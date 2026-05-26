@@ -342,7 +342,23 @@ def disagreements():
             parts = disagreement_id.split(':', 1)
             instance_id = parts[0]
             schema_name = parts[1] if len(parts) > 1 else 'default'
-            manager.resolve_disagreement(instance_id, schema_name, resolution, 'human')
+
+            # Resolve "human"/"llm" to the actual label value
+            actual_label = resolution
+            if resolution == 'human':
+                # Use the human's label
+                disagreement = manager.get_disagreement(instance_id)
+                if disagreement:
+                    actual_label = disagreement.get('human_label', resolution)
+            elif resolution == 'llm':
+                # Use the LLM's label
+                pred = manager.get_llm_prediction_for_instance(instance_id)
+                if pred:
+                    actual_label = pred.get('label', resolution)
+
+            manager.resolve_disagreement(
+                instance_id, schema_name, actual_label, resolved_by='human'
+            )
 
             # Check for more disagreements
             pending = manager.get_pending_disagreements()
@@ -668,9 +684,15 @@ def api_advance_phase():
     if not target_phase:
         return jsonify({'error': 'Missing target phase'}), 400
 
+    force = request.json.get('force', False)
+
     try:
         phase = SoloPhase.from_str(target_phase)
-        success = manager.advance_to_phase(phase)
+    except (ValueError, KeyError):
+        return jsonify({'error': f'Unknown phase: {target_phase}'}), 400
+
+    try:
+        success = manager.advance_to_phase(phase, force=force)
 
         if success:
             return jsonify({
@@ -679,12 +701,18 @@ def api_advance_phase():
             })
         else:
             return jsonify({
-                'error': 'Invalid phase transition',
+                'error': (
+                    f'Invalid phase transition from '
+                    f'{manager.get_current_phase().name} to {phase.name}'
+                ),
                 'current_phase': manager.get_current_phase().value,
             }), 400
 
-    except (ValueError, KeyError):
-        return jsonify({'error': f'Unknown phase: {target_phase}'}), 400
+    except ValueError as e:
+        return jsonify({
+            'error': str(e),
+            'current_phase': manager.get_current_phase().value,
+        }), 400
 
 
 @solo_mode_bp.route('/api/pause-labeling', methods=['POST'])
@@ -1084,6 +1112,14 @@ def api_refinement_trigger():
         return jsonify({'error': 'An internal error occurred'}), 500
 
 
+@solo_mode_bp.route('/api/reannotation-report')
+@solo_mode_required
+def api_reannotation_report():
+    """Get before/after accuracy report for re-annotated instances."""
+    manager = get_solo_mode_manager()
+    return jsonify(manager.get_reannotation_report())
+
+
 @solo_mode_bp.route('/api/refinement/reset', methods=['POST'])
 @solo_mode_required
 def api_refinement_reset():
@@ -1094,7 +1130,84 @@ def api_refinement_reset():
         return jsonify({'error': 'Refinement loop not enabled'}), 400
 
     manager.refinement_loop.reset()
+    # Also reset the validated framework's failure counter
+    if hasattr(manager, '_refinement_consecutive_failures'):
+        manager._refinement_consecutive_failures = 0
     return jsonify({'success': True, 'message': 'Refinement loop reset'})
+
+
+@solo_mode_bp.route('/api/refinement/log')
+@solo_mode_required
+def api_refinement_log():
+    """Get the full log of refinement cycles (validated framework only).
+
+    Returns each cycle's result including whether it was applied, dry-run,
+    candidates, per-candidate val accuracy, and the baseline score.
+    """
+    manager = get_solo_mode_manager()
+    log = manager.get_refinement_log() if hasattr(manager, 'get_refinement_log') else []
+    return jsonify({'log': log, 'count': len(log)})
+
+
+@solo_mode_bp.route('/api/refinement/pending')
+@solo_mode_required
+def api_refinement_pending():
+    """Get refinement candidates awaiting admin approval.
+
+    Only populated when refinement_loop.require_approval is True. Each entry
+    includes the proposed change, validation scores, and rationale so an
+    admin can decide whether to apply.
+    """
+    manager = get_solo_mode_manager()
+    pending = manager.get_pending_refinements() if hasattr(manager, 'get_pending_refinements') else []
+    return jsonify({'pending': pending, 'count': len(pending)})
+
+
+@solo_mode_bp.route('/api/refinement/approve', methods=['POST'])
+@solo_mode_required
+def api_refinement_approve():
+    """Apply a pending refinement candidate. Triggers re-annotation on apply."""
+    manager = get_solo_mode_manager()
+    data = request.get_json(silent=True) or {}
+    index = data.get('index')
+    if index is None or not isinstance(index, int):
+        return jsonify({'error': 'Missing integer index'}), 400
+
+    if not hasattr(manager, 'approve_pending_refinement'):
+        return jsonify({'error': 'Validated refinement not available'}), 400
+
+    result = manager.approve_pending_refinement(index)
+    status = 200 if result.get('success') else 400
+    return jsonify(result), status
+
+
+@solo_mode_bp.route('/api/refinement/reject', methods=['POST'])
+@solo_mode_required
+def api_refinement_reject():
+    """Reject a pending refinement candidate."""
+    manager = get_solo_mode_manager()
+    data = request.get_json(silent=True) or {}
+    index = data.get('index')
+    if index is None or not isinstance(index, int):
+        return jsonify({'error': 'Missing integer index'}), 400
+
+    if not hasattr(manager, 'reject_pending_refinement'):
+        return jsonify({'error': 'Validated refinement not available'}), 400
+
+    result = manager.reject_pending_refinement(index)
+    status = 200 if result.get('success') else 400
+    return jsonify(result), status
+
+
+@solo_mode_bp.route('/api/refinement/strategies')
+@solo_mode_required
+def api_refinement_strategies():
+    """List available refinement strategies and their metadata."""
+    try:
+        from .refinement import list_strategies
+        return jsonify({'strategies': list_strategies()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @solo_mode_bp.route('/api/labeling-functions')

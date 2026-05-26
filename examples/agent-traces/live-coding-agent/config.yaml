@@ -26,13 +26,27 @@ output_annotation_format: json
 
 # Live coding agent configuration
 live_coding_agent:
-  # Backend options: ollama_tool_use (local), anthropic_tool_use, claude_sdk
+  # Backend options:
+  #   ollama_tool_use    - local Ollama, no API key
+  #   anthropic_tool_use - Anthropic API (ANTHROPIC_API_KEY)
+  #   openai_tool_use    - any OpenAI-compatible server (OpenAI, vLLM,
+  #                        llama.cpp); honors base_url + api_key
+  #   claude_sdk         - Claude Agent SDK
   backend_type: ollama_tool_use
   ai_config:
     model: qwen2.5-coder:7b
     base_url: http://localhost:11434
     max_tokens: 4096
     temperature: 0.3
+
+  # --- OpenAI-compatible / vLLM alternative (uncomment to use) ---
+  # backend_type: openai_tool_use
+  # ai_config:
+  #   model: <served-model-id>
+  #   base_url: http://your-vllm-host:8001/v1   # root or /v1 both accepted
+  #   api_key: EMPTY                            # vLLM ignores it
+  #   max_tokens: 4096
+  #   temperature: 0.3
   working_dir: ./workspace
   max_turns: 20
   sandbox_mode: direct

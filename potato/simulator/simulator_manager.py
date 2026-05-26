@@ -136,6 +136,7 @@ class SimulatorManager:
                     timing=self.config.timing,
                     llm_config=self.config.llm_config,
                     biased_config=self.config.biased_config,
+                    agent_config=self.config.agent_config,
                 )
             )
 
@@ -161,6 +162,7 @@ class SimulatorManager:
             simulate_wait=self.config.simulate_wait,
             attention_check_fail_rate=self.config.attention_check_fail_rate,
             respond_fast_rate=self.config.respond_fast_rate,
+            interactive_config=self.config.interactive,
         )
 
         result = user.run_simulation(max_annotations)

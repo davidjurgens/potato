@@ -1,0 +1,275 @@
+/* Annotator search-and-claim sidebar.
+   Left-edge toggle (memos owns the right edge).
+
+   Consistency: this consumes the memos design system tokens directly
+   (loaded first in base_template_v2.html) so the two sidebars can never
+   drift. Literal fallbacks keep this file self-contained if load order
+   ever changes. Vanilla CSS, no deps, no build step. */
+
+:root {
+    --se-space-1: var(--memo-space-1, 4px);
+    --se-space-2: var(--memo-space-2, 8px);
+    --se-space-3: var(--memo-space-3, 12px);
+    --se-space-4: var(--memo-space-4, 16px);
+    --se-space-5: var(--memo-space-5, 24px);
+    --se-radius: var(--memo-radius, 8px);
+    --se-ink: var(--memo-ink, #1f2330);
+    --se-ink-soft: var(--memo-ink-soft, #5b6072);
+    --se-line: var(--memo-line, #e4e5ec);
+    --se-surface: var(--memo-surface, #ffffff);
+    --se-surface-2: var(--memo-surface-2, #f7f8fb);
+    --se-accent: var(--memo-accent, #4063b8);
+    --se-accent-ink: var(--memo-accent-ink, #ffffff);
+    --se-focus: var(--memo-focus, #6c8cff);
+}
+
+.search-panel-toggle {
+    position: fixed;
+    left: 0;
+    top: 42%;
+    transform: translateY(-50%);
+    z-index: 1040;
+    display: flex;
+    align-items: center;
+    gap: var(--se-space-2);
+    min-height: 44px;
+    border: 1px solid var(--se-line);
+    border-left: none;
+    background: var(--se-surface);
+    color: var(--se-ink);
+    padding: 10px 14px;
+    border-radius: 0 var(--se-radius) var(--se-radius) 0;
+    box-shadow: 1px 1px 6px rgba(31, 35, 48, 0.08);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background-color 160ms ease-out, transform 160ms ease-out;
+}
+
+.search-panel-toggle:hover {
+    background: var(--se-surface-2);
+    transform: translateY(-50%) translateX(2px);
+}
+
+.search-panel-toggle:active { background: #eef0f6; }
+
+.search-panel {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    width: 360px;
+    max-width: 92vw;
+    background: var(--se-surface);
+    border-right: 1px solid var(--se-line);
+    box-shadow: 4px 0 24px rgba(31, 35, 48, 0.10);
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+    color: var(--se-ink);
+}
+
+.search-panel:not([hidden]) { animation: search-panel-in 200ms ease-out; }
+
+@keyframes search-panel-in {
+    from { opacity: 0; transform: translateX(-12px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+.search-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--se-space-4);
+    border-bottom: 1px solid var(--se-line);
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.search-panel-header button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--se-ink-soft);
+    transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+.search-panel-header button:hover {
+    background: var(--se-surface-2);
+    color: var(--se-ink);
+}
+
+.search-form {
+    display: flex;
+    gap: var(--se-space-2);
+    padding: var(--se-space-4);
+    border-bottom: 1px solid var(--se-line);
+}
+
+.search-form input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--se-line);
+    border-radius: 6px;
+    padding: var(--se-space-2) var(--se-space-3);
+    font: inherit;
+    font-size: 0.9rem;
+    color: var(--se-ink);
+    transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.search-form input::placeholder { color: #9aa0b4; }
+
+.search-form input:focus {
+    outline: none;
+    border-color: var(--se-focus);
+    box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.18);
+}
+
+.search-primary {
+    border: 1px solid var(--se-accent);
+    background: var(--se-accent);
+    color: var(--se-accent-ink);
+    min-height: 36px;
+    padding: 7px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background-color 150ms ease-out, transform 120ms ease-out;
+}
+
+.search-primary:hover { background: #36559e; }
+.search-primary:active { transform: translateY(1px); }
+.search-primary:disabled {
+    background: #aab2cc;
+    border-color: #aab2cc;
+    cursor: progress;
+    transform: none;
+}
+
+.search-results {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--se-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--se-space-3);
+}
+
+.search-empty,
+.search-loading {
+    color: var(--se-ink-soft);
+    font-size: 0.85rem;
+    text-align: center;
+    margin-top: var(--se-space-5);
+    line-height: 1.5;
+}
+
+.search-item {
+    border: 1px solid var(--se-line);
+    border-radius: var(--se-radius);
+    padding: var(--se-space-3) var(--se-space-4);
+    background: var(--se-surface-2);
+    transition: border-color 140ms ease-out;
+}
+
+.search-item:hover { border-color: #cdd1e0; }
+
+.search-item .search-snippet {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--se-ink);
+    word-break: break-word;
+}
+
+.search-item .search-row {
+    margin-top: var(--se-space-3);
+    display: flex;
+    align-items: center;
+    gap: var(--se-space-2);
+    font-size: 0.72rem;
+    color: var(--se-ink-soft);
+}
+
+/* Echoes .memo-badge.private — the instance id reads as a neutral badge. */
+.search-id {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: #eceef4;
+    color: #494f63;
+    border: 1px solid #dcdfe9;
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.search-claim {
+    margin-left: auto;
+    border: 1px solid var(--se-accent);
+    background: none;
+    color: var(--se-accent);
+    cursor: pointer;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 5px;
+    transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+.search-claim:hover { background: var(--se-accent); color: var(--se-accent-ink); }
+.search-claim:active { background: #36559e; border-color: #36559e; }
+.search-claim:disabled { opacity: 0.55; cursor: progress; }
+
+/* Echoes .memo-badge.shared — a positive, in-queue state. */
+.search-claimed {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--se-space-1);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #246b3c;
+    background: #e2f1e7;
+    border: 1px solid #bcdec8;
+    border-radius: 999px;
+    padding: 2px 10px;
+}
+
+.search-claim-error {
+    margin-left: auto;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #b23b3b;
+    background: #fbeeee;
+    border: 1px solid #f0d2d2;
+    border-radius: 5px;
+    padding: 4px 10px;
+}
+
+.search-panel-toggle:focus-visible,
+.search-panel button:focus-visible,
+.search-panel input:focus-visible {
+    outline: 2px solid var(--se-focus);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .search-panel:not([hidden]) { animation: none; }
+    .search-panel-toggle,
+    .search-primary,
+    .search-claim,
+    .search-item,
+    .search-panel-header button { transition: none; }
+}

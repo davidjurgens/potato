@@ -35,6 +35,37 @@ def ensure_cwd_restored():
         pass  # Directory might not exist
 
 
+@pytest.fixture(autouse=True)
+def reset_mode_singletons():
+    """Reset QDA/Solo Mode singletons around every unit test.
+
+    These are process-global singletons. A unit test that initializes one
+    and does not clear it would otherwise leak into a later (e.g. server)
+    test in the same pytest process, making a mode-disabled server report
+    enabled. Unit tests never run class-scoped live servers, so a
+    function-scoped reset here is safe.
+    """
+    def _clear():
+        for mod in ("potato.qda_mode", "potato.solo_mode"):
+            try:
+                import importlib
+                clear = getattr(importlib.import_module(mod),
+                                f"clear_{mod.split('.')[-1]}_manager", None)
+                if clear:
+                    clear()
+            except Exception:
+                pass
+        try:
+            from potato.search import clear_search
+            clear_search()
+        except Exception:
+            pass
+
+    _clear()
+    yield
+    _clear()
+
+
 _ORIGINAL_CONFIG_SNAPSHOT = None
 
 

@@ -104,7 +104,14 @@ class RefinementLoop:
 
         with self._lock:
             self._annotations_since_last_check += 1
-            return self._annotations_since_last_check >= self.rl_config.trigger_interval
+            if self._annotations_since_last_check >= self.rl_config.trigger_interval:
+                # Reset counter immediately to prevent multiple triggers
+                # before run_cycle starts
+                self._annotations_since_last_check = 0
+                if self._running:
+                    return False  # Cycle already in progress
+                return True
+            return False
 
     def should_trigger(self) -> bool:
         """Check if conditions are met to trigger a refinement cycle."""

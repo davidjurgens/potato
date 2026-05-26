@@ -1,0 +1,54 @@
+# Simulator Configuration: Playwright (UI-driven) + agent rating
+#
+# Same agent strategy as simulator-agent-trace-ollama.yaml, but the simulator
+# drives the browser via Playwright instead of submitting via the HTTP API.
+# Slow but exercises the rendered annotation UI -- a real smoke test of the
+# DOM, debounce-save pipeline, and Next-button navigation.
+#
+# Prerequisites:
+#   1. pip install playwright
+#   2. playwright install chromium
+#   3. ollama pull gemma4:e4b
+#   4. ollama serve
+#
+# Usage:
+#   # Terminal 1
+#   python potato/flask_server.py start \
+#       examples/agent-traces/agent-trace-evaluation/config.yaml -p 8522
+#
+#   # Terminal 2
+#   python tests/smoke/run_playwright_ui_sim.py
+
+simulator:
+  users:
+    count: 1                # Playwright is single-user, sequential by design
+    competence_distribution:
+      perfect: 1.0
+
+  strategy: agent
+
+  agent_config:
+    endpoint_type: ollama_vision
+    model: gemma4:e4b
+    base_url: http://localhost:11434
+    temperature: 0.0
+    max_tokens: 600
+    cache_per_instance: true
+    add_noise: false
+
+  timing:
+    annotation_time:
+      min: 0.5
+      max: 2.0
+      mean: 1.0
+      std: 0.5
+      distribution: normal
+
+  execution:
+    parallel_users: 1
+    delay_between_users: 0.0
+    max_annotations_per_user: 3   # short -- browser turn-around is slow
+
+  output:
+    dir: simulator_output_playwright
+    format: json

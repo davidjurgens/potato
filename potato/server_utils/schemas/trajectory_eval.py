@@ -126,7 +126,7 @@ def _generate_internal(
 
     html = f"""
     <form id="{esc_schema}" class="annotation-form trajectory-eval-container"
-          action="/action_page.php"
+          action="javascript:void(0)"
           data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}"
           data-annotation-type="trajectory_eval"
           data-schema-name="{esc_schema}"

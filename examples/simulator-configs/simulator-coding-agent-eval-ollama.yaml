@@ -1,0 +1,51 @@
+# Simulator Configuration: Coding-agent evaluation with Gemma4 vision
+#
+# Targets examples/agent-traces/coding-agent-evaluation/, which uses the
+# `coding_trace` display + `structured_turns` data shape. The simulator's
+# AgentSimulatorStrategy now detects `structured_turns` as a dialogue
+# field and renders each turn's tool_calls (file reads/writes, bash,
+# etc.) as plain-text lines so the rater LLM can see what the agent did.
+#
+# Prerequisites:
+#   ollama pull gemma4:e4b
+#   ollama serve
+#
+# Usage:
+#   python potato/flask_server.py start \
+#       examples/agent-traces/coding-agent-evaluation/config.yaml -p 8524
+#   python tests/smoke/run_coding_agent_eval_sim.py
+
+simulator:
+  users:
+    count: 1
+    competence_distribution:
+      perfect: 1.0
+
+  strategy: agent
+
+  agent_config:
+    endpoint_type: ollama_vision
+    model: gemma4:e4b
+    base_url: http://localhost:11434
+    temperature: 0.0
+    max_tokens: 800
+    max_dialogue_chars: 16000  # coding traces are longer than chat traces
+    cache_per_instance: true
+    add_noise: false
+
+  timing:
+    annotation_time:
+      min: 1.0
+      max: 5.0
+      mean: 2.0
+      std: 1.0
+      distribution: normal
+
+  execution:
+    parallel_users: 1
+    delay_between_users: 1.0
+    max_annotations_per_user: 3
+
+  output:
+    dir: simulator_output_coding_agent_eval
+    format: json

@@ -76,6 +76,7 @@ class LLMLabelingThread(threading.Thread):
         prompt_getter: callable,
         result_callback: callable,
         prompt_version_getter: Optional[callable] = None,
+        examples_getter: Optional[callable] = None,
     ):
         """
         Initialize the labeling thread.
@@ -86,12 +87,14 @@ class LLMLabelingThread(threading.Thread):
             prompt_getter: Callable that returns the current prompt text
             result_callback: Callable to handle labeling results
             prompt_version_getter: Optional callable that returns current prompt version int
+            examples_getter: Optional callable that returns ICL examples list
         """
         super().__init__(name="LLMLabelingThread", daemon=True)
 
         self.config = config
         self.solo_config = solo_config
         self.prompt_getter = prompt_getter
+        self.examples_getter = examples_getter
         self.result_callback = result_callback
         self.prompt_version_getter = prompt_version_getter
 
@@ -125,21 +128,7 @@ class LLMLabelingThread(threading.Thread):
 
             for model_config in self.solo_config.labeling_models:
                 try:
-                    endpoint_config = {
-                        'ai_support': {
-                            'enabled': True,
-                            'endpoint_type': model_config.endpoint_type,
-                            'ai_config': {
-                                'model': model_config.model,
-                                'max_tokens': model_config.max_tokens,
-                                'temperature': model_config.temperature,
-                            }
-                        }
-                    }
-                    if model_config.api_key:
-                        endpoint_config['ai_support']['ai_config']['api_key'] = model_config.api_key
-                    if model_config.base_url:
-                        endpoint_config['ai_support']['ai_config']['base_url'] = model_config.base_url
+                    endpoint_config = model_config.to_endpoint_config()
 
                     endpoint = AIEndpointFactory.create_endpoint(endpoint_config)
                     if endpoint:
@@ -283,21 +272,7 @@ class LLMLabelingThread(threading.Thread):
     def create_endpoint_from_model_config(model_config):
         """Create an AI endpoint from a ModelConfig."""
         from potato.ai.ai_endpoint import AIEndpointFactory
-        endpoint_config = {
-            'ai_support': {
-                'enabled': True,
-                'endpoint_type': model_config.endpoint_type,
-                'ai_config': {
-                    'model': model_config.model,
-                    'max_tokens': model_config.max_tokens,
-                    'temperature': model_config.temperature,
-                }
-            }
-        }
-        if model_config.api_key:
-            endpoint_config['ai_support']['ai_config']['api_key'] = model_config.api_key
-        if model_config.base_url:
-            endpoint_config['ai_support']['ai_config']['base_url'] = model_config.base_url
+        endpoint_config = model_config.to_endpoint_config()
         return AIEndpointFactory.create_endpoint(endpoint_config)
 
     def _label_instance(
@@ -340,10 +315,25 @@ class LLMLabelingThread(threading.Thread):
                 and ecr_config.auto_extract_on_labeling
             )
 
+            # Build ICL examples section if available
+            icl_section = ""
+            if self.examples_getter:
+                try:
+                    examples = self.examples_getter()
+                    if examples:
+                        icl_lines = ["## Examples"]
+                        for ex in examples:
+                            icl_lines.append(f'Text: "{ex["text"]}"')
+                            icl_lines.append(f'Label: {ex["label"]}')
+                            icl_lines.append("")
+                        icl_section = "\n".join(icl_lines) + "\n"
+                except Exception:
+                    pass
+
             if request_edge_case:
                 full_prompt = f"""{prompt}
 
-Text to label:
+{icl_section}Text to label:
 {text}
 
 Available labels: {labels}
@@ -360,7 +350,7 @@ Respond with JSON. If you are uncertain about the label (confidence below 75), a
             else:
                 full_prompt = f"""{prompt}
 
-Text to label:
+{icl_section}Text to label:
 {text}
 
 Available labels: {labels}
@@ -412,23 +402,29 @@ Respond with JSON:
                         error="Invalid label returned"
                     )
 
-            # Estimate uncertainty
+            # Estimate uncertainty using configured strategy
             uncertainty = 1.0 - confidence
             estimator = self._get_uncertainty_estimator()
             if estimator:
                 try:
+                    logger.debug(f"Running uncertainty estimation ({estimator.__class__.__name__}) for {instance_id}")
                     estimate = estimator.estimate_uncertainty(
                         instance_id=instance_id,
                         text=text,
-                        prompt=prompt,
+                        prompt=full_prompt,
                         predicted_label=label,
                         endpoint=endpoint,
                         schema_info=schema_info
                     )
                     uncertainty = estimate.uncertainty_score
                     confidence = estimate.confidence_score
+                    logger.debug(
+                        f"Uncertainty estimate for {instance_id}: "
+                        f"conf={confidence:.3f}, unc={uncertainty:.3f}, "
+                        f"method={estimate.method}"
+                    )
                 except Exception as e:
-                    logger.debug(f"Uncertainty estimation failed: {e}")
+                    logger.warning(f"Uncertainty estimation failed for {instance_id}: {e}")
 
             # Extract edge case rule if present
             is_edge_case = False
@@ -503,11 +499,16 @@ Respond with JSON:
                 valid.append(label.get('name', str(label)))
         return valid
 
-    def _fuzzy_match_label(self, label: str, valid: List[str]) -> Optional[str]:
-        """Try to match label to valid labels."""
-        label_lower = label.lower().strip()
+    def _fuzzy_match_label(self, label, valid: List[str]) -> Optional[str]:
+        """Try to match label to valid labels. Handles non-string inputs gracefully."""
+        if label is None:
+            return None
+        try:
+            label_lower = str(label).lower().strip()
+        except Exception:
+            return None
         for v in valid:
-            if v.lower().strip() == label_lower:
+            if str(v).lower().strip() == label_lower:
                 return v
         return None
 

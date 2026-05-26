@@ -118,6 +118,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/llm-chat-sidebar.css') }}?v=1">
     {% endif %}
 
+    <!-- Universal Memos sidebar styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=10">
+
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 
@@ -235,9 +240,12 @@
                 <div id="error-state" class="error-message" style="display: none;">
                     <h5><i class="fas fa-exclamation-triangle me-2"></i>{{ ui_lang.error_heading }}</h5>
                     <p id="error-message-text"></p>
-                    <button class="shadcn-button shadcn-button-primary" onclick="loadCurrentInstance()">
+                    <button id="error-retry-btn" class="shadcn-button shadcn-button-primary" onclick="loadCurrentInstance()">
                         <i class="fas fa-redo me-2"></i>{{ ui_lang.retry_button }}
                     </button>
+                    <a id="error-done-link" href="/done" class="shadcn-button shadcn-button-primary" style="display: none;">
+                        <i class="fas fa-check me-2"></i>Finish
+                    </a>
                 </div>
 
                 <!-- Main content area -->
@@ -302,6 +310,14 @@
                     <div id="status" class="status" style="display: none;"></div>
                     <!-- Hidden input for instance_id -->
                     <input type="hidden" id="instance_id" name="instance_id" value="{{instance_id}}">
+
+                    <!-- Full instance record as JSON, consumed by schemas that
+                         bind to structured instance fields (process_reward,
+                         trajectory_eval) via document.querySelector('[data-instance-json]').
+                         tojson escapes single quotes so the single-quoted
+                         attribute is safe even when content contains apostrophes. -->
+                    <div id="instance-json-data" style="display: none;"
+                         data-instance-json='{{ (instance_record if instance_record is defined and instance_record else {}) | tojson }}'></div>
 
                     <!-- Annotation forms -->
                     <div id="annotation-forms">
@@ -546,5 +562,157 @@
             }
         });
     </script>
+
+    <!-- Universal Memos sidebar (self-hides if annotation_ui.memos is off:
+         the API returns 503 and the toggle stays hidden) -->
+    {% if is_annotation_page %}
+    <button type="button" id="memo-panel-toggle" class="memo-panel-toggle" hidden>
+        &#128221; Notes
+    </button>
+    <div id="memo-panel" class="memo-panel" hidden aria-label="Notes panel">
+        <div class="memo-panel-header">
+            <span>Notes</span>
+            <button type="button" id="memo-panel-close" aria-label="Close notes">&times;</button>
+        </div>
+        <div id="memo-list" class="memo-list"></div>
+        <div class="memo-composer">
+            <textarea id="memo-new-body" placeholder="Add a note about this instance&hellip;"></textarea>
+            <div id="memo-anchor-wrap" class="memo-anchor-hint" hidden>
+                <label>
+                    <input type="checkbox" id="memo-anchor-check">
+                    Attach to selected text: &ldquo;<span id="memo-anchor-quote"></span>&rdquo;
+                </label>
+            </div>
+            <div class="memo-composer-row">
+                <label>Visibility
+                    <select id="memo-new-visibility">
+                        <option value="private">Private</option>
+                        <option value="shared">Shared</option>
+                    </select>
+                </label>
+                <button type="button" id="memo-add-btn" class="memo-primary">Add note</button>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='memos.js') }}?v=1"></script>
+
+    <!-- Annotator search-and-claim sidebar (self-hides unless
+         search.annotator_claim is enabled: the enable-probe only gets
+         400 when the feature is on and the user is authed). -->
+    <button type="button" id="search-panel-toggle" class="search-panel-toggle" hidden>
+        &#128269; Find
+    </button>
+    <div id="search-panel" class="search-panel" hidden aria-label="Search panel">
+        <div class="search-panel-header">
+            <span>Find instances</span>
+            <button type="button" id="search-panel-close" aria-label="Close search">&times;</button>
+        </div>
+        <div class="search-form">
+            <input type="text" id="search-q" placeholder="Search instance text&hellip;"
+                   aria-label="Search query">
+            <button type="button" id="search-go" class="search-primary">Search</button>
+        </div>
+        <div id="search-results" class="search-results" aria-live="polite">
+            <div class="search-empty">Search to find instances, then Claim
+                one to add it to your queue.</div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='search.js') }}?v=2"></script>
+
+    <!-- Universal Codebook tray (self-hides unless the codebook is
+         enabled: the enable-probe is not 200 otherwise). The composer
+         only appears when codebook_mode is extensible/open. -->
+    <button type="button" id="cb-panel-toggle" class="cb-panel-toggle" hidden>
+        &#127991; Codebook
+    </button>
+    <div id="cb-panel" class="cb-panel" hidden role="region"
+         aria-label="Codebook panel">
+        <div class="cb-panel-header">
+            <span>Codebook</span>
+            <button type="button" id="cb-panel-close"
+                    aria-label="Close codebook">&times;</button>
+        </div>
+        <div id="cb-stale-banner" class="cb-stale-banner" hidden>
+            <span class="cb-stale-msg" id="cb-stale-msg"
+                  role="status"></span>
+            <button type="button" id="cb-stale-dismiss"
+                    class="cb-stale-x"
+                    aria-label="Dismiss this notice">&times;</button>
+        </div>
+        <div id="cb-tree" class="cb-tree" aria-live="polite">
+            <div class="cb-empty">Loading&hellip;</div>
+        </div>
+        <div class="cb-worklist-section" id="cb-worklist-section" hidden>
+            <h2 id="cb-worklist-head" class="cb-worklist-head">Review</h2>
+            <div id="cb-worklist" class="cb-worklist"
+                 aria-labelledby="cb-worklist-head">
+                <div class="cb-empty">Nothing to review.</div>
+            </div>
+        </div>
+        <div id="cb-admin-section" class="cb-admin-section" hidden>
+            <h2 class="cb-admin-head">Curate (admin)</h2>
+            <div class="cb-admin-group">
+                <label class="cb-admin-label"
+                       for="cb-merge-src">Merge a code into another</label>
+                <div class="cb-admin-row">
+                    <select id="cb-merge-src" class="cb-admin-select"
+                            aria-label="Code to merge from"></select>
+                    <span class="cb-admin-arrow" aria-hidden="true">→</span>
+                    <select id="cb-merge-dst" class="cb-admin-select"
+                            aria-label="Code to merge into"></select>
+                </div>
+                <button type="button" id="cb-merge-btn"
+                        class="cb-primary">Merge</button>
+            </div>
+            <div class="cb-admin-group">
+                <label class="cb-admin-label"
+                       for="cb-split-src">Split a code by annotator</label>
+                <div class="cb-admin-row">
+                    <select id="cb-split-src" class="cb-admin-select"
+                            aria-label="Code to split"></select>
+                    <input type="text" id="cb-split-annotator"
+                           class="cb-admin-input"
+                           placeholder="annotator"
+                           aria-label="Annotator to split out">
+                </div>
+                <input type="text" id="cb-split-name"
+                       class="cb-admin-input"
+                       placeholder="New code name&hellip;"
+                       aria-label="New code name">
+                <button type="button" id="cb-split-btn"
+                        class="cb-primary">Split</button>
+            </div>
+            <div id="cb-admin-error" class="cb-error" hidden
+                 role="alert" tabindex="-1"></div>
+            <div id="cb-admin-status" class="cb-admin-status"
+                 role="status" aria-live="polite"></div>
+            <div class="cb-admin-group">
+                <h3 class="cb-admin-sub" id="cb-proposals-head">
+                    Pending proposals</h3>
+                <div id="cb-proposals" class="cb-proposals"
+                     aria-labelledby="cb-proposals-head"
+                     aria-live="polite">
+                    <div class="cb-empty">No pending proposals.</div>
+                </div>
+            </div>
+            <details class="cb-admin-group cb-changes-wrap">
+                <summary class="cb-admin-sub">Recent changes</summary>
+                <ul id="cb-changes" class="cb-changes-list"></ul>
+            </details>
+        </div>
+        <div id="cb-composer" class="cb-composer" hidden>
+            <div class="cb-composer-row">
+                <input type="text" id="cb-new-name"
+                       placeholder="Add a code&hellip;"
+                       aria-label="New code name">
+                <button type="button" id="cb-add-btn"
+                        class="cb-primary">Add</button>
+            </div>
+            <div id="cb-error" class="cb-error" hidden></div>
+            <div id="cb-mode-hint" class="cb-mode-hint"></div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=10"></script>
+    {% endif %}
 </body>
 </html>

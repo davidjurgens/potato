@@ -17,7 +17,7 @@ data_files:
 
 item_properties:
   id_key: id
-  text_key: task_description
+  text_key: task
 
 task_dir: .
 output_annotation_dir: annotation_output
@@ -29,23 +29,19 @@ instance_display:
     gap: 16px
 
   fields:
-    - key: task_description
+    # Keys must match the multi-agent-traces.json record (id, task,
+    # agents, steps). The previous task_description/metadata_table/
+    # conversation keys did not exist, so the display was blank.
+    - key: task
       type: text
       label: "Task"
 
-    - key: metadata_table
-      type: spreadsheet
-      label: "Trace Info"
-      display_options:
-        compact: true
-        max_height: 150
-
-    - key: conversation
-      type: dialogue
+    - key: steps
+      type: agent_trace
       label: "Agent Interactions"
       display_options:
         show_turn_numbers: true
-        alternating_shading: true
+        speaker_key: agent
 
 annotation_schemes:
   - annotation_type: radio

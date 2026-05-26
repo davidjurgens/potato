@@ -1,0 +1,646 @@
+/* Codebook tray.
+   Right-edge toggle below Notes (Notes 42%, Codebook 62%); panel
+   slides from the right. Consumes the memos design-system tokens
+   directly (loaded first) so the three sidebars never drift; literal
+   fallbacks keep this file self-contained. Vanilla CSS, no build. */
+
+:root {
+    --cb-space-1: var(--memo-space-1, 4px);
+    --cb-space-2: var(--memo-space-2, 8px);
+    --cb-space-3: var(--memo-space-3, 12px);
+    --cb-space-4: var(--memo-space-4, 16px);
+    --cb-space-5: var(--memo-space-5, 24px);
+    --cb-radius: var(--memo-radius, 8px);
+    --cb-ink: var(--memo-ink, #1f2330);
+    --cb-ink-soft: var(--memo-ink-soft, #5b6072);
+    --cb-line: var(--memo-line, #e4e5ec);
+    --cb-surface: var(--memo-surface, #ffffff);
+    --cb-surface-2: var(--memo-surface-2, #f7f8fb);
+    --cb-accent: var(--memo-accent, #4063b8);
+    --cb-accent-ink: var(--memo-accent-ink, #ffffff);
+    --cb-focus: var(--memo-focus, #6c8cff);
+    /* Tertiary surface + pressed tint + stronger hairline, so hover/
+       active states stop hard-coding the same literals across the file.
+       Shadow ink is tokenised (geometry stays per-element). */
+    --cb-surface-3: var(--memo-surface-3, #eef0f6);
+    --cb-press: var(--memo-press, #e4e7f1);
+    --cb-line-strong: var(--memo-line-strong, #cdd2e4);
+    --cb-shadow-ink: var(--memo-shadow-ink, 31, 35, 48);
+    --cb-accent-press: var(--memo-accent-press, #36559e);
+    /* The single intentional non-neutral: a calm tinted-amber "your
+       labels may be stale" notice. Defined once here, not spread. */
+    --cb-warn-ink: var(--memo-warn-ink, #7a5200);
+    --cb-warn-surface: var(--memo-warn-surface, #fdf5e6);
+    --cb-warn-line: var(--memo-warn-line, #ecd9b4);
+}
+
+.cb-panel-toggle {
+    position: fixed;
+    right: 0;
+    top: 62%;
+    transform: translateY(-50%);
+    z-index: 1040;
+    display: flex;
+    align-items: center;
+    gap: var(--cb-space-2);
+    min-height: 44px;
+    border: 1px solid var(--cb-line);
+    border-right: none;
+    background: var(--cb-surface);
+    color: var(--cb-ink);
+    padding: 10px 14px;
+    border-radius: var(--cb-radius) 0 0 var(--cb-radius);
+    box-shadow: -1px 1px 6px rgba(var(--cb-shadow-ink), 0.08);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background-color 160ms ease-out, transform 160ms ease-out;
+}
+
+.cb-panel-toggle:hover {
+    background: var(--cb-surface-2);
+    transform: translateY(-50%) translateX(-2px);
+}
+
+.cb-panel-toggle:active { background: var(--cb-surface-3); }
+
+.cb-panel {
+    position: fixed;
+    right: 0;
+    top: 0;
+    height: 100vh;
+    width: 360px;
+    max-width: 92vw;
+    background: var(--cb-surface);
+    border-left: 1px solid var(--cb-line);
+    box-shadow: -4px 0 24px rgba(var(--cb-shadow-ink), 0.10);
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+    color: var(--cb-ink);
+}
+
+.cb-panel:not([hidden]) { animation: cb-panel-in 200ms ease-out; }
+
+@keyframes cb-panel-in {
+    from { opacity: 0; transform: translateX(12px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+.cb-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--cb-space-4);
+    border-bottom: 1px solid var(--cb-line);
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.cb-panel-header button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--cb-ink-soft);
+    transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+.cb-panel-header button:hover {
+    background: var(--cb-surface-2);
+    color: var(--cb-ink);
+}
+
+.cb-tree {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--cb-space-4);
+}
+
+.cb-empty {
+    color: var(--cb-ink-soft);
+    font-size: 0.85rem;
+    text-align: center;
+    margin-top: var(--cb-space-5);
+}
+
+.cb-root, .cb-children {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* Semantic nesting only — visual indentation is depth-driven padding
+   on the row (see --cb-depth) so deep trees don't compound-march off
+   the panel. */
+.cb-children { margin-left: 0; }
+
+.cb-node-row {
+    display: flex;
+    align-items: center;
+    gap: var(--cb-space-2);
+    /* Depth indent, capped at 6 levels so it never runs off a 360px
+       panel; falls back to 0 for flat codebooks. */
+    padding: 5px var(--cb-space-2) 5px
+        calc(var(--cb-space-2)
+             + min(var(--cb-depth, 0), 6) * var(--cb-space-4));
+    font-size: 0.88rem;
+    line-height: 1.4;
+}
+
+.cb-dot {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgba(31, 35, 48, 0.12);
+}
+
+.cb-name { word-break: break-word; }
+
+.cb-composer {
+    border-top: 1px solid var(--cb-line);
+    padding: var(--cb-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-2);
+    background: var(--cb-surface);
+}
+
+.cb-composer-row {
+    display: flex;
+    gap: var(--cb-space-2);
+}
+
+.cb-composer input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--cb-line);
+    border-radius: 6px;
+    padding: var(--cb-space-2) var(--cb-space-3);
+    font: inherit;
+    font-size: 0.9rem;
+    color: var(--cb-ink);
+    transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.cb-composer input::placeholder { color: #9aa0b4; }
+
+.cb-composer input:focus {
+    outline: none;
+    border-color: var(--cb-focus);
+    box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.18);
+}
+
+.cb-primary {
+    border: 1px solid var(--cb-accent);
+    background: var(--cb-accent);
+    color: var(--cb-accent-ink);
+    min-height: 36px;
+    padding: 7px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background-color 150ms ease-out, transform 120ms ease-out;
+}
+
+.cb-primary:hover { background: var(--cb-accent-press); }
+.cb-primary:active { transform: translateY(1px); }
+.cb-primary:disabled {
+    background: #aab2cc;
+    border-color: #aab2cc;
+    cursor: progress;
+    transform: none;
+}
+
+.cb-mode-hint {
+    font-size: 0.72rem;
+    color: var(--cb-ink-soft);
+    letter-spacing: 0.02em;
+}
+
+.cb-error {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #b23b3b;
+    background: #fbeeee;
+    border: 1px solid #f0d2d2;
+    border-radius: 6px;
+    padding: var(--cb-space-2) var(--cb-space-3);
+}
+
+/* Calm "attention" notice — the one intentional non-neutral in the
+   sidebar system; tinted amber, WCAG-AA (#7a5200 on #fdf5e6 ~ 6.4:1). */
+.cb-stale-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--cb-space-2);
+    margin: var(--cb-space-3) var(--cb-space-4) 0;
+    padding: var(--cb-space-2) var(--cb-space-2)
+             var(--cb-space-2) var(--cb-space-3);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--cb-warn-ink);
+    background: var(--cb-warn-surface);
+    border: 1px solid var(--cb-warn-line);
+    border-radius: var(--cb-radius);
+}
+
+.cb-stale-msg { flex: 1; padding-top: 3px; }
+
+.cb-stale-x {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    color: var(--cb-warn-ink);
+    font-size: 1.05rem;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background-color 140ms ease-out;
+}
+
+.cb-stale-x:hover {
+    background: color-mix(in srgb, var(--cb-warn-ink) 14%, transparent);
+}
+.cb-stale-x:active {
+    background: color-mix(in srgb, var(--cb-warn-ink) 22%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cb-stale-x { transition: none; }
+}
+
+.cb-worklist-section {
+    border-top: 1px solid var(--cb-line);
+    display: flex;
+    flex-direction: column;
+    max-height: 34vh;
+}
+
+.cb-worklist-head {
+    margin: 0;                      /* neutralise <h2> UA margins */
+    padding: var(--cb-space-2) var(--cb-space-4);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--cb-ink-soft);
+}
+
+.cb-worklist {
+    overflow-y: auto;
+    padding: 0 var(--cb-space-4) var(--cb-space-3);
+}
+
+.cb-worklist-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.cb-wl-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "id go" "sub go";
+    align-items: center;
+    gap: 0 var(--cb-space-2);
+    padding: var(--cb-space-2) 0;
+    border-bottom: 1px solid var(--cb-line);
+}
+
+.cb-wl-item:last-child { border-bottom: none; }
+
+.cb-wl-id {
+    grid-area: id;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--cb-ink);
+    word-break: break-word;
+}
+
+.cb-wl-sub {
+    grid-area: sub;
+    font-size: 0.72rem;
+    color: var(--cb-ink-soft);
+    word-break: break-word;
+}
+
+.cb-go {
+    grid-area: go;
+    border: 1px solid var(--cb-accent);
+    background: none;
+    color: var(--cb-accent);
+    font-size: 0.74rem;
+    font-weight: 600;
+    min-height: 30px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+.cb-go:hover { background: var(--cb-accent); color: var(--cb-accent-ink); }
+.cb-go:active {
+    background: var(--cb-accent-press);
+    border-color: var(--cb-accent-press);
+}
+
+/* In-vivo composer — a small popover anchored to the text selection.
+   Same token system as the tray so the two never drift. */
+.cb-invivo {
+    position: absolute;
+    z-index: 1060;
+    width: 320px;
+    max-width: calc(100vw - 16px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-2);
+    padding: var(--cb-space-3);
+    background: var(--cb-surface);
+    border: 1px solid var(--cb-line);
+    border-radius: var(--cb-radius);
+    box-shadow: 0 8px 28px rgba(var(--cb-shadow-ink), 0.16);
+    color: var(--cb-ink);
+}
+
+.cb-invivo:not([hidden]) { animation: cb-iv-in 140ms ease-out; }
+
+@keyframes cb-iv-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.cb-iv-quote {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--cb-ink-soft);
+    font-style: italic;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+}
+
+.cb-iv-input {
+    border: 1px solid var(--cb-line);
+    border-radius: 6px;
+    padding: var(--cb-space-2) var(--cb-space-3);
+    font: inherit;
+    font-size: 0.92rem;
+    color: var(--cb-ink);
+    transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+/* Solid ring (not a faint shadow) so the focused state clears WCAG
+   1.4.11 non-text contrast for pointer focus too, not only :focus-visible. */
+.cb-iv-input:focus {
+    outline: 2px solid var(--cb-focus);
+    outline-offset: 1px;
+    border-color: var(--cb-focus);
+}
+
+.cb-iv-sim {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--cb-space-1) var(--cb-space-2);
+}
+
+.cb-iv-sim-label {
+    width: 100%;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--cb-ink-soft);
+}
+
+.cb-iv-chip {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--cb-line);
+    background: var(--cb-surface-2);
+    color: var(--cb-ink);
+    font-size: 0.76rem;
+    font-weight: 500;
+    min-height: 34px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background-color 140ms ease-out,
+                border-color 140ms ease-out, color 140ms ease-out;
+}
+
+.cb-iv-chip:hover {
+    background: var(--cb-surface-3);
+    border-color: var(--cb-line-strong);
+}
+
+.cb-iv-chip:active { background: var(--cb-press); }
+
+.cb-iv-chip-on,
+.cb-iv-chip-on:hover {
+    background: var(--cb-accent);
+    border-color: var(--cb-accent);
+    color: var(--cb-accent-ink);
+}
+
+.cb-iv-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--cb-space-2);
+    margin-top: var(--cb-space-1);
+}
+
+.cb-iv-cancel {
+    border: 1px solid var(--cb-line);
+    background: var(--cb-surface);
+    color: var(--cb-ink-soft);
+    min-height: 36px;
+    padding: 7px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+.cb-iv-cancel:hover {
+    background: var(--cb-surface-2);
+    color: var(--cb-ink);
+}
+
+.cb-iv-cancel:active { background: var(--cb-surface-3); }
+
+/* Admin curation section — same token system as the rest of the tray. */
+.cb-admin-section {
+    border-top: 1px solid var(--cb-line);
+    padding: var(--cb-space-3) var(--cb-space-4) var(--cb-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-4);
+}
+
+.cb-admin-head {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--cb-ink-soft);
+}
+
+.cb-admin-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-2);
+}
+
+.cb-admin-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--cb-ink);
+}
+
+.cb-admin-sub {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--cb-ink-soft);
+}
+
+.cb-admin-row {
+    display: flex;
+    align-items: center;
+    gap: var(--cb-space-2);
+}
+
+.cb-admin-select,
+.cb-admin-input {
+    flex: 1;
+    min-width: 0;
+    min-height: 34px;
+    border: 1px solid var(--cb-line);
+    border-radius: 6px;
+    padding: var(--cb-space-1) var(--cb-space-2);
+    font: inherit;
+    font-size: 0.85rem;
+    color: var(--cb-ink);
+    background: var(--cb-surface);
+    transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.cb-admin-select:focus,
+.cb-admin-input:focus {
+    outline: 2px solid var(--cb-focus);
+    outline-offset: 1px;
+    border-color: var(--cb-focus);
+}
+
+.cb-admin-arrow {
+    flex: 0 0 auto;
+    color: var(--cb-ink-soft);
+    font-size: 0.9rem;
+}
+
+.cb-proposals,
+.cb-changes-wrap { font-size: 0.82rem; }
+
+.cb-prop-list,
+.cb-changes-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.cb-prop-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-2);
+    padding: var(--cb-space-2) 0;
+    border-bottom: 1px solid var(--cb-line);
+}
+
+.cb-prop-item:last-child { border-bottom: none; }
+
+.cb-prop-desc {
+    font-size: 0.78rem;
+    color: var(--cb-ink);
+    word-break: break-word;
+}
+
+.cb-prop-actions {
+    display: flex;
+    gap: var(--cb-space-2);
+}
+
+.cb-changes-wrap > summary {
+    cursor: pointer;
+    list-style: revert;
+}
+
+.cb-chg-item {
+    padding: var(--cb-space-1) 0;
+    font-size: 0.76rem;
+    color: var(--cb-ink-soft);
+    word-break: break-word;
+}
+
+.cb-chg-op {
+    font-weight: 700;
+    color: var(--cb-ink);
+}
+
+.cb-chg-by { color: var(--cb-ink-soft); font-style: italic; }
+
+/* Calm success/status line — no new success-green; the one-accent
+   discipline holds, a quiet italic soft-ink note is enough. */
+.cb-admin-status {
+    font-size: 0.78rem;
+    font-style: italic;
+    color: var(--cb-ink-soft);
+    min-height: 1.1em;            /* reserve space — no layout shift */
+}
+
+.cb-admin-status:empty { min-height: 0; }
+
+/* Programmatic focus target (error is announced via role=alert; no
+   stray ring needed when it is focused for sighted recovery). */
+#cb-admin-error:focus { outline: none; }
+
+.cb-panel-toggle:focus-visible,
+.cb-panel button:focus-visible,
+.cb-panel input:focus-visible,
+.cb-panel select:focus-visible,
+.cb-invivo button:focus-visible,
+.cb-invivo input:focus-visible {
+    outline: 2px solid var(--cb-focus);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cb-panel:not([hidden]) { animation: none; }
+    .cb-invivo:not([hidden]) { animation: none; }
+    .cb-panel-toggle,
+    .cb-primary,
+    .cb-go,
+    .cb-iv-chip,
+    .cb-iv-cancel,
+    .cb-iv-input,
+    .cb-admin-select,
+    .cb-admin-input,
+    .cb-panel-header button { transition: none; }
+}

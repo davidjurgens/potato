@@ -265,6 +265,34 @@ def serve_media(filepath):
     return send_from_directory(media_dir, filepath)
 
 
+def serve_trace_screenshot(filepath):
+    """Serve a static agent-trace screenshot referenced by trace data.
+
+    ``web_agent_trace`` / visual trace data set ``screenshot_url`` to a path
+    relative to the example (e.g. ``screenshots/step_000.png``), which the
+    browser requests as ``/screenshots/...``.  Without this route those
+    requests 404 and every step image + filmstrip thumbnail breaks.  Files
+    resolve against ``task_dir`` (the runtime CWD) with path-traversal
+    containment, mirroring ``serve_media``.
+    """
+    from flask import send_from_directory, abort
+
+    task_dir = config.get("task_dir", ".")
+    base_dir = os.path.realpath(task_dir)
+    screenshots_root = os.path.realpath(os.path.join(base_dir, "screenshots"))
+
+    requested = os.path.realpath(os.path.join(screenshots_root, filepath))
+    if not (requested == screenshots_root
+            or requested.startswith(screenshots_root + os.sep)):
+        logger.warning(f"Screenshot path traversal blocked: {filepath}")
+        abort(403)
+
+    if not os.path.isfile(requested):
+        abort(404)
+
+    return send_from_directory(screenshots_root, filepath)
+
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     """
@@ -849,14 +877,26 @@ def logout_page():
     """
     Handle user logout requests and redirect to login page.
 
+    For url_direct/prolific login types, renders a standalone logged-out page
+    instead of redirecting to home (which requires URL parameters like PROLIFIC_PID).
+
     Returns:
-        flask.Response: Redirect to login page
+        flask.Response: Redirect to login page or rendered logged-out template
     """
     logger.debug("Processing logout request")
+
+    # Check login type before clearing session (config is module-level, not session-dependent)
+    login_config = config.get('login', {})
+    login_type = login_config.get('type', 'standard')
 
     # Clear the session
     session.clear()
     logger.info("User logged out successfully")
+
+    if login_type in ['url_direct', 'prolific']:
+        # Cannot redirect to home — it requires a URL parameter (e.g., PROLIFIC_PID)
+        return render_template("logged_out.html",
+                               title=config.get("annotation_task_name", "Annotation Platform"))
 
     return redirect(url_for("home"))  # Redirect to the login page
 
@@ -2855,6 +2895,56 @@ def admin_api_agreement():
     return jsonify(result)
 
 
+@app.route("/admin/api/code_cooccurrence", methods=["GET"])
+def admin_api_code_cooccurrence():
+    """
+    Get pairwise code co-occurrence across instances.
+
+    Query params:
+        schema (optional): Restrict to a single schema name.
+        min_count (optional): Minimum co-occurrence count to include (default 1).
+
+    Returns:
+        JSON with codes, pairs ({code_a, code_b, count}), n_instances.
+    """
+    schema = request.args.get("schema")
+    try:
+        min_count = int(request.args.get("min_count", "1"))
+    except ValueError:
+        min_count = 1
+    result = admin_dashboard.get_code_cooccurrence_matrix(
+        schema_filter=schema, min_count=min_count
+    )
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.route("/admin/api/code_crosstab", methods=["GET"])
+def admin_api_code_crosstab():
+    """
+    Get a codes-by-instance-attribute crosstab.
+
+    Query params:
+        attribute (required): The instance metadata field to pivot on
+            (e.g. "site", "condition", "language").
+        schema (optional): Restrict to a single schema name.
+
+    Returns:
+        JSON with codes, values, cells ({code, value, count}), n_instances.
+    """
+    attribute = request.args.get("attribute")
+    if not attribute:
+        return jsonify({"error": "attribute query param is required"}), 400
+    schema = request.args.get("schema")
+    result = admin_dashboard.get_code_crosstab(
+        attribute_key=attribute, schema_filter=schema
+    )
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
 @app.route("/admin/api/step_agreement", methods=["GET"])
 def admin_api_step_agreement():
     """
@@ -3663,6 +3753,23 @@ def get_annotations():
         label_annotations = user_state.get_label_annotations(instance_id)
         span_annotations = user_state.get_span_annotations(instance_id)
 
+        # label_annotations is keyed by Label objects (schema, name) ->
+        # value; that is not JSON-serializable. Flatten to
+        # {schema: [selected label names]} (skip falsy/unset values).
+        serializable_label_annotations = {}
+        for lbl, value in (label_annotations or {}).items():
+            if value in (False, None, "", 0):
+                continue
+            schema = getattr(lbl, "schema", None)
+            name = getattr(lbl, "name", None)
+            if schema is None or name is None:
+                # Already-serialized or unexpected shape; keep as-is.
+                serializable_label_annotations.setdefault(
+                    str(lbl), value)
+                continue
+            serializable_label_annotations.setdefault(
+                schema, []).append(name)
+
         # Convert span annotations to serializable format
         serializable_span_annotations = {}
         for span, value in span_annotations.items():
@@ -3670,7 +3777,7 @@ def get_annotations():
 
         # Combine annotations
         annotations = {
-            "label_annotations": label_annotations,
+            "label_annotations": serializable_label_annotations,
             "span_annotations": serializable_span_annotations
         }
 
@@ -4510,6 +4617,22 @@ def update_instance():
             total = mace_mgr.count_total_annotations()
             mace_mgr.check_and_run(total)
 
+        # Stamp this annotation with the codebook revision in effect so
+        # an instance labeled before later code additions can be softly
+        # flagged for review. No-op unless the project uses a codebook;
+        # never allowed to break the save.
+        try:
+            if not is_phase_page_update:
+                from potato.codebook.api import codebook_enabled
+                if codebook_enabled(config):
+                    from potato.codebook import record_annotation
+                    record_annotation(
+                        config.get("task_dir", "."),
+                        config.get("annotation_task_name") or "default",
+                        instance_id, username)
+        except Exception as e:
+            logger.warning(f"Codebook provenance stamp skipped: {e}")
+
         # Get performance metrics for response
         performance_metrics = user_state.get_performance_metrics()
 
@@ -4604,8 +4727,8 @@ def done():
         # Build the Prolific completion URL (only if using Prolific-style URL argument)
         url_argument = login_config.get('url_argument', 'PROLIFIC_PID')
         if url_argument in ['PROLIFIC_PID', 'prolific_pid']:
-            # Format: https://app.prolific.co/submissions/complete?cc=YOUR_CODE
-            prolific_redirect_url = f"https://app.prolific.co/submissions/complete?cc={completion_code}"
+            # Format: https://app.prolific.com/submissions/complete?cc=YOUR_CODE
+            prolific_redirect_url = f"https://app.prolific.com/submissions/complete?cc={completion_code}"
 
     # Get MTurk submission parameters from session
     mturk_submit_url = session.get('mturk_submit_to')
@@ -5489,6 +5612,22 @@ def get_annotation_schemas():
                     labels.append(str(label))
             return labels
 
+        # Keys we surface via dedicated top-level fields above, plus
+        # internal/runtime keys that should never round-trip to API
+        # consumers. Anything else configured on the schema (likert.size,
+        # slider.min_value, process_reward.mode, code_review.verdict_options,
+        # span.labels, custom plugin keys, etc.) passes through verbatim.
+        _RESERVED_SCHEMA_KEYS = frozenset({
+            "name",
+            "annotation_type",
+            "type",
+            "labels",
+            "description",
+            # Runtime / server-side internals
+            "annotation_id",
+            "sequential_key_binding",
+        })
+
         # Helper function to process a single schema
         def process_schema(schema, schema_name=None):
             name = schema_name or schema.get('name', 'unknown')
@@ -5501,16 +5640,15 @@ def get_annotation_schemas():
                 'type': schema_type
             }
 
-            # Include additional type-specific info
-            if schema_type == 'likert':
-                schema_info['size'] = schema.get('size', 5)
-                schema_info['min_label'] = schema.get('min_label', '')
-                schema_info['max_label'] = schema.get('max_label', '')
-            elif schema_type == 'slider':
-                schema_info['min_value'] = schema.get('min_value', 0)
-                schema_info['max_value'] = schema.get('max_value', 100)
-            elif schema_type == 'textbox':
-                schema_info['textarea'] = schema.get('textarea', False)
+            # Pass through every other configured key unchanged. This keeps
+            # the API forward-compatible for any schema type (built-in or
+            # plugin) that carries type-specific config (e.g. likert.size,
+            # process_reward.mode, code_review.verdict_options). Underscore-
+            # prefixed keys are treated as internal and skipped.
+            for key, value in schema.items():
+                if key in _RESERVED_SCHEMA_KEYS or key.startswith('_'):
+                    continue
+                schema_info.setdefault(key, value)
 
             return schema_info
 
@@ -6586,6 +6724,11 @@ def configure_routes(flask_app, app_config):
 
     # Register all routes with the flask app instance
     app.add_url_rule("/media/<path:filepath>", "serve_media", serve_media)
+    app.add_url_rule(
+        "/screenshots/<path:filepath>",
+        "serve_trace_screenshot",
+        serve_trace_screenshot,
+    )
     app.add_url_rule("/", "home", home, methods=["GET", "POST"])
     app.add_url_rule("/auth", "auth", auth, methods=["GET", "POST"])
     app.add_url_rule("/passwordless-login", "passwordless_login", passwordless_login, methods=["GET", "POST"])
@@ -6601,6 +6744,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/annotate", "annotate", annotate, methods=["GET", "POST"])
     app.add_url_rule("/go_to", "go_to", go_to, methods=["GET", "POST"])
     app.add_url_rule("/updateinstance", "update_instance", update_instance, methods=["POST"])
+    app.add_url_rule("/get_annotations", "get_annotations", get_annotations, methods=["GET"])
     app.add_url_rule("/poststudy", "poststudy", poststudy, methods=["GET", "POST"])
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])
@@ -6672,6 +6816,8 @@ def configure_routes(flask_app, app_config):
 
     # Behavioral tracking and analytics routes
     app.add_url_rule("/admin/api/agreement", "admin_api_agreement", admin_api_agreement, methods=["GET"])
+    app.add_url_rule("/admin/api/code_cooccurrence", "admin_api_code_cooccurrence", admin_api_code_cooccurrence, methods=["GET"])
+    app.add_url_rule("/admin/api/code_crosstab", "admin_api_code_crosstab", admin_api_code_crosstab, methods=["GET"])
     app.add_url_rule("/admin/api/quality_control", "admin_api_quality_control", admin_api_quality_control, methods=["GET"])
     app.add_url_rule("/admin/api/behavioral_analytics", "admin_api_behavioral_analytics", admin_api_behavioral_analytics, methods=["GET"])
     app.add_url_rule("/api/track_interactions", "track_interactions", track_interactions, methods=["POST"])
@@ -6734,6 +6880,46 @@ def configure_routes(flask_app, app_config):
         try:
             from potato.solo_mode.routes import solo_mode_bp
             app.register_blueprint(solo_mode_bp)
+        except ImportError:
+            pass
+
+    # Register QDA Mode blueprint if not already registered
+    if 'qda_mode' not in app.blueprints:
+        try:
+            from potato.qda_mode import qda_mode_bp
+            app.register_blueprint(qda_mode_bp)
+        except ImportError:
+            pass
+
+    # Register universal Memos blueprint if not already registered
+    if 'memos' not in app.blueprints:
+        try:
+            from potato.memos.api import memos_bp
+            app.register_blueprint(memos_bp)
+        except ImportError:
+            pass
+
+    # Register universal Search blueprint if not already registered
+    if 'search' not in app.blueprints:
+        try:
+            from potato.search.api import search_bp
+            app.register_blueprint(search_bp)
+        except ImportError:
+            pass
+
+    # Register universal Codebook blueprint if not already registered
+    if 'codebook' not in app.blueprints:
+        try:
+            from potato.codebook.api import codebook_bp
+            app.register_blueprint(codebook_bp)
+        except ImportError:
+            pass
+
+    # Register universal Cases blueprint if not already registered
+    if 'cases' not in app.blueprints:
+        try:
+            from potato.cases.api import cases_bp
+            app.register_blueprint(cases_bp)
         except ImportError:
             pass
 

@@ -47,6 +47,11 @@ def _generate_internal(
     steps_key = annotation_scheme.get("steps_key", "steps")
     step_text_key = annotation_scheme.get("step_text_key", "action")
     mode = annotation_scheme.get("mode", "first_error")  # "first_error" or "per_step"
+    # When true, the per-step Correct/Wrong control is injected to the right
+    # of each rendered trace step (a [data-turn-index] element) rather than a
+    # separate card list at the bottom. Falls back to the card list if no
+    # trace step elements are present (e.g. non-trace displays).
+    inline_with_trace = bool(annotation_scheme.get("inline_with_trace", False))
 
     layout_attrs = generate_layout_attributes(annotation_scheme)
     validation = generate_validation_attribute(annotation_scheme)
@@ -57,11 +62,16 @@ def _generate_internal(
         "steps_key": steps_key,
         "step_text_key": step_text_key,
         "mode": mode,
+        "inline_with_trace": inline_with_trace,
     })
 
+    container_class = "process-reward-container"
+    if inline_with_trace:
+        container_class += " prm-inline-mode"
+
     html = f"""
-    <form id="{esc_schema}" class="annotation-form process-reward-container"
-          action="/action_page.php"
+    <form id="{esc_schema}" class="annotation-form {container_class}"
+          action="javascript:void(0)"
           data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}"
           data-annotation-type="process_reward"
           data-schema-name="{esc_schema}"
@@ -120,6 +130,105 @@ def _generate_internal(
             return steps;
         }}
 
+        var INLINE = !!CONFIG.inline_with_trace;
+
+        // Trace step elements, ordered by data-turn-index, scoped to a
+        // coding/agent trace so we don't grab unrelated indexed nodes.
+        function getStepEls() {{
+            var scope = document.querySelector('.coding-trace-display')
+                || document.querySelector('.live-coding-agent-viewer')
+                || document;
+            var els = Array.prototype.slice.call(
+                scope.querySelectorAll('[data-turn-index]'));
+            els.sort(function(a, b) {{
+                return parseInt(a.getAttribute('data-turn-index'), 10)
+                     - parseInt(b.getAttribute('data-turn-index'), 10);
+            }});
+            return els;
+        }}
+
+        function initStepModel(steps) {{
+            var input = document.getElementById(SCHEMA)
+                .querySelector('.process-reward-data-input');
+            var existingData = null;
+            if (input && input.value) {{
+                try {{ existingData = JSON.parse(input.value); }} catch(e) {{}}
+            }}
+            _steps = [];
+            steps.forEach(function(_, i) {{
+                var reward = 0;
+                if (existingData && existingData.steps && existingData.steps[i]) {{
+                    reward = existingData.steps[i].reward || 0;
+                }}
+                _steps.push({{ index: i, reward: reward }});
+            }});
+        }}
+
+        function controlHtml(idx) {{
+            return '<span class="prm-step-status" id="' + SCHEMA + '-st-' + idx + '"></span>' +
+                '<div class="prm-step-btns">' +
+                    '<button type="button" class="prm-btn prm-btn-correct" data-step="' + idx + '" data-value="1" title="Correct">&#10003;</button>' +
+                    '<button type="button" class="prm-btn prm-btn-incorrect" data-step="' + idx + '" data-value="-1" title="Incorrect">&#10007;</button>' +
+                '</div>';
+        }}
+
+        // Inline mode: inject a compact control to the right of each rendered
+        // trace step. Reuses .prm-step-card markup so attachHandlers() and
+        // updateStepVisual() work unchanged.
+        // The user prompt turn is not an agent step and must not be rated.
+        function isUserTurn(el, stepObj) {{
+            if (el && el.classList && el.classList.contains('ct-turn-user')) return true;
+            if (stepObj && typeof stepObj === 'object'
+                && (stepObj.role === 'user' || stepObj.speaker === 'user')) return true;
+            return false;
+        }}
+
+        function buildInline() {{
+            var bottom = document.getElementById(SCHEMA + '-steps');
+            var stepEls = getStepEls();
+            var steps = getSteps();
+            if (!stepEls.length || !steps.length) return false;
+
+            // Pair each trace element with its step object (by data-turn-index)
+            // and keep only ratable agent steps -- the user prompt turn is
+            // skipped entirely so it carries no rating control or reward.
+            // Keep the structured-turns index ('data-turn-index', which the
+            // coding_trace display sets per turn) as the canonical step
+            // index. This MUST match buildCards' index space so saved data,
+            // first_error cascade and downstream consumers stay consistent
+            // across inline/card modes (previously inline used a dense
+            // user-filtered counter, corrupting persistence).
+            var ratable = [];
+            stepEls.forEach(function(el) {{
+                var ti = parseInt(el.getAttribute('data-turn-index'), 10);
+                if (isNaN(ti)) return;
+                var stepObj = (ti < steps.length) ? steps[ti] : null;
+                if (isUserTurn(el, stepObj)) return;
+                ratable.push({{ el: el, ti: ti }});
+            }});
+            if (!ratable.length) return false;
+
+            // _steps spans the full step list (same as buildCards) so
+            // existingData restore by index aligns; user/non-ratable turns
+            // simply carry no card.
+            initStepModel(steps);
+
+            ratable.forEach(function(r) {{
+                if (r.el.querySelector('.prm-step-card')) return; // already injected
+                var card = document.createElement('div');
+                card.className = 'prm-step-card prm-inline';
+                card.setAttribute('data-step-index', r.ti);
+                card.innerHTML = controlHtml(r.ti);
+                r.el.classList.add('prm-turn-ratable');
+                r.el.appendChild(card);
+            }});
+            if (bottom) bottom.innerHTML = '';
+            attachHandlers();
+            _steps.forEach(function(s) {{ updateStepVisual(s.index); }});
+            updateCount();
+            return true;
+        }}
+
         function buildCards() {{
             var container = document.getElementById(SCHEMA + '-steps');
             if (!container) return;
@@ -175,10 +284,20 @@ def _generate_internal(
         }}
 
         function attachHandlers() {{
+            var btns = [];
             var container = document.getElementById(SCHEMA + '-steps');
-            if (!container) return;
+            if (container) {{
+                btns = btns.concat(Array.prototype.slice.call(
+                    container.querySelectorAll('.prm-btn')));
+            }}
+            // Inline-mode buttons live inside the trace turns, not the
+            // bottom container.
+            btns = btns.concat(Array.prototype.slice.call(
+                document.querySelectorAll('.prm-step-card.prm-inline .prm-btn')));
 
-            container.querySelectorAll('.prm-btn').forEach(function(btn) {{
+            btns.forEach(function(btn) {{
+                if (btn.getAttribute('data-prm-bound') === '1') return;
+                btn.setAttribute('data-prm-bound', '1');
                 btn.addEventListener('click', function() {{
                     var idx = parseInt(btn.getAttribute('data-step'), 10);
                     var val = parseInt(btn.getAttribute('data-value'), 10);
@@ -242,16 +361,21 @@ def _generate_internal(
             if (!card) return;
             var status = document.getElementById(SCHEMA + '-st-' + idx);
             var reward = _steps[idx].reward;
+            // In inline mode also tint the surrounding trace step.
+            var host = card.closest('[data-turn-index]');
 
             card.classList.remove('prm-correct', 'prm-incorrect', 'prm-unmarked');
+            if (host) host.classList.remove('prm-turn-correct', 'prm-turn-incorrect');
             card.querySelectorAll('.prm-btn').forEach(function(b) {{ b.classList.remove('selected'); }});
 
             if (reward === 1) {{
                 card.classList.add('prm-correct');
+                if (host) host.classList.add('prm-turn-correct');
                 card.querySelector('.prm-btn-correct').classList.add('selected');
                 if (status) {{ status.textContent = '\\u2713 correct'; status.className = 'prm-step-status prm-status-correct'; }}
             }} else if (reward === -1) {{
                 card.classList.add('prm-incorrect');
+                if (host) host.classList.add('prm-turn-incorrect');
                 card.querySelector('.prm-btn-incorrect').classList.add('selected');
                 if (status) {{ status.textContent = '\\u2717 incorrect'; status.className = 'prm-step-status prm-status-incorrect'; }}
             }} else {{
@@ -293,18 +417,39 @@ def _generate_internal(
             return d.innerHTML;
         }}
 
-        // Initialize
-        if (document.readyState === 'loading') {{
-            document.addEventListener('DOMContentLoaded', buildCards);
-        }} else {{
+        // Dispatcher: inline mode injects controls into the rendered trace;
+        // if the trace isn't present yet, retry briefly, then fall back to
+        // the bottom card list so non-trace displays still work.
+        function build() {{
+            if (INLINE) {{
+                if (buildInline()) return;
+            }}
             buildCards();
         }}
 
+        function buildWithRetry() {{
+            if (!INLINE) {{ buildCards(); return; }}
+            var tries = 0;
+            (function attempt() {{
+                if (buildInline()) return;
+                if (++tries < 20) {{ setTimeout(attempt, 150); return; }}
+                buildCards(); // give up waiting for trace, use bottom list
+            }})();
+        }}
+
+        // Initialize
+        if (document.readyState === 'loading') {{
+            document.addEventListener('DOMContentLoaded', buildWithRetry);
+        }} else {{
+            buildWithRetry();
+        }}
+
         // Re-build when instance changes (annotation.js fires this)
-        document.addEventListener('instanceChanged', buildCards);
+        document.addEventListener('instanceChanged', buildWithRetry);
 
         // Expose addStep for live agent integration
         window['_prm_addStep_' + SCHEMA] = function(stepData) {{
+            if (INLINE) {{ build(); return; }}
             var container = document.getElementById(SCHEMA + '-steps');
             if (!container) return;
             var waiting = container.querySelector('.prm-no-steps');
@@ -386,6 +531,44 @@ def _generate_internal(
     .prm-reset-btn:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 2px; }}
     .prm-no-steps {{
         padding: 12px; color: var(--muted-foreground, #71717a); font-style: italic; text-align: center;
+    }}
+
+    /* ---- Inline mode: control sits to the right of each trace step ---- */
+    .prm-inline-mode .prm-steps-container {{ display: none; }}
+    .prm-inline-mode .prm-mode-label {{ margin-bottom: 4px; }}
+    .prm-inline-mode .prm-footer {{ margin-top: 6px; }}
+
+    /* Host trace step gets room on the right for the control. */
+    [data-turn-index].prm-turn-ratable {{
+        position: relative;
+        padding-right: 84px;
+    }}
+    .prm-step-card.prm-inline {{
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        z-index: 2;
+    }}
+    .prm-step-card.prm-inline .prm-step-btns {{ gap: 4px; }}
+    .prm-step-card.prm-inline .prm-btn {{
+        height: 26px; min-width: 26px; padding: 0 7px; font-size: 13px;
+        line-height: 1; border-radius: 6px;
+    }}
+    .prm-step-card.prm-inline .prm-step-status {{
+        font-size: 0.7em; margin-right: 2px; white-space: nowrap;
+    }}
+    /* Subtle tint on the rated step (kept light so diffs stay readable). */
+    [data-turn-index].prm-turn-correct {{
+        box-shadow: inset 3px 0 0 #4caf50; background: rgba(76, 175, 80, 0.05);
+    }}
+    [data-turn-index].prm-turn-incorrect {{
+        box-shadow: inset 3px 0 0 #f44336; background: rgba(244, 67, 54, 0.05);
     }}
     </style>
     """

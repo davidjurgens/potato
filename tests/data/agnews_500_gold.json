@@ -1,0 +1,1502 @@
+{
+  "agnews_0000": {
+    "topic": "science_technology"
+  },
+  "agnews_0001": {
+    "topic": "business"
+  },
+  "agnews_0002": {
+    "topic": "business"
+  },
+  "agnews_0003": {
+    "topic": "sports"
+  },
+  "agnews_0004": {
+    "topic": "science_technology"
+  },
+  "agnews_0005": {
+    "topic": "world"
+  },
+  "agnews_0006": {
+    "topic": "business"
+  },
+  "agnews_0007": {
+    "topic": "business"
+  },
+  "agnews_0008": {
+    "topic": "science_technology"
+  },
+  "agnews_0009": {
+    "topic": "science_technology"
+  },
+  "agnews_0010": {
+    "topic": "business"
+  },
+  "agnews_0011": {
+    "topic": "sports"
+  },
+  "agnews_0012": {
+    "topic": "sports"
+  },
+  "agnews_0013": {
+    "topic": "science_technology"
+  },
+  "agnews_0014": {
+    "topic": "sports"
+  },
+  "agnews_0015": {
+    "topic": "business"
+  },
+  "agnews_0016": {
+    "topic": "business"
+  },
+  "agnews_0017": {
+    "topic": "world"
+  },
+  "agnews_0018": {
+    "topic": "world"
+  },
+  "agnews_0019": {
+    "topic": "science_technology"
+  },
+  "agnews_0020": {
+    "topic": "sports"
+  },
+  "agnews_0021": {
+    "topic": "science_technology"
+  },
+  "agnews_0022": {
+    "topic": "science_technology"
+  },
+  "agnews_0023": {
+    "topic": "world"
+  },
+  "agnews_0024": {
+    "topic": "sports"
+  },
+  "agnews_0025": {
+    "topic": "world"
+  },
+  "agnews_0026": {
+    "topic": "sports"
+  },
+  "agnews_0027": {
+    "topic": "science_technology"
+  },
+  "agnews_0028": {
+    "topic": "sports"
+  },
+  "agnews_0029": {
+    "topic": "sports"
+  },
+  "agnews_0030": {
+    "topic": "business"
+  },
+  "agnews_0031": {
+    "topic": "science_technology"
+  },
+  "agnews_0032": {
+    "topic": "science_technology"
+  },
+  "agnews_0033": {
+    "topic": "world"
+  },
+  "agnews_0034": {
+    "topic": "world"
+  },
+  "agnews_0035": {
+    "topic": "sports"
+  },
+  "agnews_0036": {
+    "topic": "world"
+  },
+  "agnews_0037": {
+    "topic": "science_technology"
+  },
+  "agnews_0038": {
+    "topic": "sports"
+  },
+  "agnews_0039": {
+    "topic": "science_technology"
+  },
+  "agnews_0040": {
+    "topic": "business"
+  },
+  "agnews_0041": {
+    "topic": "business"
+  },
+  "agnews_0042": {
+    "topic": "sports"
+  },
+  "agnews_0043": {
+    "topic": "business"
+  },
+  "agnews_0044": {
+    "topic": "business"
+  },
+  "agnews_0045": {
+    "topic": "business"
+  },
+  "agnews_0046": {
+    "topic": "sports"
+  },
+  "agnews_0047": {
+    "topic": "world"
+  },
+  "agnews_0048": {
+    "topic": "world"
+  },
+  "agnews_0049": {
+    "topic": "world"
+  },
+  "agnews_0050": {
+    "topic": "world"
+  },
+  "agnews_0051": {
+    "topic": "science_technology"
+  },
+  "agnews_0052": {
+    "topic": "science_technology"
+  },
+  "agnews_0053": {
+    "topic": "sports"
+  },
+  "agnews_0054": {
+    "topic": "business"
+  },
+  "agnews_0055": {
+    "topic": "world"
+  },
+  "agnews_0056": {
+    "topic": "business"
+  },
+  "agnews_0057": {
+    "topic": "sports"
+  },
+  "agnews_0058": {
+    "topic": "world"
+  },
+  "agnews_0059": {
+    "topic": "business"
+  },
+  "agnews_0060": {
+    "topic": "world"
+  },
+  "agnews_0061": {
+    "topic": "sports"
+  },
+  "agnews_0062": {
+    "topic": "science_technology"
+  },
+  "agnews_0063": {
+    "topic": "sports"
+  },
+  "agnews_0064": {
+    "topic": "sports"
+  },
+  "agnews_0065": {
+    "topic": "science_technology"
+  },
+  "agnews_0066": {
+    "topic": "world"
+  },
+  "agnews_0067": {
+    "topic": "science_technology"
+  },
+  "agnews_0068": {
+    "topic": "science_technology"
+  },
+  "agnews_0069": {
+    "topic": "sports"
+  },
+  "agnews_0070": {
+    "topic": "sports"
+  },
+  "agnews_0071": {
+    "topic": "business"
+  },
+  "agnews_0072": {
+    "topic": "sports"
+  },
+  "agnews_0073": {
+    "topic": "science_technology"
+  },
+  "agnews_0074": {
+    "topic": "business"
+  },
+  "agnews_0075": {
+    "topic": "world"
+  },
+  "agnews_0076": {
+    "topic": "business"
+  },
+  "agnews_0077": {
+    "topic": "science_technology"
+  },
+  "agnews_0078": {
+    "topic": "sports"
+  },
+  "agnews_0079": {
+    "topic": "business"
+  },
+  "agnews_0080": {
+    "topic": "business"
+  },
+  "agnews_0081": {
+    "topic": "science_technology"
+  },
+  "agnews_0082": {
+    "topic": "business"
+  },
+  "agnews_0083": {
+    "topic": "science_technology"
+  },
+  "agnews_0084": {
+    "topic": "world"
+  },
+  "agnews_0085": {
+    "topic": "science_technology"
+  },
+  "agnews_0086": {
+    "topic": "sports"
+  },
+  "agnews_0087": {
+    "topic": "world"
+  },
+  "agnews_0088": {
+    "topic": "science_technology"
+  },
+  "agnews_0089": {
+    "topic": "science_technology"
+  },
+  "agnews_0090": {
+    "topic": "business"
+  },
+  "agnews_0091": {
+    "topic": "world"
+  },
+  "agnews_0092": {
+    "topic": "science_technology"
+  },
+  "agnews_0093": {
+    "topic": "sports"
+  },
+  "agnews_0094": {
+    "topic": "science_technology"
+  },
+  "agnews_0095": {
+    "topic": "science_technology"
+  },
+  "agnews_0096": {
+    "topic": "sports"
+  },
+  "agnews_0097": {
+    "topic": "sports"
+  },
+  "agnews_0098": {
+    "topic": "world"
+  },
+  "agnews_0099": {
+    "topic": "world"
+  },
+  "agnews_0100": {
+    "topic": "world"
+  },
+  "agnews_0101": {
+    "topic": "science_technology"
+  },
+  "agnews_0102": {
+    "topic": "world"
+  },
+  "agnews_0103": {
+    "topic": "business"
+  },
+  "agnews_0104": {
+    "topic": "sports"
+  },
+  "agnews_0105": {
+    "topic": "science_technology"
+  },
+  "agnews_0106": {
+    "topic": "world"
+  },
+  "agnews_0107": {
+    "topic": "business"
+  },
+  "agnews_0108": {
+    "topic": "world"
+  },
+  "agnews_0109": {
+    "topic": "sports"
+  },
+  "agnews_0110": {
+    "topic": "business"
+  },
+  "agnews_0111": {
+    "topic": "science_technology"
+  },
+  "agnews_0112": {
+    "topic": "business"
+  },
+  "agnews_0113": {
+    "topic": "sports"
+  },
+  "agnews_0114": {
+    "topic": "world"
+  },
+  "agnews_0115": {
+    "topic": "sports"
+  },
+  "agnews_0116": {
+    "topic": "world"
+  },
+  "agnews_0117": {
+    "topic": "world"
+  },
+  "agnews_0118": {
+    "topic": "world"
+  },
+  "agnews_0119": {
+    "topic": "sports"
+  },
+  "agnews_0120": {
+    "topic": "business"
+  },
+  "agnews_0121": {
+    "topic": "business"
+  },
+  "agnews_0122": {
+    "topic": "world"
+  },
+  "agnews_0123": {
+    "topic": "sports"
+  },
+  "agnews_0124": {
+    "topic": "business"
+  },
+  "agnews_0125": {
+    "topic": "science_technology"
+  },
+  "agnews_0126": {
+    "topic": "business"
+  },
+  "agnews_0127": {
+    "topic": "science_technology"
+  },
+  "agnews_0128": {
+    "topic": "world"
+  },
+  "agnews_0129": {
+    "topic": "world"
+  },
+  "agnews_0130": {
+    "topic": "world"
+  },
+  "agnews_0131": {
+    "topic": "business"
+  },
+  "agnews_0132": {
+    "topic": "world"
+  },
+  "agnews_0133": {
+    "topic": "world"
+  },
+  "agnews_0134": {
+    "topic": "business"
+  },
+  "agnews_0135": {
+    "topic": "science_technology"
+  },
+  "agnews_0136": {
+    "topic": "science_technology"
+  },
+  "agnews_0137": {
+    "topic": "sports"
+  },
+  "agnews_0138": {
+    "topic": "world"
+  },
+  "agnews_0139": {
+    "topic": "world"
+  },
+  "agnews_0140": {
+    "topic": "science_technology"
+  },
+  "agnews_0141": {
+    "topic": "sports"
+  },
+  "agnews_0142": {
+    "topic": "business"
+  },
+  "agnews_0143": {
+    "topic": "sports"
+  },
+  "agnews_0144": {
+    "topic": "science_technology"
+  },
+  "agnews_0145": {
+    "topic": "world"
+  },
+  "agnews_0146": {
+    "topic": "sports"
+  },
+  "agnews_0147": {
+    "topic": "business"
+  },
+  "agnews_0148": {
+    "topic": "sports"
+  },
+  "agnews_0149": {
+    "topic": "sports"
+  },
+  "agnews_0150": {
+    "topic": "world"
+  },
+  "agnews_0151": {
+    "topic": "world"
+  },
+  "agnews_0152": {
+    "topic": "world"
+  },
+  "agnews_0153": {
+    "topic": "business"
+  },
+  "agnews_0154": {
+    "topic": "science_technology"
+  },
+  "agnews_0155": {
+    "topic": "science_technology"
+  },
+  "agnews_0156": {
+    "topic": "science_technology"
+  },
+  "agnews_0157": {
+    "topic": "science_technology"
+  },
+  "agnews_0158": {
+    "topic": "world"
+  },
+  "agnews_0159": {
+    "topic": "world"
+  },
+  "agnews_0160": {
+    "topic": "science_technology"
+  },
+  "agnews_0161": {
+    "topic": "world"
+  },
+  "agnews_0162": {
+    "topic": "business"
+  },
+  "agnews_0163": {
+    "topic": "world"
+  },
+  "agnews_0164": {
+    "topic": "world"
+  },
+  "agnews_0165": {
+    "topic": "business"
+  },
+  "agnews_0166": {
+    "topic": "sports"
+  },
+  "agnews_0167": {
+    "topic": "business"
+  },
+  "agnews_0168": {
+    "topic": "world"
+  },
+  "agnews_0169": {
+    "topic": "world"
+  },
+  "agnews_0170": {
+    "topic": "business"
+  },
+  "agnews_0171": {
+    "topic": "science_technology"
+  },
+  "agnews_0172": {
+    "topic": "sports"
+  },
+  "agnews_0173": {
+    "topic": "world"
+  },
+  "agnews_0174": {
+    "topic": "world"
+  },
+  "agnews_0175": {
+    "topic": "business"
+  },
+  "agnews_0176": {
+    "topic": "sports"
+  },
+  "agnews_0177": {
+    "topic": "science_technology"
+  },
+  "agnews_0178": {
+    "topic": "science_technology"
+  },
+  "agnews_0179": {
+    "topic": "business"
+  },
+  "agnews_0180": {
+    "topic": "business"
+  },
+  "agnews_0181": {
+    "topic": "science_technology"
+  },
+  "agnews_0182": {
+    "topic": "world"
+  },
+  "agnews_0183": {
+    "topic": "world"
+  },
+  "agnews_0184": {
+    "topic": "sports"
+  },
+  "agnews_0185": {
+    "topic": "sports"
+  },
+  "agnews_0186": {
+    "topic": "sports"
+  },
+  "agnews_0187": {
+    "topic": "science_technology"
+  },
+  "agnews_0188": {
+    "topic": "science_technology"
+  },
+  "agnews_0189": {
+    "topic": "business"
+  },
+  "agnews_0190": {
+    "topic": "world"
+  },
+  "agnews_0191": {
+    "topic": "world"
+  },
+  "agnews_0192": {
+    "topic": "business"
+  },
+  "agnews_0193": {
+    "topic": "sports"
+  },
+  "agnews_0194": {
+    "topic": "science_technology"
+  },
+  "agnews_0195": {
+    "topic": "sports"
+  },
+  "agnews_0196": {
+    "topic": "sports"
+  },
+  "agnews_0197": {
+    "topic": "business"
+  },
+  "agnews_0198": {
+    "topic": "sports"
+  },
+  "agnews_0199": {
+    "topic": "science_technology"
+  },
+  "agnews_0200": {
+    "topic": "sports"
+  },
+  "agnews_0201": {
+    "topic": "science_technology"
+  },
+  "agnews_0202": {
+    "topic": "sports"
+  },
+  "agnews_0203": {
+    "topic": "business"
+  },
+  "agnews_0204": {
+    "topic": "sports"
+  },
+  "agnews_0205": {
+    "topic": "sports"
+  },
+  "agnews_0206": {
+    "topic": "world"
+  },
+  "agnews_0207": {
+    "topic": "sports"
+  },
+  "agnews_0208": {
+    "topic": "world"
+  },
+  "agnews_0209": {
+    "topic": "science_technology"
+  },
+  "agnews_0210": {
+    "topic": "world"
+  },
+  "agnews_0211": {
+    "topic": "science_technology"
+  },
+  "agnews_0212": {
+    "topic": "world"
+  },
+  "agnews_0213": {
+    "topic": "business"
+  },
+  "agnews_0214": {
+    "topic": "world"
+  },
+  "agnews_0215": {
+    "topic": "world"
+  },
+  "agnews_0216": {
+    "topic": "business"
+  },
+  "agnews_0217": {
+    "topic": "science_technology"
+  },
+  "agnews_0218": {
+    "topic": "world"
+  },
+  "agnews_0219": {
+    "topic": "sports"
+  },
+  "agnews_0220": {
+    "topic": "world"
+  },
+  "agnews_0221": {
+    "topic": "sports"
+  },
+  "agnews_0222": {
+    "topic": "business"
+  },
+  "agnews_0223": {
+    "topic": "sports"
+  },
+  "agnews_0224": {
+    "topic": "world"
+  },
+  "agnews_0225": {
+    "topic": "business"
+  },
+  "agnews_0226": {
+    "topic": "world"
+  },
+  "agnews_0227": {
+    "topic": "business"
+  },
+  "agnews_0228": {
+    "topic": "science_technology"
+  },
+  "agnews_0229": {
+    "topic": "science_technology"
+  },
+  "agnews_0230": {
+    "topic": "science_technology"
+  },
+  "agnews_0231": {
+    "topic": "sports"
+  },
+  "agnews_0232": {
+    "topic": "science_technology"
+  },
+  "agnews_0233": {
+    "topic": "science_technology"
+  },
+  "agnews_0234": {
+    "topic": "world"
+  },
+  "agnews_0235": {
+    "topic": "sports"
+  },
+  "agnews_0236": {
+    "topic": "business"
+  },
+  "agnews_0237": {
+    "topic": "world"
+  },
+  "agnews_0238": {
+    "topic": "sports"
+  },
+  "agnews_0239": {
+    "topic": "sports"
+  },
+  "agnews_0240": {
+    "topic": "business"
+  },
+  "agnews_0241": {
+    "topic": "sports"
+  },
+  "agnews_0242": {
+    "topic": "world"
+  },
+  "agnews_0243": {
+    "topic": "world"
+  },
+  "agnews_0244": {
+    "topic": "sports"
+  },
+  "agnews_0245": {
+    "topic": "business"
+  },
+  "agnews_0246": {
+    "topic": "sports"
+  },
+  "agnews_0247": {
+    "topic": "sports"
+  },
+  "agnews_0248": {
+    "topic": "world"
+  },
+  "agnews_0249": {
+    "topic": "business"
+  },
+  "agnews_0250": {
+    "topic": "world"
+  },
+  "agnews_0251": {
+    "topic": "sports"
+  },
+  "agnews_0252": {
+    "topic": "world"
+  },
+  "agnews_0253": {
+    "topic": "sports"
+  },
+  "agnews_0254": {
+    "topic": "business"
+  },
+  "agnews_0255": {
+    "topic": "sports"
+  },
+  "agnews_0256": {
+    "topic": "business"
+  },
+  "agnews_0257": {
+    "topic": "business"
+  },
+  "agnews_0258": {
+    "topic": "science_technology"
+  },
+  "agnews_0259": {
+    "topic": "sports"
+  },
+  "agnews_0260": {
+    "topic": "sports"
+  },
+  "agnews_0261": {
+    "topic": "business"
+  },
+  "agnews_0262": {
+    "topic": "sports"
+  },
+  "agnews_0263": {
+    "topic": "science_technology"
+  },
+  "agnews_0264": {
+    "topic": "sports"
+  },
+  "agnews_0265": {
+    "topic": "business"
+  },
+  "agnews_0266": {
+    "topic": "business"
+  },
+  "agnews_0267": {
+    "topic": "sports"
+  },
+  "agnews_0268": {
+    "topic": "business"
+  },
+  "agnews_0269": {
+    "topic": "business"
+  },
+  "agnews_0270": {
+    "topic": "business"
+  },
+  "agnews_0271": {
+    "topic": "business"
+  },
+  "agnews_0272": {
+    "topic": "world"
+  },
+  "agnews_0273": {
+    "topic": "science_technology"
+  },
+  "agnews_0274": {
+    "topic": "science_technology"
+  },
+  "agnews_0275": {
+    "topic": "business"
+  },
+  "agnews_0276": {
+    "topic": "business"
+  },
+  "agnews_0277": {
+    "topic": "world"
+  },
+  "agnews_0278": {
+    "topic": "world"
+  },
+  "agnews_0279": {
+    "topic": "sports"
+  },
+  "agnews_0280": {
+    "topic": "world"
+  },
+  "agnews_0281": {
+    "topic": "world"
+  },
+  "agnews_0282": {
+    "topic": "world"
+  },
+  "agnews_0283": {
+    "topic": "sports"
+  },
+  "agnews_0284": {
+    "topic": "sports"
+  },
+  "agnews_0285": {
+    "topic": "world"
+  },
+  "agnews_0286": {
+    "topic": "world"
+  },
+  "agnews_0287": {
+    "topic": "business"
+  },
+  "agnews_0288": {
+    "topic": "sports"
+  },
+  "agnews_0289": {
+    "topic": "sports"
+  },
+  "agnews_0290": {
+    "topic": "sports"
+  },
+  "agnews_0291": {
+    "topic": "sports"
+  },
+  "agnews_0292": {
+    "topic": "business"
+  },
+  "agnews_0293": {
+    "topic": "world"
+  },
+  "agnews_0294": {
+    "topic": "world"
+  },
+  "agnews_0295": {
+    "topic": "sports"
+  },
+  "agnews_0296": {
+    "topic": "sports"
+  },
+  "agnews_0297": {
+    "topic": "world"
+  },
+  "agnews_0298": {
+    "topic": "world"
+  },
+  "agnews_0299": {
+    "topic": "business"
+  },
+  "agnews_0300": {
+    "topic": "world"
+  },
+  "agnews_0301": {
+    "topic": "sports"
+  },
+  "agnews_0302": {
+    "topic": "science_technology"
+  },
+  "agnews_0303": {
+    "topic": "business"
+  },
+  "agnews_0304": {
+    "topic": "sports"
+  },
+  "agnews_0305": {
+    "topic": "science_technology"
+  },
+  "agnews_0306": {
+    "topic": "world"
+  },
+  "agnews_0307": {
+    "topic": "world"
+  },
+  "agnews_0308": {
+    "topic": "sports"
+  },
+  "agnews_0309": {
+    "topic": "science_technology"
+  },
+  "agnews_0310": {
+    "topic": "sports"
+  },
+  "agnews_0311": {
+    "topic": "business"
+  },
+  "agnews_0312": {
+    "topic": "sports"
+  },
+  "agnews_0313": {
+    "topic": "science_technology"
+  },
+  "agnews_0314": {
+    "topic": "sports"
+  },
+  "agnews_0315": {
+    "topic": "sports"
+  },
+  "agnews_0316": {
+    "topic": "business"
+  },
+  "agnews_0317": {
+    "topic": "world"
+  },
+  "agnews_0318": {
+    "topic": "world"
+  },
+  "agnews_0319": {
+    "topic": "sports"
+  },
+  "agnews_0320": {
+    "topic": "business"
+  },
+  "agnews_0321": {
+    "topic": "sports"
+  },
+  "agnews_0322": {
+    "topic": "business"
+  },
+  "agnews_0323": {
+    "topic": "world"
+  },
+  "agnews_0324": {
+    "topic": "world"
+  },
+  "agnews_0325": {
+    "topic": "sports"
+  },
+  "agnews_0326": {
+    "topic": "business"
+  },
+  "agnews_0327": {
+    "topic": "science_technology"
+  },
+  "agnews_0328": {
+    "topic": "science_technology"
+  },
+  "agnews_0329": {
+    "topic": "business"
+  },
+  "agnews_0330": {
+    "topic": "business"
+  },
+  "agnews_0331": {
+    "topic": "science_technology"
+  },
+  "agnews_0332": {
+    "topic": "sports"
+  },
+  "agnews_0333": {
+    "topic": "science_technology"
+  },
+  "agnews_0334": {
+    "topic": "sports"
+  },
+  "agnews_0335": {
+    "topic": "science_technology"
+  },
+  "agnews_0336": {
+    "topic": "world"
+  },
+  "agnews_0337": {
+    "topic": "world"
+  },
+  "agnews_0338": {
+    "topic": "business"
+  },
+  "agnews_0339": {
+    "topic": "world"
+  },
+  "agnews_0340": {
+    "topic": "world"
+  },
+  "agnews_0341": {
+    "topic": "world"
+  },
+  "agnews_0342": {
+    "topic": "world"
+  },
+  "agnews_0343": {
+    "topic": "sports"
+  },
+  "agnews_0344": {
+    "topic": "science_technology"
+  },
+  "agnews_0345": {
+    "topic": "sports"
+  },
+  "agnews_0346": {
+    "topic": "business"
+  },
+  "agnews_0347": {
+    "topic": "science_technology"
+  },
+  "agnews_0348": {
+    "topic": "science_technology"
+  },
+  "agnews_0349": {
+    "topic": "world"
+  },
+  "agnews_0350": {
+    "topic": "sports"
+  },
+  "agnews_0351": {
+    "topic": "sports"
+  },
+  "agnews_0352": {
+    "topic": "world"
+  },
+  "agnews_0353": {
+    "topic": "science_technology"
+  },
+  "agnews_0354": {
+    "topic": "business"
+  },
+  "agnews_0355": {
+    "topic": "sports"
+  },
+  "agnews_0356": {
+    "topic": "sports"
+  },
+  "agnews_0357": {
+    "topic": "business"
+  },
+  "agnews_0358": {
+    "topic": "science_technology"
+  },
+  "agnews_0359": {
+    "topic": "sports"
+  },
+  "agnews_0360": {
+    "topic": "business"
+  },
+  "agnews_0361": {
+    "topic": "sports"
+  },
+  "agnews_0362": {
+    "topic": "sports"
+  },
+  "agnews_0363": {
+    "topic": "world"
+  },
+  "agnews_0364": {
+    "topic": "sports"
+  },
+  "agnews_0365": {
+    "topic": "sports"
+  },
+  "agnews_0366": {
+    "topic": "science_technology"
+  },
+  "agnews_0367": {
+    "topic": "science_technology"
+  },
+  "agnews_0368": {
+    "topic": "world"
+  },
+  "agnews_0369": {
+    "topic": "business"
+  },
+  "agnews_0370": {
+    "topic": "science_technology"
+  },
+  "agnews_0371": {
+    "topic": "sports"
+  },
+  "agnews_0372": {
+    "topic": "business"
+  },
+  "agnews_0373": {
+    "topic": "business"
+  },
+  "agnews_0374": {
+    "topic": "science_technology"
+  },
+  "agnews_0375": {
+    "topic": "sports"
+  },
+  "agnews_0376": {
+    "topic": "business"
+  },
+  "agnews_0377": {
+    "topic": "business"
+  },
+  "agnews_0378": {
+    "topic": "world"
+  },
+  "agnews_0379": {
+    "topic": "business"
+  },
+  "agnews_0380": {
+    "topic": "world"
+  },
+  "agnews_0381": {
+    "topic": "science_technology"
+  },
+  "agnews_0382": {
+    "topic": "science_technology"
+  },
+  "agnews_0383": {
+    "topic": "business"
+  },
+  "agnews_0384": {
+    "topic": "world"
+  },
+  "agnews_0385": {
+    "topic": "science_technology"
+  },
+  "agnews_0386": {
+    "topic": "business"
+  },
+  "agnews_0387": {
+    "topic": "sports"
+  },
+  "agnews_0388": {
+    "topic": "world"
+  },
+  "agnews_0389": {
+    "topic": "world"
+  },
+  "agnews_0390": {
+    "topic": "business"
+  },
+  "agnews_0391": {
+    "topic": "science_technology"
+  },
+  "agnews_0392": {
+    "topic": "sports"
+  },
+  "agnews_0393": {
+    "topic": "business"
+  },
+  "agnews_0394": {
+    "topic": "science_technology"
+  },
+  "agnews_0395": {
+    "topic": "science_technology"
+  },
+  "agnews_0396": {
+    "topic": "business"
+  },
+  "agnews_0397": {
+    "topic": "sports"
+  },
+  "agnews_0398": {
+    "topic": "world"
+  },
+  "agnews_0399": {
+    "topic": "world"
+  },
+  "agnews_0400": {
+    "topic": "sports"
+  },
+  "agnews_0401": {
+    "topic": "sports"
+  },
+  "agnews_0402": {
+    "topic": "world"
+  },
+  "agnews_0403": {
+    "topic": "world"
+  },
+  "agnews_0404": {
+    "topic": "science_technology"
+  },
+  "agnews_0405": {
+    "topic": "business"
+  },
+  "agnews_0406": {
+    "topic": "business"
+  },
+  "agnews_0407": {
+    "topic": "world"
+  },
+  "agnews_0408": {
+    "topic": "business"
+  },
+  "agnews_0409": {
+    "topic": "world"
+  },
+  "agnews_0410": {
+    "topic": "business"
+  },
+  "agnews_0411": {
+    "topic": "sports"
+  },
+  "agnews_0412": {
+    "topic": "science_technology"
+  },
+  "agnews_0413": {
+    "topic": "science_technology"
+  },
+  "agnews_0414": {
+    "topic": "world"
+  },
+  "agnews_0415": {
+    "topic": "world"
+  },
+  "agnews_0416": {
+    "topic": "business"
+  },
+  "agnews_0417": {
+    "topic": "world"
+  },
+  "agnews_0418": {
+    "topic": "science_technology"
+  },
+  "agnews_0419": {
+    "topic": "business"
+  },
+  "agnews_0420": {
+    "topic": "business"
+  },
+  "agnews_0421": {
+    "topic": "sports"
+  },
+  "agnews_0422": {
+    "topic": "world"
+  },
+  "agnews_0423": {
+    "topic": "sports"
+  },
+  "agnews_0424": {
+    "topic": "sports"
+  },
+  "agnews_0425": {
+    "topic": "science_technology"
+  },
+  "agnews_0426": {
+    "topic": "business"
+  },
+  "agnews_0427": {
+    "topic": "world"
+  },
+  "agnews_0428": {
+    "topic": "sports"
+  },
+  "agnews_0429": {
+    "topic": "business"
+  },
+  "agnews_0430": {
+    "topic": "world"
+  },
+  "agnews_0431": {
+    "topic": "business"
+  },
+  "agnews_0432": {
+    "topic": "world"
+  },
+  "agnews_0433": {
+    "topic": "business"
+  },
+  "agnews_0434": {
+    "topic": "sports"
+  },
+  "agnews_0435": {
+    "topic": "business"
+  },
+  "agnews_0436": {
+    "topic": "business"
+  },
+  "agnews_0437": {
+    "topic": "business"
+  },
+  "agnews_0438": {
+    "topic": "sports"
+  },
+  "agnews_0439": {
+    "topic": "sports"
+  },
+  "agnews_0440": {
+    "topic": "world"
+  },
+  "agnews_0441": {
+    "topic": "science_technology"
+  },
+  "agnews_0442": {
+    "topic": "sports"
+  },
+  "agnews_0443": {
+    "topic": "science_technology"
+  },
+  "agnews_0444": {
+    "topic": "world"
+  },
+  "agnews_0445": {
+    "topic": "science_technology"
+  },
+  "agnews_0446": {
+    "topic": "business"
+  },
+  "agnews_0447": {
+    "topic": "science_technology"
+  },
+  "agnews_0448": {
+    "topic": "business"
+  },
+  "agnews_0449": {
+    "topic": "world"
+  },
+  "agnews_0450": {
+    "topic": "sports"
+  },
+  "agnews_0451": {
+    "topic": "sports"
+  },
+  "agnews_0452": {
+    "topic": "sports"
+  },
+  "agnews_0453": {
+    "topic": "world"
+  },
+  "agnews_0454": {
+    "topic": "world"
+  },
+  "agnews_0455": {
+    "topic": "sports"
+  },
+  "agnews_0456": {
+    "topic": "business"
+  },
+  "agnews_0457": {
+    "topic": "business"
+  },
+  "agnews_0458": {
+    "topic": "sports"
+  },
+  "agnews_0459": {
+    "topic": "science_technology"
+  },
+  "agnews_0460": {
+    "topic": "business"
+  },
+  "agnews_0461": {
+    "topic": "science_technology"
+  },
+  "agnews_0462": {
+    "topic": "sports"
+  },
+  "agnews_0463": {
+    "topic": "sports"
+  },
+  "agnews_0464": {
+    "topic": "world"
+  },
+  "agnews_0465": {
+    "topic": "world"
+  },
+  "agnews_0466": {
+    "topic": "world"
+  },
+  "agnews_0467": {
+    "topic": "world"
+  },
+  "agnews_0468": {
+    "topic": "business"
+  },
+  "agnews_0469": {
+    "topic": "world"
+  },
+  "agnews_0470": {
+    "topic": "science_technology"
+  },
+  "agnews_0471": {
+    "topic": "sports"
+  },
+  "agnews_0472": {
+    "topic": "business"
+  },
+  "agnews_0473": {
+    "topic": "sports"
+  },
+  "agnews_0474": {
+    "topic": "world"
+  },
+  "agnews_0475": {
+    "topic": "sports"
+  },
+  "agnews_0476": {
+    "topic": "science_technology"
+  },
+  "agnews_0477": {
+    "topic": "business"
+  },
+  "agnews_0478": {
+    "topic": "world"
+  },
+  "agnews_0479": {
+    "topic": "science_technology"
+  },
+  "agnews_0480": {
+    "topic": "world"
+  },
+  "agnews_0481": {
+    "topic": "science_technology"
+  },
+  "agnews_0482": {
+    "topic": "world"
+  },
+  "agnews_0483": {
+    "topic": "world"
+  },
+  "agnews_0484": {
+    "topic": "science_technology"
+  },
+  "agnews_0485": {
+    "topic": "sports"
+  },
+  "agnews_0486": {
+    "topic": "sports"
+  },
+  "agnews_0487": {
+    "topic": "science_technology"
+  },
+  "agnews_0488": {
+    "topic": "science_technology"
+  },
+  "agnews_0489": {
+    "topic": "science_technology"
+  },
+  "agnews_0490": {
+    "topic": "business"
+  },
+  "agnews_0491": {
+    "topic": "science_technology"
+  },
+  "agnews_0492": {
+    "topic": "world"
+  },
+  "agnews_0493": {
+    "topic": "business"
+  },
+  "agnews_0494": {
+    "topic": "science_technology"
+  },
+  "agnews_0495": {
+    "topic": "sports"
+  },
+  "agnews_0496": {
+    "topic": "science_technology"
+  },
+  "agnews_0497": {
+    "topic": "science_technology"
+  },
+  "agnews_0498": {
+    "topic": "sports"
+  },
+  "agnews_0499": {
+    "topic": "science_technology"
+  }
+}

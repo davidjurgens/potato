@@ -43,17 +43,64 @@ phases:
   order: [consent, prestudy, instructions, annotation, poststudy]
 
   consent:
+    type: consent
     file: surveyflow/consent.json
 
   prestudy:
+    type: prestudy
     file: surveyflow/prescreening.json
 
   instructions:
+    type: instructions
     file: surveyflow/instructions.html
 
   poststudy:
+    type: poststudy
     file: surveyflow/demographics.json
 ```
+
+### Phase Types
+
+Each file-based phase has a **`type`** that tells Potato which stage of the
+workflow it belongs to. Valid values are:
+
+| `type` | Purpose |
+|--------|---------|
+| `consent` | Informed consent |
+| `prestudy` | Pre-screening / demographics shown before annotation |
+| `instructions` | Task instructions (supports `.html` or survey JSON) |
+| `training` | Qualification/training with feedback |
+| `annotation` | The main annotation task |
+| `poststudy` | Post-study survey / feedback |
+
+Always set `type` explicitly. As a convenience, if you omit `type` **and** the
+phase's name is itself one of the values above (e.g. a phase literally named
+`consent`), Potato infers the type from the name. Custom-named phases (e.g.
+`intro`, `feedback`) **must** declare a `type`:
+
+```yaml
+phases:
+  order: [intro, consent, instructions, annotation, feedback]
+
+  intro:
+    type: prestudy          # custom name -> type is required
+    file: surveyflow/intro.json
+
+  consent:
+    type: consent
+    file: surveyflow/consent.json
+
+  instructions:
+    type: instructions
+    file: surveyflow/instructions.json
+
+  feedback:
+    type: poststudy         # custom name -> type is required
+    file: surveyflow/feedback.json
+```
+
+> Note: the `annotation` phase needs no `file` — it uses the project's
+> top-level `annotation_schemes`.
 
 ### Phase Data Files
 
@@ -124,6 +171,7 @@ Pre-screening questions appear before the main annotation task. Use them to:
 phases:
   order: [prestudy, annotation]
   prestudy:
+    type: prestudy
     file: surveyflow/prescreening.json
 ```
 
@@ -157,6 +205,7 @@ Post-study surveys appear after annotation is complete:
 phases:
   order: [annotation, poststudy]
   poststudy:
+    type: poststudy
     file: surveyflow/demographics.json
 ```
 
@@ -214,15 +263,19 @@ phases:
   order: [consent, prestudy, instructions, training, annotation, poststudy]
 
   consent:
+    type: consent
     file: phases/consent.json
 
   prestudy:
+    type: prestudy
     file: phases/demographics.json
 
   instructions:
+    type: instructions
     file: phases/instructions.html
 
   poststudy:
+    type: poststudy
     file: phases/exit_survey.json
 
 # Training phase configuration (optional)
@@ -266,6 +319,7 @@ Customize the header text displayed on each survey page:
 ```yaml
 phases:
   prestudy:
+    type: prestudy
     file: surveyflow/consent.json
     header: "Please answer all consent questions"
 ```

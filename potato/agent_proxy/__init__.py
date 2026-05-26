@@ -27,6 +27,7 @@ from .sandbox import SafetySandbox, SandboxViolation
 from . import echo_proxy
 from . import http_proxy
 from . import openai_proxy
+from . import coding_proxy  # subprocess_coding + docker_coding
 
 __all__ = [
     "AgentMessage",

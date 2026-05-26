@@ -20,7 +20,8 @@ from .identifier_utils import (
     generate_element_identifier,
     generate_validation_attribute,
     escape_html_content,
-    generate_layout_attributes
+    generate_layout_attributes,
+    display_label_text,
 )
 
 
@@ -73,7 +74,7 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
     # Initialize form wrapper
     schema_name = annotation_scheme["name"]
     schematic = f"""
-    <form id="{escape_html_content(schema_name)}" class="annotation-form radio shadcn-radio-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" data-annotation-type="radio" data-schema-name="{escape_html_content(schema_name)}" {layout_attrs}>
+    <form id="{escape_html_content(schema_name)}" class="annotation-form radio shadcn-radio-container" action="javascript:void(0)" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" data-annotation-type="radio" data-schema-name="{escape_html_content(schema_name)}" {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(schema_name)}">
             <legend class="shadcn-radio-title">{escape_html_content(annotation_scheme['description'])}</legend>
@@ -144,8 +145,11 @@ def _generate_radio_layout_internal(annotation_scheme, horizontal=False):
                 key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
                 logger.debug(f"Added sequential key binding '{shortcut_key}' for label '{label}'")
 
-        # Format label content with optional keyboard shortcut badge
-        label_content = escape_html_content(label)
+        # Visible text is humanized (or an explicit displayed_label);
+        # the stored value (label_value) remains the raw label name.
+        label_content = escape_html_content(
+            display_label_text(label_data, annotation_scheme)
+        )
         data_key_attr = ""
         key_badge = ""
         if label in label2key:

@@ -1,0 +1,1502 @@
+{
+  "sst2_0000": {
+    "sentiment": "positive"
+  },
+  "sst2_0001": {
+    "sentiment": "positive"
+  },
+  "sst2_0002": {
+    "sentiment": "positive"
+  },
+  "sst2_0003": {
+    "sentiment": "positive"
+  },
+  "sst2_0004": {
+    "sentiment": "negative"
+  },
+  "sst2_0005": {
+    "sentiment": "positive"
+  },
+  "sst2_0006": {
+    "sentiment": "positive"
+  },
+  "sst2_0007": {
+    "sentiment": "positive"
+  },
+  "sst2_0008": {
+    "sentiment": "positive"
+  },
+  "sst2_0009": {
+    "sentiment": "positive"
+  },
+  "sst2_0010": {
+    "sentiment": "positive"
+  },
+  "sst2_0011": {
+    "sentiment": "positive"
+  },
+  "sst2_0012": {
+    "sentiment": "positive"
+  },
+  "sst2_0013": {
+    "sentiment": "positive"
+  },
+  "sst2_0014": {
+    "sentiment": "negative"
+  },
+  "sst2_0015": {
+    "sentiment": "positive"
+  },
+  "sst2_0016": {
+    "sentiment": "negative"
+  },
+  "sst2_0017": {
+    "sentiment": "positive"
+  },
+  "sst2_0018": {
+    "sentiment": "positive"
+  },
+  "sst2_0019": {
+    "sentiment": "negative"
+  },
+  "sst2_0020": {
+    "sentiment": "positive"
+  },
+  "sst2_0021": {
+    "sentiment": "negative"
+  },
+  "sst2_0022": {
+    "sentiment": "positive"
+  },
+  "sst2_0023": {
+    "sentiment": "positive"
+  },
+  "sst2_0024": {
+    "sentiment": "positive"
+  },
+  "sst2_0025": {
+    "sentiment": "positive"
+  },
+  "sst2_0026": {
+    "sentiment": "positive"
+  },
+  "sst2_0027": {
+    "sentiment": "negative"
+  },
+  "sst2_0028": {
+    "sentiment": "positive"
+  },
+  "sst2_0029": {
+    "sentiment": "positive"
+  },
+  "sst2_0030": {
+    "sentiment": "negative"
+  },
+  "sst2_0031": {
+    "sentiment": "negative"
+  },
+  "sst2_0032": {
+    "sentiment": "positive"
+  },
+  "sst2_0033": {
+    "sentiment": "positive"
+  },
+  "sst2_0034": {
+    "sentiment": "positive"
+  },
+  "sst2_0035": {
+    "sentiment": "positive"
+  },
+  "sst2_0036": {
+    "sentiment": "negative"
+  },
+  "sst2_0037": {
+    "sentiment": "positive"
+  },
+  "sst2_0038": {
+    "sentiment": "positive"
+  },
+  "sst2_0039": {
+    "sentiment": "negative"
+  },
+  "sst2_0040": {
+    "sentiment": "positive"
+  },
+  "sst2_0041": {
+    "sentiment": "positive"
+  },
+  "sst2_0042": {
+    "sentiment": "positive"
+  },
+  "sst2_0043": {
+    "sentiment": "positive"
+  },
+  "sst2_0044": {
+    "sentiment": "negative"
+  },
+  "sst2_0045": {
+    "sentiment": "negative"
+  },
+  "sst2_0046": {
+    "sentiment": "negative"
+  },
+  "sst2_0047": {
+    "sentiment": "positive"
+  },
+  "sst2_0048": {
+    "sentiment": "negative"
+  },
+  "sst2_0049": {
+    "sentiment": "positive"
+  },
+  "sst2_0050": {
+    "sentiment": "positive"
+  },
+  "sst2_0051": {
+    "sentiment": "positive"
+  },
+  "sst2_0052": {
+    "sentiment": "negative"
+  },
+  "sst2_0053": {
+    "sentiment": "negative"
+  },
+  "sst2_0054": {
+    "sentiment": "negative"
+  },
+  "sst2_0055": {
+    "sentiment": "negative"
+  },
+  "sst2_0056": {
+    "sentiment": "positive"
+  },
+  "sst2_0057": {
+    "sentiment": "positive"
+  },
+  "sst2_0058": {
+    "sentiment": "positive"
+  },
+  "sst2_0059": {
+    "sentiment": "positive"
+  },
+  "sst2_0060": {
+    "sentiment": "positive"
+  },
+  "sst2_0061": {
+    "sentiment": "positive"
+  },
+  "sst2_0062": {
+    "sentiment": "negative"
+  },
+  "sst2_0063": {
+    "sentiment": "positive"
+  },
+  "sst2_0064": {
+    "sentiment": "negative"
+  },
+  "sst2_0065": {
+    "sentiment": "negative"
+  },
+  "sst2_0066": {
+    "sentiment": "negative"
+  },
+  "sst2_0067": {
+    "sentiment": "positive"
+  },
+  "sst2_0068": {
+    "sentiment": "positive"
+  },
+  "sst2_0069": {
+    "sentiment": "negative"
+  },
+  "sst2_0070": {
+    "sentiment": "positive"
+  },
+  "sst2_0071": {
+    "sentiment": "negative"
+  },
+  "sst2_0072": {
+    "sentiment": "negative"
+  },
+  "sst2_0073": {
+    "sentiment": "negative"
+  },
+  "sst2_0074": {
+    "sentiment": "positive"
+  },
+  "sst2_0075": {
+    "sentiment": "positive"
+  },
+  "sst2_0076": {
+    "sentiment": "negative"
+  },
+  "sst2_0077": {
+    "sentiment": "negative"
+  },
+  "sst2_0078": {
+    "sentiment": "negative"
+  },
+  "sst2_0079": {
+    "sentiment": "positive"
+  },
+  "sst2_0080": {
+    "sentiment": "negative"
+  },
+  "sst2_0081": {
+    "sentiment": "negative"
+  },
+  "sst2_0082": {
+    "sentiment": "positive"
+  },
+  "sst2_0083": {
+    "sentiment": "positive"
+  },
+  "sst2_0084": {
+    "sentiment": "positive"
+  },
+  "sst2_0085": {
+    "sentiment": "negative"
+  },
+  "sst2_0086": {
+    "sentiment": "negative"
+  },
+  "sst2_0087": {
+    "sentiment": "positive"
+  },
+  "sst2_0088": {
+    "sentiment": "positive"
+  },
+  "sst2_0089": {
+    "sentiment": "positive"
+  },
+  "sst2_0090": {
+    "sentiment": "positive"
+  },
+  "sst2_0091": {
+    "sentiment": "negative"
+  },
+  "sst2_0092": {
+    "sentiment": "negative"
+  },
+  "sst2_0093": {
+    "sentiment": "positive"
+  },
+  "sst2_0094": {
+    "sentiment": "positive"
+  },
+  "sst2_0095": {
+    "sentiment": "negative"
+  },
+  "sst2_0096": {
+    "sentiment": "negative"
+  },
+  "sst2_0097": {
+    "sentiment": "positive"
+  },
+  "sst2_0098": {
+    "sentiment": "negative"
+  },
+  "sst2_0099": {
+    "sentiment": "positive"
+  },
+  "sst2_0100": {
+    "sentiment": "negative"
+  },
+  "sst2_0101": {
+    "sentiment": "negative"
+  },
+  "sst2_0102": {
+    "sentiment": "positive"
+  },
+  "sst2_0103": {
+    "sentiment": "positive"
+  },
+  "sst2_0104": {
+    "sentiment": "negative"
+  },
+  "sst2_0105": {
+    "sentiment": "positive"
+  },
+  "sst2_0106": {
+    "sentiment": "positive"
+  },
+  "sst2_0107": {
+    "sentiment": "positive"
+  },
+  "sst2_0108": {
+    "sentiment": "positive"
+  },
+  "sst2_0109": {
+    "sentiment": "negative"
+  },
+  "sst2_0110": {
+    "sentiment": "negative"
+  },
+  "sst2_0111": {
+    "sentiment": "positive"
+  },
+  "sst2_0112": {
+    "sentiment": "negative"
+  },
+  "sst2_0113": {
+    "sentiment": "negative"
+  },
+  "sst2_0114": {
+    "sentiment": "negative"
+  },
+  "sst2_0115": {
+    "sentiment": "positive"
+  },
+  "sst2_0116": {
+    "sentiment": "positive"
+  },
+  "sst2_0117": {
+    "sentiment": "negative"
+  },
+  "sst2_0118": {
+    "sentiment": "negative"
+  },
+  "sst2_0119": {
+    "sentiment": "positive"
+  },
+  "sst2_0120": {
+    "sentiment": "negative"
+  },
+  "sst2_0121": {
+    "sentiment": "negative"
+  },
+  "sst2_0122": {
+    "sentiment": "positive"
+  },
+  "sst2_0123": {
+    "sentiment": "positive"
+  },
+  "sst2_0124": {
+    "sentiment": "negative"
+  },
+  "sst2_0125": {
+    "sentiment": "positive"
+  },
+  "sst2_0126": {
+    "sentiment": "negative"
+  },
+  "sst2_0127": {
+    "sentiment": "positive"
+  },
+  "sst2_0128": {
+    "sentiment": "negative"
+  },
+  "sst2_0129": {
+    "sentiment": "positive"
+  },
+  "sst2_0130": {
+    "sentiment": "positive"
+  },
+  "sst2_0131": {
+    "sentiment": "positive"
+  },
+  "sst2_0132": {
+    "sentiment": "negative"
+  },
+  "sst2_0133": {
+    "sentiment": "negative"
+  },
+  "sst2_0134": {
+    "sentiment": "negative"
+  },
+  "sst2_0135": {
+    "sentiment": "positive"
+  },
+  "sst2_0136": {
+    "sentiment": "negative"
+  },
+  "sst2_0137": {
+    "sentiment": "positive"
+  },
+  "sst2_0138": {
+    "sentiment": "negative"
+  },
+  "sst2_0139": {
+    "sentiment": "positive"
+  },
+  "sst2_0140": {
+    "sentiment": "positive"
+  },
+  "sst2_0141": {
+    "sentiment": "positive"
+  },
+  "sst2_0142": {
+    "sentiment": "positive"
+  },
+  "sst2_0143": {
+    "sentiment": "negative"
+  },
+  "sst2_0144": {
+    "sentiment": "positive"
+  },
+  "sst2_0145": {
+    "sentiment": "positive"
+  },
+  "sst2_0146": {
+    "sentiment": "negative"
+  },
+  "sst2_0147": {
+    "sentiment": "positive"
+  },
+  "sst2_0148": {
+    "sentiment": "positive"
+  },
+  "sst2_0149": {
+    "sentiment": "positive"
+  },
+  "sst2_0150": {
+    "sentiment": "negative"
+  },
+  "sst2_0151": {
+    "sentiment": "positive"
+  },
+  "sst2_0152": {
+    "sentiment": "positive"
+  },
+  "sst2_0153": {
+    "sentiment": "positive"
+  },
+  "sst2_0154": {
+    "sentiment": "negative"
+  },
+  "sst2_0155": {
+    "sentiment": "negative"
+  },
+  "sst2_0156": {
+    "sentiment": "negative"
+  },
+  "sst2_0157": {
+    "sentiment": "positive"
+  },
+  "sst2_0158": {
+    "sentiment": "positive"
+  },
+  "sst2_0159": {
+    "sentiment": "negative"
+  },
+  "sst2_0160": {
+    "sentiment": "positive"
+  },
+  "sst2_0161": {
+    "sentiment": "positive"
+  },
+  "sst2_0162": {
+    "sentiment": "positive"
+  },
+  "sst2_0163": {
+    "sentiment": "negative"
+  },
+  "sst2_0164": {
+    "sentiment": "positive"
+  },
+  "sst2_0165": {
+    "sentiment": "positive"
+  },
+  "sst2_0166": {
+    "sentiment": "negative"
+  },
+  "sst2_0167": {
+    "sentiment": "positive"
+  },
+  "sst2_0168": {
+    "sentiment": "positive"
+  },
+  "sst2_0169": {
+    "sentiment": "positive"
+  },
+  "sst2_0170": {
+    "sentiment": "positive"
+  },
+  "sst2_0171": {
+    "sentiment": "negative"
+  },
+  "sst2_0172": {
+    "sentiment": "positive"
+  },
+  "sst2_0173": {
+    "sentiment": "negative"
+  },
+  "sst2_0174": {
+    "sentiment": "positive"
+  },
+  "sst2_0175": {
+    "sentiment": "positive"
+  },
+  "sst2_0176": {
+    "sentiment": "negative"
+  },
+  "sst2_0177": {
+    "sentiment": "positive"
+  },
+  "sst2_0178": {
+    "sentiment": "positive"
+  },
+  "sst2_0179": {
+    "sentiment": "negative"
+  },
+  "sst2_0180": {
+    "sentiment": "negative"
+  },
+  "sst2_0181": {
+    "sentiment": "positive"
+  },
+  "sst2_0182": {
+    "sentiment": "negative"
+  },
+  "sst2_0183": {
+    "sentiment": "positive"
+  },
+  "sst2_0184": {
+    "sentiment": "positive"
+  },
+  "sst2_0185": {
+    "sentiment": "negative"
+  },
+  "sst2_0186": {
+    "sentiment": "negative"
+  },
+  "sst2_0187": {
+    "sentiment": "positive"
+  },
+  "sst2_0188": {
+    "sentiment": "negative"
+  },
+  "sst2_0189": {
+    "sentiment": "positive"
+  },
+  "sst2_0190": {
+    "sentiment": "negative"
+  },
+  "sst2_0191": {
+    "sentiment": "positive"
+  },
+  "sst2_0192": {
+    "sentiment": "positive"
+  },
+  "sst2_0193": {
+    "sentiment": "negative"
+  },
+  "sst2_0194": {
+    "sentiment": "negative"
+  },
+  "sst2_0195": {
+    "sentiment": "positive"
+  },
+  "sst2_0196": {
+    "sentiment": "negative"
+  },
+  "sst2_0197": {
+    "sentiment": "negative"
+  },
+  "sst2_0198": {
+    "sentiment": "positive"
+  },
+  "sst2_0199": {
+    "sentiment": "negative"
+  },
+  "sst2_0200": {
+    "sentiment": "positive"
+  },
+  "sst2_0201": {
+    "sentiment": "negative"
+  },
+  "sst2_0202": {
+    "sentiment": "negative"
+  },
+  "sst2_0203": {
+    "sentiment": "positive"
+  },
+  "sst2_0204": {
+    "sentiment": "negative"
+  },
+  "sst2_0205": {
+    "sentiment": "positive"
+  },
+  "sst2_0206": {
+    "sentiment": "positive"
+  },
+  "sst2_0207": {
+    "sentiment": "negative"
+  },
+  "sst2_0208": {
+    "sentiment": "positive"
+  },
+  "sst2_0209": {
+    "sentiment": "negative"
+  },
+  "sst2_0210": {
+    "sentiment": "negative"
+  },
+  "sst2_0211": {
+    "sentiment": "negative"
+  },
+  "sst2_0212": {
+    "sentiment": "positive"
+  },
+  "sst2_0213": {
+    "sentiment": "positive"
+  },
+  "sst2_0214": {
+    "sentiment": "positive"
+  },
+  "sst2_0215": {
+    "sentiment": "negative"
+  },
+  "sst2_0216": {
+    "sentiment": "positive"
+  },
+  "sst2_0217": {
+    "sentiment": "negative"
+  },
+  "sst2_0218": {
+    "sentiment": "positive"
+  },
+  "sst2_0219": {
+    "sentiment": "positive"
+  },
+  "sst2_0220": {
+    "sentiment": "positive"
+  },
+  "sst2_0221": {
+    "sentiment": "positive"
+  },
+  "sst2_0222": {
+    "sentiment": "positive"
+  },
+  "sst2_0223": {
+    "sentiment": "positive"
+  },
+  "sst2_0224": {
+    "sentiment": "positive"
+  },
+  "sst2_0225": {
+    "sentiment": "negative"
+  },
+  "sst2_0226": {
+    "sentiment": "negative"
+  },
+  "sst2_0227": {
+    "sentiment": "negative"
+  },
+  "sst2_0228": {
+    "sentiment": "positive"
+  },
+  "sst2_0229": {
+    "sentiment": "positive"
+  },
+  "sst2_0230": {
+    "sentiment": "negative"
+  },
+  "sst2_0231": {
+    "sentiment": "negative"
+  },
+  "sst2_0232": {
+    "sentiment": "negative"
+  },
+  "sst2_0233": {
+    "sentiment": "positive"
+  },
+  "sst2_0234": {
+    "sentiment": "negative"
+  },
+  "sst2_0235": {
+    "sentiment": "negative"
+  },
+  "sst2_0236": {
+    "sentiment": "positive"
+  },
+  "sst2_0237": {
+    "sentiment": "negative"
+  },
+  "sst2_0238": {
+    "sentiment": "positive"
+  },
+  "sst2_0239": {
+    "sentiment": "positive"
+  },
+  "sst2_0240": {
+    "sentiment": "positive"
+  },
+  "sst2_0241": {
+    "sentiment": "negative"
+  },
+  "sst2_0242": {
+    "sentiment": "positive"
+  },
+  "sst2_0243": {
+    "sentiment": "positive"
+  },
+  "sst2_0244": {
+    "sentiment": "positive"
+  },
+  "sst2_0245": {
+    "sentiment": "positive"
+  },
+  "sst2_0246": {
+    "sentiment": "positive"
+  },
+  "sst2_0247": {
+    "sentiment": "negative"
+  },
+  "sst2_0248": {
+    "sentiment": "positive"
+  },
+  "sst2_0249": {
+    "sentiment": "negative"
+  },
+  "sst2_0250": {
+    "sentiment": "positive"
+  },
+  "sst2_0251": {
+    "sentiment": "positive"
+  },
+  "sst2_0252": {
+    "sentiment": "negative"
+  },
+  "sst2_0253": {
+    "sentiment": "negative"
+  },
+  "sst2_0254": {
+    "sentiment": "positive"
+  },
+  "sst2_0255": {
+    "sentiment": "positive"
+  },
+  "sst2_0256": {
+    "sentiment": "positive"
+  },
+  "sst2_0257": {
+    "sentiment": "positive"
+  },
+  "sst2_0258": {
+    "sentiment": "negative"
+  },
+  "sst2_0259": {
+    "sentiment": "negative"
+  },
+  "sst2_0260": {
+    "sentiment": "negative"
+  },
+  "sst2_0261": {
+    "sentiment": "negative"
+  },
+  "sst2_0262": {
+    "sentiment": "positive"
+  },
+  "sst2_0263": {
+    "sentiment": "negative"
+  },
+  "sst2_0264": {
+    "sentiment": "positive"
+  },
+  "sst2_0265": {
+    "sentiment": "negative"
+  },
+  "sst2_0266": {
+    "sentiment": "negative"
+  },
+  "sst2_0267": {
+    "sentiment": "negative"
+  },
+  "sst2_0268": {
+    "sentiment": "negative"
+  },
+  "sst2_0269": {
+    "sentiment": "negative"
+  },
+  "sst2_0270": {
+    "sentiment": "positive"
+  },
+  "sst2_0271": {
+    "sentiment": "positive"
+  },
+  "sst2_0272": {
+    "sentiment": "positive"
+  },
+  "sst2_0273": {
+    "sentiment": "positive"
+  },
+  "sst2_0274": {
+    "sentiment": "negative"
+  },
+  "sst2_0275": {
+    "sentiment": "negative"
+  },
+  "sst2_0276": {
+    "sentiment": "positive"
+  },
+  "sst2_0277": {
+    "sentiment": "positive"
+  },
+  "sst2_0278": {
+    "sentiment": "negative"
+  },
+  "sst2_0279": {
+    "sentiment": "positive"
+  },
+  "sst2_0280": {
+    "sentiment": "positive"
+  },
+  "sst2_0281": {
+    "sentiment": "positive"
+  },
+  "sst2_0282": {
+    "sentiment": "negative"
+  },
+  "sst2_0283": {
+    "sentiment": "positive"
+  },
+  "sst2_0284": {
+    "sentiment": "negative"
+  },
+  "sst2_0285": {
+    "sentiment": "negative"
+  },
+  "sst2_0286": {
+    "sentiment": "negative"
+  },
+  "sst2_0287": {
+    "sentiment": "positive"
+  },
+  "sst2_0288": {
+    "sentiment": "negative"
+  },
+  "sst2_0289": {
+    "sentiment": "negative"
+  },
+  "sst2_0290": {
+    "sentiment": "negative"
+  },
+  "sst2_0291": {
+    "sentiment": "negative"
+  },
+  "sst2_0292": {
+    "sentiment": "negative"
+  },
+  "sst2_0293": {
+    "sentiment": "positive"
+  },
+  "sst2_0294": {
+    "sentiment": "positive"
+  },
+  "sst2_0295": {
+    "sentiment": "negative"
+  },
+  "sst2_0296": {
+    "sentiment": "positive"
+  },
+  "sst2_0297": {
+    "sentiment": "negative"
+  },
+  "sst2_0298": {
+    "sentiment": "negative"
+  },
+  "sst2_0299": {
+    "sentiment": "negative"
+  },
+  "sst2_0300": {
+    "sentiment": "negative"
+  },
+  "sst2_0301": {
+    "sentiment": "positive"
+  },
+  "sst2_0302": {
+    "sentiment": "positive"
+  },
+  "sst2_0303": {
+    "sentiment": "negative"
+  },
+  "sst2_0304": {
+    "sentiment": "positive"
+  },
+  "sst2_0305": {
+    "sentiment": "negative"
+  },
+  "sst2_0306": {
+    "sentiment": "positive"
+  },
+  "sst2_0307": {
+    "sentiment": "negative"
+  },
+  "sst2_0308": {
+    "sentiment": "positive"
+  },
+  "sst2_0309": {
+    "sentiment": "negative"
+  },
+  "sst2_0310": {
+    "sentiment": "negative"
+  },
+  "sst2_0311": {
+    "sentiment": "negative"
+  },
+  "sst2_0312": {
+    "sentiment": "positive"
+  },
+  "sst2_0313": {
+    "sentiment": "positive"
+  },
+  "sst2_0314": {
+    "sentiment": "positive"
+  },
+  "sst2_0315": {
+    "sentiment": "positive"
+  },
+  "sst2_0316": {
+    "sentiment": "positive"
+  },
+  "sst2_0317": {
+    "sentiment": "positive"
+  },
+  "sst2_0318": {
+    "sentiment": "positive"
+  },
+  "sst2_0319": {
+    "sentiment": "negative"
+  },
+  "sst2_0320": {
+    "sentiment": "positive"
+  },
+  "sst2_0321": {
+    "sentiment": "negative"
+  },
+  "sst2_0322": {
+    "sentiment": "positive"
+  },
+  "sst2_0323": {
+    "sentiment": "negative"
+  },
+  "sst2_0324": {
+    "sentiment": "positive"
+  },
+  "sst2_0325": {
+    "sentiment": "positive"
+  },
+  "sst2_0326": {
+    "sentiment": "positive"
+  },
+  "sst2_0327": {
+    "sentiment": "negative"
+  },
+  "sst2_0328": {
+    "sentiment": "positive"
+  },
+  "sst2_0329": {
+    "sentiment": "positive"
+  },
+  "sst2_0330": {
+    "sentiment": "positive"
+  },
+  "sst2_0331": {
+    "sentiment": "positive"
+  },
+  "sst2_0332": {
+    "sentiment": "positive"
+  },
+  "sst2_0333": {
+    "sentiment": "positive"
+  },
+  "sst2_0334": {
+    "sentiment": "negative"
+  },
+  "sst2_0335": {
+    "sentiment": "positive"
+  },
+  "sst2_0336": {
+    "sentiment": "positive"
+  },
+  "sst2_0337": {
+    "sentiment": "positive"
+  },
+  "sst2_0338": {
+    "sentiment": "positive"
+  },
+  "sst2_0339": {
+    "sentiment": "negative"
+  },
+  "sst2_0340": {
+    "sentiment": "positive"
+  },
+  "sst2_0341": {
+    "sentiment": "negative"
+  },
+  "sst2_0342": {
+    "sentiment": "positive"
+  },
+  "sst2_0343": {
+    "sentiment": "positive"
+  },
+  "sst2_0344": {
+    "sentiment": "negative"
+  },
+  "sst2_0345": {
+    "sentiment": "positive"
+  },
+  "sst2_0346": {
+    "sentiment": "positive"
+  },
+  "sst2_0347": {
+    "sentiment": "positive"
+  },
+  "sst2_0348": {
+    "sentiment": "positive"
+  },
+  "sst2_0349": {
+    "sentiment": "positive"
+  },
+  "sst2_0350": {
+    "sentiment": "positive"
+  },
+  "sst2_0351": {
+    "sentiment": "positive"
+  },
+  "sst2_0352": {
+    "sentiment": "positive"
+  },
+  "sst2_0353": {
+    "sentiment": "negative"
+  },
+  "sst2_0354": {
+    "sentiment": "positive"
+  },
+  "sst2_0355": {
+    "sentiment": "positive"
+  },
+  "sst2_0356": {
+    "sentiment": "positive"
+  },
+  "sst2_0357": {
+    "sentiment": "positive"
+  },
+  "sst2_0358": {
+    "sentiment": "negative"
+  },
+  "sst2_0359": {
+    "sentiment": "negative"
+  },
+  "sst2_0360": {
+    "sentiment": "positive"
+  },
+  "sst2_0361": {
+    "sentiment": "negative"
+  },
+  "sst2_0362": {
+    "sentiment": "negative"
+  },
+  "sst2_0363": {
+    "sentiment": "negative"
+  },
+  "sst2_0364": {
+    "sentiment": "negative"
+  },
+  "sst2_0365": {
+    "sentiment": "positive"
+  },
+  "sst2_0366": {
+    "sentiment": "negative"
+  },
+  "sst2_0367": {
+    "sentiment": "negative"
+  },
+  "sst2_0368": {
+    "sentiment": "negative"
+  },
+  "sst2_0369": {
+    "sentiment": "negative"
+  },
+  "sst2_0370": {
+    "sentiment": "positive"
+  },
+  "sst2_0371": {
+    "sentiment": "positive"
+  },
+  "sst2_0372": {
+    "sentiment": "negative"
+  },
+  "sst2_0373": {
+    "sentiment": "negative"
+  },
+  "sst2_0374": {
+    "sentiment": "positive"
+  },
+  "sst2_0375": {
+    "sentiment": "negative"
+  },
+  "sst2_0376": {
+    "sentiment": "positive"
+  },
+  "sst2_0377": {
+    "sentiment": "negative"
+  },
+  "sst2_0378": {
+    "sentiment": "positive"
+  },
+  "sst2_0379": {
+    "sentiment": "negative"
+  },
+  "sst2_0380": {
+    "sentiment": "negative"
+  },
+  "sst2_0381": {
+    "sentiment": "positive"
+  },
+  "sst2_0382": {
+    "sentiment": "negative"
+  },
+  "sst2_0383": {
+    "sentiment": "positive"
+  },
+  "sst2_0384": {
+    "sentiment": "positive"
+  },
+  "sst2_0385": {
+    "sentiment": "positive"
+  },
+  "sst2_0386": {
+    "sentiment": "positive"
+  },
+  "sst2_0387": {
+    "sentiment": "negative"
+  },
+  "sst2_0388": {
+    "sentiment": "positive"
+  },
+  "sst2_0389": {
+    "sentiment": "negative"
+  },
+  "sst2_0390": {
+    "sentiment": "negative"
+  },
+  "sst2_0391": {
+    "sentiment": "positive"
+  },
+  "sst2_0392": {
+    "sentiment": "positive"
+  },
+  "sst2_0393": {
+    "sentiment": "negative"
+  },
+  "sst2_0394": {
+    "sentiment": "positive"
+  },
+  "sst2_0395": {
+    "sentiment": "positive"
+  },
+  "sst2_0396": {
+    "sentiment": "positive"
+  },
+  "sst2_0397": {
+    "sentiment": "negative"
+  },
+  "sst2_0398": {
+    "sentiment": "negative"
+  },
+  "sst2_0399": {
+    "sentiment": "positive"
+  },
+  "sst2_0400": {
+    "sentiment": "negative"
+  },
+  "sst2_0401": {
+    "sentiment": "positive"
+  },
+  "sst2_0402": {
+    "sentiment": "negative"
+  },
+  "sst2_0403": {
+    "sentiment": "positive"
+  },
+  "sst2_0404": {
+    "sentiment": "negative"
+  },
+  "sst2_0405": {
+    "sentiment": "positive"
+  },
+  "sst2_0406": {
+    "sentiment": "negative"
+  },
+  "sst2_0407": {
+    "sentiment": "positive"
+  },
+  "sst2_0408": {
+    "sentiment": "positive"
+  },
+  "sst2_0409": {
+    "sentiment": "negative"
+  },
+  "sst2_0410": {
+    "sentiment": "negative"
+  },
+  "sst2_0411": {
+    "sentiment": "negative"
+  },
+  "sst2_0412": {
+    "sentiment": "positive"
+  },
+  "sst2_0413": {
+    "sentiment": "negative"
+  },
+  "sst2_0414": {
+    "sentiment": "positive"
+  },
+  "sst2_0415": {
+    "sentiment": "negative"
+  },
+  "sst2_0416": {
+    "sentiment": "negative"
+  },
+  "sst2_0417": {
+    "sentiment": "positive"
+  },
+  "sst2_0418": {
+    "sentiment": "positive"
+  },
+  "sst2_0419": {
+    "sentiment": "positive"
+  },
+  "sst2_0420": {
+    "sentiment": "positive"
+  },
+  "sst2_0421": {
+    "sentiment": "positive"
+  },
+  "sst2_0422": {
+    "sentiment": "positive"
+  },
+  "sst2_0423": {
+    "sentiment": "negative"
+  },
+  "sst2_0424": {
+    "sentiment": "positive"
+  },
+  "sst2_0425": {
+    "sentiment": "negative"
+  },
+  "sst2_0426": {
+    "sentiment": "negative"
+  },
+  "sst2_0427": {
+    "sentiment": "positive"
+  },
+  "sst2_0428": {
+    "sentiment": "positive"
+  },
+  "sst2_0429": {
+    "sentiment": "positive"
+  },
+  "sst2_0430": {
+    "sentiment": "negative"
+  },
+  "sst2_0431": {
+    "sentiment": "positive"
+  },
+  "sst2_0432": {
+    "sentiment": "positive"
+  },
+  "sst2_0433": {
+    "sentiment": "negative"
+  },
+  "sst2_0434": {
+    "sentiment": "positive"
+  },
+  "sst2_0435": {
+    "sentiment": "positive"
+  },
+  "sst2_0436": {
+    "sentiment": "negative"
+  },
+  "sst2_0437": {
+    "sentiment": "positive"
+  },
+  "sst2_0438": {
+    "sentiment": "negative"
+  },
+  "sst2_0439": {
+    "sentiment": "negative"
+  },
+  "sst2_0440": {
+    "sentiment": "positive"
+  },
+  "sst2_0441": {
+    "sentiment": "positive"
+  },
+  "sst2_0442": {
+    "sentiment": "positive"
+  },
+  "sst2_0443": {
+    "sentiment": "positive"
+  },
+  "sst2_0444": {
+    "sentiment": "negative"
+  },
+  "sst2_0445": {
+    "sentiment": "positive"
+  },
+  "sst2_0446": {
+    "sentiment": "positive"
+  },
+  "sst2_0447": {
+    "sentiment": "positive"
+  },
+  "sst2_0448": {
+    "sentiment": "negative"
+  },
+  "sst2_0449": {
+    "sentiment": "negative"
+  },
+  "sst2_0450": {
+    "sentiment": "positive"
+  },
+  "sst2_0451": {
+    "sentiment": "positive"
+  },
+  "sst2_0452": {
+    "sentiment": "positive"
+  },
+  "sst2_0453": {
+    "sentiment": "negative"
+  },
+  "sst2_0454": {
+    "sentiment": "positive"
+  },
+  "sst2_0455": {
+    "sentiment": "positive"
+  },
+  "sst2_0456": {
+    "sentiment": "positive"
+  },
+  "sst2_0457": {
+    "sentiment": "positive"
+  },
+  "sst2_0458": {
+    "sentiment": "negative"
+  },
+  "sst2_0459": {
+    "sentiment": "negative"
+  },
+  "sst2_0460": {
+    "sentiment": "negative"
+  },
+  "sst2_0461": {
+    "sentiment": "negative"
+  },
+  "sst2_0462": {
+    "sentiment": "negative"
+  },
+  "sst2_0463": {
+    "sentiment": "positive"
+  },
+  "sst2_0464": {
+    "sentiment": "positive"
+  },
+  "sst2_0465": {
+    "sentiment": "positive"
+  },
+  "sst2_0466": {
+    "sentiment": "negative"
+  },
+  "sst2_0467": {
+    "sentiment": "positive"
+  },
+  "sst2_0468": {
+    "sentiment": "negative"
+  },
+  "sst2_0469": {
+    "sentiment": "negative"
+  },
+  "sst2_0470": {
+    "sentiment": "positive"
+  },
+  "sst2_0471": {
+    "sentiment": "positive"
+  },
+  "sst2_0472": {
+    "sentiment": "negative"
+  },
+  "sst2_0473": {
+    "sentiment": "positive"
+  },
+  "sst2_0474": {
+    "sentiment": "positive"
+  },
+  "sst2_0475": {
+    "sentiment": "positive"
+  },
+  "sst2_0476": {
+    "sentiment": "positive"
+  },
+  "sst2_0477": {
+    "sentiment": "negative"
+  },
+  "sst2_0478": {
+    "sentiment": "negative"
+  },
+  "sst2_0479": {
+    "sentiment": "negative"
+  },
+  "sst2_0480": {
+    "sentiment": "positive"
+  },
+  "sst2_0481": {
+    "sentiment": "positive"
+  },
+  "sst2_0482": {
+    "sentiment": "negative"
+  },
+  "sst2_0483": {
+    "sentiment": "negative"
+  },
+  "sst2_0484": {
+    "sentiment": "positive"
+  },
+  "sst2_0485": {
+    "sentiment": "positive"
+  },
+  "sst2_0486": {
+    "sentiment": "negative"
+  },
+  "sst2_0487": {
+    "sentiment": "positive"
+  },
+  "sst2_0488": {
+    "sentiment": "negative"
+  },
+  "sst2_0489": {
+    "sentiment": "positive"
+  },
+  "sst2_0490": {
+    "sentiment": "positive"
+  },
+  "sst2_0491": {
+    "sentiment": "negative"
+  },
+  "sst2_0492": {
+    "sentiment": "negative"
+  },
+  "sst2_0493": {
+    "sentiment": "positive"
+  },
+  "sst2_0494": {
+    "sentiment": "positive"
+  },
+  "sst2_0495": {
+    "sentiment": "positive"
+  },
+  "sst2_0496": {
+    "sentiment": "positive"
+  },
+  "sst2_0497": {
+    "sentiment": "positive"
+  },
+  "sst2_0498": {
+    "sentiment": "positive"
+  },
+  "sst2_0499": {
+    "sentiment": "positive"
+  }
+}

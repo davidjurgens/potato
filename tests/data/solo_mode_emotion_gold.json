@@ -1,0 +1,752 @@
+{
+  "emo_131": {
+    "emotion": "fear"
+  },
+  "emo_224": {
+    "emotion": "surprise"
+  },
+  "emo_060": {
+    "emotion": "sadness"
+  },
+  "emo_132": {
+    "emotion": "fear"
+  },
+  "emo_199": {
+    "emotion": "neutral"
+  },
+  "emo_122": {
+    "emotion": "fear"
+  },
+  "emo_139": {
+    "emotion": "fear"
+  },
+  "emo_133": {
+    "emotion": "fear"
+  },
+  "emo_082": {
+    "emotion": "sadness"
+  },
+  "emo_004": {
+    "emotion": "joy"
+  },
+  "emo_055": {
+    "emotion": "sadness"
+  },
+  "emo_146": {
+    "emotion": "fear"
+  },
+  "emo_152": {
+    "emotion": "surprise"
+  },
+  "emo_076": {
+    "emotion": "sadness"
+  },
+  "emo_097": {
+    "emotion": "anger"
+  },
+  "emo_194": {
+    "emotion": "neutral"
+  },
+  "emo_120": {
+    "emotion": "anger"
+  },
+  "emo_128": {
+    "emotion": "fear"
+  },
+  "emo_203": {
+    "emotion": "neutral"
+  },
+  "emo_099": {
+    "emotion": "anger"
+  },
+  "emo_036": {
+    "emotion": "joy"
+  },
+  "emo_138": {
+    "emotion": "fear"
+  },
+  "emo_215": {
+    "emotion": "neutral"
+  },
+  "emo_189": {
+    "emotion": "neutral"
+  },
+  "emo_216": {
+    "emotion": "neutral"
+  },
+  "emo_188": {
+    "emotion": "neutral"
+  },
+  "emo_116": {
+    "emotion": "anger"
+  },
+  "emo_107": {
+    "emotion": "anger"
+  },
+  "emo_149": {
+    "emotion": "fear"
+  },
+  "emo_062": {
+    "emotion": "sadness"
+  },
+  "emo_032": {
+    "emotion": "joy"
+  },
+  "emo_160": {
+    "emotion": "surprise"
+  },
+  "emo_186": {
+    "emotion": "neutral"
+  },
+  "emo_002": {
+    "emotion": "joy"
+  },
+  "emo_147": {
+    "emotion": "fear"
+  },
+  "emo_013": {
+    "emotion": "joy"
+  },
+  "emo_201": {
+    "emotion": "neutral"
+  },
+  "emo_213": {
+    "emotion": "neutral"
+  },
+  "emo_084": {
+    "emotion": "sadness"
+  },
+  "emo_169": {
+    "emotion": "surprise"
+  },
+  "emo_022": {
+    "emotion": "joy"
+  },
+  "emo_081": {
+    "emotion": "sadness"
+  },
+  "emo_089": {
+    "emotion": "anger"
+  },
+  "emo_108": {
+    "emotion": "anger"
+  },
+  "emo_087": {
+    "emotion": "anger"
+  },
+  "emo_019": {
+    "emotion": "joy"
+  },
+  "emo_104": {
+    "emotion": "anger"
+  },
+  "emo_148": {
+    "emotion": "fear"
+  },
+  "emo_227": {
+    "emotion": "surprise"
+  },
+  "emo_048": {
+    "emotion": "sadness"
+  },
+  "emo_245": {
+    "emotion": "sadness"
+  },
+  "emo_031": {
+    "emotion": "joy"
+  },
+  "emo_202": {
+    "emotion": "neutral"
+  },
+  "emo_119": {
+    "emotion": "anger"
+  },
+  "emo_044": {
+    "emotion": "joy"
+  },
+  "emo_145": {
+    "emotion": "fear"
+  },
+  "emo_185": {
+    "emotion": "neutral"
+  },
+  "emo_222": {
+    "emotion": "surprise"
+  },
+  "emo_021": {
+    "emotion": "joy"
+  },
+  "emo_141": {
+    "emotion": "fear"
+  },
+  "emo_100": {
+    "emotion": "anger"
+  },
+  "emo_143": {
+    "emotion": "fear"
+  },
+  "emo_051": {
+    "emotion": "sadness"
+  },
+  "emo_235": {
+    "emotion": "anger"
+  },
+  "emo_166": {
+    "emotion": "surprise"
+  },
+  "emo_037": {
+    "emotion": "joy"
+  },
+  "emo_217": {
+    "emotion": "neutral"
+  },
+  "emo_220": {
+    "emotion": "neutral"
+  },
+  "emo_175": {
+    "emotion": "surprise"
+  },
+  "emo_083": {
+    "emotion": "sadness"
+  },
+  "emo_123": {
+    "emotion": "fear"
+  },
+  "emo_049": {
+    "emotion": "sadness"
+  },
+  "emo_234": {
+    "emotion": "fear"
+  },
+  "emo_153": {
+    "emotion": "surprise"
+  },
+  "emo_017": {
+    "emotion": "joy"
+  },
+  "emo_200": {
+    "emotion": "neutral"
+  },
+  "emo_230": {
+    "emotion": "sadness"
+  },
+  "emo_195": {
+    "emotion": "neutral"
+  },
+  "emo_162": {
+    "emotion": "surprise"
+  },
+  "emo_211": {
+    "emotion": "neutral"
+  },
+  "emo_161": {
+    "emotion": "surprise"
+  },
+  "emo_205": {
+    "emotion": "neutral"
+  },
+  "emo_182": {
+    "emotion": "neutral"
+  },
+  "emo_016": {
+    "emotion": "joy"
+  },
+  "emo_129": {
+    "emotion": "fear"
+  },
+  "emo_206": {
+    "emotion": "neutral"
+  },
+  "emo_080": {
+    "emotion": "sadness"
+  },
+  "emo_043": {
+    "emotion": "joy"
+  },
+  "emo_115": {
+    "emotion": "anger"
+  },
+  "emo_009": {
+    "emotion": "joy"
+  },
+  "emo_102": {
+    "emotion": "anger"
+  },
+  "emo_047": {
+    "emotion": "sadness"
+  },
+  "emo_026": {
+    "emotion": "joy"
+  },
+  "emo_154": {
+    "emotion": "surprise"
+  },
+  "emo_096": {
+    "emotion": "anger"
+  },
+  "emo_179": {
+    "emotion": "surprise"
+  },
+  "emo_093": {
+    "emotion": "anger"
+  },
+  "emo_212": {
+    "emotion": "neutral"
+  },
+  "emo_151": {
+    "emotion": "surprise"
+  },
+  "emo_067": {
+    "emotion": "sadness"
+  },
+  "emo_198": {
+    "emotion": "neutral"
+  },
+  "emo_112": {
+    "emotion": "anger"
+  },
+  "emo_165": {
+    "emotion": "surprise"
+  },
+  "emo_006": {
+    "emotion": "joy"
+  },
+  "emo_174": {
+    "emotion": "surprise"
+  },
+  "emo_025": {
+    "emotion": "joy"
+  },
+  "emo_074": {
+    "emotion": "sadness"
+  },
+  "emo_137": {
+    "emotion": "fear"
+  },
+  "emo_127": {
+    "emotion": "fear"
+  },
+  "emo_066": {
+    "emotion": "sadness"
+  },
+  "emo_237": {
+    "emotion": "joy"
+  },
+  "emo_117": {
+    "emotion": "anger"
+  },
+  "emo_178": {
+    "emotion": "surprise"
+  },
+  "emo_101": {
+    "emotion": "anger"
+  },
+  "emo_231": {
+    "emotion": "sadness"
+  },
+  "emo_045": {
+    "emotion": "joy"
+  },
+  "emo_056": {
+    "emotion": "sadness"
+  },
+  "emo_228": {
+    "emotion": "joy"
+  },
+  "emo_204": {
+    "emotion": "neutral"
+  },
+  "emo_005": {
+    "emotion": "joy"
+  },
+  "emo_124": {
+    "emotion": "fear"
+  },
+  "emo_075": {
+    "emotion": "sadness"
+  },
+  "emo_023": {
+    "emotion": "joy"
+  },
+  "emo_196": {
+    "emotion": "neutral"
+  },
+  "emo_125": {
+    "emotion": "fear"
+  },
+  "emo_241": {
+    "emotion": "surprise"
+  },
+  "emo_015": {
+    "emotion": "joy"
+  },
+  "emo_008": {
+    "emotion": "joy"
+  },
+  "emo_135": {
+    "emotion": "fear"
+  },
+  "emo_233": {
+    "emotion": "neutral"
+  },
+  "emo_183": {
+    "emotion": "neutral"
+  },
+  "emo_134": {
+    "emotion": "fear"
+  },
+  "emo_247": {
+    "emotion": "neutral"
+  },
+  "emo_072": {
+    "emotion": "sadness"
+  },
+  "emo_085": {
+    "emotion": "sadness"
+  },
+  "emo_103": {
+    "emotion": "anger"
+  },
+  "emo_050": {
+    "emotion": "sadness"
+  },
+  "emo_156": {
+    "emotion": "surprise"
+  },
+  "emo_058": {
+    "emotion": "sadness"
+  },
+  "emo_059": {
+    "emotion": "sadness"
+  },
+  "emo_172": {
+    "emotion": "surprise"
+  },
+  "emo_249": {
+    "emotion": "joy"
+  },
+  "emo_118": {
+    "emotion": "anger"
+  },
+  "emo_052": {
+    "emotion": "sadness"
+  },
+  "emo_057": {
+    "emotion": "sadness"
+  },
+  "emo_121": {
+    "emotion": "fear"
+  },
+  "emo_180": {
+    "emotion": "surprise"
+  },
+  "emo_098": {
+    "emotion": "anger"
+  },
+  "emo_221": {
+    "emotion": "anger"
+  },
+  "emo_242": {
+    "emotion": "fear"
+  },
+  "emo_069": {
+    "emotion": "sadness"
+  },
+  "emo_167": {
+    "emotion": "surprise"
+  },
+  "emo_236": {
+    "emotion": "fear"
+  },
+  "emo_197": {
+    "emotion": "neutral"
+  },
+  "emo_158": {
+    "emotion": "surprise"
+  },
+  "emo_007": {
+    "emotion": "joy"
+  },
+  "emo_106": {
+    "emotion": "anger"
+  },
+  "emo_046": {
+    "emotion": "sadness"
+  },
+  "emo_193": {
+    "emotion": "neutral"
+  },
+  "emo_061": {
+    "emotion": "sadness"
+  },
+  "emo_218": {
+    "emotion": "neutral"
+  },
+  "emo_159": {
+    "emotion": "surprise"
+  },
+  "emo_105": {
+    "emotion": "anger"
+  },
+  "emo_187": {
+    "emotion": "neutral"
+  },
+  "emo_091": {
+    "emotion": "anger"
+  },
+  "emo_246": {
+    "emotion": "sadness"
+  },
+  "emo_064": {
+    "emotion": "sadness"
+  },
+  "emo_240": {
+    "emotion": "anger"
+  },
+  "emo_092": {
+    "emotion": "anger"
+  },
+  "emo_173": {
+    "emotion": "surprise"
+  },
+  "emo_094": {
+    "emotion": "anger"
+  },
+  "emo_079": {
+    "emotion": "sadness"
+  },
+  "emo_011": {
+    "emotion": "joy"
+  },
+  "emo_033": {
+    "emotion": "joy"
+  },
+  "emo_111": {
+    "emotion": "anger"
+  },
+  "emo_038": {
+    "emotion": "joy"
+  },
+  "emo_192": {
+    "emotion": "neutral"
+  },
+  "emo_150": {
+    "emotion": "fear"
+  },
+  "emo_244": {
+    "emotion": "anger"
+  },
+  "emo_010": {
+    "emotion": "joy"
+  },
+  "emo_250": {
+    "emotion": "neutral"
+  },
+  "emo_039": {
+    "emotion": "joy"
+  },
+  "emo_177": {
+    "emotion": "surprise"
+  },
+  "emo_020": {
+    "emotion": "joy"
+  },
+  "emo_029": {
+    "emotion": "joy"
+  },
+  "emo_232": {
+    "emotion": "surprise"
+  },
+  "emo_144": {
+    "emotion": "fear"
+  },
+  "emo_110": {
+    "emotion": "anger"
+  },
+  "emo_238": {
+    "emotion": "fear"
+  },
+  "emo_219": {
+    "emotion": "neutral"
+  },
+  "emo_114": {
+    "emotion": "anger"
+  },
+  "emo_190": {
+    "emotion": "neutral"
+  },
+  "emo_042": {
+    "emotion": "joy"
+  },
+  "emo_208": {
+    "emotion": "neutral"
+  },
+  "emo_164": {
+    "emotion": "surprise"
+  },
+  "emo_034": {
+    "emotion": "joy"
+  },
+  "emo_086": {
+    "emotion": "anger"
+  },
+  "emo_001": {
+    "emotion": "joy"
+  },
+  "emo_012": {
+    "emotion": "joy"
+  },
+  "emo_071": {
+    "emotion": "sadness"
+  },
+  "emo_109": {
+    "emotion": "anger"
+  },
+  "emo_209": {
+    "emotion": "neutral"
+  },
+  "emo_024": {
+    "emotion": "joy"
+  },
+  "emo_014": {
+    "emotion": "joy"
+  },
+  "emo_065": {
+    "emotion": "sadness"
+  },
+  "emo_126": {
+    "emotion": "fear"
+  },
+  "emo_130": {
+    "emotion": "fear"
+  },
+  "emo_223": {
+    "emotion": "sadness"
+  },
+  "emo_163": {
+    "emotion": "surprise"
+  },
+  "emo_176": {
+    "emotion": "surprise"
+  },
+  "emo_053": {
+    "emotion": "sadness"
+  },
+  "emo_088": {
+    "emotion": "anger"
+  },
+  "emo_184": {
+    "emotion": "neutral"
+  },
+  "emo_054": {
+    "emotion": "sadness"
+  },
+  "emo_155": {
+    "emotion": "surprise"
+  },
+  "emo_243": {
+    "emotion": "sadness"
+  },
+  "emo_070": {
+    "emotion": "sadness"
+  },
+  "emo_040": {
+    "emotion": "joy"
+  },
+  "emo_229": {
+    "emotion": "neutral"
+  },
+  "emo_191": {
+    "emotion": "neutral"
+  },
+  "emo_028": {
+    "emotion": "joy"
+  },
+  "emo_030": {
+    "emotion": "joy"
+  },
+  "emo_068": {
+    "emotion": "sadness"
+  },
+  "emo_035": {
+    "emotion": "joy"
+  },
+  "emo_225": {
+    "emotion": "anger"
+  },
+  "emo_027": {
+    "emotion": "joy"
+  },
+  "emo_170": {
+    "emotion": "surprise"
+  },
+  "emo_077": {
+    "emotion": "sadness"
+  },
+  "emo_142": {
+    "emotion": "fear"
+  },
+  "emo_210": {
+    "emotion": "neutral"
+  },
+  "emo_171": {
+    "emotion": "surprise"
+  },
+  "emo_003": {
+    "emotion": "joy"
+  },
+  "emo_136": {
+    "emotion": "fear"
+  },
+  "emo_168": {
+    "emotion": "surprise"
+  },
+  "emo_207": {
+    "emotion": "neutral"
+  },
+  "emo_157": {
+    "emotion": "surprise"
+  },
+  "emo_078": {
+    "emotion": "sadness"
+  },
+  "emo_181": {
+    "emotion": "neutral"
+  },
+  "emo_140": {
+    "emotion": "fear"
+  },
+  "emo_214": {
+    "emotion": "neutral"
+  },
+  "emo_113": {
+    "emotion": "anger"
+  },
+  "emo_041": {
+    "emotion": "joy"
+  },
+  "emo_073": {
+    "emotion": "sadness"
+  },
+  "emo_095": {
+    "emotion": "anger"
+  },
+  "emo_063": {
+    "emotion": "sadness"
+  },
+  "emo_248": {
+    "emotion": "sadness"
+  },
+  "emo_018": {
+    "emotion": "joy"
+  },
+  "emo_226": {
+    "emotion": "sadness"
+  },
+  "emo_090": {
+    "emotion": "anger"
+  },
+  "emo_239": {
+    "emotion": "sadness"
+  }
+}

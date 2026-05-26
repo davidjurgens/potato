@@ -1,0 +1,284 @@
+/* Universal Memos sidebar.
+   Polished pass: consistent spacing scale, full interaction/focus
+   states, tinted neutrals, WCAG-AA contrast, motion-reduced friendly.
+   Vanilla CSS, no deps, no build step. */
+
+:root {
+    --memo-space-1: 4px;
+    --memo-space-2: 8px;
+    --memo-space-3: 12px;
+    --memo-space-4: 16px;
+    --memo-space-5: 24px;
+    --memo-radius: 8px;
+    /* Tinted neutrals (slight blue tint, not pure gray/black) */
+    --memo-ink: #1f2330;
+    --memo-ink-soft: #5b6072;
+    --memo-line: #e4e5ec;
+    --memo-surface: #ffffff;
+    --memo-surface-2: #f7f8fb;
+    --memo-accent: #4063b8;
+    --memo-accent-ink: #ffffff;
+    --memo-focus: #6c8cff;
+}
+
+.memo-panel-toggle {
+    position: fixed;
+    right: 0;
+    top: 42%;
+    transform: translateY(-50%);
+    z-index: 1040;
+    display: flex;
+    align-items: center;
+    gap: var(--memo-space-2);
+    min-height: 44px;
+    border: 1px solid var(--memo-line);
+    border-right: none;
+    background: var(--memo-surface);
+    color: var(--memo-ink);
+    padding: 10px 14px;
+    border-radius: var(--memo-radius) 0 0 var(--memo-radius);
+    box-shadow: -1px 1px 6px rgba(31, 35, 48, 0.08);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background-color 160ms ease-out, transform 160ms ease-out;
+}
+
+.memo-panel-toggle:hover { background: var(--memo-surface-2); transform: translateY(-50%) translateX(-2px); }
+.memo-panel-toggle:active { background: #eef0f6; }
+
+.memo-panel {
+    position: fixed;
+    right: 0;
+    top: 0;
+    height: 100vh;
+    width: 360px;
+    max-width: 92vw;
+    background: var(--memo-surface);
+    border-left: 1px solid var(--memo-line);
+    box-shadow: -4px 0 24px rgba(31, 35, 48, 0.10);
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+    color: var(--memo-ink);
+}
+
+/* `hidden` keeps native display:none semantics (out of the a11y tree).
+   A short fade-in on open keeps it from snapping in without animating
+   layout. */
+.memo-panel:not([hidden]) { animation: memo-panel-in 200ms ease-out; }
+
+@keyframes memo-panel-in {
+    from { opacity: 0; transform: translateX(12px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+.memo-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--memo-space-4);
+    border-bottom: 1px solid var(--memo-line);
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.memo-panel-header button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--memo-ink-soft);
+    transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+.memo-panel-header button:hover { background: var(--memo-surface-2); color: var(--memo-ink); }
+
+.memo-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--memo-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--memo-space-3);
+}
+
+.memo-empty {
+    color: var(--memo-ink-soft);
+    font-size: 0.85rem;
+    text-align: center;
+    margin-top: var(--memo-space-5);
+}
+
+.memo-item {
+    border: 1px solid var(--memo-line);
+    border-radius: var(--memo-radius);
+    padding: var(--memo-space-3) var(--memo-space-4);
+    background: var(--memo-surface-2);
+    transition: border-color 140ms ease-out;
+}
+
+.memo-item:hover { border-color: #cdd1e0; }
+
+.memo-item .memo-body {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--memo-ink);
+}
+
+.memo-item .memo-meta {
+    margin-top: var(--memo-space-2);
+    font-size: 0.72rem;
+    color: var(--memo-ink-soft);
+    display: flex;
+    gap: var(--memo-space-2);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.memo-badge {
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border: 1px solid transparent;
+}
+
+/* WCAG-AA contrast on the small badge text */
+.memo-badge.private { background: #eceef4; color: #494f63; border-color: #dcdfe9; }
+.memo-badge.shared  { background: #e2f1e7; color: #246b3c; border-color: #bcdec8; }
+.memo-badge.anchor  { background: #e8edfa; color: #2f4ea0; border-color: #c7d4f0; }
+
+.memo-actions { margin-left: auto; display: flex; gap: var(--memo-space-3); }
+
+.memo-actions button {
+    border: none;
+    background: none;
+    color: var(--memo-accent);
+    cursor: pointer;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 2px 2px;
+    border-radius: 4px;
+    transition: color 140ms ease-out, background-color 140ms ease-out;
+}
+
+.memo-actions button:hover { color: #2c4a93; background: #eef2fb; }
+.memo-actions button[data-act="del"] { color: #b23b3b; }
+.memo-actions button[data-act="del"]:hover { color: #8f2a2a; background: #fbeeee; }
+
+.memo-composer {
+    border-top: 1px solid var(--memo-line);
+    padding: var(--memo-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--memo-space-3);
+    background: var(--memo-surface);
+}
+
+.memo-composer textarea {
+    width: 100%;
+    min-height: 68px;
+    resize: vertical;
+    border: 1px solid var(--memo-line);
+    border-radius: 6px;
+    padding: var(--memo-space-2) var(--memo-space-3);
+    font: inherit;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    color: var(--memo-ink);
+    transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.memo-composer textarea::placeholder { color: #9aa0b4; }
+
+.memo-composer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--memo-space-2);
+    font-size: 0.8rem;
+    color: var(--memo-ink-soft);
+}
+
+.memo-composer select {
+    font: inherit;
+    font-size: 0.8rem;
+    padding: 4px 6px;
+    border: 1px solid var(--memo-line);
+    border-radius: 5px;
+    background: var(--memo-surface);
+    color: var(--memo-ink);
+}
+
+.memo-primary {
+    border: 1px solid var(--memo-accent);
+    background: var(--memo-accent);
+    color: var(--memo-accent-ink);
+    min-height: 36px;
+    padding: 7px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background-color 150ms ease-out, transform 120ms ease-out;
+}
+
+.memo-primary:hover { background: #36559e; }
+.memo-primary:active { transform: translateY(1px); }
+
+.memo-anchor-hint {
+    font-size: 0.76rem;
+    color: #2f4ea0;
+    background: #e8edfa;
+    border: 1px solid #c7d4f0;
+    border-radius: 6px;
+    padding: var(--memo-space-2) var(--memo-space-3);
+}
+
+.memo-anchor-hint label {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--memo-space-2);
+    margin: 0;
+    cursor: pointer;
+}
+
+/* Visible keyboard focus everywhere (never rely on color alone) */
+.memo-panel-toggle:focus-visible,
+.memo-panel button:focus-visible,
+.memo-panel textarea:focus-visible,
+.memo-panel select:focus-visible,
+.memo-actions button:focus-visible {
+    outline: 2px solid var(--memo-focus);
+    outline-offset: 2px;
+}
+
+.memo-composer textarea:focus {
+    outline: none;
+    border-color: var(--memo-focus);
+    box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .memo-panel,
+    .memo-panel-toggle,
+    .memo-primary,
+    .memo-item,
+    .memo-actions button,
+    .memo-panel-header button {
+        transition: none;
+    }
+    .memo-panel:not([hidden]) { animation: none; }
+}

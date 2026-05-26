@@ -28,22 +28,21 @@ instance_display:
     gap: 16px
 
   fields:
-    - key: task_description
+    # Field keys must match the swebench-traces.json record keys
+    # (instance_id, problem_statement, model_patch, test_result, ...).
+    # The previous task_description/metadata_table/conversation keys did
+    # not exist in the data, so every field rendered blank.
+    - key: problem_statement
       type: text
       label: "Issue Description"
 
-    - key: metadata_table
-      type: spreadsheet
-      label: "Instance Info"
-      display_options:
-        compact: true
-        max_height: 150
+    - key: model_patch
+      type: text
+      label: "Generated Patch (diff)"
 
-    - key: conversation
-      type: dialogue
-      label: "Agent Trace & Patch"
-      display_options:
-        show_turn_numbers: true
+    - key: test_result
+      type: text
+      label: "Test Result"
 
 annotation_schemes:
   - annotation_type: radio

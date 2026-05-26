@@ -29,6 +29,9 @@ SPAN_TARGET_TEST_DATA = {
         {"speaker": "User", "text": "Tell me a joke."},
         {"speaker": "Agent", "text": "Why did the chicken cross the road?"},
     ],
+    "coding_trace": [
+        {"role": "assistant", "content": "Let me check the code.", "tool_calls": []},
+    ],
 }
 
 

@@ -581,6 +581,11 @@ function debugVerifyOverlayCleanup() {
 }
 
 function setupEventListeners() {
+    // Prevent default form submission on all annotation forms (defense in depth)
+    document.querySelectorAll('.annotation-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) { e.preventDefault(); });
+    });
+
     // Go to button (may not exist when jumping_to_id_disabled is true)
     const goToBtn = document.getElementById('go-to-btn');
     const goToInput = document.getElementById('go_to');
@@ -975,6 +980,12 @@ async function loadCurrentInstance() {
 
         restoreSpanAnnotationsFromHTML();
         loadAnnotations();
+        // Memos persist server-side and nav is a full reload, but if the
+        // instance changes without a reload, refresh the memo panel so it
+        // never shows another instance's notes.
+        if (window.MemoPanel && typeof window.MemoPanel.reload === 'function') {
+            window.MemoPanel.reload();
+        }
         generateAnnotationForms();
         aiAssistantManger.getAiAssistantName();
 
@@ -983,6 +994,15 @@ async function loadCurrentInstance() {
 
         // Populate dynamic schema content (extractive_qa, text_edit, error_span, card_sort, conjoint)
         await populateDynamicSchemaContent();
+
+        // Codebook: reconcile codebook-backed forms (append codes added
+        // mid-session) + restore runtime-code selections + the
+        // stale-revision banner. MUST run AFTER generateAnnotationForms()
+        // / populate* so the appended options aren't discarded by a
+        // form rebuild.
+        if (window.CodebookPanel && typeof window.CodebookPanel.onInstance === 'function') {
+            window.CodebookPanel.onInstance();
+        }
 
         // Load span annotations
         debugLog('🔍 [DEBUG] loadCurrentInstance() - About to call loadSpanAnnotations()');
@@ -1326,6 +1346,19 @@ async function loadAnnotations() {
             }
         });
 
+        // Read annotation-data-input state (image/audio/video/tiered annotations)
+        // These use a separate hidden input class and store serialized JSON data
+        const annotationDataInputs = document.querySelectorAll('input.annotation-data-input');
+        annotationDataInputs.forEach(input => {
+            if (input.name && input.value && input.getAttribute('data-server-set') === 'true') {
+                const schema = input.name;
+                if (!currentAnnotations[schema]) {
+                    currentAnnotations[schema] = {};
+                }
+                currentAnnotations[schema]['_data'] = input.value;
+            }
+        });
+
         debugLog('🔍 Annotations loaded from DOM:', currentAnnotations);
     } catch (error) {
         console.error('❌ Error loading annotations:', error);
@@ -1405,6 +1438,7 @@ async function saveAnnotations() {
             try {
                 const result = JSON.parse(responseText);
                 debugLog('[DEBUG] saveAnnotations: annotations saved:', result);
+                handleQualityControlResponse(result);
             } catch (jsonError) {
                 console.error('[DEBUG] saveAnnotations: JSON parse error:', jsonError);
                 console.error('[DEBUG] saveAnnotations: Response text (first 500 chars):', responseText.substring(0, 500));
@@ -1412,6 +1446,7 @@ async function saveAnnotations() {
             }
         } else {
             console.warn('[DEBUG] saveAnnotations: failed to save annotations:', await response.text());
+            return false;
         }
 
         return true;
@@ -1449,9 +1484,18 @@ async function navigateToPrevious() {
     }
 
     try {
+        // Flush any pending debounced save before the explicit save
+        clearTimeout(textSaveTimer);
+        textSaveTimer = null;
+
         // Save annotations before navigating away
         debugLog('[DEEP DEBUG NAV] navigateToPrevious - Saving annotations before navigation');
-        await saveAnnotations();
+        const saveSucceeded = await saveAnnotations();
+        if (saveSucceeded === false) {
+            showNotification('Failed to save annotations. Please try again.', 'error');
+            setLoading(false);
+            return;
+        }
 
         // FIREFOX FIX: Force overlay cleanup before navigation
         const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
@@ -1589,9 +1633,18 @@ async function navigateToNext() {
     }
 
     try {
+        // Flush any pending debounced save before the explicit save
+        clearTimeout(textSaveTimer);
+        textSaveTimer = null;
+
         // Save annotations before navigating away
         debugLog('[DEEP DEBUG NAV] navigateToNext - Saving annotations before navigation');
-        await saveAnnotations();
+        const saveSucceeded = await saveAnnotations();
+        if (saveSucceeded === false) {
+            showNotification('Failed to save annotations. Please try again.', 'error');
+            setLoading(false);
+            return;
+        }
 
         // FIREFOX FIX: Force overlay cleanup before navigation
         const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
@@ -1693,9 +1746,18 @@ async function navigateToInstance(instanceIndex) {
     try {
         setLoading(true);
 
+        // Flush any pending debounced save before the explicit save
+        clearTimeout(textSaveTimer);
+        textSaveTimer = null;
+
         // Save annotations before navigating away (same as navigateToPrevious/Next)
         debugLog('[DEEP DEBUG NAV] navigateToInstance - Saving annotations before navigation');
-        await saveAnnotations();
+        const saveSucceeded = await saveAnnotations();
+        if (saveSucceeded === false) {
+            showNotification('Failed to save annotations. Please try again.', 'error');
+            setLoading(false);
+            return;
+        }
 
         // DEBUG: Track overlays before navigation
         debugTrackOverlays('BEFORE_GO_TO_NAVIGATION', currentInstance?.id);
@@ -1902,15 +1964,25 @@ function setLoading(loading) {
     }
 }
 
-function showError(show, message = '') {
+function showError(show, message = '', options = {}) {
     const errorState = document.getElementById('error-state');
     const errorMessage = document.getElementById('error-message-text');
     const mainContent = document.getElementById('main-content');
+    const retryBtn = document.getElementById('error-retry-btn');
+    const doneLink = document.getElementById('error-done-link');
 
     if (show) {
         errorState.style.display = 'block';
         mainContent.style.display = 'none';
         errorMessage.textContent = message;
+        // For permanent blocks (e.g., attention check failures), hide retry and show finish link
+        if (options.permanent) {
+            if (retryBtn) retryBtn.style.display = 'none';
+            if (doneLink) doneLink.style.display = 'inline-flex';
+        } else {
+            if (retryBtn) retryBtn.style.display = '';
+            if (doneLink) doneLink.style.display = 'none';
+        }
     } else {
         errorState.style.display = 'none';
         mainContent.style.display = 'block';
@@ -4352,6 +4424,30 @@ async function jumpToUnannotated() {
     }
 }
 
+function handleQualityControlResponse(result) {
+    if (!result || typeof result !== 'object') {
+        return;
+    }
+
+    const qcResult = result.qc_result && typeof result.qc_result === 'object'
+        ? result.qc_result
+        : null;
+    const message = result.warning_message || result.message || (qcResult && qcResult.message);
+
+    const isBlocked = result.status === 'blocked' || (qcResult && qcResult.blocked);
+    if (isBlocked) {
+        showNotification(message || 'You have been blocked.', 'error');
+        showError(true, message || 'You have been blocked due to quality control checks. Your session has ended.', { permanent: true });
+        return;
+    }
+
+    const isWarning = (result.warning || (qcResult && qcResult.warning)) &&
+        !(qcResult && qcResult.passed === true);
+    if (isWarning) {
+        showNotification(message || 'Please read items carefully before answering.', 'warning');
+    }
+}
+
 /**
  * Show a notification message to the user.
  * @param {string} message - The message to display
@@ -4400,6 +4496,7 @@ window.navigateToPrevious = navigateToPrevious;
 window.jumpToUnannotated = jumpToUnannotated;
 window.jumpToUnannotatedPrev = jumpToUnannotatedPrev;
 window.showNotification = showNotification;
+window.handleQualityControlResponse = handleQualityControlResponse;
 window.loadCurrentInstance = loadCurrentInstance;
 
 // ========================================

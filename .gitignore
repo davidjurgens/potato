@@ -140,3 +140,10 @@ site/
 # Virtual Environments
 venv/
 .pypirc
+
+# Local-only LLM endpoint override configs (burger/gemini/etc.) -- these
+# are for local testing and must never be committed.
+**/config-burger.*
+**/*-burger.yaml
+**/config-gemini.*
+**/config-ollama-local.*

@@ -21,22 +21,50 @@ class ModelConfig:
     base_url: Optional[str] = None
     max_tokens: int = 1000
     temperature: float = 0.1
+    think: Optional[bool] = None  # None = use endpoint default, True/False = override
+    timeout: int = 60  # Request timeout in seconds (increase for thinking models)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for AI endpoint factory."""
-        result = {
-            'endpoint_type': self.endpoint_type,
-            'ai_config': {
-                'model': self.model,
-                'max_tokens': self.max_tokens,
-                'temperature': self.temperature,
-            }
+    def to_endpoint_config(self, temperature_override: Optional[float] = None) -> Dict[str, Any]:
+        """Build the full endpoint config dict for AIEndpointFactory.
+
+        This is the single place that builds the config dict passed to
+        AIEndpointFactory.create_endpoint(). All solo mode components
+        should use this instead of manually constructing the dict.
+
+        Args:
+            temperature_override: Override the model's default temperature.
+
+        Returns:
+            Dict ready for AIEndpointFactory.create_endpoint()
+        """
+        ai_config = {
+            'model': self.model,
+            'max_tokens': self.max_tokens,
+            'temperature': temperature_override if temperature_override is not None else self.temperature,
         }
         if self.api_key:
-            result['ai_config']['api_key'] = self.api_key
+            ai_config['api_key'] = self.api_key
         if self.base_url:
-            result['ai_config']['base_url'] = self.base_url
-        return result
+            ai_config['base_url'] = self.base_url
+        if self.think is not None:
+            ai_config['think'] = self.think
+        if self.timeout != 60:
+            ai_config['timeout'] = self.timeout
+        return {
+            'ai_support': {
+                'enabled': True,
+                'endpoint_type': self.endpoint_type,
+                'ai_config': ai_config,
+            }
+        }
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for AI endpoint factory (legacy format)."""
+        ec = self.to_endpoint_config()
+        return {
+            'endpoint_type': self.endpoint_type,
+            'ai_config': ec['ai_support']['ai_config'],
+        }
 
 
 @dataclass
@@ -72,6 +100,7 @@ class InstanceSelectionConfig:
     disagreement_weight: float = 0.1
     edge_case_rule_weight: float = 0.0  # Instances matching edge case rule patterns
     cartography_weight: float = 0.0     # Instances with high confidence variability
+    llm_predicted_weight: float = 0.0   # Instances with LLM predictions needing human comparison
 
     def validate(self) -> None:
         """Validate that weights sum to 1.0."""
@@ -81,7 +110,8 @@ class InstanceSelectionConfig:
             self.random_weight +
             self.disagreement_weight +
             self.edge_case_rule_weight +
-            self.cartography_weight
+            self.cartography_weight +
+            self.llm_predicted_weight
         )
         if abs(total - 1.0) > 0.001:
             logger.warning(
@@ -152,6 +182,27 @@ class RefinementLoopConfig:
     max_cycles: int = 5                 # Maximum refinement cycles before alerting
     patience: int = 2                   # Cycles without improvement before stopping
     auto_apply_suggestions: bool = False  # Auto-apply LLM guideline suggestions
+    refinement_strategy: str = "focused_edit"  # Legacy or new names supported
+
+    # New framework options (used when strategy is validated_*, principle_icl,
+    # hybrid_dual_track, or legacy_append from the refinement registry)
+    validation_split_ratio: float = 0.3  # fraction of disagreements held out
+    eval_sample_size: int = 10  # val instances used to score each candidate
+    num_candidates: int = 3  # candidates proposed per cycle (where applicable)
+    min_val_size: int = 10  # minimum val size before validation-gated refinement runs
+    max_consecutive_failures: int = 2  # stop after N cycles with no improvement
+    dry_run: bool = False  # if True, log candidates but don't apply
+    require_approval: bool = False  # if True, queue for admin approval before applying
+    min_val_improvement: float = 0.0  # candidate must beat baseline by at least this much (strict=0.0)
+    # Separate temperature for the evaluator pass. Sampling diversity needs
+    # non-zero temperature for confidence, but the validation gate should
+    # measure prompt quality, not sampling variance.
+    eval_temperature: float = 0.0
+    # If True, prefer val instances that have disagreed across ≥2 labeling
+    # passes (i.e. stable systematic errors) over one-off disagreements
+    # that may be stochastic. Falls back to any disagreement if too few
+    # qualify.
+    prefer_consistent_disagreements: bool = True
 
 
 @dataclass
@@ -291,6 +342,8 @@ def _parse_model_config(model_data: Dict[str, Any]) -> ModelConfig:
         base_url=model_data.get('base_url') or model_data.get('endpoint_url'),
         max_tokens=model_data.get('max_tokens', 1000),
         temperature=model_data.get('temperature', 0.1),
+        think=model_data.get('think'),  # None = endpoint default, True/False = override
+        timeout=model_data.get('timeout', 60),
     )
 
 
@@ -357,6 +410,7 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         disagreement_weight=sel_data.get('disagreement_weight', 0.1),
         edge_case_rule_weight=sel_data.get('edge_case_rule_weight', 0.0),
         cartography_weight=sel_data.get('cartography_weight', 0.0),
+        llm_predicted_weight=sel_data.get('llm_predicted_weight', 0.0),
     )
 
     # Parse batch config
@@ -425,6 +479,17 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         max_cycles=rl_data.get('max_cycles', 5),
         patience=rl_data.get('patience', 2),
         auto_apply_suggestions=rl_data.get('auto_apply_suggestions', False),
+        refinement_strategy=rl_data.get('refinement_strategy', 'focused_edit'),
+        validation_split_ratio=rl_data.get('validation_split_ratio', 0.3),
+        eval_sample_size=rl_data.get('eval_sample_size', 10),
+        num_candidates=rl_data.get('num_candidates', 3),
+        min_val_size=rl_data.get('min_val_size', 10),
+        max_consecutive_failures=rl_data.get('max_consecutive_failures', 2),
+        dry_run=rl_data.get('dry_run', False),
+        require_approval=rl_data.get('require_approval', False),
+        min_val_improvement=rl_data.get('min_val_improvement', 0.0),
+        eval_temperature=rl_data.get('eval_temperature', 0.0),
+        prefer_consistent_disagreements=rl_data.get('prefer_consistent_disagreements', True),
     )
 
     # Parse confusion analysis config

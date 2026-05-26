@@ -138,13 +138,34 @@ def load_project_base_css_html(config: dict) -> str:
     return f'<style id="potato-project-base-css">\n{css_content}\n</style>'
 
 
+def _stringify_dict_keys(value):
+    """
+    Recursively convert all dict keys to strings so the structure can be
+    JSON-serialized with ``sort_keys=True``.
+
+    YAML 1.1 parses unquoted ``yes``/``no``/``true``/``false`` as booleans, so a
+    config dict can end up with mixed key types (e.g. ``str`` and ``bool``).
+    ``json.dumps(..., sort_keys=True)`` then raises ``TypeError`` because it
+    cannot order keys of different types. Coercing keys to strings up front
+    makes hashing robust regardless of how the config was authored or merged.
+    """
+    if isinstance(value, dict):
+        return {str(k): _stringify_dict_keys(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_stringify_dict_keys(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_stringify_dict_keys(v) for v in value)
+    return value
+
+
 def compute_config_md5(config):
     """
     Compute MD5 hash of the config dict for template invalidation.
     """
     # Remove unserializable fields if needed
     config_copy = {k: v for k, v in config.items() if k not in ['__config_file__', 'site_file']}
-    config_str = json.dumps(config_copy, sort_keys=True, default=str)
+    normalized = _stringify_dict_keys(config_copy)
+    config_str = json.dumps(normalized, sort_keys=True, default=str)
     return hashlib.md5(config_str.encode('utf-8')).hexdigest()
 
 
@@ -354,6 +375,16 @@ def generate_annotation_html_template(config: dict) -> str:
         html_template = html_template.replace(
             '<div class="navbar-nav">', '<div class="navbar-nav" hidden>'
         )
+
+    # Codebook bridge: schemes with `codebook: true` get their labels
+    # from the project's mutable codebook (seeded from YAML on first
+    # run). Single chokepoint before any scheme HTML is generated, in
+    # both the CLI and WSGI-factory init paths.
+    try:
+        from potato.codebook.schema_bridge import apply_codebook_to_schemes
+        apply_codebook_to_schemes(config)
+    except Exception as e:
+        logger.warning(f"Codebook schema bridge skipped: {e}")
 
     # Grab the annotation schemes
     annotation_schemes = config["annotation_schemes"]

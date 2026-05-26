@@ -287,7 +287,7 @@ class TestProlificIntegrationUI(unittest.TestCase):
 
         # Check for Prolific redirect elements
         has_prolific_btn = "platform-btn-prolific" in page_source
-        has_prolific_redirect = "prolific.co/submissions/complete" in page_source
+        has_prolific_redirect = "prolific.com/submissions/complete" in page_source
 
         self.assertTrue(
             has_prolific_btn or has_prolific_redirect,

@@ -2,6 +2,8 @@
 
 This document provides a comprehensive guide to configuring Potato annotation tasks using YAML configuration files. Potato uses YAML files to define all aspects of an annotation task, from server settings to annotation schemes and user management.
 
+> **Looking for a quick lookup?** See the [Configuration Reference](config_reference.md) for a complete table of all config keys, annotation types, and their required fields.
+
 ## Table of Contents
 
 1. [Config File Structure and Validation](#config-file-structure-and-validation)

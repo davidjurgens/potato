@@ -268,10 +268,97 @@ KNOWN_CONFIG_KEYS = {
     "max_annotations_per_item": None,
     "num_annotators_per_item": None,
     "min_annotators_per_instance": None,
+    # qda_mode sub-keys are deliberately leaf (None): validation stops at
+    # memos/codebook and does NOT recurse into their sub-keys. This is
+    # intentional forward-compat — parse_qda_mode_config() routes any
+    # unrecognized qda_mode.* keys into `extras` so configs can declare
+    # not-yet-shipped blocks (cases/queries/smart_codes/network/media_sync)
+    # without tripping unknown-key warnings. The tradeoff: a typo like
+    # qda_mode.memos.enabledd is silently accepted. Revisit (deepen the
+    # schema) once those sub-blocks ship and their shapes are stable.
+    "qda_mode": {
+        "enabled": None,
+        "memos": None,
+        "codebook": None,
+        # Sub-blocks reserved for later phases:
+        # "cases", "queries", "smart_codes", "network", "media_sync"
+    },
+    # Universal annotation UI feature toggles (not QDA-gated). `memos`
+    # turns the memo sidebar on/off (default off in standard mode, on for
+    # qda_mode/solo_mode); `visibility` is the default new-memo visibility.
+    "annotation_ui": {
+        "memos": None,
+        "visibility": None,
+    },
+    # Universal full-text search (FTS5). Read-only admin search is always
+    # safe; `annotator_claim` opt-in is governed by a startup
+    # compatibility guard (see validate_search_assignment_compat).
+    "search": {
+        "enabled": None,
+        "backend": None,
+        "max_instances": None,
+        "annotator_claim": None,
+    },
+    # Universal codebook. `mode` (fixed|extensible|open) governs whether
+    # annotators may add codes on the fly; resolved via
+    # get_codebook_mode() (defaults: qda/solo -> open, standard -> fixed;
+    # a crowd backend force-locks fixed). Per-scheme opt-in is the
+    # scheme-level `codebook: true` key.
+    "codebook": {
+        "enabled": None,
+        "mode": None,
+    },
+    # Top-level convenience scalar mirroring codebook.mode.
+    "codebook_mode": None,
+    # In-vivo coding (D): single key that, with text selected in a
+    # codebook-backed span scheme, opens the "code from selection"
+    # composer. Default 'i'; only meaningful when a codebook span
+    # scheme exists.
+    "codebook_invivo_key": "i",
+    # Universal cases: group instances into units of analysis. `key`
+    # names the item-data field to group on; `auto_detect` lets QDA
+    # scan participant_id/respondent_id/case_id; `attributes` lifts
+    # item fields onto the case for crosstabs.
+    "cases": {
+        "enabled": None,
+        "key": None,
+        "auto_detect": None,
+        "attributes": None,
+    },
     "solo_mode": {
-        "enabled", "batches", "instance_selection",
-        "labeling_models", "revision_models", "state_dir",
-        "thresholds", "uncertainty",
+        "enabled": None,
+        "labeling_models": None,
+        "revision_models": None,
+        "embedding": None,
+        "uncertainty": None,
+        "thresholds": None,
+        "instance_selection": None,
+        "batches": None,
+        "prompt_optimization": None,
+        "edge_case_rules": None,
+        "labeling_functions": None,
+        "confidence_routing": None,
+        "confusion_analysis": None,
+        "state_dir": None,
+        "refinement_loop": {
+            "enabled",
+            "trigger_interval",
+            "min_improvement",
+            "max_cycles",
+            "patience",
+            "auto_apply_suggestions",
+            "refinement_strategy",
+            "validation_split_ratio",
+            "eval_sample_size",
+            "num_candidates",
+            "min_val_size",
+            "max_consecutive_failures",
+            "dry_run",
+            "require_approval",
+            "min_val_improvement",
+            "eval_temperature",
+            "prefer_consistent_disagreements",
+        },
     },
     "admin_api_key": None,
     "alert_time_each_instance": None,
@@ -369,7 +456,7 @@ def validate_path_security(path: str, base_dir: str, project_dir: str = None) ->
         try:
             real_path = os.path.realpath(normalized_path)
             real_base = os.path.realpath(base_dir)
-            if not real_path.startswith(real_base):
+            if not (real_path == real_base or real_path.startswith(real_base + os.sep)):
                 raise ConfigSecurityError(f"Path '{path}' resolves to '{real_path}' which is outside the project directory '{real_base}'")
         except (OSError, ValueError) as e:
             raise ConfigSecurityError(f"Invalid path '{path}': {str(e)}")
@@ -385,12 +472,93 @@ def validate_path_security(path: str, base_dir: str, project_dir: str = None) ->
         # Use project_dir for final check if provided, otherwise use base_dir
         check_dir = project_dir if project_dir else base_dir
         real_check_dir = os.path.realpath(check_dir)
-        if not real_path.startswith(real_check_dir):
+        if not (real_path == real_check_dir or real_path.startswith(real_check_dir + os.sep)):
             raise ConfigSecurityError(f"Path '{path}' resolves to '{real_path}' which is outside the project directory '{real_check_dir}'")
     except (OSError, ValueError) as e:
         raise ConfigSecurityError(f"Invalid path '{path}': {str(e)}")
 
     return normalized_path
+
+
+# Optional field type specifications for validation.
+# Maps config key -> (expected_type, human description, allow_negative).
+# Only fields that are commonly misconfigured and cause silent failures.
+_OPTIONAL_INT_FIELDS = {
+    "alert_time_each_instance": ("seconds to alert per instance", False),
+    "max_annotations_per_item": ("max annotations per item", True),  # -1 = unlimited
+    "max_annotations_per_user": ("max annotations per user", True),
+    "num_annotators_per_item": ("annotators needed per item", False),
+    "min_annotators_per_instance": ("minimum annotators per instance", False),
+    "random_seed": ("random seed", True),
+    "max_session_seconds": ("max session duration in seconds", False),
+}
+
+_OPTIONAL_BOOL_FIELDS = {
+    "highlight_linebreaks": "whether to highlight linebreaks",
+    "jumping_to_id_disabled": "whether jumping to ID is disabled",
+    "require_fully_annotated": "whether full annotation is required",
+    "require_password": "whether password is required",
+    "require_no_password": "whether no-password mode is enabled",
+    "customjs": "whether custom JS is enabled",
+    "watch_data_directory": "whether to watch data directory for changes",
+    "persist_sessions": "whether to persist sessions across restarts",
+}
+
+_VALID_ASSIGNMENT_STRATEGIES = [
+    "random", "fixed_order", "active_learning", "llm_confidence",
+    "max_diversity", "least_annotated", "category_based", "diversity_clustering",
+]
+
+
+def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
+    """
+    Validate types for commonly misconfigured optional fields.
+
+    Catches issues like string values for integer fields (e.g., alert_time_each_instance: "30")
+    or wrong types for booleans, which would silently produce incorrect behavior at runtime.
+
+    Args:
+        config_data: The parsed configuration dictionary
+
+    Raises:
+        ConfigValidationError: If a field has the wrong type
+    """
+    # Validate integer fields
+    for field, (desc, allow_negative) in _OPTIONAL_INT_FIELDS.items():
+        if field in config_data:
+            val = config_data[field]
+            if not isinstance(val, int) or isinstance(val, bool):
+                raise ConfigValidationError(
+                    f"'{field}' must be an integer ({desc}), "
+                    f"got {type(val).__name__}: {val!r}"
+                )
+            if not allow_negative and val < 0:
+                raise ConfigValidationError(
+                    f"'{field}' must be a non-negative integer ({desc}), got {val}"
+                )
+
+    # Validate boolean fields (None/null is allowed as "not set")
+    for field, desc in _OPTIONAL_BOOL_FIELDS.items():
+        if field in config_data:
+            val = config_data[field]
+            if val is not None and not isinstance(val, bool):
+                raise ConfigValidationError(
+                    f"'{field}' must be a boolean ({desc}), "
+                    f"got {type(val).__name__}: {val!r}"
+                )
+
+    # Validate assignment_strategy enum
+    if 'assignment_strategy' in config_data:
+        strat = config_data['assignment_strategy']
+        # Can be a string or a dict with a 'name' key
+        strat_name = strat
+        if isinstance(strat, dict):
+            strat_name = strat.get('name', '')
+        if isinstance(strat_name, str) and strat_name.lower() not in _VALID_ASSIGNMENT_STRATEGIES:
+            raise ConfigValidationError(
+                f"'assignment_strategy' value '{strat_name}' is not recognized. "
+                f"Valid strategies: {', '.join(_VALID_ASSIGNMENT_STRATEGIES)}"
+            )
 
 
 def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None, config_file_dir: str = None) -> None:
@@ -521,8 +689,155 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     if 'mace' in config_data:
         _validate_mace_config(config_data)
 
+    # Validate types for commonly misconfigured optional fields
+    validate_optional_field_types(config_data)
+
+    # Fail loud if annotator search-and-claim is combined with an
+    # assignment design it would corrupt via self-selection.
+    validate_search_assignment_compat(config_data)
+
+    # Validate codebook_mode (and apply the crowd force-lock).
+    validate_codebook_config(config_data)
+
     # Warn about unrecognized keys at all nesting levels
     validate_unknown_keys(config_data)
+
+
+# Assignment strategies whose sampling/ordering self-selection breaks.
+_CLAIM_INCOMPATIBLE_STRATEGIES = {
+    "random", "diversity_clustering", "max_diversity",
+    "active_learning", "llm_confidence", "least_annotated",
+    "category_based",
+}
+
+
+def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
+    """Hard-fail when ``search.annotator_claim`` is combined with a
+    feature whose integrity depends on the platform — not the annotator —
+    choosing the next item. Read-only admin search is unaffected.
+
+    Solo/QDA mode (single coder over the whole corpus) is always allowed.
+    """
+    search = config_data.get("search")
+    if not isinstance(search, dict) or not search.get("annotator_claim"):
+        return
+
+    # Single-coder modes have no sampling/overlap invariant to protect.
+    if (config_data.get("qda_mode") or {}).get("enabled") or \
+       (config_data.get("solo_mode") or {}).get("enabled"):
+        return
+
+    conflicts = []
+
+    strat = config_data.get("assignment_strategy")
+    if isinstance(strat, dict):
+        strat = strat.get("name")
+    if strat and str(strat).lower() in _CLAIM_INCOMPATIBLE_STRATEGIES:
+        conflicts.append(
+            f"assignment_strategy: {strat} (self-selection breaks "
+            f"sampling/ordering)")
+
+    for k in ("max_annotations_per_item", "num_annotators_per_item",
+              "min_annotators_per_instance"):
+        try:
+            if int(config_data.get(k, -1)) > 1:
+                conflicts.append(
+                    f"{k}: {config_data[k]} (inter-annotator overlap "
+                    f"cannot be guaranteed under self-selection)")
+        except (TypeError, ValueError):
+            pass
+
+    if (config_data.get("attention_checks") or {}).get("enabled"):
+        conflicts.append("attention_checks.enabled (annotators could "
+                          "locate/avoid QC items)")
+    if (config_data.get("gold_standards") or {}).get("enabled"):
+        conflicts.append("gold_standards.enabled (annotators could "
+                         "locate/avoid gold items)")
+    if (config_data.get("icl_labeling") or {}).get("enabled"):
+        conflicts.append("icl_labeling.enabled (blind LLM-verification "
+                         "tasks must not be findable)")
+    if (config_data.get("adjudication") or {}).get("enabled"):
+        conflicts.append("adjudication.enabled (the adjudication queue "
+                         "is curated)")
+
+    login_type = (config_data.get("login") or {}).get("type")
+    crowd = (
+        "mturk" in config_data or "prolific" in config_data
+        or login_type in ("mturk", "prolific")
+    )
+    if crowd:
+        conflicts.append("crowdsourcing backend (HIT = the assigned "
+                         "unit; self-selection breaks payment/coverage)")
+
+    if conflicts:
+        raise ConfigValidationError(
+            "search.annotator_claim: true is incompatible with this "
+            "configuration:\n  - " + "\n  - ".join(conflicts) +
+            "\n\nAnnotator search-and-claim is only supported with "
+            "solo_mode/qda_mode, or fixed_order assignment without "
+            "overlap, quality-control injection, ICL verification, "
+            "adjudication, or a crowdsourcing backend. Use read-only "
+            "admin search (no annotator_claim) for those designs."
+        )
+
+
+_CODEBOOK_MODES = ("fixed", "extensible", "open")
+
+
+def _crowd_backend(config_data: Dict[str, Any]) -> bool:
+    login_type = (config_data.get("login") or {}).get("type")
+    return (
+        "mturk" in config_data or "prolific" in config_data
+        or login_type in ("mturk", "prolific")
+    )
+
+
+def get_codebook_mode(config_data: Dict[str, Any]) -> str:
+    """Resolve the effective codebook mode.
+
+    Precedence: explicit ``codebook_mode`` / ``codebook.mode`` if set;
+    else ``open`` when solo/QDA mode is enabled; else ``fixed``. A crowd
+    backend force-locks ``fixed`` regardless of the request (annotators
+    on a paid HIT must not reshape the shared codebook).
+    """
+    raw = config_data.get("codebook_mode")
+    if raw is None:
+        raw = (config_data.get("codebook") or {}).get("mode")
+
+    if raw is None:
+        single = (
+            (config_data.get("qda_mode") or {}).get("enabled")
+            or (config_data.get("solo_mode") or {}).get("enabled")
+        )
+        mode = "open" if single else "fixed"
+    else:
+        mode = str(raw).strip().lower()
+
+    if _crowd_backend(config_data):
+        return "fixed"
+    return mode
+
+
+def validate_codebook_config(config_data: Dict[str, Any]) -> None:
+    """Reject an invalid ``codebook_mode`` value, and warn when a crowd
+    backend overrides a requested non-fixed mode."""
+    raw = config_data.get("codebook_mode")
+    if raw is None:
+        raw = (config_data.get("codebook") or {}).get("mode")
+    if raw is None:
+        return
+
+    mode = str(raw).strip().lower()
+    if mode not in _CODEBOOK_MODES:
+        raise ConfigValidationError(
+            f"codebook_mode must be one of {', '.join(_CODEBOOK_MODES)}; "
+            f"got {raw!r}."
+        )
+    if mode != "fixed" and _crowd_backend(config_data):
+        logging.warning(
+            "codebook_mode=%s requested with a crowdsourcing backend; "
+            "force-locking to 'fixed' (paid annotators must not reshape "
+            "the shared codebook).", mode)
 
 
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
@@ -946,14 +1261,39 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
     if missing_fields:
         raise ConfigValidationError(f"{path} missing required fields: {', '.join(missing_fields)}")
 
-    # Validate annotation_type
-    # Note: Keep in sync with potato.server_utils.schemas.registry
-    valid_types = ['radio', 'multiselect', 'likert', 'text', 'slider', 'span', 'span_link', 'select', 'number', 'multirate', 'pure_display', 'video', 'image_annotation', 'audio_annotation', 'video_annotation', 'pairwise', 'coreference', 'tree_annotation', 'triage', 'event_annotation', 'tiered_annotation', 'bws', 'soft_label', 'confidence', 'constant_sum', 'semantic_differential', 'ranking', 'range_slider', 'hierarchical_multiselect', 'vas', 'extractive_qa', 'rubric_eval', 'text_edit', 'error_span', 'card_sort', 'conjoint', 'trajectory_eval', 'process_reward', 'code_review']
+    # Validate annotation_type against the schema registry (single source of truth)
+    from potato.server_utils.schemas.registry import schema_registry
+    valid_types = schema_registry.get_supported_types()
     if scheme['annotation_type'] not in valid_types:
-        raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(valid_types)}")
+        raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(sorted(valid_types))}")
 
-    # Type-specific validation
+    # Registry-driven required field check: validate fields that are unconditionally
+    # required for this type. Types with alternative forms (e.g., likert accepts either
+    # 'labels' OR 'min_label'+'max_label'+'size') have deeper validation in the
+    # type-specific blocks below. This check catches missing fields for types that
+    # don't have explicit type-specific validation blocks.
     annotation_type = scheme['annotation_type']
+    _types_with_explicit_validation = {
+        'radio', 'multiselect', 'select', 'likert', 'slider', 'span', 'multirate',
+        'image_annotation', 'audio_annotation', 'video_annotation', 'tiered_annotation',
+        'pairwise', 'bws', 'soft_label', 'confidence', 'constant_sum',
+        'semantic_differential', 'ranking', 'range_slider', 'hierarchical_multiselect',
+        'vas', 'rubric_eval', 'error_span', 'card_sort', 'conjoint',
+    }
+    if annotation_type not in _types_with_explicit_validation:
+        schema_def = schema_registry.get(annotation_type)
+        if schema_def and schema_def.required_fields:
+            # 'name' and 'description' are already checked above
+            extra_required = [f for f in schema_def.required_fields
+                              if f not in ('name', 'description')]
+            missing = [f for f in extra_required if f not in scheme]
+            if missing:
+                raise ConfigValidationError(
+                    f"{path} (type '{annotation_type}') missing required field(s): "
+                    f"{', '.join(missing)}"
+                )
+
+    # Type-specific validation (deep structural checks beyond registry required_fields)
     if annotation_type in ['radio', 'multiselect', 'select']:
         if 'labels' not in scheme:
             raise ConfigValidationError(f"{path} missing 'labels' field for {annotation_type} annotation type")

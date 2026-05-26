@@ -91,6 +91,8 @@ from potato.knowledge_base import init_kb_manager
 from potato.solo_mode import init_solo_mode_manager, get_solo_mode_manager
 from potato.solo_mode.routes import solo_mode_bp
 
+from potato.qda_mode import init_qda_mode_manager
+
 from potato.create_task_cli import create_task_cli
 from potato.server_utils.arg_utils import arguments
 from potato.server_utils.config_module import init_config, config
@@ -111,6 +113,9 @@ from potato.ai.ai_help_wrapper import init_dynamic_ai_help
 # Initialize Flask app
 app = Flask(__name__)
 app.register_blueprint(solo_mode_bp)
+# Note: qda_mode_bp is registered on the *served* app in
+# potato.routes.configure_routes (the module-level `app` here is discarded
+# and rebuilt by create_app), so it is intentionally not registered here.
 
 # Web agent recording and proxy blueprints (registered lazily in configure_app
 # only when web_agent display types are configured)
@@ -1317,12 +1322,29 @@ def load_phase_data(config: dict) -> None:
                 else:
                     phase_type = UserPhase.ANNOTATION
             else:
-                # Legacy format with file and type
-                if not "type" in phase or not phase['type']:
-                    logger.error(f"Phase {phase_name} does not have a type")
-                    raise Exception("Phase %s does not have a type" % phase_name)
-
-                phase_type = UserPhase.fromstr(phase['type'])
+                # File-based phase. Prefer an explicit `type`; otherwise
+                # infer it from the phase name when the name is itself a
+                # canonical phase (e.g. a phase literally named `consent`
+                # or `prestudy`). This makes the documented `phases`
+                # config work even without a `type` field, while still
+                # requiring an explicit `type` for custom-named phases.
+                explicit_type = phase.get("type") if isinstance(phase, dict) else None
+                if explicit_type:
+                    phase_type = UserPhase.fromstr(explicit_type)
+                else:
+                    try:
+                        phase_type = UserPhase.fromstr(phase_name)
+                    except ValueError:
+                        logger.error(
+                            f"Phase '{phase_name}' has no 'type' and its name is "
+                            f"not a canonical phase type"
+                        )
+                        raise Exception(
+                            "Phase %s does not have a 'type' and its name is not "
+                            "a canonical phase type (one of: consent, prestudy, "
+                            "instructions, training, annotation, poststudy). Add "
+                            "a 'type:' field to this phase." % phase_name
+                        )
 
                 # Instructions phase with an HTML file: register the HTML
                 # directly as a template rather than parsing it as annotation
@@ -1883,6 +1905,14 @@ def render_page_with_annotations(username: str):
     is_annotation_page = phase == UserPhase.ANNOTATION
 
     item = user_state.get_current_instance()
+    if item is None:
+        logger.warning(
+            f"User {username} has no valid current instance after loading state"
+        )
+        if not user_state.has_remaining_assignments():
+            get_user_state_manager().advance_phase(username)
+        return redirect(url_for("home"))
+
     instance_id = item.get_id()
 
     # Extract pre-annotation data if quality control is enabled
@@ -2130,6 +2160,10 @@ def render_page_with_annotations(username: str):
         # Original plain text without span HTML (for data-original-text attribute)
         instance_plain_text=original_plain_text,
         instance_obj=item,
+        # Full record dict so schemas like process_reward / trajectory_eval
+        # can bind to structured fields (e.g. structured_turns) via the
+        # [data-instance-json] element.
+        instance_record=item.get_data(),
         instance_id=instance_id,
         instance_index=user_state.get_current_instance_index(),
         finished=get_user_state(username).get_annotation_count(),
@@ -2438,8 +2472,12 @@ def ai_hints(text: str) -> str:
     """
     import requests
     logger.debug(f"AI hints text: {text}")
-    description = config["annotation_schemes"][0]["description"]
-    annotation_type = config["annotation_schemes"][0]["annotation_type"]
+    schemes = config.get("annotation_schemes", [])
+    if not schemes:
+        logger.warning("Cannot generate AI hints: no annotation_schemes configured")
+        return ""
+    description = schemes[0].get("description", "")
+    annotation_type = schemes[0].get("annotation_type", "")
     logger.debug(f"AI hints description: {description}")
     prompt = f'''You are assisting a user with an annotation task. Here is the annotation instruction: {description}
     Here is the annotation task type: {annotation_type}
@@ -2508,6 +2546,7 @@ def render_page_with_annotations_WEIRD(username):
         html_fname,
         instance_id=instance_id,
         instance_data=item_data,
+        instance_record=item_data,
         annotations=annotations,
         span_annotations=span_annotations,
         progress=progress,
@@ -2955,8 +2994,8 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
             try:
                 from potato.agent_runner_manager import AgentRunnerManager
                 AgentRunnerManager.clear_instance()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to clean up agent sessions: {e}")
         atexit.register(_cleanup_agent_sessions)
 
     # Check for live_coding_agent display type
@@ -2977,8 +3016,8 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
             try:
                 from potato.coding_agent_runner_manager import CodingAgentRunnerManager
                 CodingAgentRunnerManager.clear_instance()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to clean up coding agent sessions: {e}")
         atexit.register(_cleanup_coding_agent_sessions)
 
     # Check for trace_ingestion config
@@ -3252,6 +3291,43 @@ def _initialize_from_config(config_file):
         from potato.webhooks import init_webhook_emitter
         init_webhook_emitter(config)
 
+    # Initialize Solo Mode if enabled (parity with run_server() — the
+    # WSGI/gunicorn factory path must initialize it too, otherwise the
+    # /solo routes exist but the manager is never created).
+    if config.get("solo_mode", {}).get("enabled", False):
+        logger.info("Initializing Solo Mode...")
+        init_solo_mode_manager(config)
+        logger.info("Solo Mode initialized successfully")
+
+    # Initialize QDA Mode if enabled (parity with run_server()).
+    if config.get("qda_mode", {}).get("enabled", False):
+        logger.info("Initializing QDA Mode...")
+        init_qda_mode_manager(config)
+        logger.info("QDA Mode initialized successfully")
+
+    # Keep ICL prompts restricted to the codebook's current set: a
+    # change listener re-syncs live scheme labels on any codebook edit.
+    try:
+        from potato.codebook.schema_bridge import install_codebook_icl_sync
+        install_codebook_icl_sync()
+    except Exception as e:
+        logger.warning(f"Codebook ICL sync not installed: {e}")
+
+    # Auto-detect cases from item metadata (no-op unless cases enabled
+    # or QDA mode is on).
+    try:
+        from potato.cases import init_cases_from_config
+        init_cases_from_config(config)
+    except Exception as e:
+        logger.warning(f"Cases auto-detect skipped: {e}")
+
+    # Build the universal search index (no-op if search disabled).
+    try:
+        from potato.search import init_search_from_item_state
+        init_search_from_item_state(config)
+    except Exception as e:
+        logger.warning(f"Search index init skipped: {e}")
+
     logger.info("Server initialization complete (WSGI factory mode)")
 
 
@@ -3421,6 +3497,35 @@ def run_server(args):
         logger.info("Initializing Solo Mode...")
         init_solo_mode_manager(config)
         logger.info("Solo Mode initialized successfully")
+
+    # Initialize QDA Mode if enabled
+    if config.get("qda_mode", {}).get("enabled", False):
+        logger.info("Initializing QDA Mode...")
+        init_qda_mode_manager(config)
+        logger.info("QDA Mode initialized successfully")
+
+    # Keep ICL prompts restricted to the codebook's current set: a
+    # change listener re-syncs live scheme labels on any codebook edit.
+    try:
+        from potato.codebook.schema_bridge import install_codebook_icl_sync
+        install_codebook_icl_sync()
+    except Exception as e:
+        logger.warning(f"Codebook ICL sync not installed: {e}")
+
+    # Auto-detect cases from item metadata (no-op unless cases enabled
+    # or QDA mode is on).
+    try:
+        from potato.cases import init_cases_from_config
+        init_cases_from_config(config)
+    except Exception as e:
+        logger.warning(f"Cases auto-detect skipped: {e}")
+
+    # Build the universal search index (no-op if search disabled).
+    try:
+        from potato.search import init_search_from_item_state
+        init_search_from_item_state(config)
+    except Exception as e:
+        logger.warning(f"Search index init skipped: {e}")
 
     # Initialize diversity manager if diversity_clustering strategy is used
     # or if diversity_ordering is explicitly enabled
@@ -3608,7 +3713,10 @@ def run_server(args):
     # Run the Flask app
     host = config.get("host", "0.0.0.0")
     port = config.get("port", 8000)
-    app.run(host=host, port=port, debug=config.get("debug", False), use_reloader=False)
+    # Use threaded=True so background LLM calls (solo mode refinement,
+    # edge case synthesis, etc.) don't block the HTTP server.
+    app.run(host=host, port=port, debug=config.get("debug", False),
+            use_reloader=False, threaded=True)
 
 
 # Define the main entry point for the Flask server
@@ -3645,6 +3753,10 @@ def main():
         if args.quiet:
             migrate_args.append("--quiet")
         sys.exit(migrate_main(migrate_args))
+    elif args.mode == 'codebook':
+        logger.info("Starting codebook initialization")
+        from potato.codebook_cli import main as codebook_main
+        sys.exit(codebook_main([args.config_file]))
 
     logger.info("Annotation platform shutdown complete")
 

@@ -154,6 +154,19 @@ End-to-end tests using real Flask servers and Selenium browsers. These tests ver
 - **`test_persistence.py`** - State preservation tests
 - **`test_edge_cases.py`** - Boundary condition tests
 
+### Smoke Tests (`tests/smoke/`)
+Manual, runnable scripts that exercise the solo-mode pipeline end-to-end
+against a live LLM endpoint (vLLM, ollama). **Not collected by pytest**
+(`pytest.ini` has `--ignore=tests/smoke`) because they need a live backend,
+take minutes to run, and are non-deterministic.
+
+Use them to validate refinement-cycle triggering, prompt-version evolution,
+hybrid-dual-track fallback, and background LLM-labeling throughput when a
+config or strategy change affects the end-to-end flow.
+
+**📖 [Smoke Test Documentation](smoke/README.md)** — usage, expected output,
+setup requirements.
+
 ### Jest Frontend Tests (`tests/jest/`)
 JavaScript unit tests for frontend functionality using jsdom.
 

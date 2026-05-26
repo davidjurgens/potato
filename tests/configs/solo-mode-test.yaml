@@ -1,0 +1,70 @@
+annotation_schemes:
+- annotation_type: radio
+  description: Classify the primary emotion expressed in the text
+  labels:
+  - description: Happiness, excitement, gratitude, satisfaction
+    key_value: '1'
+    name: joy
+  - description: Grief, disappointment, loneliness, melancholy
+    key_value: '2'
+    name: sadness
+  - description: Frustration, outrage, irritation, hostility
+    key_value: '3'
+    name: anger
+  - description: Anxiety, worry, dread, panic
+    key_value: '4'
+    name: fear
+  - description: Astonishment, shock, disbelief, unexpected reaction
+    key_value: '5'
+    name: surprise
+  - description: No clear emotion, factual, informational
+    key_value: '6'
+    name: neutral
+  name: emotion
+annotation_task_name: emotion-solo-test
+data_files:
+- tests/data/solo_mode_emotion_data.json
+item_properties:
+  id_key: id
+  text_key: text
+output_annotation_dir: tests/output/solo-mode-test
+port: 8200
+session_lifetime_days: 7
+solo_mode:
+  batches:
+    llm_labeling_batch: 10
+    max_parallel_labels: 50
+  confusion_analysis:
+    min_instances_for_pattern: 1
+  enabled: true
+  instance_selection:
+    disagreement_weight: 0.1
+    diversity_weight: 0.2
+    llm_predicted_weight: 0.3
+    low_confidence_weight: 0.3
+    random_weight: 0.1
+  labeling_models:
+  - endpoint_type: ollama
+    endpoint_url: http://localhost:11434
+    max_tokens: 256
+    model: llama3.2:3b
+    temperature: 0.1
+  refinement_loop:
+    auto_apply_suggestions: true
+    enabled: true
+    max_cycles: 3
+    patience: 2
+    trigger_interval: 10
+  revision_models:
+  - endpoint_type: ollama
+    endpoint_url: http://localhost:11434
+    model: llama3.2:3b
+  state_dir: tests/output/solo-mode-test/solo_state
+  thresholds:
+    confidence_low: 0.5
+    end_human_annotation_agreement: 0.8
+    minimum_validation_sample: 5
+    periodic_review_interval: 10
+  uncertainty:
+    strategy: direct_confidence
+task_dir: ../..

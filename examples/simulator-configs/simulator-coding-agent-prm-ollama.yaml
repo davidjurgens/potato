@@ -1,0 +1,49 @@
+# Simulator Configuration: Coding-agent process_reward (PRM) labeling
+#
+# Targets examples/agent-traces/coding-agent-prm/. The example uses the
+# `process_reward` annotation type with mode=first_error -- the rater
+# must identify the first wrong step in each agent trace. The simulator's
+# AgentSimulatorStrategy now supports this wire format.
+#
+# Prerequisites:
+#   ollama pull gemma4:e4b
+#
+# Usage:
+#   python potato/flask_server.py start \
+#       examples/agent-traces/coding-agent-prm/config.yaml -p 8525
+#   python tests/smoke/run_coding_agent_prm_sim.py
+
+simulator:
+  users:
+    count: 1
+    competence_distribution:
+      perfect: 1.0
+
+  strategy: agent
+
+  agent_config:
+    endpoint_type: ollama_vision
+    model: gemma4:e4b
+    base_url: http://localhost:11434
+    temperature: 0.0
+    max_tokens: 800
+    max_dialogue_chars: 16000
+    cache_per_instance: true
+    add_noise: false
+
+  timing:
+    annotation_time:
+      min: 1.0
+      max: 5.0
+      mean: 2.0
+      std: 1.0
+      distribution: normal
+
+  execution:
+    parallel_users: 1
+    delay_between_users: 1.0
+    max_annotations_per_user: 3
+
+  output:
+    dir: simulator_output_coding_agent_prm
+    format: json

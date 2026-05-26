@@ -96,10 +96,14 @@ class AgentConfig:
         viewport = config.get("viewport", {})
         endpoint_type = config.get("endpoint_type", "anthropic_vision")
 
-        # API key: Ollama doesn't need one
+        # API key: Ollama doesn't need one; OpenAI-compatible servers
+        # (e.g. vLLM) ignore it but the SDK requires a non-empty string.
         if endpoint_type == "ollama_vision":
             api_key = ai_config.get("api_key", "")
             default_model = "gemma3:4b"
+        elif endpoint_type == "openai_vision":
+            api_key = ai_config.get("api_key", os.environ.get("OPENAI_API_KEY", "EMPTY"))
+            default_model = ""  # must be set explicitly (e.g. served model id)
         else:
             api_key = ai_config.get("api_key", os.environ.get("ANTHROPIC_API_KEY", ""))
             default_model = "claude-sonnet-4-20250514"
@@ -550,10 +554,35 @@ class AgentRunner:
                 logger.info(f"Connected to Ollama at {host}, model: {self.config.model}")
             except Exception as e:
                 raise RuntimeError(f"Failed to connect to Ollama at {host}: {e}")
+        elif self.config.endpoint_type == "openai_vision":
+            try:
+                from openai import OpenAI
+            except ImportError:
+                raise RuntimeError(
+                    "openai package required. Install with: pip install openai"
+                )
+            base_url = self.config.base_url or "https://api.openai.com/v1"
+            self._llm_client = OpenAI(
+                base_url=base_url,
+                api_key=self.config.api_key or "EMPTY",
+                timeout=self.config.timeout,
+            )
+            try:
+                self._llm_client.models.list()
+                logger.info(
+                    f"Connected to OpenAI-compatible endpoint at {base_url}, "
+                    f"model: {self.config.model}"
+                )
+            except Exception as e:
+                # Non-fatal: some servers gate /models; the chat call will
+                # surface a real error if the endpoint is truly unreachable.
+                logger.warning(
+                    f"Could not list models at {base_url} ({e}); continuing."
+                )
         else:
             raise RuntimeError(
                 f"Unsupported endpoint_type: {self.config.endpoint_type}. "
-                f"Supported: 'anthropic_vision', 'ollama_vision'."
+                f"Supported: 'anthropic_vision', 'ollama_vision', 'openai_vision'."
             )
 
     def _query_llm(self, messages: List[Dict[str, Any]]) -> str:
@@ -562,7 +591,95 @@ class AgentRunner:
             return self._query_anthropic(messages)
         elif self.config.endpoint_type == "ollama_vision":
             return self._query_ollama(messages)
+        elif self.config.endpoint_type == "openai_vision":
+            return self._query_openai(messages)
         raise RuntimeError(f"Unsupported endpoint type: {self.config.endpoint_type}")
+
+    def _query_openai(self, messages: List[Dict[str, Any]]) -> str:
+        """Query an OpenAI-compatible vision endpoint (OpenAI, vLLM, etc.).
+
+        Converts the internal Anthropic-style message blocks into OpenAI
+        chat-completions format (image blocks become ``image_url`` data
+        URIs). Requests a JSON object response when the server supports it,
+        falling back gracefully if it does not.
+        """
+        oai_messages = []
+        for msg in messages:
+            role = msg["role"]
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                oai_messages.append({"role": role, "content": content})
+                continue
+            parts = []
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text":
+                    parts.append({"type": "text", "text": block.get("text", "")})
+                elif block.get("type") == "image":
+                    src = block.get("source", {})
+                    if src.get("type") == "base64":
+                        media = src.get("media_type", "image/png")
+                        parts.append({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{media};base64,{src['data']}"
+                            },
+                        })
+            oai_messages.append({"role": role, "content": parts})
+
+        kwargs = {
+            "model": self.config.model,
+            "messages": oai_messages,
+            "max_tokens": self.config.max_tokens,
+            "temperature": self.config.temperature,
+        }
+
+        def _is_rate_limit(exc) -> bool:
+            if getattr(exc, "status_code", None) == 429:
+                return True
+            s = str(exc).lower()
+            return ("429" in s or "rate limit" in s or "quota" in s
+                    or "resource_exhausted" in s)
+
+        def _create(use_rf: bool):
+            if use_rf:
+                return self._llm_client.chat.completions.create(
+                    response_format={"type": "json_object"}, **kwargs)
+            return self._llm_client.chat.completions.create(**kwargs)
+
+        # Transient 429s (per-minute rate/token bursts) are common mid-run
+        # even on paid tiers; back off and retry instead of failing the
+        # whole agent session.
+        backoffs = [5, 15, 30, 30, 30]
+        use_rf = True
+        attempt = 0
+        while True:
+            try:
+                resp = _create(use_rf)
+                break
+            except Exception as e:
+                if _is_rate_limit(e):
+                    if attempt >= len(backoffs):
+                        raise
+                    wait = backoffs[attempt]
+                    attempt += 1
+                    logger.warning(
+                        f"[{self.session_id}] LLM 429/rate-limited; "
+                        f"retry {attempt}/{len(backoffs)} in {wait}s"
+                    )
+                    self._emit_event("thinking", {
+                        "text": f"Rate-limited by the model API; "
+                                f"waiting {wait}s before retrying…"
+                    })
+                    time.sleep(wait)
+                    continue
+                if use_rf:
+                    # Server may not support response_format; drop it once.
+                    use_rf = False
+                    continue
+                raise
+        return resp.choices[0].message.content or ""
 
     def _query_anthropic(self, messages: List[Dict[str, Any]]) -> str:
         """Query Anthropic Claude with vision support."""

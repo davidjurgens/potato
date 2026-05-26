@@ -115,7 +115,7 @@ def _generate_bws_layout_internal(
 
     # Build the complete form
     schematic = f"""
-    <form id="{escaped_schema}" class="annotation-form bws" action="/action_page.php" data-annotation-type="bws" data-schema-name="{escaped_schema}" data-tuple-size="{tuple_size}" data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}" {layout_attrs}>
+    <form id="{escaped_schema}" class="annotation-form bws" action="javascript:void(0)" data-annotation-type="bws" data-schema-name="{escaped_schema}" data-tuple-size="{tuple_size}" data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}" {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escaped_schema}">
             <legend class="bws-description">{escaped_description}</legend>

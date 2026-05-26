@@ -1,0 +1,1502 @@
+{
+  "tweet_hate_0000": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0001": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0002": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0003": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0004": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0005": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0006": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0007": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0008": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0009": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0010": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0011": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0012": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0013": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0014": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0015": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0016": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0017": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0018": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0019": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0020": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0021": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0022": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0023": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0024": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0025": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0026": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0027": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0028": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0029": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0030": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0031": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0032": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0033": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0034": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0035": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0036": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0037": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0038": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0039": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0040": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0041": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0042": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0043": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0044": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0045": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0046": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0047": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0048": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0049": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0050": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0051": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0052": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0053": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0054": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0055": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0056": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0057": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0058": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0059": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0060": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0061": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0062": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0063": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0064": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0065": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0066": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0067": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0068": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0069": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0070": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0071": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0072": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0073": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0074": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0075": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0076": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0077": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0078": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0079": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0080": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0081": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0082": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0083": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0084": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0085": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0086": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0087": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0088": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0089": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0090": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0091": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0092": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0093": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0094": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0095": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0096": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0097": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0098": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0099": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0100": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0101": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0102": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0103": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0104": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0105": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0106": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0107": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0108": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0109": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0110": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0111": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0112": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0113": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0114": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0115": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0116": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0117": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0118": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0119": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0120": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0121": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0122": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0123": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0124": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0125": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0126": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0127": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0128": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0129": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0130": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0131": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0132": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0133": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0134": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0135": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0136": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0137": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0138": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0139": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0140": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0141": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0142": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0143": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0144": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0145": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0146": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0147": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0148": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0149": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0150": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0151": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0152": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0153": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0154": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0155": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0156": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0157": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0158": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0159": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0160": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0161": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0162": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0163": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0164": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0165": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0166": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0167": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0168": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0169": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0170": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0171": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0172": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0173": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0174": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0175": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0176": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0177": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0178": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0179": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0180": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0181": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0182": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0183": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0184": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0185": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0186": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0187": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0188": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0189": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0190": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0191": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0192": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0193": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0194": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0195": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0196": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0197": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0198": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0199": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0200": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0201": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0202": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0203": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0204": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0205": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0206": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0207": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0208": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0209": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0210": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0211": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0212": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0213": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0214": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0215": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0216": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0217": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0218": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0219": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0220": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0221": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0222": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0223": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0224": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0225": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0226": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0227": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0228": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0229": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0230": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0231": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0232": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0233": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0234": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0235": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0236": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0237": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0238": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0239": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0240": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0241": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0242": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0243": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0244": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0245": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0246": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0247": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0248": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0249": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0250": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0251": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0252": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0253": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0254": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0255": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0256": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0257": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0258": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0259": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0260": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0261": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0262": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0263": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0264": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0265": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0266": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0267": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0268": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0269": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0270": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0271": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0272": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0273": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0274": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0275": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0276": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0277": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0278": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0279": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0280": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0281": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0282": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0283": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0284": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0285": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0286": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0287": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0288": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0289": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0290": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0291": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0292": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0293": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0294": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0295": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0296": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0297": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0298": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0299": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0300": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0301": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0302": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0303": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0304": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0305": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0306": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0307": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0308": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0309": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0310": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0311": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0312": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0313": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0314": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0315": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0316": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0317": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0318": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0319": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0320": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0321": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0322": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0323": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0324": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0325": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0326": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0327": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0328": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0329": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0330": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0331": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0332": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0333": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0334": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0335": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0336": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0337": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0338": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0339": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0340": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0341": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0342": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0343": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0344": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0345": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0346": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0347": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0348": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0349": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0350": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0351": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0352": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0353": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0354": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0355": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0356": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0357": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0358": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0359": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0360": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0361": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0362": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0363": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0364": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0365": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0366": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0367": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0368": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0369": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0370": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0371": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0372": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0373": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0374": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0375": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0376": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0377": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0378": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0379": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0380": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0381": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0382": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0383": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0384": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0385": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0386": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0387": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0388": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0389": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0390": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0391": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0392": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0393": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0394": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0395": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0396": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0397": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0398": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0399": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0400": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0401": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0402": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0403": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0404": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0405": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0406": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0407": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0408": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0409": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0410": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0411": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0412": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0413": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0414": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0415": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0416": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0417": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0418": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0419": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0420": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0421": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0422": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0423": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0424": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0425": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0426": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0427": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0428": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0429": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0430": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0431": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0432": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0433": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0434": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0435": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0436": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0437": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0438": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0439": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0440": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0441": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0442": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0443": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0444": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0445": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0446": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0447": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0448": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0449": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0450": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0451": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0452": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0453": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0454": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0455": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0456": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0457": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0458": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0459": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0460": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0461": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0462": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0463": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0464": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0465": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0466": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0467": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0468": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0469": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0470": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0471": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0472": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0473": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0474": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0475": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0476": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0477": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0478": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0479": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0480": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0481": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0482": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0483": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0484": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0485": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0486": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0487": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0488": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0489": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0490": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0491": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0492": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0493": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0494": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0495": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0496": {
+    "hate_speech": "hateful"
+  },
+  "tweet_hate_0497": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0498": {
+    "hate_speech": "not_hateful"
+  },
+  "tweet_hate_0499": {
+    "hate_speech": "not_hateful"
+  }
+}

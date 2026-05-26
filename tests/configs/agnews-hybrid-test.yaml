@@ -1,0 +1,74 @@
+annotation_schemes:
+- annotation_type: radio
+  description: Classify the news article into one of four topic categories
+  labels:
+  - key_value: a
+    name: world
+  - key_value: b
+    name: sports
+  - key_value: c
+    name: business
+  - key_value: d
+    name: science_technology
+  name: topic
+annotation_task_name: agnews-solo-test
+data_files:
+- tests/data/agnews_500.json
+item_properties:
+  id_key: id
+  text_key: text
+output_annotation_dir: tests/output/agnews-hybrid-test
+port: 8511
+session_lifetime_days: 7
+solo_mode:
+  batches:
+    llm_labeling_batch: 20
+    max_parallel_labels: 400
+  confusion_analysis:
+    min_instances_for_pattern: 3
+  enabled: true
+  instance_selection:
+    disagreement_weight: 0.15
+    diversity_weight: 0.1
+    llm_predicted_weight: 0.4
+    low_confidence_weight: 0.25
+    random_weight: 0.1
+  labeling_models:
+  - base_url: http://burger.si.umich.edu:8001
+    endpoint_type: vllm
+    max_tokens: 200
+    model: Qwen/Qwen3.5-4B
+    temperature: 0.1
+    think: false
+  refinement_loop:
+    auto_apply_suggestions: true
+    enabled: true
+    eval_sample_size: 8
+    max_consecutive_failures: 2
+    max_cycles: 10
+    min_val_size: 5
+    num_candidates: 3
+    patience: 3
+    refinement_strategy: hybrid_dual_track
+    trigger_interval: 50
+    validation_split_ratio: 0.3
+  revision_models:
+  - base_url: http://burger.si.umich.edu:8001
+    endpoint_type: vllm
+    max_tokens: 1500
+    model: Qwen/Qwen3.5-4B
+    temperature: 0.3
+    think: false
+    timeout: 60
+  state_dir: tests/output/agnews-hybrid-test/solo_state
+  thresholds:
+    confidence_low: 0.4
+    end_human_annotation_agreement: 0.7
+    minimum_validation_sample: 10
+    periodic_review_interval: 50
+  uncertainty:
+    sampling_diversity:
+      num_samples: 10
+      temperature: 1.0
+    strategy: sampling_diversity
+task_dir: ../..

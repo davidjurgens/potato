@@ -39,7 +39,7 @@ instance_display:
       label: "Trace Info"
       display_options:
         compact: true
-        max_height: 120
+        max_height: 220
 
     - key: conversation
       type: dialogue

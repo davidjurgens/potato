@@ -162,7 +162,7 @@ def _generate_tiered_annotation_layout_internal(
     # Generate the complete HTML
     html = f'''
 <form id="{escape_html_content(schema_name)}" class="annotation-form tiered-annotation-container"
-      action="/action_page.php"
+      action="javascript:void(0)"
       data-annotation-type="tiered_annotation"
       data-schema-name="{escape_html_content(schema_name)}"
       data-config='{escape_html_content(config_json)}'>

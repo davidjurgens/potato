@@ -1,0 +1,35 @@
+port: 8000
+annotation_task_name: Codebook Example
+task_dir: .
+output_annotation_dir: annotation_output/codebook-example/
+output_annotation_format: tsv
+data_files:
+- data/codebook-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+
+# Universal codebook. `open` lets annotators add/rename/recolor/move/
+# delete codes on the fly from the Codebook tray; `extensible` would
+# allow add-only; `fixed` locks it (config/CLI only). QDA and solo mode
+# default to `open`; a crowdsourcing backend force-locks `fixed`.
+codebook_mode: open
+
+annotation_schemes:
+# `codebook: true` makes this scheme's labels come from the project
+# codebook (seeded once from the labels below) instead of being static.
+- annotation_type: multiselect
+  name: themes
+  description: Which qualitative themes appear in this excerpt?
+  codebook: true
+  labels:
+  - access barriers
+  - cost concerns
+  - provider trust
+  - wait times
+
+site_dir: default

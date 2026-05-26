@@ -445,7 +445,7 @@ class TestProlificURLDirectLogin:
         response = session.get(f"{server.base_url}/done", allow_redirects=True, timeout=5)
 
         # Check for Prolific redirect URL
-        assert "app.prolific.co/submissions/complete" in response.text or "PROLIFIC-TEST-ABC123" in response.text
+        assert "app.prolific.com/submissions/complete" in response.text or "PROLIFIC-TEST-ABC123" in response.text
 
     def test_multiple_prolific_workers_isolated(self, prolific_server):
         """Test that multiple Prolific workers have isolated sessions."""
@@ -704,7 +704,7 @@ class TestProlificCompletionFlow:
         assert "COMPLETION-CODE-12345" in response.text
 
         # Verify Prolific redirect link is present
-        assert "app.prolific.co" in response.text or "COMPLETION-CODE-12345" in response.text
+        assert "app.prolific.com" in response.text or "COMPLETION-CODE-12345" in response.text
 
 
 if __name__ == "__main__":

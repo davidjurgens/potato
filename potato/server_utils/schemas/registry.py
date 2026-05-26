@@ -315,8 +315,8 @@ def _register_builtin_schemas():
         SchemaDefinition(
             name="slider",
             generator=generate_slider_layout,
-            required_fields=["name", "description", "min", "max"],
-            optional_fields=["step", "default", "label_requirement"],
+            required_fields=["name", "description", "min_value", "max_value", "starting_value"],
+            optional_fields=["step", "label_requirement"],
             supports_keybindings=False,
             description="Slider for selecting a value in a range"
         ),

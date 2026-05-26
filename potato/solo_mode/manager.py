@@ -220,6 +220,24 @@ class SoloModeManager:
         self._labeling_function_manager = None
         self._disagreement_explorer = None
 
+        # Reannotation tracking (persisted across restarts)
+        self._reannotation_counts: Dict[str, int] = {}
+
+        # Per-prompt-version agreement tracking
+        # Tracks agreement separately for each prompt version so we can
+        # measure whether a refinement actually improved accuracy
+        self._per_version_agreement: Dict[int, Dict[str, int]] = {}  # version -> {compared, agreements}
+
+        # Validated refinement framework state
+        self._refinement_consecutive_failures: int = 0
+        self._pending_refinements: List[Dict[str, Any]] = []
+        self._refinement_log: List[Dict[str, Any]] = []
+        self._icl_library = None  # Lazy-init via _get_icl_library()
+        # Dedicated endpoint for candidate evaluation at low/zero temperature.
+        # Using the labeler endpoint directly would mix prompt quality with
+        # sampling variance. Lazy-init via _get_eval_endpoint().
+        self._eval_endpoint = None
+
         # State persistence
         self._state_file = 'solo_mode_state.json'
 
@@ -268,6 +286,7 @@ class SoloModeManager:
                 disagreement=self.config.instance_selection.disagreement_weight,
                 edge_case_rule=self.config.instance_selection.edge_case_rule_weight,
                 cartography=self.config.instance_selection.cartography_weight,
+                llm_predicted=self.config.instance_selection.llm_predicted_weight,
             )
             self._instance_selector = InstanceSelector(weights, self.app_config)
         return self._instance_selector
@@ -301,6 +320,7 @@ class SoloModeManager:
                 prompt_getter=self.get_current_prompt_text,
                 result_callback=self._handle_labeling_result,
                 prompt_version_getter=lambda: self.current_prompt_version,
+                examples_getter=self.get_icl_examples,
             )
         return self._llm_labeling_thread
 
@@ -330,6 +350,71 @@ class SoloModeManager:
                 endpoint_factory=LLMLabelingThread.create_endpoint_from_model_config,
             )
         return self._confidence_router
+
+    def get_icl_examples(self, max_per_label: int = 1, max_total: int = 5) -> List[Dict[str, str]]:
+        """Get in-context learning examples for the labeling prompt.
+
+        Priority order:
+          1. Validated examples from the persistent ICL library (added by
+             the validated refinement framework — each has proven val gain)
+          2. Auto-selected examples from human-LLM agreements (fallback)
+
+        Args:
+            max_per_label: Maximum examples per label.
+            max_total: Maximum total examples.
+
+        Returns:
+            List of {"text": "...", "label": "..."} dicts.
+        """
+        examples: List[Dict[str, str]] = []
+
+        # Pull from validated ICL library first (strongest signal)
+        if hasattr(self, '_icl_library') and self._icl_library is not None:
+            try:
+                validated = self._icl_library.get_examples(
+                    max_per_label=max_per_label,
+                    max_total=max_total,
+                )
+                for ex in validated:
+                    # Strip principle field; labeling prompt wants just text+label
+                    examples.append({
+                        'text': ex.get('text', ''),
+                        'label': ex.get('label', ''),
+                    })
+            except Exception as e:
+                logger.debug(f"[ICL] Failed to read validated library: {e}")
+
+        # If we still have room, fall back to auto-selected agreements
+        if len(examples) < max_total:
+            with self._lock:
+                used_labels = {e['label'] for e in examples}
+                by_label: Dict[str, List[Dict[str, str]]] = {}
+                for instance_id in self.human_labeled_ids:
+                    if instance_id not in self.predictions:
+                        continue
+                    for schema_name, pred in self.predictions[instance_id].items():
+                        if not pred.agrees_with_human or pred.human_label is None:
+                            continue
+                        label = str(pred.human_label)
+                        if label not in by_label:
+                            by_label[label] = []
+                        # Don't duplicate labels already covered by validated entries
+                        slots_used = used_labels.count(label) if isinstance(used_labels, list) else (1 if label in used_labels else 0)
+                        if len(by_label[label]) + slots_used < max_per_label:
+                            text = self._get_instance_text(instance_id)
+                            if text:
+                                by_label[label].append({
+                                    'text': text[:200],
+                                    'label': label,
+                                })
+
+                for label_examples in by_label.values():
+                    for ex in label_examples:
+                        if len(examples) >= max_total:
+                            break
+                        examples.append(ex)
+
+        return examples[:max_total]
 
     def _get_labeled_examples_for_optimization(self) -> List[Dict[str, Any]]:
         """Get labeled examples for prompt optimization."""
@@ -503,6 +588,13 @@ class SoloModeManager:
             reasoning=result.reasoning,
         )
         self.set_llm_prediction(result.instance_id, result.schema_name, prediction)
+        llm_count = len(self.llm_labeled_ids)
+        if llm_count % 10 == 0:
+            logger.info(
+                f"[LLM Progress] {llm_count} instances labeled "
+                f"(latest: {result.instance_id} -> {result.label}, "
+                f"conf={result.confidence:.2f})"
+            )
 
         # Record edge case rule if present
         if (
@@ -526,6 +618,11 @@ class SoloModeManager:
 
         # Check if we should extract labeling functions
         self._maybe_extract_labeling_functions()
+
+        # Retroactive comparison: if a human already labeled this instance,
+        # compare the LLM prediction against the stored human label.
+        # This handles the case where the human annotated before the LLM.
+        self._retroactive_compare(result.instance_id, result.schema_name)
 
     def _maybe_trigger_rule_clustering(self) -> None:
         """Check if enough unclustered rules have accumulated to trigger clustering."""
@@ -636,16 +733,14 @@ class SoloModeManager:
         """Remove low-confidence instances from llm_labeled_ids so they
         re-enter the labeling queue with the improved prompt.
 
+        Records old predictions for before/after accuracy comparison.
+
         Args:
             old_prompt_version: The prompt version whose labels to reconsider
 
         Returns:
             Number of instances queued for re-annotation
         """
-        # Track re-annotation counts per instance
-        if not hasattr(self, '_reannotation_counts'):
-            self._reannotation_counts: Dict[str, int] = {}
-
         candidates = self.guideline_updater.get_instances_for_reannotation(
             predictions=self.predictions,
             old_prompt_version=old_prompt_version,
@@ -653,7 +748,28 @@ class SoloModeManager:
         )
 
         with self._lock:
+            # Track old predictions for before/after comparison
+            if not hasattr(self, '_reannotation_history'):
+                self._reannotation_history: List[Dict[str, Any]] = []
+
             for instance_id in candidates:
+                # Record old prediction before re-annotation
+                old_pred = None
+                for schema_preds in self.predictions.get(instance_id, {}).values():
+                    old_pred = {
+                        'instance_id': instance_id,
+                        'old_label': schema_preds.predicted_label,
+                        'old_confidence': schema_preds.confidence_score,
+                        'old_prompt_version': schema_preds.prompt_version,
+                        'new_prompt_version': self.current_prompt_version,
+                        'had_human_label': schema_preds.human_label is not None,
+                        'human_label': schema_preds.human_label,
+                        'old_agreed': schema_preds.agrees_with_human,
+                    }
+                    break
+                if old_pred:
+                    self._reannotation_history.append(old_pred)
+
                 # Remove from llm_labeled_ids so it can be re-labeled
                 self.llm_labeled_ids.discard(instance_id)
                 # Track re-annotation count
@@ -664,8 +780,67 @@ class SoloModeManager:
             if candidates:
                 self._save_state()
 
-        logger.info(f"Queued {len(candidates)} instances for re-annotation")
+        logger.info(f"[Re-annotation] Queued {len(candidates)} instances for re-annotation")
         return len(candidates)
+
+    def get_reannotation_report(self) -> Dict[str, Any]:
+        """Get a before/after accuracy report for re-annotated instances.
+
+        Returns:
+            Dict with re-annotation statistics and per-instance comparisons.
+        """
+        if not hasattr(self, '_reannotation_history'):
+            return {'total': 0, 'comparisons': []}
+
+        comparisons = []
+        improved = 0
+        worsened = 0
+        unchanged = 0
+
+        with self._lock:
+            for record in self._reannotation_history:
+                iid = record['instance_id']
+                new_pred = None
+                for schema_preds in self.predictions.get(iid, {}).values():
+                    if schema_preds.prompt_version > record['old_prompt_version']:
+                        new_pred = schema_preds
+                        break
+
+                if new_pred is None:
+                    continue  # Not yet re-annotated
+
+                comp = {
+                    'instance_id': iid,
+                    'old_label': record['old_label'],
+                    'new_label': new_pred.predicted_label,
+                    'label_changed': record['old_label'] != new_pred.predicted_label,
+                    'old_confidence': record['old_confidence'],
+                    'new_confidence': new_pred.confidence_score,
+                    'human_label': record['human_label'],
+                }
+
+                if record['human_label'] is not None:
+                    old_correct = str(record['old_label']) == str(record['human_label'])
+                    new_correct = str(new_pred.predicted_label) == str(record['human_label'])
+                    comp['old_correct'] = old_correct
+                    comp['new_correct'] = new_correct
+                    if new_correct and not old_correct:
+                        improved += 1
+                    elif old_correct and not new_correct:
+                        worsened += 1
+                    else:
+                        unchanged += 1
+
+                comparisons.append(comp)
+
+        return {
+            'total_queued': len(self._reannotation_history),
+            'total_completed': len(comparisons),
+            'improved': improved,
+            'worsened': worsened,
+            'unchanged': unchanged,
+            'comparisons': comparisons,
+        }
 
     # === Refinement Loop ===
 
@@ -677,6 +852,13 @@ class SoloModeManager:
         loop = self.refinement_loop
         if not loop.record_annotation():
             return
+
+        logger.info(
+            f"[Refinement] Trigger interval reached "
+            f"(agreement_rate={self.agreement_metrics.agreement_rate:.3f}, "
+            f"compared={self.agreement_metrics.total_compared}). "
+            f"Starting refinement cycle {loop.cycle_count + 1}..."
+        )
 
         # Run in background thread to avoid blocking annotation flow
         thread = threading.Thread(
@@ -693,11 +875,33 @@ class SoloModeManager:
         except Exception as e:
             logger.error(f"Background refinement cycle failed: {e}")
 
+    # === New validated refinement framework ===
+
     def trigger_refinement_cycle(self) -> Dict[str, Any]:
         """Manually or automatically trigger a refinement cycle.
 
+        Dispatches to the new validated framework if the configured strategy
+        is in the refinement registry; otherwise the legacy path handles it.
+
         Returns:
             Dict with cycle results.
+        """
+        strategy_name = self.config.refinement_loop.refinement_strategy
+        # Check if strategy is in the new registry
+        try:
+            from .refinement import get_strategy
+            get_strategy(strategy_name)
+            return self._run_validated_refinement_cycle(strategy_name)
+        except KeyError:
+            # Not in new registry — fall through to legacy path
+            pass
+        return self._run_legacy_refinement_cycle()
+
+    def _run_legacy_refinement_cycle(self) -> Dict[str, Any]:
+        """Legacy refinement path (focused_edit / generator_critic / append).
+
+        Kept for backward compatibility. New strategies should use the
+        validated framework via _run_validated_refinement_cycle.
         """
         loop = self.refinement_loop
 
@@ -745,13 +949,44 @@ class SoloModeManager:
 
         # Define how to apply suggestions
         def apply_suggestions(suggestions: List[str]) -> Dict[str, Any]:
+            import re as re_mod
             current_prompt = self.get_current_prompt_text()
-            # Build a combined guidelines section from suggestions
             rules_section = "\n".join(f"- {s}" for s in suggestions)
-            updated = current_prompt + (
-                f"\n\n## Refinement Guidelines\n\n"
-                f"Based on observed confusion patterns:\n{rules_section}\n"
-            )
+
+            strategy = self.config.refinement_loop.refinement_strategy
+
+            if strategy == "append":
+                # Legacy: just append (can cause contradictions)
+                guidelines_block = (
+                    "## Refinement Guidelines\n\n"
+                    "Based on observed confusion patterns:\n"
+                )
+                if guidelines_block in current_prompt:
+                    updated = current_prompt.rstrip() + "\n" + rules_section + "\n"
+                else:
+                    updated = current_prompt + f"\n\n{guidelines_block}{rules_section}\n"
+            else:
+                # focused_edit and generator_critic: replace the entire
+                # guidelines section with the new set of rules
+                guidelines_section = (
+                    "## Annotation Guidelines\n\n"
+                    "When distinguishing between similar labels, follow these rules:\n"
+                    f"{rules_section}\n"
+                )
+                # Replace existing guidelines section or append if first time
+                if re_mod.search(
+                    r'## (?:Refinement |Annotation )?Guidelines',
+                    current_prompt
+                ):
+                    updated = re_mod.sub(
+                        r'## (?:Refinement |Annotation )?Guidelines.*',
+                        guidelines_section,
+                        current_prompt,
+                        flags=re_mod.DOTALL,
+                    )
+                else:
+                    updated = current_prompt + "\n\n" + guidelines_section
+
             old_version = self.current_prompt_version
             new_pv = self.create_prompt_version(
                 updated,
@@ -766,18 +1001,57 @@ class SoloModeManager:
                 'categories_incorporated': len(suggestions),
                 'reannotation_count': 0,
             }
-            # Trigger re-annotation of low-confidence instances
-            if self.config.edge_case_rules.reannotation_enabled:
-                reannotated = self._trigger_reannotation(old_version)
-                result['reannotation_count'] = reannotated
+            # Re-annotate low-confidence instances with the improved prompt
+            # to verify the refinement actually helps
+            reannotated = self._trigger_reannotation(old_version)
+            result['reannotation_count'] = reannotated
+            if reannotated > 0:
+                logger.info(
+                    f"[Refinement] Re-annotating {reannotated} low-confidence "
+                    f"instances with new prompt v{new_pv.version}"
+                )
 
             return result
 
-        # Define suggestion generator
+        # Generate suggestions based on strategy
         analyzer = self.confusion_analyzer
+        strategy = self.config.refinement_loop.refinement_strategy
+        current_prompt_text = self.get_current_prompt_text()
 
-        def generate_suggestion(pattern, current_prompt):
-            return analyzer.suggest_guideline(pattern, current_prompt)
+        if strategy == "focused_edit":
+            # Single LLM call produces all guidelines as a coherent set
+            batch_guidelines = analyzer.generate_guidelines_rewrite(
+                patterns, current_prompt_text
+            )
+            # Pre-populate a queue so generate_suggestion just pops items
+            guideline_queue = list(batch_guidelines) if batch_guidelines else []
+            logger.info(
+                f"[Refinement] Focused edit generated {len(guideline_queue)} guidelines"
+            )
+
+        elif strategy == "generator_critic":
+            # Two-pass: generate candidates then critic-filter
+            batch_guidelines = analyzer.generate_and_critique_guidelines(
+                patterns, current_prompt_text
+            )
+            guideline_queue = list(batch_guidelines) if batch_guidelines else []
+            logger.info(
+                f"[Refinement] Generator-critic produced {len(guideline_queue)} approved guidelines"
+            )
+
+        else:
+            guideline_queue = None  # Will use per-pattern generation
+
+        if guideline_queue is not None:
+            # Batch strategies: feed pre-generated guidelines one at a time
+            def generate_suggestion(pattern, current_prompt):
+                if guideline_queue:
+                    return guideline_queue.pop(0)
+                return None
+        else:
+            # "append" or unknown: one suggestion per pattern (legacy)
+            def generate_suggestion(pattern, current_prompt):
+                return analyzer.suggest_guideline(pattern, current_prompt)
 
         # Run the cycle
         cycle = loop.run_cycle(
@@ -786,7 +1060,7 @@ class SoloModeManager:
             confusion_patterns=patterns,
             apply_suggestions_fn=apply_suggestions,
             generate_suggestion_fn=generate_suggestion,
-            current_prompt=self.get_current_prompt_text(),
+            current_prompt=current_prompt_text,
         )
 
         logger.info(
@@ -798,6 +1072,508 @@ class SoloModeManager:
             'success': True,
             'cycle': cycle.to_dict(),
         }
+
+    # === Validated refinement framework ===
+
+    def _get_icl_library(self):
+        """Lazy-initialize the persistent ICL library for this dataset."""
+        if not hasattr(self, '_icl_library') or self._icl_library is None:
+            from .refinement.icl_library import ICLLibrary
+            self._icl_library = ICLLibrary()
+        return self._icl_library
+
+    def _run_validated_refinement_cycle(self, strategy_name: str) -> Dict[str, Any]:
+        """Run a refinement cycle using the validated framework.
+
+        Flow:
+          1. Load strategy from registry
+          2. Split disagreements 70/30 into train/val
+          3. Strategy proposes candidates based on train
+          4. Evaluator scores each candidate on val set
+          5. If best > baseline by min_improvement, apply (or queue for approval)
+          6. Otherwise increment failure counter; stop after N consecutive failures
+        """
+        from .refinement import (
+            get_strategy,
+            ValidationSplit,
+            CandidateEvaluator,
+        )
+        from .refinement.base import CandidateKind, RefinementResult
+        from .refinement.icl_library import ICLEntry
+        from datetime import datetime
+
+        rl_config = self.config.refinement_loop
+        loop = self.refinement_loop
+
+        if loop.is_stopped:
+            return {'success': False, 'error': f'Refinement loop stopped: {loop.stop_reason}'}
+
+        # Record post-cycle metrics from the previous cycle
+        metrics = self.get_agreement_metrics()
+        agreement_rate = getattr(metrics, 'agreement_rate', 0.0)
+        loop.record_post_cycle_metrics(agreement_rate)
+
+        # Instantiate strategy
+        try:
+            strategy_cls = get_strategy(strategy_name)
+        except KeyError as e:
+            return {'success': False, 'error': str(e)}
+        strategy = strategy_cls(manager=self, solo_config=self.config)
+
+        # Get comparison history
+        comparisons = self.validation_tracker.get_comparison_history()
+        if not comparisons:
+            return {'success': False, 'error': 'No comparison history yet'}
+
+        # Split into train/val
+        splitter = ValidationSplit(
+            val_ratio=rl_config.validation_split_ratio,
+            min_val=rl_config.min_val_size,
+            prefer_consistent=rl_config.prefer_consistent_disagreements,
+        )
+        split_result = splitter.split(
+            comparisons, prompt_version=self.current_prompt_version
+        )
+
+        if not split_result.val:
+            logger.info(
+                f"[Refinement-Validated] Not enough disagreements for val split "
+                f"(need {rl_config.min_val_size}); skipping cycle"
+            )
+            return {
+                'success': True,
+                'message': 'Not enough disagreements for validation split',
+                'strategy': strategy_name,
+            }
+
+        # Build confusion patterns from training data
+        patterns = self._build_patterns_from_comparisons(split_result.train)
+
+        # Let strategy propose candidates
+        current_prompt = self.get_current_prompt_text()
+        try:
+            candidates = strategy.propose_candidates(
+                patterns=patterns,
+                current_prompt=current_prompt,
+                train_comparisons=split_result.train,
+            )
+        except Exception as e:
+            logger.error(f"[Refinement-Validated] Strategy {strategy_name} propose_candidates failed: {e}")
+            return {'success': False, 'error': str(e)}
+
+        logger.info(
+            f"[Refinement-Validated] Strategy '{strategy_name}' proposed "
+            f"{len(candidates)} candidate(s); val size={len(split_result.val)}"
+        )
+
+        if not candidates:
+            self._handle_refinement_failure(strategy_name, reason='no_candidates')
+            return {
+                'success': True,
+                'strategy': strategy_name,
+                'message': 'No candidates proposed',
+                'failure_count': self._refinement_consecutive_failures,
+            }
+
+        # Build evaluator
+        evaluator = CandidateEvaluator(
+            label_fn=self._label_with_candidate,
+            get_text_fn=self._get_instance_text,
+        )
+
+        # Baseline: current prompt accuracy on val set
+        baseline_eval = evaluator.evaluate(
+            candidate_prompt=current_prompt,
+            val_comparisons=split_result.val,
+            sample_size=rl_config.eval_sample_size,
+        )
+        baseline_acc = baseline_eval.accuracy
+        val_sample_ids = [p['instance_id'] for p in baseline_eval.per_instance]
+
+        logger.info(
+            f"[Refinement-Validated] Baseline val accuracy: {baseline_acc:.3f} "
+            f"({baseline_eval.correct_count}/{baseline_eval.total})"
+        )
+
+        # Evaluate each candidate on the SAME val sample as baseline
+        candidate_accs = {}
+        best_idx = None
+        best_acc = baseline_acc + rl_config.min_val_improvement
+
+        for i, cand in enumerate(candidates):
+            try:
+                eval_prompt = self._build_eval_prompt_for_candidate(
+                    cand, current_prompt
+                )
+            except Exception as e:
+                logger.warning(f"[Refinement-Validated] candidate {i} prompt build failed: {e}")
+                continue
+
+            # Evaluate on the same val sample as baseline
+            result = evaluator.evaluate(
+                candidate_prompt=eval_prompt,
+                val_comparisons=[c for c in split_result.val if c['instance_id'] in val_sample_ids],
+            )
+            candidate_accs[i] = result.accuracy
+            logger.info(
+                f"[Refinement-Validated] Candidate {i} ({cand.kind.value}, "
+                f"{cand.proposed_by}): {result.accuracy:.3f} "
+                f"({result.correct_count}/{result.total})"
+            )
+            if result.accuracy > best_acc:
+                best_acc = result.accuracy
+                best_idx = i
+
+        # Build result object
+        ref_result = RefinementResult(
+            success=False,
+            strategy=strategy_name,
+            all_candidates=candidates,
+            val_baseline_accuracy=baseline_acc,
+            val_candidate_accuracies=candidate_accs,
+            val_sample_ids=val_sample_ids,
+            train_sample_size=len(split_result.train),
+            val_sample_size=len(val_sample_ids),
+            dry_run=rl_config.dry_run,
+        )
+
+        # If no candidate beats baseline → failure
+        if best_idx is None:
+            ref_result.failure_reason = 'no_candidate_beat_baseline'
+            self._handle_refinement_failure(strategy_name, reason='validation_failed')
+            self._log_refinement_cycle(ref_result)
+            return ref_result.to_dict() | {
+                'message': f'No candidate beat baseline ({baseline_acc:.3f})',
+                'failure_count': self._refinement_consecutive_failures,
+            }
+
+        winner = candidates[best_idx]
+        ref_result.applied_candidate = winner
+        ref_result.success = True
+
+        # Dry run: log but don't apply
+        if rl_config.dry_run:
+            logger.info(
+                f"[Refinement-Validated] DRY RUN: would apply candidate {best_idx} "
+                f"({winner.kind.value}, +{best_acc - baseline_acc:.3f} accuracy)"
+            )
+            ref_result.failure_reason = None
+            self._log_refinement_cycle(ref_result)
+            return ref_result.to_dict()
+
+        # Queue for approval OR apply immediately
+        if rl_config.require_approval:
+            self._queue_refinement_for_approval(ref_result)
+            logger.info(
+                f"[Refinement-Validated] Candidate queued for admin approval "
+                f"(+{best_acc - baseline_acc:.3f} improvement)"
+            )
+            return ref_result.to_dict() | {'status': 'queued_for_approval'}
+
+        # Apply the winning candidate
+        self._apply_refinement_candidate(winner, best_acc - baseline_acc)
+        self._refinement_consecutive_failures = 0  # success resets counter
+        self._log_refinement_cycle(ref_result)
+        logger.info(
+            f"[Refinement-Validated] APPLIED candidate {best_idx} "
+            f"({winner.kind.value}, +{best_acc - baseline_acc:.3f} "
+            f"over baseline {baseline_acc:.3f})"
+        )
+        self._save_state()
+
+        return ref_result.to_dict()
+
+    def _build_patterns_from_comparisons(self, comparisons: List[Dict[str, Any]]):
+        """Build ConfusionPattern list from a subset of comparison history."""
+        from .confusion_analyzer import ConfusionPattern, ConfusionExample
+        from collections import defaultdict
+
+        groups = defaultdict(list)
+        for c in comparisons:
+            if c.get('agrees'):
+                continue
+            key = (str(c['llm_label']), str(c['human_label']))
+            groups[key].append(c)
+
+        ca_config = self.config.confusion_analysis
+        patterns = []
+        total_disagreements = sum(1 for c in comparisons if not c.get('agrees'))
+
+        for (predicted, actual), records in groups.items():
+            if len(records) < ca_config.min_instances_for_pattern:
+                continue
+
+            percent = (len(records) / total_disagreements * 100) if total_disagreements > 0 else 0.0
+
+            examples = []
+            for record in records[:5]:
+                iid = record['instance_id']
+                text = self._get_instance_text(iid) or ''
+                examples.append(ConfusionExample(
+                    instance_id=iid,
+                    text=text[:200],
+                    llm_reasoning=None,
+                    llm_confidence=None,
+                ))
+
+            patterns.append(ConfusionPattern(
+                predicted_label=predicted,
+                actual_label=actual,
+                count=len(records),
+                percent=round(percent, 1),
+                examples=examples,
+            ))
+
+        patterns.sort(key=lambda p: p.count, reverse=True)
+        return patterns[:ca_config.max_patterns]
+
+    def _get_eval_endpoint(self) -> Optional[Any]:
+        """Get (or lazily create) the dedicated low-temperature endpoint used
+        for candidate evaluation.
+
+        The labeler's default temperature is tuned for sampling diversity
+        (non-zero, so confidence estimates have signal). The refinement gate
+        needs the opposite: measure prompt quality, not sampling variance.
+        So we keep a separate endpoint at rl_config.eval_temperature (0.0 by
+        default) and re-use it across cycles.
+        """
+        if self._eval_endpoint is not None:
+            return self._eval_endpoint
+
+        if not self.config.labeling_models:
+            return None
+
+        try:
+            from potato.ai.ai_endpoint import AIEndpointFactory
+        except Exception as e:
+            logger.debug(f"[Refinement-Validated] eval endpoint factory unavailable: {e}")
+            return None
+
+        eval_temp = self.config.refinement_loop.eval_temperature
+        for model_config in self.config.labeling_models:
+            try:
+                endpoint_config = model_config.to_endpoint_config(
+                    temperature_override=eval_temp
+                )
+                endpoint = AIEndpointFactory.create_endpoint(endpoint_config)
+                if endpoint:
+                    self._eval_endpoint = endpoint
+                    logger.info(
+                        f"[Refinement-Validated] eval endpoint: "
+                        f"{model_config.endpoint_type}/{model_config.model} "
+                        f"(temperature={eval_temp})"
+                    )
+                    return endpoint
+            except Exception as e:
+                logger.debug(f"[Refinement-Validated] eval endpoint build failed for {model_config.model}: {e}")
+                continue
+        return None
+
+    def _label_with_candidate(
+        self, instance_id: str, text: str, candidate_prompt: str
+    ) -> Optional[str]:
+        """Single labeling call using a candidate prompt (no sampling diversity).
+
+        Used by CandidateEvaluator. Routes to the dedicated eval endpoint
+        (low/zero temperature) so the validation gate measures prompt quality
+        rather than sampling variance.
+        """
+        schemes = self.app_config.get('annotation_schemes', [])
+        schema_name = schemes[0].get('name', 'default') if schemes else 'default'
+
+        try:
+            endpoint = self._get_eval_endpoint()
+            if endpoint is None:
+                # Fall back to the labeler endpoint if the eval endpoint can't be
+                # built (e.g. during tests where AIEndpointFactory is mocked).
+                endpoint = self.llm_labeling_thread._get_endpoint()
+            if endpoint is None:
+                return None
+
+            labels = [l['name'] if isinstance(l, dict) else l for l in schemes[0].get('labels', [])]
+            full_prompt = (
+                f"{candidate_prompt}\n\n"
+                f"Text to label:\n{text}\n\n"
+                f"Available labels: {labels}\n\n"
+                f'Respond with JSON: {{"label": "<your label>"}}'
+            )
+
+            from pydantic import BaseModel
+
+            class LabelOnly(BaseModel):
+                label: str = ""
+
+            response = endpoint.query(full_prompt, LabelOnly)
+            if isinstance(response, dict):
+                return response.get('label', '').strip() or None
+            elif hasattr(response, 'label'):
+                return response.label
+            return None
+        except Exception as e:
+            logger.debug(f"[CandidateEval] label_fn failed for {instance_id}: {e}")
+            return None
+
+    def _build_eval_prompt_for_candidate(self, candidate, current_prompt: str) -> str:
+        """Given a candidate, construct the full prompt used for eval.
+
+        PROMPT_EDIT: the candidate payload contains the new_prompt_text.
+        ICL_EXAMPLE: inject the candidate example into the current prompt's
+          ## Examples section.
+        """
+        from .refinement.base import CandidateKind
+
+        if candidate.kind == CandidateKind.PROMPT_EDIT:
+            return candidate.payload.get('new_prompt_text', current_prompt)
+
+        if candidate.kind == CandidateKind.ICL_EXAMPLE:
+            # Inject the single example into the current prompt
+            example_text = candidate.payload.get('text', '')
+            example_label = candidate.payload.get('label', '')
+            example_section = (
+                "\n\n## Examples\n"
+                f'Text: "{example_text[:200]}"\n'
+                f"Label: {example_label}\n"
+            )
+            return current_prompt + example_section
+
+        if candidate.kind == CandidateKind.PRINCIPLE:
+            return current_prompt + f"\n\nKey principle: {candidate.payload}\n"
+
+        return current_prompt
+
+    def _apply_refinement_candidate(self, candidate, gain: float) -> None:
+        """Commit a candidate: either create a new prompt version or add to ICL library."""
+        from .refinement.base import CandidateKind
+        from .refinement.icl_library import ICLEntry
+
+        old_version = self.current_prompt_version
+
+        if candidate.kind == CandidateKind.PROMPT_EDIT:
+            new_prompt_text = candidate.payload.get('new_prompt_text', '')
+            if new_prompt_text:
+                new_pv = self.create_prompt_version(
+                    new_prompt_text,
+                    created_by='validated_refinement',
+                    source_description=(
+                        f"{candidate.proposed_by}: +{gain:.3f} val accuracy"
+                    ),
+                )
+                logger.info(f"[Refinement-Validated] Created prompt v{new_pv.version}")
+                # Trigger re-annotation of low-confidence instances
+                self._trigger_reannotation(old_version)
+
+        elif candidate.kind == CandidateKind.ICL_EXAMPLE:
+            lib = self._get_icl_library()
+            payload = candidate.payload
+            entry = ICLEntry(
+                instance_id=payload['instance_id'],
+                text=payload.get('text', ''),
+                label=payload.get('label', ''),
+                principle=payload.get('principle', ''),
+                added_at_cycle=self.refinement_loop.cycle_count + 1,
+                val_accuracy_gain=gain,
+            )
+            lib.add(entry)
+            logger.info(f"[Refinement-Validated] Added ICL example {entry.instance_id}")
+            # Also bump prompt version to trigger re-annotation
+            # (ICL is effectively a new prompt since labeler injects examples)
+            current = self.get_current_prompt_text()
+            new_pv = self.create_prompt_version(
+                current,
+                created_by='validated_refinement_icl',
+                source_description=(
+                    f"ICL example added: {entry.instance_id} (+{gain:.3f} val accuracy)"
+                ),
+            )
+            # Trigger re-annotation to apply new ICL library
+            self._trigger_reannotation(old_version)
+
+        elif candidate.kind == CandidateKind.PRINCIPLE:
+            current = self.get_current_prompt_text()
+            new_prompt = current + f"\n\nKey principle: {candidate.payload}\n"
+            new_pv = self.create_prompt_version(
+                new_prompt,
+                created_by='validated_refinement_principle',
+                source_description=f"Principle added (+{gain:.3f} val accuracy)",
+            )
+            self._trigger_reannotation(old_version)
+
+    def _handle_refinement_failure(self, strategy_name: str, reason: str) -> None:
+        """Track a failed refinement cycle; stop after max consecutive failures."""
+        if not hasattr(self, '_refinement_consecutive_failures'):
+            self._refinement_consecutive_failures = 0
+        self._refinement_consecutive_failures += 1
+
+        max_failures = self.config.refinement_loop.max_consecutive_failures
+        if self._refinement_consecutive_failures >= max_failures:
+            logger.warning(
+                f"[Refinement-Validated] {strategy_name} failed "
+                f"{self._refinement_consecutive_failures} consecutive cycles "
+                f"(reason: {reason}); stopping refinement until more disagreements arrive"
+            )
+            # Stop the loop; it will be reset when new disagreements accumulate
+            # (handled by the trigger_interval mechanism in refinement_loop)
+            self.refinement_loop._stop(
+                f"Validation failed {self._refinement_consecutive_failures} times"
+            )
+
+    def _queue_refinement_for_approval(self, ref_result) -> None:
+        """Store a validated refinement candidate awaiting admin approval."""
+        if not hasattr(self, '_pending_refinements'):
+            self._pending_refinements = []
+        self._pending_refinements.append(ref_result.to_dict())
+
+    def _log_refinement_cycle(self, ref_result) -> None:
+        """Append a cycle result to the persistent refinement log."""
+        if not hasattr(self, '_refinement_log'):
+            self._refinement_log = []
+        self._refinement_log.append(ref_result.to_dict())
+
+    def get_refinement_log(self) -> List[Dict[str, Any]]:
+        """Return full log of all refinement cycles (including dry-run results)."""
+        return getattr(self, '_refinement_log', [])
+
+    def get_pending_refinements(self) -> List[Dict[str, Any]]:
+        """Return candidates awaiting admin approval."""
+        return getattr(self, '_pending_refinements', [])
+
+    def approve_pending_refinement(self, index: int) -> Dict[str, Any]:
+        """Apply a pending refinement by index. Returns {success, message}."""
+        pending = getattr(self, '_pending_refinements', [])
+        if index < 0 or index >= len(pending):
+            return {'success': False, 'error': 'Invalid index'}
+
+        item = pending.pop(index)
+        # Reconstruct a candidate from the stored dict
+        from .refinement.base import CandidateKind, RefinementCandidate
+
+        cand_dict = item.get('applied_candidate')
+        if not cand_dict:
+            return {'success': False, 'error': 'No candidate in pending item'}
+
+        cand = RefinementCandidate(
+            kind=CandidateKind(cand_dict['kind']),
+            payload=cand_dict['payload'],
+            target_pattern=cand_dict.get('target_pattern'),
+            proposed_by=cand_dict.get('proposed_by', ''),
+            rationale=cand_dict.get('rationale', ''),
+        )
+        gain = (
+            max(item.get('val_candidate_accuracies', {}).values())
+            - item.get('val_baseline_accuracy', 0.0)
+            if item.get('val_candidate_accuracies') else 0.0
+        )
+        self._apply_refinement_candidate(cand, gain)
+        self._save_state()
+        return {'success': True, 'applied': cand_dict}
+
+    def reject_pending_refinement(self, index: int) -> Dict[str, Any]:
+        """Reject a pending refinement by index."""
+        pending = getattr(self, '_pending_refinements', [])
+        if index < 0 or index >= len(pending):
+            return {'success': False, 'error': 'Invalid index'}
+        item = pending.pop(index)
+        return {'success': True, 'rejected': item.get('applied_candidate')}
 
     def get_refinement_status(self) -> Dict[str, Any]:
         """Get the refinement loop status."""
@@ -914,9 +1690,20 @@ class SoloModeManager:
         Returns:
             True if transition successful
         """
+        old_phase = self.phase_controller.get_current_phase()
         result = self.phase_controller.transition_to(phase, reason=reason, force=force)
-        if result and phase in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
-            self.start_background_labeling()
+        if result:
+            logger.info(
+                f"[Phase Transition] {old_phase.name} -> {phase.name}"
+                f"{' (forced)' if force else ''}"
+                f"{f' reason: {reason}' if reason else ''}"
+            )
+            if phase in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
+                self.start_background_labeling()
+        else:
+            logger.warning(
+                f"[Phase Transition] FAILED: {old_phase.name} -> {phase.name}"
+            )
         return result
 
     def advance_to_next_phase(self, reason: str = "") -> bool:
@@ -976,10 +1763,44 @@ class SoloModeManager:
 
             self.prompt_versions.append(prompt)
             self.current_prompt_version = new_version
+
+            # Reset stale reannotation counts so instances can be re-annotated
+            # with the improved prompt. Keep counts only for recent prompt versions.
+            self._reset_stale_reannotation_counts(new_version)
+
             self._save_state()
 
             logger.info(f"Created prompt version {new_version} by {created_by}")
             return prompt
+
+    def _reset_stale_reannotation_counts(self, current_version: int) -> None:
+        """Reset reannotation counts for instances not recently re-annotated.
+
+        Keeps counts only for instances whose last reannotation was within
+        the last 2 prompt versions. This prevents instances from being
+        permanently excluded from re-annotation after prompt improvements.
+        """
+        if not self._reannotation_counts:
+            return
+
+        stale_ids = []
+        for instance_id in self._reannotation_counts:
+            # Check if this instance's prediction is from a recent prompt version
+            if instance_id in self.predictions:
+                for schema_preds in self.predictions[instance_id].values():
+                    if current_version - schema_preds.prompt_version > 2:
+                        stale_ids.append(instance_id)
+                        break
+            else:
+                stale_ids.append(instance_id)
+
+        for instance_id in stale_ids:
+            del self._reannotation_counts[instance_id]
+
+        if stale_ids:
+            logger.debug(
+                f"Reset reannotation counts for {len(stale_ids)} stale instances"
+            )
 
     def update_prompt(
         self,
@@ -1113,7 +1934,7 @@ class SoloModeManager:
             )
             prediction.agrees_with_human = agrees
 
-            # Update metrics
+            # Update agreement metrics
             self.agreement_metrics.total_compared += 1
             if agrees:
                 self.agreement_metrics.agreements += 1
@@ -1121,6 +1942,37 @@ class SoloModeManager:
                 self.agreement_metrics.disagreements += 1
                 self.disagreement_ids.add(instance_id)
             self.agreement_metrics.update_rate()
+
+            # Track per-prompt-version agreement
+            pv = prediction.prompt_version
+            if pv not in self._per_version_agreement:
+                self._per_version_agreement[pv] = {'compared': 0, 'agreements': 0}
+            self._per_version_agreement[pv]['compared'] += 1
+            if agrees:
+                self._per_version_agreement[pv]['agreements'] += 1
+
+            # Feed the validation tracker for confusion matrix / pattern analysis
+            self.validation_tracker.record_comparison(
+                instance_id=instance_id,
+                human_label=label,
+                llm_label=prediction.predicted_label,
+                schema_name=schema_name,
+                agrees=agrees,
+            )
+
+            human_count = len(self.human_labeled_ids)
+            pv_stats = self._per_version_agreement.get(pv, {})
+            pv_rate = (pv_stats['agreements'] / pv_stats['compared']
+                       if pv_stats.get('compared', 0) > 0 else 0)
+            if human_count % 5 == 0 or not agrees:
+                logger.info(
+                    f"[Human Label] #{human_count} {instance_id}: "
+                    f"human={label}, llm={prediction.predicted_label}, "
+                    f"{'AGREE' if agrees else 'DISAGREE'} "
+                    f"(overall={self.agreement_metrics.agreement_rate:.3f}, "
+                    f"prompt_v{pv}={pv_rate:.3f} [{pv_stats.get('compared',0)}], "
+                    f"total_compared={self.agreement_metrics.total_compared})"
+                )
 
             self._save_state()
             return agrees
@@ -1187,6 +2039,84 @@ class SoloModeManager:
             if scheme.get('name') == schema_name:
                 return scheme.get('annotation_type', 'radio')
         return 'radio'
+
+    def _retroactive_compare(self, instance_id: str, schema_name: str) -> None:
+        """Compare an LLM prediction against an existing human label.
+
+        Called when the LLM labels an instance that a human already annotated.
+        This ensures agreement metrics are updated regardless of annotation order.
+        """
+        with self._lock:
+            if instance_id not in self.human_labeled_ids:
+                return
+
+            prediction = self.get_llm_prediction(instance_id, schema_name)
+            if prediction is None or prediction.human_label is not None:
+                return  # No prediction or already compared
+
+            human_label = self._get_stored_human_label(instance_id, schema_name)
+            if human_label is None:
+                return
+
+            prediction.human_label = human_label
+            agrees = self._check_agreement(
+                prediction.predicted_label, human_label, schema_name
+            )
+            prediction.agrees_with_human = agrees
+
+            self.agreement_metrics.total_compared += 1
+            if agrees:
+                self.agreement_metrics.agreements += 1
+            else:
+                self.agreement_metrics.disagreements += 1
+                self.disagreement_ids.add(instance_id)
+            self.agreement_metrics.update_rate()
+
+            # Track per-prompt-version agreement
+            pv = prediction.prompt_version
+            if pv not in self._per_version_agreement:
+                self._per_version_agreement[pv] = {'compared': 0, 'agreements': 0}
+            self._per_version_agreement[pv]['compared'] += 1
+            if agrees:
+                self._per_version_agreement[pv]['agreements'] += 1
+
+            # Feed the validation tracker for confusion matrix / pattern analysis
+            self.validation_tracker.record_comparison(
+                instance_id=instance_id,
+                human_label=human_label,
+                llm_label=prediction.predicted_label,
+                schema_name=schema_name,
+                agrees=agrees,
+            )
+
+            logger.debug(
+                f"Retroactive comparison for {instance_id}: "
+                f"llm={prediction.predicted_label}, human={human_label}, "
+                f"agrees={agrees}, prompt_v{pv}"
+            )
+
+    def _get_stored_human_label(
+        self, instance_id: str, schema_name: str
+    ) -> Optional[Any]:
+        """Look up a human annotation label from the user state manager.
+
+        Returns:
+            The human label if found, None otherwise.
+        """
+        try:
+            from potato.user_state_management import get_user_state_manager
+            usm = get_user_state_manager()
+            # Check all users' annotations for this instance
+            for user_id in usm.get_all_user_ids():
+                user_state = usm.get_user_state(user_id)
+                if user_state is None:
+                    continue
+                annotations = user_state.get_annotations_for_instance(instance_id)
+                if annotations and schema_name in annotations:
+                    return annotations[schema_name]
+        except Exception as e:
+            logger.debug(f"Could not look up human label for {instance_id}: {e}")
+        return None
 
     # === Disagreement Resolution ===
 
@@ -1457,7 +2387,13 @@ class SoloModeManager:
         batch_size = self.config.batches.llm_labeling_batch
         max_labels = self.config.batches.max_parallel_labels
 
-        logger.info(f"Background labeling started (batch={batch_size}, max={max_labels})")
+        total_instances = self._get_total_instance_count()
+        logger.info(
+            f"[LLM Background] Labeling started "
+            f"(batch={batch_size}, max={max_labels}, "
+            f"total_instances={total_instances}, "
+            f"already_labeled={len(self.llm_labeled_ids)})"
+        )
 
         while not self._stop_labeling.is_set():
             try:
@@ -1562,11 +2498,13 @@ class SoloModeManager:
 
         # Collect candidate IDs under the lock, then fetch texts outside it
         # to avoid blocking the main thread during potentially slow text lookups.
+        # Note: we do NOT filter out human_labeled_ids — the LLM should label
+        # instances the human has already annotated so retroactive comparison
+        # can update agreement metrics. Only skip instances the LLM already labeled.
         with self._lock:
             candidate_ids = [
                 instance_id for instance_id in ism.instance_id_ordering
                 if instance_id not in self.llm_labeled_ids
-                and instance_id not in self.human_labeled_ids
             ]
 
         instances = []
@@ -1613,51 +2551,63 @@ class SoloModeManager:
     # === State Persistence ===
 
     def _save_state(self) -> None:
-        """Save manager state to disk."""
+        """Save manager state to disk.
+
+        Thread-safe: acquires self._lock (RLock) so callers that already
+        hold the lock won't deadlock, while callers from background threads
+        (e.g., labeling loop, rule clustering) are properly serialized.
+        """
         if not self.config.state_dir:
             return
 
-        try:
-            os.makedirs(self.config.state_dir, exist_ok=True)
-            filepath = os.path.join(self.config.state_dir, self._state_file)
+        with self._lock:
+            try:
+                os.makedirs(self.config.state_dir, exist_ok=True)
+                filepath = os.path.join(self.config.state_dir, self._state_file)
 
-            state = {
-                'task_description': self.task_description,
-                'current_prompt_version': self.current_prompt_version,
-                'prompt_versions': [p.to_dict() for p in self.prompt_versions],
-                'predictions': {
-                    iid: {s: p.to_dict() for s, p in schemas.items()}
-                    for iid, schemas in self.predictions.items()
-                },
-                'human_labeled_ids': list(self.human_labeled_ids),
-                'llm_labeled_ids': list(self.llm_labeled_ids),
-                'disagreement_ids': list(self.disagreement_ids),
-                'validation_sample_ids': list(self.validation_sample_ids),
-                'edge_case_ids': list(self.edge_case_ids),
-                'edge_case_labels': self.edge_case_labels,
-                'agreement_metrics': self.agreement_metrics.to_dict(),
-                'confidence_history': {
-                    iid: entries
-                    for iid, entries in self.confidence_history.items()
-                },
-            }
+                state = {
+                    'task_description': self.task_description,
+                    'current_prompt_version': self.current_prompt_version,
+                    'prompt_versions': [p.to_dict() for p in self.prompt_versions],
+                    'predictions': {
+                        iid: {s: p.to_dict() for s, p in schemas.items()}
+                        for iid, schemas in self.predictions.items()
+                    },
+                    'human_labeled_ids': list(self.human_labeled_ids),
+                    'llm_labeled_ids': list(self.llm_labeled_ids),
+                    'disagreement_ids': list(self.disagreement_ids),
+                    'validation_sample_ids': list(self.validation_sample_ids),
+                    'edge_case_ids': list(self.edge_case_ids),
+                    'edge_case_labels': self.edge_case_labels,
+                    'agreement_metrics': self.agreement_metrics.to_dict(),
+                    'confidence_history': {
+                        iid: entries
+                        for iid, entries in self.confidence_history.items()
+                    },
+                    'reannotation_counts': self._reannotation_counts,
+                    'per_version_agreement': self._per_version_agreement,
+                    'refinement_consecutive_failures': self._refinement_consecutive_failures,
+                    'pending_refinements': self._pending_refinements,
+                    'refinement_log': self._refinement_log[-50:],  # Keep last 50
+                    'icl_library': self._icl_library.to_dict() if self._icl_library else None,
+                }
 
-            # Include edge case rule manager state inline
-            if self._edge_case_rule_manager is not None:
-                state['edge_case_rule_data'] = self._edge_case_rule_manager.to_dict()
+                # Include edge case rule manager state inline
+                if self._edge_case_rule_manager is not None:
+                    state['edge_case_rule_data'] = self._edge_case_rule_manager.to_dict()
 
-            # Include confidence routing stats (informational only)
-            if self._confidence_router is not None:
-                state['confidence_routing_stats'] = self._confidence_router.get_stats()
+                # Include confidence routing stats (informational only)
+                if self._confidence_router is not None:
+                    state['confidence_routing_stats'] = self._confidence_router.get_stats()
 
-            # Atomic write
-            temp_path = filepath + '.tmp'
-            with open(temp_path, 'w') as f:
-                json.dump(state, f, indent=2)
-            os.replace(temp_path, filepath)
+                # Atomic write
+                temp_path = filepath + '.tmp'
+                with open(temp_path, 'w') as f:
+                    json.dump(state, f, indent=2)
+                os.replace(temp_path, filepath)
 
-        except Exception as e:
-            logger.error(f"Error saving Solo Mode state: {e}")
+            except Exception as e:
+                logger.error(f"Error saving Solo Mode state: {e}")
 
     def load_state(self) -> bool:
         """
@@ -1716,6 +2666,26 @@ class SoloModeManager:
                     disagreements=metrics.get('disagreements', 0),
                     agreement_rate=metrics.get('agreement_rate', 0.0),
                 )
+
+                # Restore reannotation counts
+                self._reannotation_counts = state.get('reannotation_counts', {})
+
+                # Restore per-version agreement tracking
+                raw_pva = state.get('per_version_agreement', {})
+                self._per_version_agreement = {
+                    int(k): v for k, v in raw_pva.items()
+                }
+
+                # Restore validated refinement state
+                self._refinement_consecutive_failures = state.get(
+                    'refinement_consecutive_failures', 0
+                )
+                self._pending_refinements = state.get('pending_refinements', [])
+                self._refinement_log = state.get('refinement_log', [])
+                icl_data = state.get('icl_library')
+                if icl_data:
+                    from .refinement.icl_library import ICLLibrary
+                    self._icl_library = ICLLibrary.from_dict(icl_data)
 
                 # Load edge case rule manager state
                 ecr_data = state.get('edge_case_rule_data')
@@ -1988,6 +2958,14 @@ class SoloModeManager:
                     'background_running': self.is_background_labeling_running(),
                 },
                 'agreement': self.agreement_metrics.to_dict(),
+                'agreement_by_prompt_version': {
+                    str(v): {
+                        'compared': d['compared'],
+                        'agreements': d['agreements'],
+                        'rate': d['agreements'] / d['compared'] if d['compared'] > 0 else 0,
+                    }
+                    for v, d in self._per_version_agreement.items()
+                },
                 'disagreements': {
                     'total': len(self.disagreement_ids),
                     'pending': len(self.get_pending_disagreements()),

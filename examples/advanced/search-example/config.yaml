@@ -1,0 +1,39 @@
+port: 8000
+annotation_task_name: Search Example
+task_dir: .
+output_annotation_dir: annotation_output/search-example/
+output_annotation_format: tsv
+data_files:
+- data/search-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+
+# Admin API key so you can call /admin/api/search with X-API-Key.
+admin_api_key: search-example-key
+
+# Universal FTS5 search. Read-only admin search is always available.
+# annotator_claim is enabled here and is compatible because this project
+# uses fixed_order assignment with no overlap/QC/crowd (the startup
+# guard would refuse to boot otherwise). max_annotations_per_user keeps
+# the corpus from being fully pre-assigned, so claim is meaningful.
+search:
+  enabled: true
+  backend: fts5
+  annotator_claim: true
+
+max_annotations_per_user: 2
+
+annotation_schemes:
+- annotation_type: radio
+  name: relevance
+  description: Is this instance relevant to the target topic?
+  labels:
+  - relevant
+  - not relevant
+  sequential_key_binding: true
+site_dir: default

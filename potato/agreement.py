@@ -2,14 +2,16 @@
 Inter-Annotator Agreement Calculation Module
 
 This module provides functionality for calculating inter-annotator agreement metrics,
-specifically Krippendorff's alpha, from annotation data. It supports both rating
-agreement (interval metric) and skip agreement (nominal metric) calculations.
+including Krippendorff's alpha, Cohen's kappa (pairwise), and Fleiss' kappa
+(N raters), from annotation data. It supports both rating agreement (interval
+metric) and skip agreement (nominal metric) calculations.
 
 The module processes annotation files in JSON format and outputs agreement statistics
 along with a CSV file containing the processed annotation data.
 """
 
 import argparse
+from itertools import combinations
 import simpledorff
 from simpledorff.metrics import *
 import ujson
@@ -32,6 +34,144 @@ def get_nans(shape):
     ar = np.empty(shape)
     ar[:] = np.NaN
     return ar
+
+
+def cohen_kappa_pairwise(reliability_df):
+    """
+    Compute Cohen's kappa for every pair of annotators and return aggregate stats.
+
+    Cohen's kappa is defined for exactly two raters. With N>2 raters we compute
+    kappa for each pair on the items they both rated, then return the mean and the
+    per-pair breakdown. Pairs that share fewer than 2 items are skipped.
+
+    Args:
+        reliability_df: long-format DataFrame with columns
+            unit (item id), annotator (user), annotation (label value).
+
+    Returns:
+        dict with keys: mean_kappa (float | None), pairs (list of
+            {annotator_a, annotator_b, kappa, n_items}), n_pairs_evaluated,
+            n_pairs_skipped.
+    """
+    from sklearn.metrics import cohen_kappa_score
+
+    annotators = sorted(reliability_df["annotator"].unique())
+    pairs = []
+    skipped = 0
+
+    for a, b in combinations(annotators, 2):
+        a_rows = reliability_df[reliability_df["annotator"] == a].set_index("unit")["annotation"]
+        b_rows = reliability_df[reliability_df["annotator"] == b].set_index("unit")["annotation"]
+        shared = a_rows.index.intersection(b_rows.index)
+        if len(shared) < 2:
+            skipped += 1
+            continue
+
+        y_a = a_rows.loc[shared].astype(str).tolist()
+        y_b = b_rows.loc[shared].astype(str).tolist()
+        try:
+            kappa = float(cohen_kappa_score(y_a, y_b))
+        except Exception:
+            skipped += 1
+            continue
+        pairs.append({
+            "annotator_a": a,
+            "annotator_b": b,
+            "kappa": round(kappa, 4),
+            "n_items": int(len(shared)),
+        })
+
+    mean_kappa = (sum(p["kappa"] for p in pairs) / len(pairs)) if pairs else None
+    return {
+        "mean_kappa": round(mean_kappa, 4) if mean_kappa is not None else None,
+        "pairs": pairs,
+        "n_pairs_evaluated": len(pairs),
+        "n_pairs_skipped": skipped,
+    }
+
+
+def fleiss_kappa(reliability_df):
+    """
+    Compute Fleiss' kappa for N raters over a categorical label set.
+
+    Fleiss' kappa assumes the same number of ratings per item but tolerates
+    different rater identities per item. Items with fewer than 2 ratings are
+    dropped; the remaining items are padded by repeating their available
+    ratings up to the per-item rater count (`n_raters = max ratings per item`).
+    When per-item rater counts vary widely the metric is approximate; we report
+    `n_raters` and `n_items_evaluated` so the caller can judge.
+
+    Args:
+        reliability_df: long-format DataFrame with columns
+            unit (item id), annotator (user), annotation (label value).
+
+    Returns:
+        dict with keys: kappa (float | None), n_items_evaluated (int),
+            n_raters (int), n_categories (int), interpretation (str).
+    """
+    if reliability_df.empty:
+        return {"kappa": None, "n_items_evaluated": 0, "n_raters": 0,
+                "n_categories": 0, "interpretation": "No data"}
+
+    df = reliability_df.copy()
+    df["annotation"] = df["annotation"].astype(str)
+
+    counts_by_item = df.groupby(["unit", "annotation"]).size().unstack(fill_value=0)
+    items_with_ratings = counts_by_item.sum(axis=1)
+    counts_by_item = counts_by_item.loc[items_with_ratings >= 2]
+
+    if counts_by_item.empty:
+        return {"kappa": None, "n_items_evaluated": 0, "n_raters": 0,
+                "n_categories": int(df["annotation"].nunique()),
+                "interpretation": "No items with >=2 raters"}
+
+    n_raters = int(counts_by_item.sum(axis=1).max())
+    n_items = int(counts_by_item.shape[0])
+    n_categories = int(counts_by_item.shape[1])
+
+    matrix = counts_by_item.to_numpy(dtype=float)
+    row_sums = matrix.sum(axis=1, keepdims=True)
+    row_sums[row_sums == 0] = 1.0
+    matrix = matrix * (n_raters / row_sums)
+
+    p_j = matrix.sum(axis=0) / (n_items * n_raters)
+    if n_raters < 2:
+        return {"kappa": None, "n_items_evaluated": n_items, "n_raters": n_raters,
+                "n_categories": n_categories,
+                "interpretation": "Need >=2 raters per item"}
+    p_i = (np.sum(matrix ** 2, axis=1) - n_raters) / (n_raters * (n_raters - 1))
+    p_bar = float(p_i.mean())
+    p_e = float(np.sum(p_j ** 2))
+
+    if p_e >= 1.0:
+        kappa = 1.0 if p_bar >= 1.0 else 0.0
+    else:
+        kappa = (p_bar - p_e) / (1 - p_e)
+
+    return {
+        "kappa": round(float(kappa), 4),
+        "n_items_evaluated": n_items,
+        "n_raters": n_raters,
+        "n_categories": n_categories,
+        "interpretation": interpret_kappa(kappa),
+    }
+
+
+def interpret_kappa(kappa):
+    """Landis & Koch (1977) interpretation bands for kappa-family metrics."""
+    if kappa is None:
+        return "No agreement computable"
+    if kappa < 0:
+        return "Worse than chance"
+    if kappa < 0.21:
+        return "Slight"
+    if kappa < 0.41:
+        return "Fair"
+    if kappa < 0.61:
+        return "Moderate"
+    if kappa < 0.81:
+        return "Substantial"
+    return "Almost perfect"
 
 
 def flatten(annotations):

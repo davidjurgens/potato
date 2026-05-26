@@ -5,7 +5,7 @@ This module provides integration with Ollama for local LLM inference.
 """
 
 import json
-from typing import Dict, List, Type
+from typing import Dict, List, Optional, Type
 import ollama
 from pydantic import BaseModel
 from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities
@@ -68,18 +68,21 @@ class OllamaEndpoint(BaseAIEndpoint):
             logger.debug(f"[Ollama] Querying model: {self.model}")
             logger.debug(f"[Ollama] Prompt (first 200 chars): {prompt[:200]}...")
 
-            # Disable thinking mode for qwen3 models to get direct JSON output
             options = {
                 'temperature': self.temperature,
                 'num_predict': self.max_tokens
             }
+
+            # Think mode: configurable via ai_config['think'], defaults to False
+            # for fast structured output (thinking wastes tokens on JSON tasks)
+            think = self.ai_config.get('think', False)
 
             response = self.client.chat(
                 model=self.model,
                 messages=[{'role': 'user', 'content': prompt}],
                 options=options,
                 format=output_format.model_json_schema(),
-                think=False,  # Disable thinking mode for direct output
+                think=think,
             )
 
             # Log full response structure for debugging
@@ -114,7 +117,8 @@ class OllamaEndpoint(BaseAIEndpoint):
                 logger.debug("[Ollama] Content is already a dict, returning directly")
                 return content
 
-            # Otherwise parse as JSON string
+            # Parse response using the base class's robust parser
+            # (handles truncated JSON, markdown blocks, plain text, etc.)
             if content:
                 logger.debug(f"[Ollama] Response content (first 500 chars): {str(content)[:500]}")
                 return self.parseStringToJson(content)
@@ -135,11 +139,12 @@ class OllamaEndpoint(BaseAIEndpoint):
                 'num_predict': self.max_tokens,
             }
 
+            think = self.ai_config.get('think', False)
             response = self.client.chat(
                 model=self.model,
                 messages=messages,
                 options=options,
-                think=False,
+                think=think,
             )
 
             message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)

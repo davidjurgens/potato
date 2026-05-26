@@ -129,7 +129,15 @@ class TestBuiltinExportersRegistered:
     def test_all_formats_listed(self):
         formats = export_registry.get_supported_formats()
         # Core exporters always present
-        core_expected = {"agent_eval", "coco", "conll_2003", "conll_u", "eaf", "mask_png", "parquet", "pascal_voc", "textgrid", "yolo"}
+        core_expected = {
+            # ML-format exporters (v2.1–2.2)
+            "agent_eval", "coco", "coding_eval", "conll_2003", "conll_u",
+            "eaf", "mask_png", "parquet", "pascal_voc", "textgrid", "yolo",
+            # Tabular exporters
+            "csv", "tsv", "jsonl",
+            # QDA-wave exporters (v2.5.0)
+            "codebook", "quotation_report",
+        }
         # HuggingFace exporter is optional (depends on datasets/huggingface_hub)
         optional = {"huggingface"}
         assert core_expected.issubset(set(formats))

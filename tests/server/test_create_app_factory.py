@@ -248,3 +248,128 @@ class TestInitializeFromConfig:
         finally:
             os.chdir(original_cwd)
             clear_all_global_state()
+
+    def test_qda_mode_initialized_via_factory(self):
+        """F1 regression: create_app(config_file) must initialize the QDA
+        Mode manager and serve /qda/status (run_server parity).
+
+        FlaskTestServer replicates init in-process, so it cannot catch a
+        missing init in _initialize_from_config — this test calls the real
+        factory function.
+        """
+        from tests.helpers.flask_test_setup import clear_all_global_state
+        from potato.qda_mode import clear_qda_mode_manager, get_qda_mode_manager
+
+        clear_all_global_state()
+        clear_qda_mode_manager()
+
+        test_dir = create_test_directory("init_qda_factory")
+        data_file = create_test_data_file(test_dir, [{"id": "1", "text": "hi"}])
+        config_file = create_test_config(
+            test_dir,
+            annotation_schemes=[{
+                "name": "label",
+                "description": "L",
+                "annotation_type": "radio",
+                "labels": ["a", "b"],
+            }],
+            data_files=[data_file],
+            additional_config={
+                "qda_mode": {
+                    "enabled": True,
+                    "codebook": {"enabled": True, "mode": "fixed"},
+                }
+            },
+        )
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(os.path.dirname(config_file))
+            from potato.flask_server import create_app
+            app = create_app(config_file)
+
+            # Manager initialized by the factory path (the F1 fix).
+            mgr = get_qda_mode_manager()
+            assert mgr is not None
+            assert mgr.config.enabled is True
+
+            # Blueprint reachable on the served factory app.
+            client = app.test_client()
+            resp = client.get("/qda/status")
+            assert resp.status_code == 200
+            body = resp.get_json()
+            assert body["enabled"] is True
+            assert body["codebook"] == {"enabled": True, "mode": "fixed"}
+        finally:
+            os.chdir(original_cwd)
+            clear_qda_mode_manager()
+            clear_all_global_state()
+
+    def test_search_claim_incompatible_config_aborts_startup(self):
+        """The search x assignment guard must abort create_app() when
+        annotator_claim is combined with an incompatible strategy."""
+        from tests.helpers.flask_test_setup import clear_all_global_state
+        from potato.server_utils.config_module import ConfigValidationError
+
+        clear_all_global_state()
+        test_dir = create_test_directory("search_claim_bad")
+        data_file = create_test_data_file(test_dir, [{"id": "1", "text": "hi"}])
+        config_file = create_test_config(
+            test_dir,
+            annotation_schemes=[{
+                "name": "label", "description": "L",
+                "annotation_type": "radio", "labels": ["a", "b"],
+            }],
+            data_files=[data_file],
+            assignment_strategy="random",
+            additional_config={"search": {"annotator_claim": True}},
+        )
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(os.path.dirname(config_file))
+            from potato.flask_server import create_app
+            with pytest.raises(ConfigValidationError, match="annotator_claim"):
+                create_app(config_file)
+        finally:
+            os.chdir(original_cwd)
+            clear_all_global_state()
+
+    def test_invalid_qda_mode_config_aborts_factory_startup(self):
+        """F2: an enabled-but-invalid qda_mode must abort create_app(),
+        not silently boot with QDA disabled."""
+        from tests.helpers.flask_test_setup import clear_all_global_state
+        from potato.qda_mode import clear_qda_mode_manager
+        from potato.server_utils.config_module import ConfigValidationError
+
+        clear_all_global_state()
+        clear_qda_mode_manager()
+
+        test_dir = create_test_directory("init_qda_bad")
+        data_file = create_test_data_file(test_dir, [{"id": "1", "text": "hi"}])
+        config_file = create_test_config(
+            test_dir,
+            annotation_schemes=[{
+                "name": "label",
+                "description": "L",
+                "annotation_type": "radio",
+                "labels": ["a", "b"],
+            }],
+            data_files=[data_file],
+            additional_config={
+                "qda_mode": {
+                    "enabled": True,
+                    "codebook": {"mode": "nonsense"},
+                }
+            },
+        )
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(os.path.dirname(config_file))
+            from potato.flask_server import create_app
+            with pytest.raises(ConfigValidationError, match="qda_mode"):
+                create_app(config_file)
+        finally:
+            os.chdir(original_cwd)
+            clear_qda_mode_manager()
+            clear_all_global_state()

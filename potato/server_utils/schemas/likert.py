@@ -96,7 +96,7 @@ def _generate_likert_layout_internal(annotation_scheme):
 
     # Initialize form wrapper
     schematic = f"""
-    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form likert shadcn-likert-container" action="/action_page.php" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" data-annotation-type="likert" data-schema-name="{escape_html_content(annotation_scheme['name'])}" {layout_attrs}>
+    <form id="{escape_html_content(annotation_scheme['name'])}" class="annotation-form likert shadcn-likert-container" action="javascript:void(0)" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" data-annotation-type="likert" data-schema-name="{escape_html_content(annotation_scheme['name'])}" {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escape_html_content(annotation_scheme['name'])}">
             <legend class="shadcn-likert-title">{escape_html_content(annotation_scheme['description'])}</legend>
@@ -122,8 +122,9 @@ def _generate_likert_layout_internal(annotation_scheme):
             key_bindings.append((key_value, f"{identifiers['schema']}: {key_value}"))
             logger.debug(f"Added key binding '{key_value}' for point {i}")
 
-        # Format label content - show numbers if displaying_score is enabled
-        label_content = str(i) if annotation_scheme.get("displaying_score") else ""
+        # Show the point number by default (unlabeled circles are a
+        # usability defect); honor an explicit displaying_score: false.
+        label_content = str(i) if annotation_scheme.get("displaying_score", True) else ""
 
         # Generate radio input for each scale point
         schematic += f"""

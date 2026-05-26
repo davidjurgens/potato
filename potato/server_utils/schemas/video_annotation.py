@@ -291,7 +291,7 @@ def _generate_html(
     source_field_attr = f' data-source-field="{escape_html_content(source_field)}"' if source_field else ""
 
     html = f'''
-    <form id="{escaped_name}" class="annotation-form video-annotation" action="/action_page.php"{source_field_attr}>
+    <form id="{escaped_name}" class="annotation-form video-annotation" action="javascript:void(0)"{source_field_attr}>
         <fieldset schema="{escaped_name}">
             <legend>{description}</legend>
 

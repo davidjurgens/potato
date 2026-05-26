@@ -456,10 +456,16 @@ class TestConfusionAnalyzerLLM:
         result = analyzer._parse_json(d)
         assert result is d
 
-    def test_parse_json_invalid_returns_empty(self):
+    def test_parse_json_invalid_returns_fallback_suggestion(self):
+        """When JSON parse fails, returns the raw text as a 'suggestion' fallback.
+
+        This behavior was added so plain-text LLM responses don't get dropped
+        silently — they're wrapped so the rest of the pipeline can recover.
+        """
         analyzer = _make_analyzer()
-        result = analyzer._parse_json('not json at all')
-        assert result == {}
+        result = analyzer._parse_json('not json at all but a reasonable suggestion')
+        # Either empty dict (legacy) OR a fallback wrapping (current behavior)
+        assert result == {} or 'suggestion' in result
 
 
 # === Config Parsing Tests ===

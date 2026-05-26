@@ -1369,8 +1369,13 @@ class TestLabelBatch:
 
         assert count == 0
 
-    def test_label_batch_skips_already_labeled(self):
-        """_label_batch skips instances already labeled by LLM or human."""
+    def test_label_batch_skips_already_llm_labeled(self):
+        """_label_batch skips LLM-labeled instances but labels human-labeled ones.
+
+        Human-labeled instances are INTENTIONALLY included so the LLM can
+        label them too, enabling retroactive comparison for agreement metrics.
+        Only instances already labeled by the LLM are skipped.
+        """
         mgr = _make_manager()
         mgr.llm_labeled_ids = {'i1'}
         mgr.human_labeled_ids = {'i2'}
@@ -1380,27 +1385,32 @@ class TestLabelBatch:
         mock_ism.get_item_by_id.return_value = {'text': 'test text'}
 
         from potato.solo_mode.llm_labeler import LabelingResult
-        mock_result = LabelingResult(
-            instance_id='i3',
-            schema_name='sentiment',
-            label='neutral',
-            confidence=0.8,
-            uncertainty=0.2,
-            reasoning='ok',
-            prompt_version=1,
-            model_name='test',
-        )
+
+        call_count = {'n': 0}
+        def make_result(instance_id, *args, **kwargs):
+            call_count['n'] += 1
+            return LabelingResult(
+                instance_id=instance_id,
+                schema_name='sentiment',
+                label='neutral',
+                confidence=0.8,
+                uncertainty=0.2,
+                reasoning='ok',
+                prompt_version=1,
+                model_name='test',
+            )
 
         mock_thread = MagicMock()
-        mock_thread._label_instance.return_value = mock_result
+        mock_thread._label_instance.side_effect = make_result
         mgr._llm_labeling_thread = mock_thread
 
         with patch('potato.item_state_management.get_item_state_manager',
                     return_value=mock_ism):
             count = mgr._label_batch(10)
 
-        assert count == 1
-        mock_thread._label_instance.assert_called_once()
+        # i1 skipped (already LLM-labeled), i2 and i3 labeled
+        assert count == 2
+        assert mock_thread._label_instance.call_count == 2
 
     def test_label_batch_error_result_not_counted(self):
         """_label_batch doesn't count error results as labeled."""

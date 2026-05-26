@@ -1,0 +1,73 @@
+# Simulator Configuration: Interactive Chat with Ollama persona + agent rating
+#
+# Drives the interactive_chat field of an annotation task to completion using
+# a small Ollama persona model, then rates the resulting trajectory with the
+# agent (vision-LLM) strategy.
+#
+# Pairs naturally with examples/agent-testing/interactive-agent-test/ which
+# ships an `agent_proxy.type: echo` backend, so the smoke test runs without
+# any external agent dependency.
+#
+# Prerequisites:
+#   1. ollama pull llama3.2:3b      # persona for user-side messages
+#   2. ollama pull gemma4:e4b        # vision-capable rater
+#   3. ollama serve                  # default port 11434
+#
+# Usage:
+#   # Terminal 1
+#   python potato/flask_server.py start \
+#       examples/agent-testing/interactive-agent-test/config.yaml -p 8521
+#
+#   # Terminal 2
+#   python tests/smoke/run_interactive_agent_sim.py
+
+simulator:
+  users:
+    count: 1                    # one user is enough for the chat smoke
+    competence_distribution:
+      perfect: 1.0
+
+  strategy: agent
+
+  agent_config:
+    endpoint_type: ollama_vision
+    model: gemma4:e4b
+    base_url: http://localhost:11434
+    temperature: 0.0
+    max_tokens: 600
+    cache_per_instance: true
+    add_noise: false
+
+  interactive:
+    enabled: true
+    endpoint_type: ollama
+    model: llama3.2:3b
+    base_url: http://localhost:11434
+    temperature: 0.7
+    max_tokens: 200
+    max_turns: 4
+    persona_system_prompt: |
+      You are a curious end-user testing an AI assistant. Send short,
+      natural messages that drive the assistant toward completing the task.
+      Keep each message to 1-2 sentences. When the assistant has clearly
+      finished the task, reply with a short acknowledgement that ends with
+      the literal marker [DONE].
+    done_marker: "[DONE]"
+    first_message_template: "Hi! I need help with: {task}"
+
+  timing:
+    annotation_time:
+      min: 1.0
+      max: 5.0
+      mean: 2.0
+      std: 1.0
+      distribution: normal
+
+  execution:
+    parallel_users: 1
+    delay_between_users: 1.0
+    max_annotations_per_user: 3   # short smoke -- 3 sessions is enough
+
+  output:
+    dir: simulator_output_interactive
+    format: json

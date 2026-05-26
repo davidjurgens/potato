@@ -74,6 +74,10 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Surveyflow](workflow/surveyflow.md) - Pre/post annotation surveys
 - [Annotation Filtering](workflow/annotation_filtering.md) - Filter data based on prior annotations
 - [Survey Instruments](advanced/survey_instruments.md) - 55 pre-built validated psychological instruments
+- [Memos](advanced/memos.md) - Universal annotator notes (instance/span-anchored, private/shared)
+- [Search](advanced/search.md) - Universal FTS5 search; admin search + guarded annotator search-and-claim
+- [Codebook](advanced/codebook.md) - Universal mutable code set (nested, opt-in per scheme, on-the-fly add)
+- [Cases](advanced/cases.md) - Group instances into units of analysis; QDA auto-detect; crosstab integration
 
 ## Agent Evaluation
 

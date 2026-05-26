@@ -39,6 +39,35 @@ def clear_all_global_state():
     clear_item_state_manager()
     clear_user_state_manager()
 
+    # Mode singletons (QDA / Solo) — leak across in-process server tests
+    # otherwise, making a mode-disabled server report enabled.
+    for _mode_mod, _clear_fn in (
+        ("potato.qda_mode", "clear_qda_mode_manager"),
+        ("potato.solo_mode", "clear_solo_mode_manager"),
+        ("potato.search", "clear_search"),
+    ):
+        try:
+            import importlib
+            _fn = getattr(importlib.import_module(_mode_mod), _clear_fn, None)
+            if _fn:
+                _fn()
+        except Exception:
+            pass
+
+    # Codebook change-listener registry (process-global; the ICL-sync
+    # listener captures config_module.config and would leak across
+    # in-process servers) + universal persistence connection cache.
+    try:
+        from potato.codebook import clear_change_listeners
+        clear_change_listeners()
+    except ImportError:
+        pass
+    try:
+        from potato.persistence import clear_db_cache
+        clear_db_cache()
+    except ImportError:
+        pass
+
     # Config module
     try:
         from potato.server_utils.config_module import clear_config
@@ -575,6 +604,55 @@ class FlaskTestServer:
                         print(f"[DEBUG] Error initializing Solo Mode manager: {e}")
                         import traceback
                         traceback.print_exc()
+
+                # Reset + (re)initialize QDA Mode manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot make a QDA-disabled server report enabled.
+                try:
+                    from potato.qda_mode import clear_qda_mode_manager
+                    clear_qda_mode_manager()
+                except Exception:
+                    pass
+                if config.get('qda_mode', {}).get('enabled', False):
+                    try:
+                        from potato.qda_mode import init_qda_mode_manager
+                        qda_manager = init_qda_mode_manager(config)
+                        if qda_manager:
+                            print("[DEBUG] QDA Mode manager initialized successfully")
+                        else:
+                            print("[DEBUG] QDA Mode manager returned None")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing QDA Mode manager: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+                # Codebook ICL-sync listener (parity with the real init
+                # paths; keeps ICL prompts on the current codebook set).
+                try:
+                    from potato.codebook.schema_bridge import (
+                        install_codebook_icl_sync,
+                    )
+                    install_codebook_icl_sync()
+                except Exception as e:
+                    print(f"[DEBUG] Codebook ICL sync not installed: {e}")
+
+                # Auto-detect cases from item metadata (no-op unless
+                # cases enabled or QDA mode is on).
+                try:
+                    from potato.cases import init_cases_from_config
+                    init_cases_from_config(config)
+                except Exception as e:
+                    print(f"[DEBUG] Cases auto-detect skipped: {e}")
+
+                # Build the universal search index (no-op if disabled)
+                try:
+                    from potato.search import (
+                        clear_search, init_search_from_item_state,
+                    )
+                    clear_search()
+                    init_search_from_item_state(config)
+                except Exception as e:
+                    print(f"[DEBUG] Search index init skipped: {e}")
 
                 # Initialize chat manager if configured
                 if config.get("chat_support", {}).get("enabled", False):

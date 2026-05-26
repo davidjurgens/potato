@@ -23,18 +23,25 @@ output_annotation_format: json
 
 # Instance Display Configuration
 instance_display:
+  # Horizontal so Trace A and Trace B render as side-by-side columns
+  # (the data is split into trace_a/trace_b); previously a single
+  # combined 'traces' list stacked A fully before B, defeating the
+  # pairwise comparison.
   layout:
-    direction: vertical
+    direction: horizontal
     gap: 16px
 
   fields:
-    - key: task_description
-      type: text
-      label: "Task"
-
-    - key: traces
+    - key: trace_a
       type: dialogue
-      label: "Agent Traces (A then B)"
+      label: "Agent A"
+      display_options:
+        show_turn_numbers: true
+        alternating_shading: true
+
+    - key: trace_b
+      type: dialogue
+      label: "Agent B"
       display_options:
         show_turn_numbers: true
         alternating_shading: true

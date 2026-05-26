@@ -130,20 +130,54 @@ class InstanceDisplayRenderer:
         """
         Validate that all configured fields exist in the instance data.
 
+        Fields whose display type is marked ``lazy_populated`` in the
+        display registry (``interactive_chat``, ``live_agent``,
+        ``live_coding_agent``) are exempt -- their data key is expected
+        to be written after initial render (by a live agent session).
+
         Args:
             instance_data: The instance data dictionary
 
         Raises:
-            InstanceDisplayError: If any field is missing
+            InstanceDisplayError: If any non-lazy field is missing
         """
+        non_lazy = [
+            f for f in self.fields
+            if not display_registry.is_lazy_populated(f.get("type", ""))
+        ]
+        missing_non_lazy = [
+            f["key"] for f in non_lazy if f["key"] not in instance_data
+        ]
+        # Every non-lazy field missing is almost always a config/data
+        # key mismatch (e.g. fields reference task_description but the
+        # data uses task), not a transient lazy state -- make it loud so
+        # it isn't silently rendered as a blank page.
+        if non_lazy and len(missing_non_lazy) == len(non_lazy):
+            logger.error(
+                "instance_display: ALL %d non-lazy field(s) %s are absent "
+                "from the instance data (available keys: %s). This is "
+                "almost certainly a config/data key mismatch.",
+                len(non_lazy), missing_non_lazy,
+                list(instance_data.keys()),
+            )
+
         for field in self.fields:
             key = field["key"]
-            if key not in instance_data:
-                available = list(instance_data.keys())
-                raise InstanceDisplayError(
-                    f"Display field '{key}' not found in instance data. "
-                    f"Available fields: {available}"
+            if key in instance_data:
+                continue
+            field_type = field.get("type", "")
+            if display_registry.is_lazy_populated(field_type):
+                logger.debug(
+                    "Skipping validation for lazy-populated field '%s' (type=%s); "
+                    "data is written after initial render.",
+                    key, field_type,
                 )
+                continue
+            available = list(instance_data.keys())
+            raise InstanceDisplayError(
+                f"Display field '{key}' not found in instance data. "
+                f"Available fields: {available}"
+            )
 
     def _render_field(self, field: Dict[str, Any], instance_data: Dict[str, Any]) -> str:
         """
@@ -294,11 +328,15 @@ class InstanceDisplayRenderer:
         if not self.has_instance_display:
             return result
 
-        # Validate fields
+        # Validate fields. A missing field here is a real config problem
+        # (lazy-populated types like interactive_chat are already filtered
+        # out by _validate_fields), but the renderer surfaces it inline
+        # via ``display_error`` so the page still loads -- WARN is the
+        # right severity, not ERROR.
         try:
             self._validate_fields(instance_data)
         except InstanceDisplayError as e:
-            logger.error(f"Field validation failed: {e}")
+            logger.warning(f"Field validation failed: {e}")
             result["display_error"] = str(e)
             return result
 

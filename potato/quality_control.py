@@ -417,7 +417,7 @@ class QualityControlManager:
             response_data["message"] = self.qc_config.attention_block_message
             if previous_failures < self.qc_config.attention_block_threshold:
                 self.logger.warning(f"User {user_id} blocked after {failures} attention check failures")
-        elif failures >= self.qc_config.attention_warn_threshold:
+        elif failures >= self.qc_config.attention_warn_threshold and not passed:
             response_data["warning"] = True
             response_data["message"] = self.qc_config.attention_warn_message
             if previous_failures < self.qc_config.attention_warn_threshold:

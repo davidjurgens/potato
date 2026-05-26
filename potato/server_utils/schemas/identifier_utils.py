@@ -7,6 +7,7 @@ and validating schema configurations across all annotation schema types.
 
 import html
 import logging
+from collections.abc import Mapping
 from typing import Dict, Any, Tuple, List
 
 logger = logging.getLogger(__name__)
@@ -142,6 +143,46 @@ def escape_html_content(content: str) -> str:
     if not content:
         return ""
     return html.escape(str(content))
+
+
+def humanize_label(text: str) -> str:
+    """Turn a machine label (``agent_a_much_better``) into readable text
+    (``Agent A Much Better``) for display only -- the stored annotation
+    value is always the original label name, never this.
+
+    Tokens that are already mixed/upper case or contain digits+letters
+    (acronyms, ``GPT4``, ``v2``) are preserved as-is so we don't mangle
+    them; purely lowercase tokens are capitalized.
+    """
+    if not text:
+        return ""
+    s = str(text).replace("_", " ").replace("-", " ")
+    s = " ".join(s.split())  # collapse whitespace
+    out = []
+    for tok in s.split(" "):
+        if tok.islower():
+            out.append(tok[:1].upper() + tok[1:])
+        else:
+            out.append(tok)  # preserve ACRONYMs, GPT4, v2, MixedCase
+    return " ".join(out)
+
+
+def display_label_text(label_data: Any, annotation_scheme: dict) -> str:
+    """Resolve the *visible* text for a label.
+
+    Precedence: explicit ``displayed_label`` on a dict label  >
+    humanized name (default, when ``humanize_labels`` is not disabled) >
+    raw name. Stored value is unaffected by this function.
+    """
+    if isinstance(label_data, Mapping):
+        if label_data.get("displayed_label"):
+            return str(label_data["displayed_label"])
+        name = label_data.get("name", "")
+    else:
+        name = label_data
+    if annotation_scheme.get("humanize_labels", True):
+        return humanize_label(name)
+    return str(name)
 
 def safe_generate_layout(annotation_scheme: dict, layout_function: callable, *args, **kwargs) -> Tuple[str, List[Tuple[str, str]]]:
     """

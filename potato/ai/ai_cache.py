@@ -29,6 +29,28 @@ from potato.ai.ai_prompt import ModelManager, get_ai_prompt
 
 AICACHEMANAGER = None
 
+
+def _get_scheme_field(annotation_id: int, field: str, default=None):
+    """Safely get a field from an annotation scheme with a clear error message."""
+    schemes = config.get("annotation_schemes", [])
+    if annotation_id >= len(schemes):
+        raise ValueError(
+            f"AI cache: annotation_id {annotation_id} out of range "
+            f"(only {len(schemes)} scheme(s) configured)"
+        )
+    scheme = schemes[annotation_id]
+    if default is not None:
+        return scheme.get(field, default)
+    if field not in scheme:
+        scheme_name = scheme.get("name", f"index {annotation_id}")
+        scheme_type = scheme.get("annotation_type", "unknown")
+        raise ValueError(
+            f"AI cache: annotation scheme '{scheme_name}' (type '{scheme_type}') "
+            f"missing required field '{field}'"
+        )
+    return scheme[field]
+
+
 def _get_instance_text(instance_id: int) -> str:
     """Get the text content from an instance using the configured text_key."""
     item = get_item_state_manager().items()[instance_id]
@@ -459,12 +481,12 @@ class AiCacheManager:
     
     def generate_likert(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
         from string import Template
-        annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
-        description = config["annotation_schemes"][annotation_id]["description"]
+        annotation_type = _get_scheme_field(annotation_id, "annotation_type")
+        description = _get_scheme_field(annotation_id, "description")
         text = _get_instance_text(instance_id)
-        min_label = config["annotation_schemes"][annotation_id]["min_label"]
-        max_label = config["annotation_schemes"][annotation_id]["max_label"]
-        size = config["annotation_schemes"][annotation_id]["size"]
+        min_label = _get_scheme_field(annotation_id, "min_label")
+        max_label = _get_scheme_field(annotation_id, "max_label")
+        size = _get_scheme_field(annotation_id, "size")
 
         ai_prompt = get_ai_prompt()
         output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
@@ -521,9 +543,9 @@ Respond in JSON format: {{"keywords": ["<visual_feature_1>", "<visual_feature_2>
         return res
     
     def generate_multiselect(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
-        description = config["annotation_schemes"][annotation_id]["description"]
-        labels = config["annotation_schemes"][annotation_id]["labels"]
+        annotation_type = _get_scheme_field(annotation_id, "annotation_type")
+        description = _get_scheme_field(annotation_id, "description")
+        labels = _get_scheme_field(annotation_id, "labels")
         text = _get_instance_text(instance_id)
 
         ai_prompt = get_ai_prompt()
@@ -583,10 +605,10 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         return res
     
     def generate_radio(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
-        description = config["annotation_schemes"][annotation_id]["description"]
+        annotation_type = _get_scheme_field(annotation_id, "annotation_type")
+        description = _get_scheme_field(annotation_id, "description")
         text = _get_instance_text(instance_id)
-        labels = config["annotation_schemes"][annotation_id]["labels"]
+        labels = _get_scheme_field(annotation_id, "labels")
 
         ai_prompt = get_ai_prompt()
         output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
@@ -645,8 +667,8 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         return res
     
     def generate_number(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
-        description = config["annotation_schemes"][annotation_id]["description"]
+        annotation_type = _get_scheme_field(annotation_id, "annotation_type")
+        description = _get_scheme_field(annotation_id, "description")
         text = _get_instance_text(instance_id)
 
         data = AnnotationInput(
@@ -661,9 +683,9 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         return res
     
     def generate_select(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
-        description = config["annotation_schemes"][annotation_id]["description"]
-        labels = config["annotation_schemes"][annotation_id]["labels"]
+        annotation_type = _get_scheme_field(annotation_id, "annotation_type")
+        description = _get_scheme_field(annotation_id, "description")
+        labels = _get_scheme_field(annotation_id, "labels")
         text = _get_instance_text(instance_id)
 
 
@@ -680,11 +702,11 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         return res
     
     def generate_slider(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
-        description = config["annotation_schemes"][annotation_id]["description"]
-        min_value = config["annotation_schemes"][annotation_id]["min_value"]
-        max_value = config["annotation_schemes"][annotation_id]["max_value"]
-        step = config["annotation_schemes"][annotation_id]["step"]
+        annotation_type = _get_scheme_field(annotation_id, "annotation_type")
+        description = _get_scheme_field(annotation_id, "description")
+        min_value = _get_scheme_field(annotation_id, "min_value")
+        max_value = _get_scheme_field(annotation_id, "max_value")
+        step = _get_scheme_field(annotation_id, "step", default=1)
         text = _get_instance_text(instance_id)
 
         data = AnnotationInput(
@@ -703,9 +725,9 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         return res
     
     def generate_span(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
-        annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
-        description = config["annotation_schemes"][annotation_id]["description"]
-        labels = config["annotation_schemes"][annotation_id]["labels"]
+        annotation_type = _get_scheme_field(annotation_id, "annotation_type")
+        description = _get_scheme_field(annotation_id, "description")
+        labels = _get_scheme_field(annotation_id, "labels")
         text = _get_instance_text(instance_id)
 
         data = AnnotationInput(
@@ -723,8 +745,8 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
     
     def generate_textbox(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
         logger.debug(f"Generating textbox for annotation_id: {annotation_id}")
-        annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
-        description = config["annotation_schemes"][annotation_id]["description"]
+        annotation_type = _get_scheme_field(annotation_id, "annotation_type")
+        description = _get_scheme_field(annotation_id, "description")
         text = _get_instance_text(instance_id)
 
         data = AnnotationInput(
@@ -751,9 +773,9 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         """
         logger.debug(f"Generating image annotation for instance={instance_id}, annotation={annotation_id}, assistant={ai_assistant}")
 
-        annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
-        description = config["annotation_schemes"][annotation_id].get("description", "")
-        labels = config["annotation_schemes"][annotation_id].get("labels", [])
+        annotation_type = _get_scheme_field(annotation_id, "annotation_type")
+        description = _get_scheme_field(annotation_id, "description", default="")
+        labels = _get_scheme_field(annotation_id, "labels", default=[])
 
         # Extract label names if labels are dicts
         if labels and isinstance(labels[0], dict):
@@ -780,9 +802,9 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         image_data = self._prepare_image_data(image_url)
 
         # Get confidence threshold from config
-        confidence_threshold = config["annotation_schemes"][annotation_id].get(
-            "ai_support", {}
-        ).get("confidence_threshold", 0.5)
+        confidence_threshold = _get_scheme_field(annotation_id, "ai_support", default={}).get(
+            "confidence_threshold", 0.5
+        )
 
         # Build VisualAnnotationInput
         data = VisualAnnotationInput(
@@ -818,9 +840,9 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         """
         logger.debug(f"Generating video annotation for instance={instance_id}, annotation={annotation_id}, assistant={ai_assistant}")
 
-        annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
-        description = config["annotation_schemes"][annotation_id].get("description", "")
-        labels = config["annotation_schemes"][annotation_id].get("labels", [])
+        annotation_type = _get_scheme_field(annotation_id, "annotation_type")
+        description = _get_scheme_field(annotation_id, "description", default="")
+        labels = _get_scheme_field(annotation_id, "labels", default=[])
 
         # Extract label names if labels are dicts
         if labels and isinstance(labels[0], dict):
@@ -1029,10 +1051,9 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         if not self.is_option_highlighting_enabled_for_scheme(annotation_id):
             return {"error": "Option highlighting not enabled for this scheme"}
 
-        scheme = config["annotation_schemes"][annotation_id]
-        annotation_type = scheme.get("annotation_type", "")
-        description = scheme.get("description", "")
-        labels = scheme.get("labels", [])
+        annotation_type = _get_scheme_field(annotation_id, "annotation_type", default="")
+        description = _get_scheme_field(annotation_id, "description", default="")
+        labels = _get_scheme_field(annotation_id, "labels", default=[])
 
         # Extract label names
         if labels and isinstance(labels[0], dict):
