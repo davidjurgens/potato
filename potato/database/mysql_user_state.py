@@ -24,6 +24,14 @@ class MysqlUserState(UserState):
 
     This class stores all user state data in MySQL tables, providing
     persistence and scalability for annotation workflows.
+
+    Backend feature parity gap: link annotations (SpanLink) and event
+    annotations (EventAnnotation) are only supported by InMemoryUserState.
+    The MySQL schema has no link_annotations or event_annotations tables,
+    and this class does not implement add_link_annotation /
+    add_event_annotation / get_*_annotations. Configurations that use
+    span_link or event_annotation schemas will fail with AttributeError
+    on the MySQL backend.
     """
 
     def __init__(self, user_id: str, db_manager: DatabaseManager, max_assignments: int = -1):
@@ -130,6 +138,66 @@ class MysqlUserState(UserState):
 
         self._invalidate_cache()
 
+    def assign_instance_at_index(self, item: Item, index: int) -> bool:
+        """Insert ``item`` at ``index`` in the user's assignment ordering.
+
+        Used by quality-control injection (attention checks, gold standards).
+        Returns False if the item is already assigned. Raises IndexError if
+        ``index`` is outside [0, current_assignment_count].
+        """
+        instance_id = item.get_id()
+        with self.db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT COUNT(*) FROM user_instance_assignments
+                WHERE user_id = %s AND instance_id = %s
+            """, (self.user_id, instance_id))
+            already = cursor.fetchone()
+            if already is not None and already[0] > 0:
+                return False
+
+            cursor.execute("""
+                SELECT COUNT(*) FROM user_instance_assignments WHERE user_id = %s
+            """, (self.user_id,))
+            count_result = cursor.fetchone()
+            current_count = count_result[0] if count_result is not None else 0
+            if index < 0 or index > current_count:
+                raise IndexError(
+                    f"assign_instance_at_index: index {index} out of range "
+                    f"[0, {current_count}]"
+                )
+
+            # Shift later orders up to make room for the insert.
+            cursor.execute("""
+                UPDATE user_instance_assignments
+                SET assignment_order = assignment_order + 1
+                WHERE user_id = %s AND assignment_order >= %s
+            """, (self.user_id, index))
+            cursor.execute("""
+                INSERT INTO user_instance_assignments (user_id, instance_id, assignment_order)
+                VALUES (%s, %s, %s)
+            """, (self.user_id, instance_id, index))
+
+            # Rebalance the user's cursor.
+            cursor.execute("""
+                SELECT current_instance_index FROM user_states WHERE user_id = %s
+            """, (self.user_id,))
+            current_index_result = cursor.fetchone()
+            current_index = current_index_result[0] if current_index_result is not None else -1
+            if current_index == -1:
+                new_index = 0
+            elif current_index >= index:
+                new_index = current_index + 1
+            else:
+                new_index = current_index
+            cursor.execute("""
+                UPDATE user_states SET current_instance_index = %s WHERE user_id = %s
+            """, (new_index, self.user_id))
+            conn.commit()
+
+        self._invalidate_cache()
+        return True
+
     def unassign_instance(self, instance_id: str) -> bool:
         """Remove an instance assignment from the user."""
         with self.db_manager.get_connection() as conn:
@@ -153,6 +221,10 @@ class MysqlUserState(UserState):
                 WHERE user_id = %s AND assignment_order > %s
             """, (self.user_id, removed_order))
 
+            # get_current_instance_index opens its own connection, so under
+            # READ COMMITTED (MySQL default) it reads the pre-DELETE value,
+            # which is what the index-rebalance math below needs. The COUNT(*)
+            # that follows runs on this outer cursor and sees the DELETE.
             current_index = self.get_current_instance_index()
             cursor.execute("""
                 SELECT COUNT(*) FROM user_instance_assignments WHERE user_id = %s
