@@ -161,6 +161,10 @@ class MysqlUserState(UserState):
                 WHERE user_id = %s AND assignment_order > %s
             """, (self.user_id, removed_order))
 
+            # get_current_instance_index opens its own connection, so under
+            # READ COMMITTED (MySQL default) it reads the pre-DELETE value,
+            # which is what the index-rebalance math below needs. The COUNT(*)
+            # that follows runs on this outer cursor and sees the DELETE.
             current_index = self.get_current_instance_index()
             cursor.execute("""
                 SELECT COUNT(*) FROM user_instance_assignments WHERE user_id = %s
