@@ -144,3 +144,71 @@ def test_quality_control_block_reclaims_batch_and_does_not_keep_failed_response(
     assert set(reclaimed) == {"item_1", "item_2"}
     assert user.get_assigned_instance_ids() == set()
     assert user.has_annotated("item_2") is False
+
+
+def test_blocked_user_reclaim_survives_save_user_state_failure(monkeypatch, caplog):
+    """If save_user_state raises, the in-memory reclaim must still hold and
+    the failure must be logged rather than swallowed silently."""
+    from potato import routes
+
+    manager = _manager_with_items()
+    user = InMemoryUserState("save_fail_worker")
+    user.advance_to_phase(UserPhase.ANNOTATION, None)
+    user.assign_instance(manager.get_item("item_1"))
+    user.assign_instance(manager.get_item("item_2"))
+
+    class FailingUserStateManager:
+        def save_user_state(self, user_state):
+            raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr(routes, "get_item_state_manager", lambda: manager)
+    monkeypatch.setattr(routes, "get_user_state_manager", lambda: FailingUserStateManager())
+
+    with caplog.at_level("WARNING", logger="potato.routes"):
+        reclaimed = routes._reclaim_blocked_user_assignments(
+            "save_fail_worker",
+            user,
+            current_instance_id="item_1",
+        )
+
+    assert set(reclaimed) == {"item_1", "item_2"}
+    assert user.get_assigned_instance_ids() == set()
+    assert any("disk on fire" in r.getMessage() or "save_fail_worker" in r.getMessage()
+               for r in caplog.records), \
+        "expected a warning log mentioning the failing user"
+
+
+def test_prolific_reclaim_survives_per_user_save_failure(monkeypatch, caplog):
+    """A save failure for one dropped user must not block reclaim for others."""
+    manager = _manager_with_items()
+    user_a = InMemoryUserState("PROLIFIC_PID_A")
+    user_b = InMemoryUserState("PROLIFIC_PID_B")
+    user_a.assign_instance(manager.get_item("item_1"))
+    user_b.assign_instance(manager.get_item("item_2"))
+
+    class PartiallyFailingUserStateManager:
+        def get_user_state(self, user_id):
+            return {"PROLIFIC_PID_A": user_a, "PROLIFIC_PID_B": user_b}.get(user_id)
+
+        def save_user_state(self, user_state):
+            if user_state.get_user_id() == "PROLIFIC_PID_A":
+                raise RuntimeError("simulated save failure for A")
+            return None
+
+    monkeypatch.setattr(
+        "potato.user_state_management.get_user_state_manager",
+        lambda: PartiallyFailingUserStateManager(),
+    )
+
+    with caplog.at_level("WARNING"):
+        result = manager.reclaim_unannotated_assignments_for_users(
+            ["PROLIFIC_PID_A", "PROLIFIC_PID_B"],
+            reason="prolific_dropped",
+        )
+
+    # Both users had their assignments reclaimed in memory, even though A's save failed.
+    assert set(result.keys()) == {"PROLIFIC_PID_A", "PROLIFIC_PID_B"}
+    assert user_a.get_assigned_instance_ids() == set()
+    assert user_b.get_assigned_instance_ids() == set()
+    assert any("PROLIFIC_PID_A" in r.getMessage() for r in caplog.records), \
+        "expected warning naming the failing user"
