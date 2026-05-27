@@ -142,7 +142,7 @@ def _reclaim_blocked_user_assignments(username, user_state, current_instance_id=
     item_manager = get_item_state_manager()
     preserve_completed = item_manager.should_preserve_completed_annotations("quality_control_block")
 
-    if current_instance_id and hasattr(user_state, "clear_instance_annotations"):
+    if current_instance_id:
         user_state.clear_instance_annotations(current_instance_id)
 
     reclaimed = item_manager.reclaim_unannotated_assignments_for_user(
