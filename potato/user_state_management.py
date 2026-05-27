@@ -1098,6 +1098,9 @@ class UserState:
     def unassign_instance(self, instance_id: str) -> bool:
         raise NotImplementedError()
 
+    def clear_instance_annotations(self, instance_id: str) -> None:
+        raise NotImplementedError()
+
     def get_current_instance(self) -> Item:
         raise NotImplementedError()
 

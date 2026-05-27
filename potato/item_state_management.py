@@ -768,6 +768,7 @@ class ItemStateManager:
         reclaim_config = config.get('instance_reclaim', {})
         self.reclaim_enabled = reclaim_config.get('enabled', False)
         self.reclaim_timeout_hours = reclaim_config.get('timeout_hours', 24)
+        self.reclaim_config = reclaim_config
 
         # Queue of remaining instances to be assigned
         self.remaining_instance_ids = deque()
@@ -1575,16 +1576,113 @@ class ItemStateManager:
         )
         return True
 
+    def _clear_completed_assignment(
+        self,
+        user_state: 'UserState',
+        instance_id: str,
+        reason: str = "assignment_reclaim",
+    ) -> bool:
+        """Clear a completed annotation and release that assignment."""
+        user_id = getattr(user_state, 'user_id', None) or user_state.get_user_id()
+
+        if not user_state.has_annotated(instance_id):
+            return self._reclaim_unannotated_assignment(user_state, instance_id, reason)
+
+        if hasattr(user_state, "clear_instance_annotations"):
+            user_state.clear_instance_annotations(instance_id)
+
+        unassigned = user_state.unassign_instance(instance_id)
+        if not unassigned:
+            return False
+
+        self.instance_annotators[instance_id].discard(user_id)
+        if self.item_annotation_counts[instance_id] > 0:
+            self.item_annotation_counts[instance_id] -= 1
+
+        if instance_id in self.completed_instance_ids:
+            if self.max_annotations_per_item < 0 or len(self.instance_annotators[instance_id]) < self.max_annotations_per_item:
+                self.completed_instance_ids.discard(instance_id)
+
+        if instance_id not in self.completed_instance_ids and instance_id not in self.remaining_instance_ids:
+            self.remaining_instance_ids.append(instance_id)
+
+        if instance_id in self.assignment_timestamps:
+            self.assignment_timestamps[instance_id].pop(user_id, None)
+            if not self.assignment_timestamps[instance_id]:
+                del self.assignment_timestamps[instance_id]
+
+        self.logger.info(
+            "Cleared and reclaimed completed assignment %s from user %s (%s)",
+            instance_id,
+            user_id,
+            reason,
+        )
+        return True
+
+    def should_preserve_completed_annotations(self, reason: str = "assignment_reclaim") -> bool:
+        """Return whether completed annotations should survive a reclaim reason."""
+        default = self.reclaim_config.get('preserve_completed_annotations', True)
+
+        prolific_statuses = {
+            "prolific_returned": "RETURNED",
+            "prolific_timed_out": "TIMED-OUT",
+            "prolific_rejected": "REJECTED",
+        }
+        if reason in prolific_statuses:
+            prolific_config = self.reclaim_config.get("prolific", {})
+            if not isinstance(prolific_config, dict):
+                return default
+
+            prolific_default = prolific_config.get('preserve_completed_annotations', default)
+            status_policy = (
+                prolific_config.get("status_policies", {})
+                if isinstance(prolific_config.get("status_policies", {}), dict)
+                else {}
+            ).get(prolific_statuses[reason], {})
+            if isinstance(status_policy, dict):
+                return status_policy.get('preserve_completed_annotations', prolific_default)
+            return prolific_default
+
+        reason_to_section = {
+            "quality_control_block": ("quality_control",),
+            "stale_assignment": ("stale",),
+            "manual_admin_reclaim": ("manual",),
+            "prolific_dropped": ("prolific",),
+        }
+
+        path = reason_to_section.get(reason)
+        if not path:
+            return default
+
+        value = self.reclaim_config
+        for key in path:
+            if not isinstance(value, dict) or key not in value:
+                return default
+            value = value[key]
+
+        if isinstance(value, dict):
+            return value.get('preserve_completed_annotations', default)
+        return default
+
     def reclaim_unannotated_assignments_for_user(
         self,
         user_state: 'UserState',
         reason: str = "assignment_reclaim",
+        preserve_completed_annotations: Optional[bool] = None,
     ) -> List[str]:
-        """Reclaim all assigned-but-unannotated instances for a user."""
+        """Reclaim assignments for a user according to the retention policy."""
+        if preserve_completed_annotations is None:
+            preserve_completed_annotations = self.should_preserve_completed_annotations(reason)
+
         reclaimed = []
         with self._lock:
             for instance_id in list(user_state.get_assigned_instance_ids()):
-                if self._reclaim_unannotated_assignment(user_state, instance_id, reason):
+                if preserve_completed_annotations:
+                    did_reclaim = self._reclaim_unannotated_assignment(user_state, instance_id, reason)
+                else:
+                    did_reclaim = self._clear_completed_assignment(user_state, instance_id, reason)
+
+                if did_reclaim:
                     reclaimed.append(instance_id)
         return reclaimed
 
@@ -1592,8 +1690,9 @@ class ItemStateManager:
         self,
         user_ids: List[str],
         reason: str = "assignment_reclaim",
+        preserve_completed_annotations: Optional[bool] = None,
     ) -> Dict[str, List[str]]:
-        """Reclaim assigned-but-unannotated instances for several users."""
+        """Reclaim assignments for several users according to the retention policy."""
         from potato.user_state_management import get_user_state_manager
 
         usm = get_user_state_manager()
@@ -1606,6 +1705,7 @@ class ItemStateManager:
             reclaimed = self.reclaim_unannotated_assignments_for_user(
                 user_state,
                 reason=reason,
+                preserve_completed_annotations=preserve_completed_annotations,
             )
             if not reclaimed:
                 continue

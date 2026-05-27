@@ -384,6 +384,19 @@ class ProlificStudy(ProlificBase):
         """
         return list(self.user_status_dict['RETURNED'] | self.user_status_dict['TIMED-OUT'] | self.user_status_dict['REJECTED'])
 
+    def get_dropped_users_by_status(self):
+        """
+        Get dropped participant IDs grouped by Prolific submission status.
+
+        Returns:
+            dict: Mapping from RETURNED, TIMED-OUT, and REJECTED to participant IDs.
+        """
+        return {
+            'RETURNED': list(self.user_status_dict['RETURNED']),
+            'TIMED-OUT': list(self.user_status_dict['TIMED-OUT']),
+            'REJECTED': list(self.user_status_dict['REJECTED']),
+        }
+
     def reclaim_dropped_user_assignments(self):
         """
         Release unannotated Potato assignments for dropped Prolific workers.
@@ -393,16 +406,30 @@ class ProlificStudy(ProlificBase):
         Prolific login, so the item state manager can safely reclaim any
         assigned-but-unannotated instances.
         """
-        dropped_users = self.get_dropped_users()
-        if not dropped_users:
+        dropped_by_status = self.get_dropped_users_by_status()
+        if not any(dropped_by_status.values()):
             return {}
+
+        status_to_reason = {
+            'RETURNED': 'prolific_returned',
+            'TIMED-OUT': 'prolific_timed_out',
+            'REJECTED': 'prolific_rejected',
+        }
 
         try:
             from potato.item_state_management import get_item_state_manager
-            return get_item_state_manager().reclaim_unannotated_assignments_for_users(
-                dropped_users,
-                reason="prolific_dropped",
-            )
+            manager = get_item_state_manager()
+            reclaimed = {}
+            for status, user_ids in dropped_by_status.items():
+                if not user_ids:
+                    continue
+                reclaimed.update(
+                    manager.reclaim_unannotated_assignments_for_users(
+                        user_ids,
+                        reason=status_to_reason[status],
+                    )
+                )
+            return reclaimed
         except Exception as e:
             logging.getLogger(__name__).warning(
                 "Could not reclaim assignments for dropped Prolific users: %s",

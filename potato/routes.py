@@ -139,12 +139,16 @@ def _inject_quality_control_item_if_needed(username, user_state):
 
 def _reclaim_blocked_user_assignments(username, user_state, current_instance_id=None):
     """Release unannotated assignments after a user is blocked."""
+    item_manager = get_item_state_manager()
+    preserve_completed = item_manager.should_preserve_completed_annotations("quality_control_block")
+
     if current_instance_id and hasattr(user_state, "clear_instance_annotations"):
         user_state.clear_instance_annotations(current_instance_id)
 
-    reclaimed = get_item_state_manager().reclaim_unannotated_assignments_for_user(
+    reclaimed = item_manager.reclaim_unannotated_assignments_for_user(
         user_state,
         reason="quality_control_block",
+        preserve_completed_annotations=preserve_completed,
     )
 
     if reclaimed:
