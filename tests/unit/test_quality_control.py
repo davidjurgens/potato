@@ -898,6 +898,20 @@ def test_attention_check_injection_wires_into_annotate_flow(monkeypatch):
                 self.current_phase_and_page = (UserPhase.ANNOTATION, "annotation")
             def get_current_instance(self):
                 return StubItem("item_001")
+            def get_current_instance_index(self):
+                return self.current_instance_index
+            def get_assigned_instance_ids(self):
+                return set(self.assigned_instance_ids)
+            def get_annotated_instance_ids(self):
+                return set()
+            def assign_instance_at_index(self, item, index):
+                if item.get_id() in self.assigned_instance_ids:
+                    return False
+                self.instance_id_ordering.insert(index, item.get_id())
+                self.assigned_instance_ids.add(item.get_id())
+                if self.current_instance_index >= index:
+                    self.current_instance_index += 1
+                return True
             def generate_id_order_mapping(self, ordering):
                 return {iid: idx for idx, iid in enumerate(ordering)}
 
@@ -1060,6 +1074,20 @@ def test_attention_check_injection_reuses_existing_global_item_without_duplicate
                 self.current_phase_and_page = (UserPhase.ANNOTATION, "annotation")
             def get_current_instance(self):
                 return StubItem("item_001")
+            def get_current_instance_index(self):
+                return self.current_instance_index
+            def get_assigned_instance_ids(self):
+                return set(self.assigned_instance_ids)
+            def get_annotated_instance_ids(self):
+                return set()
+            def assign_instance_at_index(self, item, index):
+                if item.get_id() in self.assigned_instance_ids:
+                    return False
+                self.instance_id_ordering.insert(index, item.get_id())
+                self.assigned_instance_ids.add(item.get_id())
+                if self.current_instance_index >= index:
+                    self.current_instance_index += 1
+                return True
             def generate_id_order_mapping(self, ordering):
                 return {iid: idx for idx, iid in enumerate(ordering)}
 
@@ -1132,6 +1160,18 @@ def test_attention_check_is_not_reinjected_for_same_user(monkeypatch):
                 self.current_phase_and_page = (UserPhase.ANNOTATION, "annotation")
             def get_current_instance(self):
                 return StubItem("item_009")
+            def get_current_instance_index(self):
+                return self.current_instance_index
+            def get_assigned_instance_ids(self):
+                return set(self.assigned_instance_ids)
+            def assign_instance_at_index(self, item, index):
+                if item.get_id() in self.assigned_instance_ids:
+                    return False
+                self.instance_id_ordering.insert(index, item.get_id())
+                self.assigned_instance_ids.add(item.get_id())
+                if self.current_instance_index >= index:
+                    self.current_instance_index += 1
+                return True
             def generate_id_order_mapping(self, ordering):
                 return {iid: idx for idx, iid in enumerate(ordering)}
             def get_annotated_instance_ids(self):
