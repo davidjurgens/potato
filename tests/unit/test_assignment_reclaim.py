@@ -6,12 +6,12 @@ from potato.user_state_management import InMemoryUserState, UserPhase
 from potato.server_utils.prolific_apis import ProlificStudy
 
 
-def _manager_with_items():
+def _manager_with_items(instance_reclaim=None):
     manager = ItemStateManager(
         {
             "assignment_strategy": "fixed_order",
             "max_annotations_per_item": 1,
-            "instance_reclaim": {"enabled": True, "timeout_hours": 1},
+            "instance_reclaim": instance_reclaim or {"enabled": True, "timeout_hours": 1},
         }
     )
     manager.add_items(
@@ -145,6 +145,150 @@ def test_quality_control_block_reclaims_batch_and_does_not_keep_failed_response(
     assert set(reclaimed) == {"item_1", "item_2"}
     assert user.get_assigned_instance_ids() == set()
     assert user.has_annotated("item_2") is False
+
+
+def test_quality_control_block_can_clear_all_completed_annotations(monkeypatch):
+    from potato import routes
+
+    manager = _manager_with_items(
+        {
+            "enabled": True,
+            "timeout_hours": 1,
+            "quality_control": {"preserve_completed_annotations": False},
+        }
+    )
+    user = InMemoryUserState("blocked_worker")
+    user.advance_to_phase(UserPhase.ANNOTATION, None)
+    user.assign_instance(manager.get_item("item_1"))
+    user.assign_instance(manager.get_item("item_2"))
+    user.add_label_annotation("item_1", Label("sentiment", "positive"), "true")
+    user.add_label_annotation("item_2", Label("attention", "wrong"), "true")
+    manager.register_annotator("item_1", user.get_user_id())
+
+    class StubUserStateManager:
+        def save_user_state(self, user_state):
+            return None
+
+    monkeypatch.setattr(routes, "get_item_state_manager", lambda: manager)
+    monkeypatch.setattr(routes, "get_user_state_manager", lambda: StubUserStateManager())
+
+    reclaimed = routes._reclaim_blocked_user_assignments(
+        "blocked_worker",
+        user,
+        current_instance_id="item_2",
+    )
+
+    assert set(reclaimed) == {"item_1", "item_2"}
+    assert user.get_assigned_instance_ids() == set()
+    assert user.has_annotated("item_1") is False
+    assert "blocked_worker" not in manager.instance_annotators["item_1"]
+    assert "item_1" in manager.remaining_instance_ids
+
+
+def test_prolific_status_policies_can_preserve_timeout_and_clear_rejected(monkeypatch):
+    manager = _manager_with_items(
+        {
+            "enabled": True,
+            "timeout_hours": 1,
+            "prolific": {
+                "preserve_completed_annotations": True,
+                "status_policies": {
+                    "TIMED-OUT": {"preserve_completed_annotations": True},
+                    "REJECTED": {"preserve_completed_annotations": False},
+                },
+            },
+        }
+    )
+    timed_out = InMemoryUserState("TIMED_OUT_USER")
+    rejected = InMemoryUserState("REJECTED_USER")
+    for user, item_id in ((timed_out, "item_1"), (rejected, "item_2")):
+        user.advance_to_phase(UserPhase.ANNOTATION, None)
+        user.assign_instance(manager.get_item(item_id))
+        user.add_label_annotation(item_id, Label("sentiment", "positive"), "true")
+        manager.register_annotator(item_id, user.get_user_id())
+
+    class StubUserStateManager:
+        def get_user_state(self, user_id):
+            return {
+                "TIMED_OUT_USER": timed_out,
+                "REJECTED_USER": rejected,
+            }.get(user_id)
+
+        def save_user_state(self, user_state):
+            return None
+
+    monkeypatch.setattr(
+        "potato.user_state_management.get_user_state_manager",
+        lambda: StubUserStateManager(),
+    )
+    monkeypatch.setattr(
+        "potato.item_state_management.get_item_state_manager",
+        lambda: manager,
+    )
+
+    study = ProlificStudy.__new__(ProlificStudy)
+    study.user_status_dict = {
+        "RETURNED": set(),
+        "TIMED-OUT": {"TIMED_OUT_USER"},
+        "REJECTED": {"REJECTED_USER"},
+    }
+
+    reclaimed = study.reclaim_dropped_user_assignments()
+
+    assert reclaimed == {"REJECTED_USER": ["item_2"]}
+    assert timed_out.has_annotated("item_1") is True
+    assert timed_out.get_assigned_instance_ids() == {"item_1"}
+    assert rejected.has_annotated("item_2") is False
+    assert rejected.get_assigned_instance_ids() == set()
+    assert "REJECTED_USER" not in manager.instance_annotators["item_2"]
+
+
+def test_prolific_status_policy_falls_back_to_prolific_default():
+    manager = _manager_with_items(
+        {
+            "enabled": True,
+            "prolific": {"preserve_completed_annotations": False},
+        }
+    )
+
+    assert manager.should_preserve_completed_annotations("prolific_timed_out") is False
+    assert manager.should_preserve_completed_annotations("quality_control_block") is True
+
+
+def test_instance_reclaim_config_validation_accepts_retention_policies():
+    from potato.server_utils.config_module import validate_instance_reclaim_config
+
+    validate_instance_reclaim_config(
+        {
+            "instance_reclaim": {
+                "enabled": True,
+                "timeout_hours": 12,
+                "preserve_completed_annotations": True,
+                "quality_control": {"preserve_completed_annotations": False},
+                "prolific": {
+                    "preserve_completed_annotations": True,
+                    "status_policies": {
+                        "TIMED-OUT": {"preserve_completed_annotations": True},
+                        "REJECTED": {"preserve_completed_annotations": False},
+                    },
+                },
+            }
+        }
+    )
+
+
+def test_instance_reclaim_config_validation_rejects_non_boolean_policy():
+    import pytest
+    from potato.server_utils.config_module import ConfigValidationError, validate_instance_reclaim_config
+
+    with pytest.raises(ConfigValidationError, match="preserve_completed_annotations"):
+        validate_instance_reclaim_config(
+            {
+                "instance_reclaim": {
+                    "quality_control": {"preserve_completed_annotations": "no"},
+                }
+            }
+        )
 
 
 def test_blocked_user_reclaim_survives_save_user_state_failure(monkeypatch, caplog):

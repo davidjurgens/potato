@@ -169,18 +169,50 @@ assignment:
 
 For crowdsourcing batches, workers can return, time out, or fail quality checks after
 receiving a batch of assigned items. Potato reclaims assigned-but-unannotated items
-so they can be assigned again. Completed annotations are kept.
+so they can be assigned again. Completed annotations are kept by default.
 
 ```yaml
 instance_reclaim:
   enabled: true
   timeout_hours: 24
+  preserve_completed_annotations: true
 ```
 
 Reclaiming happens automatically for stale assignments when assignment runs, and for
 Prolific workers whose submissions become `RETURNED`, `TIMED-OUT`, or `REJECTED`
 when Prolific submission status is refreshed. Users blocked by attention-check
 failure also release their unannotated assignments immediately.
+
+You can choose whether completed annotations from reclaimed users are preserved.
+This can be useful when you trust partial work from timed-out Prolific workers but
+want to discard all work from users blocked by quality control:
+
+```yaml
+instance_reclaim:
+  enabled: true
+  timeout_hours: 24
+
+  # Default for reclaim reasons not overridden below.
+  preserve_completed_annotations: true
+
+  prolific:
+    preserve_completed_annotations: true
+    status_policies:
+      TIMED-OUT:
+        preserve_completed_annotations: true
+      RETURNED:
+        preserve_completed_annotations: true
+      REJECTED:
+        preserve_completed_annotations: false
+
+  quality_control:
+    preserve_completed_annotations: false
+```
+
+When `preserve_completed_annotations` is `false`, Potato clears that user's
+annotations for their assigned items, removes their annotator credit from those
+items, and returns the items to the assignment pool. The failed attention-check
+response that triggers a block is never kept.
 
 ---
 

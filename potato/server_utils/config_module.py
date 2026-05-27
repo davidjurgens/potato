@@ -668,6 +668,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate quality control configuration if present
     validate_quality_control_config(config_data)
 
+    # Validate assignment reclaim configuration if present
+    validate_instance_reclaim_config(config_data)
+
     # Validate instance display configuration if present
     validate_instance_display_config(config_data)
 
@@ -2152,6 +2155,59 @@ def validate_quality_control_config(config_data: Dict[str, Any]) -> None:
             interval = agreement_config["refresh_interval"]
             if not isinstance(interval, int) or interval < 10:
                 raise ConfigValidationError("agreement_metrics.refresh_interval must be an integer >= 10 seconds")
+
+
+def validate_instance_reclaim_config(config_data: Dict[str, Any]) -> None:
+    """Validate abandoned assignment reclaim configuration."""
+    if "instance_reclaim" not in config_data:
+        return
+
+    reclaim_config = config_data["instance_reclaim"]
+    if not isinstance(reclaim_config, dict):
+        raise ConfigValidationError("instance_reclaim must be a dictionary")
+
+    def validate_bool(section: Dict[str, Any], path: str) -> None:
+        if "preserve_completed_annotations" in section and not isinstance(section["preserve_completed_annotations"], bool):
+            raise ConfigValidationError(f"{path}.preserve_completed_annotations must be a boolean")
+
+    def validate_section(section_name: str) -> None:
+        if section_name not in reclaim_config:
+            return
+        section = reclaim_config[section_name]
+        if not isinstance(section, dict):
+            raise ConfigValidationError(f"instance_reclaim.{section_name} must be a dictionary")
+        validate_bool(section, f"instance_reclaim.{section_name}")
+
+    if "enabled" in reclaim_config and not isinstance(reclaim_config["enabled"], bool):
+        raise ConfigValidationError("instance_reclaim.enabled must be a boolean")
+
+    if "timeout_hours" in reclaim_config:
+        timeout = reclaim_config["timeout_hours"]
+        if not isinstance(timeout, (int, float)) or timeout <= 0:
+            raise ConfigValidationError("instance_reclaim.timeout_hours must be a positive number")
+
+    validate_bool(reclaim_config, "instance_reclaim")
+
+    for section_name in ("stale", "manual", "quality_control", "prolific"):
+        validate_section(section_name)
+
+    prolific = reclaim_config.get("prolific")
+    if isinstance(prolific, dict) and "status_policies" in prolific:
+        status_policies = prolific["status_policies"]
+        if not isinstance(status_policies, dict):
+            raise ConfigValidationError("instance_reclaim.prolific.status_policies must be a dictionary")
+
+        valid_statuses = {"RETURNED", "TIMED-OUT", "REJECTED"}
+        for status, section in status_policies.items():
+            if status not in valid_statuses:
+                raise ConfigValidationError(
+                    "instance_reclaim.prolific.status_policies keys must be one of: RETURNED, TIMED-OUT, REJECTED"
+                )
+            if not isinstance(section, dict):
+                raise ConfigValidationError(
+                    f"instance_reclaim.prolific.status_policies.{status} must be a dictionary"
+                )
+            validate_bool(section, f"instance_reclaim.prolific.status_policies.{status}")
 
 
 def validate_data_directory_config(config_data: Dict[str, Any]) -> None:
