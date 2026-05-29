@@ -1,0 +1,554 @@
+/* Admin Dashboard Specific Styles
+ *
+ * Extracted from potato/templates/admin.html. All rules consume the design
+ * tokens defined in styles.css (--primary, --border, --radius, etc.). New
+ * admin pages should link this file rather than duplicating these rules.
+ */
+
+.admin-container {
+  min-height: 100vh;
+  background-color: var(--light-bg);
+}
+
+.admin-header {
+  background: white;
+  border-bottom: 1px solid var(--border);
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-header h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--heading-color);
+  margin: 0;
+}
+
+.admin-header .header-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.admin-main {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Tab Navigation */
+.admin-tabs {
+  display: flex;
+  background: white;
+  border-radius: var(--radius);
+  padding: 0.25rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--box-shadow);
+}
+
+.admin-tab {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: var(--transition);
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+.admin-tab.active {
+  background-color: var(--primary);
+  color: white;
+}
+
+.admin-tab:hover:not(.active) {
+  background-color: var(--muted);
+  color: var(--foreground);
+}
+
+/* Tab Content */
+.admin-tab-content {
+  display: none;
+}
+
+.admin-tab-content.active {
+  display: block;
+}
+
+/* Dashboard Cards */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.dashboard-card {
+  background: white;
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--border);
+}
+
+.dashboard-card h3 {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  margin: 0 0 0.5rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dashboard-card .value {
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--heading-color);
+  margin: 0;
+}
+
+.dashboard-card .description {
+  font-size: 0.875rem;
+  color: var(--text-color);
+  margin: 0.5rem 0 0 0;
+}
+
+/* Tables */
+.admin-table-container {
+  background: white;
+  border-radius: var(--radius);
+  box-shadow: var(--box-shadow);
+  overflow: hidden;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-table th {
+  background-color: var(--muted);
+  font-weight: 500;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.admin-table tbody tr:hover {
+  background-color: var(--muted);
+}
+
+.admin-table td {
+  font-size: 0.875rem;
+  color: var(--text-color);
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: white;
+  border-top: 1px solid var(--border);
+}
+
+.pagination-info {
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+.pagination-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.pagination-button {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  background: white;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: var(--transition);
+}
+
+.pagination-button:hover:not(:disabled) {
+  background-color: var(--muted);
+}
+
+.pagination-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-button.active {
+  background-color: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+/* Filters and Controls */
+.table-controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.table-controls select,
+.table-controls input {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+
+/* Loading States */
+.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Status Indicators */
+.status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-active {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--success-color);
+}
+
+.status-completed {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: var(--primary);
+}
+
+.status-login {
+  background-color: rgba(156, 163, 175, 0.1);
+  color: var(--gray-color);
+}
+
+/* Config Form */
+.config-form {
+  background: white;
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--box-shadow);
+}
+
+.config-form h3 {
+  margin: 0 0 1rem 0;
+  color: var(--heading-color);
+}
+
+.config-group {
+  margin-bottom: 1rem;
+}
+
+.config-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.config-group input,
+.config-group select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+
+.config-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+/* Questions Tab Styles */
+.question-card {
+  background: white;
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--border);
+}
+
+.question-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.question-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--heading-color);
+  margin: 0;
+}
+
+.question-type {
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  font-weight: 500;
+  background-color: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.question-description {
+  color: var(--text-color);
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
+.question-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.question-stat {
+  text-align: center;
+  padding: 0.75rem;
+  background: var(--muted);
+  border-radius: var(--radius);
+}
+
+.question-stat .value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--heading-color);
+  display: block;
+}
+
+.question-stat .label {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Visualization Styles */
+.visualization {
+  margin-top: 1rem;
+}
+
+.histogram {
+  display: flex;
+  align-items: end;
+  gap: 0.25rem;
+  height: 200px;
+  margin: 1rem 0;
+}
+
+.histogram-bar {
+  flex: 1;
+  background: var(--primary);
+  border-radius: 2px 2px 0 0;
+  position: relative;
+  min-height: 4px;
+}
+
+.histogram-label {
+  position: absolute;
+  bottom: -25px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.histogram-value {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.distribution-chart {
+  display: flex;
+  align-items: end;
+  gap: 0.25rem;
+  height: 200px;
+  margin: 1rem 0;
+}
+
+.distribution-bar {
+  flex: 1;
+  background: linear-gradient(
+    to top,
+    var(--primary),
+    var(--success-color)
+  );
+  border-radius: 2px 2px 0 0;
+  position: relative;
+  min-height: 4px;
+}
+
+.text-analysis {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.text-stat {
+  background: var(--muted);
+  padding: 1rem;
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.text-stat .value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--heading-color);
+  display: block;
+}
+
+.text-stat .label {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  margin-top: 0.25rem;
+}
+
+.common-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.word-tag {
+  padding: 0.25rem 0.5rem;
+  background: var(--primary);
+  color: white;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+}
+
+.word-tag .count {
+  opacity: 0.8;
+  margin-left: 0.25rem;
+}
+
+.span-analysis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.span-stat {
+  background: var(--muted);
+  padding: 1rem;
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.span-stat .value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--heading-color);
+  display: block;
+}
+
+.span-stat .label {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  margin-top: 0.25rem;
+}
+
+.error-message {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid var(--destructive);
+  color: var(--destructive);
+  padding: 1rem;
+  border-radius: var(--radius);
+  margin: 1rem 0;
+}
+
+/* Keyboard focus parity for the elements admin.html exposes as clickable. */
+.admin-tab:focus-visible,
+.pagination-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .admin-header {
+    padding: 1rem;
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+
+  .admin-main {
+    padding: 1rem;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .table-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pagination {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .text-analysis {
+    grid-template-columns: 1fr;
+  }
+
+  .span-analysis {
+    grid-template-columns: 1fr;
+  }
+}

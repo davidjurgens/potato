@@ -81,72 +81,126 @@
             padding: 0.75rem;
             margin-top: 1rem;
             display: none;
+            text-align: left;
+            font-size: 0.875rem;
         }
 
         .admin-login-error.show {
             display: block;
+        }
+
+        .admin-login-hint {
+            color: var(--muted-foreground);
+            font-size: 0.75rem;
+            text-align: left;
+            margin: -0.5rem 0 0 0;
+        }
+
+        .admin-login-button[aria-busy="true"] {
+            opacity: 0.7;
+            cursor: progress;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
         }
     </style>
 </head>
 <body>
     <div class="admin-login-container">
         <div class="admin-login-card">
-            <h1 class="admin-login-title">🔐 Admin Access Required</h1>
+            <h1 class="admin-login-title"><span aria-hidden="true">🔐</span> Admin Access Required</h1>
             <p class="admin-login-description">
-                This area requires administrator privileges. Please enter your API key to access the admin dashboard.
+                This area requires administrator privileges. Enter your API key to access the admin dashboard.
             </p>
 
             <form class="admin-login-form" id="adminLoginForm">
+                <label class="sr-only" for="apiKey">Admin API key</label>
                 <input
                     type="password"
                     id="apiKey"
                     name="apiKey"
-                    placeholder="Enter API Key"
+                    placeholder="Admin API key"
                     class="admin-login-input"
+                    aria-describedby="apiKeyHint"
+                    autocomplete="current-password"
                     required
                 >
-                <button type="submit" class="admin-login-button">
-                    Access Dashboard
+                <p id="apiKeyHint" class="admin-login-hint">
+                    The key is stored in <code>admin_api_key.txt</code> in your task directory.
+                </p>
+                <button type="submit" class="admin-login-button" id="adminLoginSubmit">
+                    Access dashboard
                 </button>
             </form>
 
-            <div class="admin-login-error" id="errorMessage">
-                Invalid API key. Please try again.
-            </div>
+            <div class="admin-login-error" id="errorMessage" role="alert" aria-live="polite"></div>
         </div>
     </div>
 
     <script>
-        document.getElementById('adminLoginForm').addEventListener('submit', function(e) {
-            e.preventDefault();
+        (function () {
+            const form = document.getElementById('adminLoginForm');
+            const submitBtn = document.getElementById('adminLoginSubmit');
+            const errorBox = document.getElementById('errorMessage');
+            const keyInput = document.getElementById('apiKey');
 
-            const apiKey = document.getElementById('apiKey').value;
-            const errorMessage = document.getElementById('errorMessage');
+            function showError(text) {
+                errorBox.textContent = text;
+                errorBox.classList.add('show');
+            }
 
-            // Clear previous error
-            errorMessage.classList.remove('show');
+            function clearError() {
+                errorBox.textContent = '';
+                errorBox.classList.remove('show');
+            }
 
-            // Make request to admin endpoint with API key
-            fetch('/admin', {
-                method: 'GET',
-                headers: {
-                    'X-API-Key': apiKey
-                }
-            })
-            .then(response => {
-                if (response.ok) {
-                    // Success - redirect to admin dashboard
-                    window.location.href = '/admin';
-                } else {
-                    // Show error message
-                    errorMessage.classList.add('show');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                errorMessage.classList.add('show');
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                if (submitBtn.getAttribute('aria-busy') === 'true') return; // guard double-submit
+                clearError();
+                submitBtn.setAttribute('aria-busy', 'true');
+                submitBtn.disabled = true;
+                const originalLabel = submitBtn.textContent;
+                submitBtn.textContent = 'Verifying key…';
+
+                fetch('/admin', {
+                    method: 'GET',
+                    headers: { 'X-API-Key': keyInput.value }
+                })
+                .then(function (response) {
+                    if (response.ok) {
+                        window.location.href = '/admin';
+                        return;
+                    }
+                    if (response.status === 401 || response.status === 403) {
+                        showError("That API key wasn't recognized. Double-check the value in admin_api_key.txt.");
+                    } else if (response.status === 429) {
+                        showError("Too many sign-in attempts. Wait a moment and try again.");
+                    } else if (response.status >= 500) {
+                        showError("Something went wrong on the server. Try again in a moment.");
+                    } else {
+                        showError("Sign-in failed (HTTP " + response.status + "). Try again.");
+                    }
+                })
+                .catch(function () {
+                    showError("Couldn't reach the server. Check your connection and try again.");
+                })
+                .finally(function () {
+                    submitBtn.removeAttribute('aria-busy');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalLabel;
+                });
             });
-        });
+        })();
     </script>
 </body>
 </html>

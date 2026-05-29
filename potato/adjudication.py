@@ -375,6 +375,87 @@ class AdjudicationManager:
             self._queue_built = True
             return list(self.queue.values())
 
+    def try_enqueue_item(self, instance_id: str) -> bool:
+        """
+        Evaluate a single item and, if it qualifies, add it to the queue.
+
+        Called when an overlap-sample item saturates so that low-agreement
+        items show up in the adjudication queue without needing a full
+        ``build_queue()`` rescan. Returns True if the item ended up in the
+        queue, False otherwise.
+        """
+        if not self.adj_config.enabled:
+            return False
+
+        from potato.user_state_management import get_user_state_manager
+        from potato.item_state_management import get_item_state_manager
+
+        usm = get_user_state_manager()
+        ism = get_item_state_manager()
+        if usm is None or ism is None:
+            return False
+
+        with self._lock:
+            instance_id_str = str(instance_id)
+            if instance_id_str in self.decisions:
+                return False
+            item = ism.instance_id_to_instance.get(instance_id)
+            if item is None:
+                return False
+
+            annotators = {
+                u for u in ism.instance_annotators.get(instance_id, set())
+                if u not in self.adj_config.adjudicator_users
+            }
+            if len(annotators) < self.adj_config.min_annotations:
+                return False
+
+            scheme_names = [s.get("name", "") for s in self.config.get("annotation_schemes", [])]
+            item_annotations: Dict[str, Any] = {}
+            item_spans: Dict[str, Any] = {}
+            item_behavioral: Dict[str, Any] = {}
+            for user_id in annotators:
+                ustate = usm.get_user_state(user_id)
+                if not ustate:
+                    continue
+                la = ustate.instance_id_to_label_to_value.get(instance_id_str, {})
+                if la:
+                    item_annotations[user_id] = self._serialize_labels(la)
+                sa = ustate.instance_id_to_span_to_value.get(instance_id_str, {})
+                if sa:
+                    item_spans[user_id] = self._serialize_spans(sa)
+                bd = ustate.instance_id_to_behavioral_data.get(instance_id_str, {})
+                if bd:
+                    item_behavioral[user_id] = self._serialize_behavioral(bd)
+
+            if not item_annotations and not item_spans:
+                return False
+
+            agreement_scores = self._compute_agreement(item_annotations, scheme_names)
+            overall = self._compute_overall_agreement(agreement_scores)
+            if not self.adj_config.show_all_items:
+                if overall >= self.adj_config.agreement_threshold:
+                    return False
+
+            existing = self.queue.get(instance_id_str)
+            self.queue[instance_id_str] = AdjudicationItem(
+                instance_id=instance_id_str,
+                annotations=item_annotations,
+                span_annotations=item_spans,
+                behavioral_data=item_behavioral,
+                agreement_scores=agreement_scores,
+                overall_agreement=overall,
+                num_annotators=len(annotators),
+                status=existing.status if existing else "pending",
+                assigned_adjudicator=existing.assigned_adjudicator if existing else None,
+            )
+            self.logger.info(
+                "Auto-routed item %s into adjudication queue (overall agreement=%.3f, "
+                "threshold=%.3f, annotators=%d)",
+                instance_id_str, overall, self.adj_config.agreement_threshold, len(annotators),
+            )
+            return True
+
     def _serialize_labels(self, label_data: Dict) -> Dict[str, Any]:
         """Convert label annotation data to serializable dict."""
         result = {}

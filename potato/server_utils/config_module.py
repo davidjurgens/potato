@@ -265,9 +265,18 @@ KNOWN_CONFIG_KEYS = {
     # === Other ===
     "random_seed": None,
     "max_annotations_per_user": None,
+    # Deprecated alias of num_annotators_per_item (int form). Still accepted
+    # for backwards compatibility; emits a warning when both are set.
     "max_annotations_per_item": None,
+    # Canonical key for heterogeneous coverage. Accepts either:
+    #   int   — same cap for every item (legacy behavior)
+    #   dict  — { default, overlap_sample: {fraction, count, stratify_by, seed},
+    #            adaptive: {enabled, disagreement_threshold, boost_to}, min }
     "num_annotators_per_item": None,
     "min_annotators_per_instance": None,
+    # Per-annotator workload caps:
+    #   { default: int, by_user: {user_id: int}, by_user_role: {role: int} }
+    "per_annotator_quota": None,
     # qda_mode sub-keys are deliberately leaf (None): validation stops at
     # memos/codebook and does NOT recurse into their sub-keys. This is
     # intentional forward-compat — parse_qda_mode_config() routes any
@@ -487,11 +496,11 @@ _OPTIONAL_INT_FIELDS = {
     "alert_time_each_instance": ("seconds to alert per instance", False),
     "max_annotations_per_item": ("max annotations per item", True),  # -1 = unlimited
     "max_annotations_per_user": ("max annotations per user", True),
-    "num_annotators_per_item": ("annotators needed per item", False),
     "min_annotators_per_instance": ("minimum annotators per instance", False),
     "random_seed": ("random seed", True),
     "max_session_seconds": ("max session duration in seconds", False),
 }
+# num_annotators_per_item validated separately — it may be int OR dict.
 
 _OPTIONAL_BOOL_FIELDS = {
     "highlight_linebreaks": "whether to highlight linebreaks",
@@ -508,6 +517,187 @@ _VALID_ASSIGNMENT_STRATEGIES = [
     "random", "fixed_order", "active_learning", "llm_confidence",
     "max_diversity", "least_annotated", "category_based", "diversity_clustering",
 ]
+
+
+def validate_num_annotators_per_item(value: Any) -> None:
+    """
+    Validate the shape of ``num_annotators_per_item``.
+
+    Accepts either an int (legacy form) or a dict with optional keys
+    ``default``, ``overlap_sample``, ``adaptive``, and ``min``.
+    """
+    if value is None:
+        return
+    if isinstance(value, bool):
+        raise ConfigValidationError(
+            "'num_annotators_per_item' must be an integer or a structured mapping, "
+            f"got bool: {value!r}"
+        )
+    if isinstance(value, int):
+        if value < 0:
+            raise ConfigValidationError(
+                "'num_annotators_per_item' as integer must be non-negative; "
+                "use 0 or omit the key for unlimited (legacy used -1)."
+            )
+        return
+    if not isinstance(value, dict):
+        raise ConfigValidationError(
+            "'num_annotators_per_item' must be an integer or a mapping, "
+            f"got {type(value).__name__}: {value!r}"
+        )
+
+    allowed = {"default", "overlap_sample", "adaptive", "min"}
+    unknown = set(value) - allowed
+    if unknown:
+        raise ConfigValidationError(
+            f"Unknown keys in num_annotators_per_item: {sorted(unknown)}. "
+            f"Allowed: {sorted(allowed)}"
+        )
+
+    default = value.get("default", 1)
+    if not isinstance(default, int) or isinstance(default, bool) or default < 1:
+        raise ConfigValidationError(
+            f"num_annotators_per_item.default must be a positive integer, got {default!r}"
+        )
+
+    minimum = value.get("min")
+    if minimum is not None:
+        if not isinstance(minimum, int) or isinstance(minimum, bool) or minimum < 1:
+            raise ConfigValidationError(
+                f"num_annotators_per_item.min must be a positive integer, got {minimum!r}"
+            )
+        if minimum > default:
+            raise ConfigValidationError(
+                "num_annotators_per_item.min cannot exceed num_annotators_per_item.default"
+            )
+
+    overlap = value.get("overlap_sample")
+    if overlap is not None:
+        if not isinstance(overlap, dict):
+            raise ConfigValidationError(
+                "num_annotators_per_item.overlap_sample must be a mapping"
+            )
+        unknown = set(overlap) - {"fraction", "count", "stratify_by", "seed"}
+        if unknown:
+            raise ConfigValidationError(
+                f"Unknown keys in overlap_sample: {sorted(unknown)}"
+            )
+        frac = overlap.get("fraction")
+        if not isinstance(frac, (int, float)) or isinstance(frac, bool) or not (0 < frac <= 1):
+            raise ConfigValidationError(
+                f"overlap_sample.fraction must be in (0, 1], got {frac!r}"
+            )
+        count = overlap.get("count")
+        if not isinstance(count, int) or isinstance(count, bool) or count < 2:
+            raise ConfigValidationError(
+                f"overlap_sample.count must be an integer >= 2, got {count!r}"
+            )
+        if count <= default:
+            raise ConfigValidationError(
+                "overlap_sample.count must be greater than num_annotators_per_item.default "
+                f"({count} <= {default})"
+            )
+        stratify_by = overlap.get("stratify_by")
+        if stratify_by is not None and not isinstance(stratify_by, str):
+            raise ConfigValidationError(
+                f"overlap_sample.stratify_by must be a string or omitted, got {stratify_by!r}"
+            )
+        seed = overlap.get("seed")
+        if seed is not None and (not isinstance(seed, int) or isinstance(seed, bool)):
+            raise ConfigValidationError(
+                f"overlap_sample.seed must be an integer, got {seed!r}"
+            )
+
+    adaptive = value.get("adaptive")
+    if adaptive is not None:
+        if not isinstance(adaptive, dict):
+            raise ConfigValidationError(
+                "num_annotators_per_item.adaptive must be a mapping"
+            )
+        unknown = set(adaptive) - {"enabled", "disagreement_threshold", "boost_to"}
+        if unknown:
+            raise ConfigValidationError(
+                f"Unknown keys in adaptive: {sorted(unknown)}"
+            )
+        if "enabled" in adaptive and not isinstance(adaptive["enabled"], bool):
+            raise ConfigValidationError(
+                f"adaptive.enabled must be a boolean, got {adaptive['enabled']!r}"
+            )
+        thr = adaptive.get("disagreement_threshold")
+        if thr is not None and (not isinstance(thr, (int, float)) or isinstance(thr, bool) or not (0 <= thr <= 1)):
+            raise ConfigValidationError(
+                f"adaptive.disagreement_threshold must be in [0, 1], got {thr!r}"
+            )
+        boost = adaptive.get("boost_to")
+        if boost is not None:
+            if not isinstance(boost, int) or isinstance(boost, bool) or boost < 2:
+                raise ConfigValidationError(
+                    f"adaptive.boost_to must be an integer >= 2, got {boost!r}"
+                )
+            if boost <= default:
+                raise ConfigValidationError(
+                    f"adaptive.boost_to must exceed default ({boost} <= {default})"
+                )
+
+
+def validate_per_annotator_quota(value: Any) -> None:
+    """Validate the shape of ``per_annotator_quota``."""
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        raise ConfigValidationError(
+            "'per_annotator_quota' must be a mapping, "
+            f"got {type(value).__name__}: {value!r}"
+        )
+    allowed = {"default", "by_user", "by_user_role"}
+    unknown = set(value) - allowed
+    if unknown:
+        raise ConfigValidationError(
+            f"Unknown keys in per_annotator_quota: {sorted(unknown)}. Allowed: {sorted(allowed)}"
+        )
+    default = value.get("default")
+    if default is not None and (not isinstance(default, int) or isinstance(default, bool) or default < 0):
+        raise ConfigValidationError(
+            f"per_annotator_quota.default must be a non-negative integer, got {default!r}"
+        )
+    for key in ("by_user", "by_user_role"):
+        mapping = value.get(key)
+        if mapping is None:
+            continue
+        if not isinstance(mapping, dict):
+            raise ConfigValidationError(
+                f"per_annotator_quota.{key} must be a mapping of name -> integer"
+            )
+        for k, v in mapping.items():
+            if not isinstance(k, str) or not k:
+                raise ConfigValidationError(
+                    f"per_annotator_quota.{key} keys must be non-empty strings, got {k!r}"
+                )
+            if not isinstance(v, int) or isinstance(v, bool) or v < 0:
+                raise ConfigValidationError(
+                    f"per_annotator_quota.{key}[{k!r}] must be a non-negative integer, got {v!r}"
+                )
+
+
+def resolve_num_annotators_per_item(config_data: Dict[str, Any]) -> int:
+    """
+    Resolve the *default* cap (used as ``ItemStateManager.max_annotations_per_item``).
+
+    Resolution order:
+        1. num_annotators_per_item (int form)            → that value
+        2. num_annotators_per_item.default               → that value
+        3. max_annotations_per_item (legacy)             → that value
+        4. otherwise                                     → -1 (unlimited)
+    """
+    val = config_data.get("num_annotators_per_item")
+    if isinstance(val, int) and not isinstance(val, bool):
+        return val
+    if isinstance(val, dict) and val.get("default") is not None:
+        return int(val["default"])
+    legacy = config_data.get("max_annotations_per_item")
+    if isinstance(legacy, int) and not isinstance(legacy, bool):
+        return legacy
+    return -1
 
 
 def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
@@ -546,6 +736,35 @@ def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
                     f"'{field}' must be a boolean ({desc}), "
                     f"got {type(val).__name__}: {val!r}"
                 )
+
+    # Validate num_annotators_per_item (int OR structured dict)
+    if 'num_annotators_per_item' in config_data:
+        validate_num_annotators_per_item(config_data['num_annotators_per_item'])
+
+    # Validate per_annotator_quota structured dict
+    if 'per_annotator_quota' in config_data:
+        validate_per_annotator_quota(config_data['per_annotator_quota'])
+
+    # Emit a deprecation warning if max_annotations_per_item is set alongside
+    # num_annotators_per_item; reject silent inconsistencies (both set to
+    # conflicting values).
+    if 'max_annotations_per_item' in config_data and 'num_annotators_per_item' in config_data:
+        legacy = config_data['max_annotations_per_item']
+        canonical = config_data['num_annotators_per_item']
+        canonical_int = canonical if isinstance(canonical, int) else canonical.get('default')
+        if canonical_int is not None and legacy != canonical_int:
+            raise ConfigValidationError(
+                "'max_annotations_per_item' and 'num_annotators_per_item' are both "
+                f"set with conflicting values ({legacy} vs {canonical_int}). "
+                "Drop 'max_annotations_per_item' — 'num_annotators_per_item' is the canonical key."
+            )
+        import warnings as _w
+        _w.warn(
+            "'max_annotations_per_item' is deprecated; use 'num_annotators_per_item' "
+            "instead. Setting both is redundant.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     # Validate assignment_strategy enum
     if 'assignment_strategy' in config_data:
@@ -742,13 +961,26 @@ def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
 
     for k in ("max_annotations_per_item", "num_annotators_per_item",
               "min_annotators_per_instance"):
-        try:
-            if int(config_data.get(k, -1)) > 1:
-                conflicts.append(
-                    f"{k}: {config_data[k]} (inter-annotator overlap "
-                    f"cannot be guaranteed under self-selection)")
-        except (TypeError, ValueError):
-            pass
+        raw = config_data.get(k, -1)
+        # num_annotators_per_item may now be a dict — extract default + overlap_sample.count
+        candidates = []
+        if isinstance(raw, dict):
+            if raw.get("default") is not None:
+                candidates.append(raw["default"])
+            overlap = raw.get("overlap_sample") or {}
+            if overlap.get("count") is not None:
+                candidates.append(overlap["count"])
+        else:
+            candidates.append(raw)
+        for cand in candidates:
+            try:
+                if int(cand) > 1:
+                    conflicts.append(
+                        f"{k}: {config_data[k]} (inter-annotator overlap "
+                        f"cannot be guaranteed under self-selection)")
+                    break
+            except (TypeError, ValueError):
+                continue
 
     if (config_data.get("attention_checks") or {}).get("enabled"):
         conflicts.append("attention_checks.enabled (annotators could "
