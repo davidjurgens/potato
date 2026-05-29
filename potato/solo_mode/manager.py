@@ -211,7 +211,6 @@ class SoloModeManager:
         self._edge_case_rule_manager = None
         self._prompt_manager = None
         self._instance_selector = None
-        self._disagreement_resolver = None
         self._validation_tracker = None
         self._llm_labeling_thread = None
         self._prompt_optimizer = None
@@ -291,16 +290,6 @@ class SoloModeManager:
             )
             self._instance_selector = InstanceSelector(weights, self.app_config)
         return self._instance_selector
-
-    @property
-    def disagreement_resolver(self):
-        """Lazy-initialized disagreement resolver."""
-        if self._disagreement_resolver is None:
-            from .disagreement_resolver import DisagreementResolver
-            self._disagreement_resolver = DisagreementResolver(
-                self.app_config, self.config
-            )
-        return self._disagreement_resolver
 
     @property
     def validation_tracker(self):

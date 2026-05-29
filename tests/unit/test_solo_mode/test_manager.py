@@ -262,7 +262,6 @@ class TestSoloModeManagerInit:
         assert mgr._edge_case_rule_manager is None
         assert mgr._prompt_manager is None
         assert mgr._instance_selector is None
-        assert mgr._disagreement_resolver is None
 
     def test_background_labeling_not_running(self):
         mgr = _make_manager()

@@ -883,9 +883,8 @@ def api_optimize_prompt():
 def api_disagreements():
     """Get all disagreements and their status.
 
-    Reads from the manager's authoritative disagreement_ids set rather than
-    the DisagreementResolver, whose check_and_record() is never wired into
-    record_human_label(). This keeps /api/disagreements consistent with the
+    Reads from the manager's authoritative `disagreement_ids` set (populated
+    inside record_human_label). Keeps /api/disagreements consistent with the
     Overview card and with get_agreement_metrics().
     """
     manager = get_solo_mode_manager()
@@ -1452,10 +1451,10 @@ def api_export():
         'phase': manager.get_current_phase().name.lower(),
         'annotations': manager.get_all_annotations(),
         'llm_predictions': serialized_predictions,
-        'disagreements': (
-            manager.disagreement_resolver.get_stats()
-            if manager._disagreement_resolver is not None else {}
-        ),
+        'disagreements': {
+            'total': len(manager.disagreement_ids),
+            'pending': len(manager.get_pending_disagreements()),
+        },
         'agreement_metrics': manager.get_agreement_metrics().to_dict(),
         'prompt_history': [
             {
