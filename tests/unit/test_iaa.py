@@ -63,6 +63,43 @@ class TestNominal:
         k = nominal.fleiss_kappa(items)
         assert 0 < k < 1
 
+    def test_cohen_kappa_textbook_value(self):
+        # Cohen (1960) worked example: 50 items, confusion matrix
+        # [[20, 5], [10, 15]] → po = 0.70, pe = 0.50, κ = 0.40
+        a = ["yes"] * 25 + ["no"] * 25
+        b = ["yes"] * 20 + ["no"] * 5 + ["yes"] * 10 + ["no"] * 15
+        assert isclose(nominal.cohen_kappa(a, b), 0.40, tol=1e-2)
+
+    def test_cohen_kappa_length_mismatch_raises(self):
+        with pytest.raises(ValueError):
+            nominal.cohen_kappa(["a", "b"], ["a"])
+
+    def test_cohen_kappa_empty_is_nan(self):
+        result = nominal.cohen_kappa([], [])
+        assert result != result  # NaN
+
+    def test_pairwise_cohen_kappa_three_perfect_raters(self):
+        # All three raters agree on every item → mean pairwise κ = 1.0
+        labels = ["a", "b", "a", "c", "b"]
+        result = nominal.pairwise_cohen_kappa({
+            "u1": labels, "u2": labels, "u3": labels,
+        })
+        assert isclose(result, 1.0)
+
+    def test_pairwise_cohen_kappa_mixed(self):
+        # u1==u2 perfectly; u3 disagrees on some items.
+        # Mean of (perfect, partial, partial) sits strictly between the two.
+        u1 = ["a", "b", "a", "b", "a"]
+        u2 = ["a", "b", "a", "b", "a"]
+        u3 = ["a", "b", "b", "a", "a"]
+        result = nominal.pairwise_cohen_kappa({"u1": u1, "u2": u2, "u3": u3})
+        partial = nominal.cohen_kappa(u1, u3)
+        assert partial < result < 1.0
+
+    def test_pairwise_cohen_kappa_single_user_is_nan(self):
+        result = nominal.pairwise_cohen_kappa({"u1": ["a", "b"]})
+        assert result != result  # NaN
+
 
 # ---------------------------------------------------------------------------
 # Ordinal
@@ -86,6 +123,33 @@ class TestOrdinal:
     def test_spearman_rho_monotone(self):
         rho = ordinal.spearman_rho([1, 2, 3, 4], [1, 2, 3, 4])
         assert isclose(rho, 1.0)
+
+    def test_weighted_kappa_linear_perfect(self):
+        assert isclose(
+            ordinal.weighted_kappa([1, 2, 3, 4, 5], [1, 2, 3, 4, 5], weights="linear"),
+            1.0,
+        )
+
+    def test_weighted_kappa_linear_vs_quadratic_differs(self):
+        # Far-off disagreement is penalized more by quadratic than linear,
+        # so the two weighting schemes produce different values.
+        a = [1, 2, 3, 4, 5]
+        b = [1, 2, 3, 5, 1]  # one near-miss and one far-miss
+        lin = ordinal.weighted_kappa(a, b, weights="linear")
+        quad = ordinal.weighted_kappa(a, b, weights="quadratic")
+        assert not isclose(lin, quad)
+
+    def test_weighted_kappa_better_than_unweighted_for_near_miss_linear(self):
+        # Same property as quadratic test, but for linear weights.
+        a = [1, 2, 3, 4, 5]
+        b = [1, 2, 3, 4, 4]
+        w = ordinal.weighted_kappa(a, b, weights="linear")
+        c = nominal.cohen_kappa(a, b)
+        assert w > c
+
+    def test_spearman_rho_anti_monotone(self):
+        rho = ordinal.spearman_rho([1, 2, 3, 4], [4, 3, 2, 1])
+        assert isclose(rho, -1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +176,32 @@ class TestContinuous:
         noisy = continuous.icc_2_k([[1, 2], [2, 5], [3, 1], [4, 3], [5, 4]])
         assert high > noisy
 
+    def test_icc_2_1_perfect_agreement(self):
+        # Single-rater ICC equals 1.0 when raters agree exactly.
+        assert isclose(
+            continuous.icc_2_1([[1, 1], [2, 2], [3, 3], [4, 4], [5, 5]]),
+            1.0,
+        )
+
+    def test_icc_2_1_le_icc_2_k(self):
+        # By construction, single-rater ICC <= average-rater ICC for k >= 1.
+        matrix = [[1, 2], [2, 3], [3, 3], [4, 5], [5, 4]]
+        single = continuous.icc_2_1(matrix)
+        avg = continuous.icc_2_k(matrix)
+        assert single <= avg + 1e-9
+
+    def test_icc_degenerate_returns_nan(self):
+        # 1-rater matrix has no inter-rater variance → undefined.
+        result = continuous.icc_2_k([[1], [2], [3]])
+        assert result != result  # NaN
+
+    def test_pearson_empty_returns_nan(self):
+        result = continuous.pearson_r([], [])
+        assert result != result  # NaN
+
+    def test_mae_zero_for_identical(self):
+        assert continuous.mae([1.0, 2.0, 3.0], [1.0, 2.0, 3.0]) == 0.0
+
 
 # ---------------------------------------------------------------------------
 # Multilabel
@@ -130,6 +220,71 @@ class TestMultilabel:
             multilabel.masi_distance({"a"}, {"a", "b"})
             < multilabel.masi_distance({"a"}, {"c"})
         )
+
+    def test_jaccard_both_empty(self):
+        # Distance between two empty sets is 0 (perfect, vacuous agreement).
+        assert multilabel.jaccard_distance(set(), set()) == 0.0
+
+    def test_mean_jaccard_perfect(self):
+        sets_by_user = {
+            "u1": [{"a", "b"}, {"c"}, {"a"}],
+            "u2": [{"a", "b"}, {"c"}, {"a"}],
+        }
+        assert isclose(multilabel.mean_jaccard(sets_by_user), 1.0)
+
+    def test_mean_jaccard_disjoint(self):
+        sets_by_user = {
+            "u1": [{"a"}, {"b"}],
+            "u2": [{"x"}, {"y"}],
+        }
+        assert isclose(multilabel.mean_jaccard(sets_by_user), 0.0)
+
+    def test_mean_jaccard_three_users(self):
+        # u1 == u2 (sim 1.0); u3 partial overlap with both.
+        # All three pairwise sims averaged should sit between the partial and 1.0.
+        sets_by_user = {
+            "u1": [{"a", "b"}],
+            "u2": [{"a", "b"}],
+            "u3": [{"a"}],
+        }
+        result = multilabel.mean_jaccard(sets_by_user)
+        partial = 1.0 - multilabel.jaccard_distance({"a", "b"}, {"a"})
+        assert partial < result < 1.0
+
+    def test_mean_jaccard_single_user_is_nan(self):
+        result = multilabel.mean_jaccard({"u1": [{"a"}]})
+        assert result != result  # NaN
+
+    def test_alpha_masi_perfect(self):
+        # Two annotators agree on every item; MASI α should be 1.0.
+        long_format = [
+            ("u1", "i1", frozenset({"a", "b"})),
+            ("u2", "i1", frozenset({"a", "b"})),
+            ("u1", "i2", frozenset({"c"})),
+            ("u2", "i2", frozenset({"c"})),
+            ("u1", "i3", frozenset({"a"})),
+            ("u2", "i3", frozenset({"a"})),
+        ]
+        assert isclose(multilabel.alpha_masi(long_format), 1.0)
+
+    def test_alpha_masi_partial_subset_better_than_disjoint(self):
+        # Subset disagreement on one item should yield higher α than disjoint
+        # disagreement on the same item, all else equal.
+        base = [
+            ("u1", "i1", frozenset({"a"})),
+            ("u2", "i1", frozenset({"a"})),
+            ("u1", "i2", frozenset({"b"})),
+            ("u2", "i2", frozenset({"b"})),
+        ]
+        subset_case = base + [
+            ("u1", "i3", frozenset({"c"})),
+            ("u2", "i3", frozenset({"c", "d"})),  # subset/superset
+        ]
+        disjoint_case = base + [
+            ("u1", "i3", frozenset({"c"})),
+            ("u2", "i3", frozenset({"x"})),  # disjoint
+        ]
+        assert multilabel.alpha_masi(subset_case) > multilabel.alpha_masi(disjoint_case)
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +327,46 @@ class TestAlpha:
         a = alpha.krippendorff_alpha(long_format, level="ordinal")
         assert a == a  # not NaN
         assert -1.0 <= a <= 1.0
+
+    def test_alpha_interval_perfect(self):
+        long_format = [
+            ("u1", "i1", 1.0), ("u2", "i1", 1.0),
+            ("u1", "i2", 2.0), ("u2", "i2", 2.0),
+            ("u1", "i3", 3.0), ("u2", "i3", 3.0),
+            ("u1", "i4", 4.0), ("u2", "i4", 4.0),
+        ]
+        assert isclose(alpha.krippendorff_alpha(long_format, level="interval"), 1.0)
+
+    def test_alpha_ratio_perfect(self):
+        long_format = [
+            ("u1", "i1", 1.0), ("u2", "i1", 1.0),
+            ("u1", "i2", 2.0), ("u2", "i2", 2.0),
+            ("u1", "i3", 4.0), ("u2", "i3", 4.0),
+            ("u1", "i4", 8.0), ("u2", "i4", 8.0),
+        ]
+        assert isclose(alpha.krippendorff_alpha(long_format, level="ratio"), 1.0)
+
+    def test_alpha_interval_penalizes_far_misses_more_than_ordinal(self):
+        # Same disagreements, but interval distance is (a-b)^2 while ordinal is |a-b|.
+        # A single far-off mistake therefore depresses interval α further than ordinal α.
+        long_format = [
+            ("u1", "i1", 1), ("u2", "i1", 1),
+            ("u1", "i2", 2), ("u2", "i2", 2),
+            ("u1", "i3", 3), ("u2", "i3", 3),
+            ("u1", "i4", 1), ("u2", "i4", 5),  # one big disagreement
+        ]
+        a_ord = alpha.krippendorff_alpha(long_format, level="ordinal")
+        a_int = alpha.krippendorff_alpha(long_format, level="interval")
+        assert a_ord > a_int
+
+    def test_alpha_unknown_level_raises(self):
+        with pytest.raises(ValueError):
+            alpha.krippendorff_alpha([("u1", "i1", "a")], level="bogus")
+
+    def test_alpha_single_annotator_is_nan(self):
+        long_format = [("u1", "i1", "a"), ("u1", "i2", "b")]
+        result = alpha.krippendorff_alpha(long_format, level="nominal")
+        assert result != result  # NaN
 
 
 # ---------------------------------------------------------------------------
