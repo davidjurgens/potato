@@ -6,7 +6,9 @@ import pytest
 
 from potato.item_state_management import init_item_state_manager, Label
 from potato.server_utils.config_module import (
+    ConfigSecurityError,
     ConfigValidationError,
+    validate_file_paths,
     validate_yaml_structure,
 )
 from potato.user_state_management import InMemoryUserState
@@ -118,6 +120,14 @@ def test_batch_assignment_keeps_round_one_cohort_on_same_items():
     assert erin.instance_id_ordering == ["b1"]
 
 
+def test_batch_assignment_with_unlimited_user_quota_assigns_whole_batch():
+    ism = _manager()
+    alice = _user("alice", max_assignments=-1)
+
+    assert ism.assign_instances_to_user(alice) == 2
+    assert alice.instance_id_ordering == ["a1", "a2"]
+
+
 def test_batch_assignment_blocks_users_outside_any_cohort():
     ism = _manager()
     outsider = _user("outsider")
@@ -209,6 +219,51 @@ def test_batch_assignment_group_can_load_instances_from_csv_data_file(tmp_path):
 
     assert ism.assign_instances_to_user(alice) == 2
     assert alice.instance_id_ordering == ["a1", "a2"]
+
+
+def test_batch_assignment_instances_file_blocks_path_traversal(tmp_path):
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    outside_file = tmp_path / "outside.json"
+    outside_file.write_text(json.dumps(["a1"]), encoding="utf-8")
+    config = _config(
+        task_dir=str(task_dir),
+        batch_assignment={
+            "groups": [
+                {
+                    "annotators": ["alice"],
+                    "instances_file": "../outside.json",
+                }
+            ],
+        },
+    )
+
+    _reset_item_manager()
+    with pytest.raises(ConfigSecurityError):
+        init_item_state_manager(config)
+
+
+def test_batch_assignment_instances_file_validates_path_security(tmp_path):
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    outside_file = tmp_path / "outside.json"
+    outside_file.write_text(json.dumps(["a1"]), encoding="utf-8")
+    config = _valid_yaml_config(
+        task_dir=str(task_dir),
+        output_annotation_dir=str(task_dir),
+        data_files=[],
+        batch_assignment={
+            "groups": [
+                {
+                    "annotators": ["alice"],
+                    "instances_file": "../outside.json",
+                }
+            ],
+        },
+    )
+
+    with pytest.raises(ConfigSecurityError):
+        validate_file_paths(config, str(task_dir))
 
 
 def test_batch_assignment_group_combines_inline_and_file_instances(tmp_path):

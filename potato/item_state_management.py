@@ -894,10 +894,11 @@ class ItemStateManager:
 
     def _resolve_batch_file_path(self, path: str) -> str:
         """Resolve a batch assignment file path relative to task_dir."""
-        if os.path.isabs(path):
-            return path
         task_dir = self.config.get('task_dir', '.')
-        return os.path.normpath(os.path.join(task_dir, path))
+        raw_path = path if os.path.isabs(path) else os.path.join(task_dir, path)
+        from potato.server_utils.config_module import validate_path_security
+
+        return validate_path_security(os.path.normpath(raw_path), task_dir)
 
     def _instance_id_from_batch_record(self, record, source: str, index: int) -> str:
         """Extract an instance ID from a supported batch assignment record."""
@@ -1264,6 +1265,25 @@ class ItemStateManager:
                 return True
         return False
 
+    def _count_assignable_batch_items(self, user_state: 'UserState') -> int:
+        """Count batch-eligible items that can still be newly assigned."""
+        user_id = getattr(user_state, 'user_id', None)
+        if not user_id:
+            return 0
+        already_assigned = user_state.get_assigned_instance_ids()
+        count = 0
+        for iid in self._batch_candidate_ids_for_user(str(user_id)):
+            if iid not in self.remaining_instance_ids:
+                continue
+            if self._item_is_saturated(iid):
+                continue
+            if iid in already_assigned:
+                continue
+            if user_state.has_annotated(iid):
+                continue
+            count += 1
+        return count
+
     def assign_instances_to_user(self, user_state: UserState) -> int:
         """
         Assigns a set of instances to a user based on the current state of the system
@@ -1344,8 +1364,13 @@ class ItemStateManager:
                     # Otherwise, assign one at a time
                     instances_to_assign = 1
         else:
-            # No maximum, assign one at a time
-            instances_to_assign = 1
+            # Batch assignment should still hand out the whole eligible batch
+            # when per-user quota is unlimited.
+            if self.assignment_strategy == AssignmentStrategy.BATCH:
+                instances_to_assign = self._count_assignable_batch_items(user_state)
+            else:
+                # No maximum, assign one at a time
+                instances_to_assign = 1
 
         # TODO: add strategy for assigning instances to users:
         #

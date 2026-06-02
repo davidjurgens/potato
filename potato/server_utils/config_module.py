@@ -2789,6 +2789,35 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
         except ConfigSecurityError as e:
             raise ConfigSecurityError(f"Data file {i}: {str(e)}")
 
+    # Validate batch assignment instance files
+    batch_config = config_data.get('batch_assignment')
+    if isinstance(batch_config, dict):
+        for i, group in enumerate(batch_config.get('groups') or []):
+            if not isinstance(group, dict):
+                continue
+            file_entry = group.get(
+                'instances_file',
+                group.get('items_file', group.get('instance_ids_file')),
+            )
+            if not file_entry:
+                continue
+            if isinstance(file_entry, dict):
+                file_path = file_entry.get("path")
+            else:
+                file_path = file_entry
+
+            try:
+                validated_path = validate_path_security(file_path, base_dir, project_dir)
+                if not os.path.exists(validated_path):
+                    raise ConfigValidationError(
+                        f"batch_assignment.groups[{i}] file not found: "
+                        f"{file_path} (resolved to: {validated_path})"
+                    )
+            except ConfigSecurityError as e:
+                raise ConfigSecurityError(
+                    f"batch_assignment.groups[{i}] file: {str(e)}"
+                )
+
     # Validate data_directory if configured
     if 'data_directory' in config_data:
         data_directory = config_data['data_directory']
