@@ -1674,15 +1674,15 @@ class ItemStateManager:
         if not user_state.has_annotated(instance_id):
             return self._reclaim_unannotated_assignment(user_state, instance_id, reason)
 
-        if hasattr(user_state, "clear_instance_annotations"):
-            user_state.clear_instance_annotations(instance_id)
+        user_state.clear_instance_annotations(instance_id)
 
         unassigned = user_state.unassign_instance(instance_id)
         if not unassigned:
             return False
 
+        had_annotator_credit = user_id in self.instance_annotators[instance_id]
         self.instance_annotators[instance_id].discard(user_id)
-        if self.item_annotation_counts[instance_id] > 0:
+        if had_annotator_credit and self.item_annotation_counts[instance_id] > 0:
             self.item_annotation_counts[instance_id] -= 1
 
         if instance_id in self.completed_instance_ids:
@@ -1720,11 +1720,10 @@ class ItemStateManager:
                 return default
 
             prolific_default = prolific_config.get('preserve_completed_annotations', default)
-            status_policy = (
-                prolific_config.get("status_policies", {})
-                if isinstance(prolific_config.get("status_policies", {}), dict)
-                else {}
-            ).get(prolific_statuses[reason], {})
+            status_policies = prolific_config.get("status_policies", {})
+            if not isinstance(status_policies, dict):
+                status_policies = {}
+            status_policy = status_policies.get(prolific_statuses[reason], {})
             if isinstance(status_policy, dict):
                 return status_policy.get('preserve_completed_annotations', prolific_default)
             return prolific_default
