@@ -482,6 +482,14 @@ class UserStateManager:
         # TODO: load this from the config
         self.max_annotations_per_user = -1
 
+        # Per-annotator workload quota: { default, by_user, by_user_role }.
+        # Used by _resolve_user_quota() when creating new user states.
+        self.per_annotator_quota = config.get("per_annotator_quota") or {}
+        # Roles map (configurable): user_id -> role name. Read from the
+        # standard user_roles config block; absent users fall through to the
+        # default in by_user_role.
+        self.user_roles = config.get("user_roles") or {}
+
         # Database support
         self.db_manager = None
         self.use_database = False
@@ -581,6 +589,28 @@ class UserStateManager:
 
         return tuple(ordered)
 
+    def _resolve_user_quota(self, user_id: str) -> int:
+        """
+        Resolve the per-user annotation quota.
+
+        Order:
+            1. per_annotator_quota.by_user[user_id]
+            2. per_annotator_quota.by_user_role[user_roles[user_id]]
+            3. per_annotator_quota.default
+            4. self.max_annotations_per_user (legacy global)
+        """
+        quota = self.per_annotator_quota or {}
+        by_user = quota.get("by_user") or {}
+        if user_id in by_user:
+            return int(by_user[user_id])
+        by_role = quota.get("by_user_role") or {}
+        role = (self.user_roles or {}).get(user_id)
+        if role and role in by_role:
+            return int(by_role[role])
+        if quota.get("default") is not None:
+            return int(quota["default"])
+        return self.max_annotations_per_user
+
     def add_user(self, user_id: str) -> UserState:
         """
         Add a new user to the user state manager (thread-safe).
@@ -604,13 +634,15 @@ class UserStateManager:
                 logger.warning(f'User "{user_id}" already exists in the user state manager')
                 raise ValueError(f'User "{user_id}" already exists in the user state manager')
 
+            quota = self._resolve_user_quota(user_id)
+
             # Create appropriate user state based on configuration
             if self.use_database and self.db_manager:
-                logger.debug(f"Creating MysqlUserState for user: {user_id}")
-                user_state = MysqlUserState(user_id, self.db_manager, self.max_annotations_per_user)
+                logger.debug(f"Creating MysqlUserState for user: {user_id} (quota={quota})")
+                user_state = MysqlUserState(user_id, self.db_manager, quota)
             else:
-                logger.debug(f"Creating InMemoryUserState for user: {user_id}")
-                user_state = InMemoryUserState(user_id, self.max_annotations_per_user)
+                logger.debug(f"Creating InMemoryUserState for user: {user_id} (quota={quota})")
+                user_state = InMemoryUserState(user_id, quota)
 
             self.user_to_annotation_state[user_id] = user_state
             logger.debug(f"User state created and stored: {user_state}")
@@ -1096,6 +1128,9 @@ class UserState:
         raise NotImplementedError()
 
     def unassign_instance(self, instance_id: str) -> bool:
+        raise NotImplementedError()
+
+    def clear_instance_annotations(self, instance_id: str) -> None:
         raise NotImplementedError()
 
     def get_current_instance(self) -> Item:

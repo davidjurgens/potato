@@ -161,14 +161,17 @@ class TestDashboardOverviewContent(BaseSoloModeSeleniumTest):
     """Test content displayed on the overview tab."""
 
     def test_phase_indicator_present(self):
-        """Phase indicator badge should be on the page."""
+        """Active phase should be marked in the stepper."""
         self.login_user()
         self.navigate_to_solo_status()
 
-        indicator = self.driver.find_element(
-            By.CSS_SELECTOR, '.phase-indicator'
+        # The standalone .phase-indicator pill on status.html was removed
+        # in the UI rewrite — phase is now conveyed by the stepper in
+        # base_solo.html via the active step's aria-current="step".
+        active = self.driver.find_element(
+            By.CSS_SELECTOR, '.phase-progress [aria-current="step"] .step-label'
         )
-        assert indicator.text.strip(), "Phase indicator should have text"
+        assert active.text.strip(), "Active phase step should have a label"
 
     def test_dashboard_cards_present(self):
         """Dashboard should contain cards with values."""

@@ -57,6 +57,73 @@ def login_required(f):
     return decorated_function
 
 
+def api_login_required(f):
+    """Like login_required but returns JSON 401 instead of redirecting.
+
+    Intended for /api/* endpoints called by JS, where a 302 to /login is
+    useless (fetch follows it and gets HTML, not JSON).
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'username' not in session:
+            return jsonify({'error': 'Authentication required'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def same_origin_required(f):
+    """CSRF protection for state-changing API routes.
+
+    Rejects requests whose Origin or Referer header doesn't match the host.
+    Browsers automatically attach these headers; cross-origin forms cannot
+    forge them. This is a lightweight CSRF defense without requiring token
+    machinery wired into every JS call site.
+
+    Allows requests with no Origin/Referer (server-to-server, curl from
+    admins with X-API-Key) since those aren't subject to CSRF.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        origin = request.headers.get('Origin')
+        referer = request.headers.get('Referer')
+        host = request.host_url.rstrip('/')
+
+        # If neither header is present, this isn't a browser request — allow.
+        if not origin and not referer:
+            return f(*args, **kwargs)
+
+        if origin and not origin.startswith(host):
+            return jsonify({'error': 'Cross-origin request rejected'}), 403
+        if referer and not referer.startswith(host):
+            return jsonify({'error': 'Cross-origin request rejected'}), 403
+
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def admin_required(f):
+    """Require a valid admin API key (X-API-Key header) for destructive ops.
+
+    Bypasses the standard session login; used for endpoints that can corrupt
+    workflow state (forced phase transitions, refinement approval, etc.).
+    Falls back to allowing in debug mode via the existing admin key system.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Lazy import to avoid circular dependencies at module load.
+        from potato.server_utils.admin_key import validate_admin_api_key
+        from potato.flask_server import config as _config
+
+        api_key = (
+            request.headers.get('X-API-Key')
+            or session.get('admin_api_key')
+        )
+        if not validate_admin_api_key(api_key, _config):
+            return jsonify({'error': 'Admin authentication required'}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 # =============================================================================
 # User Routes
 # =============================================================================
@@ -72,36 +139,50 @@ def setup():
     POST: Process task description and advance to prompt review
     """
     manager = get_solo_mode_manager()
+    current_phase = manager.get_current_phase()
+
+    # Guard: setup is only valid while still in SETUP phase. Once the user has
+    # advanced (and possibly started annotating), re-submission would silently
+    # overwrite task_description and append a stale prompt version.
+    already_configured = current_phase != SoloPhase.SETUP
 
     if request.method == 'POST':
+        if already_configured:
+            return render_template(
+                'solo/setup.html',
+                error=(
+                    f'Setup is already complete (current phase: '
+                    f'{current_phase.name.lower().replace("_", " ")}). '
+                    'Return to status to continue, or visit the prompt editor '
+                    'to refine your annotation prompt.'
+                ),
+                phase=current_phase.name.lower(),
+                already_configured=True,
+            ), 409
+
         task_description = request.form.get('task_description', '')
 
         if task_description:
-            # Store task description and create initial prompt
             manager.set_task_description(task_description)
             manager.create_prompt_version(
                 f"Label the following text according to this task: {task_description}",
                 created_by='user_setup',
                 source_description='Initial prompt from task description'
             )
-
-            # Advance to prompt review phase (ignore if already past setup)
-            try:
-                manager.advance_to_phase(SoloPhase.PROMPT_REVIEW)
-            except ValueError:
-                pass  # Already past setup phase
-
+            manager.advance_to_phase(SoloPhase.PROMPT_REVIEW)
             return redirect(url_for('solo_mode.prompt_editor'))
 
         return render_template(
             'solo/setup.html',
             error='Please provide a task description',
-            phase=manager.get_current_phase().value,
+            phase=current_phase.name.lower(),
+            already_configured=False,
         )
 
     return render_template(
         'solo/setup.html',
-        phase=manager.get_current_phase().value,
+        phase=current_phase.name.lower(),
+        already_configured=already_configured,
     )
 
 
@@ -157,7 +238,7 @@ def prompt_editor():
         'solo/prompt_editor.html',
         current_prompt=manager.get_current_prompt_text(),
         prompt_history=prompt_history,
-        phase=manager.get_current_phase().value,
+        phase=manager.get_current_phase().name.lower(),
     )
 
 
@@ -220,7 +301,7 @@ def edge_cases():
         current_case=current_case.to_dict() if current_case else None,
         remaining_count=len(unlabeled),
         labels=labels,
-        phase=manager.get_current_phase().value,
+        phase=manager.get_current_phase().name.lower(),
     )
 
 
@@ -273,7 +354,8 @@ def annotate():
             instance_id=None,
             labels=labels,
             message='No more instances available',
-            phase=manager.get_current_phase().value,
+            phase=manager.get_current_phase().name.lower(),
+            stats=manager.get_annotation_stats(),
         )
 
     # Get full instance data
@@ -293,7 +375,7 @@ def annotate():
             instance_id=None,
             labels=labels,
             message='Error: Item state manager not available. Please restart the server.',
-            phase=manager.get_current_phase().value,
+            phase=manager.get_current_phase().name.lower(),
         )
     except KeyError as e:
         logger.error(f"Instance {instance_id} not found in ItemStateManager: {e}")
@@ -303,7 +385,7 @@ def annotate():
             instance_id=None,
             labels=labels,
             message=f'Error: Instance {instance_id} not found.',
-            phase=manager.get_current_phase().value,
+            phase=manager.get_current_phase().name.lower(),
         )
 
     # Get LLM prediction if available
@@ -315,7 +397,7 @@ def annotate():
         instance_id=instance_id,
         llm_prediction=llm_prediction,
         labels=labels,
-        phase=manager.get_current_phase().value,
+        phase=manager.get_current_phase().name.lower(),
         stats=manager.get_annotation_stats(),
     )
 
@@ -389,7 +471,7 @@ def disagreements():
         'solo/disagreement.html',
         disagreement=disagreement,
         labels=labels,
-        phase=manager.get_current_phase().value,
+        phase=manager.get_current_phase().name.lower(),
     )
 
 
@@ -436,7 +518,7 @@ def review():
         instances=instances,
         current_instance=instances[0] if instances else None,
         labels=labels,
-        phase=manager.get_current_phase().value,
+        phase=manager.get_current_phase().name.lower(),
     )
 
 
@@ -485,7 +567,7 @@ def validation():
         current_sample=current_sample,
         progress=progress,
         labels=labels,
-        phase=manager.get_current_phase().value,
+        phase=manager.get_current_phase().name.lower(),
     )
 
 
@@ -555,7 +637,7 @@ def rule_review():
         approved_count=len(approved),
         rejected_count=len(rejected),
         stats=stats,
-        phase=manager.get_current_phase().value,
+        phase=manager.get_current_phase().name.lower(),
     )
 
 
@@ -598,7 +680,7 @@ def status():
 
     return render_template(
         'solo/status.html',
-        phase=manager.get_current_phase().value,
+        phase=manager.get_current_phase().name.lower(),
         phase_name=manager.get_current_phase().name,
         annotation_stats=manager.get_annotation_stats(),
         agreement_metrics=manager.get_agreement_metrics(),
@@ -622,7 +704,7 @@ def api_status():
     manager = get_solo_mode_manager()
 
     return jsonify({
-        'phase': manager.get_current_phase().value,
+        'phase': manager.get_current_phase().name.lower(),
         'phase_name': manager.get_current_phase().name,
         'annotation_stats': manager.get_annotation_stats(),
         'agreement_metrics': manager.get_agreement_metrics().to_dict(),
@@ -675,16 +757,34 @@ def api_predictions():
 
 
 @solo_mode_bp.route('/api/advance-phase', methods=['POST'])
+@api_login_required
+@same_origin_required
 @solo_mode_required
 def api_advance_phase():
-    """Manually advance to a specific phase."""
+    """Manually advance to a specific phase.
+
+    force=True bypasses the phase transition graph and can corrupt workflow
+    state; it requires admin authentication via X-API-Key.
+    """
     manager = get_solo_mode_manager()
 
-    target_phase = request.json.get('phase')
+    payload = request.get_json(silent=True) or {}
+    target_phase = payload.get('phase')
     if not target_phase:
         return jsonify({'error': 'Missing target phase'}), 400
 
-    force = request.json.get('force', False)
+    force = bool(payload.get('force', False))
+    if force:
+        from potato.server_utils.admin_key import validate_admin_api_key
+        from potato.flask_server import config as _config
+        api_key = (
+            request.headers.get('X-API-Key')
+            or session.get('admin_api_key')
+        )
+        if not validate_admin_api_key(api_key, _config):
+            return jsonify({
+                'error': 'force=True requires admin authentication',
+            }), 403
 
     try:
         phase = SoloPhase.from_str(target_phase)
@@ -697,7 +797,7 @@ def api_advance_phase():
         if success:
             return jsonify({
                 'success': True,
-                'new_phase': manager.get_current_phase().value,
+                'new_phase': manager.get_current_phase().name.lower(),
             })
         else:
             return jsonify({
@@ -705,42 +805,48 @@ def api_advance_phase():
                     f'Invalid phase transition from '
                     f'{manager.get_current_phase().name} to {phase.name}'
                 ),
-                'current_phase': manager.get_current_phase().value,
+                'current_phase': manager.get_current_phase().name.lower(),
             }), 400
 
     except ValueError as e:
         return jsonify({
             'error': str(e),
-            'current_phase': manager.get_current_phase().value,
+            'current_phase': manager.get_current_phase().name.lower(),
         }), 400
 
 
 @solo_mode_bp.route('/api/pause-labeling', methods=['POST'])
+@api_login_required
+@same_origin_required
 @solo_mode_required
 def api_pause_labeling():
     """Pause background LLM labeling."""
     manager = get_solo_mode_manager()
 
-    if manager.llm_labeling_thread:
-        manager.llm_labeling_thread.pause()
-        return jsonify({'success': True, 'paused': True})
+    if not manager.is_background_labeling_running():
+        return jsonify({'error': 'LLM labeling thread not running'}), 400
 
-    return jsonify({'error': 'LLM labeling thread not running'}), 400
+    manager.pause_background_labeling()
+    return jsonify({'success': True, 'paused': True})
 
 
 @solo_mode_bp.route('/api/resume-labeling', methods=['POST'])
+@api_login_required
+@same_origin_required
 @solo_mode_required
 def api_resume_labeling():
     """Resume background LLM labeling."""
     manager = get_solo_mode_manager()
 
-    if manager.llm_labeling_thread:
-        manager.llm_labeling_thread.resume()
-        return jsonify({'success': True, 'paused': False})
+    if not manager.is_background_labeling_running():
+        return jsonify({'error': 'LLM labeling thread not running'}), 400
 
-    return jsonify({'error': 'LLM labeling thread not running'}), 400
+    manager.resume_background_labeling()
+    return jsonify({'success': True, 'paused': False})
 
 @solo_mode_bp.route('/api/start-labeling', methods=['POST'])
+@api_login_required
+@same_origin_required
 @solo_mode_required
 def api_start_labeling():
     """Start background LLM labeling."""
@@ -751,6 +857,8 @@ def api_start_labeling():
     return jsonify({'success': False, 'message': 'Already running or failed to start'})
 
 @solo_mode_bp.route('/api/optimize-prompt', methods=['POST'])
+@api_login_required
+@same_origin_required
 @solo_mode_required
 def api_optimize_prompt():
     """Trigger prompt optimization."""
@@ -773,19 +881,24 @@ def api_optimize_prompt():
 @solo_mode_bp.route('/api/disagreements')
 @solo_mode_required
 def api_disagreements():
-    """Get all disagreements and their status."""
+    """Get all disagreements and their status.
+
+    Reads from the manager's authoritative `disagreement_ids` set (populated
+    inside record_human_label). Keeps /api/disagreements consistent with the
+    Overview card and with get_agreement_metrics().
+    """
     manager = get_solo_mode_manager()
 
-    if manager.disagreement_resolver:
-        stats = manager.disagreement_resolver.get_stats()
-        pending = manager.disagreement_resolver.get_pending_disagreements()
-        return jsonify({
-            'pending': len(pending),
-            'resolved': stats.get('resolved', 0),
-            'stats': stats,
-        })
+    pending = manager.get_pending_disagreements()
+    total = len(manager.disagreement_ids)
+    resolved = max(total - len(pending), 0)
 
-    return jsonify({'pending': 0, 'resolved': 0, 'stats': {}})
+    return jsonify({
+        'total': total,
+        'pending': len(pending),
+        'resolved': resolved,
+        'pending_ids': pending,
+    })
 
 
 @solo_mode_bp.route('/api/edge-cases')
@@ -841,6 +954,8 @@ def api_rules_categories():
 
 
 @solo_mode_bp.route('/api/rules/approve', methods=['POST'])
+@api_login_required
+@same_origin_required
 @solo_mode_required
 def api_rules_approve():
     """Approve or reject an edge case rule category."""
@@ -866,6 +981,7 @@ def api_rules_approve():
 
 
 @solo_mode_bp.route('/api/rules/apply', methods=['POST'])
+@admin_required
 @solo_mode_required
 def api_rules_apply():
     """Inject approved rules into the annotation prompt."""
@@ -880,6 +996,8 @@ def api_rules_apply():
 
 
 @solo_mode_bp.route('/api/rules/cluster', methods=['POST'])
+@api_login_required
+@same_origin_required
 @solo_mode_required
 def api_rules_cluster():
     """Manually trigger rule clustering."""
@@ -966,6 +1084,8 @@ def api_confusion_analysis():
 
 
 @solo_mode_bp.route('/api/confusion-analysis/root-cause', methods=['POST'])
+@api_login_required
+@same_origin_required
 @solo_mode_required
 def api_confusion_root_cause():
     """Generate root cause analysis for a confusion pattern."""
@@ -1022,6 +1142,8 @@ def api_confusion_root_cause():
 
 
 @solo_mode_bp.route('/api/confusion-analysis/suggest-guideline', methods=['POST'])
+@api_login_required
+@same_origin_required
 @solo_mode_required
 def api_confusion_suggest_guideline():
     """Suggest a guideline to address a confusion pattern."""
@@ -1096,6 +1218,8 @@ def api_refinement_status():
 
 
 @solo_mode_bp.route('/api/refinement/trigger', methods=['POST'])
+@api_login_required
+@same_origin_required
 @solo_mode_required
 def api_refinement_trigger():
     """Manually trigger a refinement cycle."""
@@ -1121,6 +1245,7 @@ def api_reannotation_report():
 
 
 @solo_mode_bp.route('/api/refinement/reset', methods=['POST'])
+@admin_required
 @solo_mode_required
 def api_refinement_reset():
     """Reset the refinement loop, allowing new cycles."""
@@ -1164,6 +1289,7 @@ def api_refinement_pending():
 
 
 @solo_mode_bp.route('/api/refinement/approve', methods=['POST'])
+@admin_required
 @solo_mode_required
 def api_refinement_approve():
     """Apply a pending refinement candidate. Triggers re-annotation on apply."""
@@ -1182,6 +1308,7 @@ def api_refinement_approve():
 
 
 @solo_mode_bp.route('/api/refinement/reject', methods=['POST'])
+@admin_required
 @solo_mode_required
 def api_refinement_reject():
     """Reject a pending refinement candidate."""
@@ -1232,6 +1359,8 @@ def api_labeling_functions():
 
 
 @solo_mode_bp.route('/api/labeling-functions/extract', methods=['POST'])
+@api_login_required
+@same_origin_required
 @solo_mode_required
 def api_labeling_functions_extract():
     """Trigger labeling function extraction from high-confidence predictions."""
@@ -1249,6 +1378,8 @@ def api_labeling_functions_extract():
 
 
 @solo_mode_bp.route('/api/labeling-functions/<function_id>/toggle', methods=['POST'])
+@api_login_required
+@same_origin_required
 @solo_mode_required
 def api_labeling_function_toggle(function_id):
     """Toggle a labeling function's enabled state."""
@@ -1317,13 +1448,13 @@ def api_export():
     }
 
     export_data = {
-        'phase': manager.get_current_phase().value,
+        'phase': manager.get_current_phase().name.lower(),
         'annotations': manager.get_all_annotations(),
         'llm_predictions': serialized_predictions,
-        'disagreements': (
-            manager.disagreement_resolver.get_stats()
-            if manager._disagreement_resolver is not None else {}
-        ),
+        'disagreements': {
+            'total': len(manager.disagreement_ids),
+            'pending': len(manager.get_pending_disagreements()),
+        },
         'agreement_metrics': manager.get_agreement_metrics().to_dict(),
         'prompt_history': [
             {

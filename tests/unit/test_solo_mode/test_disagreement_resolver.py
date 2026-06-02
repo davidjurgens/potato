@@ -1,7 +1,11 @@
 """
-Tests for disagreement detection and resolution.
+Tests for disagreement detection.
 
-Tests DisagreementType, Disagreement, DisagreementDetector, and DisagreementResolver.
+Tests DisagreementType, Disagreement, and DisagreementDetector.
+
+The legacy DisagreementResolver class was removed — disagreement tracking
+now lives directly on SoloModeManager.disagreement_ids; see
+tests/server/test_solo_mode/test_b1_b7_regressions.py::TestB3DisagreementsAPI.
 """
 
 import pytest
@@ -12,7 +16,6 @@ from potato.solo_mode.disagreement_resolver import (
     DisagreementType,
     Disagreement,
     DisagreementDetector,
-    DisagreementResolver,
 )
 
 
@@ -309,151 +312,3 @@ class TestDisagreementDetector:
     def test_normalize_spans_invalid(self, detector):
         result = detector._normalize_spans([{"x": 1}, "bad"])
         assert result == []
-
-
-class TestDisagreementResolver:
-    """Tests for DisagreementResolver."""
-
-    @pytest.fixture
-    def mock_solo_config(self):
-        config = MagicMock()
-        config.thresholds.likert_tolerance = 1
-        config.thresholds.multiselect_jaccard_threshold = 0.5
-        config.thresholds.span_overlap_threshold = 0.5
-        return config
-
-    @pytest.fixture
-    def app_config(self):
-        return {
-            'annotation_schemes': [
-                {'name': 'sentiment', 'annotation_type': 'radio',
-                 'labels': ['positive', 'negative', 'neutral']},
-                {'name': 'rating', 'annotation_type': 'likert',
-                 'labels': ['1', '2', '3', '4', '5']},
-            ],
-        }
-
-    @pytest.fixture
-    def resolver(self, app_config, mock_solo_config):
-        return DisagreementResolver(app_config, mock_solo_config)
-
-    def test_check_and_record_agreement(self, resolver):
-        result = resolver.check_and_record("i1", "sentiment", "positive", "positive", 0.9)
-        assert result is None
-        assert resolver.total_comparisons == 1
-        assert resolver.total_disagreements == 0
-
-    def test_check_and_record_disagreement(self, resolver):
-        result = resolver.check_and_record("i1", "sentiment", "positive", "negative", 0.6)
-        assert result is not None
-        assert result.id == "dis_0001"
-        assert result.human_label == "positive"
-        assert result.llm_label == "negative"
-        assert resolver.total_disagreements == 1
-
-    def test_multiple_disagreements(self, resolver):
-        resolver.check_and_record("i1", "sentiment", "positive", "negative", 0.6)
-        resolver.check_and_record("i2", "sentiment", "negative", "neutral", 0.5)
-        assert len(resolver.disagreements) == 2
-        assert resolver.total_comparisons == 2
-
-    def test_resolve(self, resolver):
-        resolver.check_and_record("i1", "sentiment", "positive", "negative", 0.6)
-        success = resolver.resolve("dis_0001", "positive", "human_wins", "Clear positive")
-        assert success is True
-        d = resolver.get_disagreement("dis_0001")
-        assert d.resolved is True
-        assert d.resolution_label == "positive"
-        assert d.resolution_source == "human_wins"
-        assert d.resolution_notes == "Clear positive"
-        assert d.resolved_at is not None
-
-    def test_resolve_nonexistent(self, resolver):
-        assert resolver.resolve("nonexistent", "x", "human_wins") is False
-
-    def test_get_pending_disagreements(self, resolver):
-        resolver.check_and_record("i1", "sentiment", "positive", "negative", 0.6)
-        resolver.check_and_record("i2", "sentiment", "negative", "neutral", 0.5)
-        resolver.resolve("dis_0001", "positive", "human_wins")
-
-        pending = resolver.get_pending_disagreements()
-        assert len(pending) == 1
-        assert pending[0].id == "dis_0002"
-
-    def test_get_disagreements_for_instance(self, resolver):
-        resolver.check_and_record("i1", "sentiment", "positive", "negative", 0.6)
-        resolver.check_and_record("i1", "rating", "1", "5", 0.4)
-        resolver.check_and_record("i2", "sentiment", "negative", "neutral", 0.5)
-
-        i1_disagreements = resolver.get_disagreements_for_instance("i1")
-        assert len(i1_disagreements) == 2
-
-    def test_get_cases_for_prompt_revision(self, resolver):
-        resolver.check_and_record("i1", "sentiment", "positive", "negative", 0.6)
-        resolver.resolve("dis_0001", "positive", "human_wins")
-
-        cases = resolver.get_cases_for_prompt_revision()
-        assert len(cases) == 1
-        assert cases[0]['expected_label'] == "positive"
-        assert cases[0]['actual_label'] == "negative"
-
-    def test_cases_for_prompt_revision_excludes_llm_wins(self, resolver):
-        resolver.check_and_record("i1", "sentiment", "positive", "negative", 0.6)
-        resolver.resolve("dis_0001", "negative", "llm_wins")
-
-        cases = resolver.get_cases_for_prompt_revision()
-        assert len(cases) == 0
-
-    def test_mark_revision_triggered(self, resolver):
-        resolver.check_and_record("i1", "sentiment", "positive", "negative", 0.6)
-        resolver.mark_revision_triggered(["dis_0001"])
-        d = resolver.get_disagreement("dis_0001")
-        assert d.triggered_revision is True
-
-    def test_mark_revision_triggered_unknown(self, resolver):
-        # Should not raise
-        resolver.mark_revision_triggered(["nonexistent"])
-
-    def test_get_disagreement_rate(self, resolver):
-        assert resolver.get_disagreement_rate() == 0.0
-        resolver.check_and_record("i1", "sentiment", "positive", "negative", 0.6)
-        resolver.check_and_record("i2", "sentiment", "positive", "positive", 0.9)
-        assert resolver.get_disagreement_rate() == 0.5
-
-    def test_get_stats(self, resolver):
-        resolver.check_and_record("i1", "sentiment", "positive", "negative", 0.6)
-        resolver.check_and_record("i2", "sentiment", "negative", "neutral", 0.5)
-        resolver.resolve("dis_0001", "positive", "human_wins")
-
-        stats = resolver.get_stats()
-        assert stats['total_comparisons'] == 2
-        assert stats['total_disagreements'] == 2
-        assert stats['pending'] == 1
-        assert stats['resolved'] == 1
-        assert stats['resolution_sources']['human_wins'] == 1
-
-    def test_to_dict_from_dict(self, resolver):
-        resolver.check_and_record("i1", "sentiment", "positive", "negative", 0.6)
-        resolver.resolve("dis_0001", "positive", "human_wins")
-
-        data = resolver.to_dict()
-        assert 'disagreements' in data
-        assert data['id_counter'] == 1
-        assert data['total_comparisons'] == 1
-
-        # Restore into new resolver
-        new_resolver = DisagreementResolver(resolver.config, resolver.solo_config)
-        new_resolver.from_dict(data)
-        assert len(new_resolver.disagreements) == 1
-        assert new_resolver.total_comparisons == 1
-
-    def test_get_annotation_type(self, resolver):
-        assert resolver._get_annotation_type('sentiment') == 'radio'
-        assert resolver._get_annotation_type('rating') == 'likert'
-        assert resolver._get_annotation_type('unknown') == 'radio'  # default
-
-    def test_id_generation(self, resolver):
-        resolver.check_and_record("i1", "sentiment", "a", "b", 0.5)
-        resolver.check_and_record("i2", "sentiment", "a", "c", 0.5)
-        ids = list(resolver.disagreements.keys())
-        assert ids == ["dis_0001", "dis_0002"]

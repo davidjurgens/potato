@@ -755,8 +755,32 @@ class ItemStateManager:
 
         self.instance_id_ordering = []
 
-        # Load max annotations per item from config
-        self.max_annotations_per_item = config.get('max_annotations_per_item', -1)
+        # Load max annotations per item from config. Prefers the canonical
+        # `num_annotators_per_item` (int or dict.default) and falls back to the
+        # deprecated `max_annotations_per_item` for backwards compatibility.
+        try:
+            from potato.server_utils.config_module import resolve_num_annotators_per_item
+            self.max_annotations_per_item = resolve_num_annotators_per_item(config)
+        except ImportError:
+            self.max_annotations_per_item = config.get('max_annotations_per_item', -1)
+
+        # Adaptive boost: dynamically increase the per-item cap when early
+        # annotators disagree. Parsed from num_annotators_per_item.adaptive.
+        nap = config.get('num_annotators_per_item')
+        adaptive_cfg = (nap.get('adaptive') if isinstance(nap, dict) else None) or {}
+        self.adaptive_boost = {
+            'enabled': bool(adaptive_cfg.get('enabled', False)),
+            'threshold': float(adaptive_cfg.get('disagreement_threshold', 0.5)),
+            'boost_to': int(adaptive_cfg.get('boost_to', 0)),
+        }
+
+        # Minimum coverage floor; forces continued assignment even if some
+        # users have not yet rated an item.
+        self.min_annotations_per_item = None
+        if isinstance(nap, dict) and nap.get('min') is not None:
+            self.min_annotations_per_item = int(nap['min'])
+        elif config.get('min_annotators_per_instance') is not None:
+            self.min_annotations_per_item = int(config['min_annotators_per_instance'])
 
         # Track which annotators have worked on each item
         self.instance_annotators = defaultdict(set)
@@ -768,6 +792,7 @@ class ItemStateManager:
         reclaim_config = config.get('instance_reclaim', {})
         self.reclaim_enabled = reclaim_config.get('enabled', False)
         self.reclaim_timeout_hours = reclaim_config.get('timeout_hours', 24)
+        self.reclaim_config = reclaim_config
 
         # Queue of remaining instances to be assigned
         self.remaining_instance_ids = deque()
@@ -1014,10 +1039,35 @@ class ItemStateManager:
     # Assignment Methods
     # =========================================================================
 
+    def _get_annotator_cap_for_item(self, instance_id: str) -> int:
+        """
+        Resolve the annotator cap for a single item.
+
+        Looks up the per-item override (set by overlap sampling or adaptive boost
+        via ``Item.metadata['required_annotations']``) and falls back to the
+        global ``max_annotations_per_item`` when no override is set.
+
+        Returns -1 to mean unlimited (matching the legacy convention).
+        """
+        item = self.instance_id_to_instance.get(instance_id)
+        if item is not None:
+            per_item = item.get_metadata('required_annotations')
+            if per_item is not None:
+                try:
+                    return int(per_item)
+                except (TypeError, ValueError):
+                    pass
+        return self.max_annotations_per_item
+
+    def _item_is_saturated(self, instance_id: str) -> bool:
+        """True if the item has reached its annotator cap (per-item or global)."""
+        cap = self._get_annotator_cap_for_item(instance_id)
+        return cap >= 0 and len(self.instance_annotators[instance_id]) >= cap
+
     def has_unlabeled_items_for_user(self, user_state: 'UserState') -> bool:
         """Check whether any items remain for this user to annotate (read-only)."""
         for iid in self.remaining_instance_ids:
-            if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+            if self._item_is_saturated(iid):
                 continue
             if not user_state.has_annotated(iid):
                 return True
@@ -1124,9 +1174,10 @@ class ItemStateManager:
             unlabeled_items = []
             for iid in self.remaining_instance_ids:
                 annotation_count = len(self.instance_annotators[iid])
-                self.logger.debug(f"[ASSIGNMENT] Considering {iid}: annotation_count={annotation_count}, cap={self.max_annotations_per_item}")
+                cap = self._get_annotator_cap_for_item(iid)
+                self.logger.debug(f"[ASSIGNMENT] Considering {iid}: annotation_count={annotation_count}, cap={cap}")
                 # Always skip items that have reached max annotations, but do not remove here
-                if self.max_annotations_per_item >= 0 and annotation_count >= self.max_annotations_per_item:
+                if cap >= 0 and annotation_count >= cap:
                     self.logger.debug(f"[ASSIGNMENT] Skipping {iid}: reached annotation cap")
                     continue
                 if not user_state.has_annotated(iid):
@@ -1147,7 +1198,8 @@ class ItemStateManager:
             candidates = []
             for iid in list(self.remaining_instance_ids):
                 annotation_count = len(self.instance_annotators[iid])
-                if self.max_annotations_per_item >= 0 and annotation_count >= self.max_annotations_per_item:
+                cap = self._get_annotator_cap_for_item(iid)
+                if cap >= 0 and annotation_count >= cap:
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
@@ -1166,7 +1218,7 @@ class ItemStateManager:
             # Fixed order assignment strategy
             assigned = 0
             for iid in list(self.remaining_instance_ids):
-                if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                if self._item_is_saturated(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
@@ -1180,7 +1232,7 @@ class ItemStateManager:
             # Maximum diversity assignment strategy
             unlabeled_items = []
             for iid in list(self.remaining_instance_ids):
-                if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                if self._item_is_saturated(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
@@ -1204,7 +1256,7 @@ class ItemStateManager:
             # Active learning assignment strategy (currently falls back to random)
             unlabeled_items = []
             for iid in list(self.remaining_instance_ids):
-                if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                if self._item_is_saturated(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
@@ -1221,7 +1273,7 @@ class ItemStateManager:
             # LLM confidence assignment strategy (currently falls back to random)
             unlabeled_items = []
             for iid in list(self.remaining_instance_ids):
-                if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                if self._item_is_saturated(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
@@ -1270,7 +1322,7 @@ class ItemStateManager:
                 if iid not in self.remaining_instance_ids:
                     continue
                 # Skip if item has reached max annotations
-                if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                if self._item_is_saturated(iid):
                     continue
                 # Skip if user already annotated this item
                 if not user_state.has_annotated(iid):
@@ -1298,11 +1350,11 @@ class ItemStateManager:
                 # Get user's annotated items for preservation
                 annotated_ids = set(user_state.get_annotated_instance_ids()) if hasattr(user_state, 'get_annotated_instance_ids') else set()
 
-                # Get available items (respecting max_annotations_per_item)
+                # Get available items (respecting per-item / global annotator caps)
                 available_ids = []
                 for iid in self.remaining_instance_ids:
                     # Skip if item has reached annotation limit
-                    if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                    if self._item_is_saturated(iid):
                         continue
                     # Skip if user already annotated
                     if user_state.has_annotated(iid):
@@ -1336,7 +1388,7 @@ class ItemStateManager:
             self.logger.warning(f"Unknown assignment strategy: {self.assignment_strategy}, falling back to fixed order")
             assigned = 0
             for iid in list(self.remaining_instance_ids):
-                if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                if self._item_is_saturated(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
@@ -1386,7 +1438,7 @@ class ItemStateManager:
                     if iid not in self.remaining_instance_ids:
                         continue
                     # Skip if item has reached max annotations
-                    if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                    if self._item_is_saturated(iid):
                         continue
                     # Skip if user already annotated this item
                     if not user_state.has_annotated(iid):
@@ -1401,7 +1453,7 @@ class ItemStateManager:
             for iid in self.uncategorized_instance_ids:
                 if iid not in self.remaining_instance_ids:
                     continue
-                if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+                if self._item_is_saturated(iid):
                     continue
                 if not user_state.has_annotated(iid):
                     uncategorized_eligible.append(iid)
@@ -1444,7 +1496,7 @@ class ItemStateManager:
         """Fallback to random assignment when expertise manager is not available."""
         unlabeled_items = []
         for iid in self.remaining_instance_ids:
-            if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+            if self._item_is_saturated(iid):
                 continue
             if not user_state.has_annotated(iid):
                 unlabeled_items.append(iid)
@@ -1460,27 +1512,62 @@ class ItemStateManager:
 
     def _calculate_disagreement_score(self, instance_id: str) -> float:
         """
-        Calculate a disagreement score for an instance based on existing annotations.
+        Calculate a disagreement score in [0, 1] for an instance.
 
-        This method analyzes the annotations for a given instance and calculates
-        a score indicating how much disagreement exists among annotators.
-        Higher scores indicate more disagreement, which suggests the item
-        might be more difficult or ambiguous to annotate.
+        Walks every user who has annotated this instance and, per schema,
+        computes the ratio of distinct labels (or distinct span-set
+        signatures) to the number of annotators. The result is the maximum
+        ratio across schemas — items with at least one disagreeing schema
+        get a high score.
 
-        Args:
-            instance_id: The ID of the instance to calculate disagreement for
-
-        Returns:
-            float: Disagreement score (higher = more disagreement)
+        Returns 0.0 when fewer than two annotators have rated the item or
+        when no UserStateManager is available (e.g., during tests that
+        exercise the item manager in isolation).
         """
-        # This is a placeholder implementation
-        # In a real implementation, you would:
-        # 1. Get all annotations for this instance
-        # 2. Calculate disagreement metrics (e.g., Krippendorff's alpha)
-        # 3. Return a normalized score
+        try:
+            from potato.user_state_management import get_user_state_manager
+            usm = get_user_state_manager()
+        except (ImportError, ValueError):
+            return 0.0
+        if usm is None:
+            return 0.0
 
-        # For now, return a random score as placeholder
-        return self.random.random()
+        annotators = list(self.instance_annotators.get(instance_id, ()))
+        if len(annotators) < 2:
+            return 0.0
+
+        # Aggregate per-schema labels + spans
+        schema_to_user_value: Dict[str, Dict[str, tuple]] = defaultdict(dict)
+        for uid in annotators:
+            ustate = usm.get_user_state(uid) if hasattr(usm, "get_user_state") else None
+            if ustate is None:
+                continue
+            for schema, labels in (ustate.get_label_annotations(instance_id) or {}).items():
+                # Represent as a tuple of label names so dict-style equality works.
+                value = tuple(sorted(
+                    str(getattr(l, "name", l.get("name") if isinstance(l, dict) else l))
+                    for l in labels
+                ))
+                schema_to_user_value[schema][uid] = value
+            for schema, spans in (ustate.get_span_annotations(instance_id) or {}).items():
+                value = tuple(sorted(
+                    (int(getattr(s, "start", s["start"] if isinstance(s, dict) else 0)),
+                     int(getattr(s, "end", s["end"] if isinstance(s, dict) else 0)),
+                     str(getattr(s, "name", s.get("name") if isinstance(s, dict) else "")))
+                    for s in spans
+                ))
+                schema_to_user_value[f"__span__{schema}"][uid] = value
+
+        if not schema_to_user_value:
+            return 0.0
+
+        scores = []
+        for values_by_user in schema_to_user_value.values():
+            if len(values_by_user) < 2:
+                continue
+            distinct = len(set(values_by_user.values()))
+            scores.append((distinct - 1) / max(1, len(values_by_user) - 1))
+        return max(scores) if scores else 0.0
 
     def _reclaim_stale_assignments(self):
         """
@@ -1575,16 +1662,112 @@ class ItemStateManager:
         )
         return True
 
+    def _clear_completed_assignment(
+        self,
+        user_state: 'UserState',
+        instance_id: str,
+        reason: str = "assignment_reclaim",
+    ) -> bool:
+        """Clear a completed annotation and release that assignment."""
+        user_id = getattr(user_state, 'user_id', None) or user_state.get_user_id()
+
+        if not user_state.has_annotated(instance_id):
+            return self._reclaim_unannotated_assignment(user_state, instance_id, reason)
+
+        user_state.clear_instance_annotations(instance_id)
+
+        unassigned = user_state.unassign_instance(instance_id)
+        if not unassigned:
+            return False
+
+        had_annotator_credit = user_id in self.instance_annotators[instance_id]
+        self.instance_annotators[instance_id].discard(user_id)
+        if had_annotator_credit and self.item_annotation_counts[instance_id] > 0:
+            self.item_annotation_counts[instance_id] -= 1
+
+        if instance_id in self.completed_instance_ids:
+            if not self._item_is_saturated(instance_id):
+                self.completed_instance_ids.discard(instance_id)
+
+        if instance_id not in self.completed_instance_ids and instance_id not in self.remaining_instance_ids:
+            self.remaining_instance_ids.append(instance_id)
+
+        if instance_id in self.assignment_timestamps:
+            self.assignment_timestamps[instance_id].pop(user_id, None)
+            if not self.assignment_timestamps[instance_id]:
+                del self.assignment_timestamps[instance_id]
+
+        self.logger.info(
+            "Cleared and reclaimed completed assignment %s from user %s (%s)",
+            instance_id,
+            user_id,
+            reason,
+        )
+        return True
+
+    def should_preserve_completed_annotations(self, reason: str = "assignment_reclaim") -> bool:
+        """Return whether completed annotations should survive a reclaim reason."""
+        default = self.reclaim_config.get('preserve_completed_annotations', True)
+
+        prolific_statuses = {
+            "prolific_returned": "RETURNED",
+            "prolific_timed_out": "TIMED-OUT",
+            "prolific_rejected": "REJECTED",
+        }
+        if reason in prolific_statuses:
+            prolific_config = self.reclaim_config.get("prolific", {})
+            if not isinstance(prolific_config, dict):
+                return default
+
+            prolific_default = prolific_config.get('preserve_completed_annotations', default)
+            status_policies = prolific_config.get("status_policies", {})
+            if not isinstance(status_policies, dict):
+                status_policies = {}
+            status_policy = status_policies.get(prolific_statuses[reason], {})
+            if isinstance(status_policy, dict):
+                return status_policy.get('preserve_completed_annotations', prolific_default)
+            return prolific_default
+
+        reason_to_section = {
+            "quality_control_block": ("quality_control",),
+            "stale_assignment": ("stale",),
+            "manual_admin_reclaim": ("manual",),
+            "prolific_dropped": ("prolific",),
+        }
+
+        path = reason_to_section.get(reason)
+        if not path:
+            return default
+
+        value = self.reclaim_config
+        for key in path:
+            if not isinstance(value, dict) or key not in value:
+                return default
+            value = value[key]
+
+        if isinstance(value, dict):
+            return value.get('preserve_completed_annotations', default)
+        return default
+
     def reclaim_unannotated_assignments_for_user(
         self,
         user_state: 'UserState',
         reason: str = "assignment_reclaim",
+        preserve_completed_annotations: Optional[bool] = None,
     ) -> List[str]:
-        """Reclaim all assigned-but-unannotated instances for a user."""
+        """Reclaim assignments for a user according to the retention policy."""
+        if preserve_completed_annotations is None:
+            preserve_completed_annotations = self.should_preserve_completed_annotations(reason)
+
         reclaimed = []
         with self._lock:
             for instance_id in list(user_state.get_assigned_instance_ids()):
-                if self._reclaim_unannotated_assignment(user_state, instance_id, reason):
+                if preserve_completed_annotations:
+                    did_reclaim = self._reclaim_unannotated_assignment(user_state, instance_id, reason)
+                else:
+                    did_reclaim = self._clear_completed_assignment(user_state, instance_id, reason)
+
+                if did_reclaim:
                     reclaimed.append(instance_id)
         return reclaimed
 
@@ -1592,8 +1775,9 @@ class ItemStateManager:
         self,
         user_ids: List[str],
         reason: str = "assignment_reclaim",
+        preserve_completed_annotations: Optional[bool] = None,
     ) -> Dict[str, List[str]]:
-        """Reclaim assigned-but-unannotated instances for several users."""
+        """Reclaim assignments for several users according to the retention policy."""
         from potato.user_state_management import get_user_state_manager
 
         usm = get_user_state_manager()
@@ -1606,6 +1790,7 @@ class ItemStateManager:
             reclaimed = self.reclaim_unannotated_assignments_for_user(
                 user_state,
                 reason=reason,
+                preserve_completed_annotations=preserve_completed_annotations,
             )
             if not reclaimed:
                 continue
@@ -1746,8 +1931,8 @@ class ItemStateManager:
         """
         count = 0
         for iid in self.remaining_instance_ids:
-            # Check if item has reached annotation limit
-            if self.max_annotations_per_item >= 0 and len(self.instance_annotators[iid]) >= self.max_annotations_per_item:
+            # Check if item has reached annotation limit (per-item override or global)
+            if self._item_is_saturated(iid):
                 continue
             # Check if user has already annotated this item
             if user_state.has_annotated(iid):
@@ -1781,13 +1966,46 @@ class ItemStateManager:
         # Update annotation count
         self.item_annotation_counts[instance_id] += 1
 
+        # Adaptive boost: when an item has begun gathering annotations under
+        # the default cap and shows real disagreement, raise its per-item cap
+        # so we keep gathering votes. The boost is one-shot per item.
+        if self.adaptive_boost.get('enabled') and self.adaptive_boost.get('boost_to', 0) >= 2:
+            current_count = len(self.instance_annotators[instance_id])
+            current_cap = self._get_annotator_cap_for_item(instance_id)
+            boost_to = self.adaptive_boost['boost_to']
+            if 2 <= current_count and current_cap >= 0 and current_cap < boost_to:
+                threshold = self.adaptive_boost.get('threshold', 0.5)
+                if self._calculate_disagreement_score(instance_id) >= threshold:
+                    item = self.instance_id_to_instance.get(instance_id)
+                    if item is not None:
+                        item.add_metadata('required_annotations', boost_to)
+                        self.logger.info(
+                            "Adaptive boost: %s raised to %d annotators (current=%d)",
+                            instance_id, boost_to, current_count,
+                        )
+                        if instance_id in self.completed_instance_ids:
+                            self.completed_instance_ids.discard(instance_id)
+                            if instance_id not in self.remaining_instance_ids:
+                                self.remaining_instance_ids.append(instance_id)
+
         # Check if this item has reached its annotation limit
-        if self.max_annotations_per_item >= 0 and len(self.instance_annotators[instance_id]) >= self.max_annotations_per_item:
+        if self._item_is_saturated(instance_id):
             # Remove from remaining instances if it's there
             if instance_id in self.remaining_instance_ids:
                 self.remaining_instance_ids.remove(instance_id)
             # Mark as completed
             self.completed_instance_ids.add(instance_id)
+            # If this was an overlap-sample item (cap >= 2), check whether
+            # annotators disagreed enough to route the item to adjudication.
+            cap = self._get_annotator_cap_for_item(instance_id)
+            if cap >= 2:
+                try:
+                    from potato.adjudication import get_adjudication_manager
+                    adj_mgr = get_adjudication_manager()
+                    if adj_mgr is not None:
+                        adj_mgr.try_enqueue_item(instance_id)
+                except Exception as exc:
+                    self.logger.debug("Adjudication auto-route skipped: %s", exc)
 
     def update_annotation_count(self, instance_id: str, delta=1):
         """

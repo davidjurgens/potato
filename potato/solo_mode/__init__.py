@@ -16,7 +16,7 @@ Key Components:
 - PromptManager: Prompt synthesis, versioning, and revision
 - UncertaintyEstimator: Pluggable uncertainty estimation strategies
 - InstanceSelector: Weighted instance selection for human review
-- DisagreementResolver: Human-LLM conflict resolution
+- DisagreementDetector: Type-specific human-LLM disagreement detection
 - ValidationTracker: Agreement metrics and thresholds
 """
 
@@ -31,7 +31,7 @@ from .manager import (
 from .prompt_manager import PromptManager, PromptRevision
 from .instance_selector import InstanceSelector, SelectionWeights
 from .llm_labeler import LLMLabelingThread, LabelingResult
-from .disagreement_resolver import DisagreementDetector, DisagreementResolver
+from .disagreement_resolver import DisagreementDetector
 from .validation_tracker import ValidationTracker, AgreementMetrics, ValidationSample
 from .edge_case_synthesizer import EdgeCaseSynthesizer, EdgeCase
 from .prompt_optimizer import PromptOptimizer, OptimizationResult
@@ -57,9 +57,8 @@ __all__ = [
     # LLM labeling
     'LLMLabelingThread',
     'LabelingResult',
-    # Disagreement resolution
+    # Disagreement detection (authoritative tracking lives on SoloModeManager)
     'DisagreementDetector',
-    'DisagreementResolver',
     # Validation tracking
     'ValidationTracker',
     'AgreementMetrics',

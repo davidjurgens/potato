@@ -1,130 +1,336 @@
 {% extends "solo/base_solo.html" %}
 
-{% block title %}Annotate - Solo Mode{% endblock %}
+{% block title %}Annotate · Solo Mode · Potato{% endblock %}
+
+{% block extra_head %}
+<style>
+    .annotate-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: var(--space-md, 1rem);
+        margin-bottom: var(--space-md, 1rem);
+    }
+
+    .annotate-header h1 {
+        font-size: var(--text-md, 1.0625rem);
+        margin: 0;
+        color: var(--muted-foreground, #71717a);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .annotate-counter {
+        font-size: var(--text-xs, 0.75rem);
+        color: var(--muted-foreground, #71717a);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .llm-suggestion-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-md, 1rem);
+        margin-bottom: var(--space-md, 1rem);
+        flex-wrap: wrap;
+    }
+
+    .llm-suggestion-row .suggestion-label {
+        font-size: var(--text-sm, 0.8125rem);
+        color: var(--muted-foreground, #71717a);
+    }
+
+    .llm-suggestion-row .suggested-badge {
+        font-weight: 600;
+        color: var(--primary, #6e56cf);
+        padding: 0 var(--space-xs, 0.25rem);
+    }
+
+    .confidence-label {
+        font-size: var(--text-xs, 0.75rem);
+        color: var(--muted-foreground, #71717a);
+        margin-top: 2px;
+    }
+
+    .confidence-label .qualifier {
+        font-weight: 600;
+        color: var(--foreground, #09090b);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-right: var(--space-xs, 0.25rem);
+    }
+
+    .completion-card {
+        text-align: center;
+        padding: var(--space-xl, 2rem) var(--space-lg, 1.5rem);
+    }
+
+    .completion-card h1 {
+        font-size: var(--text-xl, 1.25rem);
+        margin: 0 0 var(--space-sm, 0.5rem) 0;
+    }
+
+    .completion-card p {
+        color: var(--muted-foreground, #71717a);
+        margin: 0 auto var(--space-lg, 1.5rem) auto;
+        max-width: 40ch;
+        font-size: var(--text-sm, 0.8125rem);
+    }
+
+    .completion-stats {
+        display: inline-grid;
+        grid-template-columns: auto auto;
+        gap: var(--space-xs, 0.25rem) var(--space-lg, 1.5rem);
+        text-align: left;
+        margin: 0 auto var(--space-lg, 1.5rem) auto;
+        font-size: var(--text-sm, 0.8125rem);
+    }
+
+    .completion-stats dt {
+        color: var(--muted-foreground, #71717a);
+    }
+    .completion-stats dd {
+        margin: 0;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--foreground, #09090b);
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<h1>Annotation</h1>
-
 {% if instance %}
-<form method="POST" action="{{ url_for('solo_mode.annotate') }}">
-    <input type="hidden" name="instance_id" value="{{ instance.id }}">
-    <input type="hidden" name="annotation" id="selected-label" value="">
-
-    <div class="instance-text" id="instance-text">
-        {{ instance.text }}
+    <div class="annotate-header">
+        <h1>Annotate</h1>
+        {% if stats %}
+            {% set total = stats.human_labeled + stats.remaining %}
+            <span class="annotate-counter" aria-live="polite">
+                Instance {{ stats.human_labeled + 1 }} of {{ total }}
+            </span>
+        {% endif %}
     </div>
 
-    {% if llm_prediction %}
-    <div class="llm-reasoning">
-        <div class="llm-reasoning-header">
-            <strong>LLM Suggestion: {{ llm_prediction.label }}</strong>
-            <span>▼</span>
-        </div>
-        <div class="llm-reasoning-content">
-            {% if llm_prediction.reasoning %}
-            <p>{{ llm_prediction.reasoning }}</p>
-            {% endif %}
+    <form method="POST" action="{{ url_for('solo_mode.annotate') }}" id="annotate-form">
+        <input type="hidden" name="instance_id" value="{{ instance.id }}">
+        <input type="hidden" name="annotation" id="selected-label" value="">
 
-            <div class="confidence-bar">
-                {% set conf_class = 'confidence-low' if llm_prediction.confidence < 0.5 else ('confidence-mid' if llm_prediction.confidence < 0.8 else 'confidence-high') %}
-                <div class="confidence-fill {{ conf_class }}" style="width: {{ (llm_prediction.confidence * 100)|int }}%"></div>
+        <div class="instance-text" id="instance-text">
+            {{ instance.text }}
+        </div>
+
+        {% if llm_prediction %}
+        {% set conf = (llm_prediction.confidence * 100)|int %}
+        {% set qualifier = 'Low confidence' if llm_prediction.confidence < 0.5
+                           else ('Moderate confidence' if llm_prediction.confidence < 0.8 else 'High confidence') %}
+        <div class="llm-suggestion-row">
+            <div>
+                <div class="suggestion-label">
+                    The LLM suggests
+                    <span class="suggested-badge">{{ llm_prediction.label }}</span>
+                </div>
+                <div class="confidence-label">
+                    <span class="qualifier">{{ qualifier }}</span>· {{ conf }}%
+                </div>
             </div>
-            <p style="font-size: 12px; color: #666;">
-                Confidence: {{ (llm_prediction.confidence * 100)|int }}%
+            <button type="button"
+                    class="btn btn-secondary"
+                    id="accept-llm-btn"
+                    data-llm-label="{{ llm_prediction.label }}"
+                    aria-keyshortcuts="A">
+                Accept (A)
+            </button>
+        </div>
+
+        <div class="llm-reasoning">
+            <div class="llm-reasoning-header" aria-expanded="false">
+                <strong>Reasoning</strong>
+                <span class="disclosure-icon" aria-hidden="true"></span>
+            </div>
+            <div class="llm-reasoning-content" hidden>
+                {% if llm_prediction.reasoning %}
+                <p style="margin: 0 0 var(--space-sm, 0.5rem);">{{ llm_prediction.reasoning }}</p>
+                {% endif %}
+                <div class="confidence-bar" role="progressbar"
+                     aria-label="LLM confidence"
+                     aria-valuenow="{{ conf }}" aria-valuemin="0" aria-valuemax="100">
+                    {% set conf_class = 'confidence-low' if llm_prediction.confidence < 0.5
+                                        else ('confidence-mid' if llm_prediction.confidence < 0.8 else 'confidence-high') %}
+                    <div class="confidence-fill {{ conf_class }}"
+                         style="width: {{ conf }}%"></div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <fieldset style="border: none; padding: 0; margin: 0;">
+            <legend class="form-help" style="margin-bottom: var(--space-sm, 0.5rem);">
+                Pick a label (use number keys, or click)
+            </legend>
+            <div class="label-buttons" role="group" aria-label="Annotation labels">
+                {% for label in labels %}
+                <button type="button"
+                        class="label-btn{% if llm_prediction and llm_prediction.label == label %} suggested{% endif %}"
+                        data-label="{{ label }}"
+                        aria-pressed="false">
+                    {% if loop.index <= 9 %}
+                    <span class="label-key" aria-hidden="true">{{ loop.index }}</span>
+                    {% endif %}
+                    <span>{{ label }}</span>
+                </button>
+                {% endfor %}
+            </div>
+        </fieldset>
+
+        <div class="solo-nav">
+            <span></span>
+            <button type="submit" class="btn btn-primary" id="submit-btn" disabled>
+                <span id="submit-label">Submit</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M5 12h14M13 6l6 6-6 6"
+                          stroke="currentColor" stroke-width="2"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </div>
+    </form>
+{% elif message %}
+    <div class="completion-card" role="status" aria-live="polite">
+        {% if phase in ('completed', 'final_validation', 'autonomous_labeling') %}
+            <h1>You're done with this batch</h1>
+            <p>
+                {% if phase == 'completed' %}
+                    The workflow is complete. Export your annotations from the dashboard.
+                {% else %}
+                    {{ message }}. The LLM is taking it from here while the dataset finishes labeling.
+                {% endif %}
             </p>
+        {% else %}
+            <h1>Caught up for now</h1>
+            <p>{{ message }}. New instances may appear shortly &mdash; check the dashboard for progress.</p>
+        {% endif %}
+
+        {% if stats %}
+        <dl class="completion-stats">
+            <dt>You labeled</dt><dd>{{ stats.human_labeled }}</dd>
+            <dt>LLM labeled</dt><dd>{{ stats.llm_labeled }}</dd>
+            <dt>Agreement</dt><dd>{{ (stats.agreement_rate * 100)|int }}%</dd>
+            <dt>Remaining</dt><dd>{{ stats.remaining }}</dd>
+        </dl>
+        {% endif %}
+
+        <div>
+            <a href="{{ url_for('solo_mode.status') }}" class="btn btn-primary">
+                Go to dashboard
+            </a>
         </div>
     </div>
-    {% endif %}
-
-    <h3>Select a label:</h3>
-    <div class="label-buttons">
-        {% for label in labels %}
-        <button type="button" class="label-btn" data-label="{{ label }}">{{ label }}</button>
-        {% endfor %}
-    </div>
-
-    <div class="solo-nav">
-        <span></span>
-        <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Submit &rarr;</button>
-    </div>
-</form>
-{% elif message %}
-<div class="alert alert-info">
-    {{ message }}
-</div>
-<div class="solo-nav">
-    <span></span>
-    <a href="{{ url_for('solo_mode.status') }}" class="btn btn-primary">View Status</a>
-</div>
 {% endif %}
 {% endblock %}
 
 {% block stats %}
-{{ super() }}
+{# Drop redundant "Phase" row; lead with progress, which is what the user wants here. #}
 {% if stats %}
+{% set total = stats.human_labeled + stats.remaining %}
 <div class="stat-item">
-    <span class="stat-label">Human Labels</span>
-    <span class="stat-value">{{ stats.human_labeled }}</span>
+    <span class="stat-label">Progress</span>
+    <span class="stat-value">{{ stats.human_labeled }} / {{ total }}</span>
 </div>
 <div class="stat-item">
-    <span class="stat-label">LLM Labels</span>
+    <span class="stat-label">Remaining</span>
+    <span class="stat-value">{{ stats.remaining }}</span>
+</div>
+<div class="stat-item">
+    <span class="stat-label">LLM labeled</span>
     <span class="stat-value">{{ stats.llm_labeled }}</span>
 </div>
 <div class="stat-item">
     <span class="stat-label">Agreement</span>
     <span class="stat-value">{{ (stats.agreement_rate * 100)|int }}%</span>
 </div>
-<div class="stat-item">
-    <span class="stat-label">Remaining</span>
-    <span class="stat-value">{{ stats.remaining }}</span>
-</div>
+{% else %}
+{{ super() }}
 {% endif %}
 {% endblock %}
 
 {% block sidebar_extra %}
-<h3>Keyboard Shortcuts</h3>
-<div style="font-size: 14px; color: #666;">
+{% if labels and instance %}
+<h3>Shortcuts</h3>
+<div style="font-size: var(--text-sm, 0.8125rem); color: var(--muted-foreground, #71717a);">
     {% for label in labels[:9] %}
-    <div style="margin-bottom: 5px;">
-        <kbd style="background: #eee; padding: 2px 6px; border-radius: 3px;">{{ loop.index }}</kbd>
-        {{ label }}
+    <div style="margin-bottom: var(--space-xs, 0.25rem); display: flex; gap: var(--space-sm, 0.5rem); align-items: center;">
+        <kbd>{{ loop.index }}</kbd>
+        <span>{{ label }}</span>
     </div>
     {% endfor %}
-    <div style="margin-top: 10px;">
-        <kbd style="background: #eee; padding: 2px 6px; border-radius: 3px;">Enter</kbd>
-        Submit
+    {% if llm_prediction %}
+    <div style="margin-bottom: var(--space-xs, 0.25rem); display: flex; gap: var(--space-sm, 0.5rem); align-items: center;">
+        <kbd>A</kbd>
+        <span>Accept LLM</span>
+    </div>
+    {% endif %}
+    <div style="margin-top: var(--space-sm, 0.5rem); display: flex; gap: var(--space-sm, 0.5rem); align-items: center;">
+        <kbd>Enter</kbd>
+        <span>Submit</span>
     </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script>
     const labels = {{ labels|tojson|safe }};
+    const submitBtn = document.getElementById('submit-btn');
+    const submitLabel = document.getElementById('submit-label');
+    const selectedInput = document.getElementById('selected-label');
+    const form = document.getElementById('annotate-form');
 
-    // Enable submit when label is selected
-    document.querySelectorAll('.label-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.getElementById('submit-btn').disabled = false;
+    function selectLabel(label) {
+        if (!label) return;
+        document.querySelectorAll('.label-btn').forEach(b => {
+            const isMatch = b.dataset.label === label;
+            b.classList.toggle('selected', isMatch);
+            b.setAttribute('aria-pressed', String(isMatch));
         });
+        if (selectedInput) selectedInput.value = label;
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            if (submitLabel) submitLabel.textContent = `Submit: ${label}`;
+        }
+    }
+
+    // Label button clicks (delegated)
+    document.querySelectorAll('.label-btn').forEach(btn => {
+        btn.addEventListener('click', () => selectLabel(btn.dataset.label));
     });
+
+    // One-click accept LLM suggestion
+    const acceptBtn = document.getElementById('accept-llm-btn');
+    if (acceptBtn) {
+        acceptBtn.addEventListener('click', () => {
+            selectLabel(acceptBtn.dataset.llmLabel);
+            form && form.requestSubmit && form.requestSubmit();
+        });
+    }
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-        // Number keys 1-9 for labels
+        // Don't intercept when an input/textarea is focused
+        const tag = (document.activeElement && document.activeElement.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
         if (e.key >= '1' && e.key <= '9') {
-            const index = parseInt(e.key) - 1;
-            if (index < labels.length) {
-                const btns = document.querySelectorAll('.label-btn');
-                btns.forEach(b => b.classList.remove('selected'));
-                btns[index].classList.add('selected');
-                document.getElementById('selected-label').value = labels[index];
-                document.getElementById('submit-btn').disabled = false;
+            const idx = parseInt(e.key, 10) - 1;
+            if (idx < labels.length) selectLabel(labels[idx]);
+        } else if ((e.key === 'a' || e.key === 'A') && acceptBtn) {
+            acceptBtn.click();
+        } else if (e.key === 'Enter') {
+            // Only submit when a label is actually selected, not just because
+            // the button became visually enabled.
+            if (selectedInput && selectedInput.value) {
+                e.preventDefault();
+                form && form.requestSubmit && form.requestSubmit();
             }
-        }
-        // Enter to submit
-        if (e.key === 'Enter' && !document.getElementById('submit-btn').disabled) {
-            e.preventDefault();
-            document.querySelector('form').submit();
         }
     });
 </script>

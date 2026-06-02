@@ -204,13 +204,13 @@ class SoloModeManager:
         # Background labeling
         self._labeling_thread: Optional[threading.Thread] = None
         self._stop_labeling = threading.Event()
+        self._pause_labeling = threading.Event()
 
         # Component instances (lazy initialization)
         self._edge_case_synthesizer = None
         self._edge_case_rule_manager = None
         self._prompt_manager = None
         self._instance_selector = None
-        self._disagreement_resolver = None
         self._validation_tracker = None
         self._llm_labeling_thread = None
         self._prompt_optimizer = None
@@ -290,16 +290,6 @@ class SoloModeManager:
             )
             self._instance_selector = InstanceSelector(weights, self.app_config)
         return self._instance_selector
-
-    @property
-    def disagreement_resolver(self):
-        """Lazy-initialized disagreement resolver."""
-        if self._disagreement_resolver is None:
-            from .disagreement_resolver import DisagreementResolver
-            self._disagreement_resolver = DisagreementResolver(
-                self.app_config, self.config
-            )
-        return self._disagreement_resolver
 
     @property
     def validation_tracker(self):
@@ -2350,6 +2340,7 @@ class SoloModeManager:
                 return False
 
             self._stop_labeling.clear()
+            self._pause_labeling.clear()
             self._labeling_thread = threading.Thread(
                 target=self._background_labeling_loop,
                 name="SoloModeLabelingThread",
@@ -2369,12 +2360,36 @@ class SoloModeManager:
         self._labeling_thread = None
         logger.info("Stopped background LLM labeling")
 
-    def pause_background_labeling(self) -> None:
-        """Pause background labeling (alias for stop)."""
-        self.stop_background_labeling()
+    def pause_background_labeling(self) -> bool:
+        """Pause the background labeling loop without tearing down the thread.
+
+        Returns True if the loop was running and is now paused, False if
+        nothing was running.
+        """
+        if not self.is_background_labeling_running():
+            return False
+        self._pause_labeling.set()
+        logger.info("Paused background LLM labeling")
+        return True
+
+    def resume_background_labeling(self) -> bool:
+        """Resume a paused background labeling loop.
+
+        Returns True if a paused loop was resumed, False if nothing was paused.
+        """
+        if not self.is_background_labeling_running():
+            return False
+        was_paused = self._pause_labeling.is_set()
+        self._pause_labeling.clear()
+        if was_paused:
+            logger.info("Resumed background LLM labeling")
+        return was_paused
+
+    def is_background_labeling_paused(self) -> bool:
+        return self._pause_labeling.is_set()
 
     def is_background_labeling_running(self) -> bool:
-        """Check if background labeling is running."""
+        """Check if background labeling is running (paused counts as running)."""
         return (
             self._labeling_thread is not None and
             self._labeling_thread.is_alive()
@@ -2397,6 +2412,11 @@ class SoloModeManager:
 
         while not self._stop_labeling.is_set():
             try:
+                # Honor pause requests: sleep in short polls so resume is responsive.
+                if self._pause_labeling.is_set():
+                    self._stop_labeling.wait(2)
+                    continue
+
                 # Check if we've hit the max parallel labels
                 with self._lock:
                     current_count = len(self.llm_labeled_ids - self.human_labeled_ids)
@@ -2596,6 +2616,13 @@ class SoloModeManager:
                 if self._edge_case_rule_manager is not None:
                     state['edge_case_rule_data'] = self._edge_case_rule_manager.to_dict()
 
+                # Persist ValidationTracker so confusion matrix and comparison
+                # history survive restarts. Without this, /api/confusion-analysis,
+                # /api/disagreement-explorer, and the dashboard's confusion tab
+                # all reset to empty on every server restart.
+                if self._validation_tracker is not None:
+                    state['validation_tracker'] = self._validation_tracker.to_dict()
+
                 # Include confidence routing stats (informational only)
                 if self._confidence_router is not None:
                     state['confidence_routing_stats'] = self._confidence_router.get_stats()
@@ -2694,6 +2721,11 @@ class SoloModeManager:
                     self._edge_case_rule_manager = EdgeCaseRuleManager.from_dict(
                         ecr_data, state_dir=self.config.state_dir
                     )
+
+                # Restore ValidationTracker (confusion matrix + comparison history)
+                vt_data = state.get('validation_tracker')
+                if vt_data:
+                    self.validation_tracker.from_dict(vt_data)
 
             # Load phase state
             self.phase_controller.load_state()
@@ -2831,8 +2863,11 @@ class SoloModeManager:
                 'labeled_count': len(self.llm_labeled_ids),
                 'queue_size': 0,  # Placeholder
                 'error_count': 0,  # Placeholder
-                'is_paused': not self.is_background_labeling_running(),
-                'is_running': self.is_background_labeling_running(),
+                'is_paused': self.is_background_labeling_paused(),
+                'is_running': (
+                    self.is_background_labeling_running()
+                    and not self.is_background_labeling_paused()
+                ),
             }
             stats['confidence_routing'] = (
                 self._confidence_router.get_stats()

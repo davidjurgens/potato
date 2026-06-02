@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inter-Annotator Agreement &mdash; Overlap Sample</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  /* IAA page — schema-by-schema agreement metrics over the overlap sample.
+     Inherits the Potato admin design system; only the metric-cell variants
+     and value typography are local. */
+  .iaa-meta {
+    color: var(--muted-foreground);
+    font-size: 0.875rem;
+    margin: 0 0 1.5rem 0;
+    max-width: 70ch;
+    line-height: 1.6;
+  }
+
+  /* iaa-schema-card extends .dashboard-card; only the bottom-margin is local. */
+  .iaa-schema-card {
+    margin-bottom: 1.5rem;
+  }
+
+  .iaa-schema-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 0 0 1rem 0;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .iaa-schema-header h2 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--heading-color);
+  }
+
+  .iaa-kind-tag {
+    display: inline-block;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius);
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-left: 0.5rem;
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+  }
+
+  .iaa-schema-footer {
+    background: var(--muted);
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+  }
+
+  td.iaa-metric-value {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+
+  td.iaa-metric-good {
+    background-color: rgba(16, 185, 129, 0.08);
+    color: var(--success-color);
+  }
+
+  td.iaa-metric-poor {
+    background-color: rgba(239, 68, 68, 0.08);
+    color: var(--destructive);
+  }
+
+  .iaa-band {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.0625rem 0.375rem;
+    border-radius: var(--radius);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+    border: 1px solid currentColor;
+    background: white;
+  }
+
+  .iaa-scale-note {
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+    margin: 0 0 0.75rem 0;
+    line-height: 1.5;
+  }
+
+  .iaa-scale-note strong {
+    color: var(--text-color);
+    font-weight: 600;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .iaa-empty {
+    color: var(--muted-foreground);
+    font-style: italic;
+  }
+
+  .iaa-details {
+    background: white;
+    border-radius: var(--radius);
+    padding: 1rem 1.5rem;
+    box-shadow: var(--box-shadow);
+    border: 1px solid var(--border);
+  }
+
+  .iaa-details summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--heading-color);
+  }
+
+  .iaa-details summary:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius);
+  }
+</style>
+</head>
+<body>
+  <div class="admin-container">
+    <header class="admin-header">
+      <h1>Inter-Annotator Agreement</h1>
+      <div class="header-actions">
+        <a href="/admin" class="pagination-button">&larr; Admin Dashboard</a>
+      </div>
+    </header>
+    <main class="admin-main">
+      <p class="iaa-meta">
+        Overlap sample &mdash; {{ report.n_overlap_items }} item{{ '' if report.n_overlap_items == 1 else 's' }} at cap.
+        Each schema is scored with the metrics appropriate to its annotation type.
+      </p>
+
+      {% if not report.schemas %}
+        <div class="dashboard-card iaa-schema-card">
+          <p class="iaa-empty">No overlap-sample items have reached their cap yet. Once the
+          sample items have been annotated by the configured number of annotators,
+          IAA will appear here.</p>
+        </div>
+      {% endif %}
+
+      {% for schema_name, schema in report.schemas.items() %}
+        {# Detect which scales appear in this schema so we can show a single
+           explanatory note per card instead of repeating it on every row. #}
+        {% set ns = namespace(has_kappa=false, has_correlation=false, has_raw=false, has_span=false, has_lower=false) %}
+        {% for metric, value in schema.metrics.items() %}
+          {% if metric not in ('n_items', 'n_annotators', 'n_aligned_items') %}
+            {% if metric.endswith('kappa') or metric.startswith('alpha') or metric == 'gamma_mathet' %}{% set ns.has_kappa = true %}{% endif %}
+            {% if metric in ('pearson_r', 'spearman_rho', 'kendall_tau', 'icc_2_k') %}{% set ns.has_correlation = true %}{% endif %}
+            {% if metric in ('percent_agreement', 'mean_jaccard') %}{% set ns.has_raw = true %}{% endif %}
+            {% if metric in ('span_f1_exact', 'span_f1_partial', 'token_level_kappa') %}{% set ns.has_span = true %}{% endif %}
+            {% if metric in ('mae', 'rmse', 'spearman_footrule') %}{% set ns.has_lower = true %}{% endif %}
+          {% endif %}
+        {% endfor %}
+        <section class="dashboard-card iaa-schema-card">
+          <div class="iaa-schema-header">
+            <h2>{{ schema_name }}<span class="iaa-kind-tag">{{ schema.kind }} &middot; {{ schema.annotation_type }}</span></h2>
+          </div>
+          {% if ns.has_kappa %}
+          <p class="iaa-scale-note"><strong>κ-family scale (κ, α, γ):</strong>
+            &lt;0.2 poor &middot; 0.2&ndash;0.4 fair &middot; 0.4&ndash;0.6 moderate &middot; 0.6&ndash;0.8 substantial &middot; &gt;0.8 strong.</p>
+          {% endif %}
+          {% if ns.has_correlation %}
+          <p class="iaa-scale-note"><strong>Correlation / ICC:</strong> ranges &minus;1 to 1; closer to 1 is stronger agreement.</p>
+          {% endif %}
+          {% if ns.has_raw %}
+          <p class="iaa-scale-note"><strong>Raw agreement (% agreement, Jaccard):</strong> 0 to 1; no chance correction.</p>
+          {% endif %}
+          {% if ns.has_span %}
+          <p class="iaa-scale-note"><strong>Span F1 / token κ:</strong> 0 to 1 (κ can be negative); <em>span_f1_partial</em> is the conventional reporting metric.</p>
+          {% endif %}
+          {% if ns.has_lower %}
+          <p class="iaa-scale-note"><strong>MAE / RMSE / Spearman footrule:</strong> lower is better; 0 means perfect agreement.</p>
+          {% endif %}
+          <div class="admin-table-container">
+            <table class="admin-table">
+              <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+              <tbody>
+                {% for metric, value in schema.metrics.items() %}
+                  {% if metric not in ('n_items', 'n_annotators', 'n_aligned_items') %}
+                  {% set is_num = value is number and value == value %}
+                  {% set band = '' %}
+                  {% if is_num %}
+                    {% if value >= 0.6 %}{% set band = 'strong' %}
+                    {% elif value < 0.2 %}{% set band = 'weak' %}
+                    {% endif %}
+                  {% endif %}
+                  <tr>
+                    <td>{{ metric }}</td>
+                    <td class="iaa-metric-value
+                        {% if band == 'strong' %}iaa-metric-good{% elif band == 'weak' %}iaa-metric-poor{% endif %}">
+                      {% if is_num %}{{ "%.3f"|format(value) }}{% else %}n/a{% endif %}
+                      {% if band %}<span class="iaa-band" aria-hidden="true">{{ band }}</span><span class="sr-only"> &mdash; {{ band }} agreement</span>{% endif %}
+                    </td>
+                  </tr>
+                  {% endif %}
+                {% endfor %}
+                <tr class="iaa-schema-footer">
+                  <td colspan="2">
+                    {{ schema.metrics.n_items }} items &middot; {{ schema.metrics.n_annotators }} annotators
+                    {% if schema.metrics.n_aligned_items is defined %} &middot; {{ schema.metrics.n_aligned_items }} fully-aligned items{% endif %}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {% endfor %}
+
+      <details class="iaa-details">
+        <summary>Per-item breakdown ({{ report['items']|length }} items)</summary>
+        <div class="admin-table-container" style="margin-top: 1rem;">
+          <table class="admin-table">
+            <thead><tr><th>Instance</th><th>Cap</th><th>Annotators</th></tr></thead>
+            <tbody>
+              {% for iid, item in report['items'].items() %}
+              <tr>
+                <td>{{ iid }}</td>
+                <td>{{ item.cap }}</td>
+                <td>{{ item.annotators|join(', ') }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </main>
+  </div>
+</body>
+</html>

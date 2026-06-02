@@ -401,6 +401,13 @@ attention_checks:
     warn_threshold: 2
     block_threshold: 5
 
+# Optional: discard all completed work from QC-blocked users.
+# If omitted, completed annotations are preserved, while the failed
+# attention-check response itself is not kept.
+instance_reclaim:
+  quality_control:
+    preserve_completed_annotations: false
+
 gold_standards:
   enabled: true
   items_file: "data/gold_standards.json"

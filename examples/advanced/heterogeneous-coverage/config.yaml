@@ -1,0 +1,73 @@
+port: 9100
+annotation_task_name: Heterogeneous Coverage Example
+task_dir: .
+output_annotation_dir: annotation_output/heterogeneous-coverage/
+output_annotation_format: tsv
+annotation_codebook_url: ''
+alert_time_each_instance: 10000000
+random_seed: 1234
+data_files:
+- data/items.json
+
+item_properties:
+  id_key: id
+  text_key: text
+  category_key: domain
+
+user_config:
+  allow_all_users: true
+  users: []
+
+# Most items get 1 annotator; 20% are sampled (stratified by domain) for
+# 3-annotator coverage. When the first two annotators on an overlap item
+# disagree above 0.5, the cap is bumped to 3 automatically.
+num_annotators_per_item:
+  default: 1
+  overlap_sample:
+    fraction: 0.2
+    count: 3
+    stratify_by: domain
+    seed: 42
+  adaptive:
+    enabled: true
+    disagreement_threshold: 0.5
+    boost_to: 3
+
+# Two expertise tiers: experts review a smaller load, novices a larger one.
+per_annotator_quota:
+  default: 30
+  by_user_role:
+    expert: 10
+    novice: 50
+user_roles:
+  alice: expert
+  bob: expert
+  carol: novice
+  dave: novice
+
+# Low-agreement overlap items auto-route into the adjudication queue.
+adjudication:
+  enabled: true
+  adjudicator_users:
+    - admin
+  min_annotations: 2
+  agreement_threshold: 0.75
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: Overall sentiment of the text
+    labels:
+      - positive
+      - negative
+      - neutral
+    sequential_key_binding: true
+  - annotation_type: span
+    name: opinion_targets
+    description: Highlight what the opinion is about
+    labels:
+      - person
+      - product
+      - organization
+
+site_dir: default

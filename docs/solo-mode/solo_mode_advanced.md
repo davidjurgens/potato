@@ -126,7 +126,7 @@ solo_mode:
 ### API
 
 ```
-GET /solo/api/confusion
+GET /solo/api/confusion-analysis
 ```
 
 Returns confusion matrix data with heatmap-ready cell values, per-label accuracy, and enriched patterns.
@@ -152,16 +152,22 @@ The explorer is read-only — it aggregates data from the validation tracker and
 ### API
 
 ```
-GET /solo/api/disagreements
+GET /solo/api/disagreement-explorer
 ```
 
 Returns `scatter_points`, `disagreements`, `label_breakdown`, and `summary` data.
+Accepts an optional `?label=<label>` query parameter to filter to one label.
 
 ```
-GET /solo/api/disagreements/timeline
+GET /solo/api/disagreement-timeline
 ```
 
 Returns `buckets` (per-window stats) and `trend` classification.
+Accepts `?bucket_size=<N>` (clamped to [2, 100], default 10).
+
+> Note: `GET /solo/api/disagreements` (without the `-explorer` suffix) is a
+> separate, simpler endpoint that returns aggregate counts only (`total`,
+> `pending`, `resolved`, `pending_ids`).
 
 ---
 
@@ -209,10 +215,28 @@ solo_mode:
 ### API
 
 ```
-GET /solo/api/refinement/status
+GET /solo/api/refinement-status
 ```
 
 Returns enabled state, cycle count, running/stopped state, stop reason, patience countdown, and full cycle history.
+
+Related refinement endpoints (all require authentication):
+
+```
+POST /solo/api/refinement/trigger     # Manually trigger a refinement cycle
+GET  /solo/api/refinement/log         # Full cycle history (validated framework)
+GET  /solo/api/refinement/pending     # Candidates awaiting admin approval
+GET  /solo/api/refinement/strategies  # List available refinement strategies
+GET  /solo/api/reannotation-report    # Before/after accuracy on re-annotated instances
+```
+
+Admin-only (require `X-API-Key`):
+
+```
+POST /solo/api/refinement/reset       # Reset refinement loop state
+POST /solo/api/refinement/approve     # Apply a pending refinement candidate
+POST /solo/api/refinement/reject      # Reject a pending refinement candidate
+```
 
 ---
 
@@ -271,11 +295,9 @@ Plus global stats: `total_routed` and `human_routed_count`.
 
 ### API
 
-```
-GET /solo/api/routing/stats
-```
-
-Returns per-tier and global routing statistics.
+Per-tier and global confidence-routing stats are included in the response of
+`GET /solo/api/status` under `llm_stats.confidence_routing` when routing is
+enabled. There is no dedicated routing-stats endpoint.
 
 ---
 
@@ -326,13 +348,11 @@ solo_mode:
 POST /solo/api/optimize-prompt
 ```
 
-Triggers on-demand optimization.
+Triggers on-demand optimization. (Requires authentication.)
 
-```
-GET /solo/api/optimization/history
-```
-
-Returns optimization history including before/after accuracy, changes made, and rationale.
+Optimization history is exposed via `GET /solo/api/prompts`, which returns
+the prompt version history including who/what produced each version
+(`user_setup`, `manual_edit`, `prompt_optimizer`, etc.).
 
 ---
 
@@ -354,22 +374,17 @@ Edge case synthesis is part of the core Solo Mode workflow (phases 3–5) and us
 ### API
 
 ```
-POST /solo/api/synthesize-edge-cases
-```
-
-Generates new edge cases based on the current task description and prompt.
-
-```
 GET /solo/api/edge-cases
 ```
 
-Returns all synthesized edge cases with their labeling status.
+Returns all synthesized edge cases with their labeling status (counts of
+total, labeled, and unlabeled cases).
 
-```
-POST /solo/api/edge-cases/{case_id}/label
-```
-
-Records a human label for a synthesized edge case.
+Edge case synthesis runs automatically when the workflow enters the
+`edge_case_synthesis` phase — there is no separate trigger endpoint.
+Labeling individual edge cases happens through the `/solo/edge-cases`
+page route (POST with `case_id`, `label`, and optional `notes`), not via
+a dedicated REST endpoint.
 
 ---
 

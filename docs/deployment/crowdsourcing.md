@@ -155,6 +155,22 @@ assigned-but-unannotated items from workers whose submissions are `RETURNED`,
 `TIMED-OUT`, or `REJECTED`, so abandoned batches can be assigned to other workers.
 Annotations already completed by those workers are preserved.
 
+If your study should treat dropout reasons differently, configure
+`instance_reclaim`. For example, preserve completed annotations from timed-out
+workers but discard annotations from rejected workers:
+
+```yaml
+instance_reclaim:
+  enabled: true
+  prolific:
+    preserve_completed_annotations: true
+    status_policies:
+      TIMED-OUT:
+        preserve_completed_annotations: true
+      REJECTED:
+        preserve_completed_annotations: false
+```
+
 ### Setup Prolific API
 
 1. **Get your Prolific API token** from your [Prolific account settings](https://app.prolific.com/account/general)

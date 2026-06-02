@@ -64,6 +64,7 @@ Role-based guides that walk you through Potato for your specific use case:
 
 - [Annotation Navigation](workflow/annotation_navigation.md) - Navigation tools and status indicators
 - [Task Assignment](advanced/task_assignment.md) - Assignment strategies and configuration
+- [Heterogeneous Coverage](advanced/heterogeneous_coverage.md) - Single-annotator default with a multi-annotator overlap sample, adaptive boost, per-annotator quotas, and full IAA reporting
 - [Diversity Ordering](workflow/diversity_ordering.md) - Embedding-based clustering for diverse item presentation
 - [Training Phase](workflow/training_phase.md) - Annotator training and qualification
 - [Quality Control](workflow/quality_control.md) - Attention checks and gold standards

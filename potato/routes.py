@@ -139,12 +139,16 @@ def _inject_quality_control_item_if_needed(username, user_state):
 
 def _reclaim_blocked_user_assignments(username, user_state, current_instance_id=None):
     """Release unannotated assignments after a user is blocked."""
-    if current_instance_id and hasattr(user_state, "clear_instance_annotations"):
+    item_manager = get_item_state_manager()
+    preserve_completed = item_manager.should_preserve_completed_annotations("quality_control_block")
+
+    if current_instance_id:
         user_state.clear_instance_annotations(current_instance_id)
 
-    reclaimed = get_item_state_manager().reclaim_unannotated_assignments_for_user(
+    reclaimed = item_manager.reclaim_unannotated_assignments_for_user(
         user_state,
         reason="quality_control_block",
+        preserve_completed_annotations=preserve_completed,
     )
 
     if reclaimed:
@@ -2909,6 +2913,41 @@ def admin_api_agreement():
     if isinstance(result, tuple):
         return jsonify(result[0]), result[1]
     return jsonify(result)
+
+
+@app.route("/admin/iaa", methods=["GET"])
+def admin_iaa():
+    """
+    Inter-annotator agreement over the overlap-sample items.
+
+    Computes a schema-appropriate set of metrics (nominal: Cohen/Fleiss kappa,
+    Krippendorff alpha; ordinal: weighted kappa, Spearman rho; continuous:
+    Pearson, ICC; span: token kappa, span F1, alpha_U, gamma; etc.).
+    Restricted to items whose per-item annotator cap is >= 2 and that have
+    reached that cap.
+
+    Pass ``?format=html`` for a rendered table (default: JSON).
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.server_utils.iaa import compute_overlap_iaa
+        report = compute_overlap_iaa(
+            get_item_state_manager(), get_user_state_manager(), config,
+        )
+    except Exception as exc:
+        logger.exception("Failed to compute overlap IAA")
+        return jsonify({"error": str(exc)}), 500
+
+    if (request.args.get("format") or "json").lower() == "html":
+        try:
+            return render_template("admin/iaa.html", report=report)
+        except Exception:
+            # Template optional; fall back to JSON if missing.
+            pass
+    return jsonify(report)
 
 
 @app.route("/admin/api/code_cooccurrence", methods=["GET"])
