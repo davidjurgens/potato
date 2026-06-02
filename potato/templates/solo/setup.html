@@ -1,55 +1,166 @@
 {% extends "solo/base_solo.html" %}
 
-{% block title %}Setup - Solo Mode{% endblock %}
+{% block title %}Setup · Solo Mode · Potato{% endblock %}
 
-{% block content %}
-<h1>Solo Mode Setup</h1>
+{% block extra_head %}
+<style>
+    /* Two-column shell at desktop widths: form on the left, workflow
+       outline on the right. Falls back to stacked at narrow widths. */
+    .setup-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 280px;
+        gap: var(--space-xl, 2rem);
+        align-items: start;
+    }
 
-<p>Welcome to Solo Mode! This mode enables you to efficiently label a dataset with LLM assistance.</p>
+    .setup-grid h1 {
+        font-size: var(--text-xl, 1.25rem);
+        margin: 0 0 var(--space-xs, 0.25rem) 0;
+        color: var(--foreground, #09090b);
+        letter-spacing: -0.01em;
+    }
 
-{% if error %}
-<div class="alert alert-error">{{ error }}</div>
-{% endif %}
+    .setup-lede {
+        margin: 0 0 var(--space-lg, 1.5rem) 0;
+        color: var(--muted-foreground, #71717a);
+        font-size: var(--text-sm, 0.8125rem);
+    }
 
-<form method="POST" action="{{ url_for('solo_mode.setup') }}">
-    <div class="form-group">
-        <label for="task_description">Task Description</label>
-        <p style="color: #666; font-size: 14px;">
-            Describe your annotation task in detail. What should be labeled? What are the categories?
-            What makes something belong to one category vs another?
-        </p>
-        <textarea
-            id="task_description"
-            name="task_description"
-            placeholder="Example: I want to classify customer reviews as positive, negative, or neutral. A positive review expresses satisfaction with the product or service. A negative review expresses dissatisfaction or complaints. A neutral review is factual without strong sentiment."
-            rows="8"
-        >{{ request.form.get('task_description', '') }}</textarea>
-    </div>
+    .workflow-outline {
+        background: var(--muted, #f4f4f5);
+        padding: var(--space-md, 1rem) var(--space-lg, 1.5rem);
+        border-radius: var(--radius, 0.5rem);
+        border: 1px solid var(--border, #e4e4e7);
+    }
 
-    <div class="form-group">
-        <h3>What happens next?</h3>
-        <ol style="color: #666; line-height: 1.8;">
-            <li><strong>Prompt Generation:</strong> An LLM will generate an annotation prompt based on your description</li>
-            <li><strong>Prompt Review:</strong> You can review and edit the generated prompt</li>
-            <li><strong>Edge Cases:</strong> The LLM will generate difficult examples for you to label</li>
-            <li><strong>Parallel Annotation:</strong> You and the LLM will annotate in parallel</li>
-            <li><strong>Disagreement Resolution:</strong> You'll resolve any disagreements</li>
-            <li><strong>Autonomous Labeling:</strong> Once agreement is high, the LLM completes the dataset</li>
-            <li><strong>Validation:</strong> You'll validate a sample of LLM-only labels</li>
-        </ol>
-    </div>
+    .workflow-outline h2 {
+        margin: 0 0 var(--space-sm, 0.5rem) 0;
+        font-size: var(--text-xs, 0.75rem);
+        color: var(--muted-foreground, #71717a);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
 
-    <div class="solo-nav">
-        <span></span>
-        <button type="submit" class="btn btn-primary">Generate Prompt &rarr;</button>
-    </div>
-</form>
+    .workflow-outline ol {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: workflow;
+    }
+
+    .workflow-outline li {
+        counter-increment: workflow;
+        padding: var(--space-sm, 0.5rem) 0;
+        font-size: var(--text-sm, 0.8125rem);
+        color: var(--foreground, #09090b);
+        border-bottom: 1px solid var(--border, #e4e4e7);
+        display: grid;
+        grid-template-columns: 1.5em 1fr;
+        gap: var(--space-sm, 0.5rem);
+        align-items: baseline;
+    }
+
+    .workflow-outline li:last-child { border-bottom: none; }
+
+    .workflow-outline li::before {
+        content: counter(workflow);
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground, #71717a);
+        font-size: var(--text-xs, 0.75rem);
+        font-weight: 500;
+    }
+
+    .workflow-outline li strong {
+        display: block;
+        font-weight: 600;
+        font-size: var(--text-sm, 0.8125rem);
+        margin-bottom: 1px;
+    }
+
+    .workflow-outline li span {
+        color: var(--muted-foreground, #71717a);
+        font-size: var(--text-xs, 0.75rem);
+        grid-column: 2;
+    }
+
+    @media (max-width: 900px) {
+        .setup-grid { grid-template-columns: 1fr; }
+        .workflow-outline { margin-top: var(--space-md, 1rem); }
+    }
+</style>
 {% endblock %}
 
-{% block stats %}
-{{ super() }}
-<div class="stat-item">
-    <span class="stat-label">Step</span>
-    <span class="stat-value">1 of 7</span>
+{% block content %}
+<div class="setup-grid">
+    <section aria-labelledby="setup-heading">
+        <h1 id="setup-heading">Set up your annotation task</h1>
+        <p class="setup-lede">
+            Solo Mode pairs you with an LLM to label a dataset together.
+            Start by describing what you want labeled and how.
+        </p>
+
+        <div role="alert" aria-live="polite">
+            {% if error %}
+            <div class="alert alert-error">{{ error }}</div>
+            {% endif %}
+        </div>
+
+        {% if already_configured %}
+            <p>
+                <a href="{{ url_for('solo_mode.status') }}" class="btn btn-primary">
+                    Return to dashboard
+                </a>
+                <a href="{{ url_for('solo_mode.prompt_editor') }}"
+                   class="btn btn-secondary" style="margin-left: var(--space-sm, 0.5rem);">
+                    Edit prompt
+                </a>
+            </p>
+        {% else %}
+            <form method="POST" action="{{ url_for('solo_mode.setup') }}">
+                <div class="form-group">
+                    <label for="task_description">Task description</label>
+                    <p class="form-help" id="task_description_help">
+                        What gets labeled and what makes one category different from another?
+                        Plain English is fine.
+                    </p>
+                    <textarea
+                        id="task_description"
+                        name="task_description"
+                        aria-describedby="task_description_help"
+                        placeholder="e.g. Classify customer reviews as positive, negative, or neutral. Positive reviews express satisfaction; negative reviews express complaints; neutral reviews are factual without strong sentiment."
+                        rows="8"
+                        required
+                    >{{ request.form.get('task_description', '') }}</textarea>
+                </div>
+
+                <div class="solo-nav">
+                    <span></span>
+                    <button type="submit" class="btn btn-primary">
+                        Generate prompt
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M5 12h14M13 6l6 6-6 6"
+                                  stroke="currentColor" stroke-width="2"
+                                  stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </form>
+        {% endif %}
+    </section>
+
+    <aside class="workflow-outline" aria-label="What happens next">
+        <h2>What happens next</h2>
+        <ol>
+            <li><strong>Prompt</strong><span>The LLM drafts an annotation prompt from your description.</span></li>
+            <li><strong>Edge cases</strong><span>You label LLM-generated boundary examples together.</span></li>
+            <li><strong>Parallel annotation</strong><span>You and the LLM label in parallel; disagreements surface for review.</span></li>
+            <li><strong>Auto label</strong><span>Once agreement is high, the LLM finishes the dataset.</span></li>
+            <li><strong>Validation</strong><span>You spot-check a sample of LLM-only labels.</span></li>
+        </ol>
+    </aside>
 </div>
+{% endblock %}
+
+{% block sidebar %}
+{# Setup screen reclaims the right rail for the workflow outline. #}
 {% endblock %}

@@ -20,11 +20,20 @@
         text-align: center;
         border-radius: var(--radius, 0.5rem);
         cursor: pointer;
-        transition: var(--transition, all 0.2s ease);
+        transition: background-color 180ms ease-out, color 180ms ease-out;
         font-weight: 500;
         font-size: 0.875rem;
         color: var(--muted-foreground, #71717a);
         user-select: none;
+        /* Tab buttons must look like tabs, not browser-default buttons. */
+        background: transparent;
+        border: none;
+        font-family: inherit;
+    }
+
+    .solo-tab:focus-visible {
+        outline: 2px solid var(--ring, var(--primary, #6e56cf));
+        outline-offset: 2px;
     }
 
     .solo-tab.active {
@@ -681,28 +690,37 @@
 
 {% block content %}
 
-{# ── Phase Indicator ────────────────────────────────────── #}
-<div style="text-align: center; margin-bottom: 1.5rem;">
-    <span class="phase-indicator {% if phase == 'completed' %}completed{% endif %}" id="ov-phase-badge">
-        <span id="ov-phase">{{ phase_name|replace('_', ' ')|title }}</span>
-    </span>
-</div>
+{# Phase pill is removed; the stepper at the top of base_solo.html
+   already communicates the current phase, fixed in B1. Keeping it created
+   two indicators in different design systems for the same fact. #}
 
 {# ── Tab Navigation ─────────────────────────────────────── #}
-<div class="solo-tabs">
-    <div class="solo-tab active" data-tab="overview">Overview</div>
-    <div class="solo-tab" data-tab="confusion">Confusion</div>
-    <div class="solo-tab" data-tab="labeling-fns">Labeling Fns</div>
-    <div class="solo-tab" data-tab="disagreements">Disagreements</div>
-    <div class="solo-tab" data-tab="rules">Edge Case Rules</div>
-    <div class="solo-tab" data-tab="clusters">Rule Clusters</div>
+<div class="solo-tabs" role="tablist" aria-label="Dashboard sections">
+    <button type="button" class="solo-tab active" role="tab"
+            id="tab-btn-overview" aria-controls="tab-overview" aria-selected="true"
+            data-tab="overview">Overview</button>
+    <button type="button" class="solo-tab" role="tab"
+            id="tab-btn-confusion" aria-controls="tab-confusion" aria-selected="false" tabindex="-1"
+            data-tab="confusion">Confusion</button>
+    <button type="button" class="solo-tab" role="tab"
+            id="tab-btn-labeling-fns" aria-controls="tab-labeling-fns" aria-selected="false" tabindex="-1"
+            data-tab="labeling-fns">Labeling Fns</button>
+    <button type="button" class="solo-tab" role="tab"
+            id="tab-btn-disagreements" aria-controls="tab-disagreements" aria-selected="false" tabindex="-1"
+            data-tab="disagreements">Disagreements</button>
+    <button type="button" class="solo-tab" role="tab"
+            id="tab-btn-rules" aria-controls="tab-rules" aria-selected="false" tabindex="-1"
+            data-tab="rules">Edge Case Rules</button>
+    <button type="button" class="solo-tab" role="tab"
+            id="tab-btn-clusters" aria-controls="tab-clusters" aria-selected="false" tabindex="-1"
+            data-tab="clusters">Rule Clusters</button>
 </div>
 
 
 {# ════════════════════════════════════════════════════════════
    OVERVIEW TAB
    ════════════════════════════════════════════════════════════ #}
-<div class="solo-tab-content active" id="tab-overview">
+<div class="solo-tab-content active" id="tab-overview" role="tabpanel" aria-labelledby="tab-btn-overview" tabindex="0">
 
     <div class="dashboard-grid">
 
@@ -837,8 +855,8 @@
                         onclick="soloDashboard.triggerRefinement()">
                     Trigger Cycle
                 </button>
-                <button class="btn btn-secondary" style="flex: 1; font-size: 0.75rem; padding: 0.375rem;"
-                        id="ov-refinement-reset-btn" style="display: none;"
+                <button class="btn btn-secondary" style="flex: 1; font-size: 0.75rem; padding: 0.375rem; display: none;"
+                        id="ov-refinement-reset-btn"
                         onclick="soloDashboard.resetRefinement()">
                     Reset
                 </button>
@@ -936,7 +954,7 @@
 {# ════════════════════════════════════════════════════════════
    CONFUSION TAB
    ════════════════════════════════════════════════════════════ #}
-<div class="solo-tab-content" id="tab-confusion">
+<div class="solo-tab-content" id="tab-confusion" role="tabpanel" aria-labelledby="tab-btn-confusion" tabindex="0">
 
     {# Summary Cards #}
     <div class="dashboard-grid">
@@ -1005,7 +1023,7 @@
 {# ════════════════════════════════════════════════════════════
    LABELING FUNCTIONS TAB
    ════════════════════════════════════════════════════════════ #}
-<div class="solo-tab-content" id="tab-labeling-fns">
+<div class="solo-tab-content" id="tab-labeling-fns" role="tabpanel" aria-labelledby="tab-btn-labeling-fns" tabindex="0">
 
     {# Summary Cards #}
     <div class="dashboard-grid">
@@ -1059,7 +1077,7 @@
 {# ════════════════════════════════════════════════════════════
    DISAGREEMENT EXPLORER TAB
    ════════════════════════════════════════════════════════════ #}
-<div class="solo-tab-content" id="tab-disagreements">
+<div class="solo-tab-content" id="tab-disagreements" role="tabpanel" aria-labelledby="tab-btn-disagreements" tabindex="0">
 
     {# Summary Cards #}
     <div class="dashboard-grid">
@@ -1125,7 +1143,7 @@
 {# ════════════════════════════════════════════════════════════
    EDGE CASE RULES TAB
    ════════════════════════════════════════════════════════════ #}
-<div class="solo-tab-content" id="tab-rules">
+<div class="solo-tab-content" id="tab-rules" role="tabpanel" aria-labelledby="tab-btn-rules" tabindex="0">
 
     {# Stats Cards #}
     <div class="dashboard-grid">
@@ -1225,7 +1243,7 @@
 {# ════════════════════════════════════════════════════════════
    RULE CLUSTERS TAB
    ════════════════════════════════════════════════════════════ #}
-<div class="solo-tab-content" id="tab-clusters">
+<div class="solo-tab-content" id="tab-clusters" role="tabpanel" aria-labelledby="tab-btn-clusters" tabindex="0">
 
     <div class="viz-layout">
         {# Scatter Plot #}
@@ -1269,13 +1287,43 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://d3js.org/d3.v7.min.js"></script>
-<script src="{{ url_for('static', filename='js/solo-viz.js') }}"></script>
-<script src="{{ url_for('static', filename='js/solo-dashboard.js') }}"></script>
-<script>
-    var soloDashboard = new SoloDashboard();
+<script src="https://d3js.org/d3.v7.min.js" defer></script>
+<script src="{{ url_for('static', filename='js/solo-viz.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/solo-dashboard.js') }}" defer></script>
+<script defer>
     document.addEventListener('DOMContentLoaded', function() {
-        soloDashboard.init();
+        window.soloDashboard = new SoloDashboard();
+        window.soloDashboard.init();
+
+        // ARIA-aware tab switching with arrow-key navigation. The original
+        // implementation only toggled .active; this adds proper accessibility.
+        const tablist = document.querySelector('[role="tablist"]');
+        if (!tablist) return;
+        const tabs = Array.from(tablist.querySelectorAll('[role="tab"]'));
+
+        function activateTab(tab) {
+            tabs.forEach(t => {
+                const isActive = t === tab;
+                t.classList.toggle('active', isActive);
+                t.setAttribute('aria-selected', String(isActive));
+                t.tabIndex = isActive ? 0 : -1;
+                const panelId = t.getAttribute('aria-controls');
+                const panel = document.getElementById(panelId);
+                if (panel) panel.classList.toggle('active', isActive);
+            });
+        }
+
+        tabs.forEach((tab, i) => {
+            tab.addEventListener('keydown', (e) => {
+                let next = null;
+                if (e.key === 'ArrowRight') next = tabs[(i + 1) % tabs.length];
+                else if (e.key === 'ArrowLeft') next = tabs[(i - 1 + tabs.length) % tabs.length];
+                else if (e.key === 'Home') next = tabs[0];
+                else if (e.key === 'End') next = tabs[tabs.length - 1];
+                if (next) { e.preventDefault(); next.focus(); activateTab(next); }
+            });
+            tab.addEventListener('click', () => activateTab(tab));
+        });
     });
 </script>
 {% endblock %}

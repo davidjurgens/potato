@@ -117,12 +117,18 @@ def solo_server():
 
 @pytest.fixture
 def authed_session(solo_server):
-    """Provide an authenticated requests.Session."""
+    """Provide an authenticated requests.Session.
+
+    Sets Origin and Referer so the same_origin_required CSRF guard on
+    /api/* POST endpoints accepts the session's requests.
+    """
     session = requests.Session()
     session.post(
         f"{solo_server.base_url}/auth",
         data={"email": f"test_user_{time.time()}", "pass": ""}
     )
+    session.headers['Origin'] = solo_server.base_url
+    session.headers['Referer'] = solo_server.base_url + "/"
     yield session
     session.close()
 
@@ -192,16 +198,16 @@ class TestSoloModeAPIAdvancePhase:
         response = requests.get(f"{solo_server.base_url}/solo/api/advance-phase")
         assert response.status_code == 405
 
-    def test_missing_phase_returns_400(self, solo_server):
-        response = requests.post(
+    def test_missing_phase_returns_400(self, solo_server, authed_session):
+        response = authed_session.post(
             f"{solo_server.base_url}/solo/api/advance-phase",
             json={}
         )
         assert response.status_code == 400
         assert 'error' in response.json()
 
-    def test_invalid_phase_returns_400(self, solo_server):
-        response = requests.post(
+    def test_invalid_phase_returns_400(self, solo_server, authed_session):
+        response = authed_session.post(
             f"{solo_server.base_url}/solo/api/advance-phase",
             json={'phase': 'nonexistent_phase'}
         )
@@ -273,17 +279,17 @@ class TestSoloModeAPIExport:
 class TestSoloModeAPILabeling:
     """Tests for labeling control endpoints."""
 
-    def test_pause_labeling(self, solo_server):
-        response = requests.post(f"{solo_server.base_url}/solo/api/pause-labeling")
+    def test_pause_labeling(self, solo_server, authed_session):
+        response = authed_session.post(f"{solo_server.base_url}/solo/api/pause-labeling")
         # 200 if thread exists, 400 if not
         assert response.status_code in [200, 400]
 
-    def test_resume_labeling(self, solo_server):
-        response = requests.post(f"{solo_server.base_url}/solo/api/resume-labeling")
+    def test_resume_labeling(self, solo_server, authed_session):
+        response = authed_session.post(f"{solo_server.base_url}/solo/api/resume-labeling")
         assert response.status_code in [200, 400]
 
-    def test_start_labeling(self, solo_server):
-        response = requests.post(f"{solo_server.base_url}/solo/api/start-labeling")
+    def test_start_labeling(self, solo_server, authed_session):
+        response = authed_session.post(f"{solo_server.base_url}/solo/api/start-labeling")
         assert response.status_code == 200
         data = response.json()
         assert 'success' in data
@@ -318,8 +324,8 @@ class TestSoloModePhaseTransitions:
         # Initial phase should be SETUP
         assert 'SETUP' in phase
 
-    def test_transition_to_prompt_review(self, solo_server):
-        response = requests.post(
+    def test_transition_to_prompt_review(self, solo_server, authed_session):
+        response = authed_session.post(
             f"{solo_server.base_url}/solo/api/advance-phase",
             json={'phase': 'prompt_review'}
         )
@@ -335,10 +341,12 @@ class TestSoloModeSetupForm:
     def test_setup_post_with_description(self, solo_server, authed_session):
         response = authed_session.post(
             f"{solo_server.base_url}/solo/setup",
-            data={'task_description': 'Classify sentiment of product reviews'}
+            data={'task_description': 'Classify sentiment of product reviews'},
+            allow_redirects=False,
         )
-        # Should redirect or return 200
-        assert response.status_code in [200, 302]
+        # Module-scoped state: if a prior test already advanced past SETUP,
+        # the B5 re-entry guard returns 409 — also valid.
+        assert response.status_code in [200, 302, 303, 409]
 
     def test_prompt_update(self, solo_server, authed_session):
         response = authed_session.post(

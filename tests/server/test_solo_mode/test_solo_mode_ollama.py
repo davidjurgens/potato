@@ -207,12 +207,15 @@ def manager(ollama_server):
 
 @pytest.fixture
 def authed_session(ollama_server):
-    """Provide an authenticated requests.Session."""
+    """Provide an authenticated requests.Session with Origin/Referer set
+    for the same_origin_required CSRF guard."""
     session = requests.Session()
     session.post(
         f"{ollama_server.base_url}/auth",
         data={"email": f"ollama_user_{time.time()}", "pass": ""},
     )
+    session.headers['Origin'] = ollama_server.base_url
+    session.headers['Referer'] = ollama_server.base_url + "/"
     yield session
     session.close()
 
@@ -227,7 +230,7 @@ class TestOllamaLabelingThread:
     """Test the background LLM labeling thread with real Ollama."""
 
     def test_start_labeling_endpoint_succeeds(
-        self, ollama_server, manager
+        self, ollama_server, manager, authed_session
     ):
         """POST /api/start-labeling starts without error."""
         from potato.solo_mode.phase_controller import SoloPhase
@@ -241,7 +244,7 @@ class TestOllamaLabelingThread:
 
         manager.advance_to_phase(SoloPhase.PARALLEL_ANNOTATION, force=True)
 
-        resp = requests.post(
+        resp = authed_session.post(
             f"{ollama_server.base_url}/solo/api/start-labeling"
         )
         assert resp.status_code == 200

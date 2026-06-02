@@ -262,7 +262,6 @@ class TestSoloModeManagerInit:
         assert mgr._edge_case_rule_manager is None
         assert mgr._prompt_manager is None
         assert mgr._instance_selector is None
-        assert mgr._disagreement_resolver is None
 
     def test_background_labeling_not_running(self):
         mgr = _make_manager()
@@ -641,10 +640,30 @@ class TestSoloModeManagerBackgroundLabeling:
     def test_stop_when_not_running(self, manager):
         manager.stop_background_labeling()  # Should not raise
 
-    def test_pause_aliases_stop(self, manager):
+    def test_pause_sets_pause_flag_without_stopping_thread(self, manager):
+        """Per B6: pause now sets a flag the loop checks; it no longer
+        tears down the thread. Thread stays alive, paused flag is set."""
+        manager.start_background_labeling()
+        paused = manager.pause_background_labeling()
+        assert paused is True
+        # Thread is alive ...
+        assert manager.is_background_labeling_running() is True
+        # ... but the loop is paused
+        assert manager.is_background_labeling_paused() is True
+        manager.stop_background_labeling()
+
+    def test_resume_clears_pause_flag(self, manager):
         manager.start_background_labeling()
         manager.pause_background_labeling()
-        assert manager.is_background_labeling_running() is False
+        assert manager.is_background_labeling_paused() is True
+        resumed = manager.resume_background_labeling()
+        assert resumed is True
+        assert manager.is_background_labeling_paused() is False
+        manager.stop_background_labeling()
+
+    def test_pause_when_not_running_returns_false(self, manager):
+        # Sanity: pause is a no-op (and returns False) without a running loop.
+        assert manager.pause_background_labeling() is False
 
 
 # === Validation ===

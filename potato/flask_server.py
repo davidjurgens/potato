@@ -1100,6 +1100,15 @@ def load_all_data(config: dict):
     '''Loads instance and annotation data from the files specified in the config.'''
     load_annotation_schematic_data(config)
     load_instance_data(config)
+    # Stamp per-item annotator caps for the overlap sample (must run before
+    # user_data so that initial assignments see the heterogeneous caps).
+    try:
+        from potato.server_utils.overlap_sampler import apply_overlap_sample
+        sampled = apply_overlap_sample(get_item_state_manager(), config)
+        if sampled:
+            logger.info("Overlap sampling stamped %d items", len(sampled))
+    except Exception as exc:
+        logger.warning("Overlap sampling skipped due to error: %s", exc)
     load_user_data(config)
     load_phase_data(config)
     load_highlights_data(config)

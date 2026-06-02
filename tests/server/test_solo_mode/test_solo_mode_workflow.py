@@ -26,7 +26,6 @@ from potato.solo_mode import (
     SelectionWeights,
     ValidationTracker,
     DisagreementDetector,
-    DisagreementResolver,
     parse_solo_mode_config,
     init_solo_mode_manager,
     get_solo_mode_manager,
@@ -473,8 +472,8 @@ class TestValidationTrackerIntegration:
         assert progress['remaining'] == 3
 
 
-class TestDisagreementResolverIntegration:
-    """Integration tests for DisagreementResolver."""
+class TestDisagreementDetectorIntegration:
+    """Integration tests for DisagreementDetector type-specific detection."""
 
     def test_detector_radio_agreement(self):
         """Test disagreement detection for radio buttons."""
@@ -526,74 +525,6 @@ class TestDisagreementResolverIntegration:
         # Low overlap = disagreement
         is_disagreement, _ = detector.detect('multiselect', ['a', 'b'], ['c', 'd'])
         assert is_disagreement
-
-    def test_resolver_record_disagreement(self):
-        """Test recording disagreements."""
-        config = {
-            'annotation_schemes': [{
-                'name': 'test',
-                'annotation_type': 'radio',
-                'labels': [{'name': 'a'}, {'name': 'b'}]
-            }]
-        }
-
-        # Create a proper mock solo_config with nested thresholds
-        solo_config = MagicMock()
-        solo_config.thresholds.likert_tolerance = 1
-        solo_config.thresholds.multiselect_jaccard_threshold = 0.5
-        solo_config.thresholds.span_overlap_threshold = 0.5
-
-        resolver = DisagreementResolver(config, solo_config)
-
-        # Use check_and_record method
-        result = resolver.check_and_record(
-            instance_id='inst_1',
-            schema_name='test',
-            human_label='a',
-            llm_label='b',
-            llm_confidence=0.8,
-        )
-
-        # Should record a disagreement (returns Disagreement or None)
-        assert result is not None
-
-        pending = resolver.get_pending_disagreements()
-        assert len(pending) == 1
-
-    def test_resolver_resolve_disagreement(self):
-        """Test resolving disagreements."""
-        config = {
-            'annotation_schemes': [{
-                'name': 'test',
-                'annotation_type': 'radio',
-                'labels': [{'name': 'a'}, {'name': 'b'}]
-            }]
-        }
-
-        # Create a proper mock solo_config with nested thresholds
-        solo_config = MagicMock()
-        solo_config.thresholds.likert_tolerance = 1
-        solo_config.thresholds.multiselect_jaccard_threshold = 0.5
-        solo_config.thresholds.span_overlap_threshold = 0.5
-
-        resolver = DisagreementResolver(config, solo_config)
-
-        # Record disagreement
-        disagreement = resolver.check_and_record(
-            instance_id='inst_1',
-            schema_name='test',
-            human_label='a',
-            llm_label='b',
-            llm_confidence=0.8,
-        )
-
-        # Resolve it using disagreement id
-        result = resolver.resolve(disagreement.id, 'a', 'human_wins')
-        assert result is True
-
-        # Should be resolved now
-        pending = resolver.get_pending_disagreements()
-        assert len(pending) == 0
 
 
 class TestSoloModeConfigIntegration:

@@ -1,0 +1,23 @@
+[
+  {"id": "rev_01", "text": "The new espresso machine is fantastic.", "domain": "product"},
+  {"id": "rev_02", "text": "Battery dies after two hours of use.", "domain": "product"},
+  {"id": "rev_03", "text": "Coffee tastes burnt and bitter.", "domain": "product"},
+  {"id": "rev_04", "text": "Excellent build quality and quiet operation.", "domain": "product"},
+  {"id": "rev_05", "text": "Customer service refused to help with the warranty.", "domain": "product"},
+  {"id": "rev_06", "text": "It arrived broken and the box was crushed.", "domain": "product"},
+  {"id": "rev_07", "text": "Works exactly as advertised and was easy to assemble.", "domain": "product"},
+  {"id": "rev_08", "text": "Cleaning the unit is a nightmare.", "domain": "product"},
+  {"id": "rev_09", "text": "Compact and lightweight, fits in my kitchen perfectly.", "domain": "product"},
+  {"id": "rev_10", "text": "Great value for the price.", "domain": "product"},
+
+  {"id": "mov_01", "text": "The director makes brave editing choices throughout.", "domain": "movie"},
+  {"id": "mov_02", "text": "Predictable plot with cardboard characters.", "domain": "movie"},
+  {"id": "mov_03", "text": "Visually stunning and emotionally honest.", "domain": "movie"},
+  {"id": "mov_04", "text": "The third act collapses under its own ambition.", "domain": "movie"},
+  {"id": "mov_05", "text": "Worth the price of admission just for the soundtrack.", "domain": "movie"},
+  {"id": "mov_06", "text": "I have seen this exact film a dozen times before.", "domain": "movie"},
+  {"id": "mov_07", "text": "Two unforgettable performances anchor the story.", "domain": "movie"},
+  {"id": "mov_08", "text": "The pacing is sluggish for almost the entire runtime.", "domain": "movie"},
+  {"id": "mov_09", "text": "A small, careful film about ordinary people.", "domain": "movie"},
+  {"id": "mov_10", "text": "Loud, dumb, and proud of it.", "domain": "movie"}
+]

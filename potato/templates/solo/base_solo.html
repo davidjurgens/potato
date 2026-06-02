@@ -6,128 +6,186 @@
     <title>{% block title %}Solo Mode{% endblock %} - Potato</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
-        /* Solo Mode specific styles */
+        /* Solo Mode shell — design-token-driven to match the rest of Potato.
+           All colors, type, and spacing come from /static/styles.css. */
+
+        body {
+            font-family: var(--font-sans, system-ui, sans-serif);
+            color: var(--foreground, #09090b);
+            background: var(--muted, #f4f4f5);
+        }
+
         .solo-container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: var(--space-lg, 1.5rem);
         }
 
-        /* Phase progress bar */
+        /* ── Phase progress (stepper) ───────────────────────────── */
         .phase-progress {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 30px;
-            padding: 15px;
-            background: #f5f5f5;
-            border-radius: 8px;
+            margin-bottom: var(--space-xl, 2rem);
+            padding: var(--space-md, 1rem) var(--space-md, 1rem);
+            background: var(--card, white);
+            border: 1px solid var(--border, #e4e4e7);
+            border-radius: var(--radius, 0.5rem);
+            box-shadow: 0 1px 2px rgba(15, 15, 25, 0.04);
         }
 
         .phase-step {
             text-align: center;
             flex: 1;
-            padding: 10px 5px;
+            padding: var(--space-sm, 0.5rem) var(--space-xs, 0.25rem);
             position: relative;
+            color: var(--muted-foreground, #71717a);
         }
 
         .phase-step::after {
             content: '';
             position: absolute;
-            top: 50%;
+            top: 18px;
             right: 0;
             width: 100%;
             height: 2px;
-            background: #ddd;
+            background: var(--border, #e4e4e7);
             z-index: 0;
         }
 
-        .phase-step:last-child::after {
-            display: none;
+        .phase-step:last-child::after { display: none; }
+
+        .phase-step.completed::after {
+            background: var(--success-color, oklch(60% 0.16 155));
         }
 
         .phase-step .step-number {
-            display: inline-block;
-            width: 30px;
-            height: 30px;
-            line-height: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
-            background: #ddd;
-            color: #666;
-            font-weight: bold;
+            background: var(--card, white);
+            color: var(--muted-foreground, #71717a);
+            border: 2px solid var(--border, #e4e4e7);
+            font-weight: 600;
+            font-size: var(--text-sm, 0.8125rem);
             position: relative;
             z-index: 1;
+            transition: background-color 200ms ease-out,
+                        border-color 200ms ease-out,
+                        color 200ms ease-out;
         }
 
         .phase-step.active .step-number {
-            background: #007bff;
-            color: white;
+            background: var(--primary, #6e56cf);
+            color: var(--primary-foreground, white);
+            border-color: var(--primary, #6e56cf);
+            box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary, #6e56cf) 18%, transparent);
         }
 
         .phase-step.completed .step-number {
-            background: #28a745;
+            background: var(--success-color, oklch(60% 0.16 155));
             color: white;
+            border-color: var(--success-color, oklch(60% 0.16 155));
         }
+
+        .phase-step.completed .step-number::after {
+            /* Check mark for state-without-color a11y */
+            content: '';
+            display: block;
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 6px; height: 11px;
+            border-right: 2px solid white;
+            border-bottom: 2px solid white;
+            transform: translate(-50%, -65%) rotate(45deg);
+        }
+
+        .phase-step.completed .step-number > * { visibility: hidden; }
 
         .phase-step .step-label {
             display: block;
-            font-size: 12px;
-            margin-top: 5px;
-            color: #666;
+            font-size: var(--text-xs, 0.75rem);
+            margin-top: var(--space-xs, 0.25rem);
+            color: var(--muted-foreground, #71717a);
+            font-weight: 500;
+            letter-spacing: 0.01em;
         }
 
         .phase-step.active .step-label {
-            color: #007bff;
-            font-weight: bold;
+            color: var(--primary, #6e56cf);
+            font-weight: 600;
         }
 
-        /* Main content area */
+        .phase-step.completed .step-label {
+            color: var(--foreground, #09090b);
+        }
+
+        /* ── Layout shell ───────────────────────────────────────── */
         .solo-main {
             display: flex;
-            gap: 20px;
+            gap: var(--space-lg, 1.5rem);
+            align-items: flex-start;
         }
 
         .solo-content {
             flex: 1;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            min-width: 0;
+            background: var(--card, white);
+            padding: var(--space-xl, 2rem);
+            border-radius: var(--radius, 0.5rem);
+            border: 1px solid var(--border, #e4e4e7);
+            box-shadow: 0 1px 2px rgba(15, 15, 25, 0.04);
         }
 
         .solo-sidebar {
-            width: 300px;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            width: 280px;
+            background: transparent;
+            padding: var(--space-md, 1rem);
+            border-left: 1px solid var(--border, #e4e4e7);
+            box-shadow: none;
         }
 
-        /* Confidence indicator */
+        .solo-sidebar h3 {
+            font-size: var(--text-xs, 0.75rem);
+            color: var(--muted-foreground, #71717a);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin: 0 0 var(--space-sm, 0.5rem) 0;
+        }
+
+        /* ── Confidence bar ─────────────────────────────────────── */
         .confidence-bar {
-            height: 8px;
-            background: #eee;
-            border-radius: 4px;
+            height: 6px;
+            background: var(--muted, #f4f4f5);
+            border-radius: 3px;
             overflow: hidden;
-            margin: 10px 0;
+            margin: var(--space-sm, 0.5rem) 0;
         }
 
         .confidence-fill {
             height: 100%;
-            border-radius: 4px;
-            transition: width 0.3s ease;
+            border-radius: 3px;
         }
 
-        .confidence-low { background: #dc3545; }
-        .confidence-mid { background: #ffc107; }
-        .confidence-high { background: #28a745; }
+        @media (prefers-reduced-motion: no-preference) {
+            .confidence-fill {
+                transition: width 280ms cubic-bezier(0.25, 1, 0.5, 1);
+            }
+        }
 
-        /* LLM reasoning panel */
+        .confidence-low { background: var(--destructive, #ef4444); }
+        .confidence-mid { background: #f59e0b; }
+        .confidence-high { background: var(--success-color, oklch(60% 0.16 155)); }
+
+        /* ── LLM reasoning panel ───────────────────────────────── */
         .llm-reasoning {
-            background: #f8f9fa;
-            border-left: 3px solid #007bff;
-            padding: 15px;
-            margin: 15px 0;
-            border-radius: 0 4px 4px 0;
+            background: color-mix(in oklab, var(--primary, #6e56cf) 6%, transparent);
+            border-left: 3px solid var(--primary, #6e56cf);
+            padding: var(--space-md, 1rem);
+            margin: var(--space-md, 1rem) 0;
+            border-radius: 0 var(--radius, 0.5rem) var(--radius, 0.5rem) 0;
         }
 
         .llm-reasoning-header {
@@ -135,205 +193,317 @@
             justify-content: space-between;
             align-items: center;
             cursor: pointer;
+            gap: var(--space-sm, 0.5rem);
+        }
+
+        .llm-reasoning-header[aria-expanded="false"] .disclosure-icon {
+            transform: rotate(-90deg);
+        }
+
+        .disclosure-icon {
+            display: inline-block;
+            width: 0.6rem; height: 0.6rem;
+            border-right: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            transform: rotate(45deg);
+            transition: transform 180ms ease-out;
         }
 
         .llm-reasoning-content {
-            margin-top: 10px;
-            font-size: 14px;
-            color: #555;
+            margin-top: var(--space-sm, 0.5rem);
+            font-size: var(--text-sm, 0.8125rem);
+            color: var(--foreground, #09090b);
         }
 
-        /* Stats panel */
-        .stats-panel {
-            margin-bottom: 20px;
-        }
+        /* ── Stats panel ────────────────────────────────────────── */
+        .stats-panel { margin-bottom: var(--space-md, 1rem); }
 
         .stat-item {
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #eee;
+            padding: var(--space-sm, 0.5rem) 0;
+            border-bottom: 1px solid var(--border, #e4e4e7);
+            font-size: var(--text-sm, 0.8125rem);
         }
 
-        .stat-item:last-child {
-            border-bottom: none;
-        }
+        .stat-item:last-child { border-bottom: none; }
+        .stat-label { color: var(--muted-foreground, #71717a); }
+        .stat-value { font-weight: 600; color: var(--foreground, #09090b); }
 
-        .stat-label {
-            color: #666;
-        }
-
-        .stat-value {
-            font-weight: bold;
-        }
-
-        /* Buttons */
+        /* ── Buttons ────────────────────────────────────────────── */
         .btn {
-            display: inline-block;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-xs, 0.25rem);
+            padding: var(--space-sm, 0.5rem) var(--space-md, 1rem);
+            border: 1px solid transparent;
+            border-radius: var(--radius, 0.5rem);
             cursor: pointer;
-            font-size: 14px;
-            transition: background 0.2s ease;
+            font-size: var(--text-sm, 0.8125rem);
+            font-weight: 600;
+            font-family: inherit;
+        }
+
+        @media (prefers-reduced-motion: no-preference) {
+            .btn { transition: background 180ms ease-out, transform 80ms ease-out; }
+            .btn:active { transform: translateY(1px); }
+        }
+
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn:focus-visible {
+            outline: 2px solid var(--ring, var(--primary, #6e56cf));
+            outline-offset: 2px;
         }
 
         .btn-primary {
-            background: #007bff;
-            color: white;
+            background: var(--primary, #6e56cf);
+            color: var(--primary-foreground, white);
         }
-
-        .btn-primary:hover {
-            background: #0056b3;
+        .btn-primary:not(:disabled):hover {
+            background: color-mix(in oklab, var(--primary, #6e56cf) 88%, black);
         }
 
         .btn-success {
-            background: #28a745;
+            background: var(--success-color, oklch(58% 0.16 155));
             color: white;
         }
-
-        .btn-success:hover {
-            background: #1e7e34;
+        .btn-success:not(:disabled):hover {
+            background: color-mix(in oklab, var(--success-color, oklch(58% 0.16 155)) 90%, black);
         }
 
         .btn-secondary {
-            background: #6c757d;
-            color: white;
+            background: var(--secondary, #f4f4f5);
+            color: var(--secondary-foreground, #18181b);
+            border-color: var(--border, #e4e4e7);
         }
-
-        .btn-secondary:hover {
-            background: #545b62;
+        .btn-secondary:not(:disabled):hover {
+            background: color-mix(in oklab, var(--secondary, #f4f4f5) 90%, var(--foreground, #09090b));
         }
 
         .btn-danger {
-            background: #dc3545;
-            color: white;
+            background: var(--destructive, #ef4444);
+            color: var(--destructive-foreground, white);
+        }
+        .btn-danger:not(:disabled):hover {
+            background: color-mix(in oklab, var(--destructive, #ef4444) 90%, black);
         }
 
-        .btn-danger:hover {
-            background: #bd2130;
-        }
-
-        /* Forms */
-        .form-group {
-            margin-bottom: 15px;
-        }
+        /* ── Forms ──────────────────────────────────────────────── */
+        .form-group { margin-bottom: var(--space-md, 1rem); }
 
         .form-group label {
             display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
+            margin-bottom: var(--space-xs, 0.25rem);
+            font-weight: 600;
+            font-size: var(--text-sm, 0.8125rem);
+            color: var(--foreground, #09090b);
+        }
+
+        .form-help {
+            display: block;
+            margin: 0 0 var(--space-sm, 0.5rem) 0;
+            font-size: var(--text-sm, 0.8125rem);
+            color: var(--muted-foreground, #71717a);
         }
 
         .form-group textarea,
         .form-group input[type="text"] {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
+            padding: var(--space-sm, 0.5rem) var(--space-md, 1rem);
+            border: 1px solid var(--border, #e4e4e7);
+            border-radius: var(--radius, 0.5rem);
+            font-size: var(--text-sm, 0.8125rem);
+            font-family: var(--font-sans, system-ui, sans-serif);
+            background: var(--card, white);
+            color: var(--foreground, #09090b);
         }
 
         .form-group textarea {
-            min-height: 100px;
+            min-height: 120px;
             resize: vertical;
+            line-height: 1.55;
         }
 
-        /* Alert messages */
+        .form-group textarea:focus-visible,
+        .form-group input[type="text"]:focus-visible {
+            outline: 2px solid var(--ring, var(--primary, #6e56cf));
+            outline-offset: 1px;
+            border-color: var(--ring, var(--primary, #6e56cf));
+        }
+
+        .form-group textarea::placeholder {
+            color: var(--muted-foreground, #71717a);
+            font-style: italic;
+            opacity: 0.85;
+        }
+
+        /* ── Alerts ─────────────────────────────────────────────── */
         .alert {
-            padding: 15px;
-            border-radius: 4px;
-            margin-bottom: 15px;
+            padding: var(--space-md, 1rem);
+            border-radius: var(--radius, 0.5rem);
+            margin-bottom: var(--space-md, 1rem);
+            font-size: var(--text-sm, 0.8125rem);
+            border: 1px solid transparent;
         }
 
         .alert-info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
+            background: color-mix(in oklab, var(--primary, #6e56cf) 8%, var(--card, white));
+            color: var(--foreground, #09090b);
+            border-color: color-mix(in oklab, var(--primary, #6e56cf) 25%, transparent);
         }
-
         .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+            background: color-mix(in oklab, var(--success-color, oklch(60% 0.16 155)) 8%, var(--card, white));
+            color: var(--foreground, #09090b);
+            border-color: color-mix(in oklab, var(--success-color, oklch(60% 0.16 155)) 30%, transparent);
         }
-
         .alert-warning {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeeba;
+            background: color-mix(in oklab, #f59e0b 8%, var(--card, white));
+            color: var(--foreground, #09090b);
+            border-color: color-mix(in oklab, #f59e0b 30%, transparent);
         }
-
         .alert-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
+            background: color-mix(in oklab, var(--destructive, #ef4444) 8%, var(--card, white));
+            color: var(--foreground, #09090b);
+            border-color: color-mix(in oklab, var(--destructive, #ef4444) 30%, transparent);
         }
 
-        /* Label buttons */
+        /* ── Label buttons (annotate screen) ────────────────────── */
         .label-buttons {
             display: flex;
             flex-wrap: wrap;
-            gap: 10px;
-            margin: 15px 0;
+            gap: var(--space-sm, 0.5rem);
+            margin: var(--space-md, 1rem) 0;
         }
 
         .label-btn {
-            padding: 12px 24px;
-            border: 2px solid #007bff;
-            background: white;
-            color: #007bff;
-            border-radius: 4px;
+            padding: var(--space-sm, 0.5rem) var(--space-md, 1rem);
+            border: 1px solid var(--border, #e4e4e7);
+            background: var(--card, white);
+            color: var(--foreground, #09090b);
+            border-radius: var(--radius, 0.5rem);
             cursor: pointer;
-            font-size: 14px;
-            transition: all 0.2s ease;
+            font-size: var(--text-sm, 0.8125rem);
+            font-weight: 500;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-sm, 0.5rem);
         }
 
-        .label-btn:hover {
-            background: #007bff;
-            color: white;
+        .label-btn .label-key {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.4em; height: 1.4em;
+            padding: 0;
+            background: var(--muted, #f4f4f5);
+            border-radius: 4px;
+            font-size: var(--text-xs, 0.75rem);
+            font-family: var(--font-mono, ui-monospace);
+            color: var(--muted-foreground, #71717a);
+            border: 1px solid var(--border, #e4e4e7);
+            flex-shrink: 0;
+        }
+
+        @media (prefers-reduced-motion: no-preference) {
+            .label-btn { transition: border-color 160ms ease-out, background 160ms ease-out, color 160ms ease-out; }
+        }
+
+        .label-btn:not(.selected):hover {
+            border-color: var(--primary, #6e56cf);
+            color: var(--primary, #6e56cf);
         }
 
         .label-btn.selected {
-            background: #007bff;
-            color: white;
+            background: var(--primary, #6e56cf);
+            border-color: var(--primary, #6e56cf);
+            color: var(--primary-foreground, white);
         }
 
-        /* Instance display */
+        .label-btn.suggested {
+            border-color: var(--primary, #6e56cf);
+            box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary, #6e56cf) 18%, transparent);
+        }
+
+        .label-btn:focus-visible {
+            outline: 2px solid var(--ring, var(--primary, #6e56cf));
+            outline-offset: 2px;
+        }
+
+        /* ── Instance text (annotate screen) ────────────────────── */
         .instance-text {
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 4px;
-            font-size: 16px;
-            line-height: 1.6;
-            margin: 15px 0;
+            padding: var(--space-lg, 1.5rem);
+            background: var(--muted, #f4f4f5);
+            border-radius: var(--radius, 0.5rem);
+            font-size: var(--text-lg, 1.1875rem);
+            line-height: 1.55;
+            margin: var(--space-md, 1rem) 0;
+            max-width: 65ch;
+            color: var(--foreground, #09090b);
         }
 
-        /* Navigation */
+        /* ── Navigation row ─────────────────────────────────────── */
         .solo-nav {
             display: flex;
             justify-content: space-between;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
+            align-items: center;
+            gap: var(--space-md, 1rem);
+            margin-top: var(--space-lg, 1.5rem);
+            padding-top: var(--space-md, 1rem);
+            border-top: 1px solid var(--border, #e4e4e7);
         }
 
-        /* Responsive */
-        @media (max-width: 768px) {
-            .solo-main {
-                flex-direction: column;
-            }
+        /* ── kbd display ────────────────────────────────────────── */
+        kbd {
+            background: var(--muted, #f4f4f5);
+            padding: 1px 6px;
+            border-radius: 4px;
+            border: 1px solid var(--border, #e4e4e7);
+            font-family: var(--font-mono, ui-monospace);
+            font-size: var(--text-xs, 0.75rem);
+            color: var(--foreground, #09090b);
+        }
 
+        /* ── Responsive ─────────────────────────────────────────── */
+        @media (max-width: 900px) {
+            .solo-main { flex-direction: column; }
             .solo-sidebar {
                 width: 100%;
+                border-left: none;
+                border-top: 1px solid var(--border, #e4e4e7);
+                padding-top: var(--space-md, 1rem);
             }
+        }
 
+        @media (max-width: 640px) {
+            /* Collapse the linear stepper into a compact "Step N of M: Label" pill.
+               Connector lines and orphan circles look broken at this width. */
             .phase-progress {
-                flex-wrap: wrap;
+                position: relative;
+                padding: var(--space-sm, 0.5rem) var(--space-md, 1rem);
             }
-
-            .phase-step {
-                flex-basis: 50%;
+            .phase-step { display: none; }
+            .phase-step.active {
+                display: flex;
+                flex: 1;
+                align-items: center;
+                gap: var(--space-sm, 0.5rem);
+                text-align: left;
+            }
+            .phase-step.active::after { display: none; }
+            .phase-step.active .step-label {
+                display: inline;
+                margin-top: 0;
+                font-size: var(--text-sm, 0.8125rem);
+            }
+            .phase-progress::before {
+                content: 'Step ' attr(data-step) ' of ' attr(data-total) ' · ';
+                font-size: var(--text-xs, 0.75rem);
+                color: var(--muted-foreground, #71717a);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                align-self: center;
+                font-weight: 600;
             }
         }
     </style>
@@ -341,28 +511,46 @@
 </head>
 <body>
     <div class="solo-container">
-        <!-- Phase Progress Bar -->
-        <div class="phase-progress">
-            {% set phases = [
-                ('setup', 'Setup'),
-                ('prompt_review', 'Prompt'),
-                ('edge_case_labeling', 'Edge Cases'),
-                ('parallel_annotation', 'Annotation'),
-                ('autonomous_labeling', 'Auto Label'),
-                ('final_validation', 'Validation'),
-                ('completed', 'Complete')
-            ] %}
-            {% set phase_order = ['setup', 'prompt_review', 'edge_case_synthesis', 'edge_case_labeling', 'prompt_validation', 'parallel_annotation', 'active_annotation', 'periodic_review', 'disagreement_resolution', 'autonomous_labeling', 'final_validation', 'completed'] %}
-            {% set current_index = phase_order.index(phase) if phase in phase_order else 0 %}
-
+        {# ── Phase progress bar ─────────────────────────────────── #}
+        {% set phases = [
+            ('setup', 'Setup'),
+            ('prompt_review', 'Prompt'),
+            ('edge_case_labeling', 'Edge Cases'),
+            ('parallel_annotation', 'Annotation'),
+            ('autonomous_labeling', 'Auto Label'),
+            ('final_validation', 'Validation'),
+            ('completed', 'Complete')
+        ] %}
+        {% set phase_order = ['setup', 'prompt_review', 'edge_case_synthesis', 'edge_case_labeling', 'prompt_validation', 'parallel_annotation', 'active_annotation', 'periodic_review', 'disagreement_resolution', 'autonomous_labeling', 'final_validation', 'completed'] %}
+        {% set current_index = phase_order.index(phase) if phase in phase_order else 0 %}
+        {# Map raw phase to the visible step the user is "on". #}
+        {% set step_for_phase = {
+            'setup': 1, 'prompt_review': 2, 'prompt_validation': 2,
+            'edge_case_synthesis': 3, 'edge_case_labeling': 3, 'rule_review': 3,
+            'parallel_annotation': 4, 'active_annotation': 4,
+            'disagreement_resolution': 4, 'periodic_review': 4,
+            'autonomous_labeling': 5,
+            'final_validation': 6,
+            'completed': 7,
+        } %}
+        {% set active_step = step_for_phase.get(phase, 1) %}
+        <nav class="phase-progress"
+             aria-label="Solo Mode workflow"
+             data-step="{{ active_step }}" data-total="{{ phases|length }}">
             {% for phase_id, phase_label in phases %}
                 {% set step_index = phase_order.index(phase_id) if phase_id in phase_order else 0 %}
-                <div class="phase-step {% if phase == phase_id %}active{% elif step_index < current_index %}completed{% endif %}">
-                    <span class="step-number">{{ loop.index }}</span>
+                {% set is_active = phase == phase_id or step_for_phase.get(phase) == loop.index %}
+                {% set is_completed = (not is_active) and step_index < current_index %}
+                <div class="phase-step {% if is_active %}active{% elif is_completed %}completed{% endif %}"
+                     {% if is_active %}aria-current="step"{% endif %}>
+                    <span class="step-number"
+                          {% if is_completed %}aria-label="completed step {{ loop.index }}, {{ phase_label }}"{% else %}aria-hidden="true"{% endif %}>
+                        {{ loop.index }}
+                    </span>
                     <span class="step-label">{{ phase_label }}</span>
                 </div>
             {% endfor %}
-        </div>
+        </nav>
 
         <!-- Main Content -->
         <div class="solo-main">
@@ -371,7 +559,7 @@
             </div>
 
             {% block sidebar %}
-            <div class="solo-sidebar">
+            <aside class="solo-sidebar" aria-label="Status sidebar">
                 <h3>Status</h3>
                 <div class="stats-panel">
                     {% block stats %}
@@ -383,34 +571,43 @@
                 </div>
 
                 {% block sidebar_extra %}{% endblock %}
-            </div>
+            </aside>
             {% endblock %}
         </div>
     </div>
 
     <script>
-        // Toggle LLM reasoning panel
+        // LLM reasoning disclosure: use aria-expanded so screen readers and
+        // CSS can read the state. The icon rotation is bound to that attr.
         document.querySelectorAll('.llm-reasoning-header').forEach(header => {
-            header.addEventListener('click', () => {
+            if (!header.hasAttribute('aria-expanded')) {
+                header.setAttribute('aria-expanded', 'true');
+            }
+            header.setAttribute('role', 'button');
+            header.setAttribute('tabindex', '0');
+            const toggle = () => {
+                const expanded = header.getAttribute('aria-expanded') === 'true';
+                header.setAttribute('aria-expanded', String(!expanded));
                 const content = header.nextElementSibling;
-                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+                if (content) content.hidden = expanded;
+            };
+            header.addEventListener('click', toggle);
+            header.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
             });
         });
 
         // Label button selection
         document.querySelectorAll('.label-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                // Remove selected from all
                 btn.parentElement.querySelectorAll('.label-btn').forEach(b => {
                     b.classList.remove('selected');
+                    b.setAttribute('aria-pressed', 'false');
                 });
-                // Add selected to clicked
                 btn.classList.add('selected');
-                // Update hidden input if exists
+                btn.setAttribute('aria-pressed', 'true');
                 const input = document.getElementById('selected-label');
-                if (input) {
-                    input.value = btn.dataset.label;
-                }
+                if (input) input.value = btn.dataset.label;
             });
         });
     </script>
