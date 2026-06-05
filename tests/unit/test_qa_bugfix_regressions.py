@@ -192,3 +192,37 @@ class TestColdStartLenientJsonParse:
         from potato.ai.llm_active_learning import _loads_lenient
         out = _loads_lenient('```\n{"label": "Z"}\n```')
         assert out["label"] == "Z"
+
+
+class TestPromptOptimizerConstructs:
+    """F-022: PromptOptimizer must accept prompt_optimization as a dataclass
+    (not only a dict); previously it called .get() on the dataclass -> crash
+    that was masked as 'Prompt optimizer not configured'."""
+
+    def _make(self, prompt_optimization):
+        import types
+        from potato.solo_mode.prompt_optimizer import PromptOptimizer
+        solo_config = types.SimpleNamespace(
+            prompt_optimization=prompt_optimization,
+            revision_models=[],
+        )
+        return PromptOptimizer(
+            config={}, solo_config=solo_config,
+            prompt_getter=lambda: "", prompt_setter=lambda *a, **k: None,
+            examples_getter=lambda: [],
+        )
+
+    def test_dataclass_prompt_optimization(self):
+        from potato.solo_mode.config import PromptOptimizationConfig
+        opt = self._make(PromptOptimizationConfig(enabled=True, target_accuracy=0.9))
+        assert opt.opt_config.enabled is True
+        assert opt.opt_config.target_accuracy == 0.9
+
+    def test_dict_prompt_optimization(self):
+        opt = self._make({"enabled": False, "target_accuracy": 0.5})
+        assert opt.opt_config.enabled is False
+        assert opt.opt_config.target_accuracy == 0.5
+
+    def test_none_prompt_optimization_uses_defaults(self):
+        opt = self._make(None)
+        assert opt.opt_config.enabled is True  # OptimizationConfig default
