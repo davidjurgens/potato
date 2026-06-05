@@ -27,6 +27,7 @@ import pickle
 import json
 from typing import Dict, List, Optional, Tuple, Any, Union
 from collections import defaultdict, Counter
+import dataclasses
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 import random
@@ -1546,6 +1547,50 @@ class ActiveLearningManager:
 
 # Global singleton instance
 ACTIVE_LEARNING_MANAGER = None
+
+
+def parse_active_learning_config(config_data: Dict[str, Any]) -> Optional[ActiveLearningConfig]:
+    """Build an ``ActiveLearningConfig`` from a Potato project config dict.
+
+    Returns None when active learning is not enabled. Maps the keys under the
+    ``active_learning:`` section onto the dataclass fields (unknown keys are
+    ignored), and defaults ``schema_names`` to the project's labelable
+    annotation schemes when not given.
+    """
+    al_dict = (config_data or {}).get("active_learning", {}) or {}
+    if not al_dict.get("enabled"):
+        return None
+
+    valid_fields = {f.name for f in dataclasses.fields(ActiveLearningConfig)}
+    kwargs = {k: v for k, v in al_dict.items() if k in valid_fields}
+
+    # YAML parses sequences as lists, but sklearn's vectorizers require a tuple
+    # for ngram_range (e.g. (1, 2)). Coerce it so training doesn't fail.
+    vec_params = kwargs.get("vectorizer_params")
+    if isinstance(vec_params, dict) and isinstance(vec_params.get("ngram_range"), list):
+        vec_params = dict(vec_params)
+        vec_params["ngram_range"] = tuple(vec_params["ngram_range"])
+        kwargs["vectorizer_params"] = vec_params
+
+    # resolution_strategy may arrive as a string; coerce to the enum.
+    rs = kwargs.get("resolution_strategy")
+    if isinstance(rs, str):
+        try:
+            kwargs["resolution_strategy"] = ResolutionStrategy(rs)
+        except ValueError:
+            kwargs.pop("resolution_strategy", None)
+
+    # Default schema_names to the labelable schemes in the project.
+    if not kwargs.get("schema_names"):
+        schemes = config_data.get("annotation_schemes", []) or []
+        kwargs["schema_names"] = [
+            s.get("name") for s in schemes
+            if s.get("name") and s.get("annotation_type") in (
+                "radio", "multiselect", "likert", "select"
+            )
+        ]
+
+    return ActiveLearningConfig(**kwargs)
 
 
 def init_active_learning_manager(config: ActiveLearningConfig) -> ActiveLearningManager:

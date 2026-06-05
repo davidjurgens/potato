@@ -4677,6 +4677,17 @@ def update_instance():
             total = mace_mgr.count_total_annotations()
             mace_mgr.check_and_run(total)
 
+        # Trigger active-learning retraining check. When enough new annotations
+        # have accumulated, this queues a background train + reorder of the
+        # unlabeled pool; never allowed to break the save.
+        try:
+            from potato.active_learning_manager import get_active_learning_manager
+            al_mgr = get_active_learning_manager()
+            if al_mgr and al_mgr.config.enabled:
+                al_mgr.check_and_trigger_training()
+        except Exception as e:
+            logger.debug("Active learning trigger skipped: %s", e)
+
         # Stamp this annotation with the codebook revision in effect so
         # an instance labeled before later code additions can be softly
         # flagged for review. No-op unless the project uses a codebook;

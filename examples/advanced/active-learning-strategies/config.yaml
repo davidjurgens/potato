@@ -17,6 +17,7 @@ user_config:
   users: []
 
 # Active learning with hybrid strategy, TF-IDF, and calibration
+assignment_strategy: active_learning
 active_learning:
   enabled: true
   query_strategy: "hybrid"

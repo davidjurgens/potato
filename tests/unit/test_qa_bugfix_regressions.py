@@ -86,3 +86,72 @@ class TestResolveGeneratedTemplatePath:
             assert fs._resolve_generated_template_path(path) == path
         finally:
             os.unlink(path)
+
+
+class TestAdjudicationAgreement:
+    """F-020: agreement must reflect actual radio disagreement, not always 1.0."""
+
+    def _agreement(self, annots):
+        from potato.adjudication import AdjudicationManager
+        # _compute_agreement is a plain method that doesn't touch instance state.
+        mgr = AdjudicationManager.__new__(AdjudicationManager)
+        return mgr._compute_agreement(annots, ["sentiment"])
+
+    def test_radio_total_disagreement_is_zero(self):
+        annots = {
+            "u1": {"sentiment": {"positive": "positive"}},
+            "u2": {"sentiment": {"negative": "negative"}},
+            "u3": {"sentiment": {"neutral": "neutral"}},
+        }
+        assert self._agreement(annots)["sentiment"] == 0.0
+
+    def test_radio_full_agreement_is_one(self):
+        annots = {
+            "u1": {"sentiment": {"positive": "positive"}},
+            "u2": {"sentiment": {"positive": "positive"}},
+        }
+        assert self._agreement(annots)["sentiment"] == 1.0
+
+    def test_radio_partial_agreement(self):
+        annots = {
+            "u1": {"sentiment": {"positive": "positive"}},
+            "u2": {"sentiment": {"positive": "positive"}},
+            "u3": {"sentiment": {"negative": "negative"}},
+        }
+        # pairs: (u1,u2)=agree, (u1,u3)=disagree, (u2,u3)=disagree -> 1/3
+        assert abs(self._agreement(annots)["sentiment"] - (1 / 3)) < 1e-9
+
+
+class TestActiveLearningConfigParser:
+    """F-021: AL config parsing (incl. ngram_range list->tuple coercion)."""
+
+    def test_disabled_returns_none(self):
+        from potato.active_learning_manager import parse_active_learning_config
+        assert parse_active_learning_config({"active_learning": {"enabled": False}}) is None
+        assert parse_active_learning_config({}) is None
+
+    def test_ngram_range_coerced_to_tuple(self):
+        from potato.active_learning_manager import parse_active_learning_config
+        cfg = {
+            "active_learning": {
+                "enabled": True,
+                "vectorizer_params": {"ngram_range": [1, 2], "max_features": 5000},
+            },
+            "annotation_schemes": [{"name": "s", "annotation_type": "radio"}],
+        }
+        al = parse_active_learning_config(cfg)
+        assert al is not None
+        assert al.vectorizer_params["ngram_range"] == (1, 2)
+        assert isinstance(al.vectorizer_params["ngram_range"], tuple)
+
+    def test_schema_names_default_from_schemes(self):
+        from potato.active_learning_manager import parse_active_learning_config
+        cfg = {
+            "active_learning": {"enabled": True, "query_strategy": "uncertainty"},
+            "annotation_schemes": [
+                {"name": "sentiment", "annotation_type": "radio"},
+                {"name": "notes", "annotation_type": "text"},
+            ],
+        }
+        al = parse_active_learning_config(cfg)
+        assert al.schema_names == ["sentiment"]  # text scheme excluded

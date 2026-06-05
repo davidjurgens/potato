@@ -2257,8 +2257,10 @@ def render_page_with_annotations(username: str):
     # did
     annotations = get_annotations_for_user_on(username, instance_id)
 
-    # If no annotations yet, check for pre-annotations (model predictions)
-    if annotations is None and pre_annotation_data:
+    # If no annotations yet, check for pre-annotations (model predictions).
+    # NOTE: get_annotations_for_user_on returns an empty dict {} (not None) for a
+    # user with no annotations, so guard on falsiness rather than `is None`.
+    if not annotations and pre_annotation_data:
         logger.debug(f"Applying pre-annotations for instance {instance_id}")
         scheme_dict = {}
         annotations = defaultdict(dict)
@@ -2274,14 +2276,18 @@ def render_page_with_annotations(username: str):
 
             scheme = scheme_dict[schema_name]
             if scheme['annotation_type'] in ['radio', 'multiselect']:
-                # predicted_value should be a label name
+                # predicted_value should be a label name. Store the LABEL NAME as
+                # the value (not the label2value index): the renderer below checks
+                # a radio when input.value == value, and the radio's value
+                # attribute is the label name. This matches how a returning
+                # user's restored annotations are stored.
                 if isinstance(predicted_value, str) and predicted_value in scheme.get('label2value', {}):
-                    annotations[schema_name][predicted_value] = scheme['label2value'][predicted_value]
+                    annotations[schema_name][predicted_value] = predicted_value
                 elif isinstance(predicted_value, list):
                     # Multi-select: multiple values
                     for val in predicted_value:
                         if val in scheme.get('label2value', {}):
-                            annotations[schema_name][val] = scheme['label2value'][val]
+                            annotations[schema_name][val] = val
             elif scheme['annotation_type'] in ['text']:
                 if "labels" not in scheme:
                     annotations[schema_name]['text_box'] = str(predicted_value)
@@ -2291,7 +2297,8 @@ def render_page_with_annotations(username: str):
                 logger.debug(f"Pre-annotation not yet supported for {scheme['annotation_type']}")
 
     # convert the label suggestions into annotations for front-end rendering
-    if annotations == None and schema_content_to_prefill:
+    # (empty dict, like None, means "no user annotations yet")
+    if not annotations and schema_content_to_prefill:
         scheme_dict = {}
         annotations = defaultdict(dict)
         for it in config['annotation_schemes']:
@@ -2300,7 +2307,9 @@ def render_page_with_annotations(username: str):
             scheme_dict[it['name']] = it
         for s in schema_content_to_prefill:
             if scheme_dict[s['name']]['annotation_type'] in ['radio', 'multiselect']:
-                annotations[s['name']][s['label']] = scheme_dict[s['name']]['label2value'][s['label']]
+                # Store the label NAME as value so the renderer matches the
+                # radio/checkbox input's value attribute (not the index).
+                annotations[s['name']][s['label']] = s['label']
             elif scheme_dict[s['name']]['annotation_type'] in ['text']:
                 if "labels" not in scheme_dict[s['name']]:
                     annotations[s['name']]['text_box'] = s['label']
@@ -3590,6 +3599,29 @@ def run_server(args):
                 "Diversity ordering requested but manager not enabled. "
                 "Install sentence-transformers and scikit-learn: "
                 "pip install sentence-transformers scikit-learn"
+            )
+
+    # Initialize active learning manager if enabled. The manager trains a
+    # classifier on annotations in a background thread and reorders the
+    # unlabeled pool by query strategy (uncertainty/BADGE/BALD/hybrid). Without
+    # this, `assignment_strategy: active_learning` falls back to random order.
+    if config.get('active_learning', {}).get('enabled', False):
+        try:
+            from potato.active_learning_manager import (
+                parse_active_learning_config, init_active_learning_manager,
+            )
+            al_cfg = parse_active_learning_config(config)
+            if al_cfg:
+                init_active_learning_manager(al_cfg)
+                logger.info(
+                    "Active learning manager initialized (query_strategy=%s, "
+                    "update_frequency=%s, schemas=%s)",
+                    al_cfg.query_strategy, al_cfg.update_frequency, al_cfg.schema_names,
+                )
+        except Exception as e:
+            logger.warning(
+                "Active learning requested but could not initialize (%s). "
+                "Continuing without active-learning reordering.", e
             )
 
     # Initialize quality control manager if any QC features are enabled

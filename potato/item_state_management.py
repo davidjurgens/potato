@@ -1253,7 +1253,12 @@ class ItemStateManager:
                 assigned += 1
             return assigned
         elif self.assignment_strategy == AssignmentStrategy.ACTIVE_LEARNING:
-            # Active learning assignment strategy (currently falls back to random)
+            # Active learning: serve items in the current pool order. The
+            # ActiveLearningManager (when enabled) reorders remaining_instance_ids
+            # by query strategy (uncertainty/BADGE/BALD/hybrid) after each
+            # retrain, so taking items in-order surfaces the most informative
+            # unlabeled instances first. Before any retrain (cold start) this is
+            # simply the configured order.
             unlabeled_items = []
             for iid in list(self.remaining_instance_ids):
                 if self._item_is_saturated(iid):
@@ -1264,8 +1269,8 @@ class ItemStateManager:
                     unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
-            to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
-            self.logger.debug(f"Active learning (random fallback): assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
+            to_assign = unlabeled_items[:instances_to_assign]
+            self.logger.debug(f"Active learning: assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
                 user_state.assign_instance(self.instance_id_to_instance[item_id])
             return len(to_assign)
