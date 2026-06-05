@@ -800,10 +800,13 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     if not isinstance(config_data, dict):
         raise ConfigValidationError("Configuration must be a YAML object (dictionary)")
 
-    # Required fields validation
+    # Required fields validation. NOTE: 'data_files' is intentionally NOT here —
+    # it is one of three mutually-acceptable data sources (data_files /
+    # data_directory / data_sources), enforced by the dedicated check below.
+    # Listing it here unconditionally made data_directory- and data_sources-only
+    # configs fail validation before that smarter check could run (F-038).
     required_fields = [
         'item_properties',
-        'data_files',
         'task_dir',
         'output_annotation_dir',
         'annotation_task_name',
