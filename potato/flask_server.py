@@ -628,7 +628,8 @@ def load_instance_data(config: dict):
             line_no = len(items)
 
         # If the admin didn't specify a subset, have the user annotate all instances
-        max_annotations_per_user = config.get("max_annotations_per_user", len(ism.get_instance_ids()))
+        # (or unlimited when a dynamic source can add more at runtime — see F-037).
+        max_annotations_per_user = _default_max_annotations_per_user(config, ism)
         get_user_state_manager().set_max_annotations_per_user(max_annotations_per_user)
 
         logger.debug("Loaded %d instances from %s" % (line_no, data_fname))
@@ -703,6 +704,30 @@ def load_instance_data(config: dict):
     _render_displayed_text(text_key)
 
 
+def _default_max_annotations_per_user(config: dict, ism) -> int:
+    """
+    Resolve the default per-user annotation quota.
+
+    When ``max_annotations_per_user`` is explicitly configured, honor it.
+    Otherwise the historical default is "annotate everything" = the instance
+    count. But that count is frozen at load time, so when a DYNAMIC data source
+    can add items at runtime (trace ingestion, directory watching), freezing the
+    cap means later-added items exceed every user's quota and are never assigned
+    to any annotator (F-037). In that case default to unlimited (-1) instead, so
+    the live ``remaining_instance_ids`` pool stays fully assignable.
+    """
+    configured = config.get("max_annotations_per_user")
+    if configured is not None:
+        return configured
+    dynamic_source = bool(
+        (config.get("trace_ingestion") or {}).get("enabled")
+        or config.get("watch_data_directory")
+    )
+    if dynamic_source:
+        return -1
+    return len(ism.get_instance_ids())
+
+
 def _render_displayed_text(text_key: str) -> None:
     """
     Render the displayed text for all items.
@@ -752,11 +777,9 @@ def _load_from_data_sources(config: dict, ism, id_key: str, text_key: str) -> No
     total_loaded = manager.load_initial_data()
     logger.info(f"Loaded {total_loaded} items from data sources")
 
-    # Set max annotations per user
-    max_annotations_per_user = config.get(
-        "max_annotations_per_user",
-        len(ism.get_instance_ids())
-    )
+    # Set max annotations per user (unlimited when a dynamic source — e.g. a
+    # watched directory or trace ingestion — can add items at runtime; F-037).
+    max_annotations_per_user = _default_max_annotations_per_user(config, ism)
     get_user_state_manager().set_max_annotations_per_user(max_annotations_per_user)
 
     # Render displayed text for all loaded items
