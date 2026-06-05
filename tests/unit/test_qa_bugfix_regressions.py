@@ -155,3 +155,40 @@ class TestActiveLearningConfigParser:
         }
         al = parse_active_learning_config(cfg)
         assert al.schema_names == ["sentiment"]  # text scheme excluded
+
+    def test_nested_llm_block_maps_to_llm_enabled(self):
+        from potato.active_learning_manager import parse_active_learning_config
+        cfg = {
+            "active_learning": {
+                "enabled": True,
+                "cold_start_strategy": "llm",
+                "llm": {"enabled": True, "use_mock": True, "model_name": "m"},
+            },
+            "annotation_schemes": [{"name": "topic", "annotation_type": "radio"}],
+        }
+        al = parse_active_learning_config(cfg)
+        assert al.llm_enabled is True
+        assert al.llm_config.get("use_mock") is True
+
+
+class TestColdStartLenientJsonParse:
+    """F-023: LLM cold-start must tolerate fenced/prose-wrapped JSON."""
+
+    def test_fenced_json(self):
+        from potato.ai.llm_active_learning import _loads_lenient
+        out = _loads_lenient('```json\n{"label": "Finance", "confidence": 8}\n```')
+        assert out == {"label": "Finance", "confidence": 8}
+
+    def test_plain_json(self):
+        from potato.ai.llm_active_learning import _loads_lenient
+        assert _loads_lenient('{"label": "X", "confidence": 5}')["label"] == "X"
+
+    def test_prose_wrapped_json(self):
+        from potato.ai.llm_active_learning import _loads_lenient
+        out = _loads_lenient('Sure! {"label": "Y", "confidence": 3} hope that helps')
+        assert out["label"] == "Y"
+
+    def test_bare_fence_without_lang(self):
+        from potato.ai.llm_active_learning import _loads_lenient
+        out = _loads_lenient('```\n{"label": "Z"}\n```')
+        assert out["label"] == "Z"

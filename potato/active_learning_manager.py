@@ -1564,6 +1564,13 @@ def parse_active_learning_config(config_data: Dict[str, Any]) -> Optional[Active
     valid_fields = {f.name for f in dataclasses.fields(ActiveLearningConfig)}
     kwargs = {k: v for k, v in al_dict.items() if k in valid_fields}
 
+    # Honor the nested `active_learning.llm:` block (LLM cold-start / ICL).
+    # The dataclass uses flat fields (llm_enabled / llm_config), so translate.
+    llm_block = al_dict.get("llm")
+    if isinstance(llm_block, dict):
+        kwargs.setdefault("llm_enabled", bool(llm_block.get("enabled", False)))
+        kwargs.setdefault("llm_config", llm_block)
+
     # YAML parses sequences as lists, but sklearn's vectorizers require a tuple
     # for ngram_range (e.g. (1, 2)). Coerce it so training doesn't fail.
     vec_params = kwargs.get("vectorizer_params")
