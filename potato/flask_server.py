@@ -3152,6 +3152,8 @@ def create_app(config_file=None):
             'go_button': 'Go',
             'retry_button': 'Retry',
             'logout': 'Logout',
+            'jump_prev_unannotated': 'Previous unannotated',
+            'jump_next_unannotated': 'Next unannotated',
             # Status indicators
             'labeled_badge': 'Labeled',
             'in_progress_badge': 'In Progress',

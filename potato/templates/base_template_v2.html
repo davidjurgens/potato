@@ -1,6 +1,6 @@
 {# Default ui_lang values if not provided by context processor #}
 {% if ui_lang is not defined %}
-{% set ui_lang = {'next_button': 'Next', 'previous_button': 'Previous', 'labeled_badge': 'Labeled', 'not_labeled_badge': 'Not labeled', 'submit_button': 'Submit', 'progress_label': 'Progress', 'go_button': 'Go', 'logout': 'Logout', 'loading': 'Loading annotation interface...', 'error_heading': 'Error', 'retry_button': 'Retry', 'adjudicate': 'Adjudicate', 'codebook': 'Codebook', 'instructions_heading': 'Instructions', 'text_to_annotate': 'Text to Annotate:', 'video_to_annotate': 'Video to Annotate:', 'audio_to_annotate': 'Audio to Annotate:', 'powered_by': 'Powered by', 'cite_us': 'Cite Us', 'html_lang': 'en', 'html_dir': 'ltr'} %}
+{% set ui_lang = {'next_button': 'Next', 'previous_button': 'Previous', 'jump_prev_unannotated': 'Previous unannotated', 'jump_next_unannotated': 'Next unannotated', 'labeled_badge': 'Labeled', 'not_labeled_badge': 'Not labeled', 'submit_button': 'Submit', 'progress_label': 'Progress', 'go_button': 'Go', 'logout': 'Logout', 'loading': 'Loading annotation interface...', 'error_heading': 'Error', 'retry_button': 'Retry', 'adjudicate': 'Adjudicate', 'codebook': 'Codebook', 'instructions_heading': 'Instructions', 'text_to_annotate': 'Text to Annotate:', 'video_to_annotate': 'Video to Annotate:', 'audio_to_annotate': 'Audio to Annotate:', 'powered_by': 'Powered by', 'cite_us': 'Cite Us', 'html_lang': 'en', 'html_dir': 'ltr'} %}
 {% endif %}
 <!DOCTYPE html>
 <html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
@@ -183,11 +183,11 @@
 
                 <div class="nav-controls">
                     <button type="button" class="nav-control-btn" id="jump-unannotated-prev-btn"
-                            onclick="jumpToUnannotatedPrev()" title="Previous unannotated">
+                            onclick="jumpToUnannotatedPrev()" title="{{ ui_lang.jump_prev_unannotated }}">
                         <i class="fas fa-backward"></i>
                     </button>
                     <button type="button" class="nav-control-btn" id="jump-unannotated-btn"
-                            onclick="jumpToUnannotated()" title="Next unannotated">
+                            onclick="jumpToUnannotated()" title="{{ ui_lang.jump_next_unannotated }}">
                         <i class="fas fa-forward"></i>
                     </button>
                 </div>
