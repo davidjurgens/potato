@@ -239,6 +239,22 @@ class TestInstanceDataRouteRegistered:
             "it 404s on live/test servers, breaking per-test isolation."
         )
 
+    def test_every_module_route_is_reregistered(self):
+        # F-042 (general invariant for the F-024/F-041 class): EVERY module-level
+        # @app.route path must also be registered via add_url_rule in
+        # configure_routes, otherwise it 404s on every live `potato start` server
+        # (the serving app is built by configure_routes, not the throwaway
+        # module-level app). This catches any newly-added dead route.
+        import re
+        src = self._routes_src()
+        route_paths = set(re.findall(r'@app\.route\(\s*["\']([^"\']+)["\']', src))
+        rule_paths = set(re.findall(r'add_url_rule\(\s*["\']([^"\']+)["\']', src))
+        missing = sorted(route_paths - rule_paths)
+        assert not missing, (
+            "These @app.route paths lack an add_url_rule in configure_routes and "
+            f"will 404 on live servers (F-024 class): {missing}"
+        )
+
 
 class TestLabelColorBooleanSafe:
     """F-027: label color helpers must tolerate non-str label names produced by

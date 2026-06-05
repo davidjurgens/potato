@@ -6930,6 +6930,23 @@ def configure_routes(flask_app, app_config):
     # configure_routes — leaving Selenium suites that rely on it (e.g. video
     # annotation persistence) without per-test isolation.
     app.add_url_rule("/admin/api/test/reset_state", "admin_api_test_reset_state", admin_api_test_reset_state, methods=["POST"])
+    # F-042 (F-024 class): these were registered ONLY via module-level @app.route
+    # and so 404'd on every live `potato start` server (the serving app is built
+    # by configure_routes). Audit: diff of @app.route paths vs add_url_rule paths.
+    app.add_url_rule("/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
+    app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
+    app.add_url_rule("/admin/api/step_agreement", "admin_api_step_agreement", admin_api_step_agreement, methods=["GET"])
+    app.add_url_rule("/admin/api/step_quality", "admin_api_step_quality", admin_api_step_quality, methods=["GET"])
+    app.add_url_rule("/api/waveform/<cache_key>", "get_waveform_data", get_waveform_data, methods=["GET"])
+    app.add_url_rule("/api/waveform/generate", "generate_waveform", generate_waveform, methods=["POST"])
+    app.add_url_rule("/api/video/metadata", "get_video_metadata", get_video_metadata, methods=["POST"])
+    app.add_url_rule("/api/video/waveform/generate", "generate_video_waveform", generate_video_waveform, methods=["POST"])
+    app.add_url_rule("/admin/api/data_sources", "admin_api_data_sources", admin_api_data_sources, methods=["GET"])
+    app.add_url_rule("/admin/api/data_sources/<source_id>/load_more", "admin_api_data_sources_load_more", admin_api_data_sources_load_more, methods=["POST"])
+    app.add_url_rule("/admin/api/data_sources/<source_id>/refresh", "admin_api_data_sources_refresh", admin_api_data_sources_refresh, methods=["POST"])
+    app.add_url_rule("/admin/api/cache/clear", "admin_api_cache_clear", admin_api_cache_clear, methods=["POST"])
+    app.add_url_rule("/admin/api/webhooks", "admin_api_webhooks", admin_api_webhooks, methods=["GET"])
+    app.add_url_rule("/admin/api/webhooks/test", "admin_api_webhooks_test", admin_api_webhooks_test, methods=["POST"])
     app.add_url_rule("/admin/api/questions", "admin_api_questions", admin_api_questions, methods=["GET"])
     app.add_url_rule("/admin/api/annotation_history", "admin_api_annotation_history", admin_api_annotation_history, methods=["GET"])
     app.add_url_rule("/admin/api/suspicious_activity", "admin_api_suspicious_activity", admin_api_suspicious_activity, methods=["GET"])
