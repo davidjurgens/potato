@@ -139,6 +139,9 @@ KNOWN_CONFIG_KEYS = {
     "category_assignment": {
         "enabled", "category_key", "qualification", "fallback", "dynamic",
     },
+    "batch_assignment": {
+        "groups", "annotator_key",
+    },
     "diversity_ordering": {
         "enabled", "model_name", "num_clusters", "items_per_cluster",
         "auto_clusters", "prefill_count", "batch_size",
@@ -517,6 +520,7 @@ _OPTIONAL_BOOL_FIELDS = {
 _VALID_ASSIGNMENT_STRATEGIES = [
     "random", "fixed_order", "active_learning", "llm_confidence",
     "max_diversity", "least_annotated", "category_based", "diversity_clustering",
+    "batch",
 ]
 
 
@@ -875,6 +879,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate category assignment configuration if present
     validate_category_assignment_config(config_data)
 
+    # Validate batch assignment configuration if present
+    validate_batch_assignment_config(config_data)
+
     # Validate diversity ordering configuration if present
     validate_diversity_config(config_data)
 
@@ -930,7 +937,7 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 _CLAIM_INCOMPATIBLE_STRATEGIES = {
     "random", "diversity_clustering", "max_diversity",
     "active_learning", "llm_confidence", "least_annotated",
-    "category_based",
+    "category_based", "batch",
 }
 
 
@@ -2783,6 +2790,35 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
         except ConfigSecurityError as e:
             raise ConfigSecurityError(f"Data file {i}: {str(e)}")
 
+    # Validate batch assignment instance files
+    batch_config = config_data.get('batch_assignment')
+    if isinstance(batch_config, dict):
+        for i, group in enumerate(batch_config.get('groups') or []):
+            if not isinstance(group, dict):
+                continue
+            file_entry = group.get(
+                'instances_file',
+                group.get('items_file', group.get('instance_ids_file')),
+            )
+            if not file_entry:
+                continue
+            if isinstance(file_entry, dict):
+                file_path = file_entry.get("path")
+            else:
+                file_path = file_entry
+
+            try:
+                validated_path = validate_path_security(file_path, base_dir, project_dir)
+                if not os.path.exists(validated_path):
+                    raise ConfigValidationError(
+                        f"batch_assignment.groups[{i}] file not found: "
+                        f"{file_path} (resolved to: {validated_path})"
+                    )
+            except ConfigSecurityError as e:
+                raise ConfigSecurityError(
+                    f"batch_assignment.groups[{i}] file: {str(e)}"
+                )
+
     # Validate data_directory if configured
     if 'data_directory' in config_data:
         data_directory = config_data['data_directory']
@@ -3051,6 +3087,96 @@ def validate_training_data_file(data_file_path: str, annotation_schemes: List[Di
         if 'explanation' in instance:
             if not isinstance(instance['explanation'], str):
                 raise ConfigValidationError(f"Training instance {i}.explanation must be a string")
+
+
+def validate_batch_assignment_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate batch assignment configuration.
+
+    ``batch_assignment`` supports explicit annotator cohorts for repeat-round
+    studies. Each group defines annotators allowed to receive a fixed item set,
+    either inline or through a separate supported data file. Items may also
+    carry annotator lists via ``annotator_key``; that field is validated at
+    assignment time because data files load later.
+    """
+    if 'batch_assignment' not in config_data:
+        return
+
+    batch_config = config_data['batch_assignment']
+    if not isinstance(batch_config, dict):
+        raise ConfigValidationError("batch_assignment must be a dictionary")
+
+    annotator_key = batch_config.get('annotator_key')
+    if annotator_key is not None and (
+        not isinstance(annotator_key, str) or not annotator_key.strip()
+    ):
+        raise ConfigValidationError("batch_assignment.annotator_key must be a non-empty string")
+
+    groups = batch_config.get('groups', [])
+    if groups is None:
+        return
+    if not isinstance(groups, list):
+        raise ConfigValidationError("batch_assignment.groups must be a list")
+
+    for idx, group in enumerate(groups):
+        if not isinstance(group, dict):
+            raise ConfigValidationError(f"batch_assignment.groups[{idx}] must be a dictionary")
+
+        users = group.get('annotators', group.get('users'))
+        instances = group.get('instances', group.get('items', group.get('instance_ids')))
+        file_entry = group.get(
+            'instances_file',
+            group.get('items_file', group.get('instance_ids_file')),
+        )
+
+        if not isinstance(users, list) or not users:
+            raise ConfigValidationError(
+                f"batch_assignment.groups[{idx}] must define non-empty annotators/users list"
+            )
+        if not all(isinstance(user, str) and user.strip() for user in users):
+            raise ConfigValidationError(
+                f"batch_assignment.groups[{idx}].annotators/users must contain non-empty strings"
+            )
+
+        has_instances = instances is not None
+        has_file = file_entry is not None
+
+        if not has_instances and not has_file:
+            raise ConfigValidationError(
+                f"batch_assignment.groups[{idx}] must define either "
+                "instances/items/instance_ids or instances_file/items_file/instance_ids_file"
+            )
+
+        if has_instances and (not isinstance(instances, list) or not instances):
+            raise ConfigValidationError(
+                f"batch_assignment.groups[{idx}] must define non-empty instances/items/instance_ids list"
+            )
+        if has_instances and not all(isinstance(instance, str) and instance.strip() for instance in instances):
+            raise ConfigValidationError(
+                f"batch_assignment.groups[{idx}].instances/items/instance_ids must contain non-empty strings"
+            )
+
+        if has_file:
+            if isinstance(file_entry, str):
+                if not file_entry.strip():
+                    raise ConfigValidationError(
+                        f"batch_assignment.groups[{idx}] file path must be non-empty"
+                    )
+            elif isinstance(file_entry, dict):
+                path = file_entry.get('path')
+                if not isinstance(path, str) or not path.strip():
+                    raise ConfigValidationError(
+                        f"batch_assignment.groups[{idx}] file entry must define a non-empty path"
+                    )
+                encoding = file_entry.get('encoding')
+                if encoding is not None and not isinstance(encoding, str):
+                    raise ConfigValidationError(
+                        f"batch_assignment.groups[{idx}] file encoding must be a string"
+                    )
+            else:
+                raise ConfigValidationError(
+                    f"batch_assignment.groups[{idx}] file entry must be a path string or mapping"
+                )
 
 
 def validate_category_assignment_config(config_data: Dict[str, Any]) -> None:

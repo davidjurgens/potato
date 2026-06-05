@@ -185,6 +185,29 @@ def test_quality_control_block_can_clear_all_completed_annotations(monkeypatch):
     assert "item_1" in manager.remaining_instance_ids
 
 
+def test_clear_completed_assignment_does_not_decrement_count_without_annotator_credit():
+    manager = _manager_with_items(
+        {
+            "enabled": True,
+            "quality_control": {"preserve_completed_annotations": False},
+        }
+    )
+    user = InMemoryUserState("drifted_worker")
+    user.advance_to_phase(UserPhase.ANNOTATION, None)
+    user.assign_instance(manager.get_item("item_1"))
+    user.add_label_annotation("item_1", Label("sentiment", "positive"), "true")
+    manager.item_annotation_counts["item_1"] = 2
+
+    reclaimed = manager.reclaim_unannotated_assignments_for_user(
+        user,
+        reason="quality_control_block",
+    )
+
+    assert reclaimed == ["item_1"]
+    assert manager.item_annotation_counts["item_1"] == 2
+    assert user.has_annotated("item_1") is False
+
+
 def test_prolific_status_policies_can_preserve_timeout_and_clear_rejected(monkeypatch):
     manager = _manager_with_items(
         {

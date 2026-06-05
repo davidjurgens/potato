@@ -33,7 +33,7 @@ Task assignment controls:
 
 ## Assignment Strategies
 
-Potato supports seven assignment strategies.
+Potato supports eight assignment strategies.
 
 ### Fully Implemented Strategies
 
@@ -108,9 +108,61 @@ diversity_ordering:
 
 See [Diversity Ordering](../workflow/diversity_ordering.md) for full configuration.
 
+#### 6. Batch Assignment (`batch`)
+
+Restricts assignment to explicit annotator/item cohorts. This is intended for
+repeat-round study designs where the same annotators who saw a first-round item
+batch must receive the corresponding second-round batch.
+
+```yaml
+assignment_strategy: batch
+num_annotators_per_item: 4
+
+batch_assignment:
+  groups:
+    - name: round1_batch_a
+      annotators: ["u1", "u2", "u3", "u4"]
+      instances: ["r2_item_001", "r2_item_002"]
+```
+
+For long batches, move the instance list into a separate data file. The file can
+use the same local formats supported by `data_files` (`json`, `jsonl`, `csv`,
+`tsv`, or `parquet`) and IDs are read using `item_properties.id_key`:
+
+```yaml
+assignment_strategy: batch
+num_annotators_per_item: 4
+
+batch_assignment:
+  groups:
+    - name: round1_batch_a
+      annotators: ["u1", "u2", "u3", "u4"]
+      instances_file: batches/round1_batch_a.csv
+```
+
+Items can also define their allowed annotators directly. This is useful when
+round-2 data is generated from round-1 annotations:
+
+```yaml
+assignment_strategy: batch
+
+batch_assignment:
+  annotator_key: round1_annotators
+```
+
+```json
+{
+  "id": "r2_item_001",
+  "text": "Round 2 item text",
+  "round1_annotators": ["u1", "u2", "u3", "u4"]
+}
+```
+
+Users outside configured cohorts receive no items under this strategy.
+
 ### ML-Based Strategies
 
-#### 6. Active Learning Assignment (`active_learning`)
+#### 7. Active Learning Assignment (`active_learning`)
 
 Uses machine learning to prioritize uncertain instances. Integrates with `ActiveLearningManager` for intelligent reordering.
 
@@ -127,7 +179,7 @@ active_learning:
 
 See [Active Learning Guide](../ai-intelligence/active_learning_guide.md) for full configuration.
 
-#### 7. LLM Confidence Assignment (`llm_confidence`)
+#### 8. LLM Confidence Assignment (`llm_confidence`)
 
 Uses LLM confidence scores to prioritize items. Currently falls back to random assignment.
 
@@ -160,7 +212,7 @@ assignment:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `assignment_strategy` | string | One of: `random`, `fixed_order`, `least_annotated`, `max_diversity`, `diversity_clustering`, `active_learning`, `llm_confidence` |
+| `assignment_strategy` | string | One of: `random`, `fixed_order`, `least_annotated`, `max_diversity`, `diversity_clustering`, `batch`, `active_learning`, `llm_confidence` |
 | `max_annotations_per_user` | integer | Maximum annotations per user (-1 = unlimited) |
 | `max_annotations_per_item` | integer | Target annotations per item (-1 = unlimited) |
 | `assignment.random_seed` | integer | Seed for reproducible random assignment |
