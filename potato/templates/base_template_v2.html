@@ -499,12 +499,12 @@
 
     <!-- Document bounding box annotation -->
     {% if frontend_assets.document_bbox | default(false) %}
-    <script src="{{ url_for('static', filename='document-bbox.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='document-bbox.js') }}?v=3"></script>
     {% endif %}
 
     <!-- PDF bounding box annotation -->
     {% if frontend_assets.pdf_bbox | default(false) %}
-    <script src="{{ url_for('static', filename='pdf-bbox.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='pdf-bbox.js') }}?v=3"></script>
     {% endif %}
 
     {% if agent_proxy_enabled | default(false) %}

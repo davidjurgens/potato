@@ -331,6 +331,14 @@ class PDFDisplay(BaseDisplay):
         # Error display
         parts.append('<div class="pdf-error" style="display: none;"></div>')
 
+        # Hidden input that carries drawn boxes through the standard save
+        # pipeline (collected as "{name}:::_data", restored by the server). F-040.
+        parts.append(
+            f'<input type="hidden" class="annotation-data-input" '
+            f'name="{html.escape(field_key)}" id="input-{html.escape(field_key)}" '
+            f'value="">'
+        )
+
         parts.append('</div>')  # Close main container
 
         return "\n".join(parts)
@@ -424,6 +432,14 @@ class PDFDisplay(BaseDisplay):
                 <div class="pdf-bbox-total">Total boxes: <span class="count">0</span></div>
             </div>
         ''')
+
+        # Hidden input that carries drawn boxes through the standard save
+        # pipeline (collected as "{name}:::_data", restored by the server). F-040.
+        parts.append(
+            f'<input type="hidden" class="annotation-data-input" '
+            f'name="{html.escape(field_key)}" id="input-{html.escape(field_key)}" '
+            f'value="">'
+        )
 
         parts.append('</div>')
 

@@ -719,10 +719,34 @@
     }
 
     /**
+     * Find the hidden input that persists this widget's boxes through the
+     * standard annotation save pipeline (class annotation-data-input, rendered
+     * by document_display.py). Falls back to the legacy bbox_annotations name.
+     */
+    function getDataInput(container) {
+        return container.querySelector('input.annotation-data-input')
+            || container.querySelector('input[name="bbox_annotations"]');
+    }
+
+    /**
+     * Persist the current boxes into the hidden input so saveAnnotations()
+     * collects them as "{name}:::_data". F-040.
+     */
+    function persistBoxes(container) {
+        const input = getDataInput(container);
+        if (!input) return;
+        const fieldKey = container.getAttribute('data-field-key');
+        input.value = JSON.stringify(boundingBoxes[fieldKey] || []);
+        // Let the autosave/validation pipeline know this changed.
+        input.setAttribute('data-modified', 'true');
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    /**
      * Load existing annotations.
      */
     function loadExistingAnnotations(container, fieldKey) {
-        const existingData = container.querySelector('input[name="bbox_annotations"]');
+        const existingData = getDataInput(container);
         if (existingData && existingData.value) {
             try {
                 const annotations = JSON.parse(existingData.value);
@@ -739,9 +763,11 @@
     }
 
     /**
-     * Trigger a custom event.
+     * Trigger a custom event. Also persists boxes to the hidden input, since
+     * this runs on every box mutation (created/labeled/resized/deleted).
      */
     function triggerBoundingBoxEvent(container, eventName, data) {
+        persistBoxes(container);
         const event = new CustomEvent(eventName, {
             detail: {
                 fieldKey: container.getAttribute('data-field-key'),

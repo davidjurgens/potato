@@ -232,6 +232,19 @@ class DocumentDisplay(BaseDisplay):
         # Canvas overlay for drawing bounding boxes
         parts.append('<canvas class="document-bbox-canvas"></canvas>')
 
+        # Hidden input that carries the drawn boxes through the standard save
+        # pipeline. saveAnnotations() collects any input.annotation-data-input as
+        # "{name}:::_data", the server stores it, and render_page_with_annotations
+        # repopulates value + data-server-set on restore — the same channel the
+        # image_annotation/video schemas use. Without this the boxes are never
+        # persisted (F-040). The name matches data-field-key so document-bbox.js
+        # reads/writes it.
+        parts.append(
+            f'<input type="hidden" class="annotation-data-input" '
+            f'name="{html.escape(field_key)}" id="input-{html.escape(field_key)}" '
+            f'value="">'
+        )
+
         parts.append('</div>')  # Close bbox-container
 
         # Metadata footer

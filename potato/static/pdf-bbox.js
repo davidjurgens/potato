@@ -902,9 +902,37 @@
     /**
      * Load existing annotations from hidden input.
      */
+    /**
+     * Find the hidden input that persists boxes through the standard save
+     * pipeline (class annotation-data-input, rendered by pdf_display.py).
+     * Falls back to the legacy bbox_annotations name.
+     */
+    function getDataInput(container) {
+        return container.querySelector('input.annotation-data-input')
+            || container.querySelector('input[name="bbox_annotations"]');
+    }
+
+    /**
+     * Persist boxes (flat, page-tagged array) into the hidden input so
+     * saveAnnotations() collects them as "{name}:::_data". F-040.
+     */
+    function persistBoxes(container) {
+        const input = getDataInput(container);
+        if (!input) return;
+        const fieldKey = container.getAttribute('data-field-key');
+        const flat = [];
+        Object.entries(boundingBoxes[fieldKey] || {}).forEach(([page, boxes]) => {
+            (boxes || []).forEach(box => flat.push(
+                Object.assign({}, box, { page: parseInt(page, 10) })));
+        });
+        input.value = JSON.stringify(flat);
+        input.setAttribute('data-modified', 'true');
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
     function loadExistingAnnotations(container, fieldKey) {
         // Look for existing annotation data
-        const existingData = container.querySelector('input[name="bbox_annotations"]');
+        const existingData = getDataInput(container);
         if (existingData && existingData.value) {
             try {
                 const annotations = JSON.parse(existingData.value);
@@ -927,9 +955,11 @@
     }
 
     /**
-     * Trigger a custom event for bounding box actions.
+     * Trigger a custom event for bounding box actions. Also persists boxes to
+     * the hidden input (runs on every box mutation).
      */
     function triggerBoundingBoxEvent(container, eventName, data) {
+        persistBoxes(container);
         const event = new CustomEvent(eventName, {
             detail: {
                 fieldKey: container.getAttribute('data-field-key'),
