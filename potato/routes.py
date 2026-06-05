@@ -4193,6 +4193,13 @@ def update_instance():
             "request_size": len(request.get_data()) if request.get_data() else 0
         }
 
+        # Capture whether this instance already had annotations BEFORE we mutate
+        # state, so the webhook below can correctly distinguish annotation.created
+        # from annotation.updated. F-032.
+        _had_prior_annotation = bool(
+            getattr(user_state, "instance_id_to_label_to_value", {}).get(instance_id)
+        )
+
         # Check if this is the frontend format (annotations, span_annotations, link_annotations, event_annotations)
         if "annotations" in request.json or "span_annotations" in request.json or "link_annotations" in request.json or "event_annotations" in request.json:
             logger.debug("Processing frontend format (annotations, span_annotations)")
@@ -4530,29 +4537,32 @@ def update_instance():
             logger.warning("Unknown data format in /updateinstance")
             return jsonify({"status": "error", "message": "Unknown data format"})
 
+        # Collect all annotations for this instance. Used by both QC validation
+        # and the webhook payload below — must be defined unconditionally, since
+        # webhooks can be enabled without quality control (otherwise the webhook
+        # emit block raises UnboundLocalError and every save 500s). F-030.
+        all_annotations = {}
+        if "annotations" in request.json:
+            for key, value in request.json.get("annotations", {}).items():
+                # Parse schema:label format
+                if ":" in key:
+                    schema_name, label_name = key.split(":", 1)
+                    all_annotations[schema_name] = value
+                else:
+                    all_annotations[key] = value
+        elif "schema" in request.json:
+            schema_name = request.json.get("schema")
+            schema_state = request.json.get("state", [])
+            # Convert state list to dict for validation
+            for sv in schema_state:
+                if "value" in sv:
+                    all_annotations[schema_name] = sv.get("value")
+
         # Quality control validation (attention checks and gold standards)
         qc_manager = get_quality_control_manager()
         qc_result = None
 
         if qc_manager:
-            # Collect all annotations for validation
-            all_annotations = {}
-            if "annotations" in request.json:
-                for key, value in request.json.get("annotations", {}).items():
-                    # Parse schema:label format
-                    if ":" in key:
-                        schema_name, label_name = key.split(":", 1)
-                        all_annotations[schema_name] = value
-                    else:
-                        all_annotations[key] = value
-            elif "schema" in request.json:
-                schema_name = request.json.get("schema")
-                schema_state = request.json.get("state", [])
-                # Convert state list to dict for validation
-                for sv in schema_state:
-                    if "value" in sv:
-                        all_annotations[schema_name] = sv.get("value")
-
             # Calculate response time
             response_time = None
             if client_timestamp:
@@ -4642,7 +4652,7 @@ def update_instance():
         )
         _wh = get_webhook_emitter()
         if _wh:
-            _evt = ANNOTATION_CREATED
+            _evt = ANNOTATION_UPDATED if _had_prior_annotation else ANNOTATION_CREATED
             _wh.emit(
                 _evt,
                 build_annotation_payload(
@@ -4653,12 +4663,18 @@ def update_instance():
                 ),
             )
 
-            # Check if item is now fully annotated
+            # Check if item is now fully annotated. Use the canonical resolver
+            # for num_annotators_per_item (int or dict.default form); the prior
+            # code read annotation_task_name (a string) and always fell back to
+            # 3, ignoring the configured annotator count. F-031.
             ism = get_item_state_manager()
             annotators = ism.get_annotators_for_item(instance_id)
-            num_annotators = config.get("annotation_task_name",
-                                         config.get("num_annotators_per_item", 3))
-            if isinstance(num_annotators, str):
+            try:
+                from potato.server_utils.config_module import resolve_num_annotators_per_item
+                num_annotators = resolve_num_annotators_per_item(config)
+            except Exception:
+                num_annotators = config.get("num_annotators_per_item", 3)
+            if not isinstance(num_annotators, int) or num_annotators < 1:
                 num_annotators = 3
             if len(annotators) >= num_annotators:
                 _wh.emit(
@@ -4669,6 +4685,31 @@ def update_instance():
                         required_count=num_annotators,
                     ),
                 )
+
+            # Emit task.completed once, when this save annotates the user's LAST
+            # remaining assigned item. The documented event had a payload builder
+            # but zero emit sites. Fire-once is guarded by _had_prior_annotation:
+            # a re-save of an already-annotated item won't re-trigger it. F-033.
+            try:
+                assigned = set(user_state.get_assigned_instance_ids() or [])
+                if assigned and not _had_prior_annotation:
+                    annotated = (
+                        set(getattr(user_state, "instance_id_to_label_to_value", {}).keys())
+                        | set(getattr(user_state, "instance_id_to_span_to_value", {}).keys())
+                    ) & assigned
+                    if assigned.issubset(annotated):
+                        from potato.webhooks.events import (
+                            TASK_COMPLETED, build_task_completed_payload,
+                        )
+                        _wh.emit(
+                            TASK_COMPLETED,
+                            build_task_completed_payload(
+                                user_id=username,
+                                total_annotations=len(annotated),
+                            ),
+                        )
+            except Exception as _e:
+                logger.debug(f"task.completed webhook check skipped: {_e}")
 
         # Trigger MACE competence estimation check
         from potato.mace_manager import get_mace_manager
