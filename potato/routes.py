@@ -6925,6 +6925,11 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/user/<username>/set_instances", "admin_api_set_user_instances", admin_api_set_user_instances, methods=["POST"])
     app.add_url_rule("/admin/api/stale_assignments", "admin_api_stale_assignments", admin_api_stale_assignments, methods=["GET"])
     app.add_url_rule("/admin/api/reclaim_instance", "admin_api_reclaim_instance", admin_api_reclaim_instance, methods=["POST"])
+    # F-041 (F-024 class): debug-gated test-state reset. It existed only as a
+    # module-level @app.route, so it 404'd on the serving app built by
+    # configure_routes — leaving Selenium suites that rely on it (e.g. video
+    # annotation persistence) without per-test isolation.
+    app.add_url_rule("/admin/api/test/reset_state", "admin_api_test_reset_state", admin_api_test_reset_state, methods=["POST"])
     app.add_url_rule("/admin/api/questions", "admin_api_questions", admin_api_questions, methods=["GET"])
     app.add_url_rule("/admin/api/annotation_history", "admin_api_annotation_history", admin_api_annotation_history, methods=["GET"])
     app.add_url_rule("/admin/api/suspicious_activity", "admin_api_suspicious_activity", admin_api_suspicious_activity, methods=["GET"])

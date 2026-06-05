@@ -228,6 +228,17 @@ class TestInstanceDataRouteRegistered:
         for path in ("/api/current_instance", "/api/instance_data", "/api/spans/<instance_id>"):
             assert f'add_url_rule("{path}"' in src, f"{path} missing configure_routes registration"
 
+    def test_test_reset_state_registered(self):
+        # F-041 (same class as F-024): the debug-gated test-state reset existed
+        # only as a module-level @app.route, so it 404'd on the configure_routes
+        # serving app and the video-persistence Selenium suite lost per-test
+        # isolation. It must be re-registered via add_url_rule.
+        src = self._routes_src()
+        assert 'add_url_rule("/admin/api/test/reset_state"' in src, (
+            "/admin/api/test/reset_state is not re-registered in configure_routes; "
+            "it 404s on live/test servers, breaking per-test isolation."
+        )
+
 
 class TestLabelColorBooleanSafe:
     """F-027: label color helpers must tolerate non-str label names produced by

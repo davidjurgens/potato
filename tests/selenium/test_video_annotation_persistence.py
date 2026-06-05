@@ -262,15 +262,15 @@ site_dir: default
         """Create a segment using UI buttons."""
         container = self._wait_for_video_container()
 
-        # Select label first
+        # Select label first (JS click avoids intermittent hit-test interception)
         label_buttons = container.find_elements(By.CSS_SELECTOR, ".label-btn")
         if label_buttons and label_index < len(label_buttons):
-            label_buttons[label_index].click()
+            self.driver.execute_script("arguments[0].click();", label_buttons[label_index])
             time.sleep(0.1)
 
         # Click set-start button
         start_btn = container.find_element(By.CSS_SELECTOR, '[data-action="set-start"]')
-        start_btn.click()
+        self.driver.execute_script("arguments[0].click();", start_btn)
         time.sleep(0.1)
 
         # Seek video forward a bit (use JavaScript since video controls may vary)
@@ -284,25 +284,34 @@ site_dir: default
 
         # Click set-end button
         end_btn = container.find_element(By.CSS_SELECTOR, '[data-action="set-end"]')
-        end_btn.click()
+        self.driver.execute_script("arguments[0].click();", end_btn)
         time.sleep(0.1)
 
         # Click create segment button
         create_btn = container.find_element(By.CSS_SELECTOR, '[data-action="create-segment"]')
-        create_btn.click()
+        self.driver.execute_script("arguments[0].click();", create_btn)
         time.sleep(0.1)
+
+    def _js_click_nav(self, btn_id):
+        """Wait for a nav button, then JS-click it.
+
+        JS click: on the tall video page the native button is intermittently
+        intercepted by an overlapping element (a Selenium hit-test artifact, not
+        app behavior). Waiting first guards against the brief window where the
+        button is re-rendered during navigation.
+        """
+        btn = WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.ID, btn_id)))
+        self.driver.execute_script("arguments[0].click();", btn)
+        time.sleep(0.2)  # Wait for navigation and page load
 
     def _navigate_to_next(self):
         """Click the Next button to navigate to next instance."""
-        next_btn = self.driver.find_element(By.ID, "next-btn")
-        next_btn.click()
-        time.sleep(0.05)  # Wait for navigation and page load
+        self._js_click_nav("next-btn")
 
     def _navigate_to_previous(self):
         """Click the Previous button to navigate to previous instance."""
-        prev_btn = self.driver.find_element(By.ID, "prev-btn")
-        prev_btn.click()
-        time.sleep(0.05)  # Wait for navigation and page load
+        self._js_click_nav("prev-btn")
 
     def _get_current_instance_id(self):
         """Get the current instance ID from the hidden input."""
