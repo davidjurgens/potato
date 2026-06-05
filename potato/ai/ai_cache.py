@@ -181,12 +181,17 @@ class AiCacheManager:
                     annotation_id_int = int(annotation_id)
                     self.special_includes[page_index][annotation_id_int] = annotation_types
 
-        # Disk cache configuration
-        self.disk_cache_enabled = cache_config["disk_cache"]["enabled"]
+        # Disk cache configuration.
+        # F-028: tolerate a partial/absent ai_cache config (e.g. AI support
+        # enabled for ICL with no disk_cache block) instead of crashing boot
+        # with KeyError: 'disk_cache'.
+        disk_cache_cfg = cache_config.get("disk_cache", {}) if isinstance(cache_config, dict) else {}
+        self.disk_cache_enabled = disk_cache_cfg.get("enabled", False)
 
-        if self.disk_cache_enabled and not cache_config["disk_cache"]["path"]:
+        disk_cache_path = disk_cache_cfg.get("path")
+        if self.disk_cache_enabled and not disk_cache_path:
             raise Exception("You have enable disk cache, but you did not specific the path!")
-        self.disk_persistence_path = cache_config["disk_cache"]["path"]
+        self.disk_persistence_path = disk_cache_path
 
         # Validate cache path stays within task directory
         if self.disk_persistence_path:
@@ -203,10 +208,13 @@ class AiCacheManager:
                     f"'{task_dir}'. Path traversal is not allowed."
                 )
 
-        # Prefetch configuration — clamp to sane ranges
-        self.warm_up_page_count = max(0, min(int(cache_config["prefetch"]["warm_up_page_count"]), 10000))
-        self.prefetch_page_count_on_next = max(0, min(int(cache_config["prefetch"]["on_next"]), 10000))
-        self.prefetch_page_count_on_prev = max(0, min(int(cache_config["prefetch"]["on_prev"]), 10000))
+        # Prefetch configuration — clamp to sane ranges.
+        # F-028: default to no prefetch when the prefetch block is absent
+        # (e.g. cache_config: {enabled: false}) instead of KeyError on boot.
+        prefetch_cfg = cache_config.get("prefetch", {}) if isinstance(cache_config, dict) else {}
+        self.warm_up_page_count = max(0, min(int(prefetch_cfg.get("warm_up_page_count", 0)), 10000))
+        self.prefetch_page_count_on_next = max(0, min(int(prefetch_cfg.get("on_next", 0)), 10000))
+        self.prefetch_page_count_on_prev = max(0, min(int(prefetch_cfg.get("on_prev", 0)), 10000))
 
         # Option highlighting configuration
         option_highlighting = ai_support.get("option_highlighting", {})

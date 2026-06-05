@@ -188,8 +188,9 @@ class TestOllamaEndpointQuery:
             endpoint.query("Test prompt", TestFormat)
 
     @patch('potato.ai.ollama_endpoint.ollama.Client')
-    def test_query_invalid_json_raises(self, mock_client_class):
-        """Test that invalid JSON response raises AIEndpointRequestError."""
+    def test_query_invalid_json_returns_raw_text(self, mock_client_class):
+        """Invalid JSON degrades gracefully to {"response": <raw>} rather than
+        raising — a model returning non-JSON must not crash the request."""
         mock_client = Mock()
         mock_client.list.return_value = {}
         mock_client.chat.return_value = {
@@ -200,7 +201,6 @@ class TestOllamaEndpointQuery:
         mock_client_class.return_value = mock_client
 
         from potato.ai.ollama_endpoint import OllamaEndpoint
-        from potato.ai.ai_endpoint import AIEndpointRequestError
         from pydantic import BaseModel
 
         class TestFormat(BaseModel):
@@ -210,8 +210,8 @@ class TestOllamaEndpointQuery:
 
         endpoint = OllamaEndpoint(config)
 
-        with pytest.raises(AIEndpointRequestError, match="Ollama request failed"):
-            endpoint.query("Test prompt", TestFormat)
+        result = endpoint.query("Test prompt", TestFormat)
+        assert result == {"response": "This is not valid JSON at all"}
 
     @patch('potato.ai.ollama_endpoint.ollama.Client')
     def test_query_network_error_raises(self, mock_client_class):

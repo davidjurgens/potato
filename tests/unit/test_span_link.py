@@ -358,15 +358,15 @@ class TestSchemaRegistryIncludesSpanLink:
         assert "span_link" in supported_types
 
     def test_span_link_in_config_valid_types(self):
-        """span_link should be accepted as a valid annotation type."""
-        # We verify span_link is valid by checking the config_module source
-        # which defines valid_types = [..., 'span_link', ...]
-        import inspect
-        from potato.server_utils import config_module
+        """span_link should be accepted as a valid annotation type.
 
-        # Get the source code of config_module and check span_link is in valid_types
-        source = inspect.getsource(config_module)
-        assert "'span_link'" in source, "span_link should be in config_module valid_types"
+        config_module.validate_config now derives valid_types dynamically from
+        ``schema_registry.get_supported_types()`` (no hardcoded list), so we
+        assert against that registry — the real source of truth — instead of
+        grepping the module source for a literal ``'span_link'``.
+        """
+        from potato.server_utils.schemas.registry import schema_registry
+        assert "span_link" in schema_registry.get_supported_types()
 
     def test_span_link_schema_definition_exists(self):
         """span_link should have a SchemaDefinition in registry."""

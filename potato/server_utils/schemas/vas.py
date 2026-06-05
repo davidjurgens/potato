@@ -62,9 +62,10 @@ def _generate_vas_layout_internal(annotation_scheme):
     validation = generate_validation_attribute(annotation_scheme)
     identifiers = generate_element_identifier(schema_name, schema_name, "range")
 
-    # The key difference from slider: step="any" for continuous values,
-    # no tick marks, no value display by default, minimal styling
-    # Compute step from precision (e.g., precision=1 → step=0.1)
+    # The key difference from slider: a fine precision-based step (vs the
+    # slider's integer ticks), no tick marks, no value display by default,
+    # minimal styling. Step is derived from precision so the scale is
+    # effectively continuous (precision=1 → step=0.1, precision=2 → 0.01).
     step_value = 10 ** -precision if precision > 0 else 1
     initial_value = round((min_value + max_value) / 2, precision)
 

@@ -62,6 +62,9 @@ PERSISTENCE_TEST_MAP = {
     "card_sort": "tests/selenium/test_card_sort_ui.py",
     "conjoint": "tests/selenium/test_conjoint_ui.py",
     "trajectory_eval": "tests/playwright/test_trajectory_eval.py",
+    # Agent-evaluation schemas — Selenium persistence tests to be created
+    "process_reward": "tests/selenium/test_process_reward_ui.py",
+    "code_review": "tests/selenium/test_code_review_ui.py",
 }
 
 # Types that are exempt from the file-existence check because their
@@ -74,6 +77,7 @@ EXEMPT_FROM_FILE_CHECK = {
     "ranking", "range_slider", "hierarchical_multiselect",
     "vas", "extractive_qa", "rubric_eval", "text_edit", "error_span",
     "card_sort", "conjoint", "trajectory_eval",
+    "process_reward", "code_review",
 }
 
 

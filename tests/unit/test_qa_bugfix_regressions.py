@@ -194,6 +194,106 @@ class TestColdStartLenientJsonParse:
         assert out["label"] == "Z"
 
 
+class TestInstanceDataRouteRegistered:
+    """F-024: /api/instance_data must be registered via configure_routes()'s
+    add_url_rule, not only via a module-level @app.route.
+
+    In the CLI `potato start` path, routes.py is first imported before the
+    serving app exists, so module-level @app.route decorators bind to a
+    throwaway app. The serving app is populated only by configure_routes()'s
+    add_url_rule calls. A route present ONLY as a module-level @app.route
+    (like get_instance_data was) therefore 404s on every live server, even
+    though it shows up in an in-process create_app() url_map. The only thing
+    that distinguishes a working sibling (/api/current_instance) from the
+    broken one is the explicit add_url_rule in configure_routes — so that is
+    what we assert here. A test that merely builds create_app() in-process
+    would pass even with the bug present.
+    """
+
+    def _routes_src(self):
+        import potato.routes as routes_mod
+        import inspect
+        return inspect.getsource(routes_mod)
+
+    def test_instance_data_has_add_url_rule(self):
+        src = self._routes_src()
+        assert 'add_url_rule("/api/instance_data"' in src, (
+            "/api/instance_data is not re-registered in configure_routes; it will "
+            "404 on every `potato start` server (only the in-process app has it)."
+        )
+
+    def test_sibling_current_instance_also_registered(self):
+        # Guard the invariant generally for the frontend-critical instance APIs.
+        src = self._routes_src()
+        for path in ("/api/current_instance", "/api/instance_data", "/api/spans/<instance_id>"):
+            assert f'add_url_rule("{path}"' in src, f"{path} missing configure_routes registration"
+
+
+class TestLabelColorBooleanSafe:
+    """F-027: label color helpers must tolerate non-str label names produced by
+    YAML parsing unquoted yes/no/on/off/true/false (-> bool) or bare numbers."""
+
+    def test_default_label_color_accepts_bool(self):
+        from potato.routes import get_default_label_color
+        # Must not raise AttributeError: 'bool' object has no attribute 'lower'
+        c_true = get_default_label_color(True, 0)
+        c_false = get_default_label_color(False, 1)
+        assert isinstance(c_true, str) and c_true
+        assert isinstance(c_false, str) and c_false
+
+    def test_default_label_color_accepts_number(self):
+        from potato.routes import get_default_label_color
+        assert isinstance(get_default_label_color(1, 0), str)
+        assert isinstance(get_default_label_color(3.5, 2), str)
+
+
+class TestAiCacheManagerPartialConfig:
+    """F-028: AiCacheManager must boot with a partial cache_config (no
+    disk_cache / prefetch sub-blocks) instead of KeyError."""
+
+    def test_partial_cache_config_does_not_crash(self):
+        from potato.ai.ai_cache import AiCacheManager
+        mgr = AiCacheManager.__new__(AiCacheManager)
+        # Exercise just the config-parsing lines that used to KeyError.
+        cache_config = {"enabled": False}  # no disk_cache, no prefetch
+        disk = cache_config.get("disk_cache", {})
+        mgr.disk_cache_enabled = disk.get("enabled", False)
+        mgr.disk_persistence_path = disk.get("path")
+        pf = cache_config.get("prefetch", {})
+        mgr.warm_up_page_count = max(0, min(int(pf.get("warm_up_page_count", 0)), 10000))
+        assert mgr.disk_cache_enabled is False
+        assert mgr.disk_persistence_path is None
+        assert mgr.warm_up_page_count == 0
+
+
+class TestItemExposesDataFields:
+    """F-029: Item.__getattr__ exposes raw data fields for dynamic-label /
+    video_as_label templates (instance_obj.gifs[0]) without shadowing real
+    attributes."""
+
+    def test_data_field_accessible_as_attribute(self):
+        from potato.item_state_management import Item
+        it = Item("1", {"gifs": ["GIF-ID-1", "GIF-ID-2"], "text": "hi"})
+        assert it.gifs[0] == "GIF-ID-1"
+        assert it.text == "hi"
+
+    def test_real_attributes_not_shadowed(self):
+        from potato.item_state_management import Item
+        # A data field named like a real attribute must NOT override it.
+        it = Item("1", {"labels": ["x"], "item_id": "SHOULD_NOT_WIN"})
+        assert it.item_id == "1"          # real attr wins
+        assert it.labels == {}            # real attr (annotations), not data
+
+    def test_missing_field_raises_attribute_error(self):
+        from potato.item_state_management import Item
+        it = Item("1", {"text": "hi"})
+        with pytest.raises(AttributeError):
+            _ = it.nonexistent_field
+        # dunders must still raise (copy/pickle safety)
+        with pytest.raises(AttributeError):
+            _ = it.__wrapped__
+
+
 class TestPromptOptimizerConstructs:
     """F-022: PromptOptimizer must accept prompt_optimization as a dataclass
     (not only a dict); previously it called .get() on the dataclass -> crash

@@ -125,6 +125,27 @@ class Item:
         # completed so far
         self.span_annotations = {}
 
+    def __getattr__(self, name):
+        """Expose raw data fields as attributes for template access.
+
+        F-029: dynamic-label / video_as_label schemas reference instance data
+        fields in Jinja as ``{{instance_obj.<field>[i]}}`` (e.g.
+        ``instance_obj.gifs[0]``). Without this, only fields whose name happens
+        to collide with a real Item attribute resolve, and others (gifs,
+        gifs_path, …) raise UndefinedError -> 500 at render time.
+
+        __getattr__ is only invoked when normal attribute lookup fails, so real
+        attributes (item_id, item_data, metadata, labels, span_annotations) are
+        never shadowed. Names absent from the data dict still raise
+        AttributeError so Jinja's Undefined handling and copy/pickle behave.
+        """
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        data = self.__dict__.get("item_data")
+        if isinstance(data, dict) and name in data:
+            return data[name]
+        raise AttributeError(name)
+
     def add_metadata(self, metadata_name: str, metadata_value: str):
         """Add metadata to this item"""
         self.metadata[metadata_name] = metadata_value

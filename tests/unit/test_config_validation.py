@@ -26,7 +26,10 @@ def validate_config(config):
         'task_dir',         # config["task_dir"]
         'output_annotation_dir',  # config["output_annotation_dir"]
         'annotation_task_name',   # config["annotation_task_name"]
-        'alert_time_each_instance',  # config["alert_time_each_instance"]
+        # NOTE: alert_time_each_instance is NOT required — the real code always
+        # reads it via config.get("alert_time_each_instance", 10000000) and
+        # config_module marks it optional. (Removed: was a stale over-strict
+        # requirement causing 12 valid test configs to fail.)
     ]
 
     for field in required_fields:

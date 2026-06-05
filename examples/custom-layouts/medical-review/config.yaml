@@ -58,9 +58,9 @@ annotation_schemes:
     name: abnormality_present
     description: "Is an abnormality present in the imaging?"
     labels:
-      - name: yes
+      - name: "yes"
         tooltip: "Clear abnormality identified"
-      - name: no
+      - name: "no"
         tooltip: "No abnormality detected"
       - name: uncertain
         tooltip: "Findings are equivocal or require further imaging"

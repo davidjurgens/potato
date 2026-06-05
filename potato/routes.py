@@ -5039,8 +5039,11 @@ def get_default_label_color(label_name, index=0):
     Get a default color for a label based on its name or index.
     First checks for named colors, then falls back to palette by index.
     """
-    # Check for named color match (case-insensitive)
-    lower_name = label_name.lower().strip()
+    # Check for named color match (case-insensitive).
+    # F-027: YAML parses unquoted yes/no/on/off/true/false as Python bools (and
+    # bare numbers as int/float), so a label "name" may not be a str — coerce
+    # before string ops to avoid a 500 in /api/colors.
+    lower_name = str(label_name).lower().strip()
     if lower_name in NAMED_LABEL_COLORS:
         return NAMED_LABEL_COLORS[lower_name]
 
@@ -5096,7 +5099,10 @@ def get_span_colors():
             labels = schema.get('labels', [])
             for i, label in enumerate(labels):
                 if isinstance(label, dict):
-                    label_name = label.get('name', str(label))
+                    # F-027: str() so a YAML-bool/number label name (yes/no/1)
+                    # doesn't become a non-str dict key (jsonify sort_keys then
+                    # raises "'<' not supported between 'str' and 'bool'").
+                    label_name = str(label.get('name', label))
                     # Check for inline color definition
                     if 'color' in label and label_name not in color_map[schema_name]:
                         normalized = normalize_color(label['color'])
@@ -6849,6 +6855,12 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/entity_linking/update_span", "entity_linking_update_span", entity_linking_update_span, methods=["POST"])
 
     app.add_url_rule("/api/current_instance", "get_current_instance", get_current_instance, methods=["GET"])
+    # F-024: get_instance_data is registered only via a module-level @app.route,
+    # which binds to a throwaway app in the CLI start path; without this explicit
+    # re-registration on the serving app the route 404s on every `potato start`
+    # server (dynamic schemas — extractive_qa/error_span/text_edit/card_sort/
+    # conjoint — then rely solely on annotation.js's embedded-JSON fallback).
+    app.add_url_rule("/api/instance_data", "get_instance_data", get_instance_data, methods=["GET"])
     app.add_url_rule("/api/ai_assistant", "ai_assistant", ai_assistant, methods=["GET"])
     app.add_url_rule("/api/audio/proxy", "audio_proxy", audio_proxy, methods=["GET"])
     app.add_url_rule("/admin/user_state/<user_id>", "admin_user_state", admin_user_state, methods=["GET"])
