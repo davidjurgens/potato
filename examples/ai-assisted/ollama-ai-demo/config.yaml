@@ -17,7 +17,6 @@ annotation_task_name: "AI-Assisted Product Review Analysis"
 
 # Server settings
 port: 8000
-debug: true
 
 # Task directory (current directory)
 task_dir: .

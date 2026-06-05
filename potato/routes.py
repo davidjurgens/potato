@@ -7769,6 +7769,13 @@ def admin_api_export():
         from potato.export import export_registry
 
         context = build_export_context(config_file)
+        # Default the output directory when the caller didn't supply one, so the
+        # admin dashboard "Export" button works without requiring a path. Writes
+        # under <output_annotation_dir>/exports/<format>/ (auto-export convention).
+        if not output:
+            base_out = getattr(context, "output_dir", "") or os.getcwd()
+            output = os.path.join(base_out, "exports", fmt)
+            os.makedirs(output, exist_ok=True)
         result = export_registry.export(fmt, context, output, options)
 
         return jsonify({

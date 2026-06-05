@@ -16,10 +16,13 @@
 
 ```bash
 pip install potato-annotation
+# The examples/ folder ships with the source repo (see "run from source" below).
+# After a PyPI install, clone the repo for the examples, or point `potato start`
+# at your own config (see docs/quick-start.md).
 potato start examples/classification/single-choice/config.yaml -p 8000
 ```
 
-Or run from source:
+Or run from source (recommended to get the `examples/`):
 
 ```bash
 git clone https://github.com/davidjurgens/potato.git

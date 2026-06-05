@@ -292,6 +292,28 @@ def _read_cached_template_text(path: str) -> str:
     return text
 
 
+def _resolve_generated_template_path(html_file: str) -> str:
+    """Resolve ``config['site_file']`` (a bare filename) to the absolute path of
+    the generated template on disk.
+
+    The generated template lives under ``<site_dir>/generated/<site_file>``, but
+    ``config['site_file']`` is stored as just the filename (Jinja resolves it via
+    its template search path). The server ``chdir``s into ``task_dir`` at startup,
+    so reading the bare name with ``open()`` would fail and silently disable every
+    page-template-gated frontend asset. Resolving against the (absolute) site_dir
+    makes asset detection work regardless of the process CWD.
+    """
+    if not html_file:
+        return html_file
+    if os.path.isabs(html_file) and os.path.exists(html_file):
+        return html_file
+    site_dir = config.get("site_dir") or ""
+    candidate = os.path.join(site_dir, "generated", html_file)
+    if os.path.exists(candidate):
+        return candidate
+    return html_file
+
+
 # Authoritative mapping from asset key to the HTML markers that trigger loading.
 # Tests verify these markers appear in the actual schema/display generators,
 # so adding a new generator or renaming a CSS class will cause a test failure
@@ -323,7 +345,7 @@ def _detect_frontend_assets_for_page(html_file: str, display_html: str = "") -> 
     This avoids loading every specialized bundle just because some other phase
     in the overall task config happens to use it.
     """
-    page_html = _read_cached_template_text(html_file)
+    page_html = _read_cached_template_text(_resolve_generated_template_path(html_file))
     combined_html = f"{page_html}\n{display_html or ''}"
 
     def has_any(*markers: str) -> bool:

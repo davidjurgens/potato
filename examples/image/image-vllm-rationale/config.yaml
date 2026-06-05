@@ -116,4 +116,3 @@ ai_support:
       on_prev: 1              # Prefetch 1 behind
 
 # Debug mode for development
-debug: true

@@ -253,7 +253,17 @@ class AiCacheManager:
         except ImportError:
             logger.debug("Anthropic Vision endpoint not available")
 
-        self.ai_endpoint = AIEndpointFactory.create_endpoint(config)
+        # Degrade gracefully if the AI backend (e.g. a local Ollama/vLLM server)
+        # is unreachable at boot: log a warning and serve the task with AI
+        # support disabled rather than aborting server startup.
+        try:
+            self.ai_endpoint = AIEndpointFactory.create_endpoint(config)
+        except Exception as e:
+            logger.warning(
+                "AI endpoint unavailable at startup (%s). Continuing with AI "
+                "support disabled. Check that your AI backend is running.", e
+            )
+            self.ai_endpoint = None
 
         # Create visual endpoint if different from main endpoint
         self.visual_endpoint = None
@@ -266,7 +276,14 @@ class AiCacheManager:
                     "ai_config": config.get("ai_support", {}).get("visual_ai_config", config.get("ai_support", {}).get("ai_config", {}))
                 }
             }
-            self.visual_endpoint = AIEndpointFactory.create_endpoint(visual_config)
+            try:
+                self.visual_endpoint = AIEndpointFactory.create_endpoint(visual_config)
+            except Exception as e:
+                logger.warning(
+                    "Visual AI endpoint unavailable at startup (%s). Continuing "
+                    "without visual AI support.", e
+                )
+                self.visual_endpoint = None
 
         annotation_scheme = config.get("annotation_schemes")
         self.annotations = []

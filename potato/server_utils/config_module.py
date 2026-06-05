@@ -3626,7 +3626,11 @@ def init_config(args):
         config_updates = {
             "verbose": args.verbose,
             "very_verbose": args.very_verbose,
-            "__config_file__": args.config_file,
+            # Store an ABSOLUTE path: the server chdir's into task_dir at startup,
+            # so a relative path would be re-resolved against the wrong CWD later
+            # (e.g. admin export doubled the project path). CWD is still the
+            # original launch dir here (chdir happens further below).
+            "__config_file__": os.path.abspath(args.config_file),
             "customjs": args.customjs,
             "customjs_hostname": args.customjs_hostname,
             "persist_sessions": args.persist_sessions,

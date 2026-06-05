@@ -23,7 +23,6 @@ annotation_task_name: "Span Annotation with AI & Admin Keywords"
 
 # Server settings
 port: 8000
-debug: true
 
 # Task directory - current directory (run from within this folder)
 task_dir: .

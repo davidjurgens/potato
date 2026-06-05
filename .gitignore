@@ -147,3 +147,10 @@ venv/
 **/*-burger.yaml
 **/config-gemini.*
 **/config-ollama-local.*
+
+# QA: stray per-example databases and generated outputs (should not be committed)
+examples/**/project.sqlite
+examples/**/project.sqlite-wal
+examples/**/project.sqlite-shm
+examples/**/admin_api_key.txt
+qa-testing/
