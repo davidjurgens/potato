@@ -527,6 +527,48 @@ class TestTrainingDataLoading:
         instances = get_training_instances()
         assert instances == []
 
+    def test_get_training_instances_resolves_across_main_module_split(self):
+        """Regression (F-044): training data must be found regardless of launch style.
+
+        When the server is started from source via
+        ``python potato/flask_server.py start ...`` this file runs in the
+        ``__main__`` namespace, so ``load_training_data`` sets
+        ``__main__.training_items``. But routes.py / user_state_management.py call
+        ``get_training_instances`` imported from ``potato.flask_server`` — a
+        different module object whose own ``training_items`` is never set. The
+        training phase then errored with "No training instance available". The fix
+        makes ``get_training_instances`` scan candidate module namespaces, so data
+        living on ``__main__`` is still found.
+        """
+        import sys
+        import potato.flask_server as pfs
+
+        _UNSET = object()
+        saved_pfs = getattr(pfs, 'training_items', _UNSET)
+        main_mod = sys.modules['__main__']
+        saved_main = getattr(main_mod, 'training_items', _UNSET)
+        try:
+            # Canonical potato.flask_server copy is empty (as after a __main__ launch)...
+            pfs.training_items = []
+            # ...while the real data lives on the __main__ module.
+            sentinel = [Mock(), Mock()]
+            main_mod.training_items = sentinel
+
+            result = get_training_instances()
+            assert result is sentinel, "should resolve training data stored on __main__"
+            assert len(result) == 2
+        finally:
+            if saved_pfs is _UNSET:
+                if hasattr(pfs, 'training_items'):
+                    del pfs.training_items
+            else:
+                pfs.training_items = saved_pfs
+            if saved_main is _UNSET:
+                if hasattr(main_mod, 'training_items'):
+                    del main_mod.training_items
+            else:
+                main_mod.training_items = saved_main
+
     @patch('potato.flask_server.get_training_instances')
     def test_get_training_correct_answers(self, mock_get_instances):
         """Test getting correct answers for a training instance."""

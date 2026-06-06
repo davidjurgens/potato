@@ -950,6 +950,20 @@ def get_training_instances() -> List[Item]:
         List of training Item objects
     """
     global training_items
+    # Bridge the __main__ vs potato.flask_server module split. When the server is
+    # launched from source via `python potato/flask_server.py start ...`, this file
+    # executes in the `__main__` namespace, so load_training_data's
+    # `global training_items` binds `__main__.training_items`. But routes.py and
+    # user_state_management.py call this function via
+    # `from potato.flask_server import get_training_instances`, which is the
+    # *potato.flask_server* copy whose own global is never set — previously
+    # leaving the training phase with "No training instance available". Scan the
+    # candidate module namespaces so the data is found regardless of launch style.
+    for _mod_name in (__name__, 'potato.flask_server', '__main__'):
+        _mod = sys.modules.get(_mod_name)
+        _items = getattr(_mod, 'training_items', None) if _mod is not None else None
+        if _items:
+            return _items
     return training_items if 'training_items' in globals() else []
 
 
