@@ -4207,6 +4207,17 @@ def update_instance():
             # Handle label annotations from frontend format
             annotations = request.json.get("annotations", {})
 
+            # Guard against malformed payloads: `annotations` must be a mapping.
+            # A non-dict (e.g. a JSON string or list) would crash the .items()
+            # loop below with AttributeError → an unhandled HTTP 500 (F-046).
+            # Reject cleanly instead.
+            if not isinstance(annotations, dict):
+                logger.warning(
+                    f"Rejected /updateinstance from {username}: 'annotations' is "
+                    f"{type(annotations).__name__}, expected object")
+                return jsonify({"status": "error",
+                                "message": "'annotations' must be an object"})
+
             # Pre-clear stale labels for radio/multiselect schemas.
             # The client always sends the COMPLETE current state, so any label
             # not in the incoming set should be removed. Without this, deselected

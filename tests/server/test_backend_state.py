@@ -226,6 +226,33 @@ class TestBackendState:
         except Exception:
             pytest.skip("Error handling test failed")
 
+    def test_non_dict_annotations_rejected_cleanly(self, flask_server):
+        """F-046: a non-dict `annotations` payload must NOT 500.
+
+        Previously `for key, value in annotations.items()` crashed with
+        AttributeError (unhandled HTTP 500) when `annotations` was a string,
+        list, or number. The endpoint now rejects it with a clean error.
+        """
+        session = requests.Session()
+        user_data = {"email": "f046_user", "pass": "test_password"}
+        session.post(f"{flask_server.base_url}/register", data=user_data, timeout=5)
+        session.post(f"{flask_server.base_url}/auth", data=user_data, timeout=5)
+
+        for bad in ["not_a_dict", ["a", "b"], 5, [{"x": 1}]]:
+            payload = {"instance_id": "item_1", "annotations": bad}
+            response = session.post(
+                f"{flask_server.base_url}/updateinstance", json=payload, timeout=5)
+            assert response.status_code != 500, \
+                f"non-dict annotations {bad!r} caused a 500"
+            assert response.status_code == 200
+            assert response.json().get("status") == "error"
+
+        # Server must remain healthy and still accept a well-formed payload afterward.
+        ok = session.post(
+            f"{flask_server.base_url}/updateinstance",
+            json={"instance_id": "item_1", "annotations": {}}, timeout=5)
+        assert ok.status_code == 200
+
     def test_concurrent_user_operations(self, flask_server):
         """Test concurrent user operations using production endpoints."""
         try:

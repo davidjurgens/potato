@@ -1099,6 +1099,16 @@ def get_prolific_study() -> 'ProlificStudy':
     Returns:
         ProlificStudy instance if configured, None otherwise
     """
+    global PROLIFIC_STUDY_INSTANCE
+    # Same __main__ vs potato.flask_server split as get_training_instances (F-044):
+    # init_prolific_study reassigns this global, so under `python flask_server.py`
+    # it lands on __main__ while routes.py reads the potato.flask_server copy (None).
+    # Scan candidate namespaces so a configured study is found regardless of launch.
+    for _mod_name in (__name__, 'potato.flask_server', '__main__'):
+        _mod = sys.modules.get(_mod_name)
+        _inst = getattr(_mod, 'PROLIFIC_STUDY_INSTANCE', None) if _mod is not None else None
+        if _inst is not None:
+            return _inst
     return PROLIFIC_STUDY_INSTANCE
 
 

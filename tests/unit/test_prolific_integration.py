@@ -142,6 +142,68 @@ class TestProlificStudyInitialization:
         prolific_config = config.get('prolific', {})
         assert prolific_config.get('config_file_path') == 'configs/prolific_config.yaml'
 
+    def test_get_prolific_study_resolves_across_main_module_split(self):
+        """Regression (F-045): get_prolific_study() must find a study configured on
+        the __main__ module.
+
+        Same F-044 bug class: under `python potato/flask_server.py start`,
+        init_prolific_study reassigns PROLIFIC_STUDY_INSTANCE in the __main__
+        namespace, but routes.py reads get_prolific_study from potato.flask_server
+        whose copy stays None — silently dropping Prolific participant registration
+        at URL-direct login. The getter now scans candidate module namespaces.
+        """
+        import sys
+        import potato.flask_server as pfs
+        from potato.flask_server import get_prolific_study
+
+        _UNSET = object()
+        saved_pfs = getattr(pfs, 'PROLIFIC_STUDY_INSTANCE', _UNSET)
+        main_mod = sys.modules['__main__']
+        saved_main = getattr(main_mod, 'PROLIFIC_STUDY_INSTANCE', _UNSET)
+        try:
+            # potato.flask_server copy is None (as after a __main__ launch)...
+            pfs.PROLIFIC_STUDY_INSTANCE = None
+            # ...while the real study object lives on __main__.
+            sentinel = object()
+            main_mod.PROLIFIC_STUDY_INSTANCE = sentinel
+
+            assert get_prolific_study() is sentinel
+        finally:
+            if saved_pfs is _UNSET:
+                if hasattr(pfs, 'PROLIFIC_STUDY_INSTANCE'):
+                    del pfs.PROLIFIC_STUDY_INSTANCE
+            else:
+                pfs.PROLIFIC_STUDY_INSTANCE = saved_pfs
+            if saved_main is _UNSET:
+                if hasattr(main_mod, 'PROLIFIC_STUDY_INSTANCE'):
+                    del main_mod.PROLIFIC_STUDY_INSTANCE
+            else:
+                main_mod.PROLIFIC_STUDY_INSTANCE = saved_main
+
+    def test_get_prolific_study_none_when_unconfigured(self):
+        """get_prolific_study() returns None when no study is configured (common case)."""
+        import sys
+        import potato.flask_server as pfs
+        from potato.flask_server import get_prolific_study
+
+        _UNSET = object()
+        saved_pfs = getattr(pfs, 'PROLIFIC_STUDY_INSTANCE', _UNSET)
+        main_mod = sys.modules['__main__']
+        saved_main = getattr(main_mod, 'PROLIFIC_STUDY_INSTANCE', _UNSET)
+        try:
+            pfs.PROLIFIC_STUDY_INSTANCE = None
+            if hasattr(main_mod, 'PROLIFIC_STUDY_INSTANCE'):
+                del main_mod.PROLIFIC_STUDY_INSTANCE
+            assert get_prolific_study() is None
+        finally:
+            if saved_pfs is _UNSET:
+                if hasattr(pfs, 'PROLIFIC_STUDY_INSTANCE'):
+                    del pfs.PROLIFIC_STUDY_INSTANCE
+            else:
+                pfs.PROLIFIC_STUDY_INSTANCE = saved_pfs
+            if saved_main is not _UNSET:
+                main_mod.PROLIFIC_STUDY_INSTANCE = saved_main
+
 
 class TestProlificURLParameters:
     """Tests for Prolific URL parameter extraction."""
