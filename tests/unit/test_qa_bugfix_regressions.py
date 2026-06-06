@@ -36,6 +36,20 @@ class TestHumanizeLabelPreservesJinja:
         expr = "{{instance_obj.labels[1]}}"
         assert display_label_text(expr, {"humanize_labels": True}) == expr
 
+    def test_survey_prose_label_not_titlecased_when_humanize_disabled(self):
+        """F-049: survey/consent labels are author prose, not identifiers.
+
+        Phase loading sets ``humanize_labels: false`` for survey phases so a label
+        like the German consent sentence renders verbatim instead of being
+        title-cased to "Ja, Natürlich Möchte Ich Teilnehmen".
+        """
+        from potato.server_utils.schemas.identifier_utils import display_label_text
+        prose = "Ja, natürlich möchte ich teilnehmen"
+        # With humanization disabled (as survey phases now default), prose is verbatim.
+        assert display_label_text(prose, {"humanize_labels": False}) == prose
+        # Sanity: the default (annotation schemes) still humanizes identifiers.
+        assert display_label_text("agent_a", {}) == "Agent A"
+
 
 class TestResolveGeneratedTemplatePath:
     """F-018: bare site_file resolves to <site_dir>/generated/<file>."""

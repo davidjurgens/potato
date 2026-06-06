@@ -1520,6 +1520,18 @@ def load_phase_data(config: dict) -> None:
                             "to specify its annotation schemes"
                         )
 
+                    # Survey/consent/instrument labels are author-written prose
+                    # (often full sentences, any language), not machine identifiers,
+                    # so don't title-case them by default. Without this, a label like
+                    # "Ja, natürlich möchte ich teilnehmen" was humanized to
+                    # "Ja, Natürlich Möchte Ich Teilnehmen" (F-049). An individual
+                    # survey scheme can still opt back in with humanize_labels: true.
+                    # (The TRAINING/ANNOTATION branch above reuses the main schemes
+                    # and keeps their existing humanization behavior.)
+                    for _survey_scheme in phase_labeling_schemes:
+                        if isinstance(_survey_scheme, dict):
+                            _survey_scheme.setdefault("humanize_labels", False)
+
             # Use the default templates unless specified in the phase config
             # Note: Template paths are now hardcoded in front_end.py
             # Only handle custom task_layout if specified
