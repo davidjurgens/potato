@@ -2307,6 +2307,11 @@ function populateInputValues() {
     // Populate radio buttons
     const radioInputs = document.querySelectorAll('input[type="radio"]');
     radioInputs.forEach(input => {
+        // Codebook restore (restoreRuntimeSelections) authoritatively
+        // sets runtime-code inputs and marks them data-server-set. Don't
+        // override those here — our async fetch and theirs race, and an
+        // unconditional reset would clobber a just-restored runtime code.
+        if (input.getAttribute('data-server-set') === 'true') return;
         const schema = input.getAttribute('schema');
         const labelName = input.getAttribute('label_name');
 
@@ -2319,6 +2324,12 @@ function populateInputValues() {
     // Populate checkboxes
     const checkboxInputs = document.querySelectorAll('input[type="checkbox"]');
     checkboxInputs.forEach(input => {
+        // See the radio note above: a checkbox the codebook restore
+        // already owns (data-server-set) must not be unconditionally
+        // reset here — the `input.checked = hasAnnotation` below would
+        // force-uncheck a restored runtime code whose key isn't in
+        // currentAnnotations, which is the nav-back persistence race.
+        if (input.getAttribute('data-server-set') === 'true') return;
         const schema = input.getAttribute('schema');
         const labelName = input.getAttribute('label_name');
 
