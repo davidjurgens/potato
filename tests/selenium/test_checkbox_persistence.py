@@ -21,6 +21,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import TimeoutException
 
 
 class TestCheckboxPersistence(unittest.TestCase):
@@ -147,31 +148,44 @@ class TestCheckboxPersistence(unittest.TestCase):
         # Wait for the /updateinstance call to complete
         time.sleep(0.1)
 
-    def _navigate_next(self):
-        """Navigate to the next instance."""
-        # Find and click the Next button (base_template_v2 uses id="next-btn")
+    def _click_nav(self, btn_id, fallback_css):
+        """Click a nav button and wait for the resulting full-page reload.
+
+        navigateToNext()/navigateToPrevious() are async: they await a save
+        and a POST /annotate, then call window.location.reload() ~100ms
+        later. The old fixed `time.sleep(0.05)` raced that chain, so the
+        test could read the *previous* instance id before the reload
+        landed. Capture an element on the current page and wait for it to
+        go stale (the reload), then for the new page to render.
+
+        If the click lands while the app is still mid-save (navigateTo*
+        returns early when isLoading), the reload never happens; retry the
+        click once after a short settle so the gate stays deterministic.
+        """
+        def _click():
+            try:
+                btn = self.driver.find_element(By.ID, btn_id)
+            except Exception:
+                btn = self.driver.find_element(By.CSS_SELECTOR, fallback_css)
+            btn.click()
+
+        marker = self.driver.find_element(By.ID, "instance_id")
+        _click()
         try:
-            next_button = self.driver.find_element(By.ID, "next-btn")
-        except:
-            # Fallback for base_template v1
-            next_button = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_next"]')
-        next_button.click()
-        # Wait for page reload
-        time.sleep(0.05)
+            WebDriverWait(self.driver, 10).until(EC.staleness_of(marker))
+        except TimeoutException:
+            time.sleep(0.5)  # let an in-flight save settle, then retry once
+            _click()
+            WebDriverWait(self.driver, 10).until(EC.staleness_of(marker))
         self._wait_for_annotation_page()
 
+    def _navigate_next(self):
+        """Navigate to the next instance (waits for the real reload)."""
+        self._click_nav("next-btn", 'a[onclick*="click_to_next"]')
+
     def _navigate_prev(self):
-        """Navigate to the previous instance."""
-        # Find and click the Previous button (base_template_v2 uses id="prev-btn")
-        try:
-            prev_button = self.driver.find_element(By.ID, "prev-btn")
-        except:
-            # Fallback for base_template v1
-            prev_button = self.driver.find_element(By.CSS_SELECTOR, 'a[onclick*="click_to_prev"]')
-        prev_button.click()
-        # Wait for page reload
-        time.sleep(0.05)
-        self._wait_for_annotation_page()
+        """Navigate to the previous instance (waits for the real reload)."""
+        self._click_nav("prev-btn", 'a[onclick*="click_to_prev"]')
 
     def _get_current_instance_id(self):
         """Get the current instance ID from the hidden field."""
