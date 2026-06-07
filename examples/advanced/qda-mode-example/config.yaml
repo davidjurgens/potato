@@ -1,0 +1,96 @@
+port: 8000
+annotation_task_name: QDA Mode Example
+task_dir: .
+output_annotation_dir: annotation_output/qda-mode-example/
+output_annotation_format: tsv
+data_files:
+- data/qda-mode-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+
+# ---------------------------------------------------------------------------
+# QDA Mode
+# ---------------------------------------------------------------------------
+# Turning on `qda_mode` composes the universal qualitative-coding features
+# into one coherent, single-coder-over-the-whole-corpus workflow:
+#
+#   * codebook   -> a mutable, nestable set of codes (mode defaults to `open`)
+#   * memos      -> annotator notes on an instance or a text selection
+#   * cases      -> group excerpts into units of analysis (here, participants)
+#   * search     -> full-text FTS5 search over the corpus
+#
+# Each of these also works on its own outside QDA Mode (see the sibling
+# examples: codebook-example, memos-example, cases-example, search-example).
+# This example wires them together the way a real qualitative study would.
+#
+# See docs/advanced/qda.md for the full overview.
+qda_mode:
+  enabled: true
+  memos:
+    enabled: true
+    show_sidebar_by_default: true
+  codebook:
+    enabled: true
+    mode: open            # open | extensible | fixed
+
+# In-vivo coding: with text selected in the codebook-backed span scheme
+# below, press this key to mint a code straight from the selection. The
+# composer surfaces near-duplicate existing codes so you reuse instead of
+# fragmenting the codebook.
+codebook_invivo_key: i
+
+# Default visibility for new memos. `private` = author + admins only;
+# use `shared` only for deliberate collaborative coding.
+annotation_ui:
+  memos: true
+  visibility: private
+
+# Group excerpts into cases by participant, and lift `condition` onto each
+# case so the admin code crosstab can tabulate codes by a participant-level
+# variable that isn't repeated on every excerpt.
+cases:
+  enabled: true
+  key: participant_id
+  auto_detect: true
+  attributes:
+  - condition
+
+# Universal FTS5 search. annotator_claim is allowed here because QDA Mode is
+# single-coder (no overlap/sampling invariant to protect); it lets the coder
+# jump to any matching excerpt from the Find panel.
+search:
+  enabled: true
+  backend: fts5
+  annotator_claim: true
+
+annotation_schemes:
+# A span scheme that is ALSO codebook-backed (`codebook: true`): its labels
+# come from the project codebook, seeded once from the labels below. Select
+# a phrase, press `i`, and code it in vivo.
+- annotation_type: span
+  name: codes
+  description: Highlight a passage and apply (or mint, via `i`) a code
+  codebook: true
+  labels:
+  - access barriers
+  - cost concerns
+  - provider trust
+
+# A second codebook-backed scheme (multiselect) for excerpt-level themes,
+# drawing on the same shared codebook.
+- annotation_type: multiselect
+  name: themes
+  description: Which themes appear in this excerpt?
+  codebook: true
+  labels:
+  - access barriers
+  - cost concerns
+  - provider trust
+  - administrative burden
+
+site_dir: default
