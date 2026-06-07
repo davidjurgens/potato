@@ -82,11 +82,38 @@ item_properties:
         report = validate_config_file(config_file)
         assert report.ok is False
         assert any("Missing required" in e for e in report.errors)
-        # Should specifically name the missing fields
+        # Should specifically name the missing REQUIRED fields. Note: data_files
+        # is intentionally NOT a required field (F-038) — it is one of three
+        # mutually-acceptable data sources (data_files / data_directory /
+        # data_sources) and is enforced by a separate check (see
+        # test_no_data_source_reported), not the required-field list.
         err = " ".join(report.errors)
-        assert "data_files" in err
         assert "task_dir" in err
         assert "output_annotation_dir" in err
+
+    def test_no_data_source_reported(self, tmp_path):
+        """A config with all required fields but no data source must fail.
+
+        data_files / data_directory / data_sources are mutually acceptable;
+        providing none of them is an error, reported by the dedicated
+        data-source check rather than the required-field list (F-038).
+        """
+        config_file = _write_config(
+            tmp_path,
+            f"""
+annotation_task_name: No Data Source
+task_dir: {tmp_path}
+output_annotation_dir: {tmp_path}/output
+item_properties:
+  id_key: id
+  text_key: text
+""",
+        )
+        report = validate_config_file(config_file)
+        assert report.ok is False
+        err = " ".join(report.errors)
+        assert "data source" in err.lower()
+        assert "data_files" in err
 
     def test_file_not_found(self, tmp_path):
         report = validate_config_file(str(tmp_path / "does_not_exist.yaml"))
