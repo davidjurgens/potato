@@ -51,7 +51,6 @@ from typing import List, Dict, Any
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from sklearn.pipeline import Pipeline
 import simpledorff
 from simpledorff.metrics import nominal_metric, interval_metric
 

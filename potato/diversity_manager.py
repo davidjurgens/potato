@@ -26,16 +26,24 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Guarded imports - same pattern as similarity.py
+# Availability is probed WITHOUT importing the heavy stack: importing
+# sentence_transformers eagerly pulls in transformers + torch (~4s and several
+# hundred MB of RSS), and this module is imported at server boot (flask_server.py)
+# even for tasks that never use diversity ordering. We detect the packages via
+# importlib.util.find_spec and defer the real imports to first use (model load /
+# clustering). numpy stays eager — it is light and used throughout this module.
+import importlib.util
+
 try:
-    from sentence_transformers import SentenceTransformer
     import numpy as np
-    from sklearn.cluster import KMeans
-    _SENTENCE_TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    _SENTENCE_TRANSFORMERS_AVAILABLE = False
+except ImportError:  # numpy is a core dependency; absence disables this module
     np = None
-    KMeans = None
+
+_SENTENCE_TRANSFORMERS_AVAILABLE = (
+    np is not None
+    and importlib.util.find_spec("sentence_transformers") is not None
+    and importlib.util.find_spec("sklearn") is not None
+)
 
 # Singleton
 _DIVERSITY_MANAGER: Optional['DiversityManager'] = None
@@ -131,6 +139,7 @@ class DiversityManager:
                 self._embed_function = config.custom_embedding_function
             else:
                 self.logger.info(f"Loading sentence-transformer model: {config.model_name}")
+                from sentence_transformers import SentenceTransformer  # lazy: heavy import
                 self.model = SentenceTransformer(config.model_name)
                 self._embed_function = self._embed_with_model
 
@@ -393,6 +402,7 @@ class DiversityManager:
 
                 self.logger.info(f"Clustering {len(ids)} items into {self.num_clusters} clusters")
 
+                from sklearn.cluster import KMeans  # lazy: heavy import
                 kmeans = KMeans(n_clusters=self.num_clusters, random_state=42, n_init=10)
                 labels = kmeans.fit_predict(vectors)
 
