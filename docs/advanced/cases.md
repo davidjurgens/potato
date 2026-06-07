@@ -65,5 +65,6 @@ python potato/flask_server.py start \
 
 ## Related
 
+- [QDA Mode](qda.md) — turn cases on alongside codebook, memos & search
 - [Codebook](codebook.md) — universal mutable code set
 - [Memos](memos.md) — universal annotator notes

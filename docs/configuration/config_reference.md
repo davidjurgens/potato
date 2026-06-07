@@ -15,6 +15,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 - [Server](#server)
 - [Quality Control](#quality-control)
 - [AI Support](#ai-support)
+- [Qualitative Coding (QDA)](#qualitative-coding-(qda))
 - [Advanced Features](#advanced-features)
 - [UI & Layout](#ui-layout)
 - [Content](#content)
@@ -102,6 +103,18 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 |-----|----------|------|----------|
 | `ai_support` |  | object | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `option_highlighting` |
 | `chat_support` |  | object | `ai_config`, `enabled`, `endpoint_type`, `ui` |
+
+## Qualitative Coding (QDA)
+
+| Key | Required | Type | Sub-keys |
+|-----|----------|------|----------|
+| `qda_mode` |  | object | `codebook`, `enabled`, `memos` |
+| `codebook` |  | object | `enabled`, `mode` |
+| `codebook_mode` |  |  |  |
+| `codebook_invivo_key` |  |  |  |
+| `annotation_ui` |  | object | `memos`, `visibility` |
+| `cases` |  | object | `attributes`, `auto_detect`, `enabled`, `key` |
+| `search` |  | object | `annotator_claim`, `backend`, `enabled`, `max_instances` |
 
 ## Advanced Features
 
@@ -208,12 +221,12 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `random_seed` |  | integer |  |
 | `max_annotations_per_user` |  | integer |  |
 | `max_annotations_per_item` |  | integer |  |
-| `num_annotators_per_item` |  | integer |  |
+| `num_annotators_per_item` |  |  |  |
 | `min_annotators_per_instance` |  | integer |  |
-| `solo_mode` |  | object | `batches`, `enabled`, `instance_selection`, `labeling_models`, `revision_models`, `state_dir`, `thresholds`, `uncertainty` |
+| `solo_mode` |  | object | `batches`, `confidence_routing`, `confusion_analysis`, `edge_case_rules`, `embedding`, `enabled`, `instance_selection`, `labeling_functions`, `labeling_models`, `prompt_optimization`, `refinement_loop`, `revision_models`, `state_dir`, `thresholds`, `uncertainty` |
 | `admin_api_key` |  |  |  |
 | `alert_time_each_instance` |  | integer |  |
-| `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering) |  |
+| `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch) |  |
 | `reclaim_stale_assignments` |  |  |  |
 | `instance_reclaim` |  |  |  |
 | `max_session_seconds` |  | integer |  |

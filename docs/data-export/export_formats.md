@@ -477,6 +477,55 @@ Export annotations directly as a HuggingFace Dataset. See [HuggingFace Hub Expor
 python -m potato.export --config config.yaml --format huggingface --output ./export/
 ```
 
+### Codebook (codebook)
+
+A qualitative-coding deliverable: one CSV row per **code** in the
+project [codebook](../advanced/codebook.md), including the hierarchy and
+how often each code was used.
+
+```bash
+python -m potato.export --config config.yaml --format codebook -o codebook.csv
+```
+
+| Column | Meaning |
+|--------|---------|
+| `schema` | Annotation scheme the code belongs to |
+| `annotation_type` | The scheme's type (e.g. `span`, `multiselect`) |
+| `code` | Code (label) name |
+| `parent` | Parent code name, if nested |
+| `description` | Code description, if any |
+| `color` | Code colour hex, if set |
+| `n_uses` | Number of annotations that applied this code |
+
+### Quotation Report (quotation_report)
+
+A qualitative-coding deliverable: one CSV row per **coded span** (a
+"quotation") with full provenance — the quote text, its character
+offsets, the source instance, and the coder.
+
+```bash
+python -m potato.export --config config.yaml --format quotation_report -o quotations.csv
+
+# Also append one row per memo (analytic notes alongside the quotes):
+python -m potato.export --config config.yaml --format quotation_report \
+  --option include_memos=true -o quotations.csv
+```
+
+| Column | Meaning |
+|--------|---------|
+| `schema` | Scheme the code belongs to (memos use the literal `(memo)`) |
+| `code` | Code applied to the span (for a memo row: the memo's visibility) |
+| `text` | The quoted span text (for a memo row: the memo body) |
+| `start` / `end` | Character offsets of the span (or span-anchored memo) |
+| `field` | Source field, in multi-field instances |
+| `instance_id` | Instance the span came from |
+| `source_doc` | Source document/file, if recorded |
+| `coder` | Username of the coder |
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `include_memos` | `false` | Also append one row per [memo](../advanced/memos.md): `schema="(memo)"`, `code=<visibility>`, `text=<memo body>`, offsets from the memo anchor when span-anchored. |
+
 ## Programmatic Export
 
 Use the export registry directly in Python:

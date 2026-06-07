@@ -35,15 +35,31 @@ search:
 
 - `GET /admin/api/search?q=<query>&limit=<n>` — admin/adjudicator,
   **read-only**. Always safe (no self-selection). Requires the admin
-  API key (`X-API-Key`) or adjudicator status.
-- `GET /api/search?q=` — annotator search (only when
-  `annotator_claim: true`).
+  API key (`X-API-Key`) or adjudicator status. `limit` defaults to `50`
+  and is capped at `500`.
+- `GET /api/search?q=<query>&limit=<n>` — annotator search (only when
+  `annotator_claim: true`). `limit` defaults to `50`, capped at `200`.
 - `POST /api/search/claim {instance_id}` — pull a matching instance into
   the annotator's queue (only when `annotator_claim: true`).
 
-User queries are tokenized and quoted before hitting FTS5, so arbitrary
-punctuation (including injection attempts) is safe and never interpreted
-as FTS5 syntax.
+Each result carries a `snippet` with the matched term wrapped for
+highlighting and the `instance_id`.
+
+### Query syntax
+
+Queries are **tokenized on non-word characters**, and each token becomes
+a **prefix match** combined with AND. Concretely:
+
+- `copay` matches `copay`, `copays`, `copayment` (prefix).
+- `bus line` requires **both** `bus*` **and** `line*` to appear (AND),
+  in any order.
+- Punctuation is split and dropped, so `cost—of—care` searches the same
+  as `cost of care`. Arbitrary punctuation (including FTS5 operators and
+  injection attempts) is safe — user input is never interpreted as FTS5
+  syntax.
+
+There is no phrase, OR, or boolean-operator syntax exposed; it is a
+deliberately simple "find excerpts containing these words" search.
 
 ## Annotator search-and-claim: compatibility guard
 
@@ -82,6 +98,7 @@ curl -H "X-API-Key: search-example-key" \
 
 ## Related
 
+- [QDA Mode](qda.md) — search as part of the qualitative-coding workspace
 - [Memos](memos.md)
 - [Task Assignment](task_assignment.md)
 - [Data Export](../data-export/export_formats.md)

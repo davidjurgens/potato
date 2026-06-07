@@ -201,6 +201,7 @@ python potato/flask_server.py start \
 
 ## Related
 
+- [QDA Mode](qda.md) — compose the codebook with memos, cases & search
 - [Memos](memos.md) — universal annotator notes
 - [Search](search.md) — universal FTS5 search
 - [Cases](cases.md) — group instances into units of analysis
