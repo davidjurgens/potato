@@ -9,12 +9,99 @@ import pytest
 import copy
 from potato.migrate_cli import (
     migrate_config,
+    HighlightToSpanRule,
     TextareaToMultilineRule,
     LegacyLabelRequirementRule,
     LegacyUserConfigRule,
     LegacyOutputFormatRule,
     MIGRATION_RULES,
 )
+from potato.server_utils.schemas.registry import schema_registry
+
+
+class TestHighlightToSpanRule:
+    """F-050: the v1 'highlight' annotation type must be renamed to 'span'.
+
+    This is the single most common v1->v2 breaking change (MIGRATION.md). A
+    config that still says `annotation_type: highlight` is rejected at boot with
+    "Unknown annotation type: highlight", so the migrator MUST rename it or the
+    "migrated" config still fails to start.
+    """
+
+    def test_detects_highlight_type(self):
+        rule = HighlightToSpanRule()
+        config = {"annotation_schemes": [
+            {"annotation_type": "highlight", "name": "entities"}]}
+        assert rule.applies(config) is True
+
+    def test_ignores_modern_span_type(self):
+        rule = HighlightToSpanRule()
+        config = {"annotation_schemes": [
+            {"annotation_type": "span", "name": "entities"}]}
+        assert rule.applies(config) is False
+
+    def test_renames_highlight_to_span(self):
+        rule = HighlightToSpanRule()
+        config = {"annotation_schemes": [
+            {"annotation_type": "highlight", "name": "entities",
+             "labels": ["PERSON", "ORG"]}]}
+        migrated, changes = rule.migrate(config)
+        assert migrated["annotation_schemes"][0]["annotation_type"] == "span"
+        # other fields preserved
+        assert migrated["annotation_schemes"][0]["labels"] == ["PERSON", "ORG"]
+        assert any("highlight" in c and "span" in c for c in changes)
+
+    def test_does_not_touch_keyword_highlight_settings(self):
+        """Only annotation_type values change — unrelated 'highlight*' keys stay."""
+        rule = HighlightToSpanRule()
+        config = {
+            "keyword_highlights_file": "kw.json",
+            "highlight_linebreaks": True,
+            "annotation_schemes": [
+                {"annotation_type": "highlight", "name": "h"},
+                {"annotation_type": "radio", "name": "r"},
+            ],
+        }
+        migrated, _ = rule.migrate(config)
+        assert migrated["keyword_highlights_file"] == "kw.json"
+        assert migrated["highlight_linebreaks"] is True
+        assert migrated["annotation_schemes"][0]["annotation_type"] == "span"
+        assert migrated["annotation_schemes"][1]["annotation_type"] == "radio"
+
+    def test_renames_inside_phases_and_training(self):
+        """highlight schemes nested in phases (list & dict) and training are renamed."""
+        rule = HighlightToSpanRule()
+        config = {
+            "phases": {
+                "order": ["annotation"],
+                "annotation": {"annotation_schemes": [
+                    {"annotation_type": "highlight", "name": "p_dict"}]},
+            },
+            "training": {"annotation_schemes": [
+                {"annotation_type": "highlight", "name": "t"}]},
+            "annotation_schemes": [
+                {"annotation_type": "highlight", "name": "top"}],
+        }
+        migrated, changes = rule.migrate(config)
+        assert migrated["annotation_schemes"][0]["annotation_type"] == "span"
+        assert migrated["phases"]["annotation"]["annotation_schemes"][0]["annotation_type"] == "span"
+        assert migrated["training"]["annotation_schemes"][0]["annotation_type"] == "span"
+        assert len(changes) == 3
+
+    def test_migrated_config_passes_v2_type_validation(self):
+        """End-to-end: a v1 highlight config validates as a real v2 type after migration."""
+        config = {"annotation_schemes": [
+            {"annotation_type": "highlight", "name": "entities"}]}
+        migrated, _ = migrate_config(config)
+        new_type = migrated["annotation_schemes"][0]["annotation_type"]
+        assert new_type in schema_registry.get_supported_types()
+
+    def test_idempotent(self):
+        """Re-running on already-migrated output is a no-op for this rule."""
+        rule = HighlightToSpanRule()
+        config = {"annotation_schemes": [
+            {"annotation_type": "span", "name": "entities"}]}
+        assert rule.applies(config) is False
 
 
 class TestTextareaToMultilineRule:
