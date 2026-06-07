@@ -21,6 +21,14 @@ logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"[^\w]+", re.UNICODE)
 
+# Snippet match delimiters. We use the STX/ETX control characters as
+# sentinels instead of visible punctuation ('[' / ']'): they never occur
+# in real instance text, survive JSON transport, and let the frontend
+# escape the snippet first (XSS-safe) and only then swap the sentinels for
+# a <mark> highlight. Visible brackets would read as literal typos.
+SNIPPET_OPEN = "\x02"
+SNIPPET_CLOSE = "\x03"
+
 
 def _to_match_query(q: str) -> str:
     """Turn arbitrary user input into a safe FTS5 MATCH expression.
@@ -91,13 +99,13 @@ class FTS5Backend(SearchBackend):
         try:
             cur = conn.execute(
                 """SELECT instance_id,
-                          snippet(instance_fts, 1, '[', ']', '…', 12) AS snip,
+                          snippet(instance_fts, 1, ?, ?, '…', 12) AS snip,
                           rank AS r
                    FROM instance_fts
                    WHERE instance_fts MATCH ?
                    ORDER BY rank
                    LIMIT ?""",
-                (match, int(limit)),
+                (SNIPPET_OPEN, SNIPPET_CLOSE, match, int(limit)),
             )
             return [Hit(instance_id=row["instance_id"],
                         snippet=row["snip"] or "",

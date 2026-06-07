@@ -20,6 +20,18 @@
         return d.innerHTML;
     }
 
+    // FTS5 marks the matched term with the STX/ETX sentinels (see
+    // potato/search/fts5.py). Escape the whole snippet FIRST so any real
+    // markup in the text is neutralised, THEN swap our own sentinels for a
+    // <mark> highlight — keeping it XSS-safe while showing where it matched.
+    var SNIP_OPEN = String.fromCharCode(2);   // STX, matches fts5.py
+    var SNIP_CLOSE = String.fromCharCode(3);  // ETX
+    function highlightSnippet(s) {
+        return esc(s)
+            .split(SNIP_OPEN).join('<mark class="search-hit">')
+            .split(SNIP_CLOSE).join("</mark>");
+    }
+
     function setStatus(html) {
         var box = el("search-results");
         if (box) box.innerHTML = html;
@@ -36,7 +48,8 @@
         }
         box.innerHTML = hits.map(function (h) {
             return '<div class="search-item">'
-                + '<div class="search-snippet">' + esc(h.snippet) + "</div>"
+                + '<div class="search-snippet">' + highlightSnippet(h.snippet)
+                + "</div>"
                 + '<div class="search-row">'
                 + '<span class="search-id">' + esc(h.instance_id) + "</span>"
                 + '<button type="button" class="search-claim" data-id="'

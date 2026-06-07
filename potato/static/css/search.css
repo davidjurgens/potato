@@ -21,6 +21,24 @@
     --se-accent: var(--memo-accent, #4063b8);
     --se-accent-ink: var(--memo-accent-ink, #ffffff);
     --se-focus: var(--memo-focus, #6c8cff);
+    /* Tertiary surface, pressed accent, stronger hairline, disabled ink,
+       placeholder, badge neutrals and tokenised shadow ink — so hover/
+       active/badge states stop hard-coding the same literals the rest of
+       the sidebar system already tokenises (parity with codebook.css). */
+    --se-surface-3: var(--memo-surface-3, #eef0f6);
+    --se-line-strong: var(--memo-line-strong, #cdd2e4);
+    --se-accent-press: var(--memo-accent-press, #36559e);
+    --se-disabled: var(--memo-disabled, #aab2cc);
+    --se-placeholder: var(--memo-placeholder, #9aa0b4);
+    --se-shadow-ink: var(--memo-shadow-ink, 31, 35, 48);
+    --se-badge-surface: var(--memo-badge-surface, #eceef4);
+    --se-badge-ink: var(--memo-badge-ink, #494f63);
+    --se-badge-line: var(--memo-badge-line, #dcdfe9);
+    /* Match highlight: a calm tinted-amber wash (the same one intentional
+       non-neutral the codebook's stale notice uses), never the action
+       blue — emphasis, not a call to action. */
+    --se-hit-surface: var(--memo-hit-surface, #fbe7c2);
+    --se-hit-ink: var(--memo-hit-ink, #5c4300);
 }
 
 .search-panel-toggle {
@@ -39,7 +57,7 @@
     color: var(--se-ink);
     padding: 10px 14px;
     border-radius: 0 var(--se-radius) var(--se-radius) 0;
-    box-shadow: 1px 1px 6px rgba(31, 35, 48, 0.08);
+    box-shadow: 1px 1px 6px rgba(var(--se-shadow-ink), 0.08);
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 600;
@@ -51,7 +69,7 @@
     transform: translateY(-50%) translateX(2px);
 }
 
-.search-panel-toggle:active { background: #eef0f6; }
+.search-panel-toggle:active { background: var(--se-surface-3); }
 
 .search-panel {
     position: fixed;
@@ -62,7 +80,7 @@
     max-width: 92vw;
     background: var(--se-surface);
     border-right: 1px solid var(--se-line);
-    box-shadow: 4px 0 24px rgba(31, 35, 48, 0.10);
+    box-shadow: 4px 0 24px rgba(var(--se-shadow-ink), 0.10);
     z-index: 1050;
     display: flex;
     flex-direction: column;
@@ -127,7 +145,7 @@
     transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
 }
 
-.search-form input::placeholder { color: #9aa0b4; }
+.search-form input::placeholder { color: var(--se-placeholder); }
 
 .search-form input:focus {
     outline: none;
@@ -148,11 +166,11 @@
     transition: background-color 150ms ease-out, transform 120ms ease-out;
 }
 
-.search-primary:hover { background: #36559e; }
+.search-primary:hover { background: var(--se-accent-press); }
 .search-primary:active { transform: translateY(1px); }
 .search-primary:disabled {
-    background: #aab2cc;
-    border-color: #aab2cc;
+    background: var(--se-disabled);
+    border-color: var(--se-disabled);
     cursor: progress;
     transform: none;
 }
@@ -183,13 +201,24 @@
     transition: border-color 140ms ease-out;
 }
 
-.search-item:hover { border-color: #cdd1e0; }
+.search-item:hover { border-color: var(--se-line-strong); }
 
 .search-item .search-snippet {
     font-size: 0.88rem;
     line-height: 1.5;
     color: var(--se-ink);
     word-break: break-word;
+}
+
+/* The matched term, wrapped in <mark> by search.js. A calm tinted wash
+   with a slight weight bump — emphasis, not the action accent. Reset the
+   UA default so it carries the design-system colours. */
+.search-item .search-snippet mark.search-hit {
+    background: var(--se-hit-surface);
+    color: var(--se-hit-ink);
+    font-weight: 600;
+    border-radius: 3px;
+    padding: 0 2px;
 }
 
 .search-item .search-row {
@@ -204,9 +233,9 @@
 /* Echoes .memo-badge.private — the instance id reads as a neutral badge. */
 .search-id {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    background: #eceef4;
-    color: #494f63;
-    border: 1px solid #dcdfe9;
+    background: var(--se-badge-surface);
+    color: var(--se-badge-ink);
+    border: 1px solid var(--se-badge-line);
     border-radius: 999px;
     padding: 1px 8px;
     font-size: 0.68rem;
@@ -228,7 +257,7 @@
 }
 
 .search-claim:hover { background: var(--se-accent); color: var(--se-accent-ink); }
-.search-claim:active { background: #36559e; border-color: #36559e; }
+.search-claim:active { background: var(--se-accent-press); border-color: var(--se-accent-press); }
 .search-claim:disabled { opacity: 0.55; cursor: progress; }
 
 /* Echoes .memo-badge.shared — a positive, in-queue state. */
