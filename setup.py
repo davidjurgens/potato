@@ -76,11 +76,12 @@ setup(
     long_description=read_readme(),
     long_description_content_type="text/markdown",
     url="https://github.com/davidjurgens/potato",
+    license="GPL-3.0-or-later",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
-        "License :: Other/Proprietary License",
+        "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",

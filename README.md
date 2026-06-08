@@ -2,7 +2,7 @@
 
 [![Documentation](https://img.shields.io/badge/docs-readthedocs-blue)](https://potatoannotator.readthedocs.io/)
 [![PyPI](https://img.shields.io/pypi/v/potato-annotation)](https://pypi.org/project/potato-annotation/)
-[![License](https://img.shields.io/badge/license-Polyform%20Shield-green)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![Paper](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
 [![Live Demo](https://img.shields.io/badge/demo-HuggingFace%20Spaces-yellow)](https://huggingface.co/spaces/Blablablab/potato)
 
@@ -244,21 +244,7 @@ pytest --cov=potato --cov-report=html
 
 ## License
 
-Potato is licensed under [Polyform Shield](LICENSE). Non-commercial applications can use Potato however they want. Commercial applications can use Potato to annotate all they want, but cannot integrate Potato into a commercial product.
-
-<details>
-<summary>License FAQ</summary>
-
-| Use Case | Allowed? |
-|----------|----------|
-| Academic research | Yes |
-| Company annotation | Yes |
-| Fork for personal development | Yes |
-| Integration in open-source pipelines | Yes |
-| Commercial annotation service | Contact us |
-| Competing annotation platform | Contact us |
-
-</details>
+Potato is free software, licensed under the [GNU General Public License v3.0 or later](LICENSE) (GPLv3+). You are free to use, study, modify, and redistribute it — including for commercial purposes — provided that any distributed derivative works are also licensed under the GPLv3+ and made available with their source code. See the [LICENSE](LICENSE) file for the full terms.
 
 ---
 
