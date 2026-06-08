@@ -48,6 +48,16 @@ def _label_name(entry: Any) -> str:
     return str(entry).strip()
 
 
+def _label_details(entry: Any) -> Dict[str, Any]:
+    """Pull structured codebook-prompting fields (definition /
+    clarification / examples) out of a dict label entry. Plain-string
+    labels have none."""
+    from potato.codebook.store import RICH_FIELDS
+    if not isinstance(entry, dict):
+        return {}
+    return {f: entry[f] for f in RICH_FIELDS if f in entry}
+
+
 def _resolve_task_dir(config_file: str, config: Dict[str, Any]) -> str:
     base = os.path.dirname(os.path.abspath(config_file))
     return os.path.normpath(os.path.join(base, config.get("task_dir", ".")))
@@ -85,7 +95,8 @@ def init_codebook(config_file: str, *, dry_run: bool = False) -> Dict[str, int]:
             cid = deterministic_code_id(project, ROOT, name)
             try:
                 create_code(task_dir, project=project, name=name,
-                            created_by="codebook-cli", code_id=cid)
+                            created_by="codebook-cli", code_id=cid,
+                            details=_label_details(entry))
                 created += 1
                 present.add(name)
             except DuplicateCodeError:

@@ -445,6 +445,27 @@ class TestPromptBuilderEdgeCases(unittest.TestCase):
         # Should fallback to text extraction or return None gracefully
         # The key is it doesn't raise an exception
 
+    def test_codebook_block_injected_when_present(self):
+        """A scheme carrying a pre-rendered codebook block injects it
+        into the system prompt."""
+        schema = {
+            'name': 'themes', 'description': 'd',
+            'annotation_type': 'radio', 'labels': ['riot', 'protest'],
+            'codebook_prompt': "## Codebook\n\n### riot\nDefinition: x",
+        }
+        prompt = self.builder._build_system_prompt(schema)
+        self.assertIn('## Codebook', prompt)
+        self.assertIn('### riot', prompt)
+
+    def test_no_codebook_block_when_absent(self):
+        """Plain schemes (no codebook_prompt) get no codebook block."""
+        schema = {
+            'name': 't', 'description': 'd', 'annotation_type': 'radio',
+            'labels': ['a', 'b'],
+        }
+        prompt = self.builder._build_system_prompt(schema)
+        self.assertNotIn('## Codebook', prompt)
+
 
 if __name__ == '__main__':
     unittest.main()

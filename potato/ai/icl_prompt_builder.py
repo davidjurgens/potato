@@ -95,6 +95,15 @@ class ICLPromptBuilder:
 **Available Labels:** {', '.join(labels)}
 """
 
+        # If the scheme is codebook-backed and its codes carry structured
+        # fields (definition / include / exclude / worked examples), the
+        # schema bridge pre-rendered a "## Codebook" block onto the
+        # scheme. Inject it verbatim — this is what makes definitions and
+        # negative examples actually reach the model.
+        codebook_block = schema.get('codebook_prompt')
+        if codebook_block:
+            prompt += "\n" + codebook_block + "\n"
+
         # Add type-specific instructions
         if annotation_type == 'radio':
             prompt += "\n**Task Type:** Single-choice classification. Select exactly ONE label.\n"

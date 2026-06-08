@@ -137,6 +137,23 @@ def changes_since(
     return [dict(r) for r in rows]
 
 
+def code_history(
+    task_dir: str, project: str, code_id: str
+) -> List[Dict[str, Any]]:
+    """Full change history for a single code (newest last) — every edit
+    that touched it, including the structured-field edits. Powers the
+    per-code "version history" view."""
+    rows = _db(task_dir).execute(
+        """SELECT id, code_id, related_code_id, op, old_value, new_value,
+                  actor, actor_kind, created_at, revision
+           FROM codebook_change
+           WHERE project = ? AND (code_id = ? OR related_code_id = ?)
+           ORDER BY created_at ASC""",
+        (project, code_id, code_id),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def all_changes(
     task_dir: str, project: str
 ) -> List[Dict[str, Any]]:

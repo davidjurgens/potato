@@ -78,6 +78,8 @@ def create_code(
     color: Optional[str] = None,
     parent_id: str = store.ROOT,
     code_id: Optional[str] = None,
+    details: Optional[Dict[str, Any]] = None,
+    actor_kind: str = "human",
 ) -> Dict[str, Any]:
     name = (name or "").strip()
     if not name:
@@ -91,12 +93,19 @@ def create_code(
     # A new code changes the option set -> bump the project revision and
     # stamp the code with the revision it first appeared in.
     from potato.codebook import revision
+    from potato.codebook import changelog
     new_rev = revision.bump_revision(task_dir, project)
     code = store.insert_code(
         task_dir, project=project, name=name, created_by=created_by,
         color=color, parent_id=parent_id, sort_order=len(siblings),
-        code_id=code_id, created_revision=new_rev,
+        code_id=code_id, created_revision=new_rev, details=details,
     )
+    # Log creation so the version history is complete (previously only
+    # rename/recolor/move/delete were logged).
+    changelog.log_change(
+        task_dir, project=project, op="create", code_id=code["id"],
+        old_value=None, new_value=name, actor=created_by,
+        actor_kind=actor_kind, revision=new_rev)
     _notify(task_dir, project)
     return code
 
@@ -157,6 +166,42 @@ def recolor_code(
         task_dir, project=project, op="recolor", code_id=code_id,
         old_value=code.get("color"), new_value=color, actor=actor,
         actor_kind=actor_kind, revision=new_rev)
+    _restamp(task_dir, project, [code_id])
+    _notify(task_dir, project)
+    return updated
+
+
+def update_code_fields(
+    task_dir: str, code_id: str, *, details: Dict[str, Any], project: str,
+    actor: str = "system", actor_kind: str = "human",
+) -> Dict[str, Any]:
+    """Update one or more structured fields (definition / clarification /
+    negative_clarification / positive_example(+why) / negative_example
+    (+why)). Every field changed here alters what the LLM sees, so this
+    is a prompt-affecting edit: it bumps the revision once, logs one
+    change row per field (full old->new for the version history), and
+    softly re-flags the instances labeled with this code for review."""
+    code = _require(task_dir, code_id)
+    # Keep only known rich fields whose value actually changes.
+    changed: Dict[str, Any] = {}
+    for field in store.RICH_FIELDS:
+        if field not in details:
+            continue
+        new_val = store._clean(details[field])
+        if new_val != code.get(field):
+            changed[field] = new_val
+    if not changed:
+        return code  # no-op: nothing to update, no revision churn
+
+    updated = store.update_code(task_dir, code_id, details=changed)
+    from potato.codebook import revision
+    from potato.codebook import changelog
+    new_rev = revision.bump_revision(task_dir, project)
+    for field, new_val in changed.items():
+        changelog.log_change(
+            task_dir, project=project, op=f"edit_{field}", code_id=code_id,
+            old_value=code.get(field), new_value=new_val, actor=actor,
+            actor_kind=actor_kind, revision=new_rev)
     _restamp(task_dir, project, [code_id])
     _notify(task_dir, project)
     return updated

@@ -22,14 +22,50 @@ codebook_mode: open
 annotation_schemes:
 # `codebook: true` makes this scheme's labels come from the project
 # codebook (seeded once from the labels below) instead of being static.
+#
+# Labels may be plain strings, or dicts carrying the structured
+# "codebook-prompting" fields below. Those fields are seeded into the
+# codebook on first run and then transparently injected into the LLM
+# prompt (definition / include / exclude / a positive & negative
+# example) — the annotator's own prompt is left untouched. The negative
+# clarification + negative example are what stop the model from
+# collapsing semantically adjacent codes via surface-word overlap.
 - annotation_type: multiselect
   name: themes
   description: Which qualitative themes appear in this excerpt?
   codebook: true
   labels:
-  - access barriers
-  - cost concerns
-  - provider trust
-  - wait times
+  - name: access barriers
+    definition: Structural obstacles that prevent a patient from reaching care (distance, transport, scheduling, language, paperwork).
+    clarification: Include anything that blocks getting to or booking care, including no nearby clinic, no transport, or being unable to navigate the system.
+    negative_clarification: NOT the price of care itself — that is "cost concerns". A long delay once you already have an appointment is "wait times", not an access barrier.
+    positive_example: The nearest clinic is two bus transfers away and I can't get there without taking a full day off work.
+    positive_example_why: Distance and transport physically block reaching care.
+    negative_example: I finally saw the doctor but the copay was more than I could afford.
+    negative_example_why: The obstacle here is price, which is cost concerns, not access.
+  - name: cost concerns
+    definition: Worry about the monetary price of care — bills, copays, premiums, or fear of debt.
+    clarification: Include any mention of affordability, insurance not covering enough, or skipping care because of money.
+    negative_clarification: NOT difficulty physically reaching care (that is "access barriers"), even though both can stop someone from being seen.
+    positive_example: I skipped the follow-up because I couldn't afford another $200 visit.
+    positive_example_why: Care was forgone specifically because of its price.
+    negative_example: I couldn't get an appointment for three months.
+    negative_example_why: This is a scheduling delay (wait times), with no mention of money.
+  - name: provider trust
+    definition: The patient's confidence in, or distrust of, their clinician or the health system.
+    clarification: Include feeling heard or dismissed, doubting a diagnosis, or relying on a provider's judgment.
+    negative_clarification: NOT general satisfaction with logistics like cost or wait times; this is specifically about the relationship and credibility of the provider.
+    positive_example: My doctor never listens, so I've started ignoring the advice I'm given.
+    positive_example_why: Expresses distrust in the provider relationship.
+    negative_example: The waiting room was crowded and I sat there for an hour.
+    negative_example_why: A logistics complaint (wait times), not about trust in the provider.
+  - name: wait times
+    definition: Delay between seeking care and receiving it — appointment lead time or time spent waiting on the day.
+    clarification: Include long lead times for appointments and long in-clinic waits.
+    negative_clarification: NOT being unable to reach the clinic at all (that is "access barriers"); wait times assume care is reachable but slow.
+    positive_example: The first available appointment was four months out.
+    positive_example_why: A direct delay in receiving care.
+    negative_example: There's no specialist within a hundred miles of me.
+    negative_example_why: Care is unreachable, an access barrier, not merely delayed.
 
 site_dir: default

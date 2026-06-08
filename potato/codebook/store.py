@@ -31,6 +31,22 @@ from potato.persistence import Migration, get_db, register_migration
 
 ROOT = ""  # sentinel parent_id for top-level codes
 
+# Structured per-code fields (Codebook prompting). These are the
+# "load-bearing" fields that get rendered into the LLM prompt: a tight
+# definition, inclusion/exclusion clarifications, and a positive /
+# negative worked example (text + a one-sentence why). All are nullable
+# TEXT and default to NULL — a code with none of them behaves exactly as
+# before (just a name + color), so this is fully backward compatible.
+RICH_FIELDS = (
+    "definition",
+    "clarification",
+    "negative_clarification",
+    "positive_example",
+    "positive_example_why",
+    "negative_example",
+    "negative_example_why",
+)
+
 _CODEBOOK_MIGRATION = Migration(
     name="0001_codebook",
     sql="""
@@ -68,6 +84,26 @@ _CODEBOOK_MIGRATION = Migration(
 
 register_migration(_CODEBOOK_MIGRATION)
 
+# Structured codebook-prompting fields (see RICH_FIELDS). Additive,
+# nullable columns on the existing `codes` table. Registered right after
+# 0001 so it runs once the table exists; like the other ALTER migrations
+# (0002/0003) it relies on schema_migrations to run exactly once (bare
+# ALTER ADD COLUMN is not idempotent on its own).
+_RICH_FIELDS_MIGRATION = Migration(
+    name="0004_codebook_rich_fields",
+    sql="""
+    ALTER TABLE codes ADD COLUMN definition TEXT;
+    ALTER TABLE codes ADD COLUMN clarification TEXT;
+    ALTER TABLE codes ADD COLUMN negative_clarification TEXT;
+    ALTER TABLE codes ADD COLUMN positive_example TEXT;
+    ALTER TABLE codes ADD COLUMN positive_example_why TEXT;
+    ALTER TABLE codes ADD COLUMN negative_example TEXT;
+    ALTER TABLE codes ADD COLUMN negative_example_why TEXT;
+    """,
+)
+
+register_migration(_RICH_FIELDS_MIGRATION)
+
 
 def _db(task_dir: str):
     """Connection guaranteeing the codebook migration is registered.
@@ -77,6 +113,7 @@ def _db(task_dir: str):
     process-global registry before this task_dir's first get_db().
     """
     register_migration(_CODEBOOK_MIGRATION)
+    register_migration(_RICH_FIELDS_MIGRATION)
     return get_db(task_dir)
 
 
@@ -107,24 +144,38 @@ def insert_code(
     sort_order: int = 0,
     code_id: Optional[str] = None,
     created_revision: int = 0,
+    details: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Insert one code row and return it. `code_id` lets the init CLI
     supply a deterministic id; otherwise a random uuid4 is used.
     `created_revision` records the codebook revision the code first
-    appeared in (for provenance / the review worklist)."""
+    appeared in (for provenance / the review worklist). `details` may
+    carry any of RICH_FIELDS (definition/clarification/examples…)."""
     cid = code_id or uuid.uuid4().hex
     now = time.time()
+    details = details or {}
+    rich_cols = list(RICH_FIELDS)
+    rich_vals = [_clean(details.get(f)) for f in rich_cols]
+    cols = ("id, project, name, color, parent_id, sort_order, "
+            "created_by, created_at, updated_at, created_revision, "
+            + ", ".join(rich_cols))
+    placeholders = ", ".join(["?"] * (10 + len(rich_cols)))
     conn = _db(task_dir)
     conn.execute(
-        """INSERT INTO codes
-           (id, project, name, color, parent_id, sort_order,
-            created_by, created_at, updated_at, created_revision)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        f"INSERT INTO codes ({cols}) VALUES ({placeholders})",
         (cid, project, name, color, parent_id, sort_order,
-         created_by, now, now, created_revision),
+         created_by, now, now, created_revision, *rich_vals),
     )
     conn.commit()
     return get_code(task_dir, cid)
+
+
+def _clean(value: Any) -> Optional[str]:
+    """Normalise a rich-field value: trim strings, treat empty as NULL."""
+    if value is None:
+        return None
+    s = str(value).strip()
+    return s or None
 
 
 def get_code(task_dir: str, code_id: str) -> Optional[Dict[str, Any]]:
@@ -173,6 +224,7 @@ def update_code(
     color: Optional[str] = None,
     parent_id: Optional[str] = None,
     sort_order: Optional[int] = None,
+    details: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     sets, params = [], []
     if name is not None:
@@ -183,6 +235,12 @@ def update_code(
         sets.append("parent_id = ?"); params.append(parent_id)
     if sort_order is not None:
         sets.append("sort_order = ?"); params.append(sort_order)
+    # Only fields explicitly present in `details` are touched, so a
+    # caller can clear one field (pass "" / None) without disturbing the
+    # others.
+    for field in RICH_FIELDS:
+        if details is not None and field in details:
+            sets.append(f"{field} = ?"); params.append(_clean(details[field]))
     if not sets:
         return get_code(task_dir, code_id)
     sets.append("updated_at = ?"); params.append(time.time())

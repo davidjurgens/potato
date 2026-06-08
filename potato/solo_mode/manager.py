@@ -241,7 +241,147 @@ class SoloModeManager:
         # State persistence
         self._state_file = 'solo_mode_state.json'
 
+        # Codebook output-change review. When a codebook edit changes
+        # what the model is told, we re-label the instances it touched
+        # and flag the ones whose label moved (see codebook.review). The
+        # baseline revision is set lazily on the first change so the
+        # initial config-seed/sync is not treated as an edit to review.
+        self._last_review_revision: Optional[int] = None
+        self._register_codebook_review_listener()
+
         logger.info(f"SoloModeManager initialized (enabled={config.enabled})")
+
+    # === Codebook output-change review ===
+
+    def _register_codebook_review_listener(self) -> None:
+        """Subscribe to codebook mutations so prompt-affecting edits
+        trigger a background re-label + significance check. Best-effort:
+        a failure here must never stop solo mode from starting."""
+        try:
+            from potato.codebook.service import register_change_listener
+            register_change_listener(self._on_codebook_change)
+        except Exception:
+            logger.debug("could not register codebook review listener",
+                         exc_info=True)
+
+    def _codebook_ids(self) -> Tuple[str, str]:
+        task_dir = self.app_config.get('task_dir', '.')
+        project = self.app_config.get('annotation_task_name') or 'default'
+        return task_dir, project
+
+    def _on_codebook_change(self, task_dir: str, project: str) -> None:
+        """Codebook change listener. Filters to this project, captures
+        the prompt-affecting changes since the last review, and kicks off
+        the re-label/compare pass in a daemon thread (never blocks the
+        mutation)."""
+        try:
+            my_td, my_proj = self._codebook_ids()
+            import os
+            if (project != my_proj
+                    or os.path.abspath(task_dir) != os.path.abspath(my_td)):
+                return
+            from potato.codebook import changelog, current_revision
+            cur = current_revision(task_dir, project)
+            if self._last_review_revision is None:
+                # First observed change: establish the baseline, don't
+                # retro-review the seed/sync that populated the codebook.
+                self._last_review_revision = cur
+                return
+            baseline = self._last_review_revision
+            self._last_review_revision = cur
+            if cur <= baseline:
+                return
+            changes = changelog.changes_since(task_dir, project, baseline)
+            # Ops that change what the model is told about an existing
+            # code (and thus can move its instances' labels). recolor /
+            # move / create don't alter prompt content for existing
+            # instances, so they don't warrant a re-label sweep.
+            prompt_ops = {"rename", "delete", "merge", "split"}
+            affected: Dict[str, str] = {}  # name -> latest change_id
+            for ch in changes:
+                op = ch.get("op") or ""
+                if op in prompt_ops or op.startswith("edit_"):
+                    for nm in (ch.get("old_value"), ch.get("new_value")):
+                        if nm:
+                            affected[str(nm)] = ch.get("id")
+            if not affected:
+                return
+            threading.Thread(
+                target=self._run_codebook_review,
+                args=(task_dir, project, affected),
+                name="CodebookReviewThread", daemon=True).start()
+        except Exception:
+            logger.debug("codebook change review skipped", exc_info=True)
+
+    def _run_codebook_review(
+        self, task_dir: str, project: str, affected: Dict[str, str]
+    ) -> None:
+        """Re-label every stored prediction that used an affected code and
+        flag the ones whose label changed significantly. Runs off-thread."""
+        try:
+            from potato.codebook import review
+        except Exception:
+            return
+        try:
+            endpoint = self.llm_labeling_thread._get_endpoint()
+        except Exception:
+            endpoint = None
+        if endpoint is None:
+            logger.info("Codebook review: no labeling endpoint; skipping")
+            return
+
+        def touches(label: Any) -> bool:
+            if isinstance(label, (list, tuple, set)):
+                return any(str(x) in affected for x in label)
+            return str(label) in affected
+
+        relabels: List[Dict[str, Any]] = []
+        for iid, schemas in self.get_all_llm_predictions().items():
+            for schema_name, pred in schemas.items():
+                if not touches(pred.predicted_label):
+                    continue
+                text = self._get_instance_text(iid)
+                if not text:
+                    continue
+                try:
+                    new = self.llm_labeling_thread._label_instance(
+                        iid, text, schema_name, endpoint=endpoint)
+                except Exception:
+                    continue
+                if new is None or new.error:
+                    continue
+                # change_id of the edit that touched this label (best guess)
+                cid = None
+                if isinstance(pred.predicted_label, (list, tuple, set)):
+                    for x in pred.predicted_label:
+                        if str(x) in affected:
+                            cid = affected[str(x)]; break
+                else:
+                    cid = affected.get(str(pred.predicted_label))
+                relabels.append({
+                    "instance_id": iid,
+                    "schema_name": schema_name,
+                    "change_id": cid,
+                    "old_label": pred.predicted_label,
+                    "new_label": new.label,
+                    "old_confidence": pred.confidence_score,
+                    "new_confidence": new.confidence,
+                })
+
+        if not relabels:
+            return
+        # evaluate_relabels stamps each flag with its own change_id from
+        # the item, so pass change_id=None at the batch level.
+        flags = []
+        for item in relabels:
+            f = review.evaluate_relabels(
+                task_dir, project=project,
+                change_id=item.get("change_id"), relabels=[item])
+            flags.extend(f)
+        if flags:
+            logger.info(
+                "Codebook review: flagged %d instance(s) for human review "
+                "after a codebook change", len(flags))
 
     # === Component Properties ===
 

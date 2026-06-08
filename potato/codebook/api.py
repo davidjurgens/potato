@@ -39,6 +39,7 @@ from potato.codebook import (
     recolor_code,
     rename_code,
     stale_instances,
+    update_code_fields,
 )
 from potato.codebook.store import ROOT
 
@@ -166,6 +167,28 @@ def get_codebook(ctx):
         "can_add": _can_mutate(ctx, need_open=False),
         "can_edit": _can_mutate(ctx, need_open=True),
     })
+
+
+@codebook_bp.route("/<code_id>", methods=["GET"])
+@codebook_view
+def get_code_detail(ctx, code_id):
+    """Full record for one code, including the structured prompting
+    fields (definition / clarification / examples)."""
+    cb = Codebook.load(ctx["task_dir"], ctx["project"])
+    detail = cb.detail(code_id)
+    if detail is None:
+        return jsonify({"error": "code not found"}), 404
+    return jsonify({"code": detail})
+
+
+@codebook_bp.route("/<code_id>/history", methods=["GET"])
+@codebook_view
+def code_history(ctx, code_id):
+    """Version history for one code: every logged edit (create, rename,
+    recolor, move, and each structured-field edit) oldest-first."""
+    from potato.codebook import changelog
+    rows = changelog.code_history(ctx["task_dir"], ctx["project"], code_id)
+    return jsonify({"code_id": code_id, "history": rows, "count": len(rows)})
 
 
 @codebook_bp.route("/version", methods=["GET"])
@@ -312,6 +335,44 @@ def admin_changes():
     from potato.codebook import changelog
     rows = changelog.all_changes(td, project)
     return jsonify({"changes": rows, "count": len(rows)})
+
+
+@codebook_bp.route("/admin/review", methods=["GET"])
+def admin_review_queue():
+    """Open output-change review flags: instances whose LLM label a
+    codebook edit moved significantly. Admin/adjudicator only."""
+    td, project, _user, err = _admin_ctx()
+    if err:
+        return err
+    from potato.codebook import review
+    status = request.args.get("status", "open")
+    items = review.list_flags(td, project, status=status)
+    idx = _instance_index_map()
+    for it in items:
+        it["index"] = idx.get(str(it["instance_id"]))
+    return jsonify({"flags": items, "count": len(items)})
+
+
+@codebook_bp.route("/admin/review/<flag_id>/resolve", methods=["POST"])
+def admin_resolve_review(flag_id):
+    """Mark a review flag reviewed | dismissed. Admin/adjudicator only."""
+    td, project, user, err = _admin_ctx()
+    if err:
+        return err
+    from potato.codebook import review
+    data = request.get_json(silent=True) or {}
+    status = (data.get("status") or "reviewed").strip()
+    if status not in ("reviewed", "dismissed"):
+        return jsonify({
+            "error": "status must be 'reviewed' or 'dismissed'"}), 400
+    flag = review.get_flag(td, flag_id)
+    if not flag or flag["project"] != project:
+        return jsonify({"error": "flag not found"}), 404
+    ok = review.resolve_flag(
+        td, flag_id, status=status, reviewed_by=user)
+    if not ok:
+        return jsonify({"error": f"flag already {flag['status']}"}), 409
+    return jsonify({"resolved": True, "status": status})
 
 
 @codebook_bp.route("/proposals", methods=["POST"])
@@ -466,7 +527,15 @@ def add_code(ctx):
         ctx["task_dir"], project=ctx["project"], name=name,
         created_by=ctx["username"], color=data.get("color"),
         parent_id=data.get("parent_id") or ROOT,
+        details=_rich_details(data),
     )}))
+
+
+def _rich_details(data: dict) -> dict:
+    """Pull just the structured codebook-prompting fields out of a
+    request body (ignoring name/color/parent_id/etc)."""
+    from potato.codebook.store import RICH_FIELDS
+    return {f: data[f] for f in RICH_FIELDS if f in data}
 
 
 @codebook_bp.route("/<code_id>", methods=["PATCH"])
@@ -483,16 +552,23 @@ def edit_code(ctx, code_id):
         if "name" in data:
             result = rename_code(
                 ctx["task_dir"], code_id,
-                new_name=data["name"], project=ctx["project"])
+                new_name=data["name"], project=ctx["project"],
+                actor=ctx["username"])
         if "color" in data:
             result = recolor_code(
                 ctx["task_dir"], code_id,
-                color=data["color"], project=ctx["project"])
+                color=data["color"], project=ctx["project"],
+                actor=ctx["username"])
         if "parent_id" in data:
             result = move_under(
                 ctx["task_dir"], code_id,
                 new_parent_id=data["parent_id"] or ROOT,
-                project=ctx["project"])
+                project=ctx["project"], actor=ctx["username"])
+        rich = _rich_details(data)
+        if rich:
+            result = update_code_fields(
+                ctx["task_dir"], code_id, details=rich,
+                project=ctx["project"], actor=ctx["username"])
         if result is None:
             return jsonify({"error": "nothing to update"}), 400
         return jsonify({"code": result})

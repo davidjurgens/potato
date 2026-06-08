@@ -35,11 +35,13 @@ from .service import (
     remove_code,
     rename_code,
     split_code,
+    update_code_fields,
 )
 from .codebook import Codebook
 from .similar import derive_code_name, similar_code_names
 from . import revision
 from . import changelog
+from . import review
 from .changelog import propose_change
 from .revision import (
     all_stale_instances,
@@ -64,6 +66,7 @@ __all__ = [
     "delete_code",
     "merge_codes",
     "split_code",
+    "update_code_fields",
     "touch_instances",
     "apply_code",
     "remove_code",
@@ -81,4 +84,5 @@ __all__ = [
     "similar_code_names",
     "changelog",
     "propose_change",
+    "review",
 ]

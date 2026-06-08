@@ -76,14 +76,48 @@ class Codebook:
         return mapping
 
     def as_tree(self) -> List[Dict[str, Any]]:
-        """Nested [{id,name,color,children:[...]}] for the codebook UI."""
+        """Nested [{id,name,color,<rich fields>,children:[...]}] for the
+        codebook UI. The structured fields (definition/clarification/…)
+        ride along so the tray and prompt renderer have everything in one
+        fetch; absent fields are emitted as None."""
 
         def node(c: Dict[str, Any]) -> Dict[str, Any]:
-            return {
+            out = {
                 "id": c["id"],
                 "name": c["name"],
                 "color": c["color"],
                 "children": [node(k) for k in self.children(c["id"])],
             }
+            for field in store.RICH_FIELDS:
+                out[field] = c.get(field)
+            return out
 
         return [node(c) for c in self.children(store.ROOT)]
+
+    def detail(self, code_id: str) -> Optional[Dict[str, Any]]:
+        """Full record for one code (name, color, parent, rich fields)."""
+        c = self._by_id.get(code_id)
+        if not c:
+            return None
+        out = {"id": c["id"], "name": c["name"], "color": c.get("color"),
+               "parent_id": c.get("parent_id")}
+        for field in store.RICH_FIELDS:
+            out[field] = c.get(field)
+        return out
+
+    def details_in_order(self) -> List[Dict[str, Any]]:
+        """Every code with its rich fields, in tree order — the input the
+        prompt renderer walks to build the structured Codes block."""
+        out: List[Dict[str, Any]] = []
+
+        def walk(parent: str) -> None:
+            for c in self.children(parent):
+                d = {"id": c["id"], "name": c["name"],
+                     "parent_id": c.get("parent_id")}
+                for field in store.RICH_FIELDS:
+                    d[field] = c.get(field)
+                out.append(d)
+                walk(c["id"])
+
+        walk(store.ROOT)
+        return out

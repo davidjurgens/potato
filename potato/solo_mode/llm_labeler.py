@@ -307,6 +307,12 @@ class LLMLabelingThread(threading.Thread):
             # Build labeling prompt
             labels = self._extract_labels(schema_info)
 
+            # Transparently augment the user's prompt with the project's
+            # structured codebook (definitions / include / exclude /
+            # worked examples). Returns "" unless the codebook carries
+            # structured fields, so plain-label projects are unaffected.
+            codebook_section = self._codebook_section()
+
             # Check if edge case rule extraction is enabled
             ecr_config = getattr(self.solo_config, 'edge_case_rules', None)
             request_edge_case = (
@@ -333,7 +339,7 @@ class LLMLabelingThread(threading.Thread):
             if request_edge_case:
                 full_prompt = f"""{prompt}
 
-{icl_section}Text to label:
+{codebook_section}{icl_section}Text to label:
 {text}
 
 Available labels: {labels}
@@ -350,7 +356,7 @@ Respond with JSON. If you are uncertain about the label (confidence below 75), a
             else:
                 full_prompt = f"""{prompt}
 
-{icl_section}Text to label:
+{codebook_section}{icl_section}Text to label:
 {text}
 
 Available labels: {labels}
@@ -476,6 +482,20 @@ Respond with JSON:
                 model_name='',
                 error=str(e)
             )
+
+    def _codebook_section(self) -> str:
+        """Structured codebook block for the current project, or "" when
+        the project has no structured codebook fields. Trailing newlines
+        keep it cleanly separated from the rest of the prompt; best-effort
+        so it can never break labeling."""
+        try:
+            from potato.codebook.prompt import render_codebook_section
+            task_dir = self.config.get('task_dir', '.')
+            project = self.config.get('annotation_task_name') or 'default'
+            section = render_codebook_section(task_dir, project)
+            return (section + "\n\n") if section else ""
+        except Exception:
+            return ""
 
     def _extract_labels(self, schema_info: Dict[str, Any]) -> str:
         """Extract label names from schema."""

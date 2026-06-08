@@ -37,6 +37,14 @@ def _project_of(config: Dict[str, Any]) -> str:
     return config.get("annotation_task_name") or "default"
 
 
+def _label_details(entry: Any) -> Dict[str, Any]:
+    """Structured codebook-prompting fields from a dict label entry."""
+    from potato.codebook.store import RICH_FIELDS
+    if not isinstance(entry, dict):
+        return {}
+    return {f: entry[f] for f in RICH_FIELDS if f in entry}
+
+
 def _seed_from_yaml(
     task_dir: str, project: str, yaml_labels: List[Any]
 ) -> None:
@@ -47,7 +55,7 @@ def _seed_from_yaml(
         try:
             create_code(
                 task_dir, project=project, name=name,
-                created_by="config")
+                created_by="config", details=_label_details(entry))
         except DuplicateCodeError:
             pass  # idempotent: re-seeding an existing code is fine
 
@@ -76,6 +84,14 @@ def apply_codebook_to_schemes(config: Dict[str, Any]) -> None:
                 "Codebook bridge: scheme %r now sources %d label(s) "
                 "from the project codebook",
                 scheme.get("name"), len(names))
+
+        # Pre-render the structured codebook block (definitions / include
+        # / exclude / examples) onto the scheme so the ICL prompt builder
+        # can inject it without touching the DB. "" when no code carries
+        # structured fields. Refreshed on every codebook change via the
+        # ICL-sync listener below.
+        from potato.codebook.prompt import render_from_codebook
+        scheme["codebook_prompt"] = render_from_codebook(cb)
 
 
 def _icl_sync_listener(task_dir: str, project: str) -> None:
