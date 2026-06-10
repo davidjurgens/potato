@@ -3126,8 +3126,10 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         flask_app.config["trace_ingestion"] = trace_ingestion_config
         logger.info("Registered trace ingestion blueprint")
 
-        # Start Langfuse poller if configured
-        sources = trace_ingestion_config.get("sources", [])
+        # Start Langfuse poller if configured. Guard against `sources:` being
+        # present-but-null in YAML (e.g. when all entries are commented out),
+        # which yields None rather than an empty list.
+        sources = trace_ingestion_config.get("sources") or []
         for source in sources:
             if source.get("type") == "langfuse":
                 from potato.trace_ingestion.langfuse_poller import LangfusePoller

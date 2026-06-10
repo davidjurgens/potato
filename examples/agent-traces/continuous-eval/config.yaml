@@ -1,0 +1,111 @@
+# Continuous Agent Evaluation — Three-Pane eval_trace Display
+#
+# Visualizes one agent trace decomposed into three side-by-side panes —
+# Reasoning | Function Calls | Final Answer — for fast, continuous evaluation.
+# New traces can arrive at runtime via the trace-ingestion webhook (and an
+# optional Langfuse poller), so annotators evaluate runs as they happen.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/continuous-eval/config.yaml -p 8000
+#
+# Push a new trace at runtime (see README.md):
+#   curl -X POST http://localhost:8000/api/traces/webhook \
+#     -H "Content-Type: application/json" -d @data/continuous-eval-example.json
+
+annotation_task_name: "Continuous Agent Evaluation"
+
+# Starts with sample traces; new traces arrive via the webhook / Langfuse poller.
+data_files:
+  - data/continuous-eval-example.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# --- Continuous-eval ingestion -------------------------------------------
+# Webhook endpoint (POST /api/traces/webhook) + SSE notifications to annotators
+# (GET /api/traces/stream). Add a Langfuse source to also poll a Langfuse
+# project for new traces. Runtime-added traces are assignable because dynamic
+# sources default the per-user quota to unlimited.
+trace_ingestion:
+  enabled: true
+  api_key: ""            # no auth for the demo; set a key in production
+  notify_annotators: true
+  # Uncomment to also pull traces from Langfuse (poll on an interval):
+  # sources:
+  #   - type: langfuse
+  #     api_url: https://cloud.langfuse.com
+  #     public_key: pk-...
+  #     secret_key: sk-...
+  #     poll_interval: 30   # seconds
+
+# --- Display: three-pane eval_trace --------------------------------------
+instance_display:
+  layout:
+    direction: vertical
+    gap: 12px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: trace
+      type: eval_trace
+      label: "Agent Trace"
+      display_options:
+        pane_labels: ["Reasoning", "Function Calls", "Final Answer"]
+        show_step_numbers: true
+        collapse_long_outputs: true
+        max_output_lines: 12
+        link_steps: true
+
+# --- Per-component evaluation schemes ------------------------------------
+annotation_schemes:
+  - annotation_type: likert
+    name: reasoning_quality
+    description: "Quality of the agent's reasoning (left pane)"
+    min_label: "Flawed"
+    max_label: "Sound"
+    size: 5
+
+  - annotation_type: radio
+    name: tool_use_correctness
+    description: "Were the function/tool calls (middle pane) appropriate and correct?"
+    labels:
+      - name: correct
+        tooltip: "All calls appropriate and correct"
+      - name: minor_issues
+        tooltip: "Mostly fine, minor inefficiency or redundancy"
+      - name: incorrect
+        tooltip: "Wrong tool, wrong args, or harmful call"
+    sequential_key_binding: true
+
+  - annotation_type: likert
+    name: answer_helpfulness
+    description: "How helpful is the final answer (right pane)?"
+    min_label: "Unhelpful"
+    max_label: "Very helpful"
+    size: 5
+
+  - annotation_type: multiselect
+    name: failure_mode
+    description: "Failure modes observed (select all that apply)"
+    labels:
+      - name: hallucination
+      - name: wrong_tool
+      - name: missing_clarification
+      - name: inefficient
+      - name: unsafe_action
+      - name: none
+
+  - annotation_type: text
+    name: notes
+    description: "Notes / rationale for your evaluation"
+
+user_config:
+  allow_all_users: true

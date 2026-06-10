@@ -344,6 +344,7 @@ def _register_builtin_displays():
     from .code_display import CodeDisplay
     from .conversation_tree_display import ConversationTreeDisplay
     from .agent_trace_display import AgentTraceDisplay
+    from .eval_trace_display import EvalTraceDisplay
     from .gallery_display import GalleryDisplay
     from .interactive_chat_display import InteractiveChatDisplay
     from .web_agent_trace_display import WebAgentTraceDisplay
@@ -534,6 +535,21 @@ def _register_builtin_displays():
             },
             supports_span_target=False,
             description="Agent trace display with step cards and type badges"
+        ),
+        DisplayDefinition(
+            name="eval_trace",
+            renderer=EvalTraceDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "pane_labels": None,
+                "show_step_numbers": True,
+                "collapse_long_outputs": True,
+                "max_output_lines": 20,
+                "link_steps": True,
+                "compact": False,
+            },
+            supports_span_target=False,
+            description="Three-pane agent trace eval: reasoning, function calls, and final answer side-by-side"
         ),
         DisplayDefinition(
             name="gallery",

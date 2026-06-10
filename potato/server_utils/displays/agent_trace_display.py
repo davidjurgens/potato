@@ -10,29 +10,16 @@ for agent trace data, with step-type-aware styling and summary headers.
 """
 
 import html
-import re
 from typing import Dict, Any, List, Optional
 
 from .base import BaseDisplay
-
-
-# Default colors for step types
-DEFAULT_STEP_COLORS = {
-    "thought": "#e8f4fd",
-    "action": "#fff3e0",
-    "observation": "#e8f5e9",
-    "system": "#f3e5f5",
-    "error": "#ffebee",
-}
-
-# Speaker patterns that map to step types
-SPEAKER_TYPE_PATTERNS = {
-    "thought": re.compile(r"(thought|reasoning|planning|think)", re.IGNORECASE),
-    "action": re.compile(r"(action|tool|function|call|execute)", re.IGNORECASE),
-    "observation": re.compile(r"(observation|environment|result|output|response)", re.IGNORECASE),
-    "system": re.compile(r"(system|info|metadata)", re.IGNORECASE),
-    "error": re.compile(r"(error|fail|exception)", re.IGNORECASE),
-}
+from ._trace_normalize import (
+    DEFAULT_STEP_COLORS,
+    SPEAKER_TYPE_PATTERNS,
+    normalize_steps,
+    infer_type_from_speaker,
+    infer_type_from_text,
+)
 
 
 class AgentTraceDisplay(BaseDisplay):
@@ -190,95 +177,20 @@ class AgentTraceDisplay(BaseDisplay):
         '''
 
     def _normalize_steps(self, data: Any, speaker_key: str, text_key: str) -> List[Dict[str, str]]:
-        """Normalize various trace data formats to a list of step dicts."""
-        steps = []
+        """Normalize various trace data formats to a list of step dicts.
 
-        if isinstance(data, str):
-            # Single string - treat as one observation
-            return [{"type": "observation", "speaker": "", "text": data}]
-
-        if not isinstance(data, list):
-            return steps
-
-        for item in data:
-            if isinstance(item, str):
-                step_type = self._infer_type_from_text(item)
-                steps.append({"type": step_type, "speaker": "", "text": item})
-            elif isinstance(item, dict):
-                # Format 1: speaker/text (same as dialogue)
-                if speaker_key in item and text_key in item:
-                    speaker = item[speaker_key]
-                    text = item[text_key]
-                    step_type = item.get("step_type", self._infer_type_from_speaker(speaker))
-                    steps.append({
-                        "type": step_type,
-                        "speaker": speaker,
-                        "text": text,
-                        "timestamp": item.get("timestamp", ""),
-                        "screenshot": item.get("screenshot", ""),
-                    })
-                # Format 2: thought/action/observation (one step = multiple turns)
-                elif any(k in item for k in ("thought", "action", "observation")):
-                    if "thought" in item and item["thought"]:
-                        steps.append({
-                            "type": "thought",
-                            "speaker": "Agent (Thought)",
-                            "text": str(item["thought"]),
-                            "timestamp": item.get("timestamp", ""),
-                        })
-                    if "action" in item and item["action"]:
-                        action = item["action"]
-                        if isinstance(action, dict):
-                            tool = action.get("tool", action.get("name", ""))
-                            params = action.get("params", action.get("parameters", {}))
-                            if params:
-                                args = ", ".join(f"{k}={repr(v)}" for k, v in params.items())
-                                action_text = f"{tool}({args})"
-                            else:
-                                action_text = f"{tool}()"
-                        else:
-                            action_text = str(action)
-                        steps.append({
-                            "type": "action",
-                            "speaker": "Agent (Action)",
-                            "text": action_text,
-                        })
-                    if "observation" in item and item["observation"]:
-                        steps.append({
-                            "type": "observation",
-                            "speaker": "Environment",
-                            "text": str(item["observation"]),
-                            "screenshot": item.get("screenshot", ""),
-                        })
-                # Format 3: step_type/content
-                elif "step_type" in item:
-                    steps.append({
-                        "type": item["step_type"],
-                        "speaker": item.get("speaker", item.get("step_type", "").capitalize()),
-                        "text": item.get("content", item.get("text", "")),
-                        "timestamp": item.get("timestamp", ""),
-                        "screenshot": item.get("screenshot", ""),
-                    })
-
-        return steps
+        Delegates to the shared :func:`normalize_steps` so ``agent_trace`` and
+        ``eval_trace`` parse identical data the same way.
+        """
+        return normalize_steps(data, speaker_key, text_key)
 
     def _infer_type_from_speaker(self, speaker: str) -> str:
         """Infer step type from speaker name."""
-        if not speaker:
-            return "observation"
-        for type_name, pattern in SPEAKER_TYPE_PATTERNS.items():
-            if pattern.search(speaker):
-                return type_name
-        return "observation"
+        return infer_type_from_speaker(speaker)
 
     def _infer_type_from_text(self, text: str) -> str:
         """Infer step type from text content."""
-        lower = text.lower()
-        if lower.startswith(("i need to", "i should", "let me think", "my plan")):
-            return "thought"
-        if "(" in text and ")" in text and any(c.isalpha() for c in text.split("(")[0]):
-            return "action"
-        return "observation"
+        return infer_type_from_text(text)
 
     def _build_summary(self, steps: List[Dict]) -> str:
         """Build a summary header showing step counts."""

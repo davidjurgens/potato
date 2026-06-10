@@ -1,0 +1,78 @@
+# Continuous Agent Evaluation — directory-watch transport
+#
+# Same three-pane eval_trace display as config.yaml, but the "continuous" part
+# is driven by watching a directory: drop a JSON/JSONL trace file into
+# watch_inbox/ and it is ingested within watch_poll_interval seconds. This is
+# the simplest offline/local continuous-eval demo (no webhook server needed).
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/continuous-eval/config-watch.yaml -p 8000
+#
+# Then drop a new trace file:
+#   cp my-new-trace.jsonl examples/agent-traces/continuous-eval/watch_inbox/
+
+annotation_task_name: "Continuous Agent Evaluation (watch)"
+
+# Load + watch a directory instead of static data_files.
+data_directory: watch_inbox
+watch_data_directory: true
+watch_poll_interval: 3.0
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 12px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: trace
+      type: eval_trace
+      label: "Agent Trace"
+      display_options:
+        pane_labels: ["Reasoning", "Function Calls", "Final Answer"]
+        show_step_numbers: true
+        collapse_long_outputs: true
+        max_output_lines: 12
+        link_steps: true
+
+annotation_schemes:
+  - annotation_type: likert
+    name: reasoning_quality
+    description: "Quality of the agent's reasoning (left pane)"
+    min_label: "Flawed"
+    max_label: "Sound"
+    size: 5
+
+  - annotation_type: radio
+    name: tool_use_correctness
+    description: "Were the function/tool calls (middle pane) appropriate and correct?"
+    labels:
+      - name: correct
+      - name: minor_issues
+      - name: incorrect
+    sequential_key_binding: true
+
+  - annotation_type: likert
+    name: answer_helpfulness
+    description: "How helpful is the final answer (right pane)?"
+    min_label: "Unhelpful"
+    max_label: "Very helpful"
+    size: 5
+
+  - annotation_type: text
+    name: notes
+    description: "Notes / rationale for your evaluation"
+
+user_config:
+  allow_all_users: true
