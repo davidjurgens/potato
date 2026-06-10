@@ -5377,6 +5377,210 @@ body > .container-fluid {
 }
 
 /* ============================================================
+   Trajectory Correction / Editing (trajectory_edit)
+   ============================================================ */
+.trajectory-edit-container {
+  padding: 1rem;
+}
+.trajedit-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.trajedit-summary {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  background: var(--muted);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+.trajedit-summary strong {
+  color: var(--foreground);
+}
+.trajedit-step-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 0.75rem;
+  background: var(--background);
+}
+.trajedit-final-card {
+  border-left: 3px solid hsl(142 50% 45%);
+}
+.trajedit-step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.trajedit-step-number {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+.trajedit-final-label {
+  color: hsl(142 50% 35%);
+}
+.trajedit-edited-flag {
+  font-size: var(--text-sm);
+  color: hsl(28 90% 32%);
+  font-weight: 600;
+}
+/* Non-color cue (in addition to the flag) that a field/answer was edited. */
+.trajedit-field-block.trajedit-edited {
+  border-left: 3px solid hsl(28 90% 45%);
+  padding-left: 0.6rem;
+  margin-left: -0.6rem;
+}
+.trajedit-step-card.trajedit-edited.trajedit-final-card {
+  border-left-color: hsl(28 90% 45%);
+}
+.trajedit-step-thought {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  margin-bottom: 0.5rem;
+}
+.trajedit-thought-label {
+  font-weight: 600;
+}
+.trajedit-field-block {
+  margin-top: 0.6rem;
+}
+.trajedit-field-label {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.trajedit-original {
+  font-size: var(--text-sm);
+  background: var(--muted);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.4rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.trajedit-original-label {
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+.trajedit-editor-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted-foreground);
+  margin-bottom: 0.25rem;
+}
+.trajedit-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.6rem;
+  font-family: inherit;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  resize: vertical;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.trajedit-textarea:focus {
+  outline: 2px solid var(--ring, hsl(215 90% 60%));
+  outline-offset: 1px;
+  border-color: transparent;
+}
+/* Tool/action fields are code-like — monospace for precise editing & diffing. */
+.trajedit-mono,
+.trajedit-mono .trajedit-original-text {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-sm);
+}
+.trajedit-stats {
+  display: flex;
+  gap: 1rem;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  margin-top: 0.35rem;
+}
+.trajedit-diff {
+  margin-top: 0.4rem;
+}
+/* Only show the diff once a field actually changed (avoids an empty
+   "Changes:" box on untouched fields). .trajedit-edited is toggled on the
+   field block / final card by onEdit. */
+.trajedit-diff {
+  display: none;
+}
+.trajedit-edited .trajedit-diff {
+  display: block;
+}
+.trajedit-diff-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted-foreground);
+  margin-bottom: 0.2rem;
+}
+.trajedit-diff-content {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.6rem;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  min-height: 1.75rem;
+}
+.trajedit-diff-same { color: inherit; }
+.trajedit-diff-del {
+  background: hsl(0 100% 95%);
+  color: hsl(0 84.2% 40%);
+  text-decoration: line-through;
+}
+.trajedit-diff-ins {
+  background: hsl(120 100% 95%);
+  color: hsl(120 50% 30%);
+}
+.trajedit-reason-block {
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.trajedit-reason-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+.trajedit-reason {
+  flex: 1 1 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.5rem;
+  font-size: var(--text-sm);
+}
+.trajedit-reset-btn {
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.trajedit-reset-btn:hover {
+  background: var(--muted);
+}
+.trajedit-no-steps {
+  padding: 1rem;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+/* ============================================================
    Error Span with Typed Severity
    ============================================================ */
 .shadcn-error-span-container {

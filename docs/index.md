@@ -87,6 +87,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - **[Coding Agent Annotation](agent-evaluation/coding_agent_annotation.md)** - Evaluate agentic coding systems (Claude Code, SWE-Agent, Aider) with diff rendering, PRM annotation, and code review
 - [Agent Traces](agent-evaluation/agent_traces.md) - Evaluate AI agent traces and trajectories
 - [Three-Pane Trace Eval](agent-evaluation/eval_trace.md) - Reasoning | function calls | final answer side-by-side, for continuous evaluation
+- [Trajectory Correction](agent-evaluation/trajectory_correction.md) - Edit traces into SFT/DPO training data
 - [Live Agent Interaction](agent-evaluation/live_agent.md) - Observe and interact with a live AI agent in real time
 - [Web Agent Annotation](agent-evaluation/web_agent_annotation.md) - Review and create web agent browsing traces
 
@@ -203,6 +204,7 @@ Role-based guides that walk you through Potato for your specific use case:
 | Navigate efficiently through items | [Annotation Navigation](workflow/annotation_navigation.md) |
 | Evaluate AI agent traces | [Agent Traces](agent-evaluation/agent_traces.md) |
 | See reasoning, tool calls & answer side-by-side | [Three-Pane Trace Eval](agent-evaluation/eval_trace.md) |
+| Edit agent traces into SFT/DPO training data | [Trajectory Correction](agent-evaluation/trajectory_correction.md) |
 | Use Solo Mode for collaborative annotation | [Solo Mode](solo-mode/solo_mode.md) |
 | Export annotations to Parquet | [Export Formats](data-export/export_formats.md#parquet) |
 | Export to COCO/YOLO/CoNLL | [Export Formats](data-export/export_formats.md) |

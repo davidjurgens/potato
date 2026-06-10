@@ -35,6 +35,7 @@ from .error_span import generate_error_span_layout
 from .card_sort import generate_card_sort_layout
 from .conjoint import generate_conjoint_layout
 from .trajectory_eval import generate_trajectory_eval_layout
+from .trajectory_edit import generate_trajectory_edit_layout
 from .process_reward import generate_process_reward_layout
 from .code_review import generate_code_review_layout
 

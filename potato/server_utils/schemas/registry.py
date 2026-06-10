@@ -260,6 +260,7 @@ def _register_builtin_schemas():
     from .card_sort import generate_card_sort_layout
     from .conjoint import generate_conjoint_layout
     from .trajectory_eval import generate_trajectory_eval_layout
+    from .trajectory_edit import generate_trajectory_edit_layout
     from .process_reward import generate_process_reward_layout
     from .code_review import generate_code_review_layout
 
@@ -567,6 +568,14 @@ def _register_builtin_schemas():
             optional_fields=["steps_key", "step_text_key", "mode"],
             supports_keybindings=False,
             description="Binary per-step process reward signals for PRM training"
+        ),
+        SchemaDefinition(
+            name="trajectory_edit",
+            generator=generate_trajectory_edit_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "step_text_key", "editable_fields", "show_diff", "show_edit_distance", "allow_reset", "require_reason_on_edit", "edit_final_answer", "final_answer_key"],
+            supports_keybindings=False,
+            description="Per-step trajectory correction/editing for SFT/DPO training data"
         ),
         SchemaDefinition(
             name="code_review",

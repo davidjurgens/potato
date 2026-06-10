@@ -62,6 +62,7 @@ PERSISTENCE_TEST_MAP = {
     "card_sort": "tests/selenium/test_card_sort_ui.py",
     "conjoint": "tests/selenium/test_conjoint_ui.py",
     "trajectory_eval": "tests/playwright/test_trajectory_eval.py",
+    "trajectory_edit": "tests/selenium/test_trajectory_edit_ui.py",
     # Agent-evaluation schemas — Selenium persistence tests to be created
     "process_reward": "tests/selenium/test_process_reward_ui.py",
     "code_review": "tests/selenium/test_code_review_ui.py",
@@ -76,7 +77,7 @@ EXEMPT_FROM_FILE_CHECK = {
     "soft_label", "confidence", "constant_sum", "semantic_differential",
     "ranking", "range_slider", "hierarchical_multiselect",
     "vas", "extractive_qa", "rubric_eval", "text_edit", "error_span",
-    "card_sort", "conjoint", "trajectory_eval",
+    "card_sort", "conjoint", "trajectory_eval", "trajectory_edit",
     "process_reward", "code_review",
 }
 

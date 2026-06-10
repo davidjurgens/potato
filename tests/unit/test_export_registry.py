@@ -134,6 +134,8 @@ class TestBuiltinExportersRegistered:
             # ML-format exporters (v2.1–2.2)
             "agent_eval", "coco", "coding_eval", "conll_2003", "conll_u",
             "eaf", "mask_png", "parquet", "pascal_voc", "textgrid", "yolo",
+            # Trajectory correction → SFT/DPO
+            "trajectory_correction",
             # Tabular exporters
             "csv", "tsv", "jsonl",
             # QDA-wave exporters (v2.5.0)
