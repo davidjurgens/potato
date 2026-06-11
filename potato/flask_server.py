@@ -2010,6 +2010,13 @@ def render_page_with_annotations(username: str):
     if qc_manager:
         pre_annotation_data = qc_manager.extract_pre_annotations(instance_id, item.get_data())
 
+    # LLM-judge inline suggestion (judge ↔ human alignment). Reads a persisted
+    # judge prediction for this instance/schema; optionally computes on demand.
+    judge_prediction = _get_inline_judge_prediction(instance_id, item)
+
+    # Signal-based triage: why was this item prioritized in the queue?
+    triage_info = _get_triage_info(item)
+
     # DEBUG: Add detailed logging
     logger.debug(f"=== RENDER_PAGE_WITH_ANNOTATIONS START ===")
     logger.debug(f"Username: {username}")
@@ -2273,6 +2280,10 @@ def render_page_with_annotations(username: str):
         # Pre-annotation data for model predictions
         pre_annotations=pre_annotation_data,
         pre_annotation_config=pre_annotation_config,
+        # LLM-judge inline suggestion (judge ↔ human alignment)
+        judge_prediction=judge_prediction,
+        # Signal-based triage badge (why this item was prioritized)
+        triage_info=triage_info,
         # Instance display (new explicit display mode)
         has_instance_display=has_instance_display,
         display_html=display_html,
@@ -2520,6 +2531,90 @@ def render_page_with_annotations(username: str):
         rendered_html = populate_dynamic_multirate(rendered_html, item.get_data())
 
     return rendered_html
+
+
+def _get_inline_judge_prediction(instance_id, item):
+    """Return a judge suggestion dict for the inline display, or None.
+
+    Gated by ``judge_alignment.inline.enabled``. Prefers a persisted prediction
+    (admin pre-runs the batch); computes on demand only if
+    ``judge_alignment.inline.compute_on_demand`` is set. Shape mirrors solo
+    mode's ``llm_prediction``: {label, confidence, reasoning, schema,
+    prompt_version, running}.
+    """
+    ja = config.get("judge_alignment", {}) or {}
+    inline = ja.get("inline", {}) or {}
+    if not inline.get("enabled"):
+        return None
+    try:
+        from potato.server_utils import judge_alignment as ja_mod
+        schemas = ja_mod.judge_scoped_schemas(config)
+        # Optional inline schema allow-list.
+        allow = set(inline.get("schemas", []) or [])
+        if allow:
+            schemas = [s for s in schemas if s.get("name") in allow]
+        if not schemas:
+            return None
+        schema_info = schemas[0]
+        schema_name = schema_info.get("name")
+
+        # 1) persisted prediction for the latest prompt version
+        preds = ja_mod.load_predictions(config)
+        version = ja_mod.latest_prompt_version(config)
+        pred = (preds.get(version, {}) or {}).get(f"{instance_id}::{schema_name}") if version else None
+
+        # 2) optional on-demand compute
+        if pred is None and inline.get("compute_on_demand"):
+            from potato.ai.judge import JudgeService
+            svc = JudgeService(config)
+            jp = svc.judge_instance(instance_id, schema_info, item.get_text())
+            if jp is not None:
+                ja_mod.save_prediction(config, jp)
+                pred = jp.to_dict()
+
+        if not pred:
+            return None
+
+        running = ja_mod.running_agreement(config, schema_name)
+        return {
+            "label": pred.get("predicted_label"),
+            "confidence": pred.get("confidence", 0.0),
+            "reasoning": pred.get("reasoning", ""),
+            "schema": schema_name,
+            "prompt_version": pred.get("prompt_version", ""),
+            "running": running,
+        }
+    except Exception as e:
+        logger.warning(f"Inline judge prediction failed for {instance_id}: {e}")
+        return None
+
+
+def _get_triage_info(item):
+    """Return a triage badge dict for the inline display, or None.
+
+    Gated by ``triage.show_badge`` (default true when triage is enabled). Reads
+    the priority/reason stored on the item's metadata by the triage scorer at
+    load/ingestion time. Only returns something when the item carries a reason
+    (i.e. a rule flagged it), so unflagged items show no banner.
+    """
+    triage_cfg = config.get("triage", {}) or {}
+    if not triage_cfg.get("enabled"):
+        return None
+    if not triage_cfg.get("show_badge", True):
+        return None
+    try:
+        reason = item.get_metadata("triage_reason")
+        if not reason:
+            return None
+        return {
+            "reason": reason,
+            "rule": item.get_metadata("triage_rule"),
+            "priority": item.get_metadata("triage_priority"),
+        }
+    except Exception as e:
+        logger.warning(f"Triage info failed for {item.get_id()}: {e}")
+        return None
+
 
 def get_label_suggestions(item, config, schema_content_to_prefill) -> set[SuggestedResponse]:
 

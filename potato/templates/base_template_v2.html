@@ -319,6 +319,77 @@
                     <div id="instance-json-data" style="display: none;"
                          data-instance-json='{{ (instance_record if instance_record is defined and instance_record else {}) | tojson }}'></div>
 
+                    <!-- Signal-based triage flag (why this item was prioritized) -->
+                    {% if triage_info is defined and triage_info %}
+                    <div class="triage-flag" id="triage-flag" role="note"
+                         aria-label="Triage: this item was prioritized in the queue">
+                      <span class="triage-flag-icon" aria-hidden="true">!</span>
+                      <span class="triage-flag-text">
+                        Prioritized for review<span class="triage-flag-sep"> · </span><span class="triage-flag-reason">{{ triage_info.reason }}</span>
+                      </span>
+                    </div>
+                    {% endif %}
+
+                    <!-- LLM-judge inline suggestion (judge ↔ human alignment) -->
+                    {% if judge_prediction is defined and judge_prediction %}
+                    {% set jp = judge_prediction %}
+                    {% set jconf = (jp.confidence * 100)|int %}
+                    {% set jqual = 'Low confidence' if jp.confidence < 0.5 else ('Moderate confidence' if jp.confidence < 0.8 else 'High confidence') %}
+                    <div class="judge-suggestion" id="judge-suggestion"
+                         data-schema="{{ jp.schema }}" data-judge-label="{{ jp.label }}">
+                      <div class="judge-suggestion-row">
+                        <div class="judge-suggestion-main">
+                          <span class="judge-badge-icon" aria-hidden="true">⚖</span>
+                          <span class="judge-suggestion-label">
+                            Judge suggests
+                            <span class="judge-suggested-value">{{ jp.label }}</span>
+                            for <span class="judge-schema-name">{{ jp.schema }}</span>
+                          </span>
+                          <span class="judge-confidence">{{ jqual }} · {{ jconf }}%</span>
+                        </div>
+                        <button type="button" class="btn btn-secondary judge-accept-btn"
+                                id="judge-accept-btn"
+                                data-schema="{{ jp.schema }}" data-judge-label="{{ jp.label }}">
+                          Accept
+                        </button>
+                        {% if jp.running and jp.running.n %}
+                        <span class="judge-running"
+                              title="Running agreement between you/your team and the judge on this task (Cohen's κ)">
+                          {{ (jp.running.agreement_rate * 100)|int }}% agree (n={{ jp.running.n }}){% if jp.running.kappa is not none %} · κ {{ '%.2f'|format(jp.running.kappa) }}{% endif %}
+                        </span>
+                        {% endif %}
+                      </div>
+                      {% if jp.reasoning %}
+                      <details class="judge-reasoning">
+                        <summary>Judge reasoning</summary>
+                        <p>{{ jp.reasoning }}</p>
+                      </details>
+                      {% endif %}
+                    </div>
+                    <script>
+                    (function() {
+                      var btn = document.getElementById('judge-accept-btn');
+                      if (!btn) return;
+                      btn.addEventListener('click', function() {
+                        var schema = btn.getAttribute('data-schema');
+                        var label = btn.getAttribute('data-judge-label');
+                        // Check the matching radio/checkbox input for this schema.
+                        var inputs = document.querySelectorAll(
+                          'input.annotation-input[schema="' + schema + '"]');
+                        var matched = false;
+                        inputs.forEach(function(inp) {
+                          if (inp.value === label || inp.getAttribute('label_name') === label) {
+                            inp.checked = true;
+                            inp.dispatchEvent(new Event('change', { bubbles: true }));
+                            matched = true;
+                          }
+                        });
+                        if (matched) { btn.textContent = 'Accepted'; btn.disabled = true; }
+                      });
+                    })();
+                    </script>
+                    {% endif %}
+
                     <!-- Annotation forms -->
                     <div id="annotation-forms">
                         {{ TASK_LAYOUT }}

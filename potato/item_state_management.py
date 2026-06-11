@@ -706,6 +706,7 @@ class AssignmentStrategy(Enum):
     - CATEGORY_BASED: Assigns items matching user's qualified categories
     - DIVERSITY_CLUSTERING: Samples items round-robin from embedding clusters
     - BATCH: Restricts assignment to configured annotator/item cohorts
+    - PRIORITY: Serves items by a triage signal (errors/low-score first)
     """
     RANDOM = 'random'
     FIXED_ORDER = 'fixed_order'
@@ -716,6 +717,7 @@ class AssignmentStrategy(Enum):
     CATEGORY_BASED = 'category_based'
     DIVERSITY_CLUSTERING = 'diversity_clustering'
     BATCH = 'batch'
+    PRIORITY = 'priority'
 
     def fromstr(phase: str) -> AssignmentStrategy:
         """
@@ -749,6 +751,8 @@ class AssignmentStrategy(Enum):
             return AssignmentStrategy.DIVERSITY_CLUSTERING
         elif phase == "batch":
             return AssignmentStrategy.BATCH
+        elif phase == "priority":
+            return AssignmentStrategy.PRIORITY
         else:
             raise ValueError(f"Unknown phase: {phase}")
 
@@ -831,6 +835,16 @@ class ItemStateManager:
         # Initialize item annotation counts for tracking
         self.item_annotation_counts = defaultdict(int)
 
+        # Signal-based triage: score each item into a priority from the
+        # `triage` config block (errors / thumbs-down / low score first). The
+        # scorer runs in add_item, so it covers both statically loaded data and
+        # traces ingested at runtime. None when triage is disabled.
+        try:
+            from potato.server_utils.triage import build_scorer
+            self.triage_scorer = build_scorer(config)
+        except ImportError:
+            self.triage_scorer = None
+
         # Load how we want to assign items to users
         if 'assignment_strategy' in config:
             strat = config['assignment_strategy']
@@ -840,6 +854,10 @@ class ItemStateManager:
                 self.assignment_strategy = AssignmentStrategy.fromstr(strat['name'])
             else:
                 raise ValueError("Invalid assignment_strategy in config")
+        elif self.triage_scorer is not None:
+            # Triage enabled without an explicit strategy: prioritize the queue
+            # by the triage signal (the whole point of enabling triage).
+            self.assignment_strategy = AssignmentStrategy.PRIORITY
         else:
             self.assignment_strategy = AssignmentStrategy.FIXED_ORDER
 
@@ -1065,6 +1083,17 @@ class ItemStateManager:
             self.instance_id_to_instance[instance_id] = item
             self.instance_id_ordering.append(instance_id)
             self.remaining_instance_ids.append(instance_id)
+
+            # Signal-based triage: store the quality-signal priority + reason on
+            # the item so the PRIORITY assignment strategy and the inline badge
+            # can read it. Runs for both static and runtime-ingested items.
+            if self.triage_scorer is not None:
+                try:
+                    score = self.triage_scorer.score(instance_data)
+                    for k, v in score.to_metadata().items():
+                        item.add_metadata(k, v)
+                except Exception as e:
+                    self.logger.warning(f"Triage scoring failed for {instance_id}: {e}")
 
             # Index categories for this item
             self._index_item_categories(instance_id, instance_data)
@@ -1627,6 +1656,42 @@ class ItemStateManager:
                 return self._assign_random_fallback(user_state, instances_to_assign)
         elif self.assignment_strategy == AssignmentStrategy.BATCH:
             return self._assign_batch(user_state, instances_to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.PRIORITY:
+            # Signal-based triage: serve items by their stored triage priority
+            # (errors / thumbs-down / low score first). Mirrors MAX_DIVERSITY but
+            # sorts by the ingestion-time signal in item metadata instead of
+            # disagreement. Ties broken by the original queue order for
+            # determinism. `triage.order: asc` flips to lowest-priority-first.
+            candidates = []
+            for iid in list(self.remaining_instance_ids):
+                if self._item_is_saturated(iid):
+                    if iid in self.remaining_instance_ids:
+                        self.remaining_instance_ids.remove(iid)
+                    continue
+                if iid in user_state.get_assigned_instance_ids():
+                    continue
+                if user_state.has_annotated(iid):
+                    continue
+                candidates.append(iid)
+            if not candidates:
+                return 0
+            order_index = {iid: i for i, iid in enumerate(self.instance_id_ordering)}
+
+            def _priority_of(iid):
+                p = self.instance_id_to_instance[iid].get_metadata("triage_priority")
+                return p if p is not None else 0
+
+            ascending = bool(self.triage_scorer) and self.triage_scorer.order == "asc"
+            # Sort by priority (desc by default), tie-break by original order asc.
+            candidates.sort(key=lambda iid: (
+                _priority_of(iid) if ascending else -_priority_of(iid),
+                order_index.get(iid, 0),
+            ))
+            assigned = 0
+            for iid in candidates[:instances_to_assign]:
+                user_state.assign_instance(self.instance_id_to_instance[iid])
+                assigned += 1
+            return assigned
         else:
             # Default fallback to fixed order
             self.logger.warning(f"Unknown assignment strategy: {self.assignment_strategy}, falling back to fixed order")

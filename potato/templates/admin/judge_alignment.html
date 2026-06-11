@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM-Judge ↔ Human Alignment</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  /* Judge-alignment report. Inherits the Potato admin design system
+     (.dashboard-card, design tokens); only the metric/heatmap typography
+     is local. */
+  .ja-meta { color: var(--muted-foreground); font-size: 0.875rem;
+             margin: 0 0 1.5rem 0; max-width: 72ch; line-height: 1.6; }
+  .ja-card { margin-bottom: 1.5rem; }
+  .ja-card-header { display: flex; justify-content: space-between;
+                    align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .ja-card-header h2 { margin: 0; font-size: 1.125rem; font-weight: 600; color: var(--heading-color); }
+  .ja-metrics { display: flex; gap: 2rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .ja-metric { display: flex; flex-direction: column; }
+  .ja-metric .label { font-size: 0.75rem; color: var(--muted-foreground);
+                      text-transform: uppercase; letter-spacing: 0.03em; }
+  .ja-metric .value { font-size: 1.5rem; font-weight: 700; color: var(--heading-color); }
+  .ja-kappa-tag { display: inline-flex; align-items: center; gap: 0.3rem;
+                  padding: 0.125rem 0.5rem; border-radius: var(--radius);
+                  font-size: 0.75rem; font-weight: 600; background: var(--muted); color: var(--muted-foreground); }
+  /* Graded-but-muted κ band cue. The interpretation word is the primary (non-color)
+     channel; the leading glyph + subtle tint add a scannable, AA-safe second channel.
+     κ bands are technical, not good/bad value judgements, so tints stay neutral-warm. */
+  .ja-kappa-tag::before { content: "◐"; font-size: 0.9em; }
+  .ja-kappa-tag.band-none::before  { content: "○"; }
+  .ja-kappa-tag.band-low::before   { content: "◔"; }
+  .ja-kappa-tag.band-mid::before   { content: "◑"; }
+  .ja-kappa-tag.band-high::before  { content: "●"; }
+  .ja-kappa-tag.band-low  { background: hsl(35 60% 92%); color: hsl(35 60% 30%); }
+  .ja-kappa-tag.band-mid  { background: hsl(45 55% 90%); color: hsl(40 55% 28%); }
+  .ja-kappa-tag.band-high { background: hsl(95 35% 90%); color: hsl(120 35% 26%); }
+  .ja-table-wrap { overflow-x: auto; }
+  table.ja-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; margin-top: 0.5rem; }
+  td.ja-reason { max-width: 42ch; }
+  .ja-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+                overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  table.ja-table th, table.ja-table td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }
+  table.ja-table th { background: var(--muted); font-weight: 600; }
+  .ja-confusion td.diag { font-weight: 700; }
+  .ja-confusion td.count { text-align: center; }
+  .ja-section-label { font-size: 0.8rem; font-weight: 600; color: var(--muted-foreground);
+                      text-transform: uppercase; letter-spacing: 0.03em; margin: 1.25rem 0 0.4rem; }
+  .ja-empty { color: var(--muted-foreground); font-style: italic; }
+  .ja-versions { font-size: 0.85rem; }
+  .ja-versions li { margin-bottom: 0.25rem; }
+  .ja-mono { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <h1>LLM-Judge ↔ Human Alignment</h1>
+  <p class="ja-meta">
+    How well does the configured LLM judge agree with human gold labels?
+    Cohen's κ and the confusion matrix are computed over instances that have
+    both a human label and a judge verdict. Inspect disagreements, edit the
+    judge rubric, and re-run to calibrate. Current prompt version:
+    <span class="ja-mono">{{ report.prompt_version or "—" }}</span>.
+  </p>
+
+  {% if report.prompt_versions %}
+  <section class="dashboard-card ja-card" aria-label="Prompt versions">
+    <div class="ja-card-header"><h2>Prompt versions</h2></div>
+    <ul class="ja-versions">
+      {% for v in report.prompt_versions %}
+      <li>
+        <span class="ja-mono">{{ v.prompt_version }}</span> —
+        mean κ {{ '%.3f'|format(v.mean_kappa) if v.mean_kappa is not none else 'n/a' }},
+        {{ v.n_predictions }} prediction(s)
+        {% if v.prompt_version == report.prompt_version %}<strong>(current)</strong>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if not report.per_schema %}
+    <p class="ja-empty">No judge predictions yet. Configure <code>judge_alignment</code>
+    and POST to <code>/admin/api/judge-alignment/run</code> to generate verdicts.</p>
+  {% endif %}
+
+  {% for schema, r in report.per_schema.items() %}
+  <section class="dashboard-card ja-card" aria-label="Alignment for {{ schema }}">
+    {% set band = 'band-none' if r.kappa is none else ('band-low' if r.kappa < 0.2 else ('band-mid' if r.kappa < 0.6 else 'band-high')) %}
+    <div class="ja-card-header">
+      <h2>{{ schema }}</h2>
+      <span class="ja-kappa-tag {{ band }}" title="Cohen's κ interpretation (Landis–Koch)">{{ r.interpretation }}</span>
+    </div>
+
+    <div class="ja-metrics">
+      <div class="ja-metric">
+        <span class="label">Cohen's κ</span>
+        <span class="value">{{ '%.3f'|format(r.kappa) if r.kappa is not none else '—' }}</span>
+      </div>
+      <div class="ja-metric">
+        <span class="label">Agreement</span>
+        <span class="value">{{ (r.agreement_rate * 100)|round(1) }}%</span>
+      </div>
+      <div class="ja-metric">
+        <span class="label">Compared (n)</span>
+        <span class="value">{{ r.n }}</span>
+      </div>
+      <div class="ja-metric">
+        <span class="label">Disagreements</span>
+        <span class="value">{{ r.disagreements|length }}</span>
+      </div>
+    </div>
+
+    {% if r.confusion %}
+    <div class="ja-section-label" id="conf-{{ schema }}">Confusion (rows = human, columns = judge)</div>
+    {% set cols = [] %}
+    {% for h, js in r.confusion.items() %}{% for j in js.keys() %}{% if j not in cols %}{% set _ = cols.append(j) %}{% endif %}{% endfor %}{% endfor %}
+    <div class="ja-table-wrap">
+    <table class="ja-table ja-confusion" aria-labelledby="conf-{{ schema }}">
+      <caption class="ja-sr-only">Confusion matrix for {{ schema }}: rows are human gold labels, columns are judge labels.</caption>
+      <thead><tr><th scope="col">human ＼ judge</th>{% for c in cols %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for h, js in r.confusion.items() %}
+        <tr><th scope="row">{{ h }}</th>
+          {% for c in cols %}
+          <td class="count {{ 'diag' if c == h else '' }}">{{ js.get(c, 0) }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+
+    {% if r.disagreements %}
+    <div class="ja-section-label">Disagreements</div>
+    <div class="ja-table-wrap">
+    <table class="ja-table">
+      <thead><tr><th scope="col">Instance</th><th scope="col">Human</th><th scope="col">Judge</th><th scope="col">Conf.</th><th scope="col">Judge reasoning</th></tr></thead>
+      <tbody>
+        {% for d in r.disagreements %}
+        <tr>
+          <td class="ja-mono">{{ d.instance_id }}</td>
+          <td>{{ d.human_label }}</td>
+          <td>{{ d.judge_label }}</td>
+          <td>{{ '%.2f'|format(d.judge_confidence) if d.judge_confidence is not none else '—' }}</td>
+          <td class="ja-reason">{{ d.reasoning }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+  </section>
+  {% endfor %}
+</main>
+</body>
+</html>

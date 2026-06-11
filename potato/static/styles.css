@@ -5581,6 +5581,90 @@ body > .container-fluid {
 }
 
 /* ============================================================
+   LLM-Judge inline suggestion (judge ↔ human alignment)
+   ============================================================ */
+.judge-suggestion {
+  border: 1px solid var(--border);
+  border-left: 3px solid hsl(265 50% 55%);
+  border-radius: var(--radius);
+  background: var(--muted);
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.9rem;
+}
+.judge-suggestion-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.judge-suggestion-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.judge-badge-icon { color: hsl(265 45% 45%); font-size: 1.1em; }
+.judge-suggestion-label { font-size: var(--text-sm); }
+.judge-suggested-value {
+  font-weight: 700;
+  background: hsl(265 60% 92%);
+  color: hsl(265 50% 32%);
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius);
+}
+.judge-schema-name { color: var(--muted-foreground); }
+.judge-confidence { font-size: var(--text-sm); color: var(--muted-foreground); }
+.judge-running {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: hsl(265 40% 40%);
+  white-space: nowrap;
+}
+.judge-accept-btn { font-size: var(--text-sm); padding: 0.3rem 0.7rem; }
+.judge-reasoning { margin-top: 0.4rem; }
+.judge-reasoning summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+.judge-reasoning p { margin: 0.4rem 0 0; font-size: var(--text-sm); }
+
+/* ============================================================
+   Signal-based triage flag (why this item was prioritized)
+   ============================================================ */
+.triage-flag {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* Amber accent — a queue-priority cue, not an error. The leading glyph +
+     the word "Prioritized" carry meaning without relying on colour alone. */
+  border: 1px solid hsl(38 70% 80%);
+  border-left: 3px solid hsl(32 85% 45%);
+  border-radius: var(--radius);
+  background: hsl(40 80% 96%);
+  padding: 0.45rem 0.7rem;
+  margin-bottom: 0.9rem;
+}
+.triage-flag-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  /* AA: white-on-disc clears 4.5:1 at this depth (was hsl(32 85% 45%) ≈ 3.2:1). */
+  background: hsl(30 90% 37%);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+.triage-flag-text { font-size: var(--text-sm); color: hsl(28 60% 28%); }
+.triage-flag-reason { font-weight: 700; }
+
+/* ============================================================
    Error Span with Typed Severity
    ============================================================ */
 .shadcn-error-span-container {

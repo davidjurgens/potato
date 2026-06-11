@@ -2950,6 +2950,118 @@ def admin_iaa():
     return jsonify(report)
 
 
+def _record_judge_comparison_if_enabled(username, instance_id):
+    """On human save, log the human↔judge comparison if inline mode is on."""
+    ja = config.get("judge_alignment", {}) or {}
+    if not (ja.get("inline", {}) or {}).get("enabled"):
+        return
+    try:
+        from potato.server_utils import judge_alignment as ja_mod
+        schemas = ja_mod.judge_scoped_schemas(config)
+        allow = set((ja.get("inline", {}) or {}).get("schemas", []) or [])
+        if allow:
+            schemas = [s for s in schemas if s.get("name") in allow]
+        preds = ja_mod.load_predictions(config)
+        version = ja_mod.latest_prompt_version(config)
+        version_preds = preds.get(version, {}) if version else {}
+        for schema_info in schemas:
+            schema_name = schema_info.get("name")
+            pred = version_preds.get(f"{instance_id}::{schema_name}")
+            if not pred:
+                continue
+            human_label = ja_mod.human_label_for(instance_id, schema_name, username)
+            if human_label is None:
+                continue
+            ja_mod.record_comparison(
+                config, instance_id, schema_name, human_label,
+                pred.get("predicted_label"), version or "",
+            )
+    except Exception as e:
+        logger.warning(f"Judge comparison recording failed for {instance_id}: {e}")
+
+
+@app.route("/admin/judge-alignment", methods=["GET"])
+def admin_judge_alignment():
+    """LLM-judge ↔ human alignment report: Cohen's κ, confusion, disagreements.
+
+    Mirrors /admin/iaa. Pass ?format=html for the rendered page (default JSON),
+    and ?prompt_version=<v> to view a specific judge prompt version.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.server_utils.judge_alignment import compute_judge_alignment
+        report = compute_judge_alignment(
+            config, get_users(), prompt_version=request.args.get("prompt_version"),
+        )
+    except Exception as exc:
+        logger.exception("Failed to compute judge alignment")
+        return jsonify({"error": str(exc)}), 500
+
+    if (request.args.get("format") or "json").lower() == "html":
+        try:
+            return render_template("admin/judge_alignment.html", report=report)
+        except Exception:
+            pass
+    return jsonify(report)
+
+
+@app.route("/admin/api/judge-alignment/run", methods=["POST"])
+def admin_judge_alignment_run():
+    """Run/re-run the judge over human-annotated instances.
+
+    Optional JSON body: {"rubrics": {schema_name: rubric}, "max_per_schema": N}.
+    Editing a rubric creates a new prompt version so κ can be tracked across
+    calibration rounds. Returns a run summary.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    body = request.get_json(silent=True) or {}
+    try:
+        from potato.server_utils.judge_alignment import run_judge_batch
+        summary = run_judge_batch(
+            config, get_users(),
+            rubric_overrides=body.get("rubrics"),
+            max_per_schema=body.get("max_per_schema"),
+        )
+    except Exception as exc:
+        logger.exception("Failed to run judge batch")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(summary)
+
+
+@app.route("/admin/triage-queue", methods=["GET"])
+def admin_triage_queue():
+    """Signal-based triage queue: items ranked by their quality signal.
+
+    Shows the remaining (incomplete) items ordered by the triage priority that
+    was assigned at load/ingestion time (errors / thumbs-down / low score
+    first), with the reason that flagged each one. Pass ?format=html for the
+    rendered page (default JSON).
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.server_utils.triage import compute_triage_queue
+        report = compute_triage_queue(config)
+    except Exception as exc:
+        logger.exception("Failed to compute triage queue")
+        return jsonify({"error": str(exc)}), 500
+
+    if (request.args.get("format") or "json").lower() == "html":
+        try:
+            return render_template("admin/triage_queue.html", report=report)
+        except Exception:
+            pass
+    return jsonify(report)
+
+
 @app.route("/admin/api/code_cooccurrence", methods=["GET"])
 def admin_api_code_cooccurrence():
     """
@@ -4287,6 +4399,9 @@ def update_instance():
                 # Update annotation
                 user_state.add_label_annotation(instance_id, label, value)
                 logger.debug(f"Added label annotation: {schema_name}:{label_name} = {value[:100]}..." if len(str(value)) > 100 else f"Added label annotation: {schema_name}:{label_name} = {value}")
+
+            # Record human↔judge comparison for the alignment loop (inline mode).
+            _record_judge_comparison_if_enabled(username, instance_id)
 
             # Handle span annotations from frontend format
             span_annotations = request.json.get("span_annotations", [])
@@ -6946,6 +7061,9 @@ def configure_routes(flask_app, app_config):
     # by configure_routes). Audit: diff of @app.route paths vs add_url_rule paths.
     app.add_url_rule("/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
     app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
+    app.add_url_rule("/admin/judge-alignment", "admin_judge_alignment", admin_judge_alignment, methods=["GET"])
+    app.add_url_rule("/admin/api/judge-alignment/run", "admin_judge_alignment_run", admin_judge_alignment_run, methods=["POST"])
+    app.add_url_rule("/admin/triage-queue", "admin_triage_queue", admin_triage_queue, methods=["GET"])
     app.add_url_rule("/admin/api/step_agreement", "admin_api_step_agreement", admin_api_step_agreement, methods=["GET"])
     app.add_url_rule("/admin/api/step_quality", "admin_api_step_quality", admin_api_step_quality, methods=["GET"])
     app.add_url_rule("/api/waveform/<cache_key>", "get_waveform_data", get_waveform_data, methods=["GET"])

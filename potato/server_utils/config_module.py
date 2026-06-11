@@ -245,6 +245,9 @@ KNOWN_CONFIG_KEYS = {
     },
     "webhooks": {"enabled", "endpoints"},
     "trace_ingestion": {"enabled", "sources", "api_key", "notify_annotators"},
+    "judge_alignment": {"enabled", "ai_support", "schemas", "few_shot", "inline"},
+    "triage": {"enabled", "order", "default_priority", "show_badge",
+               "signal_field", "invert_signal", "rules"},
     "huggingface_backup": None,
 
     # === Debug / logging ===
@@ -520,7 +523,7 @@ _OPTIONAL_BOOL_FIELDS = {
 _VALID_ASSIGNMENT_STRATEGIES = [
     "random", "fixed_order", "active_learning", "llm_confidence",
     "max_diversity", "least_annotated", "category_based", "diversity_clustering",
-    "batch",
+    "batch", "priority",
 ]
 
 

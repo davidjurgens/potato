@@ -88,6 +88,8 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Agent Traces](agent-evaluation/agent_traces.md) - Evaluate AI agent traces and trajectories
 - [Three-Pane Trace Eval](agent-evaluation/eval_trace.md) - Reasoning | function calls | final answer side-by-side, for continuous evaluation
 - [Trajectory Correction](agent-evaluation/trajectory_correction.md) - Edit traces into SFT/DPO training data
+- [LLM-Judge ↔ Human Alignment](agent-evaluation/judge_alignment.md) - Measure & calibrate an LLM judge against human gold (Cohen's κ)
+- [Signal-Based Triage Queue](agent-evaluation/triage_queue.md) - Prioritize the queue by a quality signal (errors / low score first)
 - [Live Agent Interaction](agent-evaluation/live_agent.md) - Observe and interact with a live AI agent in real time
 - [Web Agent Annotation](agent-evaluation/web_agent_annotation.md) - Review and create web agent browsing traces
 
@@ -205,6 +207,7 @@ Role-based guides that walk you through Potato for your specific use case:
 | Evaluate AI agent traces | [Agent Traces](agent-evaluation/agent_traces.md) |
 | See reasoning, tool calls & answer side-by-side | [Three-Pane Trace Eval](agent-evaluation/eval_trace.md) |
 | Edit agent traces into SFT/DPO training data | [Trajectory Correction](agent-evaluation/trajectory_correction.md) |
+| Align/calibrate an LLM judge to human labels | [Judge Alignment](agent-evaluation/judge_alignment.md) |
 | Use Solo Mode for collaborative annotation | [Solo Mode](solo-mode/solo_mode.md) |
 | Export annotations to Parquet | [Export Formats](data-export/export_formats.md#parquet) |
 | Export to COCO/YOLO/CoNLL | [Export Formats](data-export/export_formats.md) |

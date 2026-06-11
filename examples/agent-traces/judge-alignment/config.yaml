@@ -1,0 +1,81 @@
+# LLM-Judge ↔ Human Alignment
+#
+# Humans label each item (correct / incorrect). An LLM judge labels the same
+# items from a configurable rubric. The /admin/judge-alignment report shows
+# Cohen's κ + a confusion matrix + disagreements, and lets you edit the rubric
+# and re-run to calibrate. With inline mode on, the judge's verdict is shown
+# beside the human's label during annotation, with a running κ.
+#
+# Run (set a real AI endpoint in ai_support before using the judge):
+#   python potato/flask_server.py start examples/agent-traces/judge-alignment/config.yaml -p 8000
+#
+# Generate judge verdicts (admin API key required):
+#   curl -X POST localhost:8000/admin/api/judge-alignment/run -H "X-API-Key: <key>"
+# View the report:
+#   open localhost:8000/admin/judge-alignment?format=html  (send the X-API-Key header)
+
+annotation_task_name: "Judge Alignment"
+
+data_files:
+  - data/judge-alignment-example.json
+
+item_properties:
+  id_key: id
+  text_key: trace
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 12px
+  fields:
+    - key: task_description
+      type: text
+      label: "Question"
+    - key: trace
+      type: text
+      label: "Transcript"
+
+annotation_schemes:
+  - annotation_type: radio
+    name: correctness
+    description: "Did the agent answer correctly?"
+    labels:
+      - name: correct
+      - name: incorrect
+    sequential_key_binding: true
+
+# --- Judge ↔ human alignment ------------------------------------------------
+# ai_support drives the judge LLM. This example uses a keyless local Ollama
+# endpoint so it boots out of the box; swap endpoint_type/model (and add
+# ai_config.api_key) for OpenAI/Anthropic/etc. Do NOT commit private keys.
+ai_support:
+  enabled: true
+  endpoint_type: "ollama"          # ollama (local, keyless) | openai | anthropic | vllm | ...
+  ai_config:
+    model: "llama3.2"
+    temperature: 0.0
+    max_tokens: 256
+    # For openai/anthropic, add: api_key: "<your key>"
+
+judge_alignment:
+  enabled: true
+  schemas:
+    correctness:
+      rubric: >
+        Label 'correct' only if the agent's answer is factually right and fully
+        satisfies the user's request; otherwise label 'incorrect'. Refusing with
+        a helpful alternative when the agent genuinely cannot comply counts as correct.
+  few_shot:
+    enabled: false                 # set true to seed from high-agreement human labels
+    max_examples: 4
+    min_agreement: 0.8
+  inline:
+    enabled: true                  # show the judge verdict beside the human label
+    schemas: [correctness]
+    compute_on_demand: false       # if true, call the judge live when no cached verdict
+
+user_config:
+  allow_all_users: true

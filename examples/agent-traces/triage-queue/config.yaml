@@ -1,0 +1,73 @@
+# Signal-Based Triage Queue
+#
+# Each trace carries a quality signal from production (an agent error, a
+# thumbs-down, a low automated score). The triage scorer turns that signal into
+# a queue priority so annotators review the worst / most-suspect traces FIRST
+# instead of in arrival order. The /admin/triage-queue page shows the ranking;
+# during annotation a banner explains why the current item was prioritized.
+#
+# This example is keyless — the signals live in the static data file, so no LLM
+# or external service is needed.
+#
+# Run (skip straight to annotation to see the ordering + badge):
+#   python potato/flask_server.py start examples/agent-traces/triage-queue/config.yaml -p 8000 --debug --debug-phase annotation
+#
+# View the ranked queue (admin API key required):
+#   open localhost:8000/admin/triage-queue?format=html   (send the X-API-Key header)
+
+annotation_task_name: "Trace Triage"
+
+data_files:
+  - data/triage-queue-example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+
+# --- Signal-based triage ----------------------------------------------------
+# Score each item from its signal fields. Highest matching rule wins; items
+# matching no rule get default_priority. With assignment_strategy: priority the
+# queue serves highest-priority items first. (Omitting `rules` entirely falls
+# back to turnkey defaults: error status, negative feedback, low score.)
+triage:
+  enabled: true
+  order: desc            # high priority first
+  default_priority: 0
+  show_badge: true       # banner during annotation explaining the priority
+  rules:
+    - name: "Agent errored"
+      badge: "Agent errored"
+      priority: 100
+      when:
+        field: status
+        equals: error
+    - name: "Negative feedback"
+      badge: "User thumbs-down"
+      priority: 80
+      when:
+        field: feedback
+        equals: thumbs_down
+    - name: "Low quality score"
+      badge: "Low score"
+      priority: 60
+      when:
+        field: score
+        lt: 0.5
+
+assignment_strategy: priority
+
+annotation_schemes:
+  - annotation_type: radio
+    name: trace_quality
+    description: "Rate this agent trace"
+    labels:
+      - name: good
+      - name: needs_fix
+      - name: broken
+    sequential_key_binding: true
+
+user_config:
+  allow_all_users: true
