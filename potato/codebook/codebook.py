@@ -88,8 +88,9 @@ class Codebook:
                 "color": c["color"],
                 "children": [node(k) for k in self.children(c["id"])],
             }
+            eff = store.effective_rich(c)
             for field in store.RICH_FIELDS:
-                out[field] = c.get(field)
+                out[field] = eff[field]
             return out
 
         return [node(c) for c in self.children(store.ROOT)]
@@ -101,8 +102,9 @@ class Codebook:
             return None
         out = {"id": c["id"], "name": c["name"], "color": c.get("color"),
                "parent_id": c.get("parent_id")}
+        eff = store.effective_rich(c)
         for field in store.RICH_FIELDS:
-            out[field] = c.get(field)
+            out[field] = eff[field]
         return out
 
     def details_in_order(self) -> List[Dict[str, Any]]:
@@ -114,8 +116,9 @@ class Codebook:
             for c in self.children(parent):
                 d = {"id": c["id"], "name": c["name"],
                      "parent_id": c.get("parent_id")}
+                eff = store.effective_rich(c)
                 for field in store.RICH_FIELDS:
-                    d[field] = c.get(field)
+                    d[field] = eff[field]
                 out.append(d)
                 walk(c["id"])
 

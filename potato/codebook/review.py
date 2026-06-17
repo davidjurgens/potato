@@ -195,6 +195,33 @@ def evaluate_relabels(
     return created
 
 
+def has_open_flag(
+    task_dir: str, project: str, instance_id: str, *,
+    schema_name: Optional[str] = None, change_id: Optional[str] = None,
+) -> bool:
+    """True if an *open* flag already exists for this de-dup key.
+
+    De-dup key: ``(project, instance_id, schema_name, change_id)``. This
+    matches how flags are stored — every component is a column — and lets
+    callers suppress duplicate open flags when a sweep re-runs or the
+    listener fires twice for the same change (same ``change_id``, or both
+    ``None`` for the full on-demand sweep). Only ``status='open'`` rows
+    count, so once a flag is resolved/dismissed a genuinely new change for
+    the same instance flags again. ``IS`` is used for NULL-safe matching
+    on the nullable ``schema_name``/``change_id`` columns.
+    """
+    row = _db(task_dir).execute(
+        """SELECT 1 FROM codebook_review_flag
+           WHERE project = ? AND status = 'open'
+             AND instance_id = ?
+             AND schema_name IS ?
+             AND change_id IS ?
+           LIMIT 1""",
+        (project, instance_id, schema_name, change_id),
+    ).fetchone()
+    return row is not None
+
+
 def open_count(task_dir: str, project: str) -> int:
     row = _db(task_dir).execute(
         """SELECT COUNT(*) AS n FROM codebook_review_flag

@@ -297,13 +297,28 @@ class SoloModeManager:
             # move / create don't alter prompt content for existing
             # instances, so they don't warrant a re-label sweep.
             prompt_ops = {"rename", "delete", "merge", "split"}
-            affected: Dict[str, str] = {}  # name -> latest change_id
+            from potato.codebook.codebook import Codebook
+            cb = Codebook.load(task_dir, project)
+            affected: Dict[str, str] = {}  # code NAME -> latest change_id
             for ch in changes:
                 op = ch.get("op") or ""
-                if op in prompt_ops or op.startswith("edit_"):
+                if not (op in prompt_ops or op.startswith("edit_")):
+                    continue
+                names = set()
+                # edit_* rows carry the field's old/new *value* (e.g. the
+                # definition text), not the code name — so resolve the
+                # name from code_id. rename/delete/merge/split DO carry
+                # names in old/new_value (and a prediction may still hold
+                # the pre-change name), so include those too.
+                code = cb.get(ch.get("code_id")) if ch.get("code_id") else None
+                if code:
+                    names.add(code["name"])
+                if op in prompt_ops:
                     for nm in (ch.get("old_value"), ch.get("new_value")):
                         if nm:
-                            affected[str(nm)] = ch.get("id")
+                            names.add(str(nm))
+                for nm in names:
+                    affected[nm] = ch.get("id")
             if not affected:
                 return
             threading.Thread(
@@ -316,72 +331,132 @@ class SoloModeManager:
     def _run_codebook_review(
         self, task_dir: str, project: str, affected: Dict[str, str]
     ) -> None:
-        """Re-label every stored prediction that used an affected code and
-        flag the ones whose label changed significantly. Runs off-thread."""
+        """Thread target for the automatic (listener-driven) sweep: only
+        the instances whose label used an affected code. Best-effort;
+        logs the outcome."""
+        result = self._sweep_codebook_review(
+            task_dir, project, affected=affected)
+        if result.get("flagged"):
+            logger.info(
+                "Codebook review: flagged %d instance(s) for human review "
+                "after a codebook change", result["flagged"])
+
+    def run_codebook_review_now(
+        self, endpoint=None, max_instances: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """On-demand, synchronous re-review against the *current* codebook.
+
+        Unlike the automatic listener (which only revisits instances a
+        specific edit touched), this re-labels every instance that has a
+        stored LLM prediction and flags the ones whose label moved. This
+        is the admin "re-review now" action — it works for any project
+        with a configured labeling endpoint, independent of whether the
+        background labeling thread is running.
+
+        Returns a summary: {relabeled, flagged, skipped, reason?}.
+        """
+        task_dir, project = self._codebook_ids()
+        return self._sweep_codebook_review(
+            task_dir, project, affected=None, endpoint=endpoint,
+            max_instances=max_instances)
+
+    def _sweep_codebook_review(
+        self, task_dir: str, project: str, *,
+        affected: Optional[Dict[str, str]] = None, endpoint=None,
+        max_instances: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Core re-label/compare sweep shared by the automatic listener
+        and the on-demand action.
+
+        ``affected`` (name -> change_id) restricts the sweep to the
+        instances whose stored label used one of those codes and stamps
+        each flag with the originating change. ``affected=None`` sweeps
+        every stored prediction (the full manual re-review). Returns a
+        summary dict; never raises.
+        """
+        summary: Dict[str, Any] = {
+            "relabeled": 0, "flagged": 0, "skipped": 0, "deduped": 0}
         try:
             from potato.codebook import review
         except Exception:
-            return
-        try:
-            endpoint = self.llm_labeling_thread._get_endpoint()
-        except Exception:
-            endpoint = None
+            summary["reason"] = "review module unavailable"
+            return summary
+        if endpoint is None:
+            try:
+                endpoint = self.llm_labeling_thread._get_endpoint()
+            except Exception:
+                endpoint = None
         if endpoint is None:
             logger.info("Codebook review: no labeling endpoint; skipping")
-            return
+            summary["reason"] = "no labeling endpoint configured"
+            return summary
 
         def touches(label: Any) -> bool:
+            if affected is None:
+                return True  # full sweep
             if isinstance(label, (list, tuple, set)):
                 return any(str(x) in affected for x in label)
             return str(label) in affected
 
-        relabels: List[Dict[str, Any]] = []
+        def change_for(label: Any) -> Optional[str]:
+            if affected is None:
+                return None
+            if isinstance(label, (list, tuple, set)):
+                for x in label:
+                    if str(x) in affected:
+                        return affected[str(x)]
+                return None
+            return affected.get(str(label))
+
         for iid, schemas in self.get_all_llm_predictions().items():
             for schema_name, pred in schemas.items():
                 if not touches(pred.predicted_label):
                     continue
+                change_id = change_for(pred.predicted_label)
+                # De-dup: an instance must not accumulate multiple OPEN
+                # flags for the same originating change. If one is already
+                # open for this (instance, schema, change_id), skip the
+                # re-label entirely (also saves a wasted LLM call). A
+                # resolved/dismissed flag no longer blocks, so a genuinely
+                # new change re-flags. change_id is None for the full
+                # on-demand sweep, so re-running it dedupes against itself.
+                if review.has_open_flag(
+                        task_dir, project, iid,
+                        schema_name=schema_name, change_id=change_id):
+                    summary["deduped"] += 1
+                    continue
+                if (max_instances is not None
+                        and summary["relabeled"] >= max_instances):
+                    return summary
                 text = self._get_instance_text(iid)
                 if not text:
+                    summary["skipped"] += 1
                     continue
                 try:
                     new = self.llm_labeling_thread._label_instance(
                         iid, text, schema_name, endpoint=endpoint)
                 except Exception:
+                    summary["skipped"] += 1
                     continue
                 if new is None or new.error:
+                    summary["skipped"] += 1
                     continue
-                # change_id of the edit that touched this label (best guess)
-                cid = None
-                if isinstance(pred.predicted_label, (list, tuple, set)):
-                    for x in pred.predicted_label:
-                        if str(x) in affected:
-                            cid = affected[str(x)]; break
-                else:
-                    cid = affected.get(str(pred.predicted_label))
-                relabels.append({
-                    "instance_id": iid,
-                    "schema_name": schema_name,
-                    "change_id": cid,
-                    "old_label": pred.predicted_label,
-                    "new_label": new.label,
-                    "old_confidence": pred.confidence_score,
-                    "new_confidence": new.confidence,
-                })
-
-        if not relabels:
-            return
-        # evaluate_relabels stamps each flag with its own change_id from
-        # the item, so pass change_id=None at the batch level.
-        flags = []
-        for item in relabels:
-            f = review.evaluate_relabels(
-                task_dir, project=project,
-                change_id=item.get("change_id"), relabels=[item])
-            flags.extend(f)
-        if flags:
-            logger.info(
-                "Codebook review: flagged %d instance(s) for human review "
-                "after a codebook change", len(flags))
+                summary["relabeled"] += 1
+                # evaluate_relabels applies the significance policy and
+                # only persists a flag when the change is significant.
+                flags = review.evaluate_relabels(
+                    task_dir, project=project,
+                    change_id=change_id,
+                    relabels=[{
+                        "instance_id": iid,
+                        "schema_name": schema_name,
+                        "old_label": pred.predicted_label,
+                        "new_label": new.label,
+                        "old_confidence": pred.confidence_score,
+                        "new_confidence": new.confidence,
+                    }])
+                summary["flagged"] += len(flags)
+        return summary
 
     # === Component Properties ===
 
@@ -481,21 +556,91 @@ class SoloModeManager:
             )
         return self._confidence_router
 
-    def get_icl_examples(self, max_per_label: int = 1, max_total: int = 5) -> List[Dict[str, str]]:
+    def get_icl_examples(
+        self, max_per_label: int = 1, max_total: int = 5, *,
+        instance_text: Optional[str] = None, query_vec=None, endpoint=None,
+    ) -> List[Dict[str, str]]:
         """Get in-context learning examples for the labeling prompt.
 
-        Priority order:
-          1. Validated examples from the persistent ICL library (added by
-             the validated refinement framework — each has proven val gain)
-          2. Auto-selected examples from human-LLM agreements (fallback)
+        Measured toggle (Phase E, ``config.icl.selection_strategy``):
+          - "static_gain" (default): the existing behavior — validated-library
+            gain ranking, then human-LLM agreement fallback. Unchanged.
+          - "per_instance_retrieval": rank validated examples by blended
+            similarity-to-instance + proven val_accuracy_gain, MMR-diversified
+            with a per-label coverage floor. Falls back to the static path
+            when there is no embedder OR the validated corpus is too sparse
+            to retrieve meaningfully (Req 3).
 
         Args:
-            max_per_label: Maximum examples per label.
+            max_per_label: Maximum examples per label (static path / floor).
             max_total: Maximum total examples.
+            instance_text: The text being labeled (enables per-instance mode).
+            query_vec / endpoint: a shared instance embedding + endpoint so we
+                don't re-embed the query (Req 5).
 
         Returns:
             List of {"text": "...", "label": "..."} dicts.
         """
+        icl_cfg = getattr(self.config, 'icl', None)
+        if (instance_text and icl_cfg is not None
+                and icl_cfg.selection_strategy == 'per_instance_retrieval'):
+            retrieved = self._retrieve_icl_examples(
+                instance_text, max_total=max_total,
+                query_vec=query_vec, endpoint=endpoint)
+            if retrieved is not None:
+                return retrieved
+            # else: sparse corpus / no embedder -> fall through to static.
+
+        return self._static_icl_examples(max_per_label, max_total)
+
+    def _retrieve_icl_examples(
+        self, instance_text: str, *, max_total: int,
+        query_vec=None, endpoint=None,
+    ) -> Optional[List[Dict[str, str]]]:
+        """Per-instance retrieval path. Returns None to signal the caller to
+        fall back (no embedder, or the validated corpus is below
+        ``icl.min_corpus`` — Req 3)."""
+        icl_cfg = self.config.icl
+        lib = getattr(self, '_icl_library', None)
+        entries_src = lib.list_all() if lib is not None else []
+        if len(entries_src) < icl_cfg.min_corpus:
+            return None  # sparse corpus -> blend/fallback to agreement path
+        try:
+            from potato.rag import indexer, retriever
+            from potato.rag.embedding_endpoint import EmbeddingError
+            task_dir, project = self._codebook_ids()
+            entries = [{
+                "instance_id": e.instance_id, "text": e.text,
+                "label": e.label, "gain": e.val_accuracy_gain,
+            } for e in entries_src]
+            try:
+                ep = endpoint or indexer._endpoint_for(
+                    task_dir, project, self.config.embedding, None)
+                indexer.sync_icl_entries(
+                    task_dir, project, entries,
+                    endpoint=ep, config=self.config.embedding)
+                results = retriever.retrieve_icl_examples(
+                    task_dir, project, instance_text, k=max_total,
+                    query_vec=query_vec, endpoint=ep,
+                    config=self.config.embedding,
+                    min_per_label=icl_cfg.min_per_label,
+                    gain_weight=icl_cfg.gain_weight,
+                    mmr_lambda=icl_cfg.mmr_lambda)
+            except EmbeddingError:
+                return None  # no embedder -> fall back to static path
+            if not results:
+                return None
+            return [{'text': r['text'], 'label': r['label']} for r in results]
+        except Exception:
+            logger.debug("[ICL] per-instance retrieval failed; "
+                         "falling back to static", exc_info=True)
+            return None
+
+    def _static_icl_examples(
+        self, max_per_label: int = 1, max_total: int = 5,
+    ) -> List[Dict[str, str]]:
+        """Static selection (the pre-Phase-E behavior): validated-library
+        gain ranking first, then human-LLM agreement fallback."""
         examples: List[Dict[str, str]] = []
 
         # Pull from validated ICL library first (strongest signal)
@@ -839,6 +984,21 @@ class SoloModeManager:
         # Mark categories as incorporated
         for cat in unincorporated:
             ecr.mark_category_incorporated(cat.id, new_pv.version)
+
+        # Feed the canonical guideline doc that the RAG substrate indexes.
+        # This is the explicit, non-circular guideline source of truth
+        # (Amendment 2): the producer writes the rules here; the RAG indexer
+        # reads from here, not from the assembled prompt. Best-effort.
+        try:
+            from potato.rag.guidelines import append_guidelines
+            task_dir, project = self._codebook_ids()
+            rules_text = "\n".join(
+                f"- {cat.summary_rule}" for cat in unincorporated
+                if getattr(cat, "summary_rule", None))
+            if rules_text:
+                append_guidelines(task_dir, project, rules_text)
+        except Exception:
+            logger.debug("RAG guideline sync skipped", exc_info=True)
 
         result = {
             'success': True,
@@ -2750,6 +2910,12 @@ class SoloModeManager:
                     'pending_refinements': self._pending_refinements,
                     'refinement_log': self._refinement_log[-50:],  # Keep last 50
                     'icl_library': self._icl_library.to_dict() if self._icl_library else None,
+                    # Codebook re-review bookmark: the changelog revision the
+                    # listener/sweep has already processed. Persisted so a
+                    # restart resumes from here instead of re-flooding the
+                    # review queue from revision 0. None means "no change
+                    # observed yet" (baseline is set lazily on first edit).
+                    'last_review_revision': self._last_review_revision,
                 }
 
                 # Include edge case rule manager state inline
@@ -2836,6 +3002,12 @@ class SoloModeManager:
 
                 # Restore reannotation counts
                 self._reannotation_counts = state.get('reannotation_counts', {})
+
+                # Restore the codebook re-review bookmark so the listener
+                # resumes from the last processed changelog revision rather
+                # than re-reviewing (and re-flagging) earlier changes. Absent
+                # key -> None (treated as "no baseline yet").
+                self._last_review_revision = state.get('last_review_revision')
 
                 # Restore per-version agreement tracking
                 raw_pva = state.get('per_version_agreement', {})

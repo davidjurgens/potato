@@ -36,8 +36,8 @@ _GUARD = (
     "Decide each label from its Definition, Include and Exclude rules "
     "below — NOT from surface wording. A keyword appearing in the text "
     "(e.g. a code's name) is not sufficient; the text must satisfy the "
-    "code's definition. Pay special attention to the Exclude rules that "
-    "separate similar codes."
+    "code's definition. Pay special attention to the Exclude rules and "
+    "the \"Do NOT apply when\" rules that separate similar codes."
 )
 
 
@@ -55,17 +55,34 @@ def _render_code(detail: Dict[str, Any]) -> Optional[str]:
     add("clarification", "Include: {val}")
     add("negative_clarification", "Exclude: {val}")
 
-    pos, pos_why = detail.get("positive_example"), detail.get(
-        "positive_example_why")
-    if pos:
-        why = f" — {pos_why}" if pos_why else ""
-        lines.append(f'✓ Example: "{pos}"{why}')
+    def _example(ex: Any) -> Optional[tuple]:
+        """(text, why) for a worked example, or None if it has no text."""
+        if not isinstance(ex, dict):
+            return None
+        text = (ex.get("text") or "").strip()
+        if not text:
+            return None
+        return text, (ex.get("why") or "").strip()
 
-    neg, neg_why = detail.get("negative_example"), detail.get(
-        "negative_example_why")
-    if neg:
-        why = f" — {neg_why}" if neg_why else ""
-        lines.append(f'✗ Looks like this code but is NOT: "{neg}"{why}')
+    for ex in detail.get("positive_examples") or []:
+        parsed = _example(ex)
+        if parsed:
+            text, why = parsed
+            lines.append(f'✓ Example: "{text}"' + (f" — {why}" if why else ""))
+
+    for ex in detail.get("negative_examples") or []:
+        parsed = _example(ex)
+        if parsed:
+            text, why = parsed
+            lines.append(
+                f'✗ Looks like this code but is NOT: "{text}"'
+                + (f" — {why}" if why else ""))
+
+    rules = [str(r).strip() for r in (detail.get("exclusion_rules") or [])
+             if str(r).strip()]
+    if rules:
+        lines.append("Do NOT apply when:")
+        lines.extend(f"  • {r}" for r in rules)
 
     if not lines:
         return None

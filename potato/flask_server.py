@@ -3413,6 +3413,14 @@ def _initialize_from_config(config_file):
     except Exception as e:
         logger.warning(f"Codebook ICL sync not installed: {e}")
 
+    # Keep the RAG codebook index fresh: a scoped listener marks only an
+    # edited code's embeddings stale (re-embedded lazily at retrieval).
+    try:
+        from potato.rag.indexer import install_rag_codebook_sync
+        install_rag_codebook_sync()
+    except Exception as e:
+        logger.warning(f"RAG codebook sync not installed: {e}")
+
     # Auto-detect cases from item metadata (no-op unless cases enabled
     # or QDA mode is on).
     try:
@@ -3611,6 +3619,14 @@ def run_server(args):
         install_codebook_icl_sync()
     except Exception as e:
         logger.warning(f"Codebook ICL sync not installed: {e}")
+
+    # Keep the RAG codebook index fresh: a scoped listener marks only an
+    # edited code's embeddings stale (re-embedded lazily at retrieval).
+    try:
+        from potato.rag.indexer import install_rag_codebook_sync
+        install_rag_codebook_sync()
+    except Exception as e:
+        logger.warning(f"RAG codebook sync not installed: {e}")
 
     # Auto-detect cases from item metadata (no-op unless cases enabled
     # or QDA mode is on).

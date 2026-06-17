@@ -375,6 +375,44 @@ def admin_resolve_review(flag_id):
     return jsonify({"resolved": True, "status": status})
 
 
+@codebook_bp.route("/admin/review/run", methods=["POST"])
+def admin_run_review():
+    """On-demand re-review: re-label every instance that has a stored LLM
+    prediction against the *current* codebook and flag the ones whose
+    label moved. Unlike the automatic listener this works even when the
+    background labeling thread isn't running — it just needs a configured
+    labeling endpoint. Admin/adjudicator only.
+
+    Optional JSON body: {"max_instances": <int>} to cap the sweep.
+    """
+    td, project, _user, err = _admin_ctx()
+    if err:
+        return err
+    try:
+        from potato.solo_mode import get_solo_mode_manager
+        manager = get_solo_mode_manager()
+    except Exception:
+        manager = None
+    if manager is None:
+        return jsonify({
+            "error": "Re-review requires a labeling model. Enable solo "
+                     "mode (which configures the labeling endpoint) to "
+                     "use this action.",
+        }), 503
+    data = request.get_json(silent=True) or {}
+    max_instances = data.get("max_instances")
+    try:
+        max_instances = int(max_instances) if max_instances else None
+    except (TypeError, ValueError):
+        return jsonify({"error": "max_instances must be an integer"}), 400
+    summary = manager.run_codebook_review_now(max_instances=max_instances)
+    code = 200
+    if summary.get("reason") and not summary.get("relabeled"):
+        # Nothing ran (e.g. no endpoint configured) — surface it clearly.
+        code = 503
+    return jsonify(summary), code
+
+
 @codebook_bp.route("/proposals", methods=["POST"])
 @codebook_view
 def submit_proposal(ctx):

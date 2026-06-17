@@ -313,6 +313,18 @@ class LLMLabelingThread(threading.Thread):
             # structured fields, so plain-label projects are unaffected.
             codebook_section = self._codebook_section()
 
+            # Resolve the embedding endpoint and embed this instance ONCE,
+            # shared by guideline + ICL retrieval (Req 5). (None, None) unless
+            # a RAG path is actually active, so the default path does no
+            # embedding work.
+            rag_ep, rag_qv = self._rag_prepare(text)
+
+            # RAG-retrieved guideline fragments (default OFF; "" unless
+            # config['rag']['inject_guidelines']). Additive — never trims the
+            # codebook/label set.
+            guideline_section = self._guideline_section(
+                text, endpoint=rag_ep, query_vec=rag_qv)
+
             # Check if edge case rule extraction is enabled
             ecr_config = getattr(self.solo_config, 'edge_case_rules', None)
             request_edge_case = (
@@ -325,7 +337,15 @@ class LLMLabelingThread(threading.Thread):
             icl_section = ""
             if self.examples_getter:
                 try:
-                    examples = self.examples_getter()
+                    # Per-instance ICL selection when the getter supports it
+                    # (shares the instance embedding); older no-arg getters
+                    # still work.
+                    try:
+                        examples = self.examples_getter(
+                            instance_text=text, query_vec=rag_qv,
+                            endpoint=rag_ep)
+                    except TypeError:
+                        examples = self.examples_getter()
                     if examples:
                         icl_lines = ["## Examples"]
                         for ex in examples:
@@ -339,7 +359,7 @@ class LLMLabelingThread(threading.Thread):
             if request_edge_case:
                 full_prompt = f"""{prompt}
 
-{codebook_section}{icl_section}Text to label:
+{codebook_section}{guideline_section}{icl_section}Text to label:
 {text}
 
 Available labels: {labels}
@@ -356,7 +376,7 @@ Respond with JSON. If you are uncertain about the label (confidence below 75), a
             else:
                 full_prompt = f"""{prompt}
 
-{codebook_section}{icl_section}Text to label:
+{codebook_section}{guideline_section}{icl_section}Text to label:
 {text}
 
 Available labels: {labels}
@@ -494,6 +514,70 @@ Respond with JSON:
             project = self.config.get('annotation_task_name') or 'default'
             section = render_codebook_section(task_dir, project)
             return (section + "\n\n") if section else ""
+        except Exception:
+            return ""
+
+    def _rag_active(self) -> bool:
+        """True if any per-instance RAG path is enabled (guideline injection
+        or per-instance ICL retrieval) — gates the shared embedding so the
+        default path stays embedding-free."""
+        rag_cfg = self.config.get('rag') or {}
+        if rag_cfg.get('inject_guidelines'):
+            return True
+        icl_cfg = getattr(self.solo_config, 'icl', None) \
+            if self.solo_config is not None else None
+        return bool(icl_cfg and getattr(icl_cfg, 'selection_strategy', None)
+                    == 'per_instance_retrieval')
+
+    def _rag_prepare(self, text: str):
+        """Resolve the endpoint and embed ``text`` ONCE for all per-instance
+        retrieval (Req 5). (None, None) when no RAG path is active or no
+        embedder is available — best-effort, never breaks labeling."""
+        try:
+            if not self._rag_active():
+                return None, None
+            emb_cfg = getattr(self.solo_config, 'embedding', None) \
+                if self.solo_config is not None else None
+            from potato.rag.retriever import prepare_instance
+            task_dir = self.config.get('task_dir', '.')
+            project = self.config.get('annotation_task_name') or 'default'
+            return prepare_instance(task_dir, project, text, config=emb_cfg)
+        except Exception:
+            return None, None
+
+    def _guideline_section(self, text: str, *, endpoint=None,
+                           query_vec=None) -> str:
+        """RAG-retrieved guideline fragments relevant to ``text``.
+
+        Default OFF — returns "" unless ``config['rag']['inject_guidelines']``
+        is set, so the default prompt is byte-identical to today. When on, it
+        injects ONLY the top-k relevant guideline fragments (it never touches
+        the codebook/label set). Reuses the shared instance embedding
+        (Req 5). Best-effort: any retrieval failure -> "".
+
+        NOTE: this is the additive, behind-a-flag step. Replacing the prompt's
+        whole-document guideline injection with only these fragments
+        ("guideline injection replace-flip") is a separate scoped follow-up
+        that decouples guidelines from PromptVersion.
+        """
+        try:
+            rag_cfg = self.config.get('rag') or {}
+            if not rag_cfg.get('inject_guidelines'):
+                return ""
+            emb_cfg = getattr(self.solo_config, 'embedding', None) \
+                if self.solo_config is not None else None
+            from potato.rag.retriever import retrieve_guidelines
+            task_dir = self.config.get('task_dir', '.')
+            project = self.config.get('annotation_task_name') or 'default'
+            k = int(rag_cfg.get('guideline_top_k', 3))
+            hits = retrieve_guidelines(task_dir, project, text, k=k,
+                                       config=emb_cfg, endpoint=endpoint,
+                                       query_vec=query_vec)
+            if not hits:
+                return ""
+            lines = ["## Relevant Guidelines"]
+            lines += [f"- {h['text']}" for h in hits]
+            return "\n".join(lines) + "\n\n"
         except Exception:
             return ""
 

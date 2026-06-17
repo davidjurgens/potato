@@ -23,6 +23,7 @@ Design notes:
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from typing import Any, Dict, List, Optional
@@ -31,21 +32,43 @@ from potato.persistence import Migration, get_db, register_migration
 
 ROOT = ""  # sentinel parent_id for top-level codes
 
-# Structured per-code fields (Codebook prompting). These are the
-# "load-bearing" fields that get rendered into the LLM prompt: a tight
-# definition, inclusion/exclusion clarifications, and a positive /
-# negative worked example (text + a one-sentence why). All are nullable
-# TEXT and default to NULL — a code with none of them behaves exactly as
-# before (just a name + color), so this is fully backward compatible.
+# Structured per-code fields (Codebook prompting) — the LOGICAL field set
+# rendered into the LLM prompt. Three prose fields (a tight definition and
+# inclusion/exclusion clarifications) plus three machine-readable list
+# fields: worked positive/negative examples ([{text, why}, ...]) and
+# explicit exclusion rules (["do not apply when ...", ...]). All columns
+# are nullable and default to NULL — a code with none of them behaves
+# exactly as before (just a name + color), so this is fully backward
+# compatible.
 RICH_FIELDS = (
     "definition",
     "clarification",
     "negative_clarification",
-    "positive_example",
-    "positive_example_why",
-    "negative_example",
-    "negative_example_why",
+    "positive_examples",
+    "negative_examples",
+    "exclusion_rules",
 )
+
+# Value shape per field: scalar prose ("text") vs. canonical-JSON list
+# ("json"). The json fields are stored as canonical JSON in a TEXT column
+# (sorted object keys, list order preserved) and decoded on read.
+RICH_FIELD_TYPES = {
+    "definition": "text",
+    "clarification": "text",
+    "negative_clarification": "text",
+    "positive_examples": "json",
+    "negative_examples": "json",
+    "exclusion_rules": "json",
+}
+
+# Legacy singular example columns (migration 0004), superseded by the
+# *_examples list fields. READ-ONLY post-0006: never written again; lazily
+# upgraded into a one-item [{text, why}] list on read when the new column
+# is still NULL. Maps new list field -> (legacy_text_col, legacy_why_col).
+_LEGACY_EXAMPLE_COLS = {
+    "positive_examples": ("positive_example", "positive_example_why"),
+    "negative_examples": ("negative_example", "negative_example_why"),
+}
 
 _CODEBOOK_MIGRATION = Migration(
     name="0001_codebook",
@@ -104,6 +127,24 @@ _RICH_FIELDS_MIGRATION = Migration(
 
 register_migration(_RICH_FIELDS_MIGRATION)
 
+# Structured-codebook fields (the list-shaped successors to the singular
+# example columns + the new exclusion rules). Additive, nullable TEXT
+# columns holding canonical JSON. Registered after 0004 so it runs once
+# the table + the legacy columns exist (registration order is preserved by
+# the migration runner). The old positive_example*/negative_example*
+# columns are intentionally kept (read-only) for backward-compatible
+# lazy-upgrade — see _LEGACY_EXAMPLE_COLS / effective_rich.
+_STRUCTURED_FIELDS_MIGRATION = Migration(
+    name="0006_codebook_structured_fields",
+    sql="""
+    ALTER TABLE codes ADD COLUMN positive_examples TEXT;
+    ALTER TABLE codes ADD COLUMN negative_examples TEXT;
+    ALTER TABLE codes ADD COLUMN exclusion_rules TEXT;
+    """,
+)
+
+register_migration(_STRUCTURED_FIELDS_MIGRATION)
+
 
 def _db(task_dir: str):
     """Connection guaranteeing the codebook migration is registered.
@@ -114,6 +155,7 @@ def _db(task_dir: str):
     """
     register_migration(_CODEBOOK_MIGRATION)
     register_migration(_RICH_FIELDS_MIGRATION)
+    register_migration(_STRUCTURED_FIELDS_MIGRATION)
     return get_db(task_dir)
 
 
@@ -155,7 +197,7 @@ def insert_code(
     now = time.time()
     details = details or {}
     rich_cols = list(RICH_FIELDS)
-    rich_vals = [_clean(details.get(f)) for f in rich_cols]
+    rich_vals = [clean_field(f, details.get(f)) for f in rich_cols]
     cols = ("id, project, name, color, parent_id, sort_order, "
             "created_by, created_at, updated_at, created_revision, "
             + ", ".join(rich_cols))
@@ -171,11 +213,110 @@ def insert_code(
 
 
 def _clean(value: Any) -> Optional[str]:
-    """Normalise a rich-field value: trim strings, treat empty as NULL."""
+    """Normalise a scalar rich-field value: trim strings, empty -> NULL."""
     if value is None:
         return None
     s = str(value).strip()
     return s or None
+
+
+def _clean_json(value: Any) -> Optional[str]:
+    """Normalise a JSON list field to canonical JSON text or NULL.
+
+    Accepts a Python list, a JSON string, or None. Object keys are sorted
+    (canonical) but list order is preserved (order is meaningful for
+    examples/rules). Dict items are normalised to exactly {text, why}
+    (dropped if text is blank); string items are trimmed (dropped if
+    blank). An empty result -> NULL so an absent field stays absent. This
+    canonical form is what makes the no-op comparison in update_code_fields
+    reliable (sort_keys both sides).
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return None
+        try:
+            value = json.loads(s)
+        except Exception:
+            value = [s]  # a bare string for a list field -> single item
+    if not isinstance(value, (list, tuple)):
+        value = [value]
+    items: List[Any] = []
+    for it in value:
+        if isinstance(it, dict):
+            text = str(it.get("text") or "").strip()
+            if not text:
+                continue
+            items.append({"text": text,
+                          "why": str(it.get("why") or "").strip()})
+        else:
+            s = str(it).strip()
+            if s:
+                items.append(s)
+    if not items:
+        return None
+    return json.dumps(items, sort_keys=True, ensure_ascii=False)
+
+
+def clean_field(field: str, value: Any) -> Optional[str]:
+    """Type-aware normalisation for a logical rich field (text vs json)."""
+    if RICH_FIELD_TYPES.get(field) == "json":
+        return _clean_json(value)
+    return _clean(value)
+
+
+def _decode_json(value: Optional[str]) -> List[Any]:
+    """Decode a stored JSON list column to a Python list ([] on absent/bad)."""
+    if not value:
+        return []
+    try:
+        obj = json.loads(value)
+    except Exception:
+        return []
+    return obj if isinstance(obj, list) else []
+
+
+def effective_rich(code: Dict[str, Any]) -> Dict[str, Any]:
+    """Logical rich-field values for a raw code row.
+
+    Text fields pass through; JSON list fields are decoded. The legacy
+    singular example columns are lazily upgraded to a one-item
+    [{text, why}] list when the new *_examples column is still NULL — a
+    pure read that never writes the legacy columns back (Refinement B).
+    """
+    out: Dict[str, Any] = {}
+    for field in RICH_FIELDS:
+        if RICH_FIELD_TYPES[field] == "text":
+            out[field] = code.get(field)
+            continue
+        raw = code.get(field)
+        if raw:
+            out[field] = _decode_json(raw)
+            continue
+        legacy = _LEGACY_EXAMPLE_COLS.get(field)
+        if legacy:
+            ltext = code.get(legacy[0])
+            if ltext and str(ltext).strip():
+                out[field] = [{"text": str(ltext).strip(),
+                               "why": str(code.get(legacy[1]) or "").strip()}]
+                continue
+        out[field] = []
+    return out
+
+
+def effective_current(code: Dict[str, Any], field: str) -> Optional[str]:
+    """Canonical *current* value of a logical field, for change detection.
+
+    Text fields -> the stored text; JSON fields -> canonical JSON of the
+    decoded / lazy-upgraded list (or None). Comparing a candidate
+    clean_field() value against this is what prevents a legacy code's first
+    save from churning the revision when nothing actually changed.
+    """
+    if RICH_FIELD_TYPES.get(field) == "json":
+        return _clean_json(effective_rich(code).get(field))
+    return code.get(field)
 
 
 def get_code(task_dir: str, code_id: str) -> Optional[Dict[str, Any]]:
@@ -240,7 +381,8 @@ def update_code(
     # others.
     for field in RICH_FIELDS:
         if details is not None and field in details:
-            sets.append(f"{field} = ?"); params.append(_clean(details[field]))
+            sets.append(f"{field} = ?")
+            params.append(clean_field(field, details[field]))
     if not sets:
         return get_code(task_dir, code_id)
     sets.append("updated_at = ?"); params.append(time.time())

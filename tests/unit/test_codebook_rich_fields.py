@@ -1,6 +1,8 @@
 """Structured codebook fields: storage, service edits + history, prompt
 rendering, YAML/CLI seeding, and output-change review flagging."""
 
+import json
+
 import pytest
 
 from potato.codebook import (
@@ -49,20 +51,23 @@ RICH = dict(
     definition="a violent public disturbance by a crowd",
     clarification="includes property destruction",
     negative_clarification="NOT a peaceful protest",
-    positive_example="protesters smashed shop windows",
-    positive_example_why="shows violence",
-    negative_example="thousands marched peacefully",
-    negative_example_why="non-violent, so a demonstration",
+    positive_examples=[{"text": "protesters smashed shop windows",
+                        "why": "shows violence"}],
+    negative_examples=[{"text": "thousands marched peacefully",
+                        "why": "non-violent, so a demonstration"}],
 )
 
 
 class TestStorage:
     def test_create_persists_rich_fields(self, td):
+        # Reads go through the effective (decoded / lazy-upgraded) view —
+        # the JSON list fields are stored as canonical JSON in TEXT columns
+        # and come back as Python lists via Codebook.detail.
         c = create_code(td, project="p", name="riot", created_by="u",
                         details=RICH)
-        got = store.get_code(td, c["id"])
+        d = Codebook.load(td, "p").detail(c["id"])
         for k, v in RICH.items():
-            assert got[k] == v
+            assert d[k] == v
 
     def test_blank_fields_normalise_to_none(self, td):
         c = create_code(td, project="p", name="riot", created_by="u",
@@ -201,6 +206,109 @@ class TestSoloLabelerInjection:
             prompt_getter=lambda: "label this",
             result_callback=lambda r: None)
         assert thread._codebook_section() == ""
+
+
+def _make_legacy_code(td, project, name, *, pos=None, pos_why=None,
+                      neg=None, neg_why=None):
+    """Create a code, then write data ONLY into the pre-0006 singular
+    example columns (new *_examples columns left NULL) to simulate a
+    codebook migrated up from before the structured-fields change."""
+    c = create_code(td, project=project, name=name, created_by="u")
+    conn = store._db(td)
+    conn.execute(
+        "UPDATE codes SET positive_example=?, positive_example_why=?, "
+        "negative_example=?, negative_example_why=? WHERE id=?",
+        (pos, pos_why, neg, neg_why, c["id"]))
+    conn.commit()
+    return c
+
+
+class TestStructuredFields:
+    """list[str] exclusion_rules + list[{text,why}] examples: canonical
+    JSON storage, no-op churn guard, lazy-upgrade, and prompt rendering."""
+
+    def test_json_round_trip_trims_and_drops_blanks(self, td):
+        c = create_code(td, project="p", name="riot", created_by="u",
+                        details={
+                            "exclusion_rules": ["  rule one  ", "rule two", ""],
+                            "positive_examples": [
+                                {"text": "x", "why": "y"},
+                                {"text": "  z  "},          # why omitted
+                                {"text": "", "why": "drop me"}]})  # no text
+        d = Codebook.load(td, "p").detail(c["id"])
+        assert d["exclusion_rules"] == ["rule one", "rule two"]
+        assert d["positive_examples"] == [
+            {"text": "x", "why": "y"}, {"text": "z", "why": ""}]
+        # Stored as canonical JSON (sorted object keys) in a TEXT column.
+        raw = store.get_code(td, c["id"])
+        assert raw["positive_examples"] == (
+            '[{"text": "x", "why": "y"}, {"text": "z", "why": ""}]')
+
+    def test_empty_list_normalises_to_none(self, td):
+        c = create_code(td, project="p", name="riot", created_by="u",
+                        details={"exclusion_rules": [],
+                                 "negative_examples": [{"text": "  "}]})
+        raw = store.get_code(td, c["id"])
+        assert raw["exclusion_rules"] is None
+        assert raw["negative_examples"] is None
+        assert Codebook.load(td, "p").detail(c["id"])["exclusion_rules"] == []
+
+    def test_json_field_noop_does_not_churn(self, td):
+        from potato.codebook import current_revision
+        c = create_code(td, project="p", name="riot", created_by="u")
+        update_code_fields(td, c["id"], project="p",
+                           details={"exclusion_rules": ["a", "b"]})
+        rev = current_revision(td, "p")
+        # Equivalent value (same canonical JSON) -> no edit, no churn.
+        update_code_fields(td, c["id"], project="p",
+                           details={"exclusion_rules": ["a", "b"]})
+        assert current_revision(td, "p") == rev
+        edits = [h for h in changelog.code_history(td, "p", c["id"])
+                 if h["op"] == "edit_exclusion_rules"]
+        assert len(edits) == 1
+
+    def test_edit_exclusion_rules_logs_canonical_with_code_id(self, td):
+        c = create_code(td, project="p", name="riot", created_by="u")
+        update_code_fields(
+            td, c["id"], project="p",
+            details={"exclusion_rules": ["text merely mentions a riot"]})
+        row = next(h for h in changelog.code_history(td, "p", c["id"])
+                   if h["op"] == "edit_exclusion_rules")
+        assert row["code_id"] == c["id"]              # resolvable for the sweep
+        assert json.loads(row["new_value"]) == ["text merely mentions a riot"]
+
+    def test_renders_multi_example_and_do_not_apply_block(self, td):
+        create_code(td, project="p", name="riot", created_by="u", details={
+            "definition": "violent crowd",
+            "positive_examples": [
+                {"text": "smashed windows", "why": "violence"},
+                {"text": "set cars on fire", "why": "destruction"}],
+            "negative_examples": [{"text": "peaceful march",
+                                   "why": "non-violent"}],
+            "exclusion_rules": ["the text only mentions the word riot",
+                                "it describes a sports celebration"]})
+        out = render_codebook_section(td, "p")
+        assert '✓ Example: "smashed windows" — violence' in out
+        assert '✓ Example: "set cars on fire" — destruction' in out
+        assert ('✗ Looks like this code but is NOT: "peaceful march"'
+                ' — non-violent') in out
+        assert "Do NOT apply when:" in out
+        assert "  • the text only mentions the word riot" in out
+        assert "  • it describes a sports celebration" in out
+        # guard now name-checks the do-not-apply rules
+        assert "Do NOT apply when" in out
+
+    def test_legacy_singular_code_renders_identically(self, td):
+        """A pre-0006 code (singular columns only) renders byte-identically
+        to a new-style code carrying the same example as a list."""
+        create_code(td, project="new", name="riot", created_by="u", details={
+            "positive_examples": [{"text": "protesters smashed shop windows",
+                                   "why": "shows violence"}]})
+        _make_legacy_code(td, "leg", "riot",
+                          pos="protesters smashed shop windows",
+                          pos_why="shows violence")
+        assert render_codebook_section(td, "new") == \
+            render_codebook_section(td, "leg")
 
 
 class TestReviewFlagging:

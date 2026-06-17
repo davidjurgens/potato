@@ -225,8 +225,37 @@ class ConfidenceRoutingConfig:
 
 @dataclass
 class EmbeddingConfig:
-    """Configuration for embedding model (used for diversity)."""
-    model_name: str = "all-MiniLM-L6-v2"
+    """Configuration for embedding model (diversity + RAG retrieval).
+
+    ``provider`` selects the RAG embedding backend. "auto" prefers a local
+    open-weight model — Ollama if reachable, else sentence-transformers —
+    and is resolved (and then PINNED per project) at first index creation.
+    Backend-specific model names live here so callers never hardcode one.
+    """
+    model_name: str = "all-MiniLM-L6-v2"        # sentence-transformers model
+    provider: str = "auto"                       # auto|ollama|sentence_transformers|openai
+    ollama_model: str = "nomic-embed-text"
+    openai_model: str = "text-embedding-3-small"
+    base_url: str = "http://localhost:11434"
+    api_key: str = ""
+
+
+@dataclass
+class ICLConfig:
+    """In-context example selection (Phase E).
+
+    ``selection_strategy`` is the measured toggle: "static_gain" keeps the
+    current behavior (validated-library gain ranking + agreement fallback);
+    "per_instance_retrieval" ranks validated examples by a blend of
+    embedding similarity to the instance and their proven val_accuracy_gain,
+    diversifies with MMR, and guarantees a per-label coverage floor.
+    Defaults to current behavior so labeling is unchanged until flipped.
+    """
+    selection_strategy: str = "static_gain"   # static_gain | per_instance_retrieval
+    min_per_label: int = 1        # per-label coverage floor (Req 2)
+    gain_weight: float = 0.5      # weight on val_accuracy_gain vs similarity (Req 1)
+    mmr_lambda: float = 0.7       # MMR relevance/diversity trade-off
+    min_corpus: int = 4           # below this many validated examples -> sparse fallback (Req 3)
 
 
 @dataclass
@@ -247,6 +276,9 @@ class SoloModeConfig:
 
     # Embedding configuration
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+
+    # In-context example selection (Phase E)
+    icl: ICLConfig = field(default_factory=ICLConfig)
 
     # Uncertainty estimation
     uncertainty: UncertaintyConfig = field(default_factory=UncertaintyConfig)
@@ -375,7 +407,22 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
     # Parse embedding config
     emb_data = sm.get('embedding', {})
     embedding = EmbeddingConfig(
-        model_name=emb_data.get('model_name', 'all-MiniLM-L6-v2')
+        model_name=emb_data.get('model_name', 'all-MiniLM-L6-v2'),
+        provider=emb_data.get('provider', 'auto'),
+        ollama_model=emb_data.get('ollama_model', 'nomic-embed-text'),
+        openai_model=emb_data.get('openai_model', 'text-embedding-3-small'),
+        base_url=emb_data.get('base_url', 'http://localhost:11434'),
+        api_key=emb_data.get('api_key', ''),
+    )
+
+    # Parse ICL example-selection config
+    icl_data = sm.get('icl', {})
+    icl = ICLConfig(
+        selection_strategy=icl_data.get('selection_strategy', 'static_gain'),
+        min_per_label=icl_data.get('min_per_label', 1),
+        gain_weight=icl_data.get('gain_weight', 0.5),
+        mmr_lambda=icl_data.get('mmr_lambda', 0.7),
+        min_corpus=icl_data.get('min_corpus', 4),
     )
 
     # Parse uncertainty config
@@ -512,6 +559,7 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         labeling_models=labeling_models,
         revision_models=revision_models,
         embedding=embedding,
+        icl=icl,
         uncertainty=uncertainty,
         thresholds=thresholds,
         instance_selection=instance_selection,

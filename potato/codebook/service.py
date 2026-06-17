@@ -176,20 +176,32 @@ def update_code_fields(
     actor: str = "system", actor_kind: str = "human",
 ) -> Dict[str, Any]:
     """Update one or more structured fields (definition / clarification /
-    negative_clarification / positive_example(+why) / negative_example
-    (+why)). Every field changed here alters what the LLM sees, so this
-    is a prompt-affecting edit: it bumps the revision once, logs one
+    negative_clarification / positive_examples / negative_examples /
+    exclusion_rules). Every field changed here alters what the LLM sees, so
+    this is a prompt-affecting edit: it bumps the revision once, logs one
     change row per field (full old->new for the version history), and
-    softly re-flags the instances labeled with this code for review."""
+    softly re-flags the instances labeled with this code for review.
+
+    Churn guard (critical): the candidate value is compared against the
+    EFFECTIVE current value — i.e. the lazy-upgraded, canonical-JSON view
+    of the column (store.effective_current), not the raw stored column. So
+    re-saving a freshly-migrated legacy code unchanged is a true no-op:
+    nothing logs, the revision doesn't move, no review flag fires. Only a
+    genuine content change is recorded."""
     code = _require(task_dir, code_id)
-    # Keep only known rich fields whose value actually changes.
+    # Keep only known rich fields whose effective value actually changes.
+    # Both sides are normalised (text trimmed / list canonicalised) so the
+    # comparison is exact and JSON key-order can't cause spurious edits.
     changed: Dict[str, Any] = {}
+    old_vals: Dict[str, Any] = {}
     for field in store.RICH_FIELDS:
         if field not in details:
             continue
-        new_val = store._clean(details[field])
-        if new_val != code.get(field):
+        new_val = store.clean_field(field, details[field])
+        cur_val = store.effective_current(code, field)
+        if new_val != cur_val:
             changed[field] = new_val
+            old_vals[field] = cur_val
     if not changed:
         return code  # no-op: nothing to update, no revision churn
 
@@ -200,7 +212,7 @@ def update_code_fields(
     for field, new_val in changed.items():
         changelog.log_change(
             task_dir, project=project, op=f"edit_{field}", code_id=code_id,
-            old_value=code.get(field), new_value=new_val, actor=actor,
+            old_value=old_vals[field], new_value=new_val, actor=actor,
             actor_kind=actor_kind, revision=new_rev)
     _restamp(task_dir, project, [code_id])
     _notify(task_dir, project)
