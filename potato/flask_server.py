@@ -112,6 +112,8 @@ from potato.ai.ai_help_wrapper import init_dynamic_ai_help
 # Initialize Flask app
 app = Flask(__name__)
 app.register_blueprint(solo_mode_bp)
+from potato.judge_calibration.routes import judge_calibration_bp
+app.register_blueprint(judge_calibration_bp)
 # Note: qda_mode_bp is registered on the *served* app in
 # potato.routes.configure_routes (the module-level `app` here is discarded
 # and rebuilt by create_app), so it is intentionally not registered here.
@@ -3573,6 +3575,13 @@ def _initialize_from_config(config_file):
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
 
+    # Initialize Judge Calibration if enabled (parity with run_server()).
+    if config.get("judge_calibration", {}).get("enabled", False):
+        logger.info("Initializing Judge Calibration...")
+        from potato.judge_calibration import init_judge_calibration_manager
+        init_judge_calibration_manager(config)
+        logger.info("Judge Calibration initialized successfully")
+
     # Keep ICL prompts restricted to the codebook's current set: a
     # change listener re-syncs live scheme labels on any codebook edit.
     try:
@@ -3771,6 +3780,13 @@ def run_server(args):
         logger.info("Initializing QDA Mode...")
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
+
+    # Initialize Judge Calibration if enabled
+    if config.get("judge_calibration", {}).get("enabled", False):
+        logger.info("Initializing Judge Calibration...")
+        from potato.judge_calibration import init_judge_calibration_manager
+        init_judge_calibration_manager(config)
+        logger.info("Judge Calibration initialized successfully")
 
     # Keep ICL prompts restricted to the codebook's current set: a
     # change listener re-syncs live scheme labels on any codebook edit.

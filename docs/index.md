@@ -102,6 +102,7 @@ Role-based guides that walk you through Potato for your specific use case:
 ## AI & Intelligence
 
 - [AI Support](ai-intelligence/ai_support.md) - AI-powered label suggestions
+- [Judge Calibration](ai-intelligence/judge_calibration.md) - Auto-label with LLM judges + blind human calibration (accuracy, IAA, ECE)
 - [Active Learning](ai-intelligence/active_learning_guide.md) - ML-based prioritization
 - [Active Learning Strategies](ai-intelligence/active_learning_strategies.md) - Query strategies reference (BADGE, BALD, hybrid, cold-start)
 - [ICL Labeling](ai-intelligence/icl_labeling.md) - In-context learning for labeling
@@ -208,6 +209,7 @@ Role-based guides that walk you through Potato for your specific use case:
 | See reasoning, tool calls & answer side-by-side | [Three-Pane Trace Eval](agent-evaluation/eval_trace.md) |
 | Edit agent traces into SFT/DPO training data | [Trajectory Correction](agent-evaluation/trajectory_correction.md) |
 | Align/calibrate an LLM judge to human labels | [Judge Alignment](agent-evaluation/judge_alignment.md) |
+| Auto-label with LLM judges + calibrate blind | [Judge Calibration](ai-intelligence/judge_calibration.md) |
 | Use Solo Mode for collaborative annotation | [Solo Mode](solo-mode/solo_mode.md) |
 | Export annotations to Parquet | [Export Formats](data-export/export_formats.md#parquet) |
 | Export to COCO/YOLO/CoNLL | [Export Formats](data-export/export_formats.md) |

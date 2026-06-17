@@ -246,6 +246,14 @@ KNOWN_CONFIG_KEYS = {
     "webhooks": {"enabled", "endpoints"},
     "trace_ingestion": {"enabled", "sources", "api_key", "notify_annotators"},
     "judge_alignment": {"enabled", "ai_support", "schemas", "few_shot", "inline"},
+    # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
+    # Leaf sub-dicts (sampling/human/calibration/output) are validated by
+    # validate_judge_calibration_config(); kept shallow here to avoid
+    # unknown-key churn while the feature stabilizes.
+    "judge_calibration": {
+        "enabled", "prompt", "models", "k_samples", "max_items", "fraction",
+        "sampling", "human", "schemas", "calibration", "output", "state_dir",
+    },
     "triage": {"enabled", "order", "default_priority", "show_badge",
                "signal_field", "invert_signal", "rules"},
     "huggingface_backup": None,
@@ -788,6 +796,41 @@ def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
             )
 
 
+def validate_judge_calibration_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``judge_calibration`` block when enabled.
+
+    Delegates to the typed config's ``validate()`` (so the rules live in one
+    place) and additionally cross-checks that referenced schema names exist in
+    ``annotation_schemes``. Raises ConfigValidationError on hard errors.
+    """
+    jc = config_data.get("judge_calibration")
+    if not isinstance(jc, dict) or not jc.get("enabled"):
+        return
+
+    from potato.judge_calibration.config import parse_judge_calibration_config
+
+    cfg = parse_judge_calibration_config(config_data)
+    errors = cfg.validate()
+
+    # Cross-check schema references against declared annotation_schemes.
+    declared = {
+        s.get("name")
+        for s in (config_data.get("annotation_schemes") or [])
+        if isinstance(s, dict)
+    }
+    for name in cfg.schemas:
+        if name not in declared:
+            errors.append(
+                f"judge_calibration.schemas references unknown scheme '{name}' "
+                f"(declared: {sorted(n for n in declared if n)})"
+            )
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid judge_calibration configuration:\n  - " + "\n  - ".join(errors)
+        )
+
+
 def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None, config_file_dir: str = None) -> None:
     """
     Validate the structure and content of the YAML configuration.
@@ -934,6 +977,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate codebook_mode (and apply the crowd force-lock).
     validate_codebook_config(config_data)
+
+    # Validate judge_calibration configuration if present
+    validate_judge_calibration_config(config_data)
 
     # Warn about unrecognized keys at all nesting levels
     validate_unknown_keys(config_data)

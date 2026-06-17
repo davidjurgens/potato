@@ -7198,6 +7198,14 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register Judge Calibration blueprint if not already registered
+    if 'judge_calibration' not in app.blueprints:
+        try:
+            from potato.judge_calibration.routes import judge_calibration_bp
+            app.register_blueprint(judge_calibration_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================

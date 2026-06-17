@@ -626,6 +626,25 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Reset + (re)initialize Judge Calibration manager (clear
+                # unconditionally so a leaked singleton can't make a disabled
+                # server report enabled).
+                try:
+                    from potato.judge_calibration import clear_judge_calibration_manager
+                    clear_judge_calibration_manager()
+                except Exception:
+                    pass
+                if config.get('judge_calibration', {}).get('enabled', False):
+                    try:
+                        from potato.judge_calibration import init_judge_calibration_manager
+                        jc_manager = init_judge_calibration_manager(config)
+                        if jc_manager:
+                            print("[DEBUG] Judge Calibration manager initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing Judge Calibration manager: {e}")
+                        import traceback
+                        traceback.print_exc()
+
                 # Codebook ICL-sync listener (parity with the real init
                 # paths; keeps ICL prompts on the current codebook set).
                 try:
