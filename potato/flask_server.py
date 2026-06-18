@@ -3083,6 +3083,7 @@ def create_app(config_file=None):
     # Initialize the app with explicit static folder configuration
     static_folder = os.path.join(cur_program_dir, 'static')
     app = Flask(__name__, static_folder=static_folder)
+    _apply_url_prefix_from_env(app)
     _apply_proxy_fix_from_env(app)
 
     # Configure Jinja2 to look in both main templates and generated templates directories
@@ -3197,6 +3198,38 @@ def create_app(config_file=None):
 
 def _env_flag_enabled(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_url_prefix(prefix: str) -> str:
+    prefix = (prefix or "").strip().strip("/")
+    return f"/{prefix}" if prefix else ""
+
+
+def _apply_url_prefix_from_env(flask_app):
+    """
+    Force URL generation to include a deployment prefix when the reverse proxy
+    cannot send X-Forwarded-Prefix.
+
+    This is for deployments where nginx exposes Potato at /app1/ and strips
+    that prefix before proxying to Flask. Setting POTATO_URL_PREFIX=/app1 makes
+    url_for('static', ...) emit /app1/static/... while Flask still receives
+    backend paths such as /static/styles.css.
+    """
+    prefix = _normalize_url_prefix(os.environ.get("POTATO_URL_PREFIX", ""))
+    if not prefix:
+        return
+
+    class StaticPrefixMiddleware:
+        def __init__(self, wrapped_app, script_name):
+            self.wrapped_app = wrapped_app
+            self.script_name = script_name
+
+        def __call__(self, environ, start_response):
+            if not environ.get("SCRIPT_NAME"):
+                environ["SCRIPT_NAME"] = self.script_name
+            return self.wrapped_app(environ, start_response)
+
+    flask_app.wsgi_app = StaticPrefixMiddleware(flask_app.wsgi_app, prefix)
 
 
 def _apply_proxy_fix_from_env(flask_app):
