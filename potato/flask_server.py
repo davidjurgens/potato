@@ -3083,6 +3083,7 @@ def create_app(config_file=None):
     # Initialize the app with explicit static folder configuration
     static_folder = os.path.join(cur_program_dir, 'static')
     app = Flask(__name__, static_folder=static_folder)
+    _apply_proxy_fix_from_env(app)
 
     # Configure Jinja2 to look in both main templates and generated templates directories
     real_templates_dir = os.path.join(cur_program_dir, 'templates')
@@ -3192,6 +3193,32 @@ def create_app(config_file=None):
         }
 
     return app
+
+
+def _env_flag_enabled(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _apply_proxy_fix_from_env(flask_app):
+    """
+    Enable reverse-proxy prefix handling when explicitly requested.
+
+    Deployments mounted below a path such as /round1 need Flask to see the
+    forwarded prefix so url_for('static', ...) emits /round1/static/... instead
+    of /static/.... Without that, the annotation shell renders but CSS/JS 404s.
+    """
+    if not _env_flag_enabled("POTATO_PROXY_FIX"):
+        return
+
+    from werkzeug.middleware.proxy_fix import ProxyFix
+
+    flask_app.wsgi_app = ProxyFix(
+        flask_app.wsgi_app,
+        x_for=int(os.environ.get("POTATO_PROXY_FIX_X_FOR", "1")),
+        x_proto=int(os.environ.get("POTATO_PROXY_FIX_X_PROTO", "1")),
+        x_host=int(os.environ.get("POTATO_PROXY_FIX_X_HOST", "1")),
+        x_prefix=int(os.environ.get("POTATO_PROXY_FIX_X_PREFIX", "1")),
+    )
 
 
 def _initialize_from_config(config_file):

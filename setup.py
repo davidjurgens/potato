@@ -115,8 +115,13 @@ setup(
             "base_html/*.html",
             "base_html/examples/*.html",
             "static/*",
+            "static/css/*",
+            "static/js/*",
             "static/styles/*",
             "static/survey_assets/*",
+            "static/vendor/*",
+            "static/vendor/*/*",
+            "static/vendor/*/*/*",
         ],
     },
 )
