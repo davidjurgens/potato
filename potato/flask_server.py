@@ -3189,6 +3189,8 @@ def create_app(config_file=None):
             'PROJECT_BASE_CSS': project_base_css,
             # Header logo
             'header_logo_url': header_logo_url,
+            # Deployment URL prefix for client-side fetch/beacon/media URLs.
+            'url_prefix': _normalize_url_prefix(os.environ.get("POTATO_URL_PREFIX", "")),
             # Custom footer HTML (e.g., promotional banner for HF Spaces)
             'custom_footer_html': config.get('custom_footer_html', ''),
         }
