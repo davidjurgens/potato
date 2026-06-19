@@ -2,6 +2,30 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [2.6.0] - QDA Mode, LLM-as-Judge Calibration & Trajectory Editing
+
+Interactive Qualitative Data Analysis (QDA) Mode (universal persistence, memos, FTS5 search, a living codebook with cases, in-vivo coding, and retroactive curation), an LLM-as-judge calibration/alignment workflow with a signal-based triage queue, `trajectory_edit`/`trajectory_correction` schemas for SFT/DPO data, the `eval_trace` three-pane display, relicensing to GPL-3.0-or-later, and a large robustness wave (F-022–F-051).
+
+**[Full Release Notes →](docs/releasenotes/v2.6.0.md)**
+
+---
+
+## [2.5.0] - Qualitative-Coding Wave
+
+Cohen's and Fleiss' kappa for inter-annotator agreement, `codebook` and `quotation_report` exporters, and code co-occurrence/crosstab admin analytics endpoints.
+
+**[Full Release Notes →](docs/releasenotes/v2.5.0.md)**
+
+---
+
+## [2.4.5] - Validated Refinement, Config Validator & Stability
+
+Pluggable validated-refinement framework for solo-mode guideline improvement, a config-validator CLI, a path-traversal security fix (GHSA-q9m2-fhv9-3jcf), documentation reorganization, and a broad set of navigation, Prolific, and solo-mode fixes.
+
+**[Full Release Notes →](docs/releasenotes/v2.4.5.md)**
+
+---
+
 ## [2.4.4] - Span Annotation Fixes & UX Improvements
 
 Fixed span overlay misalignment (overlays rendering on wrong line of text), text-node offset pollution from overlay labels, and fragile indexOf-based positioning. Added auto-selection of single span labels on page load.

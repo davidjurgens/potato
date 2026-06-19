@@ -125,6 +125,9 @@ nav:
     - API Reference:
         - API Reference: api-reference/api_reference.md
     - Release Notes:
+        - v2.6.0: releasenotes/v2.6.0.md
+        - v2.5.0: releasenotes/v2.5.0.md
+        - v2.4.5: releasenotes/v2.4.5.md
         - v2.4.4: releasenotes/v2.4.4.md
         - v2.4.3: releasenotes/v2.4.3.md
         - v2.4.1: releasenotes/v2.4.1.md
