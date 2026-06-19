@@ -111,13 +111,13 @@ setup(
         ],
     },
     package_data={
+        # NOTE: All of potato/static/ is shipped via MANIFEST.in
+        # (`recursive-include potato/static/ *`) together with
+        # include_package_data=True above. Do NOT re-add static subdirectories
+        # here — they are already packaged recursively, and per-subdir globs
+        # only invite drift as new static/ folders are added.
         "potato": [
             "templates/*.html",
-            "base_html/*.html",
-            "base_html/examples/*.html",
-            "static/*",
-            "static/styles/*",
-            "static/survey_assets/*",
         ],
     },
 )
