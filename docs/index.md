@@ -19,6 +19,7 @@ Role-based guides that walk you through Potato for your specific use case:
 
 - [Quick Start](quick-start.md) - Get running in 5 minutes
 - [Installation & Usage](deployment/usage.md) - Detailed setup guide
+- [Reverse Proxy / URL Prefix](deployment/reverse-proxy.md) - Run behind a path-prefix proxy (`/app1/`)
 - [Configuration Reference](configuration/configuration.md) - Complete config options
 - [Comparison with Other Tools](comparison.md) - How Potato compares to alternatives
 
@@ -207,6 +208,7 @@ Role-based guides that walk you through Potato for your specific use case:
 | Export to COCO/YOLO/CoNLL | [Export Formats](data-export/export_formats.md) |
 | Push annotations to HuggingFace Hub | [HuggingFace Export](data-export/huggingface_export.md) |
 | Deploy on HuggingFace Spaces | [HuggingFace Spaces](data-export/huggingface_spaces.md) |
+| Run behind a `/app1/` reverse proxy | [Reverse Proxy / URL Prefix](deployment/reverse-proxy.md) |
 | Set up webhook notifications | [Webhooks](integrations/webhooks.md) |
 | Use LLM chat assistant for annotators | [Chat Support](ai-intelligence/chat_support.md) |
 | Evaluate coding agents | [Coding Agent Annotation](agent-evaluation/coding_agent_annotation.md) |
