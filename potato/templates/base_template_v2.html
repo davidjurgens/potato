@@ -382,6 +382,11 @@
             if (!prefix || typeof path !== 'string' || path.charAt(0) !== '/') {
                 return path;
             }
+            // Leave protocol-relative URLs ("//host/...") untouched — they are
+            // absolute to another origin, not app-root-relative.
+            if (path.charAt(1) === '/') {
+                return path;
+            }
             if (path.indexOf(prefix + '/') === 0 || path === prefix) {
                 return path;
             }
@@ -412,6 +417,23 @@
                 navigator.sendBeacon = function(url, data) {
                     return originalSendBeacon.call(this, window.potatoUrl(url), data);
                 };
+            }
+
+            // Server-Sent Events (live agent / live coding viewers) open
+            // root-relative stream URLs that fetch/sendBeacon patching misses.
+            // Wrap the constructor so new EventSource('/api/.../stream') resolves
+            // under the mounted prefix. Note: SSE behind a path-prefix proxy also
+            // needs `proxy_buffering off` on the stream location (see docs).
+            var OriginalEventSource = window.EventSource;
+            if (OriginalEventSource) {
+                window.EventSource = function(url, config) {
+                    return new OriginalEventSource(window.potatoUrl(url), config);
+                };
+                // Preserve instanceof checks and inherited members.
+                window.EventSource.prototype = OriginalEventSource.prototype;
+                ['CONNECTING', 'OPEN', 'CLOSED'].forEach(function(key) {
+                    window.EventSource[key] = OriginalEventSource[key];
+                });
             }
 
             function prefixAttribute(root, selector, attribute) {

@@ -3190,7 +3190,16 @@ def create_app(config_file=None):
             # Header logo
             'header_logo_url': header_logo_url,
             # Deployment URL prefix for client-side fetch/beacon/media URLs.
-            'url_prefix': _normalize_url_prefix(os.environ.get("POTATO_URL_PREFIX", "")),
+            #
+            # Both proxy mechanisms converge on the WSGI SCRIPT_NAME: ProxyFix
+            # sets it from X-Forwarded-Prefix, and StaticPrefixMiddleware sets it
+            # from POTATO_URL_PREFIX. request.script_root surfaces that value, so
+            # it is the single source of truth and works in BOTH modes (including
+            # a real WSGI mount). We fall back to the env var defensively. When no
+            # proxy is involved script_root is "" and this is a no-op.
+            'url_prefix': request.script_root or _normalize_url_prefix(
+                os.environ.get("POTATO_URL_PREFIX", "")
+            ),
             # Custom footer HTML (e.g., promotional banner for HF Spaces)
             'custom_footer_html': config.get('custom_footer_html', ''),
         }
