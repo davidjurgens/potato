@@ -50,6 +50,9 @@ ALLOWED_ELEMENTS: Set[str] = {
     'a',
     # Media and figures for instructional/survey content (Issue #129)
     'img', 'figure', 'figcaption',
+    # Audio/video media — src checked against dangerous patterns; only safe
+    # attributes allowed (no event handlers). Potato is a multimedia tool.
+    'video', 'audio', 'source', 'track',
     # Ruby annotations for CJK text
     'ruby', 'rt', 'rp',
 }
@@ -100,6 +103,13 @@ ALLOWED_ATTRIBUTES: Dict[str, Set[str]] = {
     'caption': {'class', 'style'},
     # Images — src checked against dangerous patterns like href
     'img': {'src', 'alt', 'title', 'style', 'width', 'height'},
+    # Audio/video media — src checked against dangerous patterns; boolean
+    # attributes (controls/autoplay/loop/muted) carry no script risk.
+    'video': {'src', 'controls', 'width', 'height', 'style', 'poster',
+              'preload', 'autoplay', 'loop', 'muted', 'playsinline'},
+    'audio': {'src', 'controls', 'preload', 'autoplay', 'loop', 'muted'},
+    'source': {'src', 'type', 'srcset', 'media'},
+    'track': {'src', 'kind', 'srclang', 'label', 'default'},
     # Figures and captions for instructional content
     'figure': {'class', 'style'},
     'figcaption': {'class', 'style'},
@@ -135,6 +145,13 @@ ALLOWED_CSS_PROPERTIES: Set[str] = {
     'border',
     'border-radius',
     'border-collapse',
+}
+
+# Valueless boolean attributes — emitted as a bare name when present without a
+# value (e.g. <video controls autoplay loop muted>). Only those also present in
+# a tag's ALLOWED_ATTRIBUTES are kept.
+BOOLEAN_ATTRIBUTES: Set[str] = {
+    'controls', 'autoplay', 'loop', 'muted', 'playsinline', 'default',
 }
 
 # Dangerous patterns to block
@@ -239,19 +256,28 @@ def _sanitize_attributes(tag_name: str, attrs_str: str) -> str:
     # Get allowed attributes for this tag
     allowed = ALLOWED_ATTRIBUTES.get(tag_name, ALLOWED_ATTRIBUTES.get('*', set()))
 
-    # Parse attributes
+    # Parse attributes. The value (= "..."/'...'/bare) is OPTIONAL so that
+    # valueless boolean attributes (controls, autoplay, loop, muted, ...) are
+    # captured rather than silently dropped.
     attr_pattern = re.compile(
-        r'''(\w+(?:-\w+)*)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))''',
+        r'''(\w+(?:-\w+)*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+)))?''',
         re.IGNORECASE
     )
 
     sanitized = []
     for match in attr_pattern.finditer(attrs_str):
         attr_name = match.group(1).lower()
+        has_value = any(match.group(g) is not None for g in (2, 3, 4))
         # Get value from whichever group matched
         attr_value = match.group(2) or match.group(3) or match.group(4) or ""
 
         if attr_name not in allowed:
+            continue
+
+        # Valueless boolean attribute (e.g. <video controls autoplay>) — emit bare.
+        if not has_value:
+            if attr_name in BOOLEAN_ATTRIBUTES:
+                sanitized.append(attr_name)
             continue
 
         # Special handling for href/src attributes — block dangerous URLs
