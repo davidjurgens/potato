@@ -335,6 +335,16 @@ def annotate():
     if not manager.get_current_prompt_text():
         return redirect(url_for('solo_mode.setup'))
 
+    # Reaching the annotate screen means parallel annotation has begun. Coming
+    # straight from edge-case validation leaves the workflow in PROMPT_VALIDATION,
+    # which makes the phase stepper highlight "Prompt" instead of "Annotation".
+    # Move it forward so the stepper reflects where the user actually is.
+    if manager.get_current_phase() == SoloPhase.PROMPT_VALIDATION:
+        try:
+            manager.advance_to_phase(SoloPhase.PARALLEL_ANNOTATION)
+        except ValueError:
+            pass
+
     if request.method == 'POST':
         instance_id = request.form.get('instance_id')
         annotation = request.form.get('annotation')
@@ -511,7 +521,10 @@ def disagreements():
 
             return redirect(url_for('solo_mode.disagreements'))
 
-        return jsonify({'error': 'Missing disagreement_id or resolution'}), 400
+        # The form posts normally (no AJAX). A missing/empty resolution — e.g.
+        # the user accepted an LLM label that came back blank — shouldn't dump a
+        # raw JSON 400 to the page; send them back to re-pick a resolution.
+        return redirect(url_for('solo_mode.disagreements'))
 
     # Get current disagreement
     instance_id = session.pop('disagreement_instance', None)
