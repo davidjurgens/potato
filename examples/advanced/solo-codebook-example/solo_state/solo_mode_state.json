@@ -5,7 +5,7 @@
     {
       "version": 1,
       "prompt_text": "Label the following text according to this task: Classify each patient comment by the single primary theme it expresses about getting healthcare: an access barrier, a cost concern, distrust of a provider, or a complaint about wait times. Pick the theme the comment is mostly about.",
-      "created_at": "2026-06-22T12:09:06.593768",
+      "created_at": "2026-06-22T12:27:09.862196",
       "created_by": "user_setup",
       "source_description": "Initial prompt from task description",
       "parent_version": null,
@@ -13,40 +13,6 @@
     }
   ],
   "predictions": {
-    "4": {
-      "primary_theme": {
-        "instance_id": "4",
-        "schema_name": "primary_theme",
-        "predicted_label": "wait times",
-        "confidence_score": 0.9,
-        "uncertainty_score": 0.09999999999999998,
-        "prompt_version": 1,
-        "timestamp": "2026-06-22T12:11:38.905399",
-        "model_name": "llama3.2:3b",
-        "reasoning": "The comment mentions a long lead time for an appointment, indicating a delay between seeking care and receiving it.",
-        "human_label": "wait times",
-        "agrees_with_human": true,
-        "disagreement_resolved": false,
-        "resolution_label": null
-      }
-    },
-    "1": {
-      "primary_theme": {
-        "instance_id": "1",
-        "schema_name": "primary_theme",
-        "predicted_label": "access barriers",
-        "confidence_score": 0.9,
-        "uncertainty_score": 0.09999999999999998,
-        "prompt_version": 1,
-        "timestamp": "2026-06-22T12:11:58.660006",
-        "model_name": "llama3.2:3b",
-        "reasoning": "The text mentions the distance to the clinic and the inability to reach it without taking a full day off work, which blocks getting to or booking care.",
-        "human_label": "access barriers",
-        "agrees_with_human": true,
-        "disagreement_resolved": false,
-        "resolution_label": null
-      }
-    },
     "11": {
       "primary_theme": {
         "instance_id": "11",
@@ -55,10 +21,27 @@
         "confidence_score": 0.9,
         "uncertainty_score": 0.09999999999999998,
         "prompt_version": 1,
-        "timestamp": "2026-06-22T12:12:09.690496",
+        "timestamp": "2026-06-22T12:28:24.084357",
         "model_name": "llama3.2:3b",
-        "reasoning": "The patient expresses doubt about the diagnosis and feels dismissed, indicating a lack of confidence in their clinician's judgment and credibility.",
+        "reasoning": "The patient expresses doubt about the diagnosis and feels dismissed, indicating a lack of confidence in their clinician's judgment and care.",
         "human_label": "provider trust",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "5": {
+      "primary_theme": {
+        "instance_id": "5",
+        "schema_name": "primary_theme",
+        "predicted_label": "access barriers",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 1,
+        "timestamp": "2026-06-22T12:28:47.597525",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The text mentions 'no specialist within a hundred miles of me', which indicates a structural obstacle preventing the patient from reaching care due to distance and lack of availability.",
+        "human_label": "access barriers",
         "agrees_with_human": true,
         "disagreement_resolved": false,
         "resolution_label": null
@@ -66,39 +49,31 @@
     }
   },
   "human_labeled_ids": [
-    "1",
     "11",
-    "4"
+    "5"
   ],
   "llm_labeled_ids": [
-    "1",
     "11",
-    "4"
+    "5"
   ],
   "disagreement_ids": [],
   "validation_sample_ids": [],
   "edge_case_ids": [],
   "edge_case_labels": {},
   "agreement_metrics": {
-    "total_compared": 3,
-    "agreements": 3,
+    "total_compared": 2,
+    "agreements": 2,
     "disagreements": 0,
     "agreement_rate": 1.0
   },
   "confidence_history": {
-    "4": [
-      [
-        1,
-        0.9
-      ]
-    ],
-    "1": [
-      [
-        1,
-        0.9
-      ]
-    ],
     "11": [
+      [
+        1,
+        0.9
+      ]
+    ],
+    "5": [
       [
         1,
         0.9
@@ -108,8 +83,8 @@
   "reannotation_counts": {},
   "per_version_agreement": {
     "1": {
-      "compared": 3,
-      "agreements": 3
+      "compared": 2,
+      "agreements": 2
     }
   },
   "refinement_consecutive_failures": 0,
@@ -117,20 +92,15 @@
   "refinement_log": [],
   "icl_library": null,
   "last_review_revision": null,
-  "edge_case_rule_data": {
-    "rules": {},
-    "categories": {}
-  },
   "validation_tracker": {
     "metrics": {
-      "total_compared": 3,
-      "agreements": 3,
+      "total_compared": 2,
+      "agreements": 2,
       "disagreements": 0,
       "agreement_rate": 1.0,
       "label_agreements": {
-        "wait times": 1,
-        "access barriers": 1,
-        "provider trust": 1
+        "provider trust": 1,
+        "access barriers": 1
       },
       "label_disagreements": {},
       "confusion_matrix": {},
@@ -139,28 +109,20 @@
     },
     "comparison_history": [
       {
-        "instance_id": "4",
-        "human_label": "wait times",
-        "llm_label": "wait times",
-        "schema_name": "primary_theme",
-        "agrees": true,
-        "timestamp": "2026-06-22T12:11:53.998747"
-      },
-      {
-        "instance_id": "1",
-        "human_label": "access barriers",
-        "llm_label": "access barriers",
-        "schema_name": "primary_theme",
-        "agrees": true,
-        "timestamp": "2026-06-22T12:12:05.435413"
-      },
-      {
         "instance_id": "11",
         "human_label": "provider trust",
         "llm_label": "provider trust",
         "schema_name": "primary_theme",
         "agrees": true,
-        "timestamp": "2026-06-22T12:12:14.955314"
+        "timestamp": "2026-06-22T12:28:43.118859"
+      },
+      {
+        "instance_id": "5",
+        "human_label": "access barriers",
+        "llm_label": "access barriers",
+        "schema_name": "primary_theme",
+        "agrees": true,
+        "timestamp": "2026-06-22T12:29:17.439947"
       }
     ],
     "validation_samples": {},

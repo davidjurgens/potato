@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Solo Mode{% endblock %} - Potato</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=10">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=11">
     <style>
         /* Solo Mode shell — design-token-driven to match the rest of Potato.
            All colors, type, and spacing come from /static/styles.css. */
@@ -713,7 +713,7 @@
             <div id="cb-mode-hint" class="cb-mode-hint"></div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='codebook.js') }}?v=10"></script>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=11"></script>
 
     {% block extra_js %}{% endblock %}
 </body>

@@ -278,9 +278,11 @@ def edge_cases():
                 manager.advance_to_phase(SoloPhase.PROMPT_VALIDATION)
                 return redirect(url_for('solo_mode.prompt_editor'))
 
-            return jsonify({'success': True, 'remaining': len(unlabeled)})
+            # The form posts normally (no JS/AJAX), so redirect back to render
+            # the next unlabeled case instead of dumping raw JSON to the page.
+            return redirect(url_for('solo_mode.edge_cases'))
 
-        return jsonify({'error': 'Missing case_id or label'}), 400
+        return redirect(url_for('solo_mode.edge_cases'))
 
     # Generate edge cases if needed
     if manager.get_current_phase() == SoloPhase.EDGE_CASE_SYNTHESIS:
