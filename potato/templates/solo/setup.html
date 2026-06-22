@@ -130,7 +130,7 @@
                         placeholder="e.g. Classify customer reviews as positive, negative, or neutral. Positive reviews express satisfaction; negative reviews express complaints; neutral reviews are factual without strong sentiment."
                         rows="8"
                         required
-                    >{{ request.form.get('task_description', '') }}</textarea>
+                    >{{ request.form.get('task_description') or default_task_description or '' }}</textarea>
                 </div>
 
                 <div class="solo-nav">

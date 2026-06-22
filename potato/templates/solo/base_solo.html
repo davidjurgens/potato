@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Solo Mode{% endblock %} - Potato</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=10">
     <style>
         /* Solo Mode shell — design-token-driven to match the rest of Potato.
            All colors, type, and spacing come from /static/styles.css. */
@@ -611,6 +612,109 @@
             });
         });
     </script>
+
+    {# ── Universal Codebook tray ─────────────────────────────────────
+       Self-gating: codebook.js probes GET /api/codebook and stays hidden
+       unless the codebook is enabled (200). The composer only appears when
+       codebook_mode is extensible/open. This is the same universal tray the
+       standard annotation UI uses — here it lets a solo annotator edit codes
+       and watch the "Prompt the LLM sees" panel change. #}
+    <script>
+        // codebook.js only initialises the tray on an annotation page, so
+        // flag this solo screen as one. project name namespaces the tray's
+        // client-side cache only.
+        window.config = window.config || {};
+        window.config.is_annotation_page = true;
+        window.config.annotation_task_name =
+            "{{ annotation_task_name|default('default') }}";
+    </script>
+    <button type="button" id="cb-panel-toggle" class="cb-panel-toggle" hidden>
+        &#127991; Codebook
+    </button>
+    <div id="cb-panel" class="cb-panel" hidden role="region"
+         aria-label="Codebook panel">
+        <div class="cb-panel-header">
+            <span>Codebook</span>
+            <button type="button" id="cb-panel-close"
+                    aria-label="Close codebook">&times;</button>
+        </div>
+        <div id="cb-stale-banner" class="cb-stale-banner" hidden>
+            <span class="cb-stale-msg" id="cb-stale-msg" role="status"></span>
+            <button type="button" id="cb-stale-dismiss" class="cb-stale-x"
+                    aria-label="Dismiss this notice">&times;</button>
+        </div>
+        <div id="cb-tree" class="cb-tree" aria-live="polite">
+            <div class="cb-empty">Loading&hellip;</div>
+        </div>
+        <div class="cb-worklist-section" id="cb-worklist-section" hidden>
+            <h2 id="cb-worklist-head" class="cb-worklist-head">Review</h2>
+            <div id="cb-worklist" class="cb-worklist"
+                 aria-labelledby="cb-worklist-head">
+                <div class="cb-empty">Nothing to review.</div>
+            </div>
+        </div>
+        <div id="cb-admin-section" class="cb-admin-section" hidden>
+            <h2 class="cb-admin-head">Curate (admin)</h2>
+            <div class="cb-admin-group">
+                <label class="cb-admin-label"
+                       for="cb-merge-src">Merge a code into another</label>
+                <div class="cb-admin-row">
+                    <select id="cb-merge-src" class="cb-admin-select"
+                            aria-label="Code to merge from"></select>
+                    <span class="cb-admin-arrow" aria-hidden="true">→</span>
+                    <select id="cb-merge-dst" class="cb-admin-select"
+                            aria-label="Code to merge into"></select>
+                </div>
+                <button type="button" id="cb-merge-btn"
+                        class="cb-primary">Merge</button>
+            </div>
+            <div class="cb-admin-group">
+                <label class="cb-admin-label"
+                       for="cb-split-src">Split a code by annotator</label>
+                <div class="cb-admin-row">
+                    <select id="cb-split-src" class="cb-admin-select"
+                            aria-label="Code to split"></select>
+                    <input type="text" id="cb-split-annotator"
+                           class="cb-admin-input" placeholder="annotator"
+                           aria-label="Annotator to split out">
+                </div>
+                <input type="text" id="cb-split-name" class="cb-admin-input"
+                       placeholder="New code name&hellip;"
+                       aria-label="New code name">
+                <button type="button" id="cb-split-btn"
+                        class="cb-primary">Split</button>
+            </div>
+            <div id="cb-admin-error" class="cb-error" hidden
+                 role="alert" tabindex="-1"></div>
+            <div id="cb-admin-status" class="cb-admin-status"
+                 role="status" aria-live="polite"></div>
+            <div class="cb-admin-group">
+                <h3 class="cb-admin-sub" id="cb-proposals-head">
+                    Pending proposals</h3>
+                <div id="cb-proposals" class="cb-proposals"
+                     aria-labelledby="cb-proposals-head" aria-live="polite">
+                    <div class="cb-empty">No pending proposals.</div>
+                </div>
+            </div>
+            <details class="cb-admin-group cb-changes-wrap">
+                <summary class="cb-admin-sub">Recent changes</summary>
+                <ul id="cb-changes" class="cb-changes-list"></ul>
+            </details>
+        </div>
+        <div id="cb-composer" class="cb-composer" hidden>
+            <div class="cb-composer-row">
+                <input type="text" id="cb-new-name"
+                       placeholder="Add a code&hellip;"
+                       aria-label="New code name">
+                <button type="button" id="cb-add-btn"
+                        class="cb-primary">Add</button>
+            </div>
+            <div id="cb-error" class="cb-error" hidden></div>
+            <div id="cb-mode-hint" class="cb-mode-hint"></div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=10"></script>
+
     {% block extra_js %}{% endblock %}
 </body>
 </html>

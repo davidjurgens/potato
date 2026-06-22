@@ -1,0 +1,230 @@
+{
+  "user_id": "lina1",
+  "instance_id_ordering": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12"
+  ],
+  "current_instance_index": 1,
+  "current_phase_and_page": [
+    "annotation",
+    "annotation"
+  ],
+  "completed_phase_and_pages": [],
+  "max_assignments": 12,
+  "instance_id_to_behavioral_data": {
+    "1": {
+      "instance_id": "1",
+      "session_start": 1782076342.6772962,
+      "session_end": null,
+      "total_time_ms": 0,
+      "interactions": [
+        {
+          "event_type": "navigation",
+          "timestamp": 1782076337.842,
+          "target": "instance_load",
+          "instance_id": "1",
+          "client_timestamp": 1782076337842,
+          "metadata": {
+            "instance_id": "1",
+            "from_instance": null
+          }
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1782076342.667,
+          "target": "schema:primary_theme",
+          "instance_id": "1",
+          "client_timestamp": 1782076342667,
+          "metadata": {
+            "x": 505,
+            "y": 326
+          }
+        },
+        {
+          "event_type": "focus_in",
+          "timestamp": 1782076342.668,
+          "target": "label:primary_theme:access barriers",
+          "instance_id": "1",
+          "client_timestamp": 1782076342668,
+          "metadata": {}
+        },
+        {
+          "event_type": "click",
+          "timestamp": 1782076342.669,
+          "target": "label:primary_theme:access barriers",
+          "instance_id": "1",
+          "client_timestamp": 1782076342669,
+          "metadata": {
+            "x": 505,
+            "y": 326
+          }
+        },
+        {
+          "event_type": "annotation_change",
+          "timestamp": 1782076342.67,
+          "target": "schema:primary_theme",
+          "instance_id": "1",
+          "client_timestamp": 1782076342670,
+          "metadata": {
+            "label": "access barriers",
+            "action": "select",
+            "old_value": null,
+            "new_value": "access barriers",
+            "source": "user"
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1782076343.171,
+          "target": "instance:1",
+          "instance_id": "1",
+          "client_timestamp": 1782076343171,
+          "metadata": {}
+        },
+        {
+          "event_type": "focus_out",
+          "timestamp": 1782076343.69,
+          "target": "label:primary_theme:access barriers",
+          "instance_id": "1",
+          "client_timestamp": 1782076343690,
+          "metadata": {
+            "duration_ms": 1022
+          }
+        },
+        {
+          "event_type": "navigation",
+          "timestamp": 1782076343.859,
+          "target": "next",
+          "instance_id": "1",
+          "client_timestamp": 1782076343859,
+          "metadata": {
+            "from_instance": "1",
+            "to_instance": null
+          }
+        },
+        {
+          "event_type": "save",
+          "timestamp": 1782076343.859,
+          "target": "instance:1",
+          "instance_id": "1",
+          "client_timestamp": 1782076343859,
+          "metadata": {}
+        }
+      ],
+      "ai_usage": [],
+      "annotation_changes": [
+        {
+          "timestamp": 1782076342.677313,
+          "schema_name": "primary_theme",
+          "label_name": "access barriers",
+          "action": "select",
+          "old_value": null,
+          "new_value": "access barriers",
+          "source": "user"
+        }
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {
+        "label:primary_theme:access barriers": 1022
+      },
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": [],
+      "chat_history": []
+    },
+    "2": {
+      "instance_id": "2",
+      "session_start": 1782076348.0892642,
+      "session_end": null,
+      "total_time_ms": 0,
+      "interactions": [],
+      "ai_usage": [],
+      "annotation_changes": [
+        {
+          "timestamp": 1782076348.08928,
+          "schema_name": "primary_theme",
+          "label_name": "cost concerns",
+          "action": "select",
+          "old_value": null,
+          "new_value": "cost concerns",
+          "source": "user"
+        }
+      ],
+      "navigation_history": [],
+      "focus_time_by_element": {},
+      "scroll_depth_max": 0.0,
+      "keyword_highlights_shown": [],
+      "chat_history": []
+    }
+  },
+  "instance_id_to_label_to_value": {
+    "1": [
+      [
+        {
+          "schema": "primary_theme",
+          "name": "access barriers"
+        },
+        "access barriers"
+      ]
+    ],
+    "2": [
+      [
+        {
+          "schema": "primary_theme",
+          "name": "cost concerns"
+        },
+        "cost concerns"
+      ]
+    ]
+  },
+  "instance_id_to_span_to_value": {},
+  "phase_to_page_to_label_to_value": {},
+  "phase_to_page_to_span_to_value": {},
+  "training_state": {
+    "completed_questions": {},
+    "total_correct": 0,
+    "total_attempts": 0,
+    "total_mistakes": 0,
+    "passed": false,
+    "failed": false,
+    "current_question_index": 0,
+    "training_instances": [],
+    "show_feedback": false,
+    "feedback_message": "",
+    "allow_retry": false,
+    "max_mistakes": -1,
+    "max_mistakes_per_question": -1,
+    "category_scores": {}
+  },
+  "qualified_categories": [],
+  "category_qualification_scores": {},
+  "instance_id_to_keyword_highlight_state": {
+    "1": {
+      "highlights": [],
+      "seed": 641980174,
+      "settings": {
+        "keyword_probability": 1.0,
+        "random_word_probability": 0.0
+      }
+    },
+    "2": {
+      "highlights": [],
+      "seed": 2335316078,
+      "settings": {
+        "keyword_probability": 1.0,
+        "random_word_probability": 0.0
+      }
+    }
+  },
+  "instance_id_to_link_to_value": {},
+  "instance_id_to_event_to_value": {}
+}

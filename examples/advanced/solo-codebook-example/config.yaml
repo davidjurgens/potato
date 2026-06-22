@@ -1,0 +1,129 @@
+# Solo Mode + Codebook example
+#
+# Combines two features so you can watch them interact:
+#   1. Solo Mode — an LLM labels each instance in parallel with you.
+#   2. The universal codebook — the scheme's labels come from the mutable
+#      project codebook, and each code's structured fields (definition /
+#      clarification / examples) are injected into the LLM's prompt.
+#
+# Open the "Prompt the LLM sees" panel on the annotate screen, edit a code
+# in the Codebook tray, hit Refresh, and watch the ## Codebook block (and the
+# revision badge) change — that is the codebook driving the prompt live.
+#
+# Needs Ollama running with llama3.2:3b:
+#   ollama serve
+#   ollama pull llama3.2:3b
+
+annotation_task_name: "solo-codebook-demo"
+task_dir: .
+port: 8000
+verbose: true
+
+# Pre-fills the Solo Mode Setup screen so you don't have to type a task
+# description every run. It's just a default — edit it on the Setup screen
+# and your edit wins. (Leave it out to start from a blank Setup form.)
+task_description: >-
+  Classify each patient comment by the single primary theme it expresses about
+  getting healthcare: an access barrier, a cost concern, distrust of a provider,
+  or a complaint about wait times. Pick the theme the comment is mostly about.
+
+output_annotation_dir: "annotations"
+output_annotation_format: "tsv"
+
+data_files:
+  - "data/excerpts.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+# Universal codebook. `open` lets you add / rename / recolor / move / delete
+# codes from the Codebook tray while labeling; every edit bumps the codebook
+# revision and re-renders the prompt's ## Codebook block.
+codebook_mode: open
+
+# Enable Solo Mode (human + LLM collaborative labeling)
+solo_mode:
+  enabled: true
+
+  labeling_models:
+    - endpoint_type: "ollama"
+      model: "llama3.2:3b"
+      endpoint_url: "http://localhost:11434"
+      max_tokens: 256
+      temperature: 0.1
+
+  revision_models:
+    - endpoint_type: "ollama"
+      model: "llama3.2:3b"
+      endpoint_url: "http://localhost:11434"
+
+  uncertainty:
+    strategy: "direct_confidence"
+
+  thresholds:
+    end_human_annotation_agreement: 0.90
+    minimum_validation_sample: 8
+    confidence_low: 0.5
+    periodic_review_interval: 25
+
+  instance_selection:
+    low_confidence_weight: 0.3
+    diversity_weight: 0.2
+    random_weight: 0.1
+    disagreement_weight: 0.1
+    llm_predicted_weight: 0.3
+
+  batches:
+    llm_labeling_batch: 6
+    max_parallel_labels: 20
+
+  state_dir: "solo_state"
+
+annotation_schemes:
+  # `codebook: true` sources this scheme's labels from the project codebook
+  # (seeded once from the labels below). The structured per-code fields are
+  # seeded into the codebook and then transparently injected into the LLM
+  # prompt — your base prompt stays untouched. The negative_clarification +
+  # negative_example are what stop the model from collapsing semantically
+  # adjacent codes.
+  - name: "primary_theme"
+    annotation_type: "radio"
+    description: "What is the single dominant theme in this patient excerpt?"
+    codebook: true
+    labels:
+      - name: "access barriers"
+        definition: "Structural obstacles that prevent a patient from reaching care (distance, transport, scheduling, language, paperwork)."
+        clarification: "Include anything that blocks getting to or booking care: no nearby clinic, no transport, or being unable to navigate the system."
+        negative_clarification: "NOT the price of care itself — that is \"cost concerns\". A long delay once you already have an appointment is \"wait times\"."
+        positive_example: "The nearest clinic is two bus transfers away and I can't get there without taking a full day off work."
+        positive_example_why: "Distance and transport physically block reaching care."
+        negative_example: "I finally saw the doctor but the copay was more than I could afford."
+        negative_example_why: "The obstacle here is price, which is cost concerns, not access."
+      - name: "cost concerns"
+        definition: "Worry about the monetary price of care — bills, copays, premiums, or fear of debt."
+        clarification: "Include any mention of affordability, insurance not covering enough, or skipping care because of money."
+        negative_clarification: "NOT difficulty physically reaching care (that is \"access barriers\"), even though both can stop someone from being seen."
+        positive_example: "I skipped the follow-up because I couldn't afford another $200 visit."
+        positive_example_why: "Care was forgone specifically because of its price."
+        negative_example: "I couldn't get an appointment for three months."
+        negative_example_why: "This is a scheduling delay (wait times), with no mention of money."
+      - name: "provider trust"
+        definition: "The patient's confidence in, or distrust of, their clinician or the health system."
+        clarification: "Include feeling heard or dismissed, doubting a diagnosis, or relying on a provider's judgment."
+        negative_clarification: "NOT general satisfaction with logistics like cost or wait times; this is about the relationship and credibility of the provider."
+        positive_example: "My doctor never listens, so I've started ignoring the advice I'm given."
+        positive_example_why: "Expresses distrust in the provider relationship."
+        negative_example: "The waiting room was crowded and I sat there for an hour."
+        negative_example_why: "A logistics complaint (wait times), not about trust in the provider."
+      - name: "wait times"
+        definition: "Delay between seeking care and receiving it — appointment lead time or time spent waiting on the day."
+        clarification: "Include long lead times for appointments and long in-clinic waits."
+        negative_clarification: "NOT being unable to reach the clinic at all (that is \"access barriers\"); wait times assume care is reachable but slow."
+        positive_example: "The first available appointment was four months out."
+        positive_example_why: "A direct delay in receiving care."
+        negative_example: "There's no specialist within a hundred miles of me."
+        negative_example_why: "Care is unreachable, an access barrier, not merely delayed."
+
+site_dir: default
+session_lifetime_days: 7

@@ -164,8 +164,15 @@ def setup():
 
         if task_description:
             manager.set_task_description(task_description)
+            # An explicit configured prompt wins over the derived wrapper, so a
+            # project can ship the exact base prompt the LLM should see (the
+            # codebook block is appended to it at label time).
+            configured_prompt = manager.app_config.get('solo_mode', {}).get('initial_prompt')
+            prompt_text = configured_prompt or (
+                f"Label the following text according to this task: {task_description}"
+            )
             manager.create_prompt_version(
-                f"Label the following text according to this task: {task_description}",
+                prompt_text,
                 created_by='user_setup',
                 source_description='Initial prompt from task description'
             )
@@ -177,12 +184,14 @@ def setup():
             error='Please provide a task description',
             phase=current_phase.name.lower(),
             already_configured=False,
+            default_task_description=manager.app_config.get('task_description', ''),
         )
 
     return render_template(
         'solo/setup.html',
         phase=current_phase.name.lower(),
         already_configured=already_configured,
+        default_task_description=manager.app_config.get('task_description', ''),
     )
 
 
@@ -318,6 +327,12 @@ def annotate():
     manager = get_solo_mode_manager()
     user_id = session.get('username', 'anonymous')
 
+    # Setup guard: annotating needs a prompt, which Setup creates. Without
+    # one (Setup not completed, or jumped straight to /solo/annotate) the LLM
+    # can't label and the screen is a dead end — send the user to Setup.
+    if not manager.get_current_prompt_text():
+        return redirect(url_for('solo_mode.setup'))
+
     if request.method == 'POST':
         instance_id = request.form.get('instance_id')
         annotation = request.form.get('annotation')
@@ -400,6 +415,50 @@ def annotate():
         phase=manager.get_current_phase().name.lower(),
         stats=manager.get_annotation_stats(),
     )
+
+
+@solo_mode_bp.route('/llm-suggestion', methods=['GET'])
+@login_required
+@solo_mode_required
+def llm_suggestion():
+    """JSON: the LLM's suggested label for ``instance_id``, labeling it on
+    demand if the background thread hasn't reached it yet.
+
+    Lets the annotate screen always show the model's take on the instance
+    in front of the human, with a visible "thinking" state, rather than
+    silently depending on background timing.
+    """
+    manager = get_solo_mode_manager()
+    instance_id = request.args.get('instance_id')
+    if not instance_id:
+        return jsonify({'error': 'Missing instance_id'}), 400
+
+    suggestion = manager.get_or_create_llm_suggestion(instance_id)
+    if suggestion is None:
+        return jsonify({'available': False})
+    return jsonify({'available': True, **suggestion})
+
+
+@solo_mode_bp.route('/prompt-preview', methods=['GET'])
+@login_required
+@solo_mode_required
+def prompt_preview():
+    """JSON: the exact prompt (and its component sections) the LLM would be
+    given for ``instance_id``, plus the current codebook revision.
+
+    Backs the "Prompt the LLM sees" panel on the annotate screen. Read-only
+    — it never queries the model, so it's safe to refresh after editing the
+    codebook to watch the ``## Codebook`` block change.
+    """
+    manager = get_solo_mode_manager()
+    instance_id = request.args.get('instance_id')
+    if not instance_id:
+        return jsonify({'error': 'Missing instance_id'}), 400
+
+    preview = manager.get_prompt_preview(instance_id)
+    if preview is None:
+        return jsonify({'error': 'No preview available for this instance'}), 404
+    return jsonify(preview)
 
 
 @solo_mode_bp.route('/disagreements', methods=['GET', 'POST'])

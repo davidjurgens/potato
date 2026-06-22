@@ -3078,6 +3078,96 @@ class SoloModeManager:
                 }
             return None
 
+    def get_prompt_preview(self, instance_id: str) -> Optional[Dict[str, Any]]:
+        """The exact prompt the LLM would see for ``instance_id``, broken
+        into its component sections, plus the codebook revision currently
+        in effect.
+
+        Powers the "Prompt the LLM sees" panel on the annotate screen: it
+        runs the same ``_build_full_prompt`` the labeling thread uses (no
+        model call), so editing the codebook and refreshing shows the
+        ``## Codebook`` block change live, and the revision badge advances.
+        """
+        text = self._get_instance_text(instance_id)
+        if not text:
+            return None
+
+        schemes = self.app_config.get('annotation_schemes', [])
+        schema_info = schemes[0] if schemes else {}
+        schema_name = schema_info.get('name', 'default')
+
+        try:
+            thread = self.llm_labeling_thread
+            labels = thread._extract_labels(schema_info)
+            assembled = dict(thread._build_full_prompt(
+                text, labels, schema_info))
+        except Exception as e:
+            logger.warning(
+                f"Prompt preview failed for {instance_id}: {e}")
+            return None
+
+        revision = None
+        try:
+            from potato.codebook import current_revision
+            task_dir = self.app_config.get('task_dir', '.')
+            project = self.app_config.get('annotation_task_name') or 'default'
+            revision = current_revision(task_dir, project)
+        except Exception:
+            pass
+
+        assembled['instance_id'] = instance_id
+        assembled['schema_name'] = schema_name
+        assembled['codebook_revision'] = revision
+        return assembled
+
+    def get_or_create_llm_suggestion(
+        self, instance_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Return the LLM's suggestion for ``instance_id``, labeling it on
+        the spot if the background thread hasn't reached it yet.
+
+        The annotate screen calls this so the human always sees the model's
+        take on the instance in front of them — making the "LLM labels
+        alongside you" behaviour visible instead of dependent on background
+        timing or the current phase. Best-effort: returns None when no model
+        is configured or the call fails.
+        """
+        existing = self.get_llm_prediction_for_instance(instance_id)
+        if existing is not None:
+            return existing
+
+        text = self._get_instance_text(instance_id)
+        if not text:
+            return None
+
+        schemes = self.app_config.get('annotation_schemes', [])
+        schema_info = schemes[0] if schemes else {}
+        schema_name = schema_info.get('name', 'default')
+
+        try:
+            result = self.llm_labeling_thread._label_instance(
+                instance_id, text, schema_name)
+        except Exception as e:
+            logger.warning(
+                f"On-demand LLM suggestion failed for {instance_id}: {e}")
+            return None
+
+        if (result is None or getattr(result, 'error', None)
+                or result.label is None):
+            return None
+
+        self.set_llm_prediction(instance_id, schema_name, LLMPrediction(
+            instance_id=instance_id,
+            schema_name=schema_name,
+            predicted_label=result.label,
+            confidence_score=result.confidence,
+            uncertainty_score=result.uncertainty,
+            prompt_version=result.prompt_version or self.current_prompt_version,
+            model_name=result.model_name,
+            reasoning=result.reasoning,
+        ))
+        return self.get_llm_prediction_for_instance(instance_id)
+
     def get_annotation_stats(self) -> Dict[str, Any]:
         """Get annotation statistics for the status display."""
         with self._lock:

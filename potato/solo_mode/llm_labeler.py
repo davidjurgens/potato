@@ -307,87 +307,13 @@ class LLMLabelingThread(threading.Thread):
             # Build labeling prompt
             labels = self._extract_labels(schema_info)
 
-            # Transparently augment the user's prompt with the project's
-            # structured codebook (definitions / include / exclude /
-            # worked examples). Returns "" unless the codebook carries
-            # structured fields, so plain-label projects are unaffected.
-            codebook_section = self._codebook_section()
-
-            # Resolve the embedding endpoint and embed this instance ONCE,
-            # shared by guideline + ICL retrieval (Req 5). (None, None) unless
-            # a RAG path is actually active, so the default path does no
-            # embedding work.
-            rag_ep, rag_qv = self._rag_prepare(text)
-
-            # RAG-retrieved guideline fragments (default OFF; "" unless
-            # config['rag']['inject_guidelines']). Additive — never trims the
-            # codebook/label set.
-            guideline_section = self._guideline_section(
-                text, endpoint=rag_ep, query_vec=rag_qv)
-
-            # Check if edge case rule extraction is enabled
-            ecr_config = getattr(self.solo_config, 'edge_case_rules', None)
-            request_edge_case = (
-                ecr_config is not None
-                and ecr_config.enabled
-                and ecr_config.auto_extract_on_labeling
-            )
-
-            # Build ICL examples section if available
-            icl_section = ""
-            if self.examples_getter:
-                try:
-                    # Per-instance ICL selection when the getter supports it
-                    # (shares the instance embedding); older no-arg getters
-                    # still work.
-                    try:
-                        examples = self.examples_getter(
-                            instance_text=text, query_vec=rag_qv,
-                            endpoint=rag_ep)
-                    except TypeError:
-                        examples = self.examples_getter()
-                    if examples:
-                        icl_lines = ["## Examples"]
-                        for ex in examples:
-                            icl_lines.append(f'Text: "{ex["text"]}"')
-                            icl_lines.append(f'Label: {ex["label"]}')
-                            icl_lines.append("")
-                        icl_section = "\n".join(icl_lines) + "\n"
-                except Exception:
-                    pass
-
-            if request_edge_case:
-                full_prompt = f"""{prompt}
-
-{codebook_section}{guideline_section}{icl_section}Text to label:
-{text}
-
-Available labels: {labels}
-
-Respond with JSON. If you are uncertain about the label (confidence below 75), also identify a generalizable edge case rule that describes when this type of ambiguity occurs:
-{{
-    "label": "<your label or -1 if unclassifiable>",
-    "confidence": <0-100>,
-    "reasoning": "<brief explanation>",
-    "is_edge_case": <true if this is an ambiguous/edge case, false otherwise>,
-    "edge_case_rule": "<When [condition] -> [action]> (only if is_edge_case is true)"
-}}
-"""
-            else:
-                full_prompt = f"""{prompt}
-
-{codebook_section}{guideline_section}{icl_section}Text to label:
-{text}
-
-Available labels: {labels}
-
-Respond with JSON:
-{{
-    "label": "<your label>",
-    "confidence": <0-100>,
-    "reasoning": "<brief explanation>"
-}}
-"""
+            # Assemble the exact prompt the LLM will see. Kept in one place
+            # (_build_full_prompt) so the annotate-UI "Prompt the LLM sees"
+            # preview can render byte-for-byte what labeling actually sends —
+            # including the live codebook section — with zero drift.
+            assembled = self._build_full_prompt(text, labels, schema_info)
+            full_prompt = assembled["full_prompt"]
+            request_edge_case = assembled["request_edge_case"]
 
             # Query endpoint
             from pydantic import BaseModel
@@ -502,6 +428,115 @@ Respond with JSON:
                 model_name='',
                 error=str(e)
             )
+
+    def _build_full_prompt(
+        self,
+        text: str,
+        labels: str,
+        schema_info: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Assemble the full prompt sent to the LLM for one instance, and
+        return it alongside its component sections.
+
+        This is the single source of truth for the labeling prompt: both
+        ``_label_instance`` (which queries the model) and the annotate-UI
+        prompt preview (which only displays) call it, so what the user sees
+        is exactly what the model is given. The base prompt is re-fetched
+        here via ``prompt_getter`` so the preview reflects the current
+        prompt version.
+        """
+        base_prompt = self.prompt_getter() or ""
+
+        # Transparently augment the user's prompt with the project's
+        # structured codebook (definitions / include / exclude / worked
+        # examples). Returns "" unless the codebook carries structured
+        # fields, so plain-label projects are unaffected.
+        codebook_section = self._codebook_section()
+
+        # Resolve the embedding endpoint and embed this instance ONCE,
+        # shared by guideline + ICL retrieval (Req 5). (None, None) unless
+        # a RAG path is actually active, so the default path does no
+        # embedding work.
+        rag_ep, rag_qv = self._rag_prepare(text)
+
+        # RAG-retrieved guideline fragments (default OFF; "" unless
+        # config['rag']['inject_guidelines']). Additive — never trims the
+        # codebook/label set.
+        guideline_section = self._guideline_section(
+            text, endpoint=rag_ep, query_vec=rag_qv)
+
+        # Check if edge case rule extraction is enabled
+        ecr_config = getattr(self.solo_config, 'edge_case_rules', None)
+        request_edge_case = (
+            ecr_config is not None
+            and ecr_config.enabled
+            and ecr_config.auto_extract_on_labeling
+        )
+
+        # Build ICL examples section if available
+        icl_section = ""
+        if self.examples_getter:
+            try:
+                # Per-instance ICL selection when the getter supports it
+                # (shares the instance embedding); older no-arg getters
+                # still work.
+                try:
+                    examples = self.examples_getter(
+                        instance_text=text, query_vec=rag_qv,
+                        endpoint=rag_ep)
+                except TypeError:
+                    examples = self.examples_getter()
+                if examples:
+                    icl_lines = ["## Examples"]
+                    for ex in examples:
+                        icl_lines.append(f'Text: "{ex["text"]}"')
+                        icl_lines.append(f'Label: {ex["label"]}')
+                        icl_lines.append("")
+                    icl_section = "\n".join(icl_lines) + "\n"
+            except Exception:
+                pass
+
+        if request_edge_case:
+            full_prompt = f"""{base_prompt}
+
+{codebook_section}{guideline_section}{icl_section}Text to label:
+{text}
+
+Available labels: {labels}
+
+Respond with JSON. If you are uncertain about the label (confidence below 75), also identify a generalizable edge case rule that describes when this type of ambiguity occurs:
+{{
+    "label": "<your label or -1 if unclassifiable>",
+    "confidence": <0-100>,
+    "reasoning": "<brief explanation>",
+    "is_edge_case": <true if this is an ambiguous/edge case, false otherwise>,
+    "edge_case_rule": "<When [condition] -> [action]> (only if is_edge_case is true)"
+}}
+"""
+        else:
+            full_prompt = f"""{base_prompt}
+
+{codebook_section}{guideline_section}{icl_section}Text to label:
+{text}
+
+Available labels: {labels}
+
+Respond with JSON:
+{{
+    "label": "<your label>",
+    "confidence": <0-100>,
+    "reasoning": "<brief explanation>"
+}}
+"""
+
+        return {
+            "full_prompt": full_prompt,
+            "base_prompt": base_prompt,
+            "codebook_section": codebook_section,
+            "guideline_section": guideline_section,
+            "icl_section": icl_section,
+            "request_edge_case": request_edge_case,
+        }
 
     def _codebook_section(self) -> str:
         """Structured codebook block for the current project, or "" when

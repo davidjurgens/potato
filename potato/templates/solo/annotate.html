@@ -96,6 +96,130 @@
         font-variant-numeric: tabular-nums;
         color: var(--foreground, #09090b);
     }
+
+    /* ── Prompt peek (what the LLM actually sees) ───────────────── */
+    .prompt-peek {
+        margin-top: var(--space-lg, 1.5rem);
+    }
+
+    .prompt-peek-details {
+        border: 1px solid var(--border, #e4e4e7);
+        border-radius: var(--radius, 0.5rem);
+        background: var(--card, white);
+    }
+
+    .prompt-peek-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-sm, 0.5rem);
+        padding: var(--space-sm, 0.5rem) var(--space-md, 1rem);
+        cursor: pointer;
+        font-size: var(--text-sm, 0.8125rem);
+        font-weight: 600;
+        color: var(--foreground, #09090b);
+        list-style: none;
+    }
+
+    .prompt-peek-summary::-webkit-details-marker { display: none; }
+
+    .prompt-peek-summary::before {
+        content: '';
+        display: inline-block;
+        width: 0.5rem; height: 0.5rem;
+        margin-right: var(--space-xs, 0.25rem);
+        border-right: 2px solid currentColor;
+        border-bottom: 2px solid currentColor;
+        transform: rotate(-45deg);
+        transition: transform 160ms ease-out;
+    }
+
+    .prompt-peek-details[open] .prompt-peek-summary::before {
+        transform: rotate(45deg);
+    }
+
+    .prompt-peek-rev {
+        margin-left: auto;
+        font-size: var(--text-xs, 0.75rem);
+        font-weight: 600;
+        color: var(--primary, #6e56cf);
+        background: color-mix(in oklab, var(--primary, #6e56cf) 10%, transparent);
+        padding: 1px 8px;
+        border-radius: 999px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .prompt-peek-body {
+        padding: 0 var(--space-md, 1rem) var(--space-md, 1rem);
+    }
+
+    .prompt-peek-toolbar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-md, 1rem);
+        flex-wrap: wrap;
+        margin-bottom: var(--space-sm, 0.5rem);
+    }
+
+    .prompt-peek-hint {
+        font-size: var(--text-xs, 0.75rem);
+        color: var(--muted-foreground, #71717a);
+    }
+
+    .prompt-peek-hint code {
+        font-family: var(--font-mono, ui-monospace);
+        background: var(--muted, #f4f4f5);
+        padding: 0 4px;
+        border-radius: 3px;
+    }
+
+    .prompt-peek-pre {
+        margin: 0;
+        max-height: 360px;
+        overflow: auto;
+        padding: var(--space-md, 1rem);
+        background: var(--muted, #f4f4f5);
+        border-radius: var(--radius, 0.5rem);
+        font-family: var(--font-mono, ui-monospace);
+        font-size: var(--text-xs, 0.75rem);
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--foreground, #09090b);
+    }
+
+    .prompt-peek-note {
+        margin: var(--space-sm, 0.5rem) 0 0;
+        font-size: var(--text-xs, 0.75rem);
+        color: var(--muted-foreground, #71717a);
+    }
+
+    /* ── LLM "thinking" placeholder (on-demand suggestion) ──────── */
+    .llm-thinking {
+        color: var(--muted-foreground, #71717a);
+        font-style: italic;
+    }
+
+    .llm-thinking::after {
+        content: '';
+        display: inline-block;
+        width: 0.4rem; height: 0.4rem;
+        margin-left: var(--space-xs, 0.25rem);
+        border-radius: 50%;
+        background: var(--primary, #6e56cf);
+        vertical-align: middle;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .llm-thinking::after {
+            animation: llm-pulse 1s ease-in-out infinite;
+        }
+    }
+
+    @keyframes llm-pulse {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 1; }
+    }
 </style>
 {% endblock %}
 
@@ -161,6 +285,14 @@
                 </div>
             </div>
         </div>
+        {% else %}
+        {# No background prediction yet — label this instance on demand so the
+           human always sees the LLM's take. JS fills this in. #}
+        <div class="llm-suggestion-row" id="llm-async" aria-live="polite">
+            <div class="suggestion-label" id="llm-async-status">
+                <span class="llm-thinking">The LLM is labeling this&hellip;</span>
+            </div>
+        </div>
         {% endif %}
 
         <fieldset style="border: none; padding: 0; margin: 0;">
@@ -194,6 +326,32 @@
             </button>
         </div>
     </form>
+
+    {# What the LLM actually sees for this instance — the same prompt the
+       labeling thread builds, including the live ## Codebook block. Edit a
+       code in the Codebook tray, then Refresh to watch it (and the revision
+       badge) change. #}
+    <section class="prompt-peek" aria-label="Prompt the LLM sees">
+        <details class="prompt-peek-details" id="prompt-peek-details">
+            <summary class="prompt-peek-summary">
+                <span>Prompt the LLM sees</span>
+                <span class="prompt-peek-rev" id="prompt-peek-rev" hidden
+                      title="The codebook revision this prompt reflects"></span>
+            </summary>
+            <div class="prompt-peek-body">
+                <div class="prompt-peek-toolbar">
+                    <button type="button" class="btn btn-secondary"
+                            id="prompt-peek-refresh">Refresh</button>
+                    <span class="prompt-peek-hint">
+                        Edit a code in the <strong>Codebook</strong> tray, then
+                        refresh to see the <code>## Codebook</code> block change.
+                    </span>
+                </div>
+                <pre class="prompt-peek-pre" id="prompt-peek-pre">Loading&hellip;</pre>
+                <p class="prompt-peek-note" id="prompt-peek-note" hidden></p>
+            </div>
+        </details>
+    </section>
 {% elif message %}
     <div class="completion-card" role="status" aria-live="polite">
         {% if phase in ('completed', 'final_validation', 'autonomous_labeling') %}
@@ -333,5 +491,153 @@
             }
         }
     });
+
+    // ── "Prompt the LLM sees" panel ──────────────────────────────────
+    // Fetches the exact prompt the labeling thread would build for this
+    // instance (no model call). Lazy: only loads when the panel is opened,
+    // and re-fetches on Refresh so codebook edits show up live.
+    (function () {
+        const details = document.getElementById('prompt-peek-details');
+        const pre = document.getElementById('prompt-peek-pre');
+        const rev = document.getElementById('prompt-peek-rev');
+        const note = document.getElementById('prompt-peek-note');
+        const refreshBtn = document.getElementById('prompt-peek-refresh');
+        if (!details || !pre) return;
+
+        const instanceId = {{ instance.id|tojson|safe }};
+        const baseUrl = "{{ url_for('solo_mode.prompt_preview') }}";
+        let loadedOnce = false;
+
+        function load() {
+            pre.textContent = 'Loading…';
+            note.hidden = true;
+            fetch(baseUrl + '?instance_id=' + encodeURIComponent(instanceId))
+                .then(r => r.ok ? r.json() : Promise.reject(r.status))
+                .then(d => {
+                    pre.textContent = d.full_prompt || '(empty prompt)';
+                    if (d.codebook_revision !== null && d.codebook_revision !== undefined) {
+                        rev.textContent = 'codebook rev ' + d.codebook_revision;
+                        rev.hidden = false;
+                    } else {
+                        rev.hidden = true;
+                    }
+                    if (!d.codebook_section) {
+                        note.textContent = 'No structured codebook block is being '
+                            + 'injected — add a definition/example to a code to see '
+                            + 'it appear here.';
+                        note.hidden = false;
+                    }
+                })
+                .catch(err => {
+                    pre.textContent = 'Could not load the prompt (' + err + ').';
+                });
+        }
+
+        details.addEventListener('toggle', () => {
+            if (details.open && !loadedOnce) { loadedOnce = true; load(); }
+        });
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => { loadedOnce = true; load(); });
+        }
+    })();
+
+    // ── On-demand LLM suggestion ─────────────────────────────────────
+    // When the page rendered without a background prediction, fetch one for
+    // this exact instance so the human always sees the LLM labeling
+    // alongside them (with a visible "thinking" state).
+    (function () {
+        const row = document.getElementById('llm-async');
+        if (!row) return;  // server already rendered a suggestion
+        const status = document.getElementById('llm-async-status');
+        const instanceId = {{ instance.id|tojson|safe }};
+        const url = "{{ url_for('solo_mode.llm_suggestion') }}";
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
+
+        function wireReasoning(scope) {
+            const h = scope.querySelector('.llm-reasoning-header');
+            if (!h) return;
+            h.setAttribute('role', 'button');
+            h.setAttribute('tabindex', '0');
+            const toggle = () => {
+                const open = h.getAttribute('aria-expanded') === 'true';
+                h.setAttribute('aria-expanded', String(!open));
+                const c = h.nextElementSibling;
+                if (c) c.hidden = open;
+            };
+            h.addEventListener('click', toggle);
+            h.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+            });
+        }
+
+        function render(d) {
+            const conf = Math.round((d.confidence || 0) * 100);
+            const qualifier = d.confidence < 0.5 ? 'Low confidence'
+                : (d.confidence < 0.8 ? 'Moderate confidence' : 'High confidence');
+
+            row.innerHTML =
+                '<div>'
+                + '<div class="suggestion-label">The LLM suggests '
+                + '<span class="suggested-badge">' + esc(d.label) + '</span></div>'
+                + '<div class="confidence-label">'
+                + '<span class="qualifier">' + qualifier + '</span>· ' + conf + '%</div>'
+                + '</div>'
+                + '<button type="button" class="btn btn-secondary" '
+                + 'id="accept-llm-btn-async" aria-keyshortcuts="A">Accept (A)</button>';
+
+            if (d.reasoning) {
+                const r = document.createElement('div');
+                r.className = 'llm-reasoning';
+                r.innerHTML =
+                    '<div class="llm-reasoning-header" aria-expanded="false">'
+                    + '<strong>Reasoning</strong>'
+                    + '<span class="disclosure-icon" aria-hidden="true"></span></div>'
+                    + '<div class="llm-reasoning-content" hidden>'
+                    + '<p style="margin:0">' + esc(d.reasoning) + '</p></div>';
+                row.parentNode.insertBefore(r, row.nextSibling);
+                wireReasoning(r);
+            }
+
+            // Highlight the matching label button, like the server-side path.
+            document.querySelectorAll('.label-btn').forEach(b => {
+                if (b.dataset.label === d.label) b.classList.add('suggested');
+            });
+
+            // Wire Accept (button + the "A" shortcut).
+            const accept = () => {
+                selectLabel(d.label);
+                form && form.requestSubmit && form.requestSubmit();
+            };
+            const btn = document.getElementById('accept-llm-btn-async');
+            if (btn) btn.addEventListener('click', accept);
+            document.addEventListener('keydown', (e) => {
+                const tag = (document.activeElement && document.activeElement.tagName) || '';
+                if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+                if (e.key === 'a' || e.key === 'A') accept();
+            });
+        }
+
+        fetch(url + '?instance_id=' + encodeURIComponent(instanceId))
+            .then(r => r.ok ? r.json() : Promise.reject(r.status))
+            .then(d => {
+                if (!d.available) {
+                    if (status) status.innerHTML =
+                        '<span style="color: var(--muted-foreground, #71717a);">'
+                        + 'No LLM suggestion available for this instance.</span>';
+                    return;
+                }
+                render(d);
+            })
+            .catch(() => {
+                if (status) status.innerHTML =
+                    '<span style="color: var(--muted-foreground, #71717a);">'
+                    + 'Could not get an LLM suggestion.</span>';
+            });
+    })();
 </script>
 {% endblock %}
