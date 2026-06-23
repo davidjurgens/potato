@@ -3034,6 +3034,31 @@ def admin_judge_alignment_run():
     return jsonify(summary)
 
 
+@app.route("/admin/api/judge-alignment/autocalibrate", methods=["POST"])
+def admin_judge_alignment_autocalibrate():
+    """Auto-calibrate the judge: re-run with human corrections injected as
+    few-shot examples, creating a new prompt version, and report base vs new κ.
+
+    Optional JSON body: {"max_corrections": N, "max_per_schema": N}.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    body = request.get_json(silent=True) or {}
+    try:
+        from potato.server_utils.judge_autocalibrate import autocalibrate
+        report = autocalibrate(
+            config, get_users(),
+            max_corrections=int(body.get("max_corrections", 5)),
+            max_per_schema=body.get("max_per_schema"),
+        )
+    except Exception as exc:
+        logger.exception("Failed to auto-calibrate judge")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(report)
+
+
 @app.route("/admin/triage-queue", methods=["GET"])
 def admin_triage_queue():
     """Signal-based triage queue: items ranked by their quality signal.
@@ -5021,6 +5046,12 @@ def admin():
         "mace_enabled": config.get("mace", {}).get("enabled", False),
         "bws_enabled": bool(config.get("bws_config")),
         "embedding_viz_enabled": embedding_viz_enabled,
+        "datasets_enabled": config.get("datasets", {}).get("enabled", False),
+        "judge_calibration_enabled": config.get("judge_calibration", {}).get("enabled", False),
+        "triage_enabled": config.get("triage", {}).get("enabled", False),
+        "automation_enabled": config.get("automation", {}).get("enabled", False),
+        "curation_enabled": config.get("curation", {}).get("enabled", False),
+        "arena_enabled": config.get("arena", {}).get("enabled", False),
     }
 
     return render_template("admin.html", **context)
@@ -7063,6 +7094,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
     app.add_url_rule("/admin/judge-alignment", "admin_judge_alignment", admin_judge_alignment, methods=["GET"])
     app.add_url_rule("/admin/api/judge-alignment/run", "admin_judge_alignment_run", admin_judge_alignment_run, methods=["POST"])
+    app.add_url_rule("/admin/api/judge-alignment/autocalibrate", "admin_judge_alignment_autocalibrate", admin_judge_alignment_autocalibrate, methods=["POST"])
     app.add_url_rule("/admin/triage-queue", "admin_triage_queue", admin_triage_queue, methods=["GET"])
     app.add_url_rule("/admin/api/step_agreement", "admin_api_step_agreement", admin_api_step_agreement, methods=["GET"])
     app.add_url_rule("/admin/api/step_quality", "admin_api_step_quality", admin_api_step_quality, methods=["GET"])

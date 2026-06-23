@@ -256,6 +256,14 @@ KNOWN_CONFIG_KEYS = {
     },
     "triage": {"enabled", "order", "default_priority", "show_badge",
                "signal_field", "invert_signal", "rules"},
+    # Datasets / Experiments: versioned eval datasets + experiment runs.
+    "datasets": {"enabled", "storage"},
+    # Automation rules: filter -> sample -> actions over incoming items.
+    "automation": {"enabled", "rules"},
+    # Semantic curation: embedding index, similarity search, dynamic slices.
+    "curation": {"enabled", "model_name", "embed_on_ingest", "text_key"},
+    # Multi-model arena: fan a prompt out to N providers side by side.
+    "arena": {"enabled", "models"},
     "huggingface_backup": None,
 
     # === Debug / logging ===

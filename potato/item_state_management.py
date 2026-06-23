@@ -828,6 +828,11 @@ class ItemStateManager:
         # Queue of remaining instances to be assigned
         self.remaining_instance_ids = deque()
 
+        # Runtime assignment pause switch. When True, assign_instances_to_user
+        # is a no-op so admins can freeze new assignments (e.g. while curating an
+        # eval dataset or investigating). Existing assignments are untouched.
+        self._assignment_paused = False
+
         # NOTE: We use an extra set to keep track of completed instances to allow for
         # O(1) tests of whether an item needs to be removed from the remaining list
         self.completed_instance_ids = set()
@@ -1098,6 +1103,28 @@ class ItemStateManager:
             # Index categories for this item
             self._index_item_categories(instance_id, instance_data)
 
+        # Automation rules (Phase 4): run OUTSIDE the lock so action execution
+        # (dataset writes, notifies; heavy actions are dispatched to a worker)
+        # never holds the item-state lock. Runs after triage so add_to_queue can
+        # override the triage priority. Guarded — must never break ingestion.
+        try:
+            from potato.automation.manager import get_automation_manager
+            automation = get_automation_manager()
+            if automation is not None:
+                automation.process_item(instance_id, instance_data)
+        except Exception as e:
+            self.logger.warning(f"Automation processing failed for {instance_id}: {e}")
+
+        # Semantic curation: optionally embed the item into the search index on
+        # ingest (opt-in via curation.embed_on_ingest; guarded + lazy).
+        try:
+            from potato.curation.manager import get_curation_manager
+            curation = get_curation_manager()
+            if curation is not None and curation.embed_on_ingest:
+                curation.embed_instance(instance_id)
+        except Exception as e:
+            self.logger.warning(f"Curation embed-on-ingest failed for {instance_id}: {e}")
+
     def update_item(self, instance_id: str, instance_data: dict) -> bool:
         """
         Update an existing instance's data (thread-safe).
@@ -1334,6 +1361,17 @@ class ItemStateManager:
             count += 1
         return count
 
+    def pause_assignment(self) -> None:
+        """Freeze new assignments (admin control). Idempotent."""
+        self._assignment_paused = True
+
+    def resume_assignment(self) -> None:
+        """Resume new assignments (admin control). Idempotent."""
+        self._assignment_paused = False
+
+    def is_assignment_paused(self) -> bool:
+        return self._assignment_paused
+
     def assign_instances_to_user(self, user_state: UserState) -> int:
         """
         Assigns a set of instances to a user based on the current state of the system
@@ -1359,6 +1397,12 @@ class ItemStateManager:
             - May modify remaining_instance_ids queue
         """
         self.logger.debug(f"Assigning instances to user {getattr(user_state, 'user_id', None)} with strategy {self.assignment_strategy} and random_seed={self.random_seed}")
+
+        # Respect the runtime pause switch — freeze new assignments without
+        # disturbing anything already assigned.
+        if self._assignment_paused:
+            self.logger.info("Assignment is paused; skipping new assignments")
+            return 0
 
         # Snapshot existing assignments so we can record timestamps for new ones
         existing_assignments = set(user_state.get_assigned_instance_ids()) if self.reclaim_enabled else None

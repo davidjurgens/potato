@@ -88,9 +88,15 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Agent Traces](agent-evaluation/agent_traces.md) - Evaluate AI agent traces and trajectories
 - [Three-Pane Trace Eval](agent-evaluation/eval_trace.md) - Reasoning | function calls | final answer side-by-side, for continuous evaluation
 - [Trajectory Correction](agent-evaluation/trajectory_correction.md) - Edit traces into SFT/DPO training data
+- [Datasets & Experiments](agent-evaluation/datasets_and_experiments.md) - Versioned eval datasets + experiment runs that score outputs over time
+- [Programmatic Evaluators](agent-evaluation/evaluators.md) - Trajectory match, tool-use, LLM-judge & heuristic evaluators (Flask-free library)
+- [Automation Rules](agent-evaluation/automation_rules.md) - filter→sample→action rules that route incoming items to queues/datasets/evaluators (production→eval loop)
+- [CI Evaluation](agent-evaluation/ci_evaluation.md) - pytest plugin to run evals in your suite and gate the build on score-threshold regressions
+- [Semantic Curation](agent-evaluation/semantic_curation.md) - embedding search + dynamic slices to find traces by similarity and curate them into datasets
 - [LLM-Judge ↔ Human Alignment](agent-evaluation/judge_alignment.md) - Measure & calibrate an LLM judge against human gold (Cohen's κ)
 - [Signal-Based Triage Queue](agent-evaluation/triage_queue.md) - Prioritize the queue by a quality signal (errors / low score first)
 - [Live Agent Interaction](agent-evaluation/live_agent.md) - Observe and interact with a live AI agent in real time
+- [Model Arena](agent-evaluation/model_arena.md) - Compare N models side by side on one prompt; pick the best, build a win-rate leaderboard (provider-agnostic)
 - [Web Agent Annotation](agent-evaluation/web_agent_annotation.md) - Review and create web agent browsing traces
 
 ## Solo Mode
@@ -102,6 +108,7 @@ Role-based guides that walk you through Potato for your specific use case:
 ## AI & Intelligence
 
 - [AI Support](ai-intelligence/ai_support.md) - AI-powered label suggestions
+- [Using HuggingFace Models](ai-intelligence/huggingface_models.md) - Point AI hints, solo mode, and judge calibration at any HF model
 - [Judge Calibration](ai-intelligence/judge_calibration.md) - Auto-label with LLM judges + blind human calibration (accuracy, IAA, ECE)
 - [Active Learning](ai-intelligence/active_learning_guide.md) - ML-based prioritization
 - [Active Learning Strategies](ai-intelligence/active_learning_strategies.md) - Query strategies reference (BADGE, BALD, hybrid, cold-start)
@@ -150,6 +157,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Webhooks](integrations/webhooks.md) - Outgoing webhook notifications for annotation events
 - [HuggingFace Spaces](data-export/huggingface_spaces.md) - Deploy Potato on HuggingFace Spaces
 - [LangChain Integration](integrations/langchain_integration.md) - Send LangChain agent traces to Potato
+- [Tracing SDK (`potato_trace`)](integrations/tracing_sdk.md) - Instrument any agent with `@traceable` to capture runs into Potato (OpenTelemetry interop)
 
 ## Tools & Utilities
 
@@ -208,6 +216,13 @@ Role-based guides that walk you through Potato for your specific use case:
 | Evaluate AI agent traces | [Agent Traces](agent-evaluation/agent_traces.md) |
 | See reasoning, tool calls & answer side-by-side | [Three-Pane Trace Eval](agent-evaluation/eval_trace.md) |
 | Edit agent traces into SFT/DPO training data | [Trajectory Correction](agent-evaluation/trajectory_correction.md) |
+| Build versioned eval sets & track scores over time | [Datasets & Experiments](agent-evaluation/datasets_and_experiments.md) |
+| Score agent outputs programmatically | [Programmatic Evaluators](agent-evaluation/evaluators.md) |
+| Capture agent runs from your own code | [Tracing SDK](integrations/tracing_sdk.md) |
+| Auto-route incoming traces to queues/datasets/evals | [Automation Rules](agent-evaluation/automation_rules.md) |
+| Gate CI on eval-score regressions | [CI Evaluation](agent-evaluation/ci_evaluation.md) |
+| Find traces by similarity / curate slices | [Semantic Curation](agent-evaluation/semantic_curation.md) |
+| Compare models side by side on a prompt | [Model Arena](agent-evaluation/model_arena.md) |
 | Align/calibrate an LLM judge to human labels | [Judge Alignment](agent-evaluation/judge_alignment.md) |
 | Auto-label with LLM judges + calibrate blind | [Judge Calibration](ai-intelligence/judge_calibration.md) |
 | Use Solo Mode for collaborative annotation | [Solo Mode](solo-mode/solo_mode.md) |

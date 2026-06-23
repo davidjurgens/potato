@@ -3242,6 +3242,55 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
                 import atexit
                 atexit.register(poller.stop)
 
+    # Datasets / Experiments. Registered here in configure_app() — the single
+    # chokepoint called by create_app() on BOTH the live `start` path and the
+    # WSGI factory path — so the route exists regardless of how the server is
+    # launched (see project_route_dual_registration).
+    if config.get("datasets", {}).get("enabled", False):
+        from potato.eval_datasets import init_datasets_manager, get_datasets_manager
+        from potato.eval_datasets.routes import datasets_bp
+        from potato.eval_datasets.eval_admin import eval_admin_bp
+        if get_datasets_manager() is None:
+            init_datasets_manager(config)
+        if "datasets" not in flask_app.blueprints:
+            flask_app.register_blueprint(datasets_bp)
+        if "eval_admin" not in flask_app.blueprints:
+            flask_app.register_blueprint(eval_admin_bp)
+        logger.info("Registered datasets/experiments + eval-admin blueprints")
+
+    # Automation rules engine (Phase 4): closes the production->eval loop by
+    # running filter->sample->actions over every item entering Potato.
+    if config.get("automation", {}).get("enabled", False):
+        from potato.automation import init_automation_manager, get_automation_manager
+        from potato.automation.routes import automation_bp
+        if get_automation_manager() is None:
+            init_automation_manager(config)
+        if "automation" not in flask_app.blueprints:
+            flask_app.register_blueprint(automation_bp)
+        import atexit
+        atexit.register(lambda: (get_automation_manager() and get_automation_manager().shutdown()))
+        logger.info("Registered automation-rules blueprint")
+
+    # Semantic curation (Catalog): embedding index + similarity search + slices.
+    if config.get("curation", {}).get("enabled", False):
+        from potato.curation import init_curation_manager, get_curation_manager
+        from potato.curation.routes import curation_bp
+        if get_curation_manager() is None:
+            init_curation_manager(config)
+        if "curation" not in flask_app.blueprints:
+            flask_app.register_blueprint(curation_bp)
+        logger.info("Registered semantic-curation (catalog) blueprint")
+
+    # Multi-model arena: fan a prompt out to N providers side by side.
+    if config.get("arena", {}).get("enabled", False):
+        from potato.arena import init_arena_manager, get_arena_manager
+        from potato.arena.routes import arena_bp
+        if get_arena_manager() is None:
+            init_arena_manager(config)
+        if "arena" not in flask_app.blueprints:
+            flask_app.register_blueprint(arena_bp)
+        logger.info("Registered model-arena blueprint")
+
 # Function to create and initialize the Flask application
 def create_app(config_file=None):
     """
