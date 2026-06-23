@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Catalog · Semantic Curation</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  .cat-lede { color: var(--muted-foreground); font-size: 0.9375rem; max-width: 72ch;
+              line-height: 1.6; margin: 0 0 1.5rem; }
+  .cat-card { margin-bottom: 1.25rem; }
+  .cat-card h2 { margin-top: 0; font-size: 1.125rem; }
+  .cat-row { display: flex; gap: 0.6rem; align-items: flex-end; flex-wrap: wrap; }
+  .cat-field { display: flex; flex-direction: column; gap: 0.2rem; }
+  .cat-field label { font-size: 0.75rem; font-weight: 600; color: var(--heading-color); }
+  .cat-field input { padding: 0.4rem 0.55rem; border: 1px solid var(--border);
+                     border-radius: var(--radius); font: inherit; background: var(--background);
+                     color: var(--foreground); }
+  .cat-field input.num { width: 6rem; }
+  table.cat-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; margin-top: 0.75rem; }
+  table.cat-table th, table.cat-table td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }
+  table.cat-table th { background: var(--muted); font-weight: 600; }
+  td.cat-score { text-align: right; font-variant-numeric: tabular-nums; }
+  .cat-bar { display: inline-block; height: 0.5rem; border-radius: 3px;
+             background: var(--primary); vertical-align: middle; margin-left: 0.4rem; }
+  .cat-mono { font-family: var(--font-mono, ui-monospace, Menlo, monospace); }
+  .cat-empty { color: var(--muted-foreground); font-style: italic; }
+  .cat-status { font-size: 0.85rem; min-height: 1.2em; }
+  .cat-status.err { color: hsl(0 65% 45%); }
+  .cat-status.ok { color: hsl(140 45% 32%); }
+  .cat-pill { font-size: 0.7rem; background: var(--muted); border-radius: var(--radius);
+              padding: 0.05rem 0.45rem; font-weight: 600; }
+  .cat-warn { background: hsl(40 80% 95%); color: hsl(28 60% 28%); border: 1px solid hsl(40 70% 85%);
+              border-radius: var(--radius); padding: 0.5rem 0.75rem; font-size: 0.85rem; margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <h1>Catalog</h1>
+  <p class="cat-lede">
+    Find <em>what to review</em> by similarity. Build an embedding index over your
+    items, search for traces like a given query or example, and save
+    <strong>dynamic slices</strong> — semantic + metadata filters that auto-include
+    new matching traces and can be curated into a dataset.
+  </p>
+
+  {% if not embeddings_available %}
+  <div class="cat-warn">Embeddings are unavailable — install <code>sentence-transformers</code>
+    (or configure an embedder) to build the index.</div>
+  {% endif %}
+
+  <section class="dashboard-card cat-card" aria-labelledby="idx-h">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+      <h2 id="idx-h">Index</h2>
+      <div class="cat-row">
+        <span class="cat-empty"><span id="idx-count">{{ indexed }}</span> item(s) indexed</span>
+        <button class="shadcn-button shadcn-button-outline" id="build-btn">Build index</button>
+      </div>
+    </div>
+    <span class="cat-status" id="build-status" role="status" aria-live="polite"></span>
+  </section>
+
+  <section class="dashboard-card cat-card" aria-labelledby="search-h">
+    <h2 id="search-h">Similarity search</h2>
+    <div class="cat-row">
+      <div class="cat-field" style="flex:1;min-width:220px;">
+        <label for="q">Query text</label>
+        <input type="text" id="q" placeholder="e.g. agent failed to call the tool">
+      </div>
+      <div class="cat-field">
+        <label for="anchor">…or anchor instance id</label>
+        <input type="text" id="anchor" placeholder="instance id" class="cat-mono">
+      </div>
+      <div class="cat-field"><label for="topk">Top-k</label>
+        <input type="number" id="topk" class="num" value="10" min="1"></div>
+      <div class="cat-field"><label for="thr">Threshold</label>
+        <input type="number" id="thr" class="num" value="0.0" min="0" max="1" step="0.05"></div>
+      <button class="shadcn-button shadcn-button-primary" id="search-btn">Search</button>
+    </div>
+    <span class="cat-status" id="search-status" role="status" aria-live="polite"></span>
+    <div id="results"></div>
+  </section>
+
+  <section class="dashboard-card cat-card" aria-labelledby="slices-h">
+    <h2 id="slices-h">Dynamic slices</h2>
+    <div class="cat-row" style="margin-bottom:0.5rem;">
+      <div class="cat-field"><label for="s-name">Name</label>
+        <input type="text" id="s-name" placeholder="error-traces"></div>
+      <div class="cat-field" style="flex:1;min-width:200px;"><label for="s-query">Query</label>
+        <input type="text" id="s-query" placeholder="semantic query (optional)"></div>
+      <div class="cat-field"><label for="s-thr">Threshold</label>
+        <input type="number" id="s-thr" class="num" value="0.5" min="0" max="1" step="0.05"></div>
+      <button class="shadcn-button shadcn-button-outline" id="s-save">Save slice</button>
+    </div>
+    <span class="cat-status" id="slice-status" role="status" aria-live="polite"></span>
+    {% if slices %}
+    <table class="cat-table">
+      <thead><tr><th scope="col">Slice</th><th scope="col">Query / anchor</th><th scope="col">Threshold</th><th scope="col">Actions</th></tr></thead>
+      <tbody>
+        {% for s in slices %}
+        <tr data-slice="{{ s.name }}">
+          <td>{{ s.name }}</td>
+          <td class="cat-mono">{{ s.query or s.anchor_id or '(all)' }}</td>
+          <td class="cat-mono">{{ '%.2f'|format(s.threshold) }}</td>
+          <td>
+            <button class="shadcn-button shadcn-button-outline s-resolve" data-name="{{ s.name }}">Resolve</button>
+            <button class="shadcn-button shadcn-button-outline s-todataset" data-name="{{ s.name }}">→ Dataset</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="cat-empty">No slices saved yet.</p>{% endif %}
+  </section>
+</main>
+
+<script>
+(function () {
+  async function post(url, body) {
+    const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"},
+                              body: JSON.stringify(body || {})});
+    return {ok: r.ok, data: await r.json().catch(() => ({}))};
+  }
+
+  const buildBtn = document.getElementById("build-btn");
+  buildBtn.addEventListener("click", async () => {
+    const st = document.getElementById("build-status");
+    st.className = "cat-status"; st.textContent = "Building…"; buildBtn.disabled = true;
+    try {
+      const r = await post("{{ url_for('curation.api_build') }}", {});
+      if (r.ok) { st.className = "cat-status ok"; st.textContent = "Indexed " + r.data.indexed + " item(s).";
+                  document.getElementById("idx-count").textContent = r.data.indexed; }
+      else { st.className = "cat-status err"; st.textContent = r.data.error || "Failed."; }
+    } finally { buildBtn.disabled = false; }
+  });
+
+  const searchBtn = document.getElementById("search-btn");
+  async function runSearch() {
+    const st = document.getElementById("search-status");
+    st.className = "cat-status"; st.textContent = "Searching…"; searchBtn.disabled = true;
+    try {
+      const body = {query: document.getElementById("q").value,
+                    anchor_id: document.getElementById("anchor").value,
+                    top_k: parseInt(document.getElementById("topk").value) || 10,
+                    threshold: parseFloat(document.getElementById("thr").value) || 0.0};
+      const r = await post("{{ url_for('curation.api_search') }}", body);
+      if (!r.ok) { st.className = "cat-status err"; st.textContent = r.data.error || "Failed."; return; }
+      st.className = "cat-status"; st.textContent = r.data.results.length + " result(s)";
+      const rows = r.data.results.map(h =>
+        `<tr><td class="cat-mono">${h.instance_id}</td><td class="cat-score">${h.score.toFixed(3)}` +
+        `<span class="cat-bar" style="width:${Math.max(0, Math.round(h.score*80))}px"></span></td></tr>`).join("");
+      document.getElementById("results").innerHTML = r.data.results.length
+        ? `<table class="cat-table"><thead><tr><th scope="col">Instance</th><th scope="col">Similarity</th></tr></thead><tbody>${rows}</tbody></table>`
+        : '<p class="cat-empty">No matches.</p>';
+    } finally { searchBtn.disabled = false; }
+  }
+  searchBtn.addEventListener("click", runSearch);
+  // Enter in the query or anchor field triggers search.
+  ["q", "anchor"].forEach(id => document.getElementById(id).addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); runSearch(); }
+  }));
+
+  document.getElementById("s-save").addEventListener("click", async () => {
+    const st = document.getElementById("slice-status");
+    const name = document.getElementById("s-name").value.trim();
+    if (!name) { st.className = "cat-status err"; st.textContent = "Name required."; return; }
+    const r = await post("{{ url_for('curation.api_save_slice') }}", {
+      name, query: document.getElementById("s-query").value,
+      threshold: parseFloat(document.getElementById("s-thr").value) || 0.0});
+    if (r.ok) { st.className = "cat-status ok"; st.textContent = "Saved."; setTimeout(() => location.reload(), 600); }
+    else { st.className = "cat-status err"; st.textContent = r.data.error || "Failed."; }
+  });
+
+  document.querySelectorAll(".s-resolve").forEach(b => b.addEventListener("click", async () => {
+    const st = document.getElementById("slice-status"); st.className = "cat-status";
+    const r = await fetch(`/admin/catalog/api/slices/${b.dataset.name}/resolve`);
+    const d = await r.json();
+    st.textContent = `${b.dataset.name}: ${d.count} matching instance(s)`;
+  }));
+
+  document.querySelectorAll(".s-todataset").forEach(b => b.addEventListener("click", async () => {
+    const st = document.getElementById("slice-status");
+    const dataset = prompt("Curate slice '" + b.dataset.name + "' into which dataset?");
+    if (!dataset) return;
+    st.className = "cat-status"; st.textContent = "Curating…";
+    const r = await post(`/admin/catalog/api/slices/${b.dataset.name}/to_dataset`, {dataset});
+    if (r.ok) { st.className = "cat-status ok"; st.textContent = `Imported ${r.data.imported} into '${dataset}'.`; }
+    else { st.className = "cat-status err"; st.textContent = r.data.error || "Failed."; }
+  }));
+})();
+</script>
+</body>
+</html>
