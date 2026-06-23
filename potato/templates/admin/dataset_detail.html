@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dataset · {{ dataset.name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  .dd-back { font-size: 0.85rem; color: var(--muted-foreground); text-decoration: none; }
+  .dd-back:hover { text-decoration: underline; }
+  .dd-desc { color: var(--muted-foreground); max-width: 70ch; line-height: 1.6; margin: 0.25rem 0 1.5rem; }
+  table.dd-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+  table.dd-table th, table.dd-table td { border: 1px solid var(--border); padding: 0.45rem 0.65rem; text-align: left; vertical-align: top; }
+  table.dd-table th { background: var(--muted); font-weight: 600; }
+  .dd-mono { font-family: var(--font-mono, ui-monospace, Menlo, monospace); }
+  .dd-tag { font-size: 0.7rem; background: var(--muted); border-radius: var(--radius); padding: 0.05rem 0.45rem; font-weight: 600; }
+  .dd-card { margin-bottom: 1.5rem; }
+  .dd-card h2 { margin-top: 0; font-size: 1.125rem; }
+  .dd-empty { color: var(--muted-foreground); font-style: italic; }
+  .dd-pre { white-space: pre-wrap; word-break: break-word; max-width: 40ch; margin: 0;
+            font-size: 0.8125rem; color: var(--foreground); }
+  .dd-tag-form { display: inline-flex; gap: 0.35rem; align-items: center; }
+  .dd-tag-form input { padding: 0.2rem 0.4rem; border: 1px solid var(--border); border-radius: var(--radius); font: inherit; width: 7rem; }
+  .dd-tag-form button { font: inherit; cursor: pointer; padding: 0.2rem 0.55rem; border-radius: var(--radius);
+                        border: 1px solid var(--border); background: transparent; color: var(--foreground); }
+  .de-score { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <a class="dd-back" href="{{ url_for('datasets.admin') }}">&larr; Datasets &amp; Experiments</a>
+  <h1>{{ dataset.name }}</h1>
+  {% if dataset.description %}<p class="dd-desc">{{ dataset.description }}</p>{% endif %}
+
+  <div class="dd-actions" style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;margin-bottom:1.5rem;">
+    <a class="shadcn-button shadcn-button-outline"
+       href="{{ url_for('datasets.api_export_dataset', name=dataset.name) }}?format=sft"
+       title="Download SFT fine-tuning data (prompt/completion)">Export SFT</a>
+    <a class="shadcn-button shadcn-button-outline"
+       href="{{ url_for('datasets.api_export_dataset', name=dataset.name) }}?format=dpo"
+       title="Download DPO preference data (prompt/chosen/rejected)">Export DPO</a>
+    <button class="shadcn-button shadcn-button-outline" id="import-btn"
+            title="Add the live task's loaded instances as examples">Import loaded instances</button>
+    <button class="shadcn-button shadcn-button-outline" id="import-traces-btn"
+            title="Add only runtime-ingested traces (webhook / Langfuse) as examples">Import ingested traces</button>
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;font-size:0.8125rem;">
+      <input type="checkbox" id="include-ann">
+      include human annotations as references</label>
+    <span class="dd-empty" id="import-status" role="status" aria-live="polite"></span>
+  </div>
+
+  <section class="dashboard-card dd-card" aria-labelledby="ver-h">
+    <h2 id="ver-h">Versions</h2>
+    {% if dataset.versions %}
+    <table class="dd-table">
+      <thead><tr><th scope="col">Version</th><th scope="col">Examples</th><th scope="col">Note</th><th scope="col">Created</th><th scope="col">Tags</th></tr></thead>
+      <tbody>
+        {% for v in dataset.versions %}
+        <tr>
+          <td class="dd-mono">{{ v.version_id }}</td>
+          <td class="de-score">{{ v.example_count }}</td>
+          <td class="dd-empty">{{ v.note }}</td>
+          <td class="dd-empty" style="font-size:0.8rem;">{{ v.created_at }}</td>
+          <td>
+            {% for t in v.tags %}<span class="dd-tag">{{ t }}</span> {% endfor %}
+            <form class="dd-tag-form" data-version="{{ v.version_id }}">
+              <input type="text" placeholder="tag…" aria-label="Tag {{ v.version_id }}">
+              <button type="submit">Tag</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="dd-empty">No versions yet.</p>{% endif %}
+  </section>
+
+  <section class="dashboard-card dd-card" aria-labelledby="ex-h">
+    <h2 id="ex-h">Examples <span class="dd-empty" style="font-weight:400;">(latest version, showing up to 50)</span></h2>
+    {% if examples %}
+    <table class="dd-table">
+      <thead><tr><th scope="col">ID</th><th scope="col">Inputs</th><th scope="col">Reference</th><th scope="col">Split</th></tr></thead>
+      <tbody>
+        {% for e in examples[:50] %}
+        <tr>
+          <td class="dd-mono">{{ e.id }}</td>
+          <td><pre class="dd-pre">{{ e.inputs | tojson(indent=0) }}</pre></td>
+          <td><pre class="dd-pre">{{ (e.reference_outputs if e.reference_outputs is not none else '') | tojson(indent=0) }}</pre></td>
+          <td><span class="dd-tag">{{ e.split }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="dd-empty">No examples in the latest version.</p>{% endif %}
+  </section>
+
+  <section class="dashboard-card dd-card" aria-labelledby="exp-h">
+    <h2 id="exp-h">Experiments on this dataset</h2>
+    {% if experiments %}
+    <table class="dd-table">
+      <thead><tr><th scope="col">Experiment</th><th scope="col">Version</th><th scope="col">Examples</th><th scope="col">Scores</th></tr></thead>
+      <tbody>
+        {% for x in experiments %}
+        <tr>
+          <td>{{ x.name or x.id }}</td>
+          <td class="dd-mono">{{ x.dataset_version }}</td>
+          <td class="de-score">{{ x.example_count }}</td>
+          <td>{% for k, v in x.aggregate_scores.items() %}<span class="dd-tag">{{ k }}: {{ '%.2f'|format(v) }}</span> {% endfor %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="dd-empty">No experiments run on this dataset yet.</p>{% endif %}
+  </section>
+</main>
+
+<script>
+async function runImport(url, btn) {
+  const status = document.getElementById("import-status");
+  const include = document.getElementById("include-ann").checked;
+  btn.disabled = true; status.textContent = "Importing…";
+  const r = await fetch(url, {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({include_annotations: include}),
+  });
+  const data = await r.json().catch(() => ({}));
+  btn.disabled = false;
+  if (r.ok) { status.textContent = "Imported " + (data.example_count || 0) + " example(s)."; setTimeout(() => location.reload(), 700); }
+  else { status.textContent = data.error || "Import failed."; }
+}
+
+const importBtn = document.getElementById("import-btn");
+if (importBtn) importBtn.addEventListener("click", () =>
+  runImport("{{ url_for('datasets.api_import_instances', name=dataset.name) }}", importBtn));
+
+const importTracesBtn = document.getElementById("import-traces-btn");
+if (importTracesBtn) importTracesBtn.addEventListener("click", () =>
+  runImport("{{ url_for('datasets.api_import_traces', name=dataset.name) }}", importTracesBtn));
+
+document.querySelectorAll(".dd-tag-form").forEach((form) => {
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const version_id = form.dataset.version;
+    const tag = form.querySelector("input").value.trim();
+    if (!tag) return;
+    const r = await fetch("{{ url_for('datasets.api_tag_version', name=dataset.name) }}", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({version_id, tag}),
+    });
+    if (r.ok) location.reload();
+  });
+});
+</script>
+</body>
+</html>
