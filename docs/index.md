@@ -10,6 +10,11 @@ multi-model arena) as a free alternative to LangSmith, LabelBox, and Braintrust.
 **New here?** Start with the [FAQ](faq.md), the [Glossary](glossary.md), or the
 [Quick Start](quick-start.md).
 
+!!! tip "Looking for guides and tutorials?"
+    This Read the Docs site is the **complete, version-matched technical reference** —
+    every config option, the full HTTP API, and internals. For guided walkthroughs,
+    use-cases, and higher-level docs, visit **[potatoannotator.com/docs](https://www.potatoannotator.com/docs)**.
+
 ---
 
 ## Guides

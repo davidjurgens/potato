@@ -76,6 +76,12 @@ setup(
     long_description=read_readme(),
     long_description_content_type="text/markdown",
     url="https://github.com/davidjurgens/potato",
+    project_urls={
+        "Documentation": "https://www.potatoannotator.com/docs",
+        "Technical Reference": "https://potatoannotator.readthedocs.io/",
+        "Source": "https://github.com/davidjurgens/potato",
+        "Website": "https://www.potatoannotator.com",
+    },
     license="GPL-3.0-or-later",
     packages=find_packages(),
     classifiers=[

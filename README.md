@@ -1,6 +1,7 @@
 # Potato: The Portable Annotation Tool
 
-[![Documentation](https://img.shields.io/badge/docs-readthedocs-blue)](https://potatoannotator.readthedocs.io/)
+[![Docs & Guides](https://img.shields.io/badge/docs%20%26%20guides-potatoannotator.com-brightgreen)](https://www.potatoannotator.com/docs)
+[![Technical Reference](https://img.shields.io/badge/reference-readthedocs-blue)](https://potatoannotator.readthedocs.io/)
 [![PyPI](https://img.shields.io/pypi/v/potato-annotation)](https://pypi.org/project/potato-annotation/)
 [![License](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![Paper](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
@@ -219,6 +220,8 @@ The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** cont
 ---
 
 ## Documentation
+
+Potato has two complementary doc sites: **[potatoannotator.com/docs](https://www.potatoannotator.com/docs)** for guides, tutorials, and higher-level walkthroughs, and **[Read the Docs](https://potatoannotator.readthedocs.io/)** for the complete, version-matched technical reference (every config option, the full HTTP API, and internals). The links below point to the guide pages.
 
 | Topic | Link |
 |-------|------|
