@@ -9,6 +9,8 @@ produces a report: per-LLM accuracy, inter-annotator agreement (human↔LLM and
 LLM↔LLM), calibration (ECE + reliability), and confusion matrices — plus a file
 of every LLM's labels on your data.
 
+> **Using a HuggingFace model as the judge?** See [Using HuggingFace Models in Potato](huggingface_models.md) for wiring `judge_calibration.models[]` to an HF-hosted model.
+
 It is a deliberately simpler cousin of [Solo Mode](../solo-mode/solo_mode.md)
 (no prompt-refinement loops, edge-case synthesis, or disagreement UI) and is
 distinct from [Judge Alignment](../agent-evaluation/judge_alignment.md), which

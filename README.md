@@ -4,11 +4,12 @@
 [![PyPI](https://img.shields.io/pypi/v/potato-annotation)](https://pypi.org/project/potato-annotation/)
 [![License](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![Paper](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
-[![Live Demo](https://img.shields.io/badge/demo-HuggingFace%20Spaces-yellow)](https://huggingface.co/spaces/Blablablab/potato)
+[![Live Demo](https://img.shields.io/badge/demo-HuggingFace%20Spaces-yellow)](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)
+[![Website](https://img.shields.io/badge/website-potatoannotator.com-brightgreen)](https://www.potatoannotator.com)
 
 **Potato** is a free, self-hosted annotation platform for NLP, Agentic, and GenAI research. Annotate text, audio, video, images, documents, agent traces, and more — configured entirely through YAML. No coding required.
 
-**[Try the live demo on HuggingFace Spaces](https://huggingface.co/spaces/Blablablab/potato)** — no installation needed.
+**[Try the live demo on HuggingFace Spaces](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)** — no installation needed. More at **[www.potatoannotator.com](https://www.potatoannotator.com)**.
 
 ---
 
@@ -189,6 +190,15 @@ Ready-to-use templates organized by type in [`examples/`](examples/):
 | [AI-Assisted](examples/ai-assisted/) | LLM suggestions, Ollama integration |
 | [Custom Layouts](examples/custom-layouts/) | Content moderation, dialogue QA, medical review |
 
+### Live Demos on HuggingFace
+
+Try Potato in your browser — no installation. A growing catalog of one-click demo Spaces
+covers classification, span/NER, agent-trace evaluation, multimodal, QDA, and more:
+
+- 🤗 **[Flagship demo](https://huggingface.co/spaces/Blablablab/potato)** — agent trace evaluation
+- 📋 **[Full demo catalog & collection](docs/data-export/potato_on_huggingface.md)** — every annotation type as a live Space
+- 🚀 **[Deploy your own](deployment/huggingface-spaces/deploy_spaces.md)** — `build_space.py` + `deploy_space.py` from a single manifest
+
 ### Research Showcase
 
 The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** contains annotation projects from published research — sentiment analysis, dialogue evaluation, summarization, and more.
@@ -205,6 +215,8 @@ The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** cont
 | Agent Trace Evaluation | [docs/agent-evaluation/agent_traces.md](docs/agent-evaluation/agent_traces.md) |
 | Web Agent Annotation | [docs/agent-evaluation/web_agent_annotation.md](docs/agent-evaluation/web_agent_annotation.md) |
 | AI Support | [docs/ai-intelligence/ai_support.md](docs/ai-intelligence/ai_support.md) |
+| Using HuggingFace Models | [docs/ai-intelligence/huggingface_models.md](docs/ai-intelligence/huggingface_models.md) |
+| Potato on HuggingFace | [docs/data-export/potato_on_huggingface.md](docs/data-export/potato_on_huggingface.md) |
 | Active Learning | [docs/ai-intelligence/active_learning_guide.md](docs/ai-intelligence/active_learning_guide.md) |
 | Solo Mode | [docs/solo-mode/solo_mode.md](docs/solo-mode/solo_mode.md) |
 | Quality Control | [docs/workflow/quality_control.md](docs/workflow/quality_control.md) |

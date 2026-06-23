@@ -2,6 +2,8 @@
 
 Potato provides integrated AI support to enhance annotation workflows with intelligent hints, keyword highlighting, and label suggestions. This feature uses Large Language Models (LLMs) to provide contextual assistance to annotators without revealing the correct answers.
 
+> **Using a HuggingFace model?** See [Using HuggingFace Models in Potato](huggingface_models.md) for the `huggingface` endpoint and OpenAI-compatible `base_url` setup across hints, solo mode, and judge calibration.
+
 ## Overview
 
 AI support in Potato offers four main features:

@@ -487,6 +487,14 @@ select:focus {
   box-shadow: 0 0 0 2px rgba(110, 86, 207, 0.25);
 }
 
+/* Keyboard focus ring for range/slider inputs (they reset outline) */
+input[type="range"]:focus-visible,
+.shadcn-slider-input:focus-visible,
+.pairwise-scale-slider:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.30);
+}
+
 /* Radio and checkbox styling */
 input[type="radio"],
 input[type="checkbox"] {
@@ -3780,7 +3788,7 @@ body > .container-fluid {
 }
 
 .potato-navbar .progress-section .progress-label {
-  opacity: 0.65;
+  opacity: 0.9;
   margin-right: 0.25rem;
 }
 
@@ -3792,7 +3800,7 @@ body > .container-fluid {
 }
 
 .potato-navbar .instance-number-section .instance-number-label {
-  opacity: 0.65;
+  opacity: 0.9;
   margin-right: 0.25rem;
 }
 
@@ -3810,7 +3818,7 @@ body > .container-fluid {
 }
 
 .potato-navbar .ibws-round-banner .ibws-round-detail {
-  opacity: 0.65;
+  opacity: 0.9;
 }
 
 .potato-navbar .nav-controls {
@@ -3819,8 +3827,8 @@ body > .container-fluid {
 }
 
 .potato-navbar .nav-control-btn {
-  height: 30px;
-  width: 30px;
+  height: 38px;
+  width: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3837,6 +3845,13 @@ body > .container-fluid {
   background: rgba(255,255,255,0.22);
 }
 
+.potato-navbar .nav-control-btn:focus-visible,
+.potato-navbar .goto-section input:focus-visible,
+.potato-navbar .goto-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.55);
+}
+
 .potato-navbar .goto-section {
   display: flex;
   align-items: center;
@@ -3845,7 +3860,7 @@ body > .container-fluid {
 
 .potato-navbar .goto-section input {
   width: 48px;
-  height: 30px;
+  height: 38px;
   border-radius: var(--radius);
   border: 1px solid rgba(255,255,255,0.18);
   background: rgba(255,255,255,0.08);
@@ -3867,8 +3882,8 @@ body > .container-fluid {
 }
 
 .potato-navbar .goto-btn {
-  height: 30px;
-  padding: 0 10px;
+  height: 38px;
+  padding: 0 12px;
   border-radius: var(--radius);
   background: rgba(255,255,255,0.88);
   color: var(--primary-color);
