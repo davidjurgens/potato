@@ -1,8 +1,11 @@
 site_name: Potato Annotation
-site_url: https://github.com/davidjurgens/potato
+site_url: https://potatoannotator.readthedocs.io/
+site_description: Free, open-source, self-hosted annotation and agent-evaluation platform for NLP, agentic, and GenAI research.
 nav:
     - Home: index.md
     - Quick Start: quick-start.md
+    - FAQ: faq.md
+    - Glossary: glossary.md
     - Comparison: comparison.md
     - Guides:
         - Getting Started: guides/getting-started.md
@@ -70,9 +73,19 @@ nav:
         - Diversity Ordering: workflow/diversity_ordering.md
     - Agent Evaluation:
         - Agent Traces: agent-evaluation/agent_traces.md
+        - Three-Pane Trace Eval: agent-evaluation/eval_trace.md
         - Coding Agent Annotation: agent-evaluation/coding_agent_annotation.md
         - Web Agent Annotation: agent-evaluation/web_agent_annotation.md
         - Trajectory Evaluation: agent-evaluation/trajectory_eval.md
+        - Trajectory Correction: agent-evaluation/trajectory_correction.md
+        - Programmatic Evaluators: agent-evaluation/evaluators.md
+        - Datasets & Experiments: agent-evaluation/datasets_and_experiments.md
+        - Automation Rules: agent-evaluation/automation_rules.md
+        - CI Evaluation: agent-evaluation/ci_evaluation.md
+        - Judge Alignment: agent-evaluation/judge_alignment.md
+        - Semantic Curation: agent-evaluation/semantic_curation.md
+        - Model Arena: agent-evaluation/model_arena.md
+        - Triage Queue: agent-evaluation/triage_queue.md
         - Live Agent Interaction: agent-evaluation/live_agent.md
     - Solo Mode:
         - Solo Mode: solo-mode/solo_mode.md
@@ -117,6 +130,7 @@ nav:
     - Integrations:
         - Webhooks: integrations/webhooks.md
         - LangChain Integration: integrations/langchain_integration.md
+        - Tracing SDK (potato_trace): integrations/tracing_sdk.md
     - Deployment:
         - Usage: deployment/usage.md
         - Crowdsourcing: deployment/crowdsourcing.md
@@ -125,6 +139,7 @@ nav:
     - API Reference:
         - API Reference: api-reference/api_reference.md
     - Release Notes:
+        - v2.6.1: releasenotes/v2.6.1.md
         - v2.6.0: releasenotes/v2.6.0.md
         - v2.5.0: releasenotes/v2.5.0.md
         - v2.4.5: releasenotes/v2.4.5.md

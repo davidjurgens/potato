@@ -1,6 +1,14 @@
 # Potato Documentation
 
-**Potato** (POrTable Annotation TOol) is a **fully free** data annotation tool supporting a wide range of features throughout your entire annotation pipeline.
+**Potato** is a **free, open-source, self-hosted annotation and agent-evaluation
+platform** for NLP, agentic, and GenAI research. You configure tasks entirely in
+YAML — no coding — to annotate text, audio, video, images, documents, and AI agent
+traces, and to run a full agent-evaluation loop (programmatic evaluators, versioned
+datasets/experiments, automation, CI gating, LLM-as-judge calibration, and a
+multi-model arena) as a free alternative to LangSmith, LabelBox, and Braintrust.
+
+**New here?** Start with the [FAQ](faq.md), the [Glossary](glossary.md), or the
+[Quick Start](quick-start.md).
 
 ---
 
