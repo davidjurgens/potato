@@ -155,6 +155,19 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | **Crowdsourcing** | Prolific and MTurk integration with platform-specific auth ([docs](docs/deployment/crowdsourcing.md)) |
 | **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/annotation-types/triage.md)) |
 
+### Continuous Evaluation Loop
+
+Close the loop from production traces to graded, regression-gated evaluation:
+
+| Capability | Description |
+|------------|-------------|
+| **Capture** | Instrument any agent with the `@traceable` [tracing SDK](docs/integrations/tracing_sdk.md), or POST traces to the ingestion webhook |
+| **Automate** | [Rules](docs/agent-evaluation/automation_rules.md) (`filter → sample → actions`) route incoming traces to queues, datasets, evaluators, or webhooks |
+| **Curate** | Versioned [datasets & experiments](docs/agent-evaluation/datasets_and_experiments.md) + [semantic search/slices](docs/agent-evaluation/semantic_curation.md) to find what to review |
+| **Evaluate** | [Programmatic evaluators](docs/agent-evaluation/evaluators.md) (trajectory match, tool-use, LLM-judge, heuristics) + a side-by-side [model arena](docs/agent-evaluation/model_arena.md) |
+| **Gate** | [Run evals in pytest](docs/agent-evaluation/ci_evaluation.md) and fail CI on score-threshold regressions |
+| **Calibrate** | [LLM-judge ↔ human alignment](docs/agent-evaluation/judge_alignment.md) with auto-calibration from human corrections; judges categorical, span, and free-text outputs |
+
 ---
 
 ## Authentication & Deployment
@@ -214,6 +227,13 @@ The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** cont
 | Schema Gallery | [docs/annotation-types/schemas_and_templates.md](docs/annotation-types/schemas_and_templates.md) |
 | Agent Trace Evaluation | [docs/agent-evaluation/agent_traces.md](docs/agent-evaluation/agent_traces.md) |
 | Web Agent Annotation | [docs/agent-evaluation/web_agent_annotation.md](docs/agent-evaluation/web_agent_annotation.md) |
+| Datasets & Experiments | [docs/agent-evaluation/datasets_and_experiments.md](docs/agent-evaluation/datasets_and_experiments.md) |
+| Programmatic Evaluators | [docs/agent-evaluation/evaluators.md](docs/agent-evaluation/evaluators.md) |
+| Automation Rules | [docs/agent-evaluation/automation_rules.md](docs/agent-evaluation/automation_rules.md) |
+| CI Evaluation (pytest gating) | [docs/agent-evaluation/ci_evaluation.md](docs/agent-evaluation/ci_evaluation.md) |
+| Model Arena | [docs/agent-evaluation/model_arena.md](docs/agent-evaluation/model_arena.md) |
+| Semantic Curation (Catalog) | [docs/agent-evaluation/semantic_curation.md](docs/agent-evaluation/semantic_curation.md) |
+| Tracing SDK (potato_trace) | [docs/integrations/tracing_sdk.md](docs/integrations/tracing_sdk.md) |
 | AI Support | [docs/ai-intelligence/ai_support.md](docs/ai-intelligence/ai_support.md) |
 | Using HuggingFace Models | [docs/ai-intelligence/huggingface_models.md](docs/ai-intelligence/huggingface_models.md) |
 | Potato on HuggingFace | [docs/data-export/potato_on_huggingface.md](docs/data-export/potato_on_huggingface.md) |

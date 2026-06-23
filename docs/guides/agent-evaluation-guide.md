@@ -62,6 +62,32 @@ Observe and interact with a live AI agent in real time, recording traces as you 
 
 See **[Live Agent Interaction](../agent-evaluation/live_agent.md)**.
 
+## Continuous Evaluation Loop
+
+Beyond annotating individual traces, Potato closes the loop from production traffic
+to graded, regression-gated evaluation:
+
+- **Capture** — instrument your agent with the [`@traceable` tracing SDK](../integrations/tracing_sdk.md)
+  (`potato_trace`), or POST traces to the ingestion webhook / Langfuse poller.
+- **Automate** — [automation rules](../agent-evaluation/automation_rules.md) run
+  `filter → sampling rate → actions` over every incoming trace, routing it to the
+  annotation queue, an eval dataset, an evaluator, an outbound webhook, or a notification.
+- **Curate** — build versioned [datasets & experiments](../agent-evaluation/datasets_and_experiments.md)
+  (file or SQLite, tagged versions, splits), and use the [semantic Catalog](../agent-evaluation/semantic_curation.md)
+  (embedding search + dynamic slices) to find the traces worth reviewing.
+- **Evaluate** — score outputs with [programmatic evaluators](../agent-evaluation/evaluators.md)
+  (deterministic trajectory match, tool-use correctness, reference-free LLM-judge,
+  heuristics), or compare models head-to-head in the [model arena](../agent-evaluation/model_arena.md).
+- **Gate CI** — run evals inside pytest and fail the build on score-threshold
+  regressions with the [CI evaluation plugin](../agent-evaluation/ci_evaluation.md).
+- **Calibrate judges** — measure and tune an LLM judge against human gold with
+  [judge alignment](../agent-evaluation/judge_alignment.md) (Cohen's κ, auto-calibration
+  from human corrections) and blind multi-LLM [judge calibration](../ai-intelligence/judge_calibration.md);
+  judges work on categorical, span, and free-text outputs.
+
+Inspect and control all of this from the admin dashboard (Datasets & Experiments,
+Automation, Catalog, Arena links) and the `/admin/eval/*` API.
+
 ## Using AI Assistance for Evaluation
 
 Speed up agent evaluation with AI-powered features:

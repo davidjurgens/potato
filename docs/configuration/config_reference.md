@@ -195,6 +195,26 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `trace_ingestion` |  | object | `api_key`, `enabled`, `notify_annotators`, `sources` |
 | `huggingface_backup` |  |  |  |
 
+## Agent Evaluation Suite
+
+Config blocks for the continuous-evaluation features. Each is opt-in via its
+`enabled` flag; see the linked guide for the full options.
+
+| Key | Type | Sub-keys | Guide |
+|-----|------|----------|-------|
+| `datasets` | object | `enabled`, `storage` (`file`\|`sqlite`) | [Datasets & Experiments](../agent-evaluation/datasets_and_experiments.md) |
+| `automation` | object | `enabled`, `rules` (each: `name`, `when`, `sample_rate`, `actions`) | [Automation Rules](../agent-evaluation/automation_rules.md) |
+| `curation` | object | `enabled`, `model_name`, `embed_on_ingest`, `text_key` | [Semantic Curation](../agent-evaluation/semantic_curation.md) |
+| `arena` | object | `enabled`, `models` (each: `label`, `endpoint_type`, `model`, `base_url`, `temperature`, `ai_config`) | [Model Arena](../agent-evaluation/model_arena.md) |
+| `judge_alignment` | object | `enabled`, `ai_support`, `schemas`, `few_shot`, `inline` | [Judge Alignment](../agent-evaluation/judge_alignment.md) |
+| `judge_calibration` | object | `enabled`, `prompt`, `models`, `k_samples`, `max_items`, `fraction`, `sampling`, `human`, `schemas`, `calibration`, `output` | [Judge Calibration](../ai-intelligence/judge_calibration.md) |
+| `triage` | object | `enabled`, `order`, `default_priority`, `show_badge`, `signal_field`, `invert_signal`, `rules` | [Triage Queue](../agent-evaluation/triage_queue.md) |
+
+> The pytest CI plugin ([CI Evaluation](../agent-evaluation/ci_evaluation.md)) and
+> the tracing SDK ([Tracing SDK](../integrations/tracing_sdk.md)) are not config
+> blocks — they are driven by pytest options / environment variables and the
+> `potato_trace` client, respectively.
+
 ## Debug / Logging
 
 | Key | Required | Type | Sub-keys |
