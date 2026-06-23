@@ -109,6 +109,11 @@ setup(
         "console_scripts": [
             "potato=potato.flask_server:main",
         ],
+        # Pytest plugin for Potato evaluations (markers, the potato_eval fixture,
+        # --potato-threshold gating). Inert unless eval tests run / thresholds set.
+        "pytest11": [
+            "potato_eval=potato.testing.pytest_plugin",
+        ],
     },
     package_data={
         # NOTE: All of potato/static/ is shipped via MANIFEST.in
