@@ -114,12 +114,25 @@ default the per-user quota to unlimited). See
 
 ## Notes & limitations
 
-- `eval_trace` is **display-only** — it collects no annotations itself. Pair it
-  with annotation schemes (e.g. `reasoning_quality`, `tool_use_correctness`,
-  `answer_helpfulness`) as in the example.
-- Span annotation is **not** supported on `eval_trace` (per-pane card IDs do not
-  follow the single `.text-content` wrapper contract). Use `agent_trace` or
-  `code` if you need span highlighting on trace text.
+- `eval_trace` pairs naturally with annotation schemes (e.g. `reasoning_quality`,
+  `tool_use_correctness`, `answer_helpfulness`) as in the example.
+- **Span annotation is supported.** Set `span_target: true` on the field and add a
+  `span` scheme — the whole three-pane view becomes one span target, so an
+  evaluator can highlight any text across the panes (a flawed reasoning step, a
+  wrong tool argument, a bad final answer) and label it. Spans restore by offset
+  against the rendered panes (so they survive navigation), via the shared
+  multi-field span pipeline.
+
+  ```yaml
+  fields:
+    - key: trace
+      type: eval_trace
+      span_target: true        # enable span highlighting across the panes
+  annotation_schemes:
+    - annotation_type: span
+      name: error_spans
+      labels: [reasoning_error, tool_error, answer_error]
+  ```
 
 ## Related
 

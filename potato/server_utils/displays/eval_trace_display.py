@@ -97,9 +97,12 @@ class EvalTraceDisplay(BaseDisplay):
         "text_key": "text",
     }
     description = "Three-pane agent trace eval: reasoning, function calls, and final answer side-by-side"
-    # Per-pane card IDs do not follow the single .text-content wrapper contract
-    # required by SpanManager, so span annotation is not supported (yet).
-    supports_span_target = False
+    # Span annotation: when span_target is set, the whole three-pane block is
+    # wrapped in a single .text-content (via render_span_wrapper). Evaluators can
+    # highlight any text across the panes; overlays restore by offset (relative
+    # to the stable rendered panes), so fine-grained error localization works
+    # without per-pane multi-field wrappers.
+    supports_span_target = True
 
     def render(self, field_config: Dict[str, Any], data: Any) -> str:
         field_key = _escape(field_config.get("key", ""))
@@ -141,18 +144,32 @@ class EvalTraceDisplay(BaseDisplay):
             self._wrap_pane("calls", pane_labels[1], calls_html),
             self._wrap_pane("answer", pane_labels[2], answer_html),
         ]
+        panes_block = f'<div class="eval-trace-panes">{"".join(panes)}</div>'
+
+        # Span annotation: wrap the panes in the standard .text-content so the
+        # SpanManager treats the whole three-pane view as one span target.
+        if field_config.get("span_target"):
+            panes_block = self.render_span_wrapper(
+                field_key, panes_block, self._extract_plain_text(steps))
 
         js = self._build_js(field_key) if link_steps else ""
 
         return f'''
         <style>{css}</style>
         <div class="eval-trace-display" data-field-key="{field_key}"{link_attr}>
-            <div class="eval-trace-panes">
-                {"".join(panes)}
-            </div>
+            {panes_block}
         </div>
         <script>{js}</script>
         '''
+
+    def _extract_plain_text(self, steps: List[Dict[str, Any]]) -> str:
+        """Flat text of the trace (for the span wrapper's data-original-text).
+
+        Visual span restore is offset-based against the rendered panes, so this
+        need not match the rendered layout exactly; it provides a stable textual
+        reference in trace order.
+        """
+        return "\n".join(str(s.get("text", "")) for s in steps if s.get("text"))
 
     # ----- pane assembly --------------------------------------------------
 

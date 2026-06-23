@@ -43,9 +43,9 @@ class TestRegistration:
     def test_in_supported_types(self):
         assert "eval_trace" in display_registry.get_supported_types()
 
-    def test_does_not_support_span_target(self):
-        assert self.display.supports_span_target is False
-        assert display_registry.type_supports_span_target("eval_trace") is False
+    def test_supports_span_target(self):
+        assert self.display.supports_span_target is True
+        assert display_registry.type_supports_span_target("eval_trace") is True
 
     def test_render_via_registry(self):
         html = display_registry.render("eval_trace", {"key": "trace"}, TRACE)
@@ -284,10 +284,24 @@ class TestValidation:
         )
         assert any("pane_labels" in e for e in errors)
 
-    def test_span_target_warns(self):
-        # eval_trace does not support span targets; setting one should error.
+    def test_span_target_is_valid(self):
+        # eval_trace now supports span targets; setting one is not an error.
         errors = self.display.validate_config({"key": "trace", "span_target": True})
-        assert any("span_target" in e for e in errors)
+        assert not any("span_target" in e for e in errors)
+
+    def test_span_target_renders_text_content_wrapper(self):
+        # With span_target, the panes are wrapped in the standard .text-content
+        # so the SpanManager can register the field.
+        html = display_registry.render("eval_trace", {"key": "trace", "span_target": True}, TRACE)
+        assert 'class="text-content"' in html
+        assert 'id="text-content-trace"' in html
+        assert "eval-trace-panes" in html        # panes still rendered inside
+        # data-span-target wrapper is added by the registry container
+        assert 'data-span-target="true"' in html
+
+    def test_no_span_wrapper_without_span_target(self):
+        html = display_registry.render("eval_trace", {"key": "trace"}, TRACE)
+        assert 'id="text-content-trace"' not in html
 
 
 class TestHelpers:
