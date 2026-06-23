@@ -93,7 +93,7 @@ class WebhookReceiver:
                 "viewport": step.get("viewport"),
             })
 
-        return {
+        normalized = {
             "id": f"webhook_{trace_id}",
             "task_description": payload.get(
                 "task_description",
@@ -108,6 +108,13 @@ class WebhookReceiver:
                 "original_id": trace_id,
             },
         }
+        # Carry through common quality-signal fields so the triage scorer and
+        # automation rules can match on them (they'd otherwise be dropped). These
+        # are exactly the signals triage's default rules key on.
+        for signal in ("status", "feedback", "score", "tags"):
+            if signal in payload:
+                normalized[signal] = payload[signal]
+        return normalized
 
     def _normalize_langsmith(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Normalize a LangSmith webhook payload."""

@@ -1,0 +1,10 @@
+[
+  {
+    "id": "seed-001",
+    "task_description": "Seed item (push traces via the webhook to see automation fire)",
+    "conversation": [
+      {"speaker": "User", "text": "ping"},
+      {"speaker": "Agent", "text": "pong"}
+    ]
+  }
+]

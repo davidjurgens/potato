@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Automation Rules</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  /* Automation rules. Inherits the Potato admin design system
+     (.dashboard, .dashboard-card, design tokens). */
+  .au-lede { color: var(--muted-foreground); font-size: 0.9375rem;
+             margin: 0 0 1.5rem; max-width: 72ch; line-height: 1.6; }
+  .au-card { margin-bottom: 1.5rem; }
+  .au-card h2 { margin-top: 0; font-size: 1.125rem; }
+  .au-statgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; }
+  .au-stat { display: flex; flex-direction: column; }
+  .au-stat .label { font-size: 0.7rem; color: var(--muted-foreground);
+                    text-transform: uppercase; letter-spacing: 0.03em; }
+  .au-stat .value { font-size: 1.5rem; font-weight: 700; color: var(--heading-color);
+                    font-variant-numeric: tabular-nums; }
+  table.au-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+  table.au-table th, table.au-table td { border: 1px solid var(--border); padding: 0.45rem 0.65rem; text-align: left; }
+  table.au-table th { background: var(--muted); font-weight: 600; }
+  .au-pill { font-size: 0.7rem; background: var(--muted); border-radius: var(--radius);
+             padding: 0.05rem 0.45rem; font-weight: 600; margin-right: 0.25rem; }
+  .au-mono { font-family: var(--font-mono, ui-monospace, Menlo, monospace); }
+  .au-empty { color: var(--muted-foreground); font-style: italic; }
+  .au-ok { color: hsl(140 45% 32%); font-weight: 600; }
+  .au-error { color: hsl(0 65% 45%); font-weight: 600; }
+  .au-skipped { color: var(--muted-foreground); }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <h1>Automation Rules</h1>
+  <p class="au-lede">
+    Rules run <span class="au-mono">filter → sample → actions</span> over every item
+    entering Potato (loaded or runtime-ingested), closing the production→eval loop.
+    Rules are configured in the <span class="au-mono">automation</span> block of your
+    config; this page inspects what's configured and what has fired.
+  </p>
+
+  <section class="dashboard-card au-card" aria-labelledby="au-counters-h">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+      <h2 id="au-counters-h">Activity</h2>
+      <a class="au-empty" href="{{ url_for('automation.admin_page') }}"
+         style="font-size:0.8125rem;text-decoration:none;"
+         title="This page is a snapshot from page load">↻ Reload to refresh</a>
+    </div>
+    <div class="au-statgrid">
+      {% set c = status.counters %}
+      <div class="au-stat"><span class="label">Items processed</span><span class="value">{{ c.items_processed }}</span></div>
+      <div class="au-stat"><span class="label">Rules fired</span><span class="value">{{ c.rules_fired }}</span></div>
+      <div class="au-stat"><span class="label">Actions ok</span><span class="value">{{ c.actions_ok }}</span></div>
+      <div class="au-stat"><span class="label">Actions error</span><span class="value">{{ c.actions_error }}</span></div>
+      <div class="au-stat"><span class="label">Actions skipped</span><span class="value">{{ c.actions_skipped }}</span></div>
+    </div>
+  </section>
+
+  <section class="dashboard-card au-card" aria-labelledby="au-rules-h">
+    <h2 id="au-rules-h">Configured rules <span class="au-empty" style="font-weight:400;">({{ status.rules|length }})</span></h2>
+    {% if status.rules %}
+    <table class="au-table">
+      <thead><tr><th scope="col">Rule</th><th scope="col">Sample rate</th><th scope="col">Actions</th><th scope="col">Enabled</th></tr></thead>
+      <tbody>
+        {% for r in status.rules %}
+        <tr>
+          <td>{{ r.name }}</td>
+          <td class="au-mono">{{ '%.2f'|format(r.sample_rate) }}</td>
+          <td>{% for a in r.actions %}<span class="au-pill">{{ a }}</span>{% endfor %}</td>
+          <td>{{ 'yes' if r.enabled else 'no' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="au-empty">No rules configured.</p>{% endif %}
+  </section>
+
+  <section class="dashboard-card au-card" aria-labelledby="au-out-h">
+    <h2 id="au-out-h">Recent outcomes <span class="au-empty" style="font-weight:400;">(latest {{ outcomes|length }})</span></h2>
+    {% if outcomes %}
+    <div style="overflow-x:auto;">
+      <table class="au-table">
+        <thead><tr><th scope="col">Item</th><th scope="col">Rule</th><th scope="col">Action</th><th scope="col">Status</th><th scope="col">Detail</th></tr></thead>
+        <tbody>
+          {% for o in outcomes %}
+          <tr>
+            <td class="au-mono">{{ o.item_id }}</td>
+            <td>{{ o.rule }}</td>
+            <td><span class="au-pill">{{ o.action }}</span></td>
+            <td class="au-{{ o.status }}">{{ o.status }}</td>
+            <td class="au-empty">{{ o.detail }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="au-empty">No actions have fired yet.</p>{% endif %}
+  </section>
+</main>
+</body>
+</html>

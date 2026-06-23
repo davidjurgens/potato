@@ -73,92 +73,14 @@ class TriageScore:
         }
 
 
-def _lookup(data: dict, field: str):
-    """Resolve a possibly dotted field path against an item dict.
-
-    Supports nested dicts (``metadata.score``). Returns None if any segment is
-    missing or a non-dict is traversed.
-    """
-    cur = data
-    for part in str(field).split("."):
-        if not isinstance(cur, dict) or part not in cur:
-            return None
-        cur = cur[part]
-    return cur
-
-
-def _as_number(value):
-    """Coerce a value to float, or None if it isn't numeric."""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except (ValueError, AttributeError):
-            return None
-    return None
-
-
-def _matches(condition: dict, data: dict) -> bool:
-    """Evaluate a single rule's ``when`` condition against item data.
-
-    Supported operators: equals, in, lt, lte, gt, gte, exists, contains.
-    String comparisons for equals/in are case-insensitive. Numeric comparisons
-    coerce both sides. ``contains`` tests membership in a list/string field.
-    """
-    field = condition.get("field")
-    if field is None:
-        return False
-    value = _lookup(data, field)
-
-    if "exists" in condition:
-        present = value is not None
-        return present == bool(condition["exists"])
-
-    # Absent fields never match value-based operators.
-    if value is None:
-        return False
-
-    if "equals" in condition:
-        target = condition["equals"]
-        if isinstance(value, str) and isinstance(target, str):
-            return value.strip().lower() == target.strip().lower()
-        return value == target
-
-    if "in" in condition:
-        options = condition["in"] or []
-        norm = [o.lower() if isinstance(o, str) else o for o in options]
-        v = value.lower() if isinstance(value, str) else value
-        return v in norm
-
-    if "contains" in condition:
-        target = condition["contains"]
-        if isinstance(value, (list, tuple, set)):
-            tnorm = target.lower() if isinstance(target, str) else target
-            return any(
-                (item.lower() if isinstance(item, str) else item) == tnorm
-                for item in value
-            )
-        if isinstance(value, str) and isinstance(target, str):
-            return target.lower() in value.lower()
-        return False
-
-    for op, py in (("lt", "<"), ("lte", "<="), ("gt", ">"), ("gte", ">=")):
-        if op in condition:
-            lhs, rhs = _as_number(value), _as_number(condition[op])
-            if lhs is None or rhs is None:
-                return False
-            if op == "lt":
-                return lhs < rhs
-            if op == "lte":
-                return lhs <= rhs
-            if op == "gt":
-                return lhs > rhs
-            return lhs >= rhs
-
-    return False
+# The condition matcher now lives in the shared ``conditions`` module so the
+# automation-rules engine evaluates the exact same ``when`` grammar. The private
+# aliases are kept for backward compatibility (imported by tests and elsewhere).
+from potato.server_utils.conditions import (  # noqa: E402
+    lookup as _lookup,
+    as_number as _as_number,
+    matches as _matches,
+)
 
 
 class TriageScorer:
