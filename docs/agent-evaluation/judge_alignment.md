@@ -67,6 +67,34 @@ curl -X POST localhost:8000/admin/api/judge-alignment/run \
   -d '{"rubrics": {"correctness": "Stricter rubric text..."}}'
 ```
 
+## Automated calibration (corrections → few-shot)
+
+Instead of hand-editing the rubric, **auto-calibrate**: the instances where a
+human *corrected* the judge (human label ≠ judge label) are exactly where it's
+wrong, so they make the most informative few-shot examples. One call re-runs the
+judge with those corrections injected into the prompt and reports the new κ:
+
+```bash
+curl -X POST localhost:8000/admin/api/judge-alignment/autocalibrate \
+  -H "X-API-Key: <admin-key>" -H "Content-Type: application/json" \
+  -d '{"max_corrections": 5}'
+```
+
+This mirrors LangSmith's "human corrections become few-shot examples", grounded
+in Potato's κ tracking. Per schema it returns the base vs new prompt version,
+base vs new κ, the delta, and whether κ improved:
+
+```json
+{"schemas": {"correctness": {"base_kappa": 0.42, "new_kappa": 0.71,
+  "delta": 0.29, "improved": true, "n_corrections": 5,
+  "new_version": "v_…"}}, "improved_count": 1, "total": 1}
+```
+
+**Leakage guard:** when judging an instance, any correction *for that same
+instance* is excluded from its few-shot set — the judge never sees the answer to
+the item it's grading. The new prompt version appears in the report's
+prompt-version history alongside manual rounds.
+
 ## The alignment report
 
 ```
@@ -82,6 +110,39 @@ GET /admin/judge-alignment?prompt_version=v_abc123  # a specific version
 - **prompt-version history** with mean κ per version, so calibration progress is visible.
 
 Human gold is the majority vote across annotators for each instance.
+
+## Judging beyond single-choice (span & free-text)
+
+The judge isn't limited to `radio`/`select`/`likert`. `potato.ai.judge` routes by
+schema type (`judge_mode`):
+
+- **Span schemas** (`span`, `error_span`, `coreference`) — `JudgeService.judge_spans`
+  asks the model to extract labeled spans (exact substrings + labels), maps them to
+  character offsets (repeated text → distinct offsets), and validates labels against
+  the schema. Score against human spans with `score_spans(predicted, gold,
+  iou_threshold=0.5)` → IoU-matched precision / recall / F1 / mean IoU (the same
+  matcher as `judge_calibration.metrics.span_prf`).
+
+  ```python
+  res = service.judge_spans(iid, schema, text)        # {"spans": [...], "reasoning": ...}
+  score_spans(res["spans"], human_spans)              # {"precision","recall","f1","mean_iou",...}
+  ```
+
+- **Free-text schemas** (`textbox`, `text`, `text_edit`) — `JudgeService.judge_freetext`
+  rubric-scores a free-form response along one or more **feedback dimensions**
+  (`continuous` 0–1, `boolean`, or `categorical`), à la LangSmith:
+
+  ```python
+  dims = [{"key": "helpful", "type": "boolean"},
+          {"key": "fluency", "type": "continuous"}]
+  service.judge_freetext(iid, schema, text, dims)     # {"scores": {...}, "reasoning": ...}
+  ```
+  Defaults to a single continuous `quality` score. Continuous values are clamped to
+  [0, 1]; booleans/categoricals are coerced and (for categorical) fuzzy-matched to the
+  declared labels.
+
+Span agreement uses **IoU-F1** (not κ); free-text judging is reference-free (the judge
+produces the feedback scores).
 
 ## Inline mode
 

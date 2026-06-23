@@ -79,6 +79,20 @@
   </section>
   {% endif %}
 
+  <section class="dashboard-card ja-card" aria-label="Auto-calibrate">
+    <div class="ja-card-header"><h2>Auto-calibrate</h2></div>
+    <p class="ja-meta" style="margin:0;">
+      Close the loop automatically: the instances where a human <em>corrected</em>
+      the judge (human label ≠ judge label) are its most informative examples.
+      POST to <code>/admin/api/judge-alignment/autocalibrate</code> to re-run the
+      judge with those corrections injected as few-shot examples
+      (leakage-guarded — an instance never sees its own correction), creating a
+      new prompt version whose mean κ is compared against the baseline. Optional
+      body: <code>{"max_corrections": 5, "max_per_schema": N}</code>. The new
+      version appears in <strong>Prompt versions</strong> above.
+    </p>
+  </section>
+
   {% if not report.per_schema %}
     <p class="ja-empty">No judge predictions yet. Configure <code>judge_alignment</code>
     and POST to <code>/admin/api/judge-alignment/run</code> to generate verdicts.</p>

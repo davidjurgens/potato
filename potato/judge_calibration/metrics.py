@@ -353,6 +353,19 @@ def _match_spans(pred: List[dict], gold: List[dict], iou_threshold: float):
     return tp, fp, fn, matched_ious, matched_pred
 
 
+def span_prf(predicted: List[dict], gold: List[dict],
+             iou_threshold: float = 0.5) -> Dict[str, float]:
+    """Public IoU-matched span precision/recall/F1 (judge-vs-human or rater-pair).
+
+    Promotes the previously-internal span matcher to a supported entry point used
+    by the LLM-judge span path (``potato.ai.judge.score_spans``).
+    """
+    tp, fp, fn, matched_ious, _ = _match_spans(predicted, gold, iou_threshold)
+    out = _prf(tp, fp, fn)
+    out["mean_iou"] = round(sum(matched_ious) / len(matched_ious), 6) if matched_ious else 0.0
+    return out
+
+
 def _prf(tp: int, fp: int, fn: int) -> Dict[str, float]:
     precision = tp / (tp + fp) if (tp + fp) else 0.0
     recall = tp / (tp + fn) if (tp + fn) else 0.0

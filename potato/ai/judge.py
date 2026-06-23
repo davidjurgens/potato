@@ -87,13 +87,16 @@ def extract_labels(schema_info: Dict[str, Any]) -> List[str]:
     return [x for x in out if x]
 
 
-def compute_prompt_version(rubric: str, schema_name: str, few_shot: bool) -> str:
+def compute_prompt_version(rubric: str, schema_name: str, few_shot: bool,
+                           extra: str = "") -> str:
     """Stable short hash identifying this judge configuration.
 
     Editing the rubric (or toggling few-shot) yields a new version so the admin
-    report can track κ across prompt versions.
+    report can track κ across prompt versions. ``extra`` is an optional salt
+    (e.g. a correction-set fingerprint) so auto-calibrated versions are tracked
+    distinctly from manual rubric edits.
     """
-    basis = f"{schema_name}␟{int(bool(few_shot))}␟{rubric or ''}"
+    basis = f"{schema_name}␟{int(bool(few_shot))}␟{rubric or ''}␟{extra or ''}"
     return "v_" + hashlib.sha1(basis.encode("utf-8")).hexdigest()[:10]
 
 
@@ -243,6 +246,205 @@ class JudgeService:
             prompt_version=prompt_version,
             examples_used=[e.get("id", "") for e in (few_shot_examples or []) if e.get("id")],
         )
+
+    # ----- span judging --------------------------------------------------
+
+    def judge_spans(self, instance_id: str, schema_info: Dict[str, Any],
+                    instance_text: str) -> Optional[Dict[str, Any]]:
+        """Ask the judge to extract labeled spans; return located spans + reasoning.
+
+        Returns ``{instance_id, schema_name, spans:[{start,end,text,label}],
+        reasoning, model_name}`` or None on failure.
+        """
+        endpoint = self._get_endpoint()
+        if endpoint is None:
+            return None
+        labels = extract_labels(schema_info)
+        rubric = self.get_rubric(schema_info)
+        parts = [
+            "You are an expert annotator. Extract every span of text matching the",
+            "task below. Return each span's exact substring and its label.",
+            f"Task: {schema_info.get('description', '')}".rstrip(),
+            f"Rubric: {rubric}".rstrip(),
+            ("Allowed labels: " + ", ".join(labels)) if labels else "",
+            "\nText:", _truncate(instance_text, 4000),
+            '\nRespond as JSON: {"spans": [{"text": <exact substring>, '
+            '"label": <one allowed label>}], "reasoning": <one sentence>}.',
+        ]
+        prompt = "\n".join(p for p in parts if p != "")
+        try:
+            from pydantic import BaseModel
+
+            class SpanItem(BaseModel):
+                text: str = ""
+                label: str = ""
+
+            class SpanVerdict(BaseModel):
+                spans: List[SpanItem] = []
+                reasoning: str = ""
+
+            response = endpoint.query(prompt, SpanVerdict)
+            data = _response_to_dict(response)
+        except Exception as e:
+            logger.error(f"Judge spans: query/parse failed for {instance_id}: {e}")
+            return None
+
+        raw = data.get("spans", []) or []
+        raw = [r if isinstance(r, dict) else {"text": str(r)} for r in raw]
+        spans = _locate_spans(instance_text or "", raw, labels)
+        return {
+            "instance_id": instance_id,
+            "schema_name": schema_info.get("name", ""),
+            "spans": spans,
+            "reasoning": str(data.get("reasoning", "")),
+            "model_name": getattr(endpoint, "model", ""),
+        }
+
+    # ----- free-text judging --------------------------------------------
+
+    def judge_freetext(self, instance_id: str, schema_info: Dict[str, Any],
+                       instance_text: str,
+                       dimensions: Optional[List[Dict[str, Any]]] = None
+                       ) -> Optional[Dict[str, Any]]:
+        """Rubric-score a free-text output along one or more feedback dimensions.
+
+        ``dimensions``: list of ``{"key", "type": continuous|boolean|categorical,
+        "labels"?}``. Defaults to a single continuous ``quality`` score.
+        Returns ``{instance_id, schema_name, scores:{key:val}, reasoning, ...}``.
+        """
+        endpoint = self._get_endpoint()
+        if endpoint is None:
+            return None
+        dims = dimensions or [{"key": "quality", "type": "continuous"}]
+        rubric = self.get_rubric(schema_info)
+        spec_lines = []
+        for d in dims:
+            t = d.get("type", "continuous")
+            if t == "continuous":
+                spec_lines.append(f'  "{d["key"]}": <0.0-1.0>')
+            elif t == "boolean":
+                spec_lines.append(f'  "{d["key"]}": <true|false>')
+            else:
+                opts = "|".join(d.get("labels", []))
+                spec_lines.append(f'  "{d["key"]}": <{opts or "label"}>')
+        parts = [
+            "You are an impartial judge scoring a free-text response.",
+            f"Task: {schema_info.get('description', '')}".rstrip(),
+            f"Rubric: {rubric}".rstrip(),
+            "\nResponse to evaluate:", _truncate(instance_text, 4000),
+            '\nRespond as JSON: {"scores": {\n' + ",\n".join(spec_lines)
+            + '\n}, "reasoning": <one sentence>}.',
+        ]
+        prompt = "\n".join(p for p in parts if p != "")
+        try:
+            response = endpoint.query(prompt, None)
+            data = _response_to_dict(response)
+        except Exception as e:
+            logger.error(f"Judge freetext: query/parse failed for {instance_id}: {e}")
+            return None
+
+        raw_scores = data.get("scores", {}) or {}
+        scores = {}
+        for d in dims:
+            scores[d["key"]] = _coerce_feedback(
+                raw_scores.get(d["key"]), d.get("type", "continuous"), d.get("labels"))
+        return {
+            "instance_id": instance_id,
+            "schema_name": schema_info.get("name", ""),
+            "scores": scores,
+            "reasoning": str(data.get("reasoning", "")),
+            "model_name": getattr(endpoint, "model", ""),
+        }
+
+
+def _response_to_dict(response: Any) -> Dict[str, Any]:
+    """Normalize an endpoint response (str/JSON, pydantic, or dict) to a dict."""
+    if isinstance(response, str):
+        return json.loads(response)
+    if hasattr(response, "model_dump"):
+        return response.model_dump()
+    if hasattr(response, "dict"):
+        return response.dict()
+    return response or {}
+
+
+_SPAN_TYPES = {"span", "error_span", "coreference"}
+_FREETEXT_TYPES = {"textbox", "text", "text_edit"}
+
+
+def judge_mode(schema_info: Dict[str, Any]) -> str:
+    """Which judging strategy fits a schema: 'categorical' | 'span' | 'freetext'."""
+    atype = schema_info.get("annotation_type", "")
+    if atype in _SPAN_TYPES:
+        return "span"
+    if atype in _FREETEXT_TYPES:
+        return "freetext"
+    return "categorical"
+
+
+def _locate_spans(text: str, raw_spans: List[Dict[str, Any]],
+                  valid_labels: List[str]) -> List[Dict[str, Any]]:
+    """Map LLM-proposed ``{text,label}`` spans to character offsets in ``text``.
+
+    Repeated span texts advance a search cursor so each occurrence maps to a
+    distinct offset. Labels are validated against the schema (fuzzy-matched);
+    unlocatable or invalid-label spans are dropped.
+    """
+    out = []
+    cursor = 0
+    for s in raw_spans:
+        frag = str(s.get("text", "")).strip()
+        if not frag:
+            continue
+        label = str(s.get("label", "")).strip()
+        if valid_labels:
+            matched = _fuzzy_match_label(label, valid_labels)
+            if matched is None:
+                continue
+            label = matched
+        idx = text.find(frag, cursor)
+        if idx < 0:
+            idx = text.find(frag)  # fall back to first occurrence
+        if idx < 0:
+            continue
+        start, end = idx, idx + len(frag)
+        cursor = end
+        out.append({"start": start, "end": end, "text": frag, "label": label})
+    return out
+
+
+def score_spans(predicted: List[Dict[str, Any]], gold: List[Dict[str, Any]],
+                iou_threshold: float = 0.5) -> Dict[str, Any]:
+    """IoU-matched span agreement (precision/recall/F1) of judge vs human spans.
+
+    Reuses the calibration span matcher so the judge path shares one definition.
+    """
+    from potato.judge_calibration.metrics import _match_spans, _prf
+    tp, fp, fn, matched_ious, _ = _match_spans(predicted, gold, iou_threshold)
+    out = _prf(tp, fp, fn)
+    out.update({
+        "tp": tp, "fp": fp, "fn": fn,
+        "mean_iou": round(sum(matched_ious) / len(matched_ious), 4) if matched_ious else 0.0,
+    })
+    return out
+
+
+def _coerce_feedback(value: Any, dim_type: str, labels: Optional[List[str]]):
+    """Coerce a free-text judge feedback value to its declared type."""
+    if dim_type == "boolean":
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in ("true", "yes", "1", "pass")
+    if dim_type == "categorical":
+        v = str(value).strip()
+        if labels:
+            return _fuzzy_match_label(v, labels) or v
+        return v
+    # continuous (default): clamp to [0, 1]
+    try:
+        return min(1.0, max(0.0, float(value)))
+    except (TypeError, ValueError):
+        return None
 
 
 def _truncate(text: str, limit: int = 300) -> str:
