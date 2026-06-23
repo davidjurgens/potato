@@ -1,0 +1,114 @@
+# Potato Demo Space — LLM Response Preference Arena
+#
+# Showcases pairwise comparison with scale mode (RLHF-style preference),
+# binary dimension ratings, and free-text justification.
+
+annotation_task_name: "LLM Preference Arena"
+
+data_files:
+  - data/llm_responses.json
+
+item_properties:
+  id_key: id
+  text_key: responses
+  context_key: prompt
+
+list_as_text:
+  text_list_prefix_type: alphabet
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+annotation_instructions: |
+  <h4>Task: LLM Response Comparison</h4>
+  <p>You will see a <strong>prompt</strong> and two LLM-generated <strong>responses</strong> (A and B).
+  Compare them across multiple dimensions.</p>
+
+  <h4>How to annotate</h4>
+  <ol>
+    <li><strong>Overall Preference</strong> — Use the slider to indicate which response is better overall.
+        Slide toward A or B depending on strength of preference.</li>
+    <li><strong>Helpfulness</strong> — Which response better addresses what the user actually needs?</li>
+    <li><strong>Accuracy</strong> — Which response contains fewer errors or misleading claims?</li>
+    <li><strong>Justification</strong> — Briefly explain your preference (optional but helpful).</li>
+  </ol>
+
+annotation_schemes:
+  # Pairwise scale: Overall preference (RLHF-style)
+  - annotation_type: pairwise
+    name: overall_preference
+    description: "Overall, which response is better?"
+    mode: scale
+    items_key: responses
+    labels:
+      - "Response A"
+      - "Response B"
+    scale:
+      min: 1
+      max: 6
+      step: 1
+      default: 3
+      labels:
+        min: "A is much better"
+        max: "B is much better"
+        center: ""
+    label_requirement:
+      required: true
+
+  # Binary: Helpfulness
+  - annotation_type: pairwise
+    name: helpfulness
+    description: "Which response is more helpful for the user's actual need?"
+    mode: binary
+    items_key: responses
+    labels:
+      - "A"
+      - "B"
+    allow_tie: true
+    tie_label: "Equally helpful"
+    sequential_key_binding: true
+
+  # Binary: Accuracy
+  - annotation_type: pairwise
+    name: accuracy
+    description: "Which response contains fewer factual errors?"
+    mode: binary
+    items_key: responses
+    labels:
+      - "A"
+      - "B"
+    allow_tie: true
+    tie_label: "Both accurate"
+    sequential_key_binding: true
+
+  # Text: Justification
+  - annotation_type: text
+    name: justification
+    description: "Briefly explain your preference (optional)"
+    multiline: true
+    rows: 2
+
+require_password: false
+
+user_config:
+  allow_all_users: true
+
+site_dir: default
+
+custom_footer_html: |
+  <div class="potato-promo-banner">
+    <p class="promo-headline">This demo was built with Potato</p>
+    <p>Potato is a free, open-source annotation platform with 20+ annotation types, AI-assisted labeling, and quality control. Set up your own annotation project in minutes with a single YAML config file.</p>
+    <div class="promo-links">
+      <a href="https://potatoannotator.com/" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-primary">
+        <i class="fas fa-globe"></i> potatoannotator.com
+      </a>
+      <a href="https://github.com/davidjurgens/potato" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-outline">
+        <i class="fab fa-github"></i> GitHub
+      </a>
+      <a href="https://github.com/davidjurgens/potato/tree/master/examples" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-outline">
+        <i class="fas fa-book-open"></i> 100+ Examples
+      </a>
+    </div>
+  </div>

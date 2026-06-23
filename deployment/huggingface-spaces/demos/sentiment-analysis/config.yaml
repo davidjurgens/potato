@@ -1,0 +1,119 @@
+# Potato Demo Space — Sentiment Analysis Workbench
+#
+# Showcases text classification with radio buttons, Likert confidence scales,
+# and AI-assisted keyword highlighting for sentiment analysis.
+#
+# Designed for HuggingFace Spaces free tier deployment.
+
+annotation_task_name: "Sentiment Analysis Workbench"
+
+# Data configuration
+data_files:
+  - data/reviews.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+# Task directory
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Inline annotation instructions
+annotation_instructions: |
+  <h4>Task: Sentiment Analysis</h4>
+  <p>You are annotating <strong>product and service reviews</strong> for sentiment.
+  Keyword highlights are provided to help you identify sentiment-bearing words.</p>
+
+  <h4>How to annotate</h4>
+  <ol>
+    <li><strong>Overall Sentiment</strong> — What is the dominant sentiment of the review?
+        Choose the single best label.</li>
+    <li><strong>Confidence</strong> — How confident are you in your sentiment label?
+        Use the scale from 1 (not sure) to 5 (very confident).</li>
+    <li><strong>Sentiment Phrases</strong> — Optionally highlight key phrases that carry sentiment.
+        Click a label (positive/negative), then select text to mark it.
+        <em>Keywords are pre-highlighted with colored borders to guide you.</em></li>
+    <li><strong>Notes</strong> — Add any observations about tricky or ambiguous cases.</li>
+  </ol>
+
+# Keyword highlights — auto-highlights sentiment words with colored borders
+keyword_highlights_file: data/sentiment_keywords.tsv
+
+# UI configuration — colors for keyword highlight labels
+ui:
+  spans:
+    span_colors:
+      sentiment_phrases:
+        positive: "(22, 163, 74)"
+        negative: "(239, 68, 68)"
+
+# Annotation schemes
+annotation_schemes:
+  # Radio: Overall sentiment
+  - annotation_type: radio
+    name: overall_sentiment
+    description: "What is the overall sentiment of this review?"
+    labels:
+      - name: positive
+        tooltip: "The review is predominantly positive — satisfied, happy, recommending"
+      - name: negative
+        tooltip: "The review is predominantly negative — dissatisfied, frustrated, warning others"
+      - name: mixed
+        tooltip: "The review contains significant positive AND negative sentiment"
+      - name: neutral
+        tooltip: "The review is factual/informational without strong sentiment"
+    sequential_key_binding: true
+
+  # Likert: Confidence
+  - annotation_type: likert
+    name: confidence
+    description: "How confident are you in your sentiment label?"
+    min_label: "Not sure"
+    max_label: "Very confident"
+    size: 5
+
+  # Span: Sentiment phrase marking
+  - annotation_type: span
+    name: sentiment_phrases
+    description: "Select a label, then highlight sentiment-bearing phrases in the text"
+    columns: 2
+    labels:
+      - name: positive
+        tooltip: "Words or phrases expressing positive sentiment, praise, or satisfaction"
+      - name: negative
+        tooltip: "Words or phrases expressing negative sentiment, criticism, or dissatisfaction"
+
+  # Text: Free-form notes
+  - annotation_type: text
+    name: notes
+    description: "Any additional observations (optional)"
+    multiline: true
+    rows: 2
+
+# Open access — no password for demo
+require_password: false
+
+user_config:
+  allow_all_users: true
+
+# Site configuration
+site_dir: default
+
+custom_footer_html: |
+  <div class="potato-promo-banner">
+    <p class="promo-headline">This demo was built with Potato</p>
+    <p>Potato is a free, open-source annotation platform with 20+ annotation types, AI-assisted labeling, and quality control. Set up your own annotation project in minutes with a single YAML config file.</p>
+    <div class="promo-links">
+      <a href="https://potatoannotator.com/" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-primary">
+        <i class="fas fa-globe"></i> potatoannotator.com
+      </a>
+      <a href="https://github.com/davidjurgens/potato" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-outline">
+        <i class="fab fa-github"></i> GitHub
+      </a>
+      <a href="https://github.com/davidjurgens/potato/tree/master/examples" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-outline">
+        <i class="fas fa-book-open"></i> 100+ Examples
+      </a>
+    </div>
+  </div>

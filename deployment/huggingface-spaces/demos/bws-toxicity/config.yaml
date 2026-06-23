@@ -1,0 +1,60 @@
+# Potato Demo Space — Best-Worst Scaling for Toxicity
+annotation_task_name: "Toxicity Best-Worst Scaling"
+
+task_dir: .
+data_files:
+  - data/toxicity-pool.jsonl
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+bws_config:
+  tuple_size: 4
+  num_tuples: null
+  seed: 42
+  min_item_appearances: 6
+  scoring:
+    method: counting
+
+annotation_instructions: |
+  <h4>Task: Toxicity Ranking via Best-Worst Scaling</h4>
+  <p>You will see <strong>4 comments</strong> at a time. For each set:</p>
+  <ol>
+    <li>Select the <strong>MOST toxic</strong> comment (the one that is most harmful, rude, or disrespectful)</li>
+    <li>Select the <strong>LEAST toxic</strong> comment (the one that is most civil and constructive)</li>
+  </ol>
+  <p><em>Best-Worst Scaling is a statistically efficient method for ranking items. Each set of 4 gives us information about the relative toxicity of all items.</em></p>
+
+annotation_schemes:
+  - annotation_type: bws
+    name: toxicity_bws
+    description: "Toxicity Level"
+    best_description: "Which comment is the MOST toxic?"
+    worst_description: "Which comment is the LEAST toxic?"
+    tuple_size: 4
+    sequential_key_binding: true
+
+require_password: false
+user_config:
+  allow_all_users: true
+site_dir: default
+
+custom_footer_html: |
+  <div class="potato-promo-banner">
+    <p class="promo-headline">This demo was built with Potato</p>
+    <p>Potato is a free, open-source annotation platform with 20+ annotation types, AI-assisted labeling, and quality control. Set up your own annotation project in minutes with a single YAML config file.</p>
+    <div class="promo-links">
+      <a href="https://potatoannotator.com/" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-primary">
+        <i class="fas fa-globe"></i> potatoannotator.com
+      </a>
+      <a href="https://github.com/davidjurgens/potato" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-outline">
+        <i class="fab fa-github"></i> GitHub
+      </a>
+      <a href="https://github.com/davidjurgens/potato/tree/master/examples" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-outline">
+        <i class="fas fa-book-open"></i> 100+ Examples
+      </a>
+    </div>
+  </div>
