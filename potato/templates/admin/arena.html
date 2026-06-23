@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Model Arena</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  .ar-lede { color: var(--muted-foreground); font-size: 0.9375rem; max-width: 72ch;
+             line-height: 1.6; margin: 0 0 1.5rem; }
+  .ar-card { margin-bottom: 1.25rem; }
+  .ar-card h2 { margin-top: 0; font-size: 1.125rem; }
+  .ar-prompt { width: 100%; min-height: 4.5rem; padding: 0.55rem 0.7rem; font: inherit;
+               border: 1px solid var(--border); border-radius: var(--radius);
+               background: var(--background); color: var(--foreground); resize: vertical; }
+  .ar-row { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.6rem; }
+  .ar-status { font-size: 0.85rem; color: var(--muted-foreground); }
+  .ar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+  .ar-model { border: 1px solid var(--border); border-radius: var(--radius); display: flex;
+              flex-direction: column; overflow: hidden; }
+  .ar-model-head { display: flex; align-items: center; justify-content: space-between;
+                   gap: 0.5rem; padding: 0.5rem 0.7rem; background: var(--muted);
+                   border-bottom: 1px solid var(--border); }
+  .ar-model-head .name { font-weight: 700; }
+  .ar-latency { font-size: 0.72rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  .ar-response { padding: 0.7rem; white-space: pre-wrap; word-break: break-word;
+                 font-size: 0.9em; line-height: 1.5; flex: 1; min-height: 4rem; }
+  .ar-response.err { color: hsl(0 65% 45%); font-style: italic; }
+  .ar-pick { margin: 0.5rem 0.7rem 0.7rem; }
+  .ar-pick.won { background: hsl(140 55% 95%); color: hsl(140 50% 25%);
+                 border-color: hsl(140 40% 70%); }
+  table.ar-lb { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+  table.ar-lb th, table.ar-lb td { border: 1px solid var(--border); padding: 0.45rem 0.65rem; text-align: left; }
+  table.ar-lb th { background: var(--muted); font-weight: 600; }
+  td.ar-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .ar-empty { color: var(--muted-foreground); font-style: italic; }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <h1>Model Arena</h1>
+  <p class="ar-lede">
+    Send one prompt to every configured model side by side, compare the responses,
+    and pick the best — building a win-rate leaderboard. Models are
+    provider-agnostic (any of Potato's LLM endpoints).
+  </p>
+
+  <section class="dashboard-card ar-card" aria-labelledby="ar-run-h">
+    <h2 id="ar-run-h">Prompt</h2>
+    <label for="ar-prompt" class="ar-empty" style="font-size:0.8125rem;">Sent to {{ models|length }} model(s): {{ models|join(', ') }}</label>
+    <textarea id="ar-prompt" class="ar-prompt" placeholder="Ask the models something…"></textarea>
+    <div class="ar-row">
+      <button class="shadcn-button shadcn-button-primary" id="ar-run">Run</button>
+      <span class="ar-status" id="ar-status" role="status" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <section class="dashboard-card ar-card" aria-labelledby="ar-resp-h" id="ar-resp-card" style="display:none;">
+    <h2 id="ar-resp-h">Responses</h2>
+    <div class="ar-grid" id="ar-grid"></div>
+  </section>
+
+  <section class="dashboard-card ar-card" aria-labelledby="ar-lb-h">
+    <h2 id="ar-lb-h">Leaderboard</h2>
+    <table class="ar-lb" id="ar-lb">
+      <thead><tr><th scope="col">Model</th><th scope="col">Wins</th><th scope="col">Comparisons</th><th scope="col">Win rate</th></tr></thead>
+      <tbody id="ar-lb-body">
+        {% for r in leaderboard %}
+        <tr><td>{{ r.label }}</td><td class="ar-num">{{ r.wins }}</td><td class="ar-num">{{ r.comparisons }}</td>
+            <td class="ar-num">{{ '%.0f%%'|format(r.win_rate*100) if r.win_rate is not none else '—' }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+(function () {
+  let lastPrompt = "";
+  // Escape untrusted model output before inserting into innerHTML.
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g,
+      c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+  }
+  async function post(url, body) {
+    const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"},
+                              body: JSON.stringify(body || {})});
+    return {ok: r.ok, data: await r.json().catch(() => ({}))};
+  }
+  function renderLeaderboard(rows) {
+    document.getElementById("ar-lb-body").innerHTML = rows.map(r =>
+      `<tr><td>${esc(r.label)}</td><td class="ar-num">${r.wins}</td><td class="ar-num">${r.comparisons}</td>` +
+      `<td class="ar-num">${r.win_rate == null ? "—" : Math.round(r.win_rate*100)+"%"}</td></tr>`).join("");
+  }
+  const runBtn = document.getElementById("ar-run");
+  runBtn.addEventListener("click", async () => {
+    const prompt = document.getElementById("ar-prompt").value.trim();
+    const st = document.getElementById("ar-status");
+    if (!prompt) { st.textContent = "Enter a prompt."; return; }
+    runBtn.disabled = true; st.textContent = "Running…";
+    try {
+      const r = await post("{{ url_for('arena.api_run') }}", {prompt});
+      if (!r.ok) { st.textContent = r.data.error || "Failed."; return; }
+      lastPrompt = prompt; st.textContent = "";
+      document.getElementById("ar-resp-card").style.display = "";
+      document.getElementById("ar-grid").innerHTML = r.data.results.map(res => `
+        <div class="ar-model">
+          <div class="ar-model-head"><span class="name">${esc(res.label)}</span>
+            <span class="ar-latency">${Number(res.latency_ms)} ms</span></div>
+          <div class="ar-response${res.error ? ' err' : ''}">${esc(res.error ? 'Error: ' + res.error : res.response) || '(empty)'}</div>
+          <button class="shadcn-button shadcn-button-outline ar-pick" data-label="${esc(res.label)}"${res.error ? ' disabled' : ''}>Pick as best</button>
+        </div>`).join("");
+      document.querySelectorAll(".ar-pick").forEach(b => b.addEventListener("click", async () => {
+        const pr = await post("{{ url_for('arena.api_preference') }}", {prompt: lastPrompt, winner: b.dataset.label});
+        if (pr.ok) {
+          renderLeaderboard(pr.data.leaderboard);
+          document.querySelectorAll(".ar-pick").forEach(x => x.classList.remove("won"));
+          b.classList.add("won"); b.textContent = "✓ Picked";
+        }
+      }));
+    } finally { runBtn.disabled = false; }
+  });
+})();
+</script>
+</body>
+</html>
