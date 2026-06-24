@@ -49,6 +49,7 @@ from .speech_transcript import generate_speech_transcript_layout
 from .tool_contention import generate_tool_contention_layout
 from .temporal_grounding import generate_temporal_grounding_layout
 from .emergent_behavior import generate_emergent_behavior_layout
+from .table_grid import generate_table_grid_layout
 from .code_review import generate_code_review_layout
 
 # Import identifier utilities for use by other modules

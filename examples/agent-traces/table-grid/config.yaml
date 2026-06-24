@@ -1,0 +1,28 @@
+# Table-grid structure annotation (M16)
+# Mark the cell structure of a table image: rows x cols + per-cell role (header/data/empty).
+# Per-page region bboxes (table/figure/header) are covered by image_annotation run per page;
+# this schema captures the table STRUCTURE that bounding boxes can't express.
+# Run: python potato/flask_server.py start examples/agent-traces/table-grid/config.yaml -p 8000
+annotation_task_name: "Table Structure Annotation"
+data_files:
+  - data/tables.json
+item_properties:
+  id_key: id
+  text_key: task
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+instance_display:
+  layout: {direction: vertical, gap: 16px}
+  fields:
+    - key: task
+      type: text
+      label: "Task"
+annotation_schemes:
+  - annotation_type: table_grid
+    name: structure
+    description: "Set the grid size, then click cells to mark column/row headers and empty cells."
+    image_key: image
+    rows_key: rows
+    cols_key: cols
+    roles: [data, col_header, row_header, empty]

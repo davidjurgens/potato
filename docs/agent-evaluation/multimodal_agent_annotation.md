@@ -127,6 +127,29 @@ annotation_schemes:
 Stored as a list of `{index, start, end, errors, correction}`, keyed by `index`.
 Example: `examples/agent-traces/speech-transcript/`.
 
+## Table-grid structure (`table_grid`)
+
+Annotate the **cell structure** of a table image — the document-specific piece that
+plain bounding boxes can't capture (OmniDocBench, CVPR 2025; RealHiTBench). The
+annotator sets the grid dimensions and clicks cells to mark their role (data /
+column-header / row-header / empty). Per-page *region* boxes (table / figure /
+header) are already covered by running [`image_annotation`](../image_annotation.md)
+per page, so this schema focuses on the structure those boxes can't express.
+
+```yaml
+annotation_schemes:
+  - annotation_type: table_grid
+    name: structure
+    description: "Set the grid size, then click cells to mark headers and empty cells."
+    image_key: image           # per-instance table image URL / data-URI
+    rows_key: rows             # optional initial dims from the data
+    cols_key: cols
+    roles: [data, col_header, row_header, empty]   # click cycles through these
+```
+
+Stored as `{rows, cols, cells: {"r,c": role}}` (only non-`data` cells stored).
+Example: `examples/agent-traces/table-grid/`.
+
 ## Related documentation
 
 - [Multi-Agent Team Annotation](multi_agent_annotation.md) — team-structure schemas

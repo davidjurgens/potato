@@ -32,6 +32,26 @@ attributing the failure. A runnable example is at
 python potato/flask_server.py start examples/agent-traces/failure-attribution/config.yaml -p 8000
 ```
 
+## Orchestration pattern (recipe)
+
+The orchestration architecture often dominates a run's outcome (MAESTRO,
+2601.00481), so it's worth capturing as a first-class label. No new schema is needed
+— a `radio` confirms or corrects the run's pattern, paired with the trace display.
+The label then guides both the downstream evaluation lens and how you lay the trace
+out (sequential → lanes, hierarchical → tree, group-chat → board).
+
+```yaml
+annotation_schemes:
+  - annotation_type: radio
+    name: orchestration_pattern
+    description: "Which orchestration pattern does this run actually follow?"
+    labels: [single_agent, sequential_pipeline, hierarchical_manager, group_chat, blackboard, debate, hub_and_spoke]
+    has_free_response: true
+```
+
+Runnable example: `examples/agent-traces/orchestration-pattern/`. Pair with
+`agent_interaction_graph` (structure) and `agent_scorecard` (per-agent scoring).
+
 ## MAST tagging at step granularity (recipe)
 
 You don't need a new schema to bind the [MAST taxonomy](failure_taxonomy.md) to the

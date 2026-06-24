@@ -274,6 +274,7 @@ def _register_builtin_schemas():
     from .tool_contention import generate_tool_contention_layout
     from .temporal_grounding import generate_temporal_grounding_layout
     from .emergent_behavior import generate_emergent_behavior_layout
+    from .table_grid import generate_table_grid_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -676,6 +677,14 @@ def _register_builtin_schemas():
             optional_fields=["steps_key", "agent_key", "behaviors", "allow_note"],
             supports_keybindings=False,
             description="Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift"
+        ),
+        SchemaDefinition(
+            name="table_grid",
+            generator=generate_table_grid_layout,
+            required_fields=["name", "description"],
+            optional_fields=["image_key", "rows_key", "cols_key", "default_rows", "default_cols", "roles"],
+            supports_keybindings=False,
+            description="Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty)"
         ),
         SchemaDefinition(
             name="trajectory_edit",
