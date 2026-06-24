@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Annotation integrity</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=3">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  .ai-lede { color: var(--muted-foreground); max-width: 72ch; line-height: 1.6; margin: 0.25rem 0 1.25rem; }
+  table.ai-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+  table.ai-table th, table.ai-table td { border: 1px solid var(--border); padding: 0.5rem 0.7rem; text-align: left; }
+  table.ai-table th { background: var(--muted); font-weight: 600; }
+  td.ai-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .ai-bar-wrap { display: inline-block; width: 90px; height: 8px; background: var(--muted); border-radius: 999px; vertical-align: middle; margin-left: 0.4rem; }
+  .ai-bar { display: block; height: 8px; border-radius: 999px; }
+  .ai-flag { display: inline-block; font-size: 0.68rem; font-weight: 600; padding: 0 0.4rem; border-radius: 999px; margin-right: 0.25rem; }
+  .ai-flag.llm_echo { background: hsl(8 60% 92%); color: hsl(8 55% 32%); }
+  .ai-flag.low_signal { background: hsl(40 70% 90%); color: hsl(35 55% 30%); }
+  .ai-empty { color: var(--muted-foreground); font-style: italic; }
+  .ai-note { font-size: 0.8rem; color: var(--muted-foreground); margin-top: 0.75rem; }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <h1>Annotation integrity</h1>
+  <p class="ai-lede">
+    Flags annotators who likely echoed an LLM or answered with little effort —
+    <strong>without ground truth</strong>. <em>Correlated Agreement</em> (CA) is each
+    annotator's same-item minus cross-item agreement with peers (low ⇒ random/low
+    effort). When reference LLM labels are available, <em>LLM alignment</em> with low
+    <em>residual</em> (independent agreement on items where they diverge from the LLM)
+    is the covert-LLM tell. Treat as triage signals to review, not proof.
+  </p>
+
+  {% if not reports %}
+  <p class="ai-empty">No annotations to analyze yet.</p>
+  {% else %}
+  <table class="ai-table">
+    <thead><tr>
+      <th scope="col">Annotator</th>
+      <th scope="col">Items</th>
+      <th scope="col">Suspicion</th>
+      <th scope="col">CA score</th>
+      <th scope="col">LLM alignment</th>
+      <th scope="col">Residual</th>
+      <th scope="col">Flags</th>
+    </tr></thead>
+    <tbody>
+      {% for r in reports %}
+      {% set hue = 0 if r.suspicion >= 0.66 else (40 if r.suspicion >= 0.34 else 140) %}
+      <tr>
+        <td>{{ r.annotator }}</td>
+        <td class="ai-num">{{ r.n_items }}</td>
+        <td class="ai-num">{{ '%.2f'|format(r.suspicion) }}
+          <span class="ai-bar-wrap" aria-hidden="true"><span class="ai-bar"
+            style="width: {{ (r.suspicion*90)|round|int }}px; background: hsl({{ hue }} 60% 50%);"></span></span>
+        </td>
+        <td class="ai-num">{{ '%.3f'|format(r.ca_score) if r.ca_score is not none else '—' }}</td>
+        <td class="ai-num">{{ '%.0f%%'|format(r.llm_alignment*100) if r.llm_alignment is not none else '—' }}</td>
+        <td class="ai-num">{{ '%.0f%%'|format(r.residual_agreement*100) if r.residual_agreement is not none else '—' }}</td>
+        <td>{% for f in r.flags %}<span class="ai-flag {{ f }}">{{ f.replace('_',' ') }}</span>{% endfor %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="ai-note">
+    {{ n_annotators }} annotator(s).
+    {% if used_llm_labels %}Reference LLM labels were available (LLM-echo signal active).
+    {% else %}No reference LLM labels — Correlated-Agreement signal only; run the judge to enable LLM-echo detection.{% endif %}
+  </p>
+  {% endif %}
+</main>
+</body>
+</html>

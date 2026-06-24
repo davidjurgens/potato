@@ -3059,6 +3059,70 @@ def admin_judge_alignment_autocalibrate():
     return jsonify(report)
 
 
+def _build_annotation_observations(users, schemas):
+    """(worker, item::schema, label) observations from stored annotations (E2)."""
+    from potato.server_utils.judge_alignment import human_label_for
+    from potato.item_state_management import get_item_state_manager
+    ism = get_item_state_manager()
+    if ism is None:
+        return []
+    obs = []
+    for iid in ism.get_instance_ids():
+        for schema in schemas:
+            key = f"{iid}::{schema}"
+            for u in users:
+                lab = human_label_for(str(iid), schema, u)
+                if lab is not None:
+                    obs.append((u, key, lab))
+    return obs
+
+
+@app.route("/admin/annotation-integrity", methods=["GET"])
+def admin_annotation_integrity():
+    """Per-annotator LLM-cheating / low-effort detection (E2), no ground truth.
+
+    ?format=html for the dashboard. Uses the judge to supply reference LLM labels
+    when available (for the LLM-echo signal); otherwise Correlated-Agreement only.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    try:
+        from potato.server_utils.cheating_detection import detect_llm_cheating
+        from potato.server_utils.judge_alignment import judge_scoped_schemas, run_judge_batch
+        # schemas: prefer judge-scoped (categorical) schemes; fall back to all radio/multiselect names
+        schemas = [s.get("name") for s in judge_scoped_schemas(config)]
+        if not schemas:
+            schemas = [s.get("name") for s in (config.get("annotation_schemes") or [])
+                       if s.get("annotation_type") in ("radio", "multiselect", "multiple_choice")]
+        users = get_users()
+        obs = _build_annotation_observations(users, schemas)
+        # Optional reference LLM labels from cached judge predictions (best-effort).
+        llm_labels = None
+        try:
+            from potato.server_utils.judge_alignment import load_predictions, latest_prompt_version
+            preds = load_predictions(config).get(latest_prompt_version(config) or "", {})
+            llm_labels = {f"{k.split('::')[0]}::{k.split('::')[1]}": v.get("predicted_label")
+                          for k, v in preds.items()
+                          if isinstance(v, dict) and v.get("predicted_label") and "::" in k}
+            llm_labels = llm_labels or None
+        except Exception:
+            llm_labels = None
+        reports = [r.to_dict() for r in detect_llm_cheating(obs, llm_labels=llm_labels)]
+    except Exception as exc:
+        logger.exception("Failed to compute annotation integrity")
+        return jsonify({"error": str(exc)}), 500
+
+    payload = {"reports": reports, "n_annotators": len(reports),
+               "used_llm_labels": bool(llm_labels)}
+    if (request.args.get("format") or "json").lower() == "html":
+        try:
+            return render_template("admin/annotation_integrity.html", **payload)
+        except Exception:
+            pass
+    return jsonify(payload)
+
+
 @app.route("/admin/triage-queue", methods=["GET"])
 def admin_triage_queue():
     """Signal-based triage queue: items ranked by their quality signal.
@@ -7092,6 +7156,7 @@ def configure_routes(flask_app, app_config):
     # by configure_routes). Audit: diff of @app.route paths vs add_url_rule paths.
     app.add_url_rule("/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
     app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
+    app.add_url_rule("/admin/annotation-integrity", "admin_annotation_integrity", admin_annotation_integrity, methods=["GET"])
     app.add_url_rule("/admin/judge-alignment", "admin_judge_alignment", admin_judge_alignment, methods=["GET"])
     app.add_url_rule("/admin/api/judge-alignment/run", "admin_judge_alignment_run", admin_judge_alignment_run, methods=["POST"])
     app.add_url_rule("/admin/api/judge-alignment/autocalibrate", "admin_judge_alignment_autocalibrate", admin_judge_alignment_autocalibrate, methods=["POST"])

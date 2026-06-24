@@ -157,3 +157,28 @@ def api_slice_to_dataset(name):
         include_annotations=bool(body.get("include_annotations", False)))
     return jsonify({"dataset": dataset, "imported": len(ids),
                     "version": version.to_dict()}), 201
+
+
+@curation_bp.route("/api/discover", methods=["POST"])
+@admin_required
+@_enabled_required
+def api_discover():
+    """Discover candidate failure modes by clustering the embedding index (E1).
+
+    Body: {k?: int, instance_ids?: [...], use_llm?: bool, max_examples?: int}.
+    Returns clusters (largest first) with representative examples and an
+    LLM-suggested axial code a human then confirms/edits.
+    """
+    body = request.get_json(silent=True) or {}
+    mgr = get_curation_manager()
+    if len(mgr.index) == 0:
+        return jsonify({"error": "embedding index is empty; build it first"}), 400
+    try:
+        clusters = mgr.discover_failure_modes(
+            k=int(body.get("k", 6)),
+            instance_ids=body.get("instance_ids"),
+            use_llm=bool(body.get("use_llm", True)),
+            max_examples=int(body.get("max_examples", 4)))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"clusters": [c.to_dict() for c in clusters], "count": len(clusters)})

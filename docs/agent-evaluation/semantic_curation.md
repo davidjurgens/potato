@@ -72,12 +72,33 @@ curl -X POST localhost:8000/admin/catalog/api/slices/tool-errors/to_dataset \
 The resolved instances become examples in the named [dataset](datasets_and_experiments.md),
 ready for annotation, experiments, or SFT/DPO export.
 
+## Discover failure modes (bottom-up taxonomy)
+
+Where the [MAST taxonomy](failure_taxonomy.md) tags traces against a *fixed* known
+set, **discovery** builds a *project-specific* taxonomy bottom-up — the qualitative
+open/axial-coding workflow over agent traces. On the **Catalog** page, *Discover
+failure modes* clusters the indexed traces and asks the judge to propose a candidate
+**label + description per cluster** from representative examples; you then confirm or
+edit each code (a cluster the judge can't name shows as "unlabeled — add a code").
+
+```bash
+curl -X POST localhost:8000/admin/catalog/api/discover -H "X-API-Key: <key>" \
+  -H "Content-Type: application/json" -d '{"k": 6}'
+# -> {"clusters": [{size, suggested_label, suggested_description, examples, member_ids}, ...]}
+```
+
+Clustering is deterministic spherical k-means over the embedding index (pure Python);
+LLM labeling is optional (`use_llm: false` returns clusters + examples for fully
+manual coding). Restrict to a subset (e.g. only failed traces) with `instance_ids`.
+This complements the MAST tagging schema: discover the modes, then tag at scale.
+
 ## API summary
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | POST | `/admin/catalog/api/build` | Build the embedding index over current items |
 | POST | `/admin/catalog/api/search` | `{query\|anchor_id, top_k, threshold}` |
+| POST | `/admin/catalog/api/discover` | `{k, instance_ids?, use_llm?}` → candidate failure-mode clusters |
 | GET/POST | `/admin/catalog/api/slices` | List / create slices |
 | GET | `/admin/catalog/api/slices/<n>/resolve` | Resolve a slice → instance ids |
 | DELETE | `/admin/catalog/api/slices/<n>` | Delete a slice |

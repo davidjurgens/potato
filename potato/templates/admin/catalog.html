@@ -33,6 +33,11 @@
               padding: 0.05rem 0.45rem; font-weight: 600; }
   .cat-warn { background: hsl(40 80% 95%); color: hsl(28 60% 28%); border: 1px solid hsl(40 70% 85%);
               border-radius: var(--radius); padding: 0.5rem 0.75rem; font-size: 0.85rem; margin-bottom: 1rem; }
+  .cat-cluster { border: 1px solid var(--border); border-radius: var(--radius); padding: 0.6rem 0.8rem; margin-top: 0.6rem; }
+  .cat-cluster-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+  .cat-cluster-desc { font-size: 0.85rem; color: var(--muted-foreground); margin-top: 0.2rem; }
+  .cat-cluster-ex { margin: 0.4rem 0 0; padding-left: 1.1rem; font-size: 0.8rem; color: var(--muted-foreground); }
+  .cat-cluster-ex li { margin-bottom: 0.15rem; }
 </style>
 </head>
 <body>
@@ -80,6 +85,21 @@
     </div>
     <span class="cat-status" id="search-status" role="status" aria-live="polite"></span>
     <div id="results"></div>
+  </section>
+
+  <section class="dashboard-card cat-card" aria-labelledby="disc-h">
+    <h2 id="disc-h">Discover failure modes</h2>
+    <p class="cat-empty" style="margin:0 0 0.5rem;">
+      Cluster the indexed traces and let the judge propose a candidate failure-mode
+      label per cluster (a project-specific taxonomy you then confirm or edit).
+    </p>
+    <div class="cat-row">
+      <div class="cat-field"><label for="disc-k">Clusters (k)</label>
+        <input type="number" id="disc-k" class="num" value="6" min="2" max="30"></div>
+      <button class="shadcn-button shadcn-button-primary" id="disc-btn">Discover</button>
+    </div>
+    <span class="cat-status" id="disc-status" role="status" aria-live="polite"></span>
+    <div id="disc-results"></div>
   </section>
 
   <section class="dashboard-card cat-card" aria-labelledby="slices-h">
@@ -188,6 +208,33 @@
     if (r.ok) { st.className = "cat-status ok"; st.textContent = `Imported ${r.data.imported} into '${dataset}'.`; }
     else { st.className = "cat-status err"; st.textContent = r.data.error || "Failed."; }
   }));
+
+  // Escape untrusted text (LLM labels + trace excerpts) before innerHTML.
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g,
+      c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+  const discBtn = document.getElementById("disc-btn");
+  discBtn.addEventListener("click", async () => {
+    const st = document.getElementById("disc-status");
+    st.className = "cat-status"; st.textContent = "Clustering & labeling…"; discBtn.disabled = true;
+    try {
+      const r = await post("{{ url_for('curation.api_discover') }}",
+                           {k: parseInt(document.getElementById("disc-k").value) || 6});
+      if (!r.ok) { st.className = "cat-status err"; st.textContent = r.data.error || "Failed."; return; }
+      st.className = "cat-status ok"; st.textContent = `${r.data.count} candidate failure mode(s)`;
+      document.getElementById("disc-results").innerHTML = r.data.clusters.map(c => `
+        <div class="cat-cluster">
+          <div class="cat-cluster-head">
+            <strong>${esc(c.suggested_label) || "(unlabeled — add a code)"}</strong>
+            <span class="cat-empty">${c.size} trace(s)</span>
+          </div>
+          ${c.suggested_description ? `<div class="cat-cluster-desc">${esc(c.suggested_description)}</div>` : ""}
+          <ul class="cat-cluster-ex">${c.examples.slice(0,3).map(e => `<li>${esc(String(e).slice(0,160))}</li>`).join("")}
+            ${c.size > 3 ? `<li class="cat-empty">+${c.size - 3} more trace(s)</li>` : ""}</ul>
+        </div>`).join("");
+    } finally { discBtn.disabled = false; }
+  });
 })();
 </script>
 </body>

@@ -111,6 +111,24 @@ class CurationManager:
     def resolve(self, slc: Slice) -> List[str]:
         return resolve_slice(slc, self.index, self.embedder, self._metadata_for)
 
+    def discover_failure_modes(self, k: int = 6, instance_ids: Optional[List[str]] = None,
+                               use_llm: bool = True, max_examples: int = 4):
+        """Cluster embedded traces into candidate failure modes (E1). Returns a list
+        of ``DiscoveredCluster`` (largest cluster first), each with representative
+        examples and — when an LLM judge is configured — a suggested axial code that
+        a human confirms or edits."""
+        from potato.curation.discovery import discover_failure_modes
+        llm = None
+        if use_llm:
+            try:
+                from potato.ai.judge import JudgeService
+                llm = JudgeService(self.config)._get_endpoint()
+            except Exception as e:  # pragma: no cover - provider-dependent
+                logger.warning("discovery: no judge endpoint (%s); clustering only", e)
+        return discover_failure_modes(
+            self.index, self._item_text, k=k, llm=llm,
+            max_examples=max_examples, instance_ids=instance_ids)
+
 
 # ----- singleton -----
 
