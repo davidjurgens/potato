@@ -84,6 +84,29 @@ node and edge is keyboard-focusable and activates on Enter/Space, and a live tex
 summary lists critical nodes and flagged edges so meaning is never conveyed by color
 alone (WCAG). Example: `examples/agent-traces/interaction-graph/`.
 
+## Cross-lane emergent behavior (`emergent_behavior`)
+
+Tag **collective behaviors** that span multiple turns and agents — collusion,
+groupthink, cascading errors, role drift (collective-behavior work, 2604.05339). An
+emergent behavior isn't a contiguous text span; it's a *set of participating turns*,
+possibly from different agents/lanes. For each behavior the annotator checks the
+turns that participate and adds a note — a "cross-lane span" expressed as a turn-set
+(which keeps it independent of, and safe for, the core span engine).
+
+```yaml
+annotation_schemes:
+  - annotation_type: emergent_behavior
+    name: emergent
+    description: "For each collective behavior, check the turns (across agents) that participate."
+    steps_key: steps
+    agent_key: agent
+    behaviors: [collusion, groupthink, cascading_error, role_drift]
+    allow_note: true
+```
+
+Stored as `{behavior: {turns: [idx...], note}}` (only non-empty behaviors). Example:
+`examples/agent-traces/emergent-behavior/`.
+
 ## Handoff review (`handoff_review`)
 
 Treat every **handoff** — one agent passing control to another — as a first-class

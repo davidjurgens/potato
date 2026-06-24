@@ -273,6 +273,7 @@ def _register_builtin_schemas():
     from .speech_transcript import generate_speech_transcript_layout
     from .tool_contention import generate_tool_contention_layout
     from .temporal_grounding import generate_temporal_grounding_layout
+    from .emergent_behavior import generate_emergent_behavior_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -667,6 +668,14 @@ def _register_builtin_schemas():
             optional_fields=["video_key", "events_key", "duration"],
             supports_keybindings=False,
             description="Video temporal grounding: mark gold event intervals with live IoU vs predicted"
+        ),
+        SchemaDefinition(
+            name="emergent_behavior",
+            generator=generate_emergent_behavior_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key", "behaviors", "allow_note"],
+            supports_keybindings=False,
+            description="Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift"
         ),
         SchemaDefinition(
             name="trajectory_edit",
