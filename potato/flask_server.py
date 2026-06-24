@@ -1980,6 +1980,20 @@ def _is_user_adjudicator(username: str) -> bool:
     return False
 
 
+def _annotator_dashboard_enabled() -> bool:
+    """Whether the opt-in annotator progress dashboard is enabled (default off).
+
+    Accepts both ``annotator_dashboard: true`` and the dict form
+    ``annotator_dashboard: {enabled: true, ...}``.
+    """
+    raw = config.get("annotator_dashboard", False)
+    if raw is True:
+        return True
+    if isinstance(raw, dict):
+        return bool(raw.get("enabled", False))
+    return False
+
+
 def render_page_with_annotations(username: str):
     '''
     When annotating, shows the current instance to the user with any annotations
@@ -2304,6 +2318,8 @@ def render_page_with_annotations(username: str):
         annotation_instructions=config.get("annotation_instructions", ""),
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(username),
+        # Annotator progress dashboard nav link (opt-in, off by default)
+        annotator_dashboard_enabled=_annotator_dashboard_enabled(),
         annotation_codebook_url=_sanitize_codebook_url(config.get("annotation_codebook_url", "")),
         # Annotation status indicator (three-state: labeled/in_progress/unlabeled)
         annotation_status=annotation_status,

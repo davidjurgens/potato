@@ -1401,13 +1401,12 @@ class UserState:
             }
 
         def span_to_dict(s: SpanAnnotation) -> dict[str,any]:
-            return {
-                "schema": s.get_schema(),
-                "name": s.get_name(),
-                "start": s.get_start(),
-                "end": s.get_end(),
-                "title": s.get_title()
-            }
+            # Use SpanAnnotation.to_dict() as the single source of truth so this
+            # stays in sync with to_span() below. Previously this duplicated only
+            # schema/name/start/end/title and silently dropped target_field
+            # (breaking multi-field span rendering across sessions),
+            # id, kb_*, additional_parts and format_coords on every save->reload.
+            return s.to_dict()
 
         def convert_label_dict(d: dict[Label, any]) -> list[tuple[dict[str], str]]:
             return [(label_to_dict(k), v) for k, v in d.items()]
@@ -2754,13 +2753,12 @@ class InMemoryUserState(UserState):
             }
 
         def span_to_dict(s: SpanAnnotation) -> dict[str,any]:
-            return {
-                "schema": s.get_schema(),
-                "name": s.get_name(),
-                "start": s.get_start(),
-                "end": s.get_end(),
-                "title": s.get_title()
-            }
+            # Use SpanAnnotation.to_dict() as the single source of truth so this
+            # stays in sync with to_span() below. Previously this duplicated only
+            # schema/name/start/end/title and silently dropped target_field
+            # (breaking multi-field span rendering across sessions),
+            # id, kb_*, additional_parts and format_coords on every save->reload.
+            return s.to_dict()
 
         def convert_label_dict(d: dict[Label, any]) -> list[tuple[dict[str], str]]:
             return [(label_to_dict(k), v) for k, v in d.items()]

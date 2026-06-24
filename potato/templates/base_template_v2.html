@@ -209,6 +209,11 @@
                     <i class="fas fa-gavel"></i> {{ ui_lang.adjudicate }}
                 </a>
                 {% endif %}
+                {% if annotator_dashboard_enabled | default(false) %}
+                <a href="/progress" class="adjudicate-btn" title="View your progress">
+                    <i class="fas fa-chart-line"></i> {{ ui_lang.progress | default('Progress') }}
+                </a>
+                {% endif %}
                 {% if annotation_codebook_url %}
                 <a href="{{ annotation_codebook_url | replace('data_files/', '/media/') }}"
                    class="codebook-btn"

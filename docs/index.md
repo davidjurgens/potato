@@ -146,6 +146,7 @@ Role-based guides that walk you through Potato for your specific use case:
 ## Administration
 
 - [Admin Dashboard](administration/admin_dashboard.md) - Monitoring and management
+- [Annotator Progress Dashboard](administration/annotator_dashboard.md) - Opt-in, read-only progress view for annotators
 - [Behavioral Tracking](advanced/behavioral_tracking.md) - User behavior analytics
 - [Annotation History](administration/annotation_history.md) - Tracking annotation changes
 

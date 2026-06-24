@@ -92,14 +92,30 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
                 "image_annotations": {},
             }
 
-            # Process span data
-            instance_spans = span_data.get(instance_id, {})
-            for schema_name, span_list in instance_spans.items():
-                if isinstance(span_list, list):
-                    record["spans"][schema_name] = span_list
-                elif isinstance(span_list, dict):
-                    # Span data might be stored as a dict of span_id -> span_obj
-                    record["spans"][schema_name] = list(span_list.values())
+            # Process span data.
+            # On disk, instance_id_to_span_to_value[instance_id] is serialized
+            # by convert_span_dict() as a LIST of [span_dict, value] pairs
+            # (mirroring the label format handled above). Older/alternate
+            # formats stored a dict keyed by schema name, so handle both.
+            # Output shape: record["spans"] is a dict {schema_name: [span,...]}
+            # which every downstream exporter expects (they call .items()).
+            instance_spans = span_data.get(instance_id, [])
+            if isinstance(instance_spans, list):
+                for entry in instance_spans:
+                    if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                        span_obj, _value = entry
+                    else:
+                        span_obj = entry
+                    if isinstance(span_obj, dict):
+                        schema_name = span_obj.get("schema", "")
+                        record["spans"].setdefault(schema_name, []).append(span_obj)
+            elif isinstance(instance_spans, dict):
+                for schema_name, span_list in instance_spans.items():
+                    if isinstance(span_list, list):
+                        record["spans"][schema_name] = span_list
+                    elif isinstance(span_list, dict):
+                        # Span data might be stored as a dict of span_id -> span_obj
+                        record["spans"][schema_name] = list(span_list.values())
 
             # Extract image annotations from labels
             # Image annotations are stored as JSON strings in label values

@@ -5169,6 +5169,89 @@ def done():
                           auto_redirect=auto_redirect,
                           auto_redirect_delay=auto_redirect_delay)
 
+def _annotator_dashboard_config():
+    """Return the normalized annotator_dashboard config block.
+
+    Disabled (returns enabled=False) unless explicitly turned on. Accepts a
+    bare ``annotator_dashboard: true`` shorthand as well as a dict.
+    """
+    raw = config.get("annotator_dashboard", False)
+    if raw is True:
+        raw = {"enabled": True}
+    if not isinstance(raw, dict):
+        raw = {}
+    return {
+        "enabled": bool(raw.get("enabled", False)),
+        "show_project_progress": bool(raw.get("show_project_progress", True)),
+        "show_personal_progress": bool(raw.get("show_personal_progress", True)),
+        "show_active_annotators": bool(raw.get("show_active_annotators", False)),
+    }
+
+
+@app.route("/progress", methods=["GET"])
+def annotator_progress():
+    """
+    Read-only, opt-in progress dashboard for annotators.
+
+    Shows ONLY project-level aggregate progress and the requesting annotator's
+    own stats. Never exposes other annotators' identities, admin actions, or
+    configuration. Disabled by default (see annotator_dashboard config).
+    """
+    dash = _annotator_dashboard_config()
+    if not dash["enabled"]:
+        # Feature off: behave as if the route does not exist.
+        return home()
+
+    if 'username' not in session:
+        return home()
+
+    return render_template(
+        "annotator_dashboard.html",
+        title=config.get("annotation_task_name", "Annotation Platform"),
+        annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+        dashboard_config=dash,
+    )
+
+
+@app.route("/progress/api/summary", methods=["GET"])
+def annotator_progress_summary():
+    """JSON progress numbers for the annotator dashboard (read-only)."""
+    dash = _annotator_dashboard_config()
+    if not dash["enabled"]:
+        return jsonify({"error": "Not found"}), 404
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+
+    from potato.server_utils.progress_stats import (
+        compute_project_progress,
+        compute_personal_progress,
+    )
+
+    result = {}
+
+    if dash["show_project_progress"]:
+        project = compute_project_progress()
+        project_out = {
+            "total_items": project["total_items"],
+            "items_with_annotations": project["items_with_annotations"],
+            "completion_percentage": project["completion_percentage"],
+            "total_annotations": project["total_annotations"],
+        }
+        # active annotators is a COUNT only and separately gated
+        if dash["show_active_annotators"]:
+            project_out["active_annotators"] = project["active_annotators"]
+        result["project"] = project_out
+
+    if dash["show_personal_progress"]:
+        # Only ever the requesting user's own data.
+        result["personal"] = compute_personal_progress(username)
+
+    return jsonify(result)
+
+
 @app.route("/admin", methods=["GET"])
 def admin():
     """
@@ -7181,6 +7264,8 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/poststudy", "poststudy", poststudy, methods=["GET", "POST"])
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])
+    app.add_url_rule("/progress", "annotator_progress", annotator_progress, methods=["GET"])
+    app.add_url_rule("/progress/api/summary", "annotator_progress_summary", annotator_progress_summary, methods=["GET"])
 
     app.add_url_rule("/api/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
 

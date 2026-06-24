@@ -162,6 +162,10 @@ KNOWN_CONFIG_KEYS = {
         "output_subdir", "require_confidence",
         "show_all_items", "show_timing_data",
     },
+    "annotator_dashboard": {
+        "enabled", "show_project_progress", "show_personal_progress",
+        "show_active_annotators",
+    },
     "database": {"type", "host", "database", "username", "password", "port",
                  "pool_size", "pool_timeout", "connection_string"},
     "bws_config": {

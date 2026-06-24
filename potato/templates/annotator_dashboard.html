@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Progress</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .progress-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin: 1.25rem 0;
+        }
+        .stat-card {
+            background: var(--light-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.1rem 1rem;
+            text-align: center;
+        }
+        .stat-value {
+            /* Display figure: deliberately above the UI type scale (tops out at
+               --text-xl 1.25rem). tabular-nums keeps digits aligned across cards. */
+            font-size: 1.9rem;
+            font-weight: 700;
+            color: var(--heading-color);
+            line-height: 1.1;
+            font-variant-numeric: tabular-nums;
+        }
+        .stat-label {
+            margin-top: 0.35rem;
+            font-size: var(--text-xs);
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            color: var(--text-color);
+        }
+        .section-title {
+            font-size: var(--text-base);
+            font-weight: 600;
+            color: var(--heading-color);
+            margin: 1.5rem 0 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .pbar-track {
+            height: 12px;
+            background: var(--border);
+            border-radius: 999px;
+            overflow: hidden;
+            margin: 0.6rem 0 0.25rem;
+        }
+        .pbar-fill {
+            height: 100%;
+            background: var(--primary);
+            border-radius: 999px;
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+        .pbar-caption {
+            font-size: var(--text-sm);
+            color: var(--text-color);
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .dash-actions {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: var(--text-sm);
+        }
+        .dash-link { color: var(--primary); text-decoration: none; font-weight: 600; }
+        .dash-link:hover { text-decoration: underline; }
+        .dash-error {
+            display: none;
+            color: var(--muted-foreground);
+            text-align: center;
+            padding: 1rem;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .pbar-fill { transition: none; }
+        }
+    </style>
+</head>
+<body class="potato-page-center">
+    <div class="potato-page-card potato-page-card-wide">
+        <h1 class="potato-page-title" style="text-align:center;">
+            <i class="fas fa-chart-line me-2" aria-hidden="true"></i>{{ annotation_task_name }}
+        </h1>
+        <p class="potato-page-subtitle" style="text-align:center;">Your annotation progress</p>
+
+        {% if dashboard_config.show_personal_progress %}
+        <h2 class="section-title"><i class="fas fa-user" aria-hidden="true"></i> Your progress</h2>
+        <div class="pbar-track">
+            <div class="pbar-fill" id="personal-bar" role="progressbar"
+                 aria-label="Your completion" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <div class="pbar-caption" id="personal-caption" aria-live="polite">Loading…</div>
+        <div class="progress-grid" aria-live="polite">
+            <div class="stat-card">
+                <div class="stat-value" id="personal-annotated">–</div>
+                <div class="stat-label">Annotated</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="personal-assigned">–</div>
+                <div class="stat-label">Assigned</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="personal-pct">–</div>
+                <div class="stat-label">Complete</div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if dashboard_config.show_project_progress %}
+        <h2 class="section-title"><i class="fas fa-layer-group" aria-hidden="true"></i> Project progress</h2>
+        <div class="pbar-track">
+            <div class="pbar-fill" id="project-bar" role="progressbar"
+                 aria-label="Project completion" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <div class="pbar-caption" id="project-caption" aria-live="polite">Loading…</div>
+        <div class="progress-grid" aria-live="polite">
+            <div class="stat-card">
+                <div class="stat-value" id="project-items">–</div>
+                <div class="stat-label">Total items</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="project-annotated-items">–</div>
+                <div class="stat-label">Items started</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="project-annotations">–</div>
+                <div class="stat-label">Annotations</div>
+            </div>
+            {% if dashboard_config.show_active_annotators %}
+            <div class="stat-card">
+                <div class="stat-value" id="project-active">–</div>
+                <div class="stat-label">Active annotators</div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="dash-error" id="dash-error" role="status">
+            <i class="fas fa-circle-exclamation me-1" aria-hidden="true"></i> Could not load progress right now.
+        </div>
+
+        <div class="dash-actions">
+            <a class="dash-link" href="/annotate"><i class="fas fa-arrow-left me-1" aria-hidden="true"></i> Back to annotating</a>
+            <span style="color: var(--muted-foreground);">Read-only view</span>
+        </div>
+    </div>
+
+    <script>
+        function setText(id, value) {
+            var el = document.getElementById(id);
+            if (el) el.textContent = value;
+        }
+        function num(value, fallback) {
+            // Coerce a possibly-missing/invalid number to a safe integer.
+            var n = Number(value);
+            return Number.isFinite(n) ? n : (fallback || 0);
+        }
+        function setBar(id, pct) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            var clamped = Math.max(0, Math.min(100, num(pct)));
+            el.style.width = clamped + "%";
+            el.setAttribute("aria-valuenow", String(Math.round(clamped)));
+        }
+        function showError() {
+            var el = document.getElementById("dash-error");
+            if (el) el.style.display = "block";
+        }
+
+        // Abort the request if the server is slow/hung so the user isn't left
+        // staring at "Loading…" forever.
+        var controller = ("AbortController" in window) ? new AbortController() : null;
+        var timer = setTimeout(function () {
+            if (controller) controller.abort();
+        }, 10000);
+
+        fetch("/progress/api/summary", {
+                headers: {"Accept": "application/json"},
+                signal: controller ? controller.signal : undefined
+            })
+            .then(function(r) {
+                if (!r.ok) throw new Error("status " + r.status);
+                return r.json();
+            })
+            .then(function(data) {
+                clearTimeout(timer);
+                data = data || {};
+                var p = data.personal;
+                if (p) {
+                    var annotated = num(p.annotated), assigned = num(p.assigned);
+                    var ppct = num(p.completion_percentage);
+                    setText("personal-annotated", annotated);
+                    setText("personal-assigned", assigned);
+                    setText("personal-pct", ppct + "%");
+                    setBar("personal-bar", ppct);
+                    setText("personal-caption", assigned === 0
+                        ? "No items assigned to you yet"
+                        : annotated + " of " + assigned + " assigned items completed");
+                }
+                var pr = data.project;
+                if (pr) {
+                    var items = num(pr.total_items);
+                    var started = num(pr.items_with_annotations);
+                    var prpct = num(pr.completion_percentage);
+                    setText("project-items", items);
+                    setText("project-annotated-items", started);
+                    setText("project-annotations", num(pr.total_annotations));
+                    if (pr.active_annotators !== undefined) {
+                        setText("project-active", num(pr.active_annotators));
+                    }
+                    setText("project-pct", prpct + "%");
+                    setBar("project-bar", prpct);
+                    setText("project-caption", items === 0
+                        ? "No items in this project yet"
+                        : started + " of " + items + " items started (" + prpct + "%)");
+                }
+                // A well-formed but empty response still means "nothing to show".
+                if (!p && !pr) showError();
+            })
+            .catch(function(err) {
+                clearTimeout(timer);
+                console.error("Progress load failed:", err);
+                showError();
+            });
+    </script>
+</body>
+</html>
