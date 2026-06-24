@@ -32,6 +32,30 @@ attributing the failure. A runnable example is at
 python potato/flask_server.py start examples/agent-traces/failure-attribution/config.yaml -p 8000
 ```
 
+## Interaction graph (`agent_interaction_graph`)
+
+Render the whole run as a directed **interaction graph** — nodes are the agents,
+edges are the message/handoff transitions between them (thicker = more frequent) —
+and let the annotator mark the **critical path** (click a node) and flag
+**problematic edges** (click an edge to cycle normal → critical → problematic). No
+open competitor offers a clickable agent-interaction graph (cf. AgentGraph,
+AAAI 2026). The graph is laid out automatically from the trace, so it needs no
+precomputed coordinates.
+
+```yaml
+annotation_schemes:
+  - annotation_type: agent_interaction_graph
+    name: graph
+    description: "Mark the critical path and flag any problematic handoffs."
+    steps_key: steps
+    agent_key: agent
+```
+
+Stored as `{"critical_nodes": [...], "edges": {"A->B": "problematic", ...}}`. Every
+node and edge is keyboard-focusable and activates on Enter/Space, and a live text
+summary lists critical nodes and flagged edges so meaning is never conveyed by color
+alone (WCAG). Example: `examples/agent-traces/interaction-graph/`.
+
 ## Handoff review (`handoff_review`)
 
 Treat every **handoff** — one agent passing control to another — as a first-class

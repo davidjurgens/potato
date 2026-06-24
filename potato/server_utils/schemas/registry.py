@@ -266,6 +266,8 @@ def _register_builtin_schemas():
     from .tool_call_review import generate_tool_call_review_layout
     from .agent_scorecard import generate_agent_scorecard_layout
     from .handoff_review import generate_handoff_review_layout
+    from .agent_interaction_graph import generate_agent_interaction_graph_layout
+    from .gui_trajectory import generate_gui_trajectory_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -604,6 +606,22 @@ def _register_builtin_schemas():
             optional_fields=["steps_key", "agent_key", "flags", "quality_scale"],
             supports_keybindings=False,
             description="Annotate agent-to-agent handoffs: inter-agent misalignment flags + quality"
+        ),
+        SchemaDefinition(
+            name="agent_interaction_graph",
+            generator=generate_agent_interaction_graph_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key"],
+            supports_keybindings=False,
+            description="Clickable agent-interaction graph: mark critical-path nodes + flag problematic edges"
+        ),
+        SchemaDefinition(
+            name="gui_trajectory",
+            generator=generate_gui_trajectory_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "screenshot_key", "action_key", "coord_space", "verdict_options"],
+            supports_keybindings=False,
+            description="Computer-use/GUI agent step review: per-step screenshot + action correctness + click grounding"
         ),
         SchemaDefinition(
             name="trajectory_edit",

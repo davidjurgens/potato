@@ -41,6 +41,8 @@ from .failure_attribution import generate_failure_attribution_layout
 from .tool_call_review import generate_tool_call_review_layout
 from .agent_scorecard import generate_agent_scorecard_layout
 from .handoff_review import generate_handoff_review_layout
+from .agent_interaction_graph import generate_agent_interaction_graph_layout
+from .gui_trajectory import generate_gui_trajectory_layout
 from .code_review import generate_code_review_layout
 
 # Import identifier utilities for use by other modules

@@ -1,0 +1,28 @@
+# Agent interaction graph (M3)
+# Mark critical-path agents (click nodes) and flag problematic message edges (click edges).
+# Run: python potato/flask_server.py start examples/agent-traces/interaction-graph/config.yaml -p 8000
+annotation_task_name: "Agent Interaction Graph"
+data_files:
+  - data/traces.json
+item_properties:
+  id_key: id
+  text_key: task
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+instance_display:
+  layout: {direction: vertical, gap: 16px}
+  fields:
+    - key: task
+      type: text
+      label: "Task"
+    - key: steps
+      type: agent_trace
+      label: "Agent Interactions"
+      display_options: {show_turn_numbers: true, speaker_key: agent, text_key: content}
+annotation_schemes:
+  - annotation_type: agent_interaction_graph
+    name: graph
+    description: "Mark the critical path and flag any problematic handoffs."
+    steps_key: steps
+    agent_key: agent

@@ -81,6 +81,7 @@ nav:
         - Process Supervision (PRM): agent-evaluation/process_supervision.md
         - Failure-Mode Taxonomy (MAST): agent-evaluation/failure_taxonomy.md
         - Multi-Agent Team Annotation: agent-evaluation/multi_agent_annotation.md
+        - Multimodal-Agent Annotation: agent-evaluation/multimodal_agent_annotation.md
         - Programmatic Evaluators: agent-evaluation/evaluators.md
         - Datasets & Experiments: agent-evaluation/datasets_and_experiments.md
         - Automation Rules: agent-evaluation/automation_rules.md
