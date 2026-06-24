@@ -32,6 +32,34 @@ attributing the failure. A runnable example is at
 python potato/flask_server.py start examples/agent-traces/failure-attribution/config.yaml -p 8000
 ```
 
+## MAST tagging at step granularity (recipe)
+
+You don't need a new schema to bind the [MAST taxonomy](failure_taxonomy.md) to the
+exact step (and therefore the acting agent) where a failure occurred — configure the
+existing per-step [`trajectory_eval`](trajectory_eval.md) schema with the 14 MAST
+modes as its `error_types`, grouped by the three MAST categories. Annotators then tag
+each turn with the precise failure mode instead of labeling the trace as a whole.
+Pair it with `failure_attribution` (responsible agent) and `handoff_review`
+(inter-agent edges) for full coverage.
+
+```yaml
+annotation_schemes:
+  - annotation_type: trajectory_eval
+    name: mast_steps
+    description: "Tag each step with the MAST failure mode(s) it exhibits."
+    steps_key: steps
+    step_text_key: content
+    error_types:
+      - name: "Specification & System Design"
+        subtypes: ["1.1 Disobey task specification", "1.2 Disobey role specification", "1.3 Step repetition", "1.4 Loss of conversation history", "1.5 Unaware of termination conditions"]
+      - name: "Inter-Agent Misalignment"
+        subtypes: ["2.1 Conversation reset", "2.2 Fail to ask for clarification", "2.3 Task derailment", "2.4 Information withholding", "2.5 Ignored other agent's input", "2.6 Reasoning-action mismatch"]
+      - name: "Task Verification & Termination"
+        subtypes: ["3.1 Premature termination", "3.2 No or incomplete verification", "3.3 Incorrect verification"]
+```
+
+Runnable example: `examples/agent-traces/mast-step-tagging/`.
+
 ## Interaction graph (`agent_interaction_graph`)
 
 Render the whole run as a directed **interaction graph** — nodes are the agents,
