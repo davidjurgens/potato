@@ -107,6 +107,37 @@ class ArenaManager:
                 rows.sort(key=lambda r: (r["win_rate"] if r["win_rate"] is not None else -1), reverse=True)
             return rows
 
+    def suggest_pairs(self, k: int = 10, strategy: str = "uncertainty") -> List[Dict[str, Any]]:
+        """Active preference selection (E10): rank model-response pairs from recent
+        runs by how informative a human comparison would be, using current
+        Bradley-Terry scores. Most-uncertain (closest BT) pairs first."""
+        from potato.server_utils.active_preference import select_pairs
+        with self._lock:
+            bt = {r["label"]: r.get("bt_score") for r in self.leaderboard()}
+            candidates = []
+            seen = set()
+            for entry in self.history:
+                prompt = entry.get("prompt", "")
+                results = entry.get("results", [])
+                for i in range(len(results)):
+                    for j in range(i + 1, len(results)):
+                        a, b = results[i], results[j]
+                        la, lb = a.get("label"), b.get("label")
+                        if not la or not lb:
+                            continue
+                        key = (prompt, la, lb)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        candidates.append({
+                            "prompt": prompt, "model_a": la, "model_b": lb,
+                            "response_a": a.get("response", ""), "response_b": b.get("response", ""),
+                            # BT scores are 0–100; scale to a logit-ish range for win_prob
+                            "score_a": (bt.get(la) or 50.0) / 12.0,
+                            "score_b": (bt.get(lb) or 50.0) / 12.0,
+                        })
+        return select_pairs(candidates, k=k, strategy=strategy)
+
     def export_dpo(self) -> List[Dict[str, str]]:
         """Arena preferences as DPO triples: one (prompt, chosen, rejected) per
         winner-vs-loser pair where both response texts are available."""

@@ -188,6 +188,24 @@ def api_list_examples(name):
     return jsonify([e.to_dict() for e in examples])
 
 
+@datasets_bp.route("/api/datasets/<name>/optimize_export", methods=["GET"])
+@admin_required
+@_enabled_required
+def api_optimize_export(name):
+    """Eval→improve export (E12): a dataset as a GEPA/DSPy-ready optimization
+    trainset. ?fmt=dspy|gepa, ?prompt=<seed prompt>. Feed to the external optimizer;
+    review the proposed prompt diff before shipping."""
+    from potato.server_utils.prompt_optimization import export_for_optimization
+    mgr = get_datasets_manager()
+    if mgr.store.get_dataset(name) is None:
+        return jsonify({"error": "not found"}), 404
+    examples = [e.to_dict() for e in mgr.store.list_examples(name, as_of="latest")]
+    fmt = request.args.get("fmt", "dspy")
+    if fmt not in ("dspy", "gepa"):
+        return jsonify({"error": "fmt must be 'dspy' or 'gepa'"}), 400
+    return jsonify(export_for_optimization(examples, prompt=request.args.get("prompt", ""), fmt=fmt))
+
+
 @datasets_bp.route("/api/datasets/<name>/examples", methods=["POST"])
 @admin_required
 @_enabled_required
@@ -336,3 +354,26 @@ def api_get_experiment(experiment_id):
     if exp is None:
         return jsonify({"error": "not found"}), 404
     return jsonify(exp.to_dict())
+
+
+@datasets_bp.route("/api/experiments/<experiment_id>/export_rewards", methods=["GET"])
+@admin_required
+@_enabled_required
+def api_export_rewards(experiment_id):
+    """Rubrics-as-Rewards export (E9): convert an experiment's rubric-DAG /
+    agent-as-judge results into criterion-level reward-model training rows."""
+    from potato.server_utils.rubric_reward import build_reward_dataset
+    mgr = get_datasets_manager()
+    exp = mgr.experiments.get(experiment_id)
+    if exp is None:
+        return jsonify({"error": "not found"}), 404
+    records = []
+    for r in exp.results:
+        prompt = ""
+        if isinstance(r.outputs, dict):
+            prompt = r.outputs.get("prompt") or r.outputs.get("question") or ""
+        for result in (r.results or []):
+            records.append({"result": result, "prompt": str(prompt),
+                            "response": str(r.outputs) if r.outputs is not None else ""})
+    rows = build_reward_dataset(records)
+    return jsonify({"experiment": experiment_id, "count": len(rows), "rows": rows})

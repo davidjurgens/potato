@@ -110,3 +110,18 @@ class TestArenaAPI:
     def test_export_dpo_admin_guarded(self):
         assert requests.get(f"{self.server.base_url}/admin/arena/api/export_dpo"
                             ).status_code in (401, 403)
+
+    def test_suggest_pairs(self):
+        s, base = self._admin()
+        s.post(f"{base}/admin/arena/api/run", json={"prompt": "pick me"})
+        r = s.get(f"{base}/admin/arena/api/suggest_pairs?k=5&strategy=uncertainty")
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["strategy"] == "uncertainty"
+        # one run with 2 models -> one candidate pair, annotated with acquisition
+        assert data["count"] >= 1
+        assert "acquisition" in data["pairs"][0] and "model_a" in data["pairs"][0]
+
+    def test_suggest_pairs_rejects_bad_strategy(self):
+        s, base = self._admin()
+        assert s.get(f"{base}/admin/arena/api/suggest_pairs?strategy=bogus").status_code == 400

@@ -117,6 +117,29 @@ curl -OJ "http://localhost:8000/datasets/api/datasets/agent-eval-v1/export?forma
 
 The `X-Skipped-Examples` response header reports how many examples were skipped.
 
+## Reward data & the eval→improve loop
+
+Beyond SFT/DPO, the suite turns evaluations into **reward-model data** and closes
+the loop to prompt improvement — each step human-grounded:
+
+- **Rubrics-as-Rewards (E9)** — `GET /datasets/api/experiments/<id>/export_rewards`
+  converts an experiment's [rubric-DAG](evaluators.md) / [agent-as-judge](evaluators.md)
+  results into **criterion-level reward rows** (`{prompt, response, reward, criteria}`)
+  for RM/RLVR training in non-verifiable domains. (`server_utils/rubric_reward.py`.)
+- **Active preference sampling (E10)** — `GET /admin/arena/api/suggest_pairs?strategy=uncertainty`
+  ranks which response pairs to label next by how *informative* the comparison is
+  (closest Bradley-Terry scores first), with an honest `random` baseline.
+  (`server_utils/active_preference.py`.)
+- **Metric induction (E11)** — `GET /admin/api/induce-metrics?schema=<free-text scheme>`
+  mines recurring evaluation metrics from annotators' free-text comments (AutoLibra-
+  style) and proposes candidates for a human to confirm into a rubric.
+  (`server_utils/metric_induction.py`.)
+- **Eval→improve export (E12)** — `GET /datasets/api/datasets/<name>/optimize_export?fmt=gepa`
+  exports a curated dataset as a GEPA/DSPy optimization trainset; the optimizer
+  proposes a prompt rewrite, surfaced as a `PromptDiff` a human **approves or
+  rejects** before it ships (the optimizer never silently changes the prompt).
+  (`server_utils/prompt_optimization.py`.)
+
 ## API reference
 
 All endpoints require admin auth (`X-API-Key` header or admin session).

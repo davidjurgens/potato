@@ -93,3 +93,23 @@ def api_export_dpo():
     """Arena human preferences as DPO triples (prompt, chosen, rejected)."""
     pairs = get_arena_manager().export_dpo()
     return jsonify({"count": len(pairs), "pairs": pairs})
+
+
+@arena_bp.route("/api/suggest_pairs", methods=["GET"])
+@admin_required
+@_enabled_required
+def api_suggest_pairs():
+    """Active preference selection (E10): which response pairs to label next.
+
+    ?k=N (default 10), ?strategy=uncertainty|moderate_margin|random.
+    """
+    from potato.server_utils.active_preference import STRATEGIES
+    strategy = request.args.get("strategy", "uncertainty")
+    if strategy not in STRATEGIES:
+        return jsonify({"error": f"strategy must be one of {STRATEGIES}"}), 400
+    try:
+        k = int(request.args.get("k", 10))
+    except (TypeError, ValueError):
+        k = 10
+    pairs = get_arena_manager().suggest_pairs(k=k, strategy=strategy)
+    return jsonify({"count": len(pairs), "strategy": strategy, "pairs": pairs})

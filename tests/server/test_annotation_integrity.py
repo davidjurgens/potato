@@ -76,3 +76,12 @@ class TestAnnotationIntegrity:
     def test_perspectivist_requires_admin(self):
         r = requests.get(f"{self.base}/admin/api/perspectivist")
         assert r.status_code == 403
+
+    def test_induce_metrics_requires_admin(self):
+        r = requests.get(f"{self.base}/admin/api/induce-metrics?schema=sentiment")
+        assert r.status_code == 403
+
+    def test_induce_metrics_requires_schema(self):
+        r = requests.get(f"{self.base}/admin/api/induce-metrics",
+                         headers={"X-API-Key": ADMIN_KEY})
+        assert r.status_code == 400

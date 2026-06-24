@@ -3174,6 +3174,49 @@ def admin_perspectivist_export():
         return jsonify({"error": str(exc)}), 500
 
 
+@app.route("/admin/api/induce-metrics", methods=["GET"])
+def admin_induce_metrics():
+    """Agent-metric induction (E11): mine recurring evaluation metrics from the
+    free-text annotations on a scheme, for a human to confirm into a rubric.
+
+    ?schema=<free-text scheme name> (required), ?min_support=N (default 2).
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    schema = request.args.get("schema")
+    if not schema:
+        return jsonify({"error": "schema query param is required"}), 400
+    try:
+        from potato.server_utils.metric_induction import induce_metrics
+        from potato.ai.judge import JudgeService
+        from potato.item_state_management import get_item_state_manager
+        ism = get_item_state_manager()
+        comments = []
+        if ism is not None:
+            for iid in ism.get_instance_ids():
+                for u in get_users():
+                    anns = get_annotations_for_user_on(u, str(iid)) or {}
+                    val = anns.get(schema)
+                    text = None
+                    if isinstance(val, dict):
+                        text = val.get("text") or (next(iter(val.keys())) if val else None)
+                    elif isinstance(val, str):
+                        text = val
+                    if text and len(str(text).strip()) > 3:
+                        comments.append(str(text).strip())
+        llm = JudgeService(config)._get_endpoint()
+        if llm is None:
+            return jsonify({"error": "no LLM endpoint configured for induction"}), 400
+        min_support = int(request.args.get("min_support", 2))
+        cands = [c.to_dict() for c in induce_metrics(comments, llm, min_support=min_support)]
+    except Exception as exc:
+        logger.exception("Failed to induce metrics")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"schema": schema, "n_comments": len(comments),
+                    "candidate_metrics": cands})
+
+
 @app.route("/admin/triage-queue", methods=["GET"])
 def admin_triage_queue():
     """Signal-based triage queue: items ranked by their quality signal.
@@ -7209,6 +7252,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
     app.add_url_rule("/admin/annotation-integrity", "admin_annotation_integrity", admin_annotation_integrity, methods=["GET"])
     app.add_url_rule("/admin/api/perspectivist", "admin_perspectivist_export", admin_perspectivist_export, methods=["GET"])
+    app.add_url_rule("/admin/api/induce-metrics", "admin_induce_metrics", admin_induce_metrics, methods=["GET"])
     app.add_url_rule("/admin/judge-alignment", "admin_judge_alignment", admin_judge_alignment, methods=["GET"])
     app.add_url_rule("/admin/api/judge-alignment/run", "admin_judge_alignment_run", admin_judge_alignment_run, methods=["POST"])
     app.add_url_rule("/admin/api/judge-alignment/autocalibrate", "admin_judge_alignment_autocalibrate", admin_judge_alignment_autocalibrate, methods=["POST"])

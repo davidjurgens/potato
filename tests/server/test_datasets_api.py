@@ -138,3 +138,45 @@ class TestDatasetsAPI:
         r = s.post(f"{base}/datasets/api/datasets/curated_bad/import_instances",
                    json={"aggregation_method": "bogus"})
         assert r.status_code == 400
+
+    def test_export_rewards_from_experiment(self):
+        # Seed an experiment in-process whose results carry agent-as-judge verdicts.
+        from potato.eval_datasets.manager import get_datasets_manager
+        from potato.experiments.models import Experiment, ExperimentResult
+        mgr = get_datasets_manager()
+        exp = Experiment(id="exp-rar", dataset_name="d", dataset_version="1",
+                         results=[ExperimentResult(example_id="e1", outputs={"prompt": "book a flight"},
+                             results=[{"key": "agent_as_judge", "score": 0.5, "metadata": {"verdicts": [
+                                 {"requirement": "under $400", "satisfied": True},
+                                 {"requirement": "emailed", "satisfied": False}]}}])])
+        mgr.experiments.save(exp)
+        s, base = self._session()
+        r = s.get(f"{base}/datasets/api/experiments/exp-rar/export_rewards")
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["count"] == 1
+        row = data["rows"][0]
+        assert row["source"] == "agent_as_judge"
+        assert row["reward"] == 0.5 and len(row["criteria"]) == 2
+
+    def test_export_rewards_missing_experiment(self):
+        s, base = self._session()
+        r = s.get(f"{base}/datasets/api/experiments/nope/export_rewards")
+        assert r.status_code == 404
+
+    def test_optimize_export(self):
+        s, base = self._session()
+        s.post(f"{base}/datasets/api/datasets", json={"name": "opt_ds"})
+        s.post(f"{base}/datasets/api/datasets/opt_ds/examples",
+               json={"examples": [{"inputs": {"q": "2+2"}, "reference_outputs": "4"}]})
+        r = s.get(f"{base}/datasets/api/datasets/opt_ds/optimize_export?fmt=gepa&prompt=Answer")
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["format"] == "gepa" and data["seed_prompt"] == "Answer"
+        assert data["n"] >= 1
+
+    def test_optimize_export_bad_format(self):
+        s, base = self._session()
+        s.post(f"{base}/datasets/api/datasets", json={"name": "opt_bad"})
+        r = s.get(f"{base}/datasets/api/datasets/opt_bad/optimize_export?fmt=bogus")
+        assert r.status_code == 400
