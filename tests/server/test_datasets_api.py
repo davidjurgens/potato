@@ -124,3 +124,17 @@ class TestDatasetsAPI:
         r = s.post(f"{base}/datasets/api/datasets/curated/import_instances", json={})
         assert r.status_code == 201, r.text
         assert r.json()["example_count"] >= 1
+
+    def test_import_with_dawid_skene_method(self):
+        s, base = self._session()
+        s.post(f"{base}/datasets/api/datasets", json={"name": "curated_ds"})
+        r = s.post(f"{base}/datasets/api/datasets/curated_ds/import_instances",
+                   json={"include_annotations": True, "aggregation_method": "dawid_skene"})
+        assert r.status_code == 201, r.text
+
+    def test_import_rejects_unknown_aggregation_method(self):
+        s, base = self._session()
+        s.post(f"{base}/datasets/api/datasets", json={"name": "curated_bad"})
+        r = s.post(f"{base}/datasets/api/datasets/curated_bad/import_instances",
+                   json={"aggregation_method": "bogus"})
+        assert r.status_code == 400

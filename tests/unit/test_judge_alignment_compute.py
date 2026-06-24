@@ -11,6 +11,46 @@ import pytest
 from potato.server_utils import judge_alignment as ja
 
 
+# ----- κ drift trend (D5) -------------------------------------------------
+
+class TestKappaTrend:
+    def _versions(self, kappas):
+        return [{"prompt_version": f"v{i}", "n_predictions": 10, "mean_kappa": k}
+                for i, k in enumerate(kappas)]
+
+    def test_none_with_fewer_than_two(self):
+        assert ja._kappa_trend(self._versions([0.5])) is None
+        assert ja._kappa_trend([]) is None
+
+    def test_improving_direction(self):
+        t = ja._kappa_trend(self._versions([0.30, 0.55, 0.72]))
+        assert t["direction"] == "improving"
+        assert t["delta"] == pytest.approx(0.42, abs=1e-6)
+        assert t["first"] == 0.3 and t["last"] == 0.72
+
+    def test_declining_direction(self):
+        t = ja._kappa_trend(self._versions([0.7, 0.5, 0.4]))
+        assert t["direction"] == "declining"
+        assert t["delta"] < 0
+
+    def test_stable_direction(self):
+        t = ja._kappa_trend(self._versions([0.61, 0.60, 0.615]))
+        assert t["direction"] == "stable"
+
+    def test_points_count_and_bounds(self):
+        t = ja._kappa_trend(self._versions([0.0, 0.5, 1.0]))
+        pts = t["points"].split(" ")
+        assert len(pts) == 3
+        # higher κ plots higher (smaller y); κ=1.0 near top, κ=0.0 near bottom
+        ys = [float(p.split(",")[1]) for p in pts]
+        assert ys[2] < ys[0]
+
+    def test_skips_null_kappas(self):
+        vs = self._versions([0.3, None, 0.6])
+        t = ja._kappa_trend(vs)
+        assert t["series"] == [0.3, 0.6]
+
+
 # ----- pure compute core --------------------------------------------------
 
 class TestComputeFromPairs:

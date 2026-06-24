@@ -56,9 +56,18 @@ A tag points to exactly one version; re-tagging moves it.
   imports just the runtime-ingested traces (webhook / LangSmith / Langfuse),
   optionally filtered to one `source`.
 - **With human annotations as references** — tick *include human annotations as
-  references* (or pass `include_annotations: true`). The **majority human
-  annotation per scheme** is aggregated into each example's `reference_outputs`
-  (exact-match majority vote; vote counts + agreement recorded in metadata).
+  references* (or pass `include_annotations: true`). The aggregated human
+  annotation per scheme becomes each example's `reference_outputs`. Two methods
+  (`aggregation_method`):
+    - `majority` (default) — exact-match majority vote; vote counts + agreement
+      recorded in metadata.
+    - `dawid_skene` — **worker-reliability-weighted consensus**. Dawid-Skene
+      jointly estimates each annotator's reliability (via EM over their confusion
+      matrices) and re-weights votes accordingly, so a careful annotator outvotes
+      a careless one and you get a per-example confidence. This is the standard
+      upgrade over majority vote for noisy crowds; per-annotator reliability and
+      per-example confidence are recorded in metadata. (See
+      `potato/server_utils/consensus.py`.)
 - **Via the API** — add examples directly (see below).
 - Otherwise reference outputs can be added later, or scored against `metadata['outputs']`.
 

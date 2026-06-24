@@ -101,6 +101,57 @@ EmbeddingDistance().evaluate(outputs=a, reference_outputs=b)  # lazy ML import
 an injected `embed_fn` (e.g. an embedding API). Importing the library never pulls
 the ML stack.
 
+## Rubric DAG (decision-tree judge)
+
+A `rubric_dag` evaluator turns a rubric into a **decision tree the judge
+traverses**. At each node the judge answers one discrete question; the chosen
+branch leads either to another node or to a **leaf with a fixed, authored score**.
+The scores are deterministic (you write them, the model doesn't invent a number),
+the structure is auditable, and the **full traversed path is recorded** — so a
+human-in-the-loop reviewer can correct a single branch decision instead of
+re-grading the whole output.
+
+```yaml
+# Configure declaratively (used by experiments / automation / CI):
+evaluators:
+  - name: rubric_dag
+    params:
+      dag:
+        key: answer_quality
+        root: answers
+        nodes:
+          answers:
+            question: "Does the response directly answer the question?"
+            choices: [yes, partially, no]
+            branches:
+              yes: grounded                          # -> next node
+              partially: {score: 0.5, label: partial}# -> leaf
+              no: {score: 0.0, label: no answer}
+          grounded:
+            question: "Is the answer well-supported (no fabricated claims)?"
+            choices: [yes, no]
+            branches:
+              yes: {score: 1.0, label: complete}
+              no:  {score: 0.7, label: unsourced}
+```
+
+```python
+from potato.evaluators import make_rubric_dag, RUBRIC_PRESETS
+
+# Use the built-in rubric library, or pass your own `dag=`:
+ev = make_rubric_dag(config, preset="answer_quality")
+result = ev.evaluate(inputs="Capital of France?", outputs="Paris [gouvernement.fr].")
+result.score                      # 1.0
+result.metadata["path"]           # [{node, question, choice, reasoning}, ...]
+```
+
+`RUBRIC_PRESETS` is a small **reusable rubric library** (add your own by appending
+to it). The evaluator reuses the judge endpoint config (`judge_alignment.ai_support`
+or `ai_support`) and is robust to models that don't honor JSON output (it recovers
+the chosen option from the raw text). Compare with the annotation-facing
+[`rubric_eval`](../annotation-types) schema, which collects *human* multi-criteria
+scores — the two pair naturally (judge proposes via the DAG, humans verify).
+
 ## Graph-trajectory eval (LangGraph, via agentevals)
 
 For LangGraph node/transition evaluation, Potato reuses the MIT-licensed

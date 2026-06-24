@@ -104,15 +104,24 @@ class DatasetsManager:
             return True
         return self._item_source(item) in self._TRACE_SOURCES
 
-    def _build_examples(self, ism, ids, include_annotations: bool):
+    def _build_examples(self, ism, ids, include_annotations: bool,
+                        aggregation_method: str = "majority"):
         """Build Example objects from live instances, optionally with aggregated
-        human annotations as reference_outputs."""
+        human annotations as reference_outputs.
+
+        aggregation_method: "majority" (per-instance majority vote, default) or
+        "dawid_skene" (batch worker-reliability-weighted consensus).
+        """
         get_user_annotations = usernames = None
+        consensus_refs = consensus_meta = None
         if include_annotations:
             from potato.flask_server import get_annotations_for_user_on, get_users
-            from potato.eval_datasets.annotation_aggregation import aggregate_instance_annotations
             get_user_annotations = get_annotations_for_user_on
             usernames = list(get_users())
+            if aggregation_method == "dawid_skene":
+                from potato.eval_datasets.annotation_aggregation import consensus_reference_outputs
+                consensus_refs, consensus_meta = consensus_reference_outputs(
+                    [str(i) for i in ids], usernames, get_user_annotations)
 
         examples = []
         for iid in ids:
@@ -124,7 +133,14 @@ class DatasetsManager:
             inputs = data if isinstance(data, dict) else {"text": data}
             meta = {"source": self._item_source(item)}
             reference = None
-            if include_annotations:
+            if include_annotations and aggregation_method == "dawid_skene":
+                reference = (consensus_refs or {}).get(str(iid)) or None
+                meta["annotation_aggregation"] = {
+                    "method": "dawid_skene",
+                    "confidence": (consensus_meta or {}).get("confidence", {}).get(str(iid), {}),
+                }
+            elif include_annotations:
+                from potato.eval_datasets.annotation_aggregation import aggregate_instance_annotations
                 reference, agg_meta = aggregate_instance_annotations(
                     str(iid), usernames, get_user_annotations)
                 meta["annotation_aggregation"] = agg_meta
@@ -134,14 +150,15 @@ class DatasetsManager:
 
     def import_from_instances(self, dataset_name: str, instance_ids=None,
                               include_annotations: bool = False,
-                              note: str = "") -> DatasetVersion:
+                              note: str = "", aggregation_method: str = "majority") -> DatasetVersion:
         """Curate dataset examples from the live task's loaded instances.
 
         Each instance's raw data becomes an example's ``inputs`` (the instance id
-        becomes the example id). With ``include_annotations`` the majority human
-        annotation per scheme is aggregated into ``reference_outputs``; otherwise
-        references are left unset (score against ``metadata['outputs']`` / a
-        target, or add references later).
+        becomes the example id). With ``include_annotations`` the aggregated human
+        annotation per scheme becomes ``reference_outputs``; ``aggregation_method``
+        is ``"majority"`` (per-instance majority vote, default) or ``"dawid_skene"``
+        (batch worker-reliability-weighted consensus). Otherwise references are left
+        unset (score against ``metadata['outputs']`` / a target, or add later).
         """
         from potato.item_state_management import get_item_state_manager
         ism = get_item_state_manager()
@@ -149,7 +166,8 @@ class DatasetsManager:
             raise RuntimeError("No item state manager available")
 
         ids = instance_ids if instance_ids else ism.get_instance_ids()
-        examples = self._build_examples(ism, ids, include_annotations)
+        examples = self._build_examples(ism, ids, include_annotations,
+                                        aggregation_method=aggregation_method)
         if not examples:
             raise ValueError("No matching instances to import")
         self.store.create_dataset(dataset_name)

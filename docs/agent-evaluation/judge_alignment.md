@@ -67,6 +67,14 @@ curl -X POST localhost:8000/admin/api/judge-alignment/run \
   -d '{"rubrics": {"correctness": "Stricter rubric text..."}}'
 ```
 
+### κ drift trend
+
+The dashboard's **Prompt versions** card plots a sparkline of mean κ across every
+prompt version, with a direction badge — **improving**, **declining**, or
+**stable** — and the first→last delta. This makes calibration *drift* visible at a
+glance: you can see whether successive rubric edits (or auto-calibration rounds)
+are actually raising agreement, or whether a "fix" quietly regressed it.
+
 ## Automated calibration (corrections → few-shot)
 
 Instead of hand-editing the rubric, **auto-calibrate**: the instances where a

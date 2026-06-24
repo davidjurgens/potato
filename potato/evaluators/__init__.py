@@ -30,6 +30,11 @@ from potato.evaluators.heuristic import (
     JSONSchemaMatch,
     EmbeddingDistance,
 )
+from potato.evaluators.rubric_dag import (
+    RubricDagEvaluator,
+    make_rubric_dag,
+    RUBRIC_PRESETS,
+)
 from potato.evaluators.registry import (
     build_evaluator,
     register_evaluator,
@@ -55,6 +60,9 @@ __all__ = [
     "JSONValid",
     "JSONSchemaMatch",
     "EmbeddingDistance",
+    "RubricDagEvaluator",
+    "make_rubric_dag",
+    "RUBRIC_PRESETS",
     "build_evaluator",
     "register_evaluator",
     "list_evaluators",

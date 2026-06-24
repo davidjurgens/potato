@@ -228,15 +228,20 @@ def api_export_dataset(name):
 def api_import_instances(name):
     """Curate dataset examples from the live task's loaded instances.
 
-    Body: {instance_ids?: [...], include_annotations?: bool}
+    Body: {instance_ids?: [...], include_annotations?: bool,
+           aggregation_method?: "majority"|"dawid_skene"}
     """
     body = request.get_json(silent=True) or {}
     mgr = get_datasets_manager()
+    method = body.get("aggregation_method", "majority")
+    if method not in ("majority", "dawid_skene"):
+        return jsonify({"error": "aggregation_method must be 'majority' or 'dawid_skene'"}), 400
     try:
         version = mgr.import_from_instances(
             name,
             instance_ids=body.get("instance_ids"),
             include_annotations=bool(body.get("include_annotations", False)),
+            aggregation_method=method,
         )
     except (ValueError, RuntimeError) as e:
         return jsonify({"error": str(e)}), 400

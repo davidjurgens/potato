@@ -342,8 +342,47 @@ def compute_judge_alignment(config: Dict[str, Any], users: List[str],
             "mean_kappa": round(sum(kappas) / len(kappas), 3) if kappas else None,
         })
 
+    sorted_versions = sorted(versions, key=lambda x: x["prompt_version"])
+
     return {
         "prompt_version": version,
         "per_schema": per_schema,
-        "prompt_versions": sorted(versions, key=lambda x: x["prompt_version"]),
+        "prompt_versions": sorted_versions,
+        "kappa_trend": _kappa_trend(sorted_versions),
+    }
+
+
+def _kappa_trend(sorted_versions: List[Dict[str, Any]],
+                 width: int = 220, height: int = 40, pad: int = 4) -> Optional[Dict[str, Any]]:
+    """Summarize mean-κ drift across prompt versions for the dashboard sparkline.
+
+    Returns ``None`` until there are ≥2 versions with a κ. Otherwise a dict with
+    the κ ``series``, the first→last ``delta`` and a ``direction``
+    (improving/declining/stable), plus precomputed SVG ``points`` so the template
+    can draw a sparkline without inline math. κ is bounded to [0, 1] for plotting
+    (negative κ — worse than chance — clamps to the floor).
+    """
+    series = [v["mean_kappa"] for v in sorted_versions if v["mean_kappa"] is not None]
+    if len(series) < 2:
+        return None
+    delta = series[-1] - series[0]
+    direction = "improving" if delta > 0.02 else ("declining" if delta < -0.02 else "stable")
+    n = len(series)
+    span_x = width - 2 * pad
+    span_y = height - 2 * pad
+    pts = []
+    for i, k in enumerate(series):
+        x = pad + (span_x * i / (n - 1))
+        y = pad + span_y * (1.0 - min(1.0, max(0.0, k)))  # higher κ → higher on screen
+        pts.append(f"{round(x, 1)},{round(y, 1)}")
+    return {
+        "series": [round(s, 3) for s in series],
+        "delta": round(delta, 3),
+        "direction": direction,
+        "first": round(series[0], 3),
+        "last": round(series[-1], 3),
+        "points": " ".join(pts),
+        "last_x": pts[-1].split(",")[0],
+        "last_y": pts[-1].split(",")[1],
+        "width": width, "height": height,
     }

@@ -25,6 +25,7 @@ from potato.evaluators.heuristic import (
     JSONSchemaMatch,
     EmbeddingDistance,
 )
+from potato.evaluators.rubric_dag import RubricDagEvaluator
 
 # name -> (factory, one-line description)
 _REGISTRY: Dict[str, tuple] = {
@@ -32,6 +33,7 @@ _REGISTRY: Dict[str, tuple] = {
     "tool_use": (ToolUseEvaluator, "A specific expected tool was invoked"),
     "tool_call_accuracy": (ToolCallAccuracyEvaluator, "Fraction of reference tool calls reproduced"),
     "llm_trajectory_judge": (LLMTrajectoryJudge, "Reference-free LLM judge of trajectory quality"),
+    "rubric_dag": (RubricDagEvaluator, "Decision-tree rubric the judge traverses to a fixed leaf score"),
     "exact_match": (ExactMatch, "Output equals reference"),
     "contains": (Contains, "Output contains a substring"),
     "regex_match": (RegexMatch, "Output matches a regex"),

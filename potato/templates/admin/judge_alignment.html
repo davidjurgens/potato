@@ -44,6 +44,18 @@
   table.ja-table th { background: var(--muted); font-weight: 600; }
   .ja-confusion td.diag { font-weight: 700; }
   .ja-confusion td.count { text-align: center; }
+  /* κ drift sparkline. Stroke uses currentColor; the caption tag carries the
+     improving/declining/stable meaning in words (not color alone). */
+  .ja-trend { margin: 0 0 0.85rem; }
+  .ja-spark { display: block; color: var(--muted-foreground); }
+  .ja-trend.trend-improving .ja-spark { color: hsl(140 45% 38%); }
+  .ja-trend.trend-declining .ja-spark { color: hsl(8 55% 45%); }
+  .ja-trend-cap { font-size: 0.8rem; color: var(--muted-foreground); margin-top: 0.25rem; }
+  .ja-trend-tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0 0.35rem;
+                  border-radius: 999px; }
+  .ja-trend-tag.trend-improving { background: hsl(140 45% 92%); color: hsl(140 45% 28%); }
+  .ja-trend-tag.trend-declining { background: hsl(8 60% 93%); color: hsl(8 55% 38%); }
+  .ja-trend-tag.trend-stable    { background: var(--muted); color: var(--muted-foreground); }
   .ja-section-label { font-size: 0.8rem; font-weight: 600; color: var(--muted-foreground);
                       text-transform: uppercase; letter-spacing: 0.03em; margin: 1.25rem 0 0.4rem; }
   .ja-empty { color: var(--muted-foreground); font-style: italic; }
@@ -66,6 +78,23 @@
   {% if report.prompt_versions %}
   <section class="dashboard-card ja-card" aria-label="Prompt versions">
     <div class="ja-card-header"><h2>Prompt versions</h2></div>
+    {% if report.kappa_trend %}
+    {% set t = report.kappa_trend %}
+    <figure class="ja-trend trend-{{ t.direction }}" aria-label="Mean Cohen's κ across prompt versions">
+      <svg class="ja-spark" viewBox="0 0 {{ t.width }} {{ t.height }}" width="{{ t.width }}" height="{{ t.height }}"
+           role="img" aria-label="Sparkline of mean κ over {{ t.series|length }} prompt versions, {{ t.direction }}">
+        <polyline points="{{ t.points }}" fill="none" stroke="currentColor" stroke-width="1.5"
+                  stroke-linejoin="round" stroke-linecap="round" />
+        <circle cx="{{ t.last_x }}" cy="{{ t.last_y }}" r="2.5" fill="currentColor" />
+      </svg>
+      <figcaption class="ja-trend-cap">
+        Mean κ drift:
+        <span class="ja-trend-tag trend-{{ t.direction }}">{{ t.direction }}</span>
+        {{ '%.3f'|format(t.first) }} → {{ '%.3f'|format(t.last) }}
+        (<span class="ja-mono">{{ '%+.3f'|format(t.delta) }}</span> over {{ t.series|length }} versions)
+      </figcaption>
+    </figure>
+    {% endif %}
     <ul class="ja-versions">
       {% for v in report.prompt_versions %}
       <li>

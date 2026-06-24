@@ -70,3 +70,56 @@ def aggregate_instance_annotations(
         }
 
     return reference, {"num_annotators": annotators_with_any, "votes": votes_meta}
+
+
+def consensus_reference_outputs(
+    instance_ids: List[str],
+    usernames: List[str],
+    get_user_annotations: Callable[[str, str], Dict[str, Any]],
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Any]]:
+    """Batch **Dawid-Skene** consensus across all instances/annotators.
+
+    Unlike per-instance majority vote, this jointly estimates each annotator's
+    reliability and weights their votes accordingly — so a careful annotator
+    sways the consensus more than a careless one. Returns
+    ``(references_by_instance, meta)`` where ``references_by_instance[iid]`` is
+    ``{scheme: value_map}`` and ``meta`` carries per-scheme annotator
+    ``reliability`` and per-instance ``confidence``.
+    """
+    from potato.server_utils.consensus import dawid_skene
+
+    # Per scheme: observations + a canonical->value_map lookup to map the
+    # consensus label back to the original annotation dict.
+    obs_by_scheme: Dict[str, List[Tuple[str, str, str]]] = defaultdict(list)
+    canon_to_value: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+
+    for user in usernames:
+        for iid in instance_ids:
+            try:
+                ann = get_user_annotations(user, str(iid)) or {}
+            except Exception:
+                ann = {}
+            for scheme, value_map in ann.items():
+                if not isinstance(value_map, dict):
+                    value_map = {"_value": value_map}
+                canonical = json.dumps(value_map, sort_keys=True, ensure_ascii=False)
+                obs_by_scheme[scheme].append((user, str(iid), canonical))
+                canon_to_value[scheme][canonical] = value_map
+
+    references: Dict[str, Dict[str, Any]] = defaultdict(dict)
+    reliability_meta: Dict[str, Any] = {}
+    confidence_meta: Dict[str, Dict[str, float]] = defaultdict(dict)
+
+    for scheme, observations in obs_by_scheme.items():
+        result = dawid_skene(observations)
+        reliability_meta[scheme] = {w: round(r, 4) for w, r in result.reliability.items()}
+        for iid, canonical in result.labels.items():
+            references[iid][scheme] = canon_to_value[scheme].get(canonical, {})
+            confidence_meta[iid][scheme] = round(result.confidence.get(iid, 0.0), 4)
+
+    meta = {
+        "method": "dawid_skene",
+        "reliability": reliability_meta,
+        "confidence": dict(confidence_meta),
+    }
+    return dict(references), meta
