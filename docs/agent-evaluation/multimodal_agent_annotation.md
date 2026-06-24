@@ -59,6 +59,28 @@ Overlaps between turns of different speakers are computed at render time (no man
 setup). Stored as `{"overlaps": {idx: label}, "rating": int}`. Example:
 `examples/agent-traces/voice-interaction/`.
 
+## Interleaved multimodal reasoning (`multimodal_reasoning`)
+
+Rate an interleaved **text ↔ image ↔ tool ↔ action** reasoning trace step by step
+(Multimodal RewardBench 2, 2512.16899; Zebra-CoT). Each step is a typed block,
+rendered in-line by its type; the annotator judges each step's coherence — does the
+reasoning follow from the image and prior steps, or is the visual *hallucinated*?
+
+```yaml
+annotation_schemes:
+  - annotation_type: multimodal_reasoning
+    name: reasoning_review
+    description: "Judge each step: coherent reasoning and grounded visuals?"
+    steps_key: steps
+    type_key: type     # each step's 'type': text | image | tool | action (inferred if absent)
+    verdict_options: [coherent, incoherent, visual_hallucination, uncertain]
+```
+
+Each step may carry `text`/`content`, `image`/`image_url` (+`caption`), or
+`tool`/`args`. Stored as a list of `{index, step, type, verdict, notes}`, keyed by
+`index`. Example: `examples/agent-traces/multimodal-reasoning/` (uses inline-SVG
+images, including a deliberate visual-hallucination case to annotate).
+
 ## Related documentation
 
 - [Multi-Agent Team Annotation](multi_agent_annotation.md) — team-structure schemas

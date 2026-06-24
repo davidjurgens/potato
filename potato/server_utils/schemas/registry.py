@@ -269,6 +269,7 @@ def _register_builtin_schemas():
     from .agent_interaction_graph import generate_agent_interaction_graph_layout
     from .gui_trajectory import generate_gui_trajectory_layout
     from .voice_interaction import generate_voice_interaction_layout
+    from .multimodal_reasoning import generate_multimodal_reasoning_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -631,6 +632,14 @@ def _register_builtin_schemas():
             optional_fields=["turns_key", "audio_key", "speaker_key", "user_speakers", "overlap_labels", "rating_scale"],
             supports_keybindings=False,
             description="Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification"
+        ),
+        SchemaDefinition(
+            name="multimodal_reasoning",
+            generator=generate_multimodal_reasoning_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "type_key", "verdict_options"],
+            supports_keybindings=False,
+            description="Interleaved text/image/tool reasoning trace: per-step coherence + visual-hallucination rating"
         ),
         SchemaDefinition(
             name="trajectory_edit",
