@@ -1,0 +1,30 @@
+# Handoff review (M2)
+# Each agent-to-agent handoff becomes a card; flag inter-agent misalignment + rate quality.
+# Run: python potato/flask_server.py start examples/agent-traces/handoff-review/config.yaml -p 8000
+annotation_task_name: "Agent Handoff Review"
+data_files:
+  - data/traces.json
+item_properties:
+  id_key: id
+  text_key: task
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+instance_display:
+  layout: {direction: vertical, gap: 16px}
+  fields:
+    - key: task
+      type: text
+      label: "Task"
+    - key: steps
+      type: agent_trace
+      label: "Agent Interactions"
+      display_options: {show_turn_numbers: true, speaker_key: agent, text_key: content}
+annotation_schemes:
+  - annotation_type: handoff_review
+    name: handoffs
+    description: "For each handoff: flag any misalignment and rate the quality."
+    steps_key: steps
+    agent_key: agent
+    flags: [info_loss, dropped_constraint, garbling, goal_drift]
+    quality_scale: 5

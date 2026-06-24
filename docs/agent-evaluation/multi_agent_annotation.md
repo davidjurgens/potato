@@ -32,6 +32,53 @@ attributing the failure. A runnable example is at
 python potato/flask_server.py start examples/agent-traces/failure-attribution/config.yaml -p 8000
 ```
 
+## Handoff review (`handoff_review`)
+
+Treat every **handoff** — one agent passing control to another — as a first-class
+object to annotate. Wherever the acting agent changes between consecutive turns,
+Potato emits a handoff card `A → B`; the annotator flags inter-agent misalignment
+and rates the handoff quality. Grounded in MAST's inter-agent failure modes, LACP
+(Zhang et al., 2510.13821) and the "Echoing" phenomenon (2511.09710).
+
+```yaml
+annotation_schemes:
+  - annotation_type: handoff_review
+    name: handoffs
+    description: "For each handoff: flag any misalignment and rate the quality."
+    steps_key: steps
+    agent_key: agent
+    flags: [info_loss, dropped_constraint, garbling, goal_drift]   # customizable
+    quality_scale: 5
+```
+
+Stored as a list of `{index, step, from, to, flags, quality}`. Handoffs are derived
+from the trace at render time (no manual setup). Example:
+`examples/agent-traces/handoff-review/`.
+
+## Per-agent + per-team scorecard (`agent_scorecard`)
+
+Score a run on **two levels at once** (MultiAgentBench, Zhou et al., ACL 2025,
+2503.01935): each agent gets per-dimension scores (role fidelity, contribution,
+coordination), the team gets shared-dimension scores, and optional milestones are
+checked off. Agent rows are derived from the trace's own turns, so the matrix matches
+who actually participated.
+
+```yaml
+annotation_schemes:
+  - annotation_type: agent_scorecard
+    name: scorecard
+    description: "Score each agent, the team, and which milestones were reached."
+    steps_key: steps
+    agent_key: agent
+    scale: 5
+    agent_dimensions: [role fidelity, contribution, coordination]
+    team_dimensions: [coordination, communication, efficiency]
+    milestones: [plan produced, task delegated correctly, result verified]   # optional
+```
+
+Stored as `{"agents": {name: {dim: score}}, "team": {dim: score}, "milestones": {name: bool}}`.
+Example: `examples/agent-traces/agent-scorecard/`.
+
 ## Tool-call review (`tool_call_review`)
 
 Judge each **tool / function call** in a trace individually: was the right tool

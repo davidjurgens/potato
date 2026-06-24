@@ -264,6 +264,8 @@ def _register_builtin_schemas():
     from .process_reward import generate_process_reward_layout
     from .failure_attribution import generate_failure_attribution_layout
     from .tool_call_review import generate_tool_call_review_layout
+    from .agent_scorecard import generate_agent_scorecard_layout
+    from .handoff_review import generate_handoff_review_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -586,6 +588,22 @@ def _register_builtin_schemas():
             optional_fields=["steps_key", "verdict_options"],
             supports_keybindings=False,
             description="Per-tool-call correctness review (right tool / args / ordering)"
+        ),
+        SchemaDefinition(
+            name="agent_scorecard",
+            generator=generate_agent_scorecard_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key", "agents", "agent_dimensions", "team_dimensions", "milestones", "scale"],
+            supports_keybindings=False,
+            description="Per-agent + per-team scorecard with optional milestones (MultiAgentBench-style)"
+        ),
+        SchemaDefinition(
+            name="handoff_review",
+            generator=generate_handoff_review_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key", "flags", "quality_scale"],
+            supports_keybindings=False,
+            description="Annotate agent-to-agent handoffs: inter-agent misalignment flags + quality"
         ),
         SchemaDefinition(
             name="trajectory_edit",
