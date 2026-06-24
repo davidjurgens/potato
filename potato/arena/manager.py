@@ -87,13 +87,16 @@ class ArenaManager:
 
     def leaderboard(self) -> List[Dict[str, Any]]:
         with self._lock:
+            from potato.server_utils.eval_stats import wilson_ci
             bt = bradley_terry(self._pairs, labels=self.model_labels()) if self._pairs else {}
             rows = []
             for lbl in self.model_labels():
                 wins, comps = self._wins.get(lbl, 0), self._compares.get(lbl, 0)
+                ci = wilson_ci(wins, comps) if comps else {"lo": None, "hi": None}
                 rows.append({
                     "label": lbl, "wins": wins, "comparisons": comps,
                     "win_rate": round(wins / comps, 3) if comps else None,
+                    "win_rate_lo": ci["lo"], "win_rate_hi": ci["hi"],
                     "elo": round(self._elo.rating(lbl)) if self._pairs else None,
                     "bt_score": bt.get(lbl),
                 })

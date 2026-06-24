@@ -81,6 +81,15 @@ Select two or more experiments and **Compare** to see aggregate scores side by
 side. The first is the baseline; deltas and the best value per metric are
 highlighted so regressions stand out.
 
+Each delta is annotated with a **paired-bootstrap significance** badge and a 95%
+confidence interval, computed per-example against the baseline (aligned by
+`example_id`). A change is flagged **significant** only when its CI excludes 0 —
+so a +0.02 that's really noise reads as **n.s.**, while a decisive gain reads as
+**significant**. This is the same statistics layer
+(`potato/server_utils/eval_stats.py`: bootstrap CIs, Wilson intervals for
+win-rates, paired significance) used by the [Model Arena](model_arena.md)
+leaderboard, so error bars and significance are consistent across the suite.
+
 ## Export to fine-tuning data
 
 Any dataset version exports to JSONL for fine-tuning, reusing the same record

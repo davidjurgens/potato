@@ -116,10 +116,23 @@ def compare_experiments():
         for k in e.aggregate_scores:
             if k not in keys:
                 keys.append(k)
+
+    # Paired significance of each non-baseline experiment's delta vs the baseline
+    # (experiments[0]), per metric. mean_diff is mean(exp) - mean(baseline) so the
+    # sign matches the delta shown in the table. Keyed significance[exp_id][metric].
+    from potato.server_utils.eval_stats import compare_experiments_metric
+    significance = {}
+    if len(experiments) >= 2:
+        baseline = experiments[0]
+        for e in experiments[1:]:
+            significance[e.id] = {
+                k: compare_experiments_metric(e, baseline, k) for k in keys
+            }
     return render_template(
         "admin/experiment_compare.html",
         experiments=experiments,
         metric_keys=keys,
+        significance=significance,
     )
 
 

@@ -38,6 +38,7 @@
   .ar-lb-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
   .ar-lb-head h2 { margin-bottom: 0; }
   .ar-lb-note { color: var(--muted-foreground); font-size: 0.8125rem; margin: 0.25rem 0 0.75rem; }
+  .ar-ci { display: block; font-size: 0.7rem; color: var(--muted-foreground); font-weight: 400; }
   /* First leaderboard row (the leader) gets a subtle emphasis. */
   table.ar-lb tbody tr:first-child td { font-weight: 600; }
 </style>
@@ -89,7 +90,7 @@
             <td class="ar-num">{{ '%.1f'|format(r.bt_score) if r.bt_score is not none else '—' }}</td>
             <td class="ar-num">{{ r.elo if r.elo is not none else '—' }}</td>
             <td class="ar-num">{{ r.wins }}</td><td class="ar-num">{{ r.comparisons }}</td>
-            <td class="ar-num">{{ '%.0f%%'|format(r.win_rate*100) if r.win_rate is not none else '—' }}</td></tr>
+            <td class="ar-num">{{ '%.0f%%'|format(r.win_rate*100) if r.win_rate is not none else '—' }}{% if r.win_rate_lo is not none %}<span class="ar-ci">{{ '%.0f–%.0f%%'|format(r.win_rate_lo*100, r.win_rate_hi*100) }}</span>{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -115,7 +116,8 @@
       `<td class="ar-num">${r.bt_score == null ? "—" : r.bt_score.toFixed(1)}</td>` +
       `<td class="ar-num">${r.elo == null ? "—" : r.elo}</td>` +
       `<td class="ar-num">${r.wins}</td><td class="ar-num">${r.comparisons}</td>` +
-      `<td class="ar-num">${r.win_rate == null ? "—" : Math.round(r.win_rate*100)+"%"}</td></tr>`).join("");
+      `<td class="ar-num">${r.win_rate == null ? "—" : Math.round(r.win_rate*100)+"%"}` +
+      `${r.win_rate_lo == null ? "" : `<span class="ar-ci">${Math.round(r.win_rate_lo*100)}–${Math.round(r.win_rate_hi*100)}%</span>`}</td></tr>`).join("");
   }
   const exportBtn = document.getElementById("ar-export");
   if (exportBtn) exportBtn.addEventListener("click", async () => {
