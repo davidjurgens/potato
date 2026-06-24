@@ -1930,9 +1930,19 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                 raise ConfigValidationError(f"{path}.min_value must be less than max_value")
 
     elif annotation_type == 'hierarchical_multiselect':
-        if 'taxonomy' not in scheme:
-            raise ConfigValidationError(f"{path} missing 'taxonomy' field for hierarchical_multiselect annotation type")
-        if not isinstance(scheme['taxonomy'], dict) or not scheme['taxonomy']:
+        # Either an explicit taxonomy or a built-in preset (e.g. MAST) is required.
+        preset = scheme.get('taxonomy_preset')
+        if 'taxonomy' not in scheme and not preset:
+            raise ConfigValidationError(
+                f"{path} requires 'taxonomy' or 'taxonomy_preset' for "
+                f"hierarchical_multiselect annotation type")
+        if preset:
+            from potato.server_utils.failure_taxonomy import TAXONOMY_PRESETS
+            if str(preset).strip().lower() not in TAXONOMY_PRESETS:
+                raise ConfigValidationError(
+                    f"{path}.taxonomy_preset '{preset}' is not a known preset "
+                    f"(available: {', '.join(sorted(TAXONOMY_PRESETS))})")
+        elif not isinstance(scheme['taxonomy'], dict) or not scheme['taxonomy']:
             raise ConfigValidationError(f"{path}.taxonomy must be a non-empty dictionary")
 
     elif annotation_type == 'vas':

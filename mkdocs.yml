@@ -78,6 +78,8 @@ nav:
         - Web Agent Annotation: agent-evaluation/web_agent_annotation.md
         - Trajectory Evaluation: agent-evaluation/trajectory_eval.md
         - Trajectory Correction: agent-evaluation/trajectory_correction.md
+        - Process Supervision (PRM): agent-evaluation/process_supervision.md
+        - Failure-Mode Taxonomy (MAST): agent-evaluation/failure_taxonomy.md
         - Programmatic Evaluators: agent-evaluation/evaluators.md
         - Datasets & Experiments: agent-evaluation/datasets_and_experiments.md
         - Automation Rules: agent-evaluation/automation_rules.md

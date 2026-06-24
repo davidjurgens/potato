@@ -81,3 +81,32 @@ class TestArenaAPI:
         assert s.get(f"{base}/admin/arena").status_code == 200
         assert requests.post(f"{base}/admin/arena/api/run",
                              json={"prompt": "x"}).status_code in (401, 403)
+
+    def test_leaderboard_has_elo_and_bt(self):
+        s, base = self._admin()
+        s.post(f"{base}/admin/arena/api/run", json={"prompt": "rank me"})
+        s.post(f"{base}/admin/arena/api/preference",
+               json={"prompt": "rank me", "winner": "Alpha"})
+        lb = {row["label"]: row for row in
+              s.get(f"{base}/admin/arena/api/leaderboard").json()["leaderboard"]}
+        # Both opponent-strength-aware metrics are present after a comparison.
+        assert lb["Alpha"]["elo"] is not None and lb["Beta"]["elo"] is not None
+        assert lb["Alpha"]["elo"] > lb["Beta"]["elo"]
+        assert lb["Alpha"]["bt_score"] >= lb["Beta"]["bt_score"]
+
+    def test_export_dpo_returns_pairs(self):
+        s, base = self._admin()
+        s.post(f"{base}/admin/arena/api/run", json={"prompt": "dpo please"})
+        s.post(f"{base}/admin/arena/api/preference",
+               json={"prompt": "dpo please", "winner": "Alpha"})
+        r = s.get(f"{base}/admin/arena/api/export_dpo")
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["count"] >= 1
+        pair = data["pairs"][0]
+        assert pair["chosen"].startswith("[Alpha]")
+        assert pair["rejected"].startswith("[Beta]")
+
+    def test_export_dpo_admin_guarded(self):
+        assert requests.get(f"{self.server.base_url}/admin/arena/api/export_dpo"
+                            ).status_code in (401, 403)

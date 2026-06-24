@@ -4,7 +4,8 @@ Admin routes for the multi-model arena.
     GET  /admin/arena                 HTML page
     POST /admin/arena/api/run         {prompt} -> per-model responses
     POST /admin/arena/api/preference  {prompt, winner, ranking} -> record a pick
-    GET  /admin/arena/api/leaderboard win-rate per model
+    GET  /admin/arena/api/leaderboard Bradley-Terry + Elo + win-rate per model
+    GET  /admin/arena/api/export_dpo  human preferences as DPO (chosen/rejected) pairs
 """
 
 from __future__ import annotations
@@ -83,3 +84,12 @@ def api_preference():
 @_enabled_required
 def api_leaderboard():
     return jsonify({"leaderboard": get_arena_manager().leaderboard()})
+
+
+@arena_bp.route("/api/export_dpo", methods=["GET"])
+@admin_required
+@_enabled_required
+def api_export_dpo():
+    """Arena human preferences as DPO triples (prompt, chosen, rejected)."""
+    pairs = get_arena_manager().export_dpo()
+    return jsonify({"count": len(pairs), "pairs": pairs})

@@ -26,8 +26,27 @@ enabled, the admin dashboard shows an **Arena** link.
 1. Enter a prompt → it's sent to every model **concurrently**. One model failing
    (bad key, provider down) never blocks the others — its card shows the error.
 2. Responses render side by side, each with per-model latency.
-3. Click **Pick as best** → records a preference and updates the **leaderboard**
-   (wins / comparisons / win-rate per model).
+3. Click **Pick as best** → records a preference and updates the **leaderboard**.
+
+## Leaderboard: Bradley-Terry + Elo (not just win-rate)
+
+A raw win-rate treats beating a weak model the same as beating a strong one. The
+arena instead ranks models by a **Bradley-Terry** score (a maximum-likelihood
+strength that accounts for *who you beat*) and also reports an **Elo** rating
+updated after every comparison. Win-rate is still shown for reference.
+
+- A bare **winner** counts as that model beating every other model in the run.
+- A full **ranking** (`["A", "B", "C"]`) expands into all pairwise outcomes.
+
+Both metrics need no extra config — they appear once you record preferences.
+
+## Export DPO preference data
+
+Every "Pick as best" is a human preference, so the arena doubles as a **DPO
+data-collection** surface. **Export DPO** (button on the leaderboard, or
+`GET /admin/arena/api/export_dpo`) returns one `{prompt, chosen, rejected}` triple
+per winner-vs-loser pair where both response texts are available — ready for
+preference fine-tuning (DPO/KTO).
 
 ## API
 
@@ -35,7 +54,8 @@ enabled, the admin dashboard shows an **Arena** link.
 |--------|------|---------|
 | POST | `/admin/arena/api/run` | `{prompt}` → per-model responses (`label, response, latency_ms, error`) |
 | POST | `/admin/arena/api/preference` | `{prompt, winner, ranking?}` → record a pick |
-| GET | `/admin/arena/api/leaderboard` | win-rate per model |
+| GET | `/admin/arena/api/leaderboard` | Bradley-Terry score + Elo + wins/comparisons/win-rate per model |
+| GET | `/admin/arena/api/export_dpo` | human preferences as DPO `{prompt, chosen, rejected}` pairs |
 
 ```bash
 curl -X POST localhost:8000/admin/arena/api/run -H "X-API-Key: <key>" \

@@ -5018,6 +5018,24 @@ body > .container-fluid {
   user-select: none;
 }
 
+/* Tooltip marker for taxonomy presets (e.g. MAST failure modes). */
+.hier-info {
+  display: inline-block;
+  margin-left: 0.35rem;
+  color: var(--muted-foreground, #71717a);
+  font-size: 0.85em;
+  cursor: help;
+  /* Full token color (~4.6:1) meets WCAG 1.4.11 non-text contrast; no opacity dimming. */
+}
+.hier-info:hover {
+  color: var(--foreground, #18181b);
+}
+.hier-info:focus-visible {
+  outline: 2px solid var(--ring, #6e56cf);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 /* ============================================================
    Text Schema Enhancements (rationale/justification features)
    ============================================================ */

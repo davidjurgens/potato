@@ -80,6 +80,52 @@ class TestProcessRewardSchema:
         assert kb == []
 
 
+class TestProcessRewardNeutral:
+    """Three-way (correct/neutral/incorrect) PRM800K-style labeling."""
+
+    def _make_scheme(self, **kwargs):
+        base = {
+            "name": "test_prm",
+            "description": "Test PRM schema",
+            "annotation_type": "process_reward",
+            "steps_key": "steps",
+            "mode": "per_step",
+            "allow_neutral": True,
+        }
+        base.update(kwargs)
+        return base
+
+    def test_neutral_disabled_by_default(self):
+        # The runtime gate is CONFIG.allow_neutral (the class name string is
+        # always present in the JS source, so we assert on the flag).
+        scheme = self._make_scheme()
+        del scheme["allow_neutral"]
+        html, _ = generate_process_reward_layout(scheme)
+        assert '"allow_neutral": false' in html
+
+    def test_neutral_enabled_in_per_step(self):
+        html, _ = generate_process_reward_layout(self._make_scheme())
+        assert '"allow_neutral": true' in html
+        # The unmarked sentinel must be null so neutral(0) is distinguishable.
+        assert "var UNMARKED = NEUTRAL ? null : 0;" in html
+
+    def test_neutral_forced_off_in_first_error_mode(self):
+        # Neutral makes no sense for the first-error cascade and must be ignored.
+        html, _ = generate_process_reward_layout(
+            self._make_scheme(mode="first_error"))
+        assert '"allow_neutral": false' in html
+
+    def test_neutral_styling_present(self):
+        html, _ = generate_process_reward_layout(self._make_scheme())
+        assert "prm-neutral" in html
+        assert "prm-status-neutral" in html
+        assert "prm-count-neutral" in html
+
+    def test_mode_label_mentions_neutral(self):
+        html, _ = generate_process_reward_layout(self._make_scheme())
+        assert "neutral" in html.lower()
+
+
 class TestProcessRewardRegistration:
     """Test schema registry integration."""
 

@@ -35,6 +35,11 @@
   table.ar-lb th { background: var(--muted); font-weight: 600; }
   td.ar-num { text-align: right; font-variant-numeric: tabular-nums; }
   .ar-empty { color: var(--muted-foreground); font-style: italic; }
+  .ar-lb-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .ar-lb-head h2 { margin-bottom: 0; }
+  .ar-lb-note { color: var(--muted-foreground); font-size: 0.8125rem; margin: 0.25rem 0 0.75rem; }
+  /* First leaderboard row (the leader) gets a subtle emphasis. */
+  table.ar-lb tbody tr:first-child td { font-weight: 600; }
 </style>
 </head>
 <body>
@@ -42,8 +47,8 @@
   <h1>Model Arena</h1>
   <p class="ar-lede">
     Send one prompt to every configured model side by side, compare the responses,
-    and pick the best — building a win-rate leaderboard. Models are
-    provider-agnostic (any of Potato's LLM endpoints).
+    and pick the best — building a Bradley-Terry &amp; Elo leaderboard and exportable
+    DPO preference data. Models are provider-agnostic (any of Potato's LLM endpoints).
   </p>
 
   <section class="dashboard-card ar-card" aria-labelledby="ar-run-h">
@@ -62,12 +67,28 @@
   </section>
 
   <section class="dashboard-card ar-card" aria-labelledby="ar-lb-h">
-    <h2 id="ar-lb-h">Leaderboard</h2>
+    <div class="ar-lb-head">
+      <h2 id="ar-lb-h">Leaderboard</h2>
+      <button class="shadcn-button shadcn-button-outline ar-export" id="ar-export"
+              title="Download arena preferences as DPO (chosen/rejected) pairs">Export DPO</button>
+    </div>
+    <p class="ar-lb-note">Ranked by <strong>Bradley-Terry</strong> score (accounts for opponent
+      strength), with <strong>Elo</strong> ratings. Win rate shown for reference.</p>
     <table class="ar-lb" id="ar-lb">
-      <thead><tr><th scope="col">Model</th><th scope="col">Wins</th><th scope="col">Comparisons</th><th scope="col">Win rate</th></tr></thead>
+      <thead><tr>
+        <th scope="col">Model</th>
+        <th scope="col">BT score</th>
+        <th scope="col">Elo</th>
+        <th scope="col">Wins</th>
+        <th scope="col">Comparisons</th>
+        <th scope="col">Win rate</th>
+      </tr></thead>
       <tbody id="ar-lb-body">
         {% for r in leaderboard %}
-        <tr><td>{{ r.label }}</td><td class="ar-num">{{ r.wins }}</td><td class="ar-num">{{ r.comparisons }}</td>
+        <tr><td>{{ r.label }}</td>
+            <td class="ar-num">{{ '%.1f'|format(r.bt_score) if r.bt_score is not none else '—' }}</td>
+            <td class="ar-num">{{ r.elo if r.elo is not none else '—' }}</td>
+            <td class="ar-num">{{ r.wins }}</td><td class="ar-num">{{ r.comparisons }}</td>
             <td class="ar-num">{{ '%.0f%%'|format(r.win_rate*100) if r.win_rate is not none else '—' }}</td></tr>
         {% endfor %}
       </tbody>
@@ -90,9 +111,24 @@
   }
   function renderLeaderboard(rows) {
     document.getElementById("ar-lb-body").innerHTML = rows.map(r =>
-      `<tr><td>${esc(r.label)}</td><td class="ar-num">${r.wins}</td><td class="ar-num">${r.comparisons}</td>` +
+      `<tr><td>${esc(r.label)}</td>` +
+      `<td class="ar-num">${r.bt_score == null ? "—" : r.bt_score.toFixed(1)}</td>` +
+      `<td class="ar-num">${r.elo == null ? "—" : r.elo}</td>` +
+      `<td class="ar-num">${r.wins}</td><td class="ar-num">${r.comparisons}</td>` +
       `<td class="ar-num">${r.win_rate == null ? "—" : Math.round(r.win_rate*100)+"%"}</td></tr>`).join("");
   }
+  const exportBtn = document.getElementById("ar-export");
+  if (exportBtn) exportBtn.addEventListener("click", async () => {
+    const r = await fetch("{{ url_for('arena.api_export_dpo') }}");
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.pairs || !data.pairs.length) {
+      exportBtn.textContent = "No DPO pairs yet"; setTimeout(() => exportBtn.textContent = "Export DPO", 1800); return;
+    }
+    const blob = new Blob([data.pairs.map(p => JSON.stringify(p)).join("\n")], {type: "application/jsonl"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "arena_dpo.jsonl"; a.click();
+    URL.revokeObjectURL(a.href);
+  });
   const runBtn = document.getElementById("ar-run");
   runBtn.addEventListener("click", async () => {
     const prompt = document.getElementById("ar-prompt").value.trim();

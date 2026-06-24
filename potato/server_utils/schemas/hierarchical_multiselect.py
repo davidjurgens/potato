@@ -46,7 +46,31 @@ def generate_hierarchical_multiselect_layout(annotation_scheme):
     return safe_generate_layout(annotation_scheme, _generate_hierarchical_multiselect_layout_internal)
 
 
-def _build_tree_html(taxonomy, schema_name, prefix="", depth=0):
+def _label_tooltip(label, tooltips):
+    """Return ``(title_attr, info_marker_html)`` for a label that has a tooltip.
+
+    Uses the native ``title`` attribute (no extra JS) plus a subtle ⓘ marker so
+    annotators can see what each taxonomy code means on hover.
+    """
+    if not tooltips:
+        return "", ""
+    desc = tooltips.get(label)
+    if not desc:
+        return "", ""
+    safe_desc = escape_html_content(str(desc))
+    # Accessible info affordance: focusable + announced (aria-label) so keyboard
+    # and screen-reader users get the definition, not just mouse-hover (title).
+    # The marker sits inside the <label>, so a click would toggle the checkbox --
+    # suppress that; reading the tooltip should not change the selection.
+    info = (
+        f'<span class="hier-info" role="img" tabindex="0" '
+        f'title="{safe_desc}" aria-label="Definition: {safe_desc}" '
+        f'onclick="event.preventDefault();event.stopPropagation();">&#9432;</span>'
+    )
+    return f' title="{safe_desc}"', info
+
+
+def _build_tree_html(taxonomy, schema_name, prefix="", depth=0, tooltips=None):
     """Recursively build tree HTML from taxonomy dict/list."""
     html = ""
     safe_schema = escape_html_content(schema_name)
@@ -58,6 +82,7 @@ def _build_tree_html(taxonomy, schema_name, prefix="", depth=0):
             safe_node_id = escape_html_content(node_id)
             has_children = bool(children)
             toggle = '<span class="hier-toggle">&#9654;</span>' if has_children else '<span class="hier-toggle-placeholder"></span>'
+            title_attr, info = _label_tooltip(key, tooltips)
 
             html += f"""
             <div class="hier-node" data-depth="{depth}" data-node-id="{safe_node_id}">
@@ -71,13 +96,13 @@ def _build_tree_html(taxonomy, schema_name, prefix="", depth=0):
                                data-hier-node="{safe_node_id}"
                                data-hier-depth="{depth}"
                                value="{safe_key}">
-                        <span class="hier-label-text">{safe_key}</span>
+                        <span class="hier-label-text"{title_attr}>{safe_key}</span>{info}
                     </label>
                 </div>
             """
             if has_children:
                 html += f'<div class="hier-children" style="display:none;">'
-                html += _build_tree_html(children, schema_name, prefix=f"{node_id}.", depth=depth + 1)
+                html += _build_tree_html(children, schema_name, prefix=f"{node_id}.", depth=depth + 1, tooltips=tooltips)
                 html += "</div>"
             html += "</div>"
 
@@ -86,6 +111,7 @@ def _build_tree_html(taxonomy, schema_name, prefix="", depth=0):
             safe_item = escape_html_content(str(item))
             node_id = f"{prefix}{item}".replace(" ", "_")
             safe_node_id = escape_html_content(node_id)
+            title_attr, info = _label_tooltip(str(item), tooltips)
 
             html += f"""
             <div class="hier-node hier-leaf" data-depth="{depth}" data-node-id="{safe_node_id}">
@@ -99,7 +125,7 @@ def _build_tree_html(taxonomy, schema_name, prefix="", depth=0):
                                data-hier-node="{safe_node_id}"
                                data-hier-depth="{depth}"
                                value="{safe_item}">
-                        <span class="hier-label-text">{safe_item}</span>
+                        <span class="hier-label-text"{title_attr}>{safe_item}</span>{info}
                     </label>
                 </div>
             </div>
@@ -113,6 +139,7 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
     safe_schema = escape_html_content(schema_name)
     description = annotation_scheme["description"]
     taxonomy = annotation_scheme.get("taxonomy", {})
+    tooltips = dict(annotation_scheme.get("tooltips", {}) or {})
     auto_select_children = annotation_scheme.get("auto_select_children", False)
     auto_select_parent = annotation_scheme.get("auto_select_parent", False)
     show_search = annotation_scheme.get("show_search", False)
@@ -120,8 +147,21 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
     layout_attrs = generate_layout_attributes(annotation_scheme)
     validation = generate_validation_attribute(annotation_scheme)
 
+    # A research-backed taxonomy preset (e.g. ``taxonomy_preset: mast``) fills in
+    # both the taxonomy and per-mode tooltips so projects don't hand-author the
+    # label set. An explicit ``taxonomy``/``tooltips`` always wins over the preset.
+    preset_name = annotation_scheme.get("taxonomy_preset")
+    if preset_name and not taxonomy:
+        from potato.server_utils.failure_taxonomy import to_hierarchical, to_tooltips
+        taxonomy = to_hierarchical(preset_name)
+        preset_tips = to_tooltips(preset_name)
+        preset_tips.update(tooltips)  # explicit tooltips override the preset
+        tooltips = preset_tips
+
     if not taxonomy:
-        raise ValueError(f"hierarchical_multiselect schema '{schema_name}' requires 'taxonomy'")
+        raise ValueError(
+            f"hierarchical_multiselect schema '{schema_name}' requires 'taxonomy' "
+            f"or 'taxonomy_preset'")
 
     identifiers = generate_element_identifier(schema_name, "selected_labels", "hidden")
 
@@ -162,7 +202,7 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
                  data-max-selections="{max_selections if max_selections else ''}">
     """
 
-    html += _build_tree_html(taxonomy, schema_name)
+    html += _build_tree_html(taxonomy, schema_name, tooltips=tooltips)
 
     html += f"""
             </div>
