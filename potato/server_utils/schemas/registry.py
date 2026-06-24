@@ -271,6 +271,7 @@ def _register_builtin_schemas():
     from .voice_interaction import generate_voice_interaction_layout
     from .multimodal_reasoning import generate_multimodal_reasoning_layout
     from .speech_transcript import generate_speech_transcript_layout
+    from .tool_contention import generate_tool_contention_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -649,6 +650,14 @@ def _register_builtin_schemas():
             optional_fields=["segments_key", "audio_key", "error_types", "allow_correction"],
             supports_keybindings=False,
             description="Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction"
+        ),
+        SchemaDefinition(
+            name="tool_contention",
+            generator=generate_tool_contention_layout,
+            required_fields=["name", "description"],
+            optional_fields=["calls_key", "agent_key", "resource_key", "contention_labels"],
+            supports_keybindings=False,
+            description="Tool/resource-contention timeline: per-agent lanes + shared-resource collision classification"
         ),
         SchemaDefinition(
             name="trajectory_edit",

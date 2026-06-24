@@ -103,6 +103,29 @@ annotation_schemes:
 Stored as `{"agents": {name: {dim: score}}, "team": {dim: score}, "milestones": {name: bool}}`.
 Example: `examples/agent-traces/agent-scorecard/`.
 
+## Tool / resource-contention timeline (`tool_contention`)
+
+Visualize concurrent tool/resource use across agents on a multi-lane timeline (one
+lane per agent) and flag concurrency failures — deadlock, circular wait, race
+conditions, shared-resource collisions (DPBench, 2602.13255). **Contention regions**
+where two calls touch the *same* resource at overlapping times are highlighted
+across the lanes and listed for classification.
+
+```yaml
+annotation_schemes:
+  - annotation_type: tool_contention
+    name: contention
+    description: "Classify each shared-resource contention region."
+    calls_key: calls          # list of {agent, tool, start, end, resource}
+    agent_key: agent
+    resource_key: resource
+    contention_labels: [deadlock, circular_wait, race_condition, benign]
+```
+
+Contentions are computed at render time (same `resource`, overlapping interval).
+Stored as `{"contentions": {idx: label}}`. Example:
+`examples/agent-traces/tool-contention/`.
+
 ## Tool-call review (`tool_call_review`)
 
 Judge each **tool / function call** in a trace individually: was the right tool
