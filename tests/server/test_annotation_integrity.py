@@ -59,3 +59,20 @@ class TestAnnotationIntegrity:
                          headers={"X-API-Key": ADMIN_KEY})
         assert r.status_code == 200
         assert "Annotation integrity" in r.text
+
+    def test_perspectivist_export(self):
+        # two annotators disagree on an item -> a non-trivial distribution
+        self._annotate_as("dana@test.com", "positive")
+        self._annotate_as("evan@test.com", "negative")
+        time.sleep(0.3)
+        r = requests.get(f"{self.base}/admin/api/perspectivist",
+                         headers={"X-API-Key": ADMIN_KEY})
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "items" in data and "perspectives" in data and "n_ambiguous" in data
+        for it in data["items"]:
+            assert "distribution" in it and "ambiguous" in it and "entropy" in it
+
+    def test_perspectivist_requires_admin(self):
+        r = requests.get(f"{self.base}/admin/api/perspectivist")
+        assert r.status_code == 403

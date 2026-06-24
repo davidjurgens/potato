@@ -61,6 +61,15 @@
   .ja-empty { color: var(--muted-foreground); font-style: italic; }
   .ja-versions { font-size: 0.85rem; }
   .ja-versions li { margin-bottom: 0.25rem; }
+  .ja-evalcard { border: 1px solid var(--border); border-radius: var(--radius, 0.5rem); padding: 0.6rem 0.8rem; margin-bottom: 0.5rem; }
+  .ja-evalcard-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .ja-evalcard-metrics { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.85rem; color: var(--muted-foreground); margin-top: 0.3rem; }
+  .ja-evalcard-metrics strong { color: var(--foreground, #18181b); font-variant-numeric: tabular-nums; }
+  .ja-verdict { font-size: 0.7rem; font-weight: 700; padding: 0.05rem 0.5rem; border-radius: 999px; text-transform: uppercase; }
+  .ja-verdict.v-trustworthy { background: hsl(140 45% 90%); color: hsl(140 45% 26%); }
+  .ja-verdict.v-use-with-caution { background: hsl(40 70% 88%); color: hsl(35 55% 28%); }
+  .ja-verdict.v-needs-review { background: hsl(8 60% 91%); color: hsl(8 55% 32%); }
+  .ja-concerns { margin: 0.4rem 0 0; padding-left: 1.1rem; font-size: 0.8rem; color: hsl(8 45% 38%); }
   .ja-mono { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); }
 </style>
 </head>
@@ -105,6 +114,36 @@
       </li>
       {% endfor %}
     </ul>
+  </section>
+  {% endif %}
+
+  {% if report.eval_cards %}
+  <section class="dashboard-card ja-card" aria-label="Judge eval cards">
+    <div class="ja-card-header"><h2>Judge eval cards <span class="ja-mono">(bias &amp; robustness)</span></h2></div>
+    <p class="ja-meta" style="margin:0 0 0.6rem;">
+      Beyond agreement (κ): does the judge favor longer outputs, is its confidence
+      calibrated, is it order-robust? A portable certificate to ship with the eval.
+    </p>
+    {% for schema, card in report.eval_cards.items() %}
+    <div class="ja-evalcard">
+      <div class="ja-evalcard-head">
+        <strong>{{ schema }}</strong>
+        <span class="ja-verdict v-{{ card.verdict.replace(' ', '-') }}">{{ card.verdict }}</span>
+      </div>
+      <div class="ja-evalcard-metrics">
+        <span>κ <strong>{{ '%.3f'|format(card.agreement.kappa) if card.agreement.kappa is not none else '—' }}</strong></span>
+        {% if card.verbosity and card.verbosity.length_bias_excess is not none %}
+          <span title="judge minus human positive-class length gap">length bias <strong>{{ '%+.0f'|format(card.verbosity.length_bias_excess) }}</strong> chars</span>
+        {% endif %}
+        {% if card.calibration and card.calibration.ece is not none %}
+          <span title="expected calibration error (lower better)">ECE <strong>{{ '%.2f'|format(card.calibration.ece) }}</strong></span>
+        {% endif %}
+      </div>
+      {% if card.concerns %}
+      <ul class="ja-concerns">{% for c in card.concerns %}<li>{{ c }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+    {% endfor %}
   </section>
   {% endif %}
 

@@ -2992,10 +2992,29 @@ def admin_judge_alignment():
         return jsonify({"error": "Admin API key required"}), 403
 
     try:
-        from potato.server_utils.judge_alignment import compute_judge_alignment
-        report = compute_judge_alignment(
-            config, get_users(), prompt_version=request.args.get("prompt_version"),
-        )
+        from potato.server_utils.judge_alignment import (
+            compute_judge_alignment, gather_pairs, judge_scoped_schemas, latest_prompt_version)
+        users = get_users()
+        pv = request.args.get("prompt_version")
+        report = compute_judge_alignment(config, users, prompt_version=pv)
+        # E4: judge bias + robustness eval cards (the axis beyond κ).
+        try:
+            from potato.server_utils.judge_bias import eval_cards_from_pairs
+
+            def _text_len(iid):
+                from potato.item_state_management import get_item_state_manager
+                ism = get_item_state_manager()
+                try:
+                    return len(str(ism.get_item(iid).get_data())) if ism else 0
+                except Exception:
+                    return 0
+            schemas = [s.get("name") for s in judge_scoped_schemas(config)]
+            pairs = gather_pairs(config, users, schemas, pv or latest_prompt_version(config))
+            report["eval_cards"] = eval_cards_from_pairs(
+                pairs, report.get("per_schema", {}), _text_len,
+                prompt_version=report.get("prompt_version") or "")
+        except Exception:
+            logger.exception("eval-card computation failed (non-fatal)")
     except Exception as exc:
         logger.exception("Failed to compute judge alignment")
         return jsonify({"error": str(exc)}), 500
@@ -3121,6 +3140,38 @@ def admin_annotation_integrity():
         except Exception:
             pass
     return jsonify(payload)
+
+
+@app.route("/admin/api/perspectivist", methods=["GET"])
+def admin_perspectivist_export():
+    """Soft-label / perspectivist export (E3): per-item label distributions,
+    ambiguity flags, and per-annotator perspectives — preserves disagreement
+    instead of collapsing to one answer. ?schema=<name> to restrict; default all.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    try:
+        from potato.server_utils.perspectivist import perspectivist_export, annotator_perspectives
+        from potato.server_utils.judge_alignment import judge_scoped_schemas
+        wanted = request.args.get("schema")
+        schemas = ([wanted] if wanted else
+                   [s.get("name") for s in (config.get("annotation_schemes") or [])
+                    if s.get("annotation_type") in ("radio", "multiselect", "multiple_choice")]
+                   or [s.get("name") for s in judge_scoped_schemas(config)])
+        obs = _build_annotation_observations(get_users(), schemas)
+        try:
+            thr = float(request.args.get("ambiguity_threshold", 0.5))
+        except (TypeError, ValueError):
+            thr = 0.5
+        items = perspectivist_export(obs, ambiguity_threshold=thr)
+        ambiguous = sum(1 for it in items if it["ambiguous"])
+        return jsonify({"items": items, "n_items": len(items),
+                        "n_ambiguous": ambiguous,
+                        "perspectives": annotator_perspectives(obs)})
+    except Exception as exc:
+        logger.exception("Failed to build perspectivist export")
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/admin/triage-queue", methods=["GET"])
@@ -7157,6 +7208,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
     app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
     app.add_url_rule("/admin/annotation-integrity", "admin_annotation_integrity", admin_annotation_integrity, methods=["GET"])
+    app.add_url_rule("/admin/api/perspectivist", "admin_perspectivist_export", admin_perspectivist_export, methods=["GET"])
     app.add_url_rule("/admin/judge-alignment", "admin_judge_alignment", admin_judge_alignment, methods=["GET"])
     app.add_url_rule("/admin/api/judge-alignment/run", "admin_judge_alignment_run", admin_judge_alignment_run, methods=["POST"])
     app.add_url_rule("/admin/api/judge-alignment/autocalibrate", "admin_judge_alignment_autocalibrate", admin_judge_alignment_autocalibrate, methods=["POST"])

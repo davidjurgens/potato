@@ -169,6 +169,30 @@ the judge live when no cached verdict exists (slower; otherwise pre-run the batc
 - Predictions persist under `{output_annotation_dir}/judge_alignment/` keyed by
   prompt version; the LLM calls are cached.
 
+## Judge eval cards: bias & robustness (the axis beyond κ)
+
+Agreement (κ) alone can hide a biased judge — research finds **style/length bias
+dominates and is invisible to κ**. The dashboard's **Judge eval cards** panel adds
+the second axis per schema and packages both into a portable certificate:
+
+- **Verbosity / length bias** — does the judge assign the positive class to longer
+  outputs *more than humans do*? (judge minus human positive-class length gap).
+- **Confidence calibration** — does stated confidence track actual correctness vs
+  human gold? (expected calibration error + reliability buckets).
+- **Position-swap consistency** — for order-sensitive judging, how often the verdict
+  flips when option order is reversed (a runnable probe).
+
+Each card shows a verdict — **trustworthy / use with caution / needs review** — with
+the specific concerns listed. See `potato/server_utils/judge_bias.py`.
+
+## Soft-label / perspectivist export
+
+Disagreement is signal, not just noise. `GET /admin/api/perspectivist` exports, per
+item, the **full label distribution**, a normalized-entropy **ambiguity** flag, and
+per-annotator perspectives (majority vs minority rate) — the soft-label /
+disagreement-aware format, alongside (not replacing) Dawid-Skene consensus. See
+`potato/server_utils/perspectivist.py`.
+
 ## Notes & limitations
 
 - v1 calibration is **manual** (edit rubric + re-run); automated prompt

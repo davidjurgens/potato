@@ -208,13 +208,20 @@ class JudgeService:
 
             response = endpoint.query(prompt, JudgeVerdict)
             if isinstance(response, str):
-                data = json.loads(response)
+                # Robust parse: models often wrap JSON in ```json fences / <think>
+                # blocks, and vLLM doesn't strictly enforce response_format.
+                if hasattr(endpoint, "parseStringToJson"):
+                    data = endpoint.parseStringToJson(response)
+                else:
+                    data = json.loads(response)
             elif hasattr(response, "model_dump"):
                 data = response.model_dump()
             elif hasattr(response, "dict"):
                 data = response.dict()
             else:
                 data = response or {}
+            if not isinstance(data, dict):
+                data = {}
         except Exception as e:
             logger.error(f"Judge: query/parse failed for {instance_id}/{schema_name}: {e}")
             return None
