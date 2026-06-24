@@ -12,6 +12,7 @@ Inspect:
                                         annotation progress, ingested traces)
     GET  /admin/eval/progress          per-instance annotation status (capped)
     GET  /admin/eval/ingested_traces   runtime-ingested traces with source/counts
+    GET  /admin/eval/analytics         cost/token/latency analytics + regression alerts
 
 Control:
     POST /admin/eval/assignment        {action: "pause"|"resume"} freeze/resume
@@ -20,7 +21,7 @@ Control:
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, render_template, request
 
 from potato.eval_datasets.routes import admin_required, _enabled_required
 from potato.eval_datasets.manager import get_datasets_manager, DatasetsManager
@@ -28,6 +29,26 @@ from potato.eval_datasets.manager import get_datasets_manager, DatasetsManager
 eval_admin_bp = Blueprint("eval_admin", __name__, url_prefix="/admin/eval")
 
 _PROGRESS_CAP = 1000  # don't serialize unbounded instance lists
+_ANALYTICS_CAP = 5000  # cap traces aggregated per analytics request
+
+
+def _ingested_trace_data(mgr, ism, limit=_ANALYTICS_CAP):
+    """The raw data dicts of runtime-ingested trace items (for analytics)."""
+    out = []
+    if ism is None:
+        return out
+    for iid in ism.get_instance_ids():
+        try:
+            item = ism.get_item(iid)
+        except KeyError:
+            continue
+        if not mgr._is_ingested_trace(iid, item):
+            continue
+        data = item.get_data()
+        out.append(data if isinstance(data, dict) else {"text": data})
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _managers():
@@ -138,6 +159,44 @@ def ingested_traces():
                     "num_annotators": len(ism.get_annotators_for_item(iid) or set()),
                 })
     return jsonify({"total": sum(by_source.values()), "by_source": by_source, "traces": rows})
+
+
+@eval_admin_bp.route("/analytics", methods=["GET"])
+@admin_required
+@_enabled_required
+def analytics():
+    """Cost/token/latency analytics over ingested traces, with optional regression
+    alerts when a recent window is compared against the rest as a baseline.
+
+    Query params: ``recent`` (int, default 0 = no split) — size of the trailing
+    window treated as "recent"; the preceding traces are the baseline. ``format``
+    = ``json`` (default) or ``html``.
+    """
+    from potato.server_utils.eval_analytics import compute_analytics, detect_regressions
+    from potato.flask_server import config as _config
+
+    mgr = get_datasets_manager()
+    ism, _ = _managers()
+    items = _ingested_trace_data(mgr, ism)
+    a9 = (_config.get("analytics") or {}) if hasattr(_config, "get") else {}
+    pricing = a9.get("pricing")
+
+    overall = compute_analytics(items, pricing=pricing)
+    alerts = []
+    try:
+        recent_n = int(request.args.get("recent", 0))
+    except (TypeError, ValueError):
+        recent_n = 0
+    if recent_n and len(items) > recent_n:
+        recent = compute_analytics(items[-recent_n:], pricing=pricing)
+        baseline = compute_analytics(items[:-recent_n], pricing=pricing)
+        alerts = detect_regressions(recent, baseline, a9.get("thresholds"))
+
+    payload = {"analytics": overall, "alerts": alerts, "trace_count": len(items)}
+    if request.args.get("format") == "html":
+        return render_template("admin/eval_analytics.html",
+                               analytics=overall, alerts=alerts, trace_count=len(items))
+    return jsonify(payload)
 
 
 @eval_admin_bp.route("/assignment", methods=["POST"])

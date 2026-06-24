@@ -83,6 +83,29 @@ prompt, completion, token usage, model) to Potato run trees and submits them.
 `potato_trace.otel_exporter.is_available()` reports whether `opentelemetry` is
 installed.
 
+### Live OTLP / OpenInference ingest endpoint
+
+You don't need the Potato SDK at all if your agent framework already emits
+OpenTelemetry. **Point any OTLP/JSON exporter at `POST /api/traces/otel`** and
+Potato converts the spans into traces. This accepts both the **OTel GenAI**
+semantic conventions and **OpenInference** (Arize/Phoenix) conventions
+(`input.value` / `output.value` / `llm.model_name` / `tool.parameters`), so
+frameworks instrumented with OpenInference or OpenLLMetry — **LangGraph, CrewAI,
+OpenAI Agents SDK, Pydantic AI, LlamaIndex, …** — work without any Potato-specific
+code:
+
+```bash
+curl -X POST localhost:8000/api/traces/otel \
+  -H "Content-Type: application/json" -H "X-API-Key: <key>" \
+  -d @otlp-spans.json
+# -> {"status": "accepted", "ingested": <n>, "trace_ids": [...]}
+```
+
+GenAI/OpenInference LLM and tool spans become conversation turns; token counts and
+model land in the trace metadata (so they flow into
+[Trace Analytics](../agent-evaluation/trace_analytics.md)). Spans with no
+recognizable GenAI/OpenInference attributes are skipped (`"ingested": 0`).
+
 ## Payload format
 
 The SDK emits the LangSmith-format run payload (`{"runs": [...], "project_name"}`)

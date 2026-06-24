@@ -26,6 +26,9 @@ from potato.evaluators.heuristic import (
     EmbeddingDistance,
 )
 from potato.evaluators.rubric_dag import RubricDagEvaluator
+from potato.evaluators.rag_triad import (
+    ContextRelevanceEvaluator, GroundednessEvaluator, AnswerRelevanceEvaluator,
+)
 
 # name -> (factory, one-line description)
 _REGISTRY: Dict[str, tuple] = {
@@ -34,6 +37,9 @@ _REGISTRY: Dict[str, tuple] = {
     "tool_call_accuracy": (ToolCallAccuracyEvaluator, "Fraction of reference tool calls reproduced"),
     "llm_trajectory_judge": (LLMTrajectoryJudge, "Reference-free LLM judge of trajectory quality"),
     "rubric_dag": (RubricDagEvaluator, "Decision-tree rubric the judge traverses to a fixed leaf score"),
+    "context_relevance": (ContextRelevanceEvaluator, "RAG: is retrieved context relevant to the question"),
+    "groundedness": (GroundednessEvaluator, "RAG: answer faithfulness via claim decomposition"),
+    "answer_relevance": (AnswerRelevanceEvaluator, "RAG: does the answer address the question"),
     "exact_match": (ExactMatch, "Output equals reference"),
     "contains": (Contains, "Output contains a substring"),
     "regex_match": (RegexMatch, "Output matches a regex"),

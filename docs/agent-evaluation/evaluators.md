@@ -152,6 +152,41 @@ the chosen option from the raw text). Compare with the annotation-facing
 [`rubric_eval`](../annotation-types) schema, which collects *human* multi-criteria
 scores — the two pair naturally (judge proposes via the DAG, humans verify).
 
+## RAG triad (reference-free)
+
+The three most-adopted RAG metrics (TruLens/Ragas/Phoenix), reference-free (no gold
+answer needed):
+
+| Evaluator | Measures |
+|-----------|----------|
+| `context_relevance` | Is the retrieved context relevant to the question? |
+| `groundedness` | Is the answer supported by the context (faithfulness)? |
+| `answer_relevance` | Does the answer actually address the question? |
+
+```python
+from potato.evaluators import rag_triad
+
+triad = rag_triad(config)          # {context_relevance, groundedness, answer_relevance}
+g = triad["groundedness"].evaluate(
+    inputs={"question": q, "context": retrieved_docs}, outputs=answer)
+g.score                            # supported_claims / total_claims
+g.metadata["claims"]               # [{claim, supported}, ...] — per-claim verdicts
+```
+
+The question comes from `inputs` (or `inputs["question"]`), the answer from
+`outputs`, and the retrieved context from a `context=` kwarg (or `inputs["context"]`).
+
+**Groundedness uses claim decomposition**: the answer is split into atomic claims and
+each is checked against the context, so the score is `supported / total` and *every
+claim verdict is recorded* in `metadata["claims"]` — a natural human-in-the-loop
+adjudication target (annotators confirm or correct per-claim).
+
+!!! note "max_tokens for claim decomposition"
+    Groundedness asks the judge to enumerate claims, which can be long. If your judge
+    endpoint's `max_tokens` is small (the default is 100), the claim list can be
+    truncated and groundedness returns `None`. Set a higher `max_tokens` (e.g. 512)
+    in the judge endpoint's `ai_config` for reliable claim decomposition.
+
 ## Graph-trajectory eval (LangGraph, via agentevals)
 
 For LangGraph node/transition evaluation, Potato reuses the MIT-licensed

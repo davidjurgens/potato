@@ -35,6 +35,12 @@ from potato.evaluators.rubric_dag import (
     make_rubric_dag,
     RUBRIC_PRESETS,
 )
+from potato.evaluators.rag_triad import (
+    ContextRelevanceEvaluator,
+    GroundednessEvaluator,
+    AnswerRelevanceEvaluator,
+    rag_triad,
+)
 from potato.evaluators.registry import (
     build_evaluator,
     register_evaluator,
@@ -63,6 +69,10 @@ __all__ = [
     "RubricDagEvaluator",
     "make_rubric_dag",
     "RUBRIC_PRESETS",
+    "ContextRelevanceEvaluator",
+    "GroundednessEvaluator",
+    "AnswerRelevanceEvaluator",
+    "rag_triad",
     "build_evaluator",
     "register_evaluator",
     "list_evaluators",

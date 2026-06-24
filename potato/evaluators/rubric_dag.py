@@ -110,7 +110,13 @@ class RubricDagEvaluator(Evaluator):
             if isinstance(response, str):
                 raw = response
                 try:
-                    data = json.loads(response)
+                    # Robust parse (strips ```json fences, <think> blocks, prose).
+                    if hasattr(endpoint, "parseStringToJson"):
+                        data = endpoint.parseStringToJson(response)
+                    else:
+                        data = json.loads(response)
+                    if not isinstance(data, dict):
+                        data = {}
                 except (ValueError, TypeError):
                     data = {}
             elif hasattr(response, "model_dump"):

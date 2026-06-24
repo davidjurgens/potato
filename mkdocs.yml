@@ -87,6 +87,7 @@ nav:
         - Judge Alignment: agent-evaluation/judge_alignment.md
         - Semantic Curation: agent-evaluation/semantic_curation.md
         - Model Arena: agent-evaluation/model_arena.md
+        - Trace Analytics & Alerts: agent-evaluation/trace_analytics.md
         - Triage Queue: agent-evaluation/triage_queue.md
         - Live Agent Interaction: agent-evaluation/live_agent.md
     - Solo Mode:

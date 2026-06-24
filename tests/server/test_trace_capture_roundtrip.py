@@ -68,6 +68,35 @@ class TestTraceCaptureRoundtrip:
             time.sleep(0.5)
         assert processed >= 1, "trace was not ingested"
 
+    def test_otel_endpoint_ingests_openinference_spans(self):
+        """D11: live OTLP/OpenInference endpoint converts + ingests spans."""
+        base = self.server.base_url
+        otlp = {"resourceSpans": [{"scopeSpans": [{"spans": [{
+            "traceId": "otelt1", "spanId": "s1", "parentSpanId": "", "name": "LLM",
+            "startTimeUnixNano": "1700000000000000000",
+            "endTimeUnixNano": "1700000001000000000",
+            "attributes": [
+                {"key": "input.value", "value": {"stringValue": "What is RLHF?"}},
+                {"key": "output.value", "value": {"stringValue": "Reinforcement learning from human feedback."}},
+                {"key": "llm.model_name", "value": {"stringValue": "gpt-4o"}},
+            ],
+        }]}]}]}
+        r = requests.post(f"{base}/api/traces/otel", json=otlp)
+        assert r.status_code == 200, r.text
+        assert r.json()["ingested"] >= 1
+
+    def test_otel_endpoint_handles_empty_spans(self):
+        base = self.server.base_url
+        r = requests.post(f"{base}/api/traces/otel", json={"resourceSpans": []})
+        assert r.status_code == 200
+        assert r.json()["ingested"] == 0
+
+    def test_otel_endpoint_rejects_bad_json(self):
+        base = self.server.base_url
+        r = requests.post(f"{base}/api/traces/otel",
+                          data="not json", headers={"Content-Type": "application/json"})
+        assert r.status_code == 400
+
     def test_disabled_client_is_safe_noop(self):
         # No URL configured -> tracing is a no-op and must not raise.
         tracer._default_client = None

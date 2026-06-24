@@ -94,6 +94,26 @@ class TestEvalAdminAPI:
         assert r.status_code == 400
         assert "ingested" in r.json()["error"].lower()
 
+    def test_analytics_json(self):
+        s, base = self._session()
+        r = s.get(f"{base}/admin/eval/analytics")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert "analytics" in body and "alerts" in body
+        # no ingested traces -> zero count, no alerts
+        assert body["analytics"]["count"] == 0
+        assert body["alerts"] == []
+
+    def test_analytics_html(self):
+        s, base = self._session()
+        r = s.get(f"{base}/admin/eval/analytics?format=html")
+        assert r.status_code == 200
+        assert "Trace analytics" in r.text
+
+    def test_analytics_requires_admin(self):
+        r = requests.get(f"{self.server.base_url}/admin/eval/analytics")
+        assert r.status_code in (401, 403)
+
     def test_requires_admin(self):
         # No X-API-Key header -> 403
         base = self.server.base_url

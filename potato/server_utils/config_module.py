@@ -264,6 +264,8 @@ KNOWN_CONFIG_KEYS = {
     "curation": {"enabled", "model_name", "embed_on_ingest", "text_key"},
     # Multi-model arena: fan a prompt out to N providers side by side.
     "arena": {"enabled", "models"},
+    # Trace cost/latency analytics: optional per-model pricing + alert thresholds.
+    "analytics": {"pricing", "thresholds"},
     "huggingface_backup": None,
 
     # === Debug / logging ===
