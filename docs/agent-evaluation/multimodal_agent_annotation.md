@@ -81,6 +81,29 @@ Each step may carry `text`/`content`, `image`/`image_url` (+`caption`), or
 `index`. Example: `examples/agent-traces/multimodal-reasoning/` (uses inline-SVG
 images, including a deliberate visual-hallucination case to annotate).
 
+## Video temporal grounding (`temporal_grounding`)
+
+Mark **event time intervals** in a video for temporal-grounding evaluation (ET-Bench;
+TimeScope, 2509.26360). For each event prompt the annotator sets the gold
+`[start, end]` — by capturing the playhead ("set in/out") or typing seconds — and,
+when the data carries a model's *predicted* interval, sees a live **IoU** and a
+two-bar mini-timeline (predicted vs. gold). Purpose-built for predicted-vs-gold
+localization scoring, distinct from the general segment labeling in
+[`video_annotation`](../video_annotation.md).
+
+```yaml
+annotation_schemes:
+  - annotation_type: temporal_grounding
+    name: grounding
+    description: "Mark the gold start/end interval for each event. IoU vs prediction updates live."
+    video_key: video           # per-instance video URL
+    events_key: events         # list of {prompt, predicted: {start, end}} (predicted optional)
+    # duration: 120            # optional fixed timeline scale (else inferred from the video)
+```
+
+Stored as `{"events": {idx: {start, end}}}`. Example:
+`examples/agent-traces/temporal-grounding/`.
+
 ## Aligned-transcript speech errors (`speech_transcript`)
 
 Annotate a time-aligned speech transcript segment by segment for ASR/TTS and

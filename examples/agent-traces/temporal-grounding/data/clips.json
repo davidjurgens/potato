@@ -1,0 +1,19 @@
+[
+  {
+    "id": "ground_cooking_001",
+    "task": "Localize each described event in the cooking video; the model's predicted span is shown for comparison.",
+    "video": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    "events": [
+      {"prompt": "The chef cracks the eggs into the bowl.", "predicted": {"start": 3.0, "end": 6.5}},
+      {"prompt": "The mixture is poured into the pan.", "predicted": {"start": 11.0, "end": 14.0}}
+    ]
+  },
+  {
+    "id": "ground_sports_002",
+    "task": "Localize the highlighted actions; compare with the model prediction (IoU).",
+    "video": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    "events": [
+      {"prompt": "The player takes the shot.", "predicted": {"start": 1.5, "end": 2.5}}
+    ]
+  }
+]

@@ -272,6 +272,7 @@ def _register_builtin_schemas():
     from .multimodal_reasoning import generate_multimodal_reasoning_layout
     from .speech_transcript import generate_speech_transcript_layout
     from .tool_contention import generate_tool_contention_layout
+    from .temporal_grounding import generate_temporal_grounding_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -658,6 +659,14 @@ def _register_builtin_schemas():
             optional_fields=["calls_key", "agent_key", "resource_key", "contention_labels"],
             supports_keybindings=False,
             description="Tool/resource-contention timeline: per-agent lanes + shared-resource collision classification"
+        ),
+        SchemaDefinition(
+            name="temporal_grounding",
+            generator=generate_temporal_grounding_layout,
+            required_fields=["name", "description"],
+            optional_fields=["video_key", "events_key", "duration"],
+            supports_keybindings=False,
+            description="Video temporal grounding: mark gold event intervals with live IoU vs predicted"
         ),
         SchemaDefinition(
             name="trajectory_edit",
