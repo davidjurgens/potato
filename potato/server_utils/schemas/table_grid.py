@@ -203,8 +203,9 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
     .tbg-dims input:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .tbg-hint {{ color: var(--muted-foreground, #71717a); }}
     .tbg-grid {{ display: grid; gap: 3px; max-width: 100%; overflow: auto; }}
-    .tbg-cell {{ aspect-ratio: 1 / 1; min-height: 28px; border: 1px solid var(--border, #e4e4e7); border-radius: 4px;
-                 background: var(--card, #fff); cursor: pointer; font-size: 0.72em; font-weight: 700; color: var(--foreground, #18181b); }}
+    .tbg-cell {{ min-height: 40px; max-height: 56px; border: 1px solid var(--border, #e4e4e7); border-radius: 4px;
+                 background: var(--card, #fff); cursor: pointer; font-size: 0.78em; font-weight: 700; color: var(--foreground, #18181b);
+                 display: flex; align-items: center; justify-content: center; }}
     .tbg-cell:hover {{ outline: 1px solid var(--ring, #6e56cf); }}
     .tbg-cell:focus-visible {{ outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }}
     .tbg-cell.role-data {{ background: var(--card, #fff); }}
