@@ -268,6 +268,7 @@ def _register_builtin_schemas():
     from .handoff_review import generate_handoff_review_layout
     from .agent_interaction_graph import generate_agent_interaction_graph_layout
     from .gui_trajectory import generate_gui_trajectory_layout
+    from .voice_interaction import generate_voice_interaction_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -622,6 +623,14 @@ def _register_builtin_schemas():
             optional_fields=["steps_key", "screenshot_key", "action_key", "coord_space", "verdict_options"],
             supports_keybindings=False,
             description="Computer-use/GUI agent step review: per-step screenshot + action correctness + click grounding"
+        ),
+        SchemaDefinition(
+            name="voice_interaction",
+            generator=generate_voice_interaction_layout,
+            required_fields=["name", "description"],
+            optional_fields=["turns_key", "audio_key", "speaker_key", "user_speakers", "overlap_labels", "rating_scale"],
+            supports_keybindings=False,
+            description="Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification"
         ),
         SchemaDefinition(
             name="trajectory_edit",

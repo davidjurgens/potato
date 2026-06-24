@@ -1,0 +1,28 @@
+# Voice / full-duplex interaction (M9)
+# Dual-track timeline of a spoken human<->agent call; classify barge-ins/overlaps + rate turn-taking.
+# Run: python potato/flask_server.py start examples/agent-traces/voice-interaction/config.yaml -p 8000
+annotation_task_name: "Voice Agent Turn-Taking"
+data_files:
+  - data/calls.json
+item_properties:
+  id_key: id
+  text_key: task
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+instance_display:
+  layout: {direction: vertical, gap: 16px}
+  fields:
+    - key: task
+      type: text
+      label: "Scenario"
+annotation_schemes:
+  - annotation_type: voice_interaction
+    name: turn_taking
+    description: "Classify each barge-in/overlap and rate the overall turn-taking."
+    turns_key: turns
+    speaker_key: speaker
+    user_speakers: [user, human, caller]
+    overlap_labels: [agent_should_respond, agent_should_resume, backchannel, uncertain]
+    rating_scale: 5
+    # audio_key: audio   # optional: add an 'audio' URL per call to enable the player

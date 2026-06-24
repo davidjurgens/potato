@@ -32,6 +32,33 @@ Each step may provide `screenshot`, `action`, and optional `x`/`y` (or a nested
 `{index, step, verdict, notes}`, keyed by `index`. Example:
 `examples/agent-traces/gui-trajectory/` (uses self-contained inline-SVG screenshots).
 
+## Voice / full-duplex interaction (`voice_interaction`)
+
+Annotate a spoken human↔agent conversation for turn-taking and barge-in handling
+(Full-Duplex-Bench v1–v3, 2503.04721…; τ-Voice, 2603.13686). A **dual-track
+timeline** (user lane + agent lane) places each turn by its start/end time and
+highlights **overlap regions** where both speakers talk at once; the annotator
+classifies each overlap (agent should respond / should resume / backchannel /
+uncertain) and rates the overall turn-taking. The source audio plays inline when an
+`audio` URL is provided.
+
+```yaml
+annotation_schemes:
+  - annotation_type: voice_interaction
+    name: turn_taking
+    description: "Classify each barge-in/overlap and rate the overall turn-taking."
+    turns_key: turns           # list of {speaker, start, end, text} (seconds)
+    speaker_key: speaker
+    user_speakers: [user, human, caller]   # everything else is treated as the agent
+    overlap_labels: [agent_should_respond, agent_should_resume, backchannel, uncertain]
+    rating_scale: 5
+    # audio_key: audio         # optional per-instance audio URL to enable the player
+```
+
+Overlaps between turns of different speakers are computed at render time (no manual
+setup). Stored as `{"overlaps": {idx: label}, "rating": int}`. Example:
+`examples/agent-traces/voice-interaction/`.
+
 ## Related documentation
 
 - [Multi-Agent Team Annotation](multi_agent_annotation.md) — team-structure schemas
