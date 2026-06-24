@@ -81,6 +81,29 @@ Each step may carry `text`/`content`, `image`/`image_url` (+`caption`), or
 `index`. Example: `examples/agent-traces/multimodal-reasoning/` (uses inline-SVG
 images, including a deliberate visual-hallucination case to annotate).
 
+## Aligned-transcript speech errors (`speech_transcript`)
+
+Annotate a time-aligned speech transcript segment by segment for ASR/TTS and
+speech-quality errors (Speak&Improve 2025, 2412.11986; NVSpeech). Each segment
+`{start, end, text, speaker?}` is a card showing its timestamp and text; the
+annotator tags errors (ASR error / TTS artifact / mispronunciation / disfluency …)
+and can type the corrected transcript. Segment-level complement to the turn-taking
+view in [`voice_interaction`](#voice--full-duplex-interaction-voice_interaction).
+
+```yaml
+annotation_schemes:
+  - annotation_type: speech_transcript
+    name: speech_errors
+    description: "Tag speech errors on each segment and correct the transcript where needed."
+    segments_key: segments       # list of {start, end, text, speaker?}
+    error_types: [asr_error, tts_artifact, mispronunciation, disfluency]
+    allow_correction: true
+    # audio_key: audio           # optional per-item audio URL to enable the player
+```
+
+Stored as a list of `{index, start, end, errors, correction}`, keyed by `index`.
+Example: `examples/agent-traces/speech-transcript/`.
+
 ## Related documentation
 
 - [Multi-Agent Team Annotation](multi_agent_annotation.md) — team-structure schemas

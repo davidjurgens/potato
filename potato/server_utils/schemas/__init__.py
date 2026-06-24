@@ -45,6 +45,7 @@ from .agent_interaction_graph import generate_agent_interaction_graph_layout
 from .gui_trajectory import generate_gui_trajectory_layout
 from .voice_interaction import generate_voice_interaction_layout
 from .multimodal_reasoning import generate_multimodal_reasoning_layout
+from .speech_transcript import generate_speech_transcript_layout
 from .code_review import generate_code_review_layout
 
 # Import identifier utilities for use by other modules

@@ -1,0 +1,26 @@
+# Aligned-transcript speech-error annotation (M13)
+# Tag ASR/TTS/pronunciation/disfluency errors per segment; optionally type a correction.
+# Run: python potato/flask_server.py start examples/agent-traces/speech-transcript/config.yaml -p 8000
+annotation_task_name: "Speech Transcript Error Tagging"
+data_files:
+  - data/transcripts.json
+item_properties:
+  id_key: id
+  text_key: task
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+instance_display:
+  layout: {direction: vertical, gap: 16px}
+  fields:
+    - key: task
+      type: text
+      label: "Task"
+annotation_schemes:
+  - annotation_type: speech_transcript
+    name: speech_errors
+    description: "Tag speech errors on each segment and correct the transcript where needed."
+    segments_key: segments
+    error_types: [asr_error, tts_artifact, mispronunciation, disfluency]
+    allow_correction: true
+    # audio_key: audio   # optional per-item audio URL to enable the player

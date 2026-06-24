@@ -270,6 +270,7 @@ def _register_builtin_schemas():
     from .gui_trajectory import generate_gui_trajectory_layout
     from .voice_interaction import generate_voice_interaction_layout
     from .multimodal_reasoning import generate_multimodal_reasoning_layout
+    from .speech_transcript import generate_speech_transcript_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -640,6 +641,14 @@ def _register_builtin_schemas():
             optional_fields=["steps_key", "type_key", "verdict_options"],
             supports_keybindings=False,
             description="Interleaved text/image/tool reasoning trace: per-step coherence + visual-hallucination rating"
+        ),
+        SchemaDefinition(
+            name="speech_transcript",
+            generator=generate_speech_transcript_layout,
+            required_fields=["name", "description"],
+            optional_fields=["segments_key", "audio_key", "error_types", "allow_correction"],
+            supports_keybindings=False,
+            description="Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction"
         ),
         SchemaDefinition(
             name="trajectory_edit",
