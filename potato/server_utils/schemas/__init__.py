@@ -38,6 +38,7 @@ from .trajectory_eval import generate_trajectory_eval_layout
 from .trajectory_edit import generate_trajectory_edit_layout
 from .process_reward import generate_process_reward_layout
 from .failure_attribution import generate_failure_attribution_layout
+from .tool_call_review import generate_tool_call_review_layout
 from .code_review import generate_code_review_layout
 
 # Import identifier utilities for use by other modules

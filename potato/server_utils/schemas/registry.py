@@ -263,6 +263,7 @@ def _register_builtin_schemas():
     from .trajectory_edit import generate_trajectory_edit_layout
     from .process_reward import generate_process_reward_layout
     from .failure_attribution import generate_failure_attribution_layout
+    from .tool_call_review import generate_tool_call_review_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -577,6 +578,14 @@ def _register_builtin_schemas():
             optional_fields=["steps_key", "agent_key", "agents"],
             supports_keybindings=False,
             description="Multi-agent failure attribution: responsible agent + decisive step + reason"
+        ),
+        SchemaDefinition(
+            name="tool_call_review",
+            generator=generate_tool_call_review_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "verdict_options"],
+            supports_keybindings=False,
+            description="Per-tool-call correctness review (right tool / args / ordering)"
         ),
         SchemaDefinition(
             name="trajectory_edit",

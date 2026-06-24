@@ -32,6 +32,26 @@ attributing the failure. A runnable example is at
 python potato/flask_server.py start examples/agent-traces/failure-attribution/config.yaml -p 8000
 ```
 
+## Tool-call review (`tool_call_review`)
+
+Judge each **tool / function call** in a trace individually: was the right tool
+chosen, were the arguments correct, was the ordering right? (mirrors BFCL v4 /
+MCPMark). Tool calls are extracted from the trace steps at render time — each step's
+`tool_calls`/`tool_call`/`action` becomes a card showing the tool name and
+pretty-printed arguments, with a per-call verdict and notes.
+
+```yaml
+annotation_schemes:
+  - annotation_type: tool_call_review
+    name: tool_review
+    description: "Judge each tool call: right tool? correct arguments?"
+    steps_key: steps
+    # verdict_options: [correct, wrong_tool, wrong_args, wrong_order]   # customizable
+```
+
+Stored as a list of `{index, step, tool, verdict, notes}`. Example:
+`examples/agent-traces/tool-call-review/`.
+
 ## Related documentation
 
 - [Failure-Mode Taxonomy (MAST)](failure_taxonomy.md) — tag *how* it failed
