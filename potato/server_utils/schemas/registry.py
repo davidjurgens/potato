@@ -262,6 +262,7 @@ def _register_builtin_schemas():
     from .trajectory_eval import generate_trajectory_eval_layout
     from .trajectory_edit import generate_trajectory_edit_layout
     from .process_reward import generate_process_reward_layout
+    from .failure_attribution import generate_failure_attribution_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -565,9 +566,17 @@ def _register_builtin_schemas():
             name="process_reward",
             generator=generate_process_reward_layout,
             required_fields=["name", "description"],
-            optional_fields=["steps_key", "step_text_key", "mode"],
+            optional_fields=["steps_key", "step_text_key", "mode", "allow_neutral", "inline_with_trace"],
             supports_keybindings=False,
-            description="Binary per-step process reward signals for PRM training"
+            description="Per-step process reward signals for PRM training"
+        ),
+        SchemaDefinition(
+            name="failure_attribution",
+            generator=generate_failure_attribution_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key", "agents"],
+            supports_keybindings=False,
+            description="Multi-agent failure attribution: responsible agent + decisive step + reason"
         ),
         SchemaDefinition(
             name="trajectory_edit",
