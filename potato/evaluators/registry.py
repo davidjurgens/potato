@@ -29,6 +29,7 @@ from potato.evaluators.rubric_dag import RubricDagEvaluator
 from potato.evaluators.rag_triad import (
     ContextRelevanceEvaluator, GroundednessEvaluator, AnswerRelevanceEvaluator,
 )
+from potato.evaluators.agent_as_judge import AgentAsJudgeEvaluator
 
 # name -> (factory, one-line description)
 _REGISTRY: Dict[str, tuple] = {
@@ -40,6 +41,7 @@ _REGISTRY: Dict[str, tuple] = {
     "context_relevance": (ContextRelevanceEvaluator, "RAG: is retrieved context relevant to the question"),
     "groundedness": (GroundednessEvaluator, "RAG: answer faithfulness via claim decomposition"),
     "answer_relevance": (AnswerRelevanceEvaluator, "RAG: does the answer address the question"),
+    "agent_as_judge": (AgentAsJudgeEvaluator, "Per-requirement trajectory judging with evidence (HITL spot-check)"),
     "exact_match": (ExactMatch, "Output equals reference"),
     "contains": (Contains, "Output contains a substring"),
     "regex_match": (RegexMatch, "Output matches a regex"),

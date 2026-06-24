@@ -41,6 +41,7 @@ from potato.evaluators.rag_triad import (
     AnswerRelevanceEvaluator,
     rag_triad,
 )
+from potato.evaluators.agent_as_judge import AgentAsJudgeEvaluator
 from potato.evaluators.registry import (
     build_evaluator,
     register_evaluator,
@@ -73,6 +74,7 @@ __all__ = [
     "GroundednessEvaluator",
     "AnswerRelevanceEvaluator",
     "rag_triad",
+    "AgentAsJudgeEvaluator",
     "build_evaluator",
     "register_evaluator",
     "list_evaluators",

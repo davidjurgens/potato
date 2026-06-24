@@ -187,6 +187,36 @@ adjudication target (annotators confirm or correct per-claim).
     truncated and groundedness returns `None`. Set a higher `max_tokens` (e.g. 512)
     in the judge endpoint's `ai_config` for reliable claim decomposition.
 
+## Agent-as-a-judge (per-requirement, with evidence)
+
+A flat LLM judge gives one holistic score; an **agent-as-judge** inspects the
+*intermediate steps* and judges the trajectory against **each acceptance
+requirement** separately, citing evidence. This aligns far better with human
+judgment on complex tasks (Zhuge et al. 2024 report ~90% per-requirement alignment
+vs ~70% for a flat judge).
+
+```python
+from potato.evaluators import AgentAsJudgeEvaluator
+
+ev = AgentAsJudgeEvaluator(config, requirements=[
+    "The flight is under $400",
+    "The flight is refundable",
+    "The itinerary was emailed to the user",
+])
+r = ev.evaluate(inputs={"question": task}, outputs=trajectory)
+r.score                       # fraction of requirements satisfied
+r.metadata["verdicts"]        # [{requirement, satisfied, evidence}, ...]
+```
+
+Requirements come from the `requirements` param or `inputs["requirements"]`; the
+trajectory from `outputs` (any shape `normalize_trajectory` accepts). Each verdict
+is **evidence-backed and discrete** — the natural unit for a **human spot-check**:
+an annotator confirms or overrides each one, and those corrections feed the
+[judge↔human alignment](judge_alignment.md) corpus (track per-requirement κ, then
+auto-calibrate). In practice the agent-judge catches gaps a holistic judge misses —
+e.g. an agent that *plans* to email an itinerary but never does fails the "emailed"
+requirement with the booking-confirmation step cited as evidence.
+
 ## Graph-trajectory eval (LangGraph, via agentevals)
 
 For LangGraph node/transition evaluation, Potato reuses the MIT-licensed
