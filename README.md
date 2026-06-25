@@ -8,7 +8,7 @@
 [![Live Demo](https://img.shields.io/badge/demo-HuggingFace%20Spaces-yellow)](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)
 [![Website](https://img.shields.io/badge/website-potatoannotator.com-brightgreen)](https://www.potatoannotator.com)
 
-**Potato** is a free, self-hosted annotation platform for NLP, Agentic, and GenAI research. Annotate text, audio, video, images, documents, agent traces, and more — configured entirely through YAML. No coding required.
+**Potato** is a free, self-hosted annotation platform for NLP, Agentic, GenAI, and qualitative research. Annotate text, audio, video, images, documents, agent traces, and more — or run a full qualitative data analysis (QDA) workflow with a living codebook, memos, and cases. Configured entirely through YAML. No coding required.
 
 **[Try the live demo on HuggingFace Spaces](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)** — no installation needed. More at **[www.potatoannotator.com](https://www.potatoannotator.com)**.
 
@@ -38,7 +38,9 @@ Open [http://localhost:8000](http://localhost:8000) and start annotating. Browse
 
 ## What Can You Annotate?
 
-Potato handles the full spectrum of annotation tasks — from traditional NLP labeling to evaluating the latest AI agent systems.
+Potato handles the full spectrum of annotation tasks — from traditional NLP labeling to evaluating the latest AI agent systems, to interpretive qualitative analysis.
+
+The tables below are a **representative sample, not a complete list.** Schemes and data types compose freely, [custom layouts](examples/custom-layouts/) and raw HTML let you build interfaces beyond these, and [new schema types](docs/annotation-types/schemas_and_templates.md) can be added. If you don't see your task here, it's likely still possible.
 
 ### Data Types
 
@@ -109,6 +111,23 @@ An interactive viewer for GUI agent traces — navigate step-by-step through scr
 | [multi-agent-evaluation](examples/agent-traces/multi-agent-evaluation/) | Multi-agent coordination (CrewAI, AutoGen, LangGraph) |
 | [web-agent-review](examples/agent-traces/web-agent-review/) | Pre-recorded web traces with step-by-step overlay viewer |
 | [web-agent-creation](examples/agent-traces/web-agent-creation/) | Live web browsing with automatic trace recording |
+
+---
+
+## Qualitative Data Analysis (QDA)
+
+Potato isn't only for label-and-aggregate tasks — it also supports interpretive qualitative research, the kind of work done in tools like NVivo, ATLAS.ti, or MAXQDA, fully self-hosted and free.
+
+| Capability | Description |
+|------------|-------------|
+| **Living codebook** | The codebook is an evolving markdown document of rules, definitions, examples, and rationales — not just a label list. Edit it in a full-page document view or inline while coding, with versioning, diff, and restore; semantic edits can re-flag affected excerpts for review ([docs](docs/advanced/codebook.md)) |
+| **In-vivo coding** | Create codes directly from a highlighted passage, in the participant's own words ([example](examples/advanced/codebook-invivo-example/)) |
+| **Memos** | Attach analytic notes to excerpts, codes, or the whole project as your interpretation develops ([docs](docs/advanced/memos.md)) |
+| **Cases** | Group instances into units of analysis — participants, interviews, documents, sites — for case-based comparison ([docs](docs/advanced/cases.md)) |
+| **Search** | Full-text search across your corpus and annotations to find, revisit, and code recurring patterns ([docs](docs/advanced/search.md)) |
+| **Codebook distillation** | Turn the human-authored codebook into an LLM prompt for AI-assisted coding |
+
+Enable it with `qda_mode`, which sensibly cascades these features on; see the [QDA Mode guide](docs/advanced/qda.md) and the runnable [`qda-mode-example`](examples/advanced/qda-mode-example/).
 
 ---
 
@@ -201,6 +220,7 @@ Ready-to-use templates organized by type in [`examples/`](examples/):
 | [Video](examples/video/) | Frame-level labeling, temporal segments |
 | [Image](examples/image/) | Bounding boxes, PDF/document annotation |
 | [Advanced](examples/advanced/) | Solo mode, adjudication, quality control, conditional logic |
+| [QDA](examples/advanced/qda-mode-example/) | Qualitative analysis: living codebook, in-vivo coding, memos, cases |
 | [AI-Assisted](examples/ai-assisted/) | LLM suggestions, Ollama integration |
 | [Custom Layouts](examples/custom-layouts/) | Content moderation, dialogue QA, medical review |
 
@@ -242,6 +262,7 @@ Potato has two complementary doc sites: **[potatoannotator.com/docs](https://www
 | Potato on HuggingFace | [docs/data-export/potato_on_huggingface.md](docs/data-export/potato_on_huggingface.md) |
 | Active Learning | [docs/ai-intelligence/active_learning_guide.md](docs/ai-intelligence/active_learning_guide.md) |
 | Solo Mode | [docs/solo-mode/solo_mode.md](docs/solo-mode/solo_mode.md) |
+| Qualitative Data Analysis (QDA) | [docs/advanced/qda.md](docs/advanced/qda.md) |
 | Quality Control | [docs/workflow/quality_control.md](docs/workflow/quality_control.md) |
 | Password Management | [docs/auth-users/password_management.md](docs/auth-users/password_management.md) |
 | SSO & OAuth | [docs/auth-users/sso_authentication.md](docs/auth-users/sso_authentication.md) |
