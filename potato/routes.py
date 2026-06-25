@@ -7468,6 +7468,15 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register the Codebook full-page document view (separate blueprint so
+    # it serves /codebook at the site root, not under /api).
+    if 'codebook_page' not in app.blueprints:
+        try:
+            from potato.codebook.page import codebook_page_bp
+            app.register_blueprint(codebook_page_bp)
+        except ImportError:
+            pass
+
     # Register universal Cases blueprint if not already registered
     if 'cases' not in app.blueprints:
         try:

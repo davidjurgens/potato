@@ -1,0 +1,50 @@
+port: 8000
+annotation_task_name: Codebook Document Example
+task_dir: .
+output_annotation_dir: annotation_output/codebook-document-example/
+output_annotation_format: tsv
+data_files:
+- data/codebook-document-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+
+# The living-document codebook. Each code is more than a label: it carries
+# typed prose blocks (definition, inclusion/exclusion rules, examples,
+# rationale, background, downstream usage) authored as markdown and edited
+# at /codebook (full page) or inline from the annotation tray.
+#
+# `open` lets annotators edit content directly; `extensible`/`fixed` route
+# content edits through the admin proposal queue instead.
+codebook_mode: open
+codebook:
+  # Distill the human codebook into the AI/judge prompt. `include` chooses
+  # which block types feed the model; procedures (concat by default) can be
+  # swapped for summarization / ICL-example selection later.
+  distiller:
+    include:
+    - definition
+    - use_when
+    - avoid_when
+    - example
+    procedure: concat
+
+annotation_schemes:
+# `codebook: true` sources this scheme's labels from the project codebook
+# (seeded once from the labels below). The codebook's prose content is
+# additive — labels stay authoritative for the form.
+- annotation_type: multiselect
+  name: themes
+  description: Which qualitative themes appear in this excerpt?
+  codebook: true
+  labels:
+  - access barriers
+  - cost concerns
+  - provider trust
+  - wait times
+
+site_dir: default

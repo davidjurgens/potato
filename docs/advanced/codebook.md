@@ -189,6 +189,58 @@ machines — important because annotations carry a parallel `code_id`.
 `/qda/codebook` is the QDA-scoped read view (returns `503` when QDA Mode
 is not enabled).
 
+## Living document (rules, definitions, examples)
+
+A codebook is more than a label list — it is the evolving prose that tells
+humans (and, via distillation, LLMs) how to apply each code. Potato stores
+that prose as an ordered list of **typed blocks** per code and per
+document-level section, and renders it as a **living markdown document** at
+`/codebook`.
+
+- **Typed blocks.** Every block has a type — `short_def`, `definition`,
+  `use_when` (inclusion), `avoid_when` (exclusion), `example`,
+  `counter_example`, `rationale`, `notes`, `keywords`, `background`,
+  `downstream_usage`, or `custom`. The vocabulary is data, not schema —
+  adding a type needs no migration. Pasted markdown is parsed into blocks;
+  anything unrecognized is flagged so the author assigns a type before
+  saving.
+- **Two edit surfaces.** The full-page `/codebook` document (read +
+  typed-block editor, paste-import, history/diff/restore) and quick inline
+  "edit definition / add example" actions from the in-annotation codebook
+  tray.
+- **Three revision counters.** `revision` (structural, label/tree changes)
+  stays the cheap navigation poll; `content_revision` bumps on every prose
+  edit (cache-bust); `sem_revision` bumps only on **semantic** edits —
+  changes to meaning-bearing blocks (`short_def`, `definition`, `use_when`,
+  `avoid_when`) or adding/removing a code — which softly re-flag the
+  instances coded with that code for re-review. Mark any edit **Minor** to
+  suppress the semantic bump.
+- **Optimistic concurrency.** Saves carry a `base_version`; a stale save
+  returns **409** with the current blocks and a diff to rebase onto, never a
+  silent overwrite. Different codes/sections never collide. Locked-mode
+  annotators route content edits through the existing proposal/confirm flow.
+- **Distillation.** A configurable `CodebookDistiller` flattens chosen block
+  types into the prompt appended to AI label suggestions; it refreshes on
+  every content revision.
+
+Content API on `/api/codebook` (session-auth; mutations are gated by
+`codebook_mode`):
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/codebook/document` | whole living doc: doc sections + per-code blocks + revisions |
+| GET | `/api/codebook/blocks?code_id=&section=` | one scope's blocks + `scope_version` |
+| PUT | `/api/codebook/blocks` | save a scope (`base_version`, `minor?`); stale → **409** + diff; locked-mode → **proposal** |
+| POST | `/api/codebook/parse` | markdown → typed blocks (with `classified` flags) for paste-import |
+| GET | `/api/codebook/history?scope_kind=&scope_id=` | snapshot timeline for a scope |
+| GET | `/api/codebook/history/<id>` | one snapshot (markdown + blocks) for diff |
+| POST | `/api/codebook/restore` | re-save an older snapshot (audited, never a destructive rewind) |
+| GET | `/api/codebook/distilled` | the current distilled prompt (debug/preview) |
+
+Enable it with a `codebook.distiller` block in config; QDA Mode turns the
+document on by default. See
+[`examples/advanced/codebook-document-example/`](../../examples/advanced/codebook-document-example/).
+
 ## Example
 
 A runnable example is in
@@ -198,6 +250,16 @@ A runnable example is in
 python potato/flask_server.py start \
   examples/advanced/codebook-example/config.yaml -p 8000
 ```
+
+The living-document example (typed blocks, full-page editor, distiller):
+
+```bash
+python potato/flask_server.py start \
+  examples/advanced/codebook-document-example/config.yaml -p 8000 \
+  --debug --debug-phase annotation
+```
+Open `/codebook` to author blocks and paste markdown; in the annotation
+tray use the per-code pencil to add a definition or example inline.
 
 ## Related
 

@@ -77,6 +77,17 @@ def apply_codebook_to_schemes(config: Dict[str, Any]) -> None:
                 "from the project codebook",
                 scheme.get("name"), len(names))
 
+        # Distill the living-document content into model guidance and
+        # stash it on the scheme so the ICL/judge prompt builder can append
+        # it without importing the codebook. Refreshed on every codebook
+        # change because this function is the change listener.
+        try:
+            from potato.codebook.distiller import distill_for_config
+            guidance = distill_for_config(config)
+            scheme["codebook_guidance"] = guidance
+        except Exception:  # never let distillation break label sync
+            logger.exception("codebook distillation failed; skipping")
+
 
 def _icl_sync_listener(task_dir: str, project: str) -> None:
     """Codebook change listener: refresh the *live* server config's

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codebook</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=12">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook_document.css') }}?v=3">
+</head>
+<body class="cbd-body">
+  <header class="cbd-topbar">
+    <a class="cbd-back" href="/">&larr; Annotation</a>
+    <div class="cbd-title-wrap">
+      <h1 class="cbd-title">Codebook</h1>
+      <span class="cbd-project" id="cbd-project">{{ project }}</span>
+    </div>
+    <div class="cbd-actions">
+      <span class="cbd-rev" id="cbd-rev" title="Content revision" hidden></span>
+      <button type="button" class="cbd-btn cbd-btn-ghost" id="cbd-import-btn" hidden>Paste markdown</button>
+      <button type="button" class="cbd-btn cbd-btn-primary" id="cbd-edit-toggle" hidden aria-pressed="false">Edit</button>
+    </div>
+  </header>
+
+  <div class="cbd-shell">
+    <nav class="cbd-toc" id="cbd-toc" aria-label="Codebook contents"></nav>
+    <main class="cbd-main" id="cbd-main" aria-live="polite">
+      <div class="cbd-loading" id="cbd-loading">Loading the codebook…</div>
+      <div class="cbd-doc" id="cbd-doc" hidden></div>
+    </main>
+  </div>
+
+  <!-- Import / paste-markdown dialog -->
+  <div class="cbd-modal" id="cbd-import-modal" hidden role="dialog" aria-modal="true" aria-labelledby="cbd-import-h">
+    <div class="cbd-modal-card">
+      <div class="cbd-modal-head">
+        <h2 id="cbd-import-h">Paste markdown</h2>
+        <button type="button" class="cbd-x" id="cbd-import-close" aria-label="Close">&times;</button>
+      </div>
+      <p class="cbd-modal-sub">Paste codebook prose. Each section becomes a typed block; anything we can't recognize you'll be asked to type.</p>
+      <textarea class="cbd-textarea" id="cbd-import-text" rows="10" placeholder="### Definition&#10;…&#10;&#10;### Use when&#10;…"></textarea>
+      <div class="cbd-modal-foot">
+        <label class="cbd-target">Add to
+          <select id="cbd-import-target"></select>
+        </label>
+        <span class="cbd-spacer"></span>
+        <button type="button" class="cbd-btn cbd-btn-ghost" id="cbd-import-cancel">Cancel</button>
+        <button type="button" class="cbd-btn cbd-btn-primary" id="cbd-import-parse">Review blocks</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History drawer -->
+  <aside class="cbd-drawer" id="cbd-history" hidden aria-label="Version history">
+    <div class="cbd-drawer-head">
+      <h2 id="cbd-history-title">History</h2>
+      <button type="button" class="cbd-x" id="cbd-history-close" aria-label="Close history">&times;</button>
+    </div>
+    <div class="cbd-drawer-body" id="cbd-history-body"></div>
+  </aside>
+
+  <div class="cbd-toast" id="cbd-toast" hidden role="status"></div>
+
+  <script>
+    // Namespaced bootstrap (avoid the IIFE-overwrite trap: do not reassign
+    // a global that codebook_document.js also owns).
+    window.CodebookDoc = window.CodebookDoc || {};
+    window.CodebookDoc.project = {{ project | tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='codebook_document.js') }}?v=2"></script>
+</body>
+</html>
