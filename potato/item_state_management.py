@@ -900,7 +900,13 @@ class ItemStateManager:
             'assigned_annotators',
         )
         self.batch_assignment_id_key = config.get('item_properties', {}).get('id_key', 'id')
+        self.batch_auto_assign_annotators = bool(
+            self.batch_assignment_config.get('auto_assign_annotators', False)
+        )
         self.batch_user_to_instance_ids: Dict[str, List[str]] = defaultdict(list)
+        self.batch_auto_groups: List[Dict[str, object]] = []
+        self.batch_auto_user_to_group: Dict[str, int] = {}
+        self.batch_auto_group_to_users: Dict[int, Set[str]] = defaultdict(set)
         self._load_batch_assignment_groups()
 
     def _load_batch_assignment_groups(self) -> None:
@@ -918,6 +924,11 @@ class ItemStateManager:
                 'instances_file',
                 group.get('items_file', group.get('instance_ids_file')),
             )
+            if not file_entry:
+                file_entry = group.get(
+                    'data_file',
+                    group.get('input_data_file', group.get('input_file')),
+                )
             if file_entry:
                 instance_ids = list(instance_ids) if isinstance(instance_ids, list) else []
                 instance_ids.extend(self._load_batch_instance_ids_from_file(file_entry))
@@ -931,10 +942,26 @@ class ItemStateManager:
                 for instance_id in instance_ids
                 if isinstance(instance_id, str) and instance_id
             ]
+            if self.batch_auto_assign_annotators and not users:
+                self.batch_auto_groups.append(
+                    {
+                        'name': group.get('name') or f"batch_{len(self.batch_auto_groups) + 1}",
+                        'instance_ids': instance_ids,
+                        'max_annotators': self._resolve_batch_group_max_annotators(group),
+                    }
+                )
+                continue
             for user_id in users:
                 for instance_id in instance_ids:
                     if instance_id not in self.batch_user_to_instance_ids[user_id]:
                         self.batch_user_to_instance_ids[user_id].append(instance_id)
+
+    def _resolve_batch_group_max_annotators(self, group: dict) -> Optional[int]:
+        for key in ('max_annotators', 'annotator_count', 'slots'):
+            value = group.get(key)
+            if value is not None:
+                return int(value)
+        return self.max_annotations_per_item if self.max_annotations_per_item > 0 else None
 
     def _resolve_batch_file_path(self, path: str) -> str:
         """Resolve a batch assignment file path relative to task_dir."""
@@ -1046,7 +1073,32 @@ class ItemStateManager:
             return set()
         return {value for value in annotators if isinstance(value, str) and value}
 
-    def _batch_candidate_ids_for_user(self, user_id: str) -> List[str]:
+    def _select_auto_batch_group_for_user(self, user_id: str, persist: bool = False) -> Optional[Dict[str, object]]:
+        if not self.batch_auto_assign_annotators or not self.batch_auto_groups:
+            return None
+
+        with self._lock:
+            if user_id in self.batch_auto_user_to_group:
+                return self.batch_auto_groups[self.batch_auto_user_to_group[user_id]]
+
+            available = []
+            for index, group in enumerate(self.batch_auto_groups):
+                assigned_count = len(self.batch_auto_group_to_users[index])
+                max_annotators = group.get('max_annotators')
+                if max_annotators is not None and assigned_count >= int(max_annotators):
+                    continue
+                available.append((assigned_count, index, group))
+
+            if not available:
+                return None
+
+            _, index, group = min(available, key=lambda entry: (entry[0], entry[1]))
+            if persist:
+                self.batch_auto_user_to_group[user_id] = index
+                self.batch_auto_group_to_users[index].add(user_id)
+            return group
+
+    def _batch_candidate_ids_for_user(self, user_id: str, assign_auto: bool = False) -> List[str]:
         """Return batch-eligible item IDs for a user in deterministic order."""
         candidate_ids = []
         seen = set()
@@ -1055,6 +1107,16 @@ class ItemStateManager:
             if instance_id not in seen:
                 candidate_ids.append(instance_id)
                 seen.add(instance_id)
+
+        auto_group = self._select_auto_batch_group_for_user(
+            user_id,
+            persist=assign_auto and not candidate_ids,
+        )
+        if auto_group is not None and not candidate_ids:
+            for instance_id in auto_group.get('instance_ids', []):
+                if instance_id not in seen:
+                    candidate_ids.append(instance_id)
+                    seen.add(instance_id)
 
         for instance_id in self.remaining_instance_ids:
             if instance_id in seen:
@@ -1767,7 +1829,7 @@ class ItemStateManager:
         assigned = 0
         already_assigned = user_state.get_assigned_instance_ids()
 
-        for item_id in self._batch_candidate_ids_for_user(str(user_id)):
+        for item_id in self._batch_candidate_ids_for_user(str(user_id), assign_auto=True):
             if item_id not in self.instance_id_to_instance:
                 self.logger.warning(
                     "Batch assignment references unknown item %s for user %s",
