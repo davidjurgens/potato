@@ -103,6 +103,50 @@ for row in ds["annotations"]:
 ds = load_dataset("your-org/my-annotations", token="hf_xxx")
 ```
 
+### Sample datasets
+
+Exported with the tooling above and available on the Hub:
+
+- [`Blablablab/potato-demo-single-choice-annotations`](https://huggingface.co/datasets/Blablablab/potato-demo-single-choice-annotations) — single-choice labels (`annotations` + `items` configs)
+- [`Blablablab/potato-demo-agent-trace-annotations`](https://huggingface.co/datasets/Blablablab/potato-demo-agent-trace-annotations) — agent-trace evaluation annotations
+
+## Loading Hub data *into* Potato (round-trip)
+
+You can also use a Hub dataset as the **input** for a new Potato task — useful for
+re-annotation, adjudication, or building on someone else's data.
+
+**Option A — point a `data_sources` URL at the dataset file** (no download step). Every public
+Hub dataset file is served at `https://huggingface.co/datasets/<repo>/resolve/main/<file>`:
+
+```yaml
+data_sources:
+  - type: url
+    url: "https://huggingface.co/datasets/Blablablab/potato-demo-single-choice-annotations/resolve/main/items/train-00000-of-00001.parquet"
+    id: "from_hub"
+    # headers:                         # for private datasets
+    #   Authorization: "Bearer ${HF_TOKEN}"
+```
+
+**Option B — download with `datasets`, then point `data_files` at a local file:**
+
+```python
+from datasets import load_dataset
+load_dataset("Blablablab/potato-demo-single-choice-annotations", "items",
+             split="train").to_json("data/items.jsonl")
+```
+
+```yaml
+data_files:
+  - data/items.jsonl
+item_properties:
+  id_key: item_id
+  text_key: text
+```
+
+See the [`url-data` example](../../examples/advanced/url-data/config.yaml) for the full
+`data_sources` syntax (URL, S3, Google Drive). For configuring HF *models* (not data), see
+[Using HuggingFace Models](../ai-intelligence/huggingface_models.md).
+
 ## Dataset Card
 
 A `DatasetCard` is automatically generated and pushed alongside the data, including:

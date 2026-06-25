@@ -69,18 +69,25 @@ _LANGCHAIN_DEPS = [
 
 setup(
     name="potato-annotation",
-    version='2.5.0',
+    version='2.6.2',
     author="Potato Development Team",
     author_email="jurgens@umich.edu",
     description="A flexible, stand-alone, web-based platform for text annotation tasks",
     long_description=read_readme(),
     long_description_content_type="text/markdown",
     url="https://github.com/davidjurgens/potato",
+    project_urls={
+        "Documentation": "https://www.potatoannotator.com/docs",
+        "Technical Reference": "https://potatoannotator.readthedocs.io/",
+        "Source": "https://github.com/davidjurgens/potato",
+        "Website": "https://www.potatoannotator.com",
+    },
+    license="GPL-3.0-or-later",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
-        "License :: Other/Proprietary License",
+        "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",
@@ -108,20 +115,20 @@ setup(
         "console_scripts": [
             "potato=potato.flask_server:main",
         ],
+        # Pytest plugin for Potato evaluations (markers, the potato_eval fixture,
+        # --potato-threshold gating). Inert unless eval tests run / thresholds set.
+        "pytest11": [
+            "potato_eval=potato.testing.pytest_plugin",
+        ],
     },
     package_data={
+        # NOTE: All of potato/static/ is shipped via MANIFEST.in
+        # (`recursive-include potato/static/ *`) together with
+        # include_package_data=True above. Do NOT re-add static subdirectories
+        # here — they are already packaged recursively, and per-subdir globs
+        # only invite drift as new static/ folders are added.
         "potato": [
             "templates/*.html",
-            "base_html/*.html",
-            "base_html/examples/*.html",
-            "static/*",
-            "static/css/*",
-            "static/js/*",
-            "static/styles/*",
-            "static/survey_assets/*",
-            "static/vendor/*",
-            "static/vendor/*/*",
-            "static/vendor/*/*/*",
         ],
     },
 )

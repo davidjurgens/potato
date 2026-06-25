@@ -101,4 +101,3 @@ adjudication:
 #   min_items: 5               # Need >= this many eligible items
 
 # Debug mode for easy testing
-debug: true

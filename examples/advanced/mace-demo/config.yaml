@@ -57,4 +57,3 @@ mace:
   num_iters: 50
 
 # Debug mode for demo
-debug: true

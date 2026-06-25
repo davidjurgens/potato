@@ -24,4 +24,16 @@ annotation_schemes:
   - curry
   - tacos
   sequential_key_binding: true
+
+# Active learning: train a classifier on incoming annotations and reorder the
+# unlabeled pool so the most informative (highest-uncertainty) items come next.
+assignment_strategy: active_learning
+active_learning:
+  enabled: true
+  query_strategy: uncertainty
+  min_instances_for_training: 5
+  update_frequency: 5
+  random_sample_percent: 0.2
+  schema_names:
+    - favorite_food
 site_dir: default

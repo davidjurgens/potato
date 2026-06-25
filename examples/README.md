@@ -113,6 +113,17 @@ python potato/flask_server.py start examples/classification/check-box/config.yam
 | `code-annotation/` | Source code annotation |
 | `spreadsheet-annotation/` | Tabular data annotation |
 
+#### Qualitative coding (QDA)
+
+| Example | Description |
+|---------|-------------|
+| `qda-mode-example/` | Composed QDA workspace: codebook + memos + cases + search via `qda_mode` |
+| `codebook-example/` | Mutable, on-the-fly codebook (multiselect scheme) |
+| `codebook-invivo-example/` | In-vivo coding: mint a code from a text selection (`i`) |
+| `memos-example/` | Annotator notes (instance/span-anchored, private/shared) |
+| `cases-example/` | Group instances into units of analysis; crosstab by case attribute |
+| `search-example/` | FTS5 search; admin search + annotator search-and-claim |
+
 ### [ai-assisted/](ai-assisted/) - AI/ML Integration
 
 | Example | Description |

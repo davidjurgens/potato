@@ -34,7 +34,30 @@ potato migrate config.yaml --to-v2 --dry-run
 
 The migration tool applies the following transformations:
 
-### 1. Textarea to Multiline
+### 1. Highlight to Span
+
+Renames the legacy `highlight` annotation type to `span`. This is the most
+common v1→v2 breaking change — a config that still uses `highlight` is rejected
+at boot with `Unknown annotation type: highlight`. The rule rewrites every
+scheme (top-level, per-phase, and training schemes).
+
+**Before:**
+```yaml
+annotation_schemes:
+  - annotation_type: "highlight"
+    name: "entities"
+    labels: ["PERSON", "ORG"]
+```
+
+**After:**
+```yaml
+annotation_schemes:
+  - annotation_type: "span"
+    name: "entities"
+    labels: ["PERSON", "ORG"]
+```
+
+### 2. Textarea to Multiline
 
 Converts the old textarea format to the new multiline format for text schemas.
 
@@ -59,7 +82,7 @@ annotation_schemes:
     cols: 50
 ```
 
-### 2. Legacy User Config
+### 3. Legacy User Config
 
 Detects old `user_config` format and suggests adding explicit `login` configuration.
 
@@ -77,7 +100,7 @@ login:
   type: open
 ```
 
-### 3. Label Requirement Format
+### 4. Label Requirement Format
 
 Converts boolean `label_requirement` to the dictionary format.
 
@@ -98,13 +121,13 @@ annotation_schemes:
       required: true
 ```
 
-### 4. Output Format Suggestions
+### 5. Output Format Suggestions
 
 Provides recommendations when using older output formats:
 
 - If `output_annotation_format` is set to `csv` or `tsv`, suggests using `json` for richer annotation data support (spans, metadata)
 
-### 5. Site Configuration Notes
+### 6. Site Configuration Notes
 
 Confirms that `site_dir: default` is the recommended approach for v2, using auto-generated templates.
 

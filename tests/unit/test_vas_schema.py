@@ -88,7 +88,9 @@ class TestVasSchema:
         assert "Worst pain" in html
 
     def test_continuous_step(self):
-        """Test that step is set to 'any' for continuous values."""
+        """VAS uses a fine precision-based step (default precision=1 -> 0.1)
+        so the line scale is effectively continuous, vs the slider's integer
+        ticks."""
         scheme = {
             "name": "test_vas",
             "description": "Test",
@@ -96,8 +98,11 @@ class TestVasSchema:
         }
 
         html, _ = generate_vas_layout(scheme)
+        assert 'step="0.1"' in html
 
-        assert 'step="any"' in html
+        # Higher precision -> finer step.
+        html2, _ = generate_vas_layout({**scheme, "precision": 2})
+        assert 'step="0.01"' in html2
 
     def test_show_value_false_default(self):
         """Test that value display is hidden by default."""

@@ -1,0 +1,45 @@
+# Model Arena — compare N models side by side on one prompt
+#
+# Sends one prompt to every configured model (any Potato LLM endpoint), shows
+# the responses side by side, and records which is best → a win-rate leaderboard.
+# Manage from the admin dashboard → "Arena".
+#
+# Run from repo root:
+#   python potato/flask_server.py start examples/agent-traces/model-arena/config.yaml -p 8000
+#
+# Configure real models below (set endpoint_type/model/keys for your providers).
+
+annotation_task_name: "Model Arena"
+
+data_files:
+  - data/seed.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Multi-model arena. Each entry is a provider config (AIEndpointFactory).
+arena:
+  enabled: true
+  models:
+    - label: "Llama (Ollama)"
+      endpoint_type: ollama
+      model: llama3.2
+      base_url: http://localhost:11434
+    - label: "GPT-4o"
+      endpoint_type: openai
+      model: gpt-4o
+      # ai_config: {api_key_env: OPENAI_API_KEY}
+    - label: "Claude"
+      endpoint_type: anthropic
+      model: claude-sonnet-4-6
+
+annotation_schemes:
+  - annotation_type: radio
+    name: placeholder
+    description: "(Arena is admin-side; this scheme is just to satisfy config.)"
+    labels: [ok]

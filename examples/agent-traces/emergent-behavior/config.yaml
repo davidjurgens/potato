@@ -1,0 +1,30 @@
+# Cross-lane emergent-behavior tagging (M7)
+# Mark the set of turns (across agents) that participate in each collective behavior.
+# Run: python potato/flask_server.py start examples/agent-traces/emergent-behavior/config.yaml -p 8000
+annotation_task_name: "Emergent Behavior Tagging"
+data_files:
+  - data/traces.json
+item_properties:
+  id_key: id
+  text_key: task
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+instance_display:
+  layout: {direction: vertical, gap: 16px}
+  fields:
+    - key: task
+      type: text
+      label: "Task"
+    - key: steps
+      type: agent_trace
+      label: "Agent Interactions"
+      display_options: {show_turn_numbers: true, speaker_key: agent, text_key: content}
+annotation_schemes:
+  - annotation_type: emergent_behavior
+    name: emergent
+    description: "For each collective behavior, check the turns (across agents) that participate."
+    steps_key: steps
+    agent_key: agent
+    behaviors: [collusion, groupthink, cascading_error, role_drift]
+    allow_note: true

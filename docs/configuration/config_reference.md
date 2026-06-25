@@ -15,6 +15,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 - [Server](#server)
 - [Quality Control](#quality-control)
 - [AI Support](#ai-support)
+- [Qualitative Coding (QDA)](#qualitative-coding-(qda))
 - [Advanced Features](#advanced-features)
 - [UI & Layout](#ui-layout)
 - [Content](#content)
@@ -103,6 +104,18 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `ai_support` |  | object | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `option_highlighting` |
 | `chat_support` |  | object | `ai_config`, `enabled`, `endpoint_type`, `ui` |
 
+## Qualitative Coding (QDA)
+
+| Key | Required | Type | Sub-keys |
+|-----|----------|------|----------|
+| `qda_mode` |  | object | `codebook`, `enabled`, `memos` |
+| `codebook` |  | object | `enabled`, `mode` |
+| `codebook_mode` |  |  |  |
+| `codebook_invivo_key` |  |  |  |
+| `annotation_ui` |  | object | `memos`, `visibility` |
+| `cases` |  | object | `attributes`, `auto_detect`, `enabled`, `key` |
+| `search` |  | object | `annotator_claim`, `backend`, `enabled`, `max_instances` |
+
 ## Advanced Features
 
 | Key | Required | Type | Sub-keys |
@@ -182,6 +195,26 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `trace_ingestion` |  | object | `api_key`, `enabled`, `notify_annotators`, `sources` |
 | `huggingface_backup` |  |  |  |
 
+## Agent Evaluation Suite
+
+Config blocks for the continuous-evaluation features. Each is opt-in via its
+`enabled` flag; see the linked guide for the full options.
+
+| Key | Type | Sub-keys | Guide |
+|-----|------|----------|-------|
+| `datasets` | object | `enabled`, `storage` (`file`\|`sqlite`) | [Datasets & Experiments](../agent-evaluation/datasets_and_experiments.md) |
+| `automation` | object | `enabled`, `rules` (each: `name`, `when`, `sample_rate`, `actions`) | [Automation Rules](../agent-evaluation/automation_rules.md) |
+| `curation` | object | `enabled`, `model_name`, `embed_on_ingest`, `text_key` | [Semantic Curation](../agent-evaluation/semantic_curation.md) |
+| `arena` | object | `enabled`, `models` (each: `label`, `endpoint_type`, `model`, `base_url`, `temperature`, `ai_config`) | [Model Arena](../agent-evaluation/model_arena.md) |
+| `judge_alignment` | object | `enabled`, `ai_support`, `schemas`, `few_shot`, `inline` | [Judge Alignment](../agent-evaluation/judge_alignment.md) |
+| `judge_calibration` | object | `enabled`, `prompt`, `models`, `k_samples`, `max_items`, `fraction`, `sampling`, `human`, `schemas`, `calibration`, `output` | [Judge Calibration](../ai-intelligence/judge_calibration.md) |
+| `triage` | object | `enabled`, `order`, `default_priority`, `show_badge`, `signal_field`, `invert_signal`, `rules` | [Triage Queue](../agent-evaluation/triage_queue.md) |
+
+> The pytest CI plugin ([CI Evaluation](../agent-evaluation/ci_evaluation.md)) and
+> the tracing SDK ([Tracing SDK](../integrations/tracing_sdk.md)) are not config
+> blocks — they are driven by pytest options / environment variables and the
+> `potato_trace` client, respectively.
+
 ## Debug / Logging
 
 | Key | Required | Type | Sub-keys |
@@ -208,12 +241,12 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `random_seed` |  | integer |  |
 | `max_annotations_per_user` |  | integer |  |
 | `max_annotations_per_item` |  | integer |  |
-| `num_annotators_per_item` |  | integer |  |
+| `num_annotators_per_item` |  |  |  |
 | `min_annotators_per_instance` |  | integer |  |
-| `solo_mode` |  | object | `batches`, `enabled`, `instance_selection`, `labeling_models`, `revision_models`, `state_dir`, `thresholds`, `uncertainty` |
+| `solo_mode` |  | object | `batches`, `confidence_routing`, `confusion_analysis`, `edge_case_rules`, `embedding`, `enabled`, `instance_selection`, `labeling_functions`, `labeling_models`, `prompt_optimization`, `refinement_loop`, `revision_models`, `state_dir`, `thresholds`, `uncertainty` |
 | `admin_api_key` |  |  |  |
 | `alert_time_each_instance` |  | integer |  |
-| `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering) |  |
+| `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch) |  |
 | `reclaim_stale_assignments` |  |  |  |
 | `instance_reclaim` |  |  |  |
 | `max_session_seconds` |  | integer |  |

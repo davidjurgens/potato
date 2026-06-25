@@ -427,21 +427,39 @@ class UserAuthenticator:
         self._reset_tokens = {}  # token -> {username, expires}
         self._token_lock = threading.Lock()
 
+        # Track load outcomes so init_from_config can warn on a silently empty
+        # (e.g. wrong-format) user file. F-036.
+        self.users_loaded_from_file = 0
+        self.user_file_parse_errors = 0
+
         # Load users from config file if it exists
         if os.path.isfile(self.user_config_path):
             logger.info(f"Loading users from {self.user_config_path}")
+            before = len(self.users)
             with open(self.user_config_path, "rt", encoding="utf-8") as f:
-                for line in f.readlines():
+                for lineno, line in enumerate(f.readlines(), start=1):
                     line = line.strip()
                     if not line:
                         continue
-                    single_user = json.loads(line)
+                    # Tolerate a malformed line instead of aborting the whole
+                    # load (and crashing server boot) on one bad row.
+                    try:
+                        single_user = json.loads(line)
+                    except (ValueError, TypeError) as e:
+                        self.user_file_parse_errors += 1
+                        logger.error(
+                            f"User file {self.user_config_path} line {lineno}: "
+                            f"not valid JSON ({e}); skipping. Expected JSONL — "
+                            f'one object per line, e.g. {{"username": "alice", "password": "x"}}'
+                        )
+                        continue
                     # Detect salt$hash format in password field
-                    password_val = single_user.get("password", "")
+                    password_val = single_user.get("password", "") if isinstance(single_user, dict) else ""
                     if password_val and _is_salted_hash(password_val):
                         self._add_user_prehashed(single_user)
                     else:
                         self.add_single_user(single_user)
+            self.users_loaded_from_file = len(self.users) - before
 
     def _initialize_backend(self, auth_method: str, auth_config: dict = None) -> AuthBackend:
         if auth_method == "in_memory":
@@ -495,6 +513,24 @@ class UserAuthenticator:
                     USER_AUTHENTICATOR_SINGLETON = UserAuthenticator(user_config_path, auth_method, auth_config)
                     USER_AUTHENTICATOR_SINGLETON.require_password = require_password
                     USER_AUTHENTICATOR_SINGLETON.user_config_path_explicit = path_explicit
+
+                    # F-036: a user file was explicitly configured and exists, but
+                    # produced zero usable users (e.g. wrong format / all rows
+                    # invalid). With closed enrolment this is a silently broken
+                    # deployment — nobody can log in. Warn prominently.
+                    _auth = USER_AUTHENTICATOR_SINGLETON
+                    if (path_explicit and os.path.isfile(user_config_path)
+                            and _auth.users_loaded_from_file == 0):
+                        allow_all = config.get("user_config", {}).get("allow_all_users", False)
+                        logger.warning(
+                            "user_config_path '%s' was configured but loaded 0 users "
+                            "(%d malformed line(s)). Expected JSONL — one object per "
+                            'line, e.g. {"username": "alice", "password": "x"}. %s',
+                            user_config_path, _auth.user_file_parse_errors,
+                            ("Open registration is on, so new users can still self-register."
+                             if allow_all else
+                             "allow_all_users is false, so NO ONE will be able to log in."),
+                        )
 
                     logger.info(f"Initialized UserAuthenticator with method: {auth_method}, require_password: {require_password}")
 

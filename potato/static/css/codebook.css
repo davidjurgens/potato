@@ -644,3 +644,106 @@
     .cb-admin-input,
     .cb-panel-header button { transition: none; }
 }
+
+/* ---- panel inline content edit (Phase 5) ---------------------------- */
+.cb-fullpage-link {
+    display: inline-block;
+    margin: 0 0 var(--cb-space-3) 2px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--cb-accent);
+    text-decoration: none;
+}
+.cb-fullpage-link:hover { text-decoration: underline; }
+
+.cb-node-row { display: flex; align-items: center; gap: var(--cb-space-2); }
+.cb-node-row .cb-name { flex: 1; min-width: 0; }
+.cb-node-edit {
+    border: none;
+    background: none;
+    color: var(--cb-ink-soft);
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 4px 6px;
+    border-radius: 5px;
+    opacity: 0;
+    transition: opacity 120ms ease, background-color 120ms ease;
+}
+.cb-node-row:hover .cb-node-edit,
+.cb-node-edit:focus-visible { opacity: 1; }
+.cb-node-edit:hover { background: var(--cb-surface-3); color: var(--cb-ink); }
+/* Touch devices have no hover — keep the pencil reachable (audit H5). */
+@media (hover: none) {
+    .cb-tree.cb-can-edit .cb-node-edit { opacity: 0.65; }
+}
+/* Only interactive when the user may edit content. */
+.cb-tree:not(.cb-can-edit) .cb-node-edit { display: none; }
+
+.cb-inline-edit {
+    margin: var(--cb-space-2) 0 var(--cb-space-3) 14px;
+    padding: var(--cb-space-3);
+    border: 1px solid var(--cb-line);
+    border-left: 2px solid var(--cb-accent);
+    border-radius: var(--cb-radius);
+    background: var(--cb-surface-2);
+}
+.cb-inline-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--cb-ink-soft);
+    margin: 0 0 3px;
+}
+.cb-inline-label + .cb-inline-ta { margin-bottom: var(--cb-space-2); }
+.cb-inline-ta {
+    width: 100%;
+    box-sizing: border-box;
+    font: inherit;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    padding: 6px 8px;
+    border: 1px solid var(--cb-line-strong);
+    border-radius: 6px;
+    resize: vertical;
+    background: var(--cb-surface);
+    color: var(--cb-ink);
+}
+.cb-inline-ta:focus {
+    outline: 2px solid var(--cb-focus);
+    outline-offset: 1px;
+    border-color: transparent;
+}
+.cb-inline-foot {
+    display: flex;
+    align-items: center;
+    gap: var(--cb-space-2);
+    margin-top: var(--cb-space-2);
+}
+.cb-inline-status {
+    flex: 1;
+    font-size: 0.76rem;
+    color: var(--cb-ink-soft);
+}
+.cb-inline-btn {
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+.cb-inline-cancel {
+    background: var(--cb-surface);
+    border-color: var(--cb-line-strong);
+    color: var(--cb-ink);
+}
+.cb-inline-cancel:hover { background: var(--cb-surface-3); }
+.cb-inline-save { background: var(--cb-accent); color: var(--cb-accent-ink); }
+.cb-inline-save:hover { background: var(--cb-accent-press); }
+.cb-inline-save:disabled { opacity: 0.6; cursor: default; }

@@ -76,10 +76,10 @@ phases:
     - annotation
   consent:
     type: consent
-    file: default
+    file: surveys/consent.json
   instructions:
     type: instructions
-    file: default
+    file: surveys/instructions.json
   training:
     type: training
   annotation:

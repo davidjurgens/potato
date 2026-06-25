@@ -1,0 +1,66 @@
+# Judge Calibration example
+#
+# LLM-as-judge auto-labeling + blind human calibration. The judge LLM(s) label
+# the data; you then blind-label a sample through the normal annotation UI and
+# Potato produces a calibration report (accuracy vs human gold, IAA, ECE,
+# confusion matrices) plus a file of every LLM's labels.
+#
+# Run from the repo root:
+#   python potato/flask_server.py start examples/ai-assisted/judge-calibration/config.yaml -p 8000 --debug
+# Then open  http://localhost:8000/judge_calibration/admin  to configure + run,
+# and  http://localhost:8000/annotate  to blind-label the sample.
+#
+# This example uses a local Ollama model so no API key is required. Start Ollama
+# and `ollama pull llama3.2:3b` first, or edit the models block below.
+
+annotation_task_name: "Judge Calibration Demo"
+task_dir: .
+output_annotation_dir: judge_calibration_output/annotations
+
+data_files:
+  - data/judge-calibration-example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "Overall sentiment of the text"
+    labels:
+      - positive
+      - negative
+      - neutral
+
+judge_calibration:
+  enabled: true
+  prompt: |
+    You are an impartial expert annotator. Read the text and classify its
+    overall sentiment as exactly one of: positive, negative, neutral.
+  models:
+    - endpoint_type: ollama
+      model: llama3.2:3b
+      base_url: http://localhost:11434
+      temperature: 0.7
+  k_samples: 5
+  max_items: 1000          # cap on items the LLMs label (null = all)
+  sampling:
+    strategy: stratified   # random | stratified | all
+    stratify_by: null      # item-data field, or null to stratify by modal LLM label
+    sample_size: 10        # how many items humans blind-label
+    seed: 42
+  human:
+    num_raters: 1          # 1 = solo researcher; N adds human-human IAA
+    gold: single           # single | majority
+  schemas:
+    - sentiment
+  calibration:
+    n_bins: 10
+  output:
+    dir: judge_calibration_output
+    files:
+      labels: llm_labels.jsonl
+      report_json: report.json
+      report_html: report.html
+  state_dir: judge_calibration_output/state

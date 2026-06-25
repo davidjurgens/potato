@@ -487,6 +487,14 @@ select:focus {
   box-shadow: 0 0 0 2px rgba(110, 86, 207, 0.25);
 }
 
+/* Keyboard focus ring for range/slider inputs (they reset outline) */
+input[type="range"]:focus-visible,
+.shadcn-slider-input:focus-visible,
+.pairwise-scale-slider:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.30);
+}
+
 /* Radio and checkbox styling */
 input[type="radio"],
 input[type="checkbox"] {
@@ -3780,7 +3788,7 @@ body > .container-fluid {
 }
 
 .potato-navbar .progress-section .progress-label {
-  opacity: 0.65;
+  opacity: 0.9;
   margin-right: 0.25rem;
 }
 
@@ -3792,7 +3800,7 @@ body > .container-fluid {
 }
 
 .potato-navbar .instance-number-section .instance-number-label {
-  opacity: 0.65;
+  opacity: 0.9;
   margin-right: 0.25rem;
 }
 
@@ -3810,7 +3818,7 @@ body > .container-fluid {
 }
 
 .potato-navbar .ibws-round-banner .ibws-round-detail {
-  opacity: 0.65;
+  opacity: 0.9;
 }
 
 .potato-navbar .nav-controls {
@@ -3819,8 +3827,8 @@ body > .container-fluid {
 }
 
 .potato-navbar .nav-control-btn {
-  height: 30px;
-  width: 30px;
+  height: 38px;
+  width: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3837,6 +3845,13 @@ body > .container-fluid {
   background: rgba(255,255,255,0.22);
 }
 
+.potato-navbar .nav-control-btn:focus-visible,
+.potato-navbar .goto-section input:focus-visible,
+.potato-navbar .goto-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.55);
+}
+
 .potato-navbar .goto-section {
   display: flex;
   align-items: center;
@@ -3845,7 +3860,7 @@ body > .container-fluid {
 
 .potato-navbar .goto-section input {
   width: 48px;
-  height: 30px;
+  height: 38px;
   border-radius: var(--radius);
   border: 1px solid rgba(255,255,255,0.18);
   background: rgba(255,255,255,0.08);
@@ -3867,8 +3882,8 @@ body > .container-fluid {
 }
 
 .potato-navbar .goto-btn {
-  height: 30px;
-  padding: 0 10px;
+  height: 38px;
+  padding: 0 12px;
   border-radius: var(--radius);
   background: rgba(255,255,255,0.88);
   color: var(--primary-color);
@@ -5003,6 +5018,24 @@ body > .container-fluid {
   user-select: none;
 }
 
+/* Tooltip marker for taxonomy presets (e.g. MAST failure modes). */
+.hier-info {
+  display: inline-block;
+  margin-left: 0.35rem;
+  color: var(--muted-foreground, #71717a);
+  font-size: 0.85em;
+  cursor: help;
+  /* Full token color (~4.6:1) meets WCAG 1.4.11 non-text contrast; no opacity dimming. */
+}
+.hier-info:hover {
+  color: var(--foreground, #18181b);
+}
+.hier-info:focus-visible {
+  outline: 2px solid var(--ring, #6e56cf);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 /* ============================================================
    Text Schema Enhancements (rationale/justification features)
    ============================================================ */
@@ -5375,6 +5408,294 @@ body > .container-fluid {
 .text-edit-reset-btn:hover {
   background: var(--muted);
 }
+
+/* ============================================================
+   Trajectory Correction / Editing (trajectory_edit)
+   ============================================================ */
+.trajectory-edit-container {
+  padding: 1rem;
+}
+.trajedit-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.trajedit-summary {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  background: var(--muted);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+.trajedit-summary strong {
+  color: var(--foreground);
+}
+.trajedit-step-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 0.75rem;
+  background: var(--background);
+}
+.trajedit-final-card {
+  border-left: 3px solid hsl(142 50% 45%);
+}
+.trajedit-step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.trajedit-step-number {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+.trajedit-final-label {
+  color: hsl(142 50% 35%);
+}
+.trajedit-edited-flag {
+  font-size: var(--text-sm);
+  color: hsl(28 90% 32%);
+  font-weight: 600;
+}
+/* Non-color cue (in addition to the flag) that a field/answer was edited. */
+.trajedit-field-block.trajedit-edited {
+  border-left: 3px solid hsl(28 90% 45%);
+  padding-left: 0.6rem;
+  margin-left: -0.6rem;
+}
+.trajedit-step-card.trajedit-edited.trajedit-final-card {
+  border-left-color: hsl(28 90% 45%);
+}
+.trajedit-step-thought {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  margin-bottom: 0.5rem;
+}
+.trajedit-thought-label {
+  font-weight: 600;
+}
+.trajedit-field-block {
+  margin-top: 0.6rem;
+}
+.trajedit-field-label {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.trajedit-original {
+  font-size: var(--text-sm);
+  background: var(--muted);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.4rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.trajedit-original-label {
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+.trajedit-editor-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted-foreground);
+  margin-bottom: 0.25rem;
+}
+.trajedit-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.6rem;
+  font-family: inherit;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  resize: vertical;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.trajedit-textarea:focus {
+  outline: 2px solid var(--ring, hsl(215 90% 60%));
+  outline-offset: 1px;
+  border-color: transparent;
+}
+/* Tool/action fields are code-like — monospace for precise editing & diffing. */
+.trajedit-mono,
+.trajedit-mono .trajedit-original-text {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-sm);
+}
+.trajedit-stats {
+  display: flex;
+  gap: 1rem;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  margin-top: 0.35rem;
+}
+.trajedit-diff {
+  margin-top: 0.4rem;
+}
+/* Only show the diff once a field actually changed (avoids an empty
+   "Changes:" box on untouched fields). .trajedit-edited is toggled on the
+   field block / final card by onEdit. */
+.trajedit-diff {
+  display: none;
+}
+.trajedit-edited .trajedit-diff {
+  display: block;
+}
+.trajedit-diff-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted-foreground);
+  margin-bottom: 0.2rem;
+}
+.trajedit-diff-content {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.6rem;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  min-height: 1.75rem;
+}
+.trajedit-diff-same { color: inherit; }
+.trajedit-diff-del {
+  background: hsl(0 100% 95%);
+  color: hsl(0 84.2% 40%);
+  text-decoration: line-through;
+}
+.trajedit-diff-ins {
+  background: hsl(120 100% 95%);
+  color: hsl(120 50% 30%);
+}
+.trajedit-reason-block {
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.trajedit-reason-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+.trajedit-reason {
+  flex: 1 1 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.5rem;
+  font-size: var(--text-sm);
+}
+.trajedit-reset-btn {
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.trajedit-reset-btn:hover {
+  background: var(--muted);
+}
+.trajedit-no-steps {
+  padding: 1rem;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+/* ============================================================
+   LLM-Judge inline suggestion (judge ↔ human alignment)
+   ============================================================ */
+.judge-suggestion {
+  border: 1px solid var(--border);
+  border-left: 3px solid hsl(265 50% 55%);
+  border-radius: var(--radius);
+  background: var(--muted);
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.9rem;
+}
+.judge-suggestion-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.judge-suggestion-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.judge-badge-icon { color: hsl(265 45% 45%); font-size: 1.1em; }
+.judge-suggestion-label { font-size: var(--text-sm); }
+.judge-suggested-value {
+  font-weight: 700;
+  background: hsl(265 60% 92%);
+  color: hsl(265 50% 32%);
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius);
+}
+.judge-schema-name { color: var(--muted-foreground); }
+.judge-confidence { font-size: var(--text-sm); color: var(--muted-foreground); }
+.judge-running {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: hsl(265 40% 40%);
+  white-space: nowrap;
+}
+.judge-accept-btn { font-size: var(--text-sm); padding: 0.3rem 0.7rem; }
+.judge-reasoning { margin-top: 0.4rem; }
+.judge-reasoning summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+.judge-reasoning p { margin: 0.4rem 0 0; font-size: var(--text-sm); }
+
+/* ============================================================
+   Signal-based triage flag (why this item was prioritized)
+   ============================================================ */
+.triage-flag {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* Amber accent — a queue-priority cue, not an error. The leading glyph +
+     the word "Prioritized" carry meaning without relying on colour alone. */
+  border: 1px solid hsl(38 70% 80%);
+  border-left: 3px solid hsl(32 85% 45%);
+  border-radius: var(--radius);
+  background: hsl(40 80% 96%);
+  padding: 0.45rem 0.7rem;
+  margin-bottom: 0.9rem;
+}
+.triage-flag-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  /* AA: white-on-disc clears 4.5:1 at this depth (was hsl(32 85% 45%) ≈ 3.2:1). */
+  background: hsl(30 90% 37%);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+.triage-flag-text { font-size: var(--text-sm); color: hsl(28 60% 28%); }
+.triage-flag-reason { font-weight: 700; }
 
 /* ============================================================
    Error Span with Typed Severity

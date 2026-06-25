@@ -260,7 +260,21 @@ def _register_builtin_schemas():
     from .card_sort import generate_card_sort_layout
     from .conjoint import generate_conjoint_layout
     from .trajectory_eval import generate_trajectory_eval_layout
+    from .trajectory_edit import generate_trajectory_edit_layout
     from .process_reward import generate_process_reward_layout
+    from .failure_attribution import generate_failure_attribution_layout
+    from .tool_call_review import generate_tool_call_review_layout
+    from .agent_scorecard import generate_agent_scorecard_layout
+    from .handoff_review import generate_handoff_review_layout
+    from .agent_interaction_graph import generate_agent_interaction_graph_layout
+    from .gui_trajectory import generate_gui_trajectory_layout
+    from .voice_interaction import generate_voice_interaction_layout
+    from .multimodal_reasoning import generate_multimodal_reasoning_layout
+    from .speech_transcript import generate_speech_transcript_layout
+    from .tool_contention import generate_tool_contention_layout
+    from .temporal_grounding import generate_temporal_grounding_layout
+    from .emergent_behavior import generate_emergent_behavior_layout
+    from .table_grid import generate_table_grid_layout
     from .code_review import generate_code_review_layout
 
     schemas = [
@@ -564,9 +578,121 @@ def _register_builtin_schemas():
             name="process_reward",
             generator=generate_process_reward_layout,
             required_fields=["name", "description"],
-            optional_fields=["steps_key", "step_text_key", "mode"],
+            optional_fields=["steps_key", "step_text_key", "mode", "allow_neutral", "inline_with_trace"],
             supports_keybindings=False,
-            description="Binary per-step process reward signals for PRM training"
+            description="Per-step process reward signals for PRM training"
+        ),
+        SchemaDefinition(
+            name="failure_attribution",
+            generator=generate_failure_attribution_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key", "agents"],
+            supports_keybindings=False,
+            description="Multi-agent failure attribution: responsible agent + decisive step + reason"
+        ),
+        SchemaDefinition(
+            name="tool_call_review",
+            generator=generate_tool_call_review_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "verdict_options"],
+            supports_keybindings=False,
+            description="Per-tool-call correctness review (right tool / args / ordering)"
+        ),
+        SchemaDefinition(
+            name="agent_scorecard",
+            generator=generate_agent_scorecard_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key", "agents", "agent_dimensions", "team_dimensions", "milestones", "scale"],
+            supports_keybindings=False,
+            description="Per-agent + per-team scorecard with optional milestones (MultiAgentBench-style)"
+        ),
+        SchemaDefinition(
+            name="handoff_review",
+            generator=generate_handoff_review_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key", "flags", "quality_scale"],
+            supports_keybindings=False,
+            description="Annotate agent-to-agent handoffs: inter-agent misalignment flags + quality"
+        ),
+        SchemaDefinition(
+            name="agent_interaction_graph",
+            generator=generate_agent_interaction_graph_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key"],
+            supports_keybindings=False,
+            description="Clickable agent-interaction graph: mark critical-path nodes + flag problematic edges"
+        ),
+        SchemaDefinition(
+            name="gui_trajectory",
+            generator=generate_gui_trajectory_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "screenshot_key", "action_key", "coord_space", "verdict_options"],
+            supports_keybindings=False,
+            description="Computer-use/GUI agent step review: per-step screenshot + action correctness + click grounding"
+        ),
+        SchemaDefinition(
+            name="voice_interaction",
+            generator=generate_voice_interaction_layout,
+            required_fields=["name", "description"],
+            optional_fields=["turns_key", "audio_key", "speaker_key", "user_speakers", "overlap_labels", "rating_scale"],
+            supports_keybindings=False,
+            description="Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification"
+        ),
+        SchemaDefinition(
+            name="multimodal_reasoning",
+            generator=generate_multimodal_reasoning_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "type_key", "verdict_options"],
+            supports_keybindings=False,
+            description="Interleaved text/image/tool reasoning trace: per-step coherence + visual-hallucination rating"
+        ),
+        SchemaDefinition(
+            name="speech_transcript",
+            generator=generate_speech_transcript_layout,
+            required_fields=["name", "description"],
+            optional_fields=["segments_key", "audio_key", "error_types", "allow_correction"],
+            supports_keybindings=False,
+            description="Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction"
+        ),
+        SchemaDefinition(
+            name="tool_contention",
+            generator=generate_tool_contention_layout,
+            required_fields=["name", "description"],
+            optional_fields=["calls_key", "agent_key", "resource_key", "contention_labels"],
+            supports_keybindings=False,
+            description="Tool/resource-contention timeline: per-agent lanes + shared-resource collision classification"
+        ),
+        SchemaDefinition(
+            name="temporal_grounding",
+            generator=generate_temporal_grounding_layout,
+            required_fields=["name", "description"],
+            optional_fields=["video_key", "events_key", "duration"],
+            supports_keybindings=False,
+            description="Video temporal grounding: mark gold event intervals with live IoU vs predicted"
+        ),
+        SchemaDefinition(
+            name="emergent_behavior",
+            generator=generate_emergent_behavior_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "agent_key", "behaviors", "allow_note"],
+            supports_keybindings=False,
+            description="Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift"
+        ),
+        SchemaDefinition(
+            name="table_grid",
+            generator=generate_table_grid_layout,
+            required_fields=["name", "description"],
+            optional_fields=["image_key", "rows_key", "cols_key", "default_rows", "default_cols", "roles"],
+            supports_keybindings=False,
+            description="Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty)"
+        ),
+        SchemaDefinition(
+            name="trajectory_edit",
+            generator=generate_trajectory_edit_layout,
+            required_fields=["name", "description"],
+            optional_fields=["steps_key", "step_text_key", "editable_fields", "show_diff", "show_edit_distance", "allow_reset", "require_reason_on_edit", "edit_final_answer", "final_answer_key"],
+            supports_keybindings=False,
+            description="Per-step trajectory correction/editing for SFT/DPO training data"
         ),
         SchemaDefinition(
             name="code_review",

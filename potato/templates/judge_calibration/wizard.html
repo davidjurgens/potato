@@ -1,0 +1,223 @@
+{% extends "judge_calibration/base_jc.html" %}
+{% block title %}Judge Calibration Setup{% endblock %}
+{% block content %}
+<div class="jc-card">
+    <h1>Judge Calibration</h1>
+    <p class="jc-muted">Configure judge LLMs and run them over your data, then blind-label a
+    sample to calibrate. Current phase: <span class="jc-pill" id="jc-phase">{{ status.phase }}</span></p>
+</div>
+
+<div class="jc-card">
+    <h2>1 · Judge prompt</h2>
+    <label for="jc-prompt">Prompt <span class="jc-muted">(supports {text}, {labels}, {description})</span></label>
+    <textarea id="jc-prompt">{{ config.prompt }}</textarea>
+
+    <h2>2 · Models</h2>
+    <div id="jc-models"></div>
+    <button type="button" class="jc-btn secondary" id="jc-add-model">+ Add model</button>
+
+    <h2>3 · Sampling &amp; scope</h2>
+    <div class="jc-row">
+        <div>
+            <label for="jc-k">k samples / model</label>
+            <input type="number" id="jc-k" min="1" value="{{ config.k_samples }}">
+        </div>
+        <div>
+            <label for="jc-max-items">Max items (blank = all)</label>
+            <input type="number" id="jc-max-items" min="1" value="{{ config.max_items if config.max_items is not none else '' }}">
+        </div>
+        <div>
+            <label for="jc-bins">Calibration bins (ECE)</label>
+            <input type="number" id="jc-bins" min="1" value="{{ config.calibration.n_bins }}">
+        </div>
+    </div>
+    <div class="jc-row">
+        <div>
+            <label for="jc-strategy">Sampling strategy</label>
+            <select id="jc-strategy">
+                {% for s in ['random','stratified','all'] %}
+                <option value="{{ s }}" {{ 'selected' if config.sampling.strategy==s else '' }}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="jc-sample-size">Sample size (human)</label>
+            <input type="number" id="jc-sample-size" min="1" value="{{ config.sampling.sample_size }}">
+        </div>
+        <div>
+            <label for="jc-stratify">Stratify by (field)</label>
+            <input type="text" id="jc-stratify" value="{{ config.sampling.stratify_by or '' }}" placeholder="optional">
+        </div>
+        <div>
+            <label for="jc-seed">Seed</label>
+            <input type="number" id="jc-seed" value="{{ config.sampling.seed }}">
+        </div>
+    </div>
+    <div class="jc-row">
+        <div>
+            <label for="jc-raters">Human raters</label>
+            <input type="number" id="jc-raters" min="1" value="{{ config.human.num_raters }}">
+        </div>
+        <div>
+            <label for="jc-gold">Gold from</label>
+            <select id="jc-gold">
+                {% for g in ['single','majority'] %}
+                <option value="{{ g }}" {{ 'selected' if config.human.gold==g else '' }}>{{ g }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <h2>4 · Admin key</h2>
+    <label for="jc-key">X-API-Key <span class="jc-muted">(not needed in debug mode)</span></label>
+    <input type="password" id="jc-key" placeholder="admin API key">
+
+    <div id="jc-error" class="jc-error" role="alert" aria-live="assertive"></div>
+    <div class="jc-actions">
+        <button type="button" class="jc-btn" id="jc-run">Run judges</button>
+        <button type="button" class="jc-btn secondary" id="jc-build-report">Build report</button>
+        <a class="jc-btn secondary" href="/judge_calibration/report" target="_blank" rel="noopener">View report</a>
+    </div>
+</div>
+
+<div class="jc-card">
+    <h2>Progress</h2>
+    <div class="jc-progress-track" role="progressbar" id="jc-bar-track"
+         aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
+         aria-label="LLM generation progress">
+        <div class="jc-progress-bar" id="jc-bar"></div>
+    </div>
+    <p class="jc-muted" id="jc-progress-text" aria-live="polite">Not started.</p>
+    <p class="jc-muted" id="jc-blind-hint" style="display:none">
+        Generation complete. Have annotators blind-label the sample via
+        <a href="/annotate">/annotate</a>, then build the report.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CONFIG = {{ config|tojson }};
+
+let modelRowSeq = 0;
+function modelRow(m) {
+    m = m || {endpoint_type:'ollama', model:'', base_url:'', temperature:0.7};
+    const n = ++modelRowSeq;
+    const div = document.createElement('div');
+    div.className = 'jc-model';
+    div.setAttribute('role', 'group');
+    div.setAttribute('aria-label', `Model ${n}`);
+    div.innerHTML = `
+        <div class="jc-row">
+            <div><label for="jc-m-endpoint-${n}">Endpoint</label>
+                <select id="jc-m-endpoint-${n}" class="jc-m-endpoint">
+                    ${['openai','anthropic','ollama','vllm','gemini','openrouter','huggingface']
+                        .map(e=>`<option value="${e}" ${e===m.endpoint_type?'selected':''}>${e}</option>`).join('')}
+                </select></div>
+            <div><label for="jc-m-model-${n}">Model</label>
+                <input id="jc-m-model-${n}" class="jc-m-model" value="${m.model||''}"></div>
+            <div><label for="jc-m-url-${n}">Base URL</label>
+                <input id="jc-m-url-${n}" class="jc-m-url" value="${m.base_url||''}" placeholder="optional"></div>
+            <div><label for="jc-m-temp-${n}">Temp</label>
+                <input id="jc-m-temp-${n}" class="jc-m-temp" type="number" step="0.1" value="${m.temperature!=null?m.temperature:0.7}"></div>
+            <div style="flex:0 0 auto;align-self:flex-end">
+                <button type="button" class="jc-btn secondary jc-m-remove" aria-label="Remove model ${n}">×</button></div>
+        </div>`;
+    div.querySelector('.jc-m-remove').onclick = () => div.remove();
+    return div;
+}
+
+const modelsEl = document.getElementById('jc-models');
+(CONFIG.models && CONFIG.models.length ? CONFIG.models : [null]).forEach(m => modelsEl.appendChild(modelRow(m)));
+document.getElementById('jc-add-model').onclick = () => modelsEl.appendChild(modelRow());
+
+function gatherModels() {
+    return Array.from(modelsEl.querySelectorAll('.jc-model')).map(d => ({
+        endpoint_type: d.querySelector('.jc-m-endpoint').value,
+        model: d.querySelector('.jc-m-model').value.trim(),
+        base_url: d.querySelector('.jc-m-url').value.trim() || null,
+        temperature: parseFloat(d.querySelector('.jc-m-temp').value),
+    })).filter(m => m.model);
+}
+
+function gatherOverrides() {
+    const maxItems = document.getElementById('jc-max-items').value;
+    return {
+        prompt: document.getElementById('jc-prompt').value,
+        k_samples: parseInt(document.getElementById('jc-k').value, 10),
+        max_items: maxItems ? parseInt(maxItems, 10) : null,
+        models: gatherModels(),
+        sampling: {
+            strategy: document.getElementById('jc-strategy').value,
+            sample_size: parseInt(document.getElementById('jc-sample-size').value, 10),
+            stratify_by: document.getElementById('jc-stratify').value.trim() || null,
+            seed: parseInt(document.getElementById('jc-seed').value, 10),
+        },
+        human: {
+            num_raters: parseInt(document.getElementById('jc-raters').value, 10),
+            gold: document.getElementById('jc-gold').value,
+        },
+        calibration: { n_bins: parseInt(document.getElementById('jc-bins').value, 10) },
+    };
+}
+
+function headers() {
+    const h = {'Content-Type': 'application/json'};
+    const k = document.getElementById('jc-key').value;
+    if (k) h['X-API-Key'] = k;
+    return h;
+}
+
+function showError(msg) { document.getElementById('jc-error').textContent = msg || ''; }
+
+async function postJSON(url, body) {
+    const res = await fetch(url, {method:'POST', headers: headers(), body: JSON.stringify(body||{})});
+    const data = await res.json().catch(()=>({}));
+    return {ok: res.ok, status: res.status, data};
+}
+
+let pollTimer = null;
+function renderProgress(p) {
+    document.getElementById('jc-phase').textContent = p.phase || '';
+    const pct = p.total_units ? Math.round(100 * p.done_units / p.total_units) : 0;
+    document.getElementById('jc-bar').style.width = pct + '%';
+    document.getElementById('jc-bar-track').setAttribute('aria-valuenow', String(pct));
+    document.getElementById('jc-progress-text').textContent =
+        `${p.done_units||0} / ${p.total_units||0} units · ${p.results||0} results` +
+        (p.current_model ? ` · ${p.current_model}` : '') + (p.error ? ` · ERROR: ${p.error}` : '');
+    document.getElementById('jc-blind-hint').style.display =
+        (p.phase === 'human-calibration') ? 'block' : 'none';
+    // Prevent concurrent runs: the Run button stays disabled while generating.
+    document.getElementById('jc-run').disabled = !!p.generating;
+    if (!p.generating && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+async function poll() {
+    const res = await fetch('/judge_calibration/progress', {headers: headers()});
+    if (res.ok) renderProgress(await res.json());
+}
+
+document.getElementById('jc-run').onclick = async () => {
+    showError('');
+    const btn = document.getElementById('jc-run');
+    btn.disabled = true;  // guard against double-submit during the request
+    const {ok, data} = await postJSON('/judge_calibration/run', gatherOverrides());
+    if (!ok) {
+        showError((data.errors || [data.error || 'Failed']).join('\n'));
+        btn.disabled = false;
+        return;
+    }
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(poll, 1500);
+    poll();  // renderProgress keeps the button disabled while generating
+};
+
+document.getElementById('jc-build-report').onclick = async () => {
+    showError('');
+    const {ok, data} = await postJSON('/judge_calibration/report', {});
+    if (!ok) { showError(data.error || 'Report failed'); return; }
+    window.open('/judge_calibration/report', '_blank');
+};
+
+poll();
+</script>
+{% endblock %}

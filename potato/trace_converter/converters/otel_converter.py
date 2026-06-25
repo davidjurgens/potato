@@ -157,17 +157,23 @@ class OTELConverter(BaseTraceConverter):
             attrs = span.get("attributes", {})
             span_name = span.get("name", "")
 
-            # GenAI Semantic Conventions
-            prompt = attrs.get("gen_ai.prompt", attrs.get("gen_ai.request.prompt", ""))
-            completion = attrs.get("gen_ai.completion", attrs.get("gen_ai.response.completion", ""))
-            span_model = attrs.get("gen_ai.request.model", attrs.get("llm.model", ""))
+            # GenAI Semantic Conventions, with OpenInference aliases
+            # (Arize/Phoenix use input.value / output.value / llm.model_name).
+            prompt = (attrs.get("gen_ai.prompt") or attrs.get("gen_ai.request.prompt")
+                      or attrs.get("llm.input_messages") or attrs.get("input.value") or "")
+            completion = (attrs.get("gen_ai.completion") or attrs.get("gen_ai.response.completion")
+                          or attrs.get("llm.output_messages") or attrs.get("output.value") or "")
+            span_model = (attrs.get("gen_ai.request.model") or attrs.get("llm.model")
+                          or attrs.get("llm.model_name") or "")
 
             if span_model and not model:
                 model = str(span_model)
 
             # Token counting
             for token_key in ("llm.token_count.prompt", "llm.token_count.completion",
+                              "llm.token_count.total",
                               "gen_ai.usage.prompt_tokens", "gen_ai.usage.completion_tokens",
+                              "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens",
                               "llm.usage.total_tokens"):
                 val = attrs.get(token_key)
                 if val:
@@ -189,10 +195,10 @@ class OTELConverter(BaseTraceConverter):
                     "text": str(completion)
                 })
 
-            # Tool spans
+            # Tool spans (OpenInference uses tool.parameters / output.value)
             tool_name = attrs.get("tool.name", "")
-            tool_input = attrs.get("tool.input", "")
-            tool_output = attrs.get("tool.output", "")
+            tool_input = attrs.get("tool.input") or attrs.get("tool.parameters") or ""
+            tool_output = attrs.get("tool.output") or ""
 
             if tool_name or (not prompt and not completion and tool_input):
                 if tool_input:

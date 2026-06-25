@@ -89,12 +89,14 @@ class TestParseStringToJson:
         assert isinstance(result, dict)
         assert result["hint"] == "from plain block"
 
-    def test_parse_invalid_json_raises(self):
-        """Invalid JSON should raise ValueError with details."""
+    def test_parse_invalid_json_returns_raw_text(self):
+        """Unparseable input degrades gracefully to {"response": <raw>} (the
+        final fallback strategy) rather than raising — an LLM returning
+        malformed JSON must not crash annotation."""
         invalid_json = '{"hint": "unclosed string'
 
-        with pytest.raises(ValueError, match="Failed to parse JSON"):
-            self.endpoint.parseStringToJson(invalid_json)
+        result = self.endpoint.parseStringToJson(invalid_json)
+        assert result == {"response": invalid_json}
 
     def test_parse_array_json(self):
         """JSON array should parse correctly."""

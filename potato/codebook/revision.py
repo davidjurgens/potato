@@ -59,6 +59,18 @@ _CODES_REV_MIGRATION = Migration(
     """,
 )
 
+# Adds a parallel *semantic-revision* stamp to each annotation so prose
+# edits to a code's meaning-bearing sections (definition / use_when /
+# avoid_when / short_def) can softly flag the instance for re-review,
+# independently of the structural (label) revision above.
+_CONTENT_PROV_MIGRATION = Migration(
+    name="0005_provenance_sem_revision",
+    sql="""
+    ALTER TABLE annotation_provenance ADD COLUMN sem_revision INTEGER
+        NOT NULL DEFAULT 0;
+    """,
+)
+
 # Defensive: guarantee the codes table migration (0001_codebook) is
 # registered before this module's ALTER, regardless of import path.
 from potato.codebook.store import _CODEBOOK_MIGRATION as _CB_MIG
@@ -66,11 +78,13 @@ from potato.codebook.store import _CODEBOOK_MIGRATION as _CB_MIG
 register_migration(_CB_MIG)
 register_migration(_REVISION_MIGRATION)
 register_migration(_CODES_REV_MIGRATION)
+register_migration(_CONTENT_PROV_MIGRATION)
 
 
 def _db(task_dir: str):
     register_migration(_REVISION_MIGRATION)
     register_migration(_CODES_REV_MIGRATION)
+    register_migration(_CONTENT_PROV_MIGRATION)
     return get_db(task_dir)
 
 
@@ -99,21 +113,36 @@ def bump_revision(task_dir: str, project: str) -> int:
     return current_revision(task_dir, project)
 
 
+def current_sem_revision(task_dir: str, project: str) -> int:
+    """The codebook's current semantic-content revision (bumped only by
+    meaning-bearing prose edits). Lives in the content-meta table owned by
+    blocks.py; read here so annotation stamping can pick it up."""
+    try:
+        from potato.codebook.blocks import current_sem_revision as _csr
+        return _csr(task_dir, project)
+    except Exception:
+        return 0
+
+
 def record_annotation(
     task_dir: str, project: str, instance_id: str, username: str
 ) -> int:
-    """Stamp (project, instance_id, username) with the current revision
-    at annotation save time. Idempotent upsert; returns the revision."""
+    """Stamp (project, instance_id, username) with the current structural
+    AND semantic revisions at annotation save time. Idempotent upsert;
+    returns the structural revision."""
     rev = current_revision(task_dir, project)
+    sem = current_sem_revision(task_dir, project)
     conn = _db(task_dir)
     conn.execute(
         """INSERT INTO annotation_provenance
-               (project, instance_id, username, revision, updated_at)
-           VALUES (?, ?, ?, ?, ?)
+               (project, instance_id, username, revision, sem_revision,
+                updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)
            ON CONFLICT(project, instance_id, username) DO UPDATE SET
                revision = excluded.revision,
+               sem_revision = excluded.sem_revision,
                updated_at = excluded.updated_at""",
-        (project, instance_id, username, rev, time.time()),
+        (project, instance_id, username, rev, sem, time.time()),
     )
     conn.commit()
     return rev
@@ -207,6 +236,40 @@ def touch_instances(
     )
     conn.commit()
     return cur_.rowcount
+
+
+def instance_sem_revision(
+    task_dir: str, project: str, instance_id: str, username: str
+) -> Optional[int]:
+    row = _db(task_dir).execute(
+        """SELECT sem_revision FROM annotation_provenance
+           WHERE project = ? AND instance_id = ? AND username = ?""",
+        (project, instance_id, username),
+    ).fetchone()
+    return int(row["sem_revision"]) if row else None
+
+
+def content_stale_instances(
+    task_dir: str, project: str, username: str
+) -> List[Dict[str, object]]:
+    """This user's annotated instances whose stamped *semantic* revision is
+    behind the current one — i.e. a code definition / inclusion / exclusion
+    rule changed since they labeled. Soft + dismissible, never a hard gate
+    (mirrors the label-based stale worklist)."""
+    cur = current_sem_revision(task_dir, project)
+    if cur <= 0:
+        return []
+    rows = _db(task_dir).execute(
+        """SELECT instance_id, sem_revision FROM annotation_provenance
+           WHERE project = ? AND username = ? AND sem_revision < ?
+           ORDER BY sem_revision ASC, instance_id ASC""",
+        (project, username, cur),
+    ).fetchall()
+    return [{
+        "instance_id": r["instance_id"],
+        "annotated_sem_revision": int(r["sem_revision"]),
+        "current_sem_revision": cur,
+    } for r in rows]
 
 
 def codes_added_since(

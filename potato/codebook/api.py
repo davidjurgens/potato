@@ -132,6 +132,47 @@ def _handle(fn):
         return jsonify({"error": str(e)}), 400
 
 
+def _handle_content(fn):
+    """Like `_handle`, plus the living-document content errors: a
+    StaleContentError becomes a 409 carrying the current blocks + markdown
+    so the client can show a diff and rebase (never a silent overwrite)."""
+    from potato.codebook import content_service, markdown as _md
+    try:
+        return fn()
+    except content_service.StaleContentError as e:
+        return jsonify({
+            "error": "stale_content",
+            "current_version": e.current_version,
+            "current_blocks": e.current_blocks,
+            "current_md": _md.blocks_to_markdown(e.current_blocks),
+        }), 409
+    except content_service.ContentError as e:
+        return jsonify({"error": str(e)}), 400
+    except CodeNotFound as e:
+        return jsonify({"error": str(e)}), 404
+    except DuplicateCodeError as e:
+        return jsonify({"error": str(e)}), 409
+    except CodebookError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+def _scope_from(src):
+    """Resolve (scope_kind, scope_id) from request args/json. Accepts an
+    explicit scope_kind/scope_id, or infers from code_id / section."""
+    code_id = (src.get("code_id") or "").strip()
+    section = (src.get("section") or "").strip()
+    scope_kind = (src.get("scope_kind") or "").strip()
+    if not scope_kind:
+        scope_kind = "code" if code_id else ("section" if section else "")
+    scope_id = (src.get("scope_id") or "").strip() or (
+        code_id if scope_kind == "code" else section)
+    if not scope_kind or not scope_id:
+        return None, None, (jsonify({
+            "error": "scope_kind + scope_id (or code_id / section) "
+                     "are required"}), 400)
+    return scope_kind, scope_id, None
+
+
 def _codebook_scheme_names() -> list:
     """Names of schemes opted into the codebook — the forms the tray
     refreshes in place after an add."""
@@ -326,7 +367,7 @@ def submit_proposal(ctx):
     payload = data.get("payload") or {}
     actor_kind = (data.get("actor_kind") or "model").strip()
     if op not in ("merge", "split", "rename", "recolor", "move",
-                  "delete"):
+                  "delete", "content_edit"):
         return jsonify({"error": f"unsupported op {op!r}"}), 400
     if actor_kind != "model" and not _can_mutate(ctx, need_open=True):
         return jsonify({
@@ -381,6 +422,10 @@ def _apply_proposed(td, project, op, payload, actor):
         return delete_code(
             td, payload["code_id"], project=project,
             actor=actor, actor_kind="model")
+    if op == "content_edit":
+        from potato.codebook import content_service
+        return content_service.apply_content_proposal(
+            td, project=project, payload=payload, actor=actor)
     raise CodebookError(f"unsupported op {op!r}")
 
 
@@ -410,7 +455,7 @@ def admin_confirm_proposal(pid):
             change_id=result.get("change_id") or cid)
         return jsonify({"confirmed": True, "result": result})
 
-    return _handle(_do)
+    return _handle_content(_do)
 
 
 @codebook_bp.route("/admin/proposals/<pid>/reject", methods=["POST"])
@@ -449,6 +494,164 @@ def similar(ctx):
         "name": name,
         "matches": similar_code_names(cb.labels(), name),
     })
+
+
+# ---- living-document content (typed blocks) -----------------------------
+
+def _attach_html(block_list):
+    """Add a server-rendered, sanitized `body_html` to each block. Server
+    render is the XSS trust boundary — clients display this HTML directly
+    rather than rendering raw `body_md` themselves."""
+    from potato.codebook import markdown as _md
+    for b in block_list or []:
+        b["body_html"] = _md.render_markdown(b.get("body_md") or "")
+    return block_list
+
+
+@codebook_bp.route("/document", methods=["GET"])
+@codebook_view
+def get_content_document(ctx):
+    """The whole living document: doc-level sections + per-code blocks in
+    tree order + the block-type vocabulary + content/sem revisions. Each
+    block carries a sanitized `body_html` for safe first paint."""
+    from potato.codebook import content_service
+    doc = content_service.get_document(ctx["task_dir"], ctx["project"])
+    for sec in doc.get("doc_sections", []):
+        _attach_html(sec.get("blocks"))
+    for code in doc.get("codes", []):
+        _attach_html(code.get("blocks"))
+    doc["can_edit_content"] = _can_mutate(ctx, need_open=True)
+    return jsonify(doc)
+
+
+@codebook_bp.route("/blocks", methods=["GET"])
+@codebook_view
+def get_content_blocks(ctx):
+    from potato.codebook import content_service
+    scope_kind, scope_id, err = _scope_from(request.args)
+    if err:
+        return err
+
+    def _do():
+        scope = content_service.get_scope(
+            ctx["task_dir"], ctx["project"], scope_kind, scope_id)
+        _attach_html(scope.get("blocks"))
+        return jsonify(scope)
+    return _handle_content(_do)
+
+
+@codebook_bp.route("/render", methods=["POST"])
+@codebook_view
+def render_md(ctx):
+    """Render a markdown body to sanitized HTML (live edit preview)."""
+    from potato.codebook import markdown as _md
+    data = request.get_json(silent=True) or {}
+    return jsonify({"html": _md.render_markdown(data.get("markdown") or "")})
+
+
+@codebook_bp.route("/blocks", methods=["PUT"])
+@codebook_view
+def put_content_blocks(ctx):
+    """Save a scope's blocks (optimistic). Direct write requires edit
+    rights; otherwise the edit is QUEUED as a content_edit proposal for
+    admin confirmation (locked-mode governance) — never a 403."""
+    from potato.codebook import content_service
+    data = request.get_json(silent=True) or {}
+    scope_kind, scope_id, err = _scope_from(data)
+    if err:
+        return err
+    blocks_in = data.get("blocks")
+    if not isinstance(blocks_in, list):
+        return jsonify({"error": "blocks (a list) is required"}), 400
+    if data.get("base_version") is None:
+        return jsonify({"error": "base_version is required"}), 400
+    try:
+        base_version = int(data["base_version"])
+    except (TypeError, ValueError):
+        return jsonify({"error": "base_version must be an integer"}), 400
+    minor = bool(data.get("minor"))
+    direct = _can_mutate(ctx, need_open=True)
+
+    def _do():
+        if direct:
+            return jsonify(content_service.save_scope(
+                ctx["task_dir"], project=ctx["project"],
+                scope_kind=scope_kind, scope_id=scope_id,
+                blocks_in=blocks_in, base_version=base_version,
+                actor=ctx["username"], actor_kind="human", minor=minor))
+        prop = content_service.propose_content_edit(
+            ctx["task_dir"], project=ctx["project"], scope_kind=scope_kind,
+            scope_id=scope_id, blocks_in=blocks_in,
+            base_version=base_version, actor=ctx["username"],
+            actor_kind="human", minor=minor)
+        return jsonify({"proposal": prop, "queued": True}), 201
+
+    return _handle_content(_do)
+
+
+@codebook_bp.route("/parse", methods=["POST"])
+@codebook_view
+def parse_content_markdown(ctx):
+    """Stateless: markdown -> typed blocks (with a `classified` flag per
+    block). Powers paste/import; unclassifiable blocks prompt the user for
+    a type in the editor."""
+    from potato.codebook import markdown as _md
+    data = request.get_json(silent=True) or {}
+    return jsonify({
+        "blocks": _md.markdown_to_blocks(data.get("markdown") or "")})
+
+
+@codebook_bp.route("/history", methods=["GET"])
+@codebook_view
+def content_history(ctx):
+    from potato.codebook import snapshots
+    scope_kind, scope_id, err = _scope_from(request.args)
+    if err:
+        return err
+    rows = snapshots.list_snapshots(
+        ctx["task_dir"], ctx["project"], scope_kind, scope_id)
+    return jsonify({"history": rows, "count": len(rows)})
+
+
+@codebook_bp.route("/history/<snapshot_id>", methods=["GET"])
+@codebook_view
+def content_history_one(ctx, snapshot_id):
+    from potato.codebook import snapshots
+    snap = snapshots.get_snapshot(ctx["task_dir"], snapshot_id)
+    if not snap or snap["project"] != ctx["project"]:
+        return jsonify({"error": "snapshot not found"}), 404
+    return jsonify(snap)
+
+
+@codebook_bp.route("/distilled", methods=["GET"])
+@codebook_view
+def content_distilled(ctx):
+    """The distilled prompt string the AI/judge sees for the current
+    codebook — useful for previewing / debugging what the model is told."""
+    from potato.codebook.distiller import (
+        CodebookDistiller, DistillerConfig)
+    cfg = DistillerConfig.from_config(_config())
+    proc = (request.args.get("procedure") or "").strip()
+    if proc:
+        cfg.procedure = proc
+    text = CodebookDistiller(cfg).distill(ctx["task_dir"], ctx["project"])
+    return jsonify({"procedure": cfg.procedure, "distilled": text})
+
+
+@codebook_bp.route("/restore", methods=["POST"])
+@codebook_view
+def content_restore(ctx):
+    from potato.codebook import content_service
+    if not _can_mutate(ctx, need_open=True):
+        return jsonify({
+            "error": "Restoring a version requires edit rights."}), 403
+    data = request.get_json(silent=True) or {}
+    sid = (data.get("snapshot_id") or "").strip()
+    if not sid:
+        return jsonify({"error": "snapshot_id is required"}), 400
+    return _handle_content(lambda: jsonify(content_service.restore_snapshot(
+        ctx["task_dir"], project=ctx["project"], snapshot_id=sid,
+        actor=ctx["username"])))
 
 
 @codebook_bp.route("", methods=["POST"])

@@ -105,13 +105,21 @@ class JSONLExporter(BaseExporter):
         if phase_file:
             files_written.append(phase_file)
 
+        warnings = []
+        excl = _phase_exclusion_warning(context)
+        if excl:
+            warnings.append(excl)
+
         return ExportResult(
             success=True,
             format_name=self.format_name,
             files_written=files_written,
+            warnings=warnings,
             stats={
                 "num_records": len(context.annotations),
                 "num_phase_responses": len(context.phase_responses) if phase_file else 0,
+                "num_phase_responses_excluded": (
+                    len(context.phase_responses) if not phase_file else 0),
             },
         )
 
@@ -122,6 +130,23 @@ def _should_include_phase_data(context: ExportContext) -> bool:
         bool(context.phase_responses)
         and context.config.get("export_include_phase_data", False)
     )
+
+
+def _phase_exclusion_warning(context: ExportContext) -> Optional[str]:
+    """Return a warning when phase/survey responses exist but are NOT exported.
+
+    Phase-response export is opt-in via ``export_include_phase_data``. Without this
+    warning a survey/consent/instrument study would export with all phase responses
+    silently missing and the stats reporting ``num_phase_responses: 0`` (F-047),
+    making it look like no survey data was ever collected.
+    """
+    if context.phase_responses and not context.config.get("export_include_phase_data", False):
+        return (
+            f"{len(context.phase_responses)} phase/survey responses were found but "
+            f"NOT exported. Set 'export_include_phase_data: true' in your config to "
+            f"write them to a phase_responses file."
+        )
+    return None
 
 
 def _write_phase_delimited(context: ExportContext, output_path: str,
@@ -195,13 +220,21 @@ def _write_delimited(context: ExportContext, output_path: str,
     if phase_file:
         files_written.append(phase_file)
 
+    warnings = []
+    excl = _phase_exclusion_warning(context)
+    if excl:
+        warnings.append(excl)
+
     return ExportResult(
         success=True,
         format_name=fmt_name,
         files_written=files_written,
+        warnings=warnings,
         stats={
             "num_records": len(rows),
             "num_columns": len(columns),
             "num_phase_responses": len(context.phase_responses) if phase_file else 0,
+            "num_phase_responses_excluded": (
+                len(context.phase_responses) if not phase_file else 0),
         },
     )

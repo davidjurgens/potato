@@ -1,0 +1,24 @@
+# Video temporal grounding (M10)
+# Mark gold event intervals on a video; see live IoU vs the model's predicted span.
+# Run: python potato/flask_server.py start examples/agent-traces/temporal-grounding/config.yaml -p 8000
+annotation_task_name: "Video Temporal Grounding"
+data_files:
+  - data/clips.json
+item_properties:
+  id_key: id
+  text_key: task
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+instance_display:
+  layout: {direction: vertical, gap: 16px}
+  fields:
+    - key: task
+      type: text
+      label: "Task"
+annotation_schemes:
+  - annotation_type: temporal_grounding
+    name: grounding
+    description: "For each event, mark the gold start/end interval. IoU vs prediction updates live."
+    video_key: video
+    events_key: events

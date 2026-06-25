@@ -161,46 +161,36 @@ class AdminDashboard:
             return {"error": "Admin access required"}, 403
 
         try:
+            from potato.server_utils.progress_stats import compute_project_progress
+
             usm = get_user_state_manager()
-            ism = get_item_state_manager()
 
             # Get all users and their states
             users = get_users()
-            total_annotations = get_total_annotations()
 
-            # Calculate user statistics
-            active_users = 0
+            # Project-level aggregate progress (shared with the annotator-facing
+            # progress dashboard so the two never drift).
+            progress = compute_project_progress()
+            total_annotations = progress["total_annotations"]
+            total_items = progress["total_items"]
+            items_with_annotations = progress["items_with_annotations"]
+            completion_percentage = progress["completion_percentage"]
+            total_assignments = progress["total_assignments"]
+            active_users = progress["active_annotators"]
+
+            # Admin-only extras: completed-user count and total working time.
             completed_users = 0
             total_working_time = 0
-
             for username in users:
                 user_state = usm.get_user_state(username)
                 if user_state:
-                    if user_state.get_phase().value == "ANNOTATION":
-                        active_users += 1
-                    elif user_state.get_phase().value == "DONE":
+                    if user_state.get_phase().name.lower() == "done":
                         completed_users += 1
 
                     # Get timing data
                     timing_data = self._get_annotator_timing_data(username)
                     if timing_data:
                         total_working_time += timing_data.total_seconds
-
-            # Get item statistics
-            items = ism.items()
-            items_with_annotations = 0
-            total_assignments = 0
-
-            for item in items:
-                item_id = item.get_id()
-                annotators = ism.get_annotators_for_item(item_id)
-                if annotators:
-                    items_with_annotations += 1
-                    total_assignments += len(annotators)
-
-            # Calculate completion percentages
-            total_items = len(items)
-            completion_percentage = (items_with_annotations / total_items * 100) if total_items > 0 else 0
 
             # Format total working time
             hours = total_working_time // 3600
@@ -215,7 +205,7 @@ class AdminDashboard:
                     "total_annotations": total_annotations,
                     "total_items": total_items,
                     "items_with_annotations": items_with_annotations,
-                    "completion_percentage": round(completion_percentage, 1),
+                    "completion_percentage": completion_percentage,
                     "total_assignments": total_assignments,
                     "total_working_time": formatted_time,
                     "average_annotations_per_item": round(total_annotations / total_items, 1) if total_items > 0 else 0

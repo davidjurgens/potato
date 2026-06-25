@@ -1,0 +1,40 @@
+# Sample GitHub Actions workflow — copy to .github/workflows/eval.yml in your repo.
+# Runs the Potato eval suite on every PR and fails the build if mean(correct)
+# drops below the threshold (regression gate).
+
+name: Agent Evaluation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          pip install -e .            # makes the potato_eval pytest plugin available
+          pip install pytest
+
+      - name: Run agent evaluations (gate on thresholds)
+        env:
+          POTATO_EVAL_SUITE: ci
+          POTATO_EVAL_STORE: ./eval_store     # experiment records land here
+        run: |
+          pytest examples/agent-traces/ci-eval/test_agent_eval.py \
+            --potato-threshold correct=0.8 \
+            --potato-threshold similarity=0.7 \
+            --potato-experiment agent-regression
+
+      - name: Upload experiment artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-experiments
+          path: eval_store/

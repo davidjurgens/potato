@@ -1156,6 +1156,13 @@ function clearAllFormInputs() {
         });
     }
 
+    // Clear trajectory edit (correction) visual state
+    if (window._trajEditState) {
+        Object.keys(window._trajEditState).forEach(k => {
+            window._trajEditState[k] = { entries: {}, final_answer: null };
+        });
+    }
+
     // Clear hidden annotation data inputs (image/audio/video annotations)
     // BUT only if they don't have server-provided data (data-server-set="true")
     // This prevents browser form restoration from persisting annotations across instances
@@ -2307,6 +2314,11 @@ function populateInputValues() {
     // Populate radio buttons
     const radioInputs = document.querySelectorAll('input[type="radio"]');
     radioInputs.forEach(input => {
+        // Codebook restore (restoreRuntimeSelections) authoritatively
+        // sets runtime-code inputs and marks them data-server-set. Don't
+        // override those here — our async fetch and theirs race, and an
+        // unconditional reset would clobber a just-restored runtime code.
+        if (input.getAttribute('data-server-set') === 'true') return;
         const schema = input.getAttribute('schema');
         const labelName = input.getAttribute('label_name');
 
@@ -2319,6 +2331,12 @@ function populateInputValues() {
     // Populate checkboxes
     const checkboxInputs = document.querySelectorAll('input[type="checkbox"]');
     checkboxInputs.forEach(input => {
+        // See the radio note above: a checkbox the codebook restore
+        // already owns (data-server-set) must not be unconditionally
+        // reset here — the `input.checked = hasAnnotation` below would
+        // force-uncheck a restored runtime code whose key isn't in
+        // currentAnnotations, which is the nav-back persistence race.
+        if (input.getAttribute('data-server-set') === 'true') return;
         const schema = input.getAttribute('schema');
         const labelName = input.getAttribute('label_name');
 
@@ -2409,6 +2427,9 @@ function populateInputValues() {
 
     // Restore trajectory eval annotations
     restoreTrajectoryEvalAnnotations();
+
+    // Restore trajectory edit (correction) annotations
+    restoreTrajectoryEditAnnotations();
 
     // Update character counters for text schemas with min_chars/show_char_count
     updateAllCharCounters();
@@ -2759,6 +2780,47 @@ function restoreTrajectoryEvalAnnotations() {
             }
         } catch (e) {
             debugLog('Error restoring trajectory eval annotation:', e);
+        }
+    });
+}
+
+/**
+ * Restore trajectory edit (correction) annotations from currentAnnotations.
+ * Populates the IIFE's per-schema state from the saved JSON, then rebuilds the
+ * editors (prefilling textareas with edited_text) and re-runs the visual pass.
+ */
+function restoreTrajectoryEditAnnotations() {
+    const forms = document.querySelectorAll('.trajectory-edit-container');
+    forms.forEach(form => {
+        const schema = form.getAttribute('data-schema-name');
+        if (!schema || !currentAnnotations[schema]) return;
+
+        const hiddenInput = form.querySelector('.trajectory-edit-data-input');
+        if (!hiddenInput) return;
+
+        const labelName = hiddenInput.getAttribute('label_name');
+        if (!labelName || !currentAnnotations[schema][labelName]) return;
+
+        try {
+            const raw = currentAnnotations[schema][labelName];
+            const data = JSON.parse(raw);
+            hiddenInput.value = raw;
+            hiddenInput.setAttribute('data-server-set', 'true');
+            hiddenInput.setAttribute('data-modified', 'true');
+
+            if (window._trajEditState) {
+                const st = window._trajEditState[schema] || { entries: {}, final_answer: null };
+                st.entries = {};
+                (data.steps || []).forEach(e => {
+                    st.entries[e.step_index + '::' + e.field] = e;
+                });
+                st.final_answer = data.final_answer || null;
+                window._trajEditState[schema] = st;
+            }
+            if (typeof window._trajEditBuild === 'function') window._trajEditBuild();
+            if (typeof window._trajEditRestore === 'function') window._trajEditRestore();
+        } catch (e) {
+            debugLog('Error restoring trajectory edit annotation:', e);
         }
     });
 }

@@ -103,6 +103,16 @@ class ICLPromptBuilder:
         elif annotation_type == 'likert':
             prompt += "\n**Task Type:** Rating scale. Choose the most appropriate rating.\n"
 
+        # Codebook guidance: the living document distilled into prompt text
+        # (definitions, inclusion/exclusion rules, examples). Sourced from
+        # the schema by the codebook bridge; rebuilt on every codebook edit.
+        guidance = (schema.get('codebook_guidance') or '').strip()
+        if guidance:
+            prompt += (
+                "\n## Codebook Guidance\n"
+                "Apply the labels according to this codebook:\n\n"
+                f"{guidance}\n")
+
         return prompt
 
     def _format_example(self, example: 'HighConfidenceExample', index: int) -> str:

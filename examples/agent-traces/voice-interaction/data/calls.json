@@ -1,0 +1,24 @@
+[
+  {
+    "id": "call_reservation_001",
+    "task": "Voice agent helps a caller book a dinner reservation.",
+    "turns": [
+      {"speaker": "user", "start": 0.0, "end": 2.8, "text": "Hi, I'd like a table for four tomorrow at seven."},
+      {"speaker": "agent", "start": 3.0, "end": 6.5, "text": "Sure! For four people tomorrow at seven PM. Inside or on the patio?"},
+      {"speaker": "user", "start": 6.0, "end": 7.4, "text": "Patio, please."},
+      {"speaker": "agent", "start": 7.6, "end": 12.0, "text": "Great, the patio it is. I have a table at seven fifteen, is that okay?"},
+      {"speaker": "user", "start": 10.5, "end": 11.2, "text": "Actually—"},
+      {"speaker": "agent", "start": 12.2, "end": 14.0, "text": "Booked! You're all set."}
+    ]
+  },
+  {
+    "id": "call_support_002",
+    "task": "Voice agent troubleshoots a router with the caller.",
+    "turns": [
+      {"speaker": "user", "start": 0.0, "end": 3.5, "text": "My internet keeps dropping every few minutes."},
+      {"speaker": "agent", "start": 3.7, "end": 9.0, "text": "I'm sorry to hear that. Let's restart the router. Can you unplug it for ten seconds?"},
+      {"speaker": "user", "start": 8.0, "end": 9.5, "text": "I already tried that twice."},
+      {"speaker": "agent", "start": 9.7, "end": 13.0, "text": "Understood. Then let's check for a firmware update instead."}
+    ]
+  }
+]

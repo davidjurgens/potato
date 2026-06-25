@@ -626,6 +626,25 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Reset + (re)initialize Judge Calibration manager (clear
+                # unconditionally so a leaked singleton can't make a disabled
+                # server report enabled).
+                try:
+                    from potato.judge_calibration import clear_judge_calibration_manager
+                    clear_judge_calibration_manager()
+                except Exception:
+                    pass
+                if config.get('judge_calibration', {}).get('enabled', False):
+                    try:
+                        from potato.judge_calibration import init_judge_calibration_manager
+                        jc_manager = init_judge_calibration_manager(config)
+                        if jc_manager:
+                            print("[DEBUG] Judge Calibration manager initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing Judge Calibration manager: {e}")
+                        import traceback
+                        traceback.print_exc()
+
                 # Codebook ICL-sync listener (parity with the real init
                 # paths; keeps ICL prompts on the current codebook set).
                 try:
@@ -768,6 +787,59 @@ class FlaskTestServer:
                         if 'trace_ingestion' not in app.blueprints:
                             app.register_blueprint(trace_ingestion_bp)
                             app.config["trace_ingestion"] = trace_ingestion_config
+                    except ImportError:
+                        pass
+
+                # Register datasets/experiments blueprint if configured
+                if config.get("datasets", {}).get("enabled", False):
+                    try:
+                        from potato.eval_datasets import init_datasets_manager
+                        from potato.eval_datasets.routes import datasets_bp
+                        from potato.eval_datasets.eval_admin import eval_admin_bp
+                        init_datasets_manager(config)
+                        if 'datasets' not in app.blueprints:
+                            app.register_blueprint(datasets_bp)
+                        if 'eval_admin' not in app.blueprints:
+                            app.register_blueprint(eval_admin_bp)
+                    except ImportError:
+                        pass
+
+                # Register automation-rules blueprint if configured. Clear any
+                # prior singleton first so each test server gets fresh rules and
+                # we don't leak the previous worker thread.
+                if config.get("automation", {}).get("enabled", False):
+                    try:
+                        from potato.automation import (
+                            init_automation_manager, clear_automation_manager)
+                        from potato.automation.routes import automation_bp
+                        clear_automation_manager()
+                        init_automation_manager(config)
+                        if 'automation' not in app.blueprints:
+                            app.register_blueprint(automation_bp)
+                    except ImportError:
+                        pass
+
+                # Register semantic-curation blueprint if configured
+                if config.get("curation", {}).get("enabled", False):
+                    try:
+                        from potato.curation import init_curation_manager, clear_curation_manager
+                        from potato.curation.routes import curation_bp
+                        clear_curation_manager()
+                        init_curation_manager(config)
+                        if 'curation' not in app.blueprints:
+                            app.register_blueprint(curation_bp)
+                    except ImportError:
+                        pass
+
+                # Register multi-model arena blueprint if configured
+                if config.get("arena", {}).get("enabled", False):
+                    try:
+                        from potato.arena import init_arena_manager, clear_arena_manager
+                        from potato.arena.routes import arena_bp
+                        clear_arena_manager()
+                        init_arena_manager(config)
+                        if 'arena' not in app.blueprints:
+                            app.register_blueprint(arena_bp)
                     except ImportError:
                         pass
 

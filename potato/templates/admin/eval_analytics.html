@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trace analytics</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=3">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  .ea-lede { color: var(--muted-foreground); max-width: 70ch; line-height: 1.6; margin: 0.25rem 0 1.5rem; }
+  .ea-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.85rem; margin-bottom: 1.25rem; }
+  .ea-stat { background: var(--card, #fff); border: 1px solid var(--border); border-radius: var(--radius, 0.6rem); padding: 0.85rem 1rem; }
+  .ea-stat .label { font-size: 0.75rem; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.03em; }
+  .ea-stat .value { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 0.15rem; }
+  table.ea-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+  table.ea-table th, table.ea-table td { border: 1px solid var(--border); padding: 0.45rem 0.65rem; text-align: left; }
+  table.ea-table th { background: var(--muted); font-weight: 600; }
+  td.ea-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .ea-alert { display: flex; gap: 0.6rem; align-items: baseline; padding: 0.6rem 0.85rem; border-radius: var(--radius, 0.5rem);
+              border: 1px solid var(--border); margin-bottom: 0.5rem; }
+  .ea-alert .sev { font-size: 0.7rem; font-weight: 700; padding: 0 0.4rem; border-radius: 999px; text-transform: uppercase; }
+  .ea-alert.high { background: hsl(8 60% 96%); border-color: hsl(8 55% 80%); }
+  .ea-alert.high .sev { background: hsl(8 60% 88%); color: hsl(8 55% 32%); }
+  .ea-alert.medium { background: hsl(40 70% 96%); border-color: hsl(40 60% 80%); }
+  .ea-alert.medium .sev { background: hsl(40 65% 86%); color: hsl(35 55% 30%); }
+  .ea-ok { color: hsl(140 40% 32%); font-size: 0.9rem; }
+  .ea-empty { color: var(--muted-foreground); font-style: italic; }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <h1>Trace analytics</h1>
+  <p class="ea-lede">
+    Operational metrics aggregated across {{ trace_count }} ingested trace(s): token
+    usage, latency, error rate, and (when pricing is configured) cost. Append
+    <code>?recent=N</code> to flag regressions of the latest N traces against the rest.
+  </p>
+
+  {% if trace_count == 0 %}
+  <p class="ea-empty">No ingested traces yet. Send traces via the webhook or the tracing SDK.</p>
+  {% else %}
+
+  <section class="ea-cards">
+    <div class="ea-stat"><div class="label">Traces</div><div class="value">{{ analytics.count }}</div></div>
+    <div class="ea-stat"><div class="label">Total tokens</div><div class="value">{{ '{:,}'.format(analytics.total_tokens) }}</div></div>
+    <div class="ea-stat"><div class="label">Total cost</div><div class="value">{{ '${:.4f}'.format(analytics.total_cost) if analytics.total_cost is not none else '—' }}</div></div>
+    <div class="ea-stat"><div class="label">Error rate</div><div class="value">{{ '{:.1f}%'.format(analytics.error_rate*100) }}</div></div>
+    <div class="ea-stat"><div class="label">Avg latency</div><div class="value">{{ '{:.0f} ms'.format(analytics.avg_latency_ms) if analytics.avg_latency_ms is not none else '—' }}</div></div>
+    <div class="ea-stat"><div class="label">p95 latency</div><div class="value">{{ '{:.0f} ms'.format(analytics.p95_latency_ms) if analytics.p95_latency_ms is not none else '—' }}</div></div>
+  </section>
+
+  {% if alerts %}
+  <section class="dashboard-card" aria-label="Regression alerts">
+    <h2>Regression alerts</h2>
+    {% for a in alerts %}
+    <div class="ea-alert {{ a.severity }}">
+      <span class="sev">{{ a.severity }}</span>
+      <span><strong>{{ a.message }}</strong> — {{ a.metric }}: {{ a.baseline }} → {{ a.recent }}</span>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <section class="dashboard-card" aria-label="Per-model breakdown">
+    <h2>By model</h2>
+    <table class="ea-table">
+      <thead><tr>
+        <th scope="col">Model</th><th scope="col">Traces</th><th scope="col">Tokens</th>
+        <th scope="col">Cost</th><th scope="col">Errors</th><th scope="col">Avg latency</th>
+      </tr></thead>
+      <tbody>
+        {% for model, d in analytics.per_model.items() %}
+        <tr>
+          <td>{{ model }}</td>
+          <td class="ea-num">{{ d.count }}</td>
+          <td class="ea-num">{{ '{:,}'.format(d.total_tokens) }}</td>
+          <td class="ea-num">{{ '${:.4f}'.format(d.cost) if d.cost else '—' }}</td>
+          <td class="ea-num">{{ d.errors }}</td>
+          <td class="ea-num">{{ '{:.0f} ms'.format(d.avg_latency_ms) if d.avg_latency_ms is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+</main>
+</body>
+</html>

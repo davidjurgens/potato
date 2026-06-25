@@ -51,7 +51,6 @@ from typing import List, Dict, Any
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from sklearn.pipeline import Pipeline
 import simpledorff
 from simpledorff.metrics import nominal_metric, interval_metric
 
@@ -113,6 +112,8 @@ from potato.ai.ai_help_wrapper import init_dynamic_ai_help
 # Initialize Flask app
 app = Flask(__name__)
 app.register_blueprint(solo_mode_bp)
+from potato.judge_calibration.routes import judge_calibration_bp
+app.register_blueprint(judge_calibration_bp)
 # Note: qda_mode_bp is registered on the *served* app in
 # potato.routes.configure_routes (the module-level `app` here is discarded
 # and rebuilt by create_app), so it is intentionally not registered here.
@@ -292,6 +293,28 @@ def _read_cached_template_text(path: str) -> str:
     return text
 
 
+def _resolve_generated_template_path(html_file: str) -> str:
+    """Resolve ``config['site_file']`` (a bare filename) to the absolute path of
+    the generated template on disk.
+
+    The generated template lives under ``<site_dir>/generated/<site_file>``, but
+    ``config['site_file']`` is stored as just the filename (Jinja resolves it via
+    its template search path). The server ``chdir``s into ``task_dir`` at startup,
+    so reading the bare name with ``open()`` would fail and silently disable every
+    page-template-gated frontend asset. Resolving against the (absolute) site_dir
+    makes asset detection work regardless of the process CWD.
+    """
+    if not html_file:
+        return html_file
+    if os.path.isabs(html_file) and os.path.exists(html_file):
+        return html_file
+    site_dir = config.get("site_dir") or ""
+    candidate = os.path.join(site_dir, "generated", html_file)
+    if os.path.exists(candidate):
+        return candidate
+    return html_file
+
+
 # Authoritative mapping from asset key to the HTML markers that trigger loading.
 # Tests verify these markers appear in the actual schema/display generators,
 # so adding a new generator or renaming a CSS class will cause a test failure
@@ -323,7 +346,7 @@ def _detect_frontend_assets_for_page(html_file: str, display_html: str = "") -> 
     This avoids loading every specialized bundle just because some other phase
     in the overall task config happens to use it.
     """
-    page_html = _read_cached_template_text(html_file)
+    page_html = _read_cached_template_text(_resolve_generated_template_path(html_file))
     combined_html = f"{page_html}\n{display_html or ''}"
 
     def has_any(*markers: str) -> bool:
@@ -606,7 +629,8 @@ def load_instance_data(config: dict):
             line_no = len(items)
 
         # If the admin didn't specify a subset, have the user annotate all instances
-        max_annotations_per_user = config.get("max_annotations_per_user", len(ism.get_instance_ids()))
+        # (or unlimited when a dynamic source can add more at runtime — see F-037).
+        max_annotations_per_user = _default_max_annotations_per_user(config, ism)
         get_user_state_manager().set_max_annotations_per_user(max_annotations_per_user)
 
         logger.debug("Loaded %d instances from %s" % (line_no, data_fname))
@@ -681,6 +705,30 @@ def load_instance_data(config: dict):
     _render_displayed_text(text_key)
 
 
+def _default_max_annotations_per_user(config: dict, ism) -> int:
+    """
+    Resolve the default per-user annotation quota.
+
+    When ``max_annotations_per_user`` is explicitly configured, honor it.
+    Otherwise the historical default is "annotate everything" = the instance
+    count. But that count is frozen at load time, so when a DYNAMIC data source
+    can add items at runtime (trace ingestion, directory watching), freezing the
+    cap means later-added items exceed every user's quota and are never assigned
+    to any annotator (F-037). In that case default to unlimited (-1) instead, so
+    the live ``remaining_instance_ids`` pool stays fully assignable.
+    """
+    configured = config.get("max_annotations_per_user")
+    if configured is not None:
+        return configured
+    dynamic_source = bool(
+        (config.get("trace_ingestion") or {}).get("enabled")
+        or config.get("watch_data_directory")
+    )
+    if dynamic_source:
+        return -1
+    return len(ism.get_instance_ids())
+
+
 def _render_displayed_text(text_key: str) -> None:
     """
     Render the displayed text for all items.
@@ -730,11 +778,9 @@ def _load_from_data_sources(config: dict, ism, id_key: str, text_key: str) -> No
     total_loaded = manager.load_initial_data()
     logger.info(f"Loaded {total_loaded} items from data sources")
 
-    # Set max annotations per user
-    max_annotations_per_user = config.get(
-        "max_annotations_per_user",
-        len(ism.get_instance_ids())
-    )
+    # Set max annotations per user (unlimited when a dynamic source — e.g. a
+    # watched directory or trace ingestion — can add items at runtime; F-037).
+    max_annotations_per_user = _default_max_annotations_per_user(config, ism)
     get_user_state_manager().set_max_annotations_per_user(max_annotations_per_user)
 
     # Render displayed text for all loaded items
@@ -905,6 +951,20 @@ def get_training_instances() -> List[Item]:
         List of training Item objects
     """
     global training_items
+    # Bridge the __main__ vs potato.flask_server module split. When the server is
+    # launched from source via `python potato/flask_server.py start ...`, this file
+    # executes in the `__main__` namespace, so load_training_data's
+    # `global training_items` binds `__main__.training_items`. But routes.py and
+    # user_state_management.py call this function via
+    # `from potato.flask_server import get_training_instances`, which is the
+    # *potato.flask_server* copy whose own global is never set — previously
+    # leaving the training phase with "No training instance available". Scan the
+    # candidate module namespaces so the data is found regardless of launch style.
+    for _mod_name in (__name__, 'potato.flask_server', '__main__'):
+        _mod = sys.modules.get(_mod_name)
+        _items = getattr(_mod, 'training_items', None) if _mod is not None else None
+        if _items:
+            return _items
     return training_items if 'training_items' in globals() else []
 
 
@@ -1040,6 +1100,16 @@ def get_prolific_study() -> 'ProlificStudy':
     Returns:
         ProlificStudy instance if configured, None otherwise
     """
+    global PROLIFIC_STUDY_INSTANCE
+    # Same __main__ vs potato.flask_server split as get_training_instances (F-044):
+    # init_prolific_study reassigns this global, so under `python flask_server.py`
+    # it lands on __main__ while routes.py reads the potato.flask_server copy (None).
+    # Scan candidate namespaces so a configured study is found regardless of launch.
+    for _mod_name in (__name__, 'potato.flask_server', '__main__'):
+        _mod = sys.modules.get(_mod_name)
+        _inst = getattr(_mod, 'PROLIFIC_STUDY_INSTANCE', None) if _mod is not None else None
+        if _inst is not None:
+            return _inst
     return PROLIFIC_STUDY_INSTANCE
 
 
@@ -1450,6 +1520,18 @@ def load_phase_data(config: dict) -> None:
                             f"Phase {phase_name} requires 'instrument', 'instruments', or 'file' "
                             "to specify its annotation schemes"
                         )
+
+                    # Survey/consent/instrument labels are author-written prose
+                    # (often full sentences, any language), not machine identifiers,
+                    # so don't title-case them by default. Without this, a label like
+                    # "Ja, natürlich möchte ich teilnehmen" was humanized to
+                    # "Ja, Natürlich Möchte Ich Teilnehmen" (F-049). An individual
+                    # survey scheme can still opt back in with humanize_labels: true.
+                    # (The TRAINING/ANNOTATION branch above reuses the main schemes
+                    # and keeps their existing humanization behavior.)
+                    for _survey_scheme in phase_labeling_schemes:
+                        if isinstance(_survey_scheme, dict):
+                            _survey_scheme.setdefault("humanize_labels", False)
 
             # Use the default templates unless specified in the phase config
             # Note: Template paths are now hardcoded in front_end.py
@@ -1898,6 +1980,20 @@ def _is_user_adjudicator(username: str) -> bool:
     return False
 
 
+def _annotator_dashboard_enabled() -> bool:
+    """Whether the opt-in annotator progress dashboard is enabled (default off).
+
+    Accepts both ``annotator_dashboard: true`` and the dict form
+    ``annotator_dashboard: {enabled: true, ...}``.
+    """
+    raw = config.get("annotator_dashboard", False)
+    if raw is True:
+        return True
+    if isinstance(raw, dict):
+        return bool(raw.get("enabled", False))
+    return False
+
+
 def render_page_with_annotations(username: str):
     '''
     When annotating, shows the current instance to the user with any annotations
@@ -1929,6 +2025,13 @@ def render_page_with_annotations(username: str):
     qc_manager = get_quality_control_manager()
     if qc_manager:
         pre_annotation_data = qc_manager.extract_pre_annotations(instance_id, item.get_data())
+
+    # LLM-judge inline suggestion (judge ↔ human alignment). Reads a persisted
+    # judge prediction for this instance/schema; optionally computes on demand.
+    judge_prediction = _get_inline_judge_prediction(instance_id, item)
+
+    # Signal-based triage: why was this item prioritized in the queue?
+    triage_info = _get_triage_info(item)
 
     # DEBUG: Add detailed logging
     logger.debug(f"=== RENDER_PAGE_WITH_ANNOTATIONS START ===")
@@ -2193,6 +2296,10 @@ def render_page_with_annotations(username: str):
         # Pre-annotation data for model predictions
         pre_annotations=pre_annotation_data,
         pre_annotation_config=pre_annotation_config,
+        # LLM-judge inline suggestion (judge ↔ human alignment)
+        judge_prediction=judge_prediction,
+        # Signal-based triage badge (why this item was prioritized)
+        triage_info=triage_info,
         # Instance display (new explicit display mode)
         has_instance_display=has_instance_display,
         display_html=display_html,
@@ -2211,6 +2318,8 @@ def render_page_with_annotations(username: str):
         annotation_instructions=config.get("annotation_instructions", ""),
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(username),
+        # Annotator progress dashboard nav link (opt-in, off by default)
+        annotator_dashboard_enabled=_annotator_dashboard_enabled(),
         annotation_codebook_url=_sanitize_codebook_url(config.get("annotation_codebook_url", "")),
         # Annotation status indicator (three-state: labeled/in_progress/unlabeled)
         annotation_status=annotation_status,
@@ -2235,8 +2344,10 @@ def render_page_with_annotations(username: str):
     # did
     annotations = get_annotations_for_user_on(username, instance_id)
 
-    # If no annotations yet, check for pre-annotations (model predictions)
-    if annotations is None and pre_annotation_data:
+    # If no annotations yet, check for pre-annotations (model predictions).
+    # NOTE: get_annotations_for_user_on returns an empty dict {} (not None) for a
+    # user with no annotations, so guard on falsiness rather than `is None`.
+    if not annotations and pre_annotation_data:
         logger.debug(f"Applying pre-annotations for instance {instance_id}")
         scheme_dict = {}
         annotations = defaultdict(dict)
@@ -2252,14 +2363,18 @@ def render_page_with_annotations(username: str):
 
             scheme = scheme_dict[schema_name]
             if scheme['annotation_type'] in ['radio', 'multiselect']:
-                # predicted_value should be a label name
+                # predicted_value should be a label name. Store the LABEL NAME as
+                # the value (not the label2value index): the renderer below checks
+                # a radio when input.value == value, and the radio's value
+                # attribute is the label name. This matches how a returning
+                # user's restored annotations are stored.
                 if isinstance(predicted_value, str) and predicted_value in scheme.get('label2value', {}):
-                    annotations[schema_name][predicted_value] = scheme['label2value'][predicted_value]
+                    annotations[schema_name][predicted_value] = predicted_value
                 elif isinstance(predicted_value, list):
                     # Multi-select: multiple values
                     for val in predicted_value:
                         if val in scheme.get('label2value', {}):
-                            annotations[schema_name][val] = scheme['label2value'][val]
+                            annotations[schema_name][val] = val
             elif scheme['annotation_type'] in ['text']:
                 if "labels" not in scheme:
                     annotations[schema_name]['text_box'] = str(predicted_value)
@@ -2269,7 +2384,8 @@ def render_page_with_annotations(username: str):
                 logger.debug(f"Pre-annotation not yet supported for {scheme['annotation_type']}")
 
     # convert the label suggestions into annotations for front-end rendering
-    if annotations == None and schema_content_to_prefill:
+    # (empty dict, like None, means "no user annotations yet")
+    if not annotations and schema_content_to_prefill:
         scheme_dict = {}
         annotations = defaultdict(dict)
         for it in config['annotation_schemes']:
@@ -2278,7 +2394,9 @@ def render_page_with_annotations(username: str):
             scheme_dict[it['name']] = it
         for s in schema_content_to_prefill:
             if scheme_dict[s['name']]['annotation_type'] in ['radio', 'multiselect']:
-                annotations[s['name']][s['label']] = scheme_dict[s['name']]['label2value'][s['label']]
+                # Store the label NAME as value so the renderer matches the
+                # radio/checkbox input's value attribute (not the index).
+                annotations[s['name']][s['label']] = s['label']
             elif scheme_dict[s['name']]['annotation_type'] in ['text']:
                 if "labels" not in scheme_dict[s['name']]:
                     annotations[s['name']]['text_box'] = s['label']
@@ -2431,6 +2549,90 @@ def render_page_with_annotations(username: str):
         rendered_html = populate_dynamic_multirate(rendered_html, item.get_data())
 
     return rendered_html
+
+
+def _get_inline_judge_prediction(instance_id, item):
+    """Return a judge suggestion dict for the inline display, or None.
+
+    Gated by ``judge_alignment.inline.enabled``. Prefers a persisted prediction
+    (admin pre-runs the batch); computes on demand only if
+    ``judge_alignment.inline.compute_on_demand`` is set. Shape mirrors solo
+    mode's ``llm_prediction``: {label, confidence, reasoning, schema,
+    prompt_version, running}.
+    """
+    ja = config.get("judge_alignment", {}) or {}
+    inline = ja.get("inline", {}) or {}
+    if not inline.get("enabled"):
+        return None
+    try:
+        from potato.server_utils import judge_alignment as ja_mod
+        schemas = ja_mod.judge_scoped_schemas(config)
+        # Optional inline schema allow-list.
+        allow = set(inline.get("schemas", []) or [])
+        if allow:
+            schemas = [s for s in schemas if s.get("name") in allow]
+        if not schemas:
+            return None
+        schema_info = schemas[0]
+        schema_name = schema_info.get("name")
+
+        # 1) persisted prediction for the latest prompt version
+        preds = ja_mod.load_predictions(config)
+        version = ja_mod.latest_prompt_version(config)
+        pred = (preds.get(version, {}) or {}).get(f"{instance_id}::{schema_name}") if version else None
+
+        # 2) optional on-demand compute
+        if pred is None and inline.get("compute_on_demand"):
+            from potato.ai.judge import JudgeService
+            svc = JudgeService(config)
+            jp = svc.judge_instance(instance_id, schema_info, item.get_text())
+            if jp is not None:
+                ja_mod.save_prediction(config, jp)
+                pred = jp.to_dict()
+
+        if not pred:
+            return None
+
+        running = ja_mod.running_agreement(config, schema_name)
+        return {
+            "label": pred.get("predicted_label"),
+            "confidence": pred.get("confidence", 0.0),
+            "reasoning": pred.get("reasoning", ""),
+            "schema": schema_name,
+            "prompt_version": pred.get("prompt_version", ""),
+            "running": running,
+        }
+    except Exception as e:
+        logger.warning(f"Inline judge prediction failed for {instance_id}: {e}")
+        return None
+
+
+def _get_triage_info(item):
+    """Return a triage badge dict for the inline display, or None.
+
+    Gated by ``triage.show_badge`` (default true when triage is enabled). Reads
+    the priority/reason stored on the item's metadata by the triage scorer at
+    load/ingestion time. Only returns something when the item carries a reason
+    (i.e. a rule flagged it), so unflagged items show no banner.
+    """
+    triage_cfg = config.get("triage", {}) or {}
+    if not triage_cfg.get("enabled"):
+        return None
+    if not triage_cfg.get("show_badge", True):
+        return None
+    try:
+        reason = item.get_metadata("triage_reason")
+        if not reason:
+            return None
+        return {
+            "reason": reason,
+            "rule": item.get_metadata("triage_rule"),
+            "priority": item.get_metadata("triage_priority"),
+        }
+    except Exception as e:
+        logger.warning(f"Triage info failed for {item.get_id()}: {e}")
+        return None
+
 
 def get_label_suggestions(item, config, schema_content_to_prefill) -> set[SuggestedResponse]:
 
@@ -3037,8 +3239,10 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         flask_app.config["trace_ingestion"] = trace_ingestion_config
         logger.info("Registered trace ingestion blueprint")
 
-        # Start Langfuse poller if configured
-        sources = trace_ingestion_config.get("sources", [])
+        # Start Langfuse poller if configured. Guard against `sources:` being
+        # present-but-null in YAML (e.g. when all entries are commented out),
+        # which yields None rather than an empty list.
+        sources = trace_ingestion_config.get("sources") or []
         for source in sources:
             if source.get("type") == "langfuse":
                 from potato.trace_ingestion.langfuse_poller import LangfusePoller
@@ -3053,6 +3257,55 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
 
                 import atexit
                 atexit.register(poller.stop)
+
+    # Datasets / Experiments. Registered here in configure_app() — the single
+    # chokepoint called by create_app() on BOTH the live `start` path and the
+    # WSGI factory path — so the route exists regardless of how the server is
+    # launched (see project_route_dual_registration).
+    if config.get("datasets", {}).get("enabled", False):
+        from potato.eval_datasets import init_datasets_manager, get_datasets_manager
+        from potato.eval_datasets.routes import datasets_bp
+        from potato.eval_datasets.eval_admin import eval_admin_bp
+        if get_datasets_manager() is None:
+            init_datasets_manager(config)
+        if "datasets" not in flask_app.blueprints:
+            flask_app.register_blueprint(datasets_bp)
+        if "eval_admin" not in flask_app.blueprints:
+            flask_app.register_blueprint(eval_admin_bp)
+        logger.info("Registered datasets/experiments + eval-admin blueprints")
+
+    # Automation rules engine (Phase 4): closes the production->eval loop by
+    # running filter->sample->actions over every item entering Potato.
+    if config.get("automation", {}).get("enabled", False):
+        from potato.automation import init_automation_manager, get_automation_manager
+        from potato.automation.routes import automation_bp
+        if get_automation_manager() is None:
+            init_automation_manager(config)
+        if "automation" not in flask_app.blueprints:
+            flask_app.register_blueprint(automation_bp)
+        import atexit
+        atexit.register(lambda: (get_automation_manager() and get_automation_manager().shutdown()))
+        logger.info("Registered automation-rules blueprint")
+
+    # Semantic curation (Catalog): embedding index + similarity search + slices.
+    if config.get("curation", {}).get("enabled", False):
+        from potato.curation import init_curation_manager, get_curation_manager
+        from potato.curation.routes import curation_bp
+        if get_curation_manager() is None:
+            init_curation_manager(config)
+        if "curation" not in flask_app.blueprints:
+            flask_app.register_blueprint(curation_bp)
+        logger.info("Registered semantic-curation (catalog) blueprint")
+
+    # Multi-model arena: fan a prompt out to N providers side by side.
+    if config.get("arena", {}).get("enabled", False):
+        from potato.arena import init_arena_manager, get_arena_manager
+        from potato.arena.routes import arena_bp
+        if get_arena_manager() is None:
+            init_arena_manager(config)
+        if "arena" not in flask_app.blueprints:
+            flask_app.register_blueprint(arena_bp)
+        logger.info("Registered model-arena blueprint")
 
 # Function to create and initialize the Flask application
 def create_app(config_file=None):
@@ -3123,6 +3376,8 @@ def create_app(config_file=None):
             'go_button': 'Go',
             'retry_button': 'Retry',
             'logout': 'Logout',
+            'jump_prev_unannotated': 'Previous unannotated',
+            'jump_next_unannotated': 'Next unannotated',
             # Status indicators
             'labeled_badge': 'Labeled',
             'in_progress_badge': 'In Progress',
@@ -3190,7 +3445,16 @@ def create_app(config_file=None):
             # Header logo
             'header_logo_url': header_logo_url,
             # Deployment URL prefix for client-side fetch/beacon/media URLs.
-            'url_prefix': _normalize_url_prefix(os.environ.get("POTATO_URL_PREFIX", "")),
+            #
+            # Both proxy mechanisms converge on the WSGI SCRIPT_NAME: ProxyFix
+            # sets it from X-Forwarded-Prefix, and StaticPrefixMiddleware sets it
+            # from POTATO_URL_PREFIX. request.script_root surfaces that value, so
+            # it is the single source of truth and works in BOTH modes (including
+            # a real WSGI mount). We fall back to the env var defensively. When no
+            # proxy is involved script_root is "" and this is a no-op.
+            'url_prefix': request.script_root or _normalize_url_prefix(
+                os.environ.get("POTATO_URL_PREFIX", "")
+            ),
             # Custom footer HTML (e.g., promotional banner for HF Spaces)
             'custom_footer_html': config.get('custom_footer_html', ''),
         }
@@ -3375,6 +3639,13 @@ def _initialize_from_config(config_file):
         logger.info("Initializing QDA Mode...")
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
+
+    # Initialize Judge Calibration if enabled (parity with run_server()).
+    if config.get("judge_calibration", {}).get("enabled", False):
+        logger.info("Initializing Judge Calibration...")
+        from potato.judge_calibration import init_judge_calibration_manager
+        init_judge_calibration_manager(config)
+        logger.info("Judge Calibration initialized successfully")
 
     # Keep ICL prompts restricted to the codebook's current set: a
     # change listener re-syncs live scheme labels on any codebook edit.
@@ -3575,6 +3846,13 @@ def run_server(args):
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
 
+    # Initialize Judge Calibration if enabled
+    if config.get("judge_calibration", {}).get("enabled", False):
+        logger.info("Initializing Judge Calibration...")
+        from potato.judge_calibration import init_judge_calibration_manager
+        init_judge_calibration_manager(config)
+        logger.info("Judge Calibration initialized successfully")
+
     # Keep ICL prompts restricted to the codebook's current set: a
     # change listener re-syncs live scheme labels on any codebook edit.
     try:
@@ -3630,6 +3908,29 @@ def run_server(args):
                 "Diversity ordering requested but manager not enabled. "
                 "Install sentence-transformers and scikit-learn: "
                 "pip install sentence-transformers scikit-learn"
+            )
+
+    # Initialize active learning manager if enabled. The manager trains a
+    # classifier on annotations in a background thread and reorders the
+    # unlabeled pool by query strategy (uncertainty/BADGE/BALD/hybrid). Without
+    # this, `assignment_strategy: active_learning` falls back to random order.
+    if config.get('active_learning', {}).get('enabled', False):
+        try:
+            from potato.active_learning_manager import (
+                parse_active_learning_config, init_active_learning_manager,
+            )
+            al_cfg = parse_active_learning_config(config)
+            if al_cfg:
+                init_active_learning_manager(al_cfg)
+                logger.info(
+                    "Active learning manager initialized (query_strategy=%s, "
+                    "update_frequency=%s, schemas=%s)",
+                    al_cfg.query_strategy, al_cfg.update_frequency, al_cfg.schema_names,
+                )
+        except Exception as e:
+            logger.warning(
+                "Active learning requested but could not initialize (%s). "
+                "Continuing without active-learning reordering.", e
             )
 
     # Initialize quality control manager if any QC features are enabled

@@ -31,6 +31,32 @@ DEFAULT_SEVERITIES = [
 ]
 
 
+def _normalize_error_types(error_types: Any) -> List[Dict[str, Any]]:
+    """Coerce ``error_types`` into a list of ``{"name", "subtypes"}`` dicts.
+
+    Tolerates the natural shorthand of a plain list of strings
+    (``error_types: [foo, bar]``) and dicts that use ``label`` instead of
+    ``name``, so a reasonable config can't blow up the layout generator with an
+    opaque ``'str' object has no attribute 'get'``.
+    """
+    normalized: List[Dict[str, Any]] = []
+    if not isinstance(error_types, (list, tuple)):
+        return normalized
+    for et in error_types:
+        if isinstance(et, str):
+            normalized.append({"name": et, "subtypes": []})
+        elif isinstance(et, dict):
+            name = et.get("name", et.get("label", ""))
+            if not name:
+                continue
+            subtypes = et.get("subtypes", []) or []
+            if not isinstance(subtypes, (list, tuple)):
+                subtypes = [subtypes]
+            normalized.append({"name": str(name), "subtypes": [str(s) for s in subtypes]})
+        # silently skip anything else (None, ints, …) rather than crash
+    return normalized
+
+
 def generate_trajectory_eval_layout(
     annotation_scheme: Dict[str, Any],
 ) -> Tuple[str, List[Tuple[str, str]]]:
@@ -57,7 +83,7 @@ def _generate_internal(
     steps_key = annotation_scheme.get("steps_key", "steps")
     step_text_key = annotation_scheme.get("step_text_key", "action")
     correctness_options = annotation_scheme.get("correctness_options", DEFAULT_CORRECTNESS)
-    error_types = annotation_scheme.get("error_types", [])
+    error_types = _normalize_error_types(annotation_scheme.get("error_types", []))
     severities = annotation_scheme.get("severities", DEFAULT_SEVERITIES)
     show_score = annotation_scheme.get("show_score", True)
     max_score = annotation_scheme.get("max_score", 100)

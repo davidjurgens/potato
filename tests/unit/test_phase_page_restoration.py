@@ -38,6 +38,10 @@ def test_get_current_page_html_restores_saved_phase_answers(monkeypatch):
         def get_phase_html_fname(self, phase, page):
             return "survey_page.html"
 
+        def can_user_go_back(self, user_id):
+            # Back-navigation gating; irrelevant to answer-restoration here.
+            return False
+
     monkeypatch.setattr(fs, "app", app, raising=False)
     monkeypatch.setattr(fs, "get_user_state", lambda username: StubUserState())
     monkeypatch.setattr(fs, "get_user_state_manager", lambda: StubUSM())

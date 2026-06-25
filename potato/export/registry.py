@@ -124,6 +124,7 @@ def _register_builtin_exporters():
     from .textgrid_exporter import TextGridExporter
     from .agent_eval_exporter import AgentEvalExporter
     from .coding_eval_exporter import CodingEvalExporter
+    from .trajectory_correction_exporter import TrajectoryCorrectionExporter
     from .parquet_exporter import ParquetExporter
     from .tabular_exporter import CSVExporter, TSVExporter, JSONLExporter
     from .codebook_exporter import CodebookExporter
@@ -140,6 +141,7 @@ def _register_builtin_exporters():
         TextGridExporter(),
         AgentEvalExporter(),
         CodingEvalExporter(),
+        TrajectoryCorrectionExporter(),
         ParquetExporter(),
         CSVExporter(),
         TSVExporter(),

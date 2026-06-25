@@ -1,0 +1,98 @@
+# Potato Demo Space — Image Content Moderation
+annotation_task_name: "Image Classification"
+
+data_files:
+  - data/images.json
+
+item_properties:
+  id_key: id
+  text_key: image_url
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+annotation_instructions: |
+  <h4>Task: Image Classification</h4>
+  <p>Classify each image by its <strong>primary subject</strong> and <strong>quality</strong>.
+  You can zoom into the image for a closer look.</p>
+
+instance_display:
+  fields:
+    - key: image_url
+      type: image
+      label: "Image"
+      display_options:
+        max_width: 600
+        zoomable: true
+    - key: context
+      type: text
+      label: "Context"
+      display_options:
+        collapsible: true
+  layout:
+    direction: vertical
+    gap: 16px
+
+annotation_schemes:
+  - annotation_type: radio
+    name: category
+    description: "What is the primary subject of this image?"
+    labels:
+      - name: nature
+        tooltip: "Natural scenes, landscapes, plants, animals in nature"
+      - name: urban
+        tooltip: "Cities, buildings, streets, architecture"
+      - name: people
+        tooltip: "People as the main subject"
+      - name: food
+        tooltip: "Food, meals, cooking"
+      - name: technology
+        tooltip: "Devices, screens, workspaces"
+      - name: animals
+        tooltip: "Animals as the main subject"
+    sequential_key_binding: true
+
+  - annotation_type: radio
+    name: quality
+    description: "How would you rate the image quality?"
+    labels:
+      - name: high
+        tooltip: "Sharp, well-composed, good lighting"
+      - name: medium
+        tooltip: "Adequate quality, minor issues"
+      - name: low
+        tooltip: "Blurry, poor lighting, or badly composed"
+    sequential_key_binding: true
+
+  - annotation_type: multiselect
+    name: attributes
+    description: "Select all that apply"
+    labels:
+      - "Contains text"
+      - "Has people visible"
+      - "Indoor setting"
+      - "Outdoor setting"
+      - "Close-up / macro"
+
+require_password: false
+user_config:
+  allow_all_users: true
+site_dir: default
+
+custom_footer_html: |
+  <div class="potato-promo-banner">
+    <p class="promo-headline">This demo was built with Potato</p>
+    <p>Potato is a free, open-source annotation platform with 20+ annotation types, AI-assisted labeling, and quality control. Set up your own annotation project in minutes with a single YAML config file.</p>
+    <div class="promo-links">
+      <a href="https://potatoannotator.com/" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-primary">
+        <i class="fas fa-globe"></i> potatoannotator.com
+      </a>
+      <a href="https://github.com/davidjurgens/potato" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-outline">
+        <i class="fab fa-github"></i> GitHub
+      </a>
+      <a href="https://github.com/davidjurgens/potato/tree/master/examples" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-outline">
+        <i class="fas fa-book-open"></i> 100+ Examples
+      </a>
+    </div>
+  </div>

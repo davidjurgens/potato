@@ -101,4 +101,3 @@ ai_support:
       on_prev: 0
 
 # Debug mode for development
-debug: true

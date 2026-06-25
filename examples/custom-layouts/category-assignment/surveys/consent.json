@@ -1,0 +1,10 @@
+[
+    {
+        "id": "1",
+        "name": "info_consent",
+        "description": "I have read and understood that my annotations will be used for research purposes.",
+        "annotation_type": "radio",
+        "labels": ["I agree", "I disagree"],
+        "label_requirement": {"required_label": ["I agree"]}
+    }
+]

@@ -46,6 +46,74 @@ class MigrationRule:
         raise NotImplementedError
 
 
+def _collect_all_schemes(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return every annotation scheme dict in a config.
+
+    Gathers schemes from the top-level ``annotation_schemes``, every phase's
+    ``annotation_schemes`` (phases may be a list or a dict keyed by phase name,
+    where the ``order`` key is not a phase), and ``training.annotation_schemes``.
+    Mutating the returned dicts mutates the config in place.
+    """
+    schemes: List[Dict[str, Any]] = []
+
+    top = config.get("annotation_schemes")
+    if isinstance(top, list):
+        schemes.extend(s for s in top if isinstance(s, dict))
+
+    phases = config.get("phases")
+    if isinstance(phases, list):
+        for phase in phases:
+            if isinstance(phase, dict) and isinstance(phase.get("annotation_schemes"), list):
+                schemes.extend(s for s in phase["annotation_schemes"] if isinstance(s, dict))
+    elif isinstance(phases, dict):
+        for phase_name, phase in phases.items():
+            if phase_name == "order" or not isinstance(phase, dict):
+                continue
+            if isinstance(phase.get("annotation_schemes"), list):
+                schemes.extend(s for s in phase["annotation_schemes"] if isinstance(s, dict))
+
+    training = config.get("training")
+    if isinstance(training, dict) and isinstance(training.get("annotation_schemes"), list):
+        schemes.extend(s for s in training["annotation_schemes"] if isinstance(s, dict))
+
+    return schemes
+
+
+class HighlightToSpanRule(MigrationRule):
+    """Rename the legacy ``highlight`` annotation type to ``span``.
+
+    The span annotation type was named ``highlight`` in v1.x. In v2 it is
+    ``span`` and ``highlight`` is rejected at boot with "Unknown annotation
+    type: highlight". This is the single most common v1->v2 breaking change
+    (MIGRATION.md), so the migrator must apply it or the "migrated" config
+    still fails to start.
+    """
+
+    def __init__(self):
+        super().__init__(
+            "highlight_to_span",
+            "Rename annotation_type: highlight to span"
+        )
+
+    def applies(self, config: Dict[str, Any]) -> bool:
+        return any(
+            scheme.get("annotation_type") == "highlight"
+            for scheme in _collect_all_schemes(config)
+        )
+
+    def migrate(self, config: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+        config = copy.deepcopy(config)
+        changes = []
+        for scheme in _collect_all_schemes(config):
+            if scheme.get("annotation_type") == "highlight":
+                scheme["annotation_type"] = "span"
+                changes.append(
+                    f"Renamed annotation_type: highlight -> span "
+                    f"in scheme '{scheme.get('name', 'unknown')}'"
+                )
+        return config, changes
+
+
 class TextareaToMultilineRule(MigrationRule):
     """Migrate textarea.on to multiline format."""
 
@@ -287,6 +355,7 @@ class LegacyLabelRequirementRule(MigrationRule):
 
 # All migration rules in order of application
 MIGRATION_RULES = [
+    HighlightToSpanRule(),
     TextareaToMultilineRule(),
     LegacyLabelRequirementRule(),
     LegacyUserConfigRule(),

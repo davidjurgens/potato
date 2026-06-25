@@ -196,3 +196,32 @@ class TestOTELConverterConvertFlat:
         d = traces[0].to_dict()
         assert "id" in d
         assert "conversation" in d
+
+
+class TestOTELConverterOpenInference:
+    """OpenInference attribute conventions (Arize/Phoenix) — D11."""
+
+    def _otlp(self, attrs):
+        return {"resourceSpans": [{"scopeSpans": [{"spans": [{
+            "traceId": "t1", "spanId": "s1", "parentSpanId": "", "name": "LLM",
+            "startTimeUnixNano": "1700000000000000000",
+            "endTimeUnixNano": "1700000001000000000",
+            "attributes": [{"key": k, "value": {"stringValue": str(v)} if isinstance(v, str)
+                            else {"intValue": v}} for k, v in attrs.items()],
+        }]}]}]}
+
+    def test_openinference_input_output_value(self):
+        data = self._otlp({"input.value": "Why is the sky blue?",
+                           "output.value": "Rayleigh scattering.",
+                           "llm.model_name": "gpt-4o"})
+        traces = OTELConverter().convert(data)
+        assert traces
+        texts = " ".join(t["text"] for c in traces for t in c.conversation)
+        assert "sky blue" in texts and "Rayleigh" in texts
+
+    def test_openinference_tool_parameters(self):
+        data = self._otlp({"tool.name": "search", "tool.parameters": "q=weather",
+                           "tool.output": "sunny"})
+        traces = OTELConverter().convert(data)
+        joined = " ".join(t["text"] for c in traces for t in c.conversation)
+        assert "search" in joined and "weather" in joined and "sunny" in joined

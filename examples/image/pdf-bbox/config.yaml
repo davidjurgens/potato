@@ -68,5 +68,3 @@ annotation_schemes:
 user_config:
   allow_all_users: true
 
-debug: true
-debug_phase: annotation

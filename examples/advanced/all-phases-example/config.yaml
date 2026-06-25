@@ -12,6 +12,13 @@ user_config:
   allow_all_users: true
   users: []
 alert_time_each_instance: 10000000
+training:
+  enabled: true
+  data_file: surveys/baseline.json
+  passing_criteria:
+    min_correct: 1
+    max_mistakes: 10
+    allow_retry: true
 phases:
   order:
   - consent
@@ -19,6 +26,9 @@ phases:
   - general_instructions
   - specific_instructions
   - baseline_check
+  - annotation
+  - personality
+  - study_satisfaction
   consent:
     type: consent
     file: surveys/consent.json

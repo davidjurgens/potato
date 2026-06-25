@@ -34,6 +34,30 @@ import numpy as np
 from potato.active_learning_manager import TrainingMetrics
 
 
+def _loads_lenient(content: str):
+    """json.loads that tolerates markdown code fences and surrounding prose.
+
+    Many models (e.g. Gemma on vLLM) wrap JSON in ```json ... ``` fences even
+    when response_format=json_object is requested, which breaks a naive
+    json.loads(). Strip fences and, failing that, extract the first {...} block.
+    """
+    import re
+    if content is None:
+        raise json.JSONDecodeError("empty content", "", 0)
+    s = content.strip()
+    # Strip a leading ```json / ``` fence and trailing ```
+    s = re.sub(r"^```(?:json|JSON)?\s*", "", s)
+    s = re.sub(r"\s*```$", "", s).strip()
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        # Fall back to the first balanced-looking {...} object in the text.
+        m = re.search(r"\{.*\}", s, re.DOTALL)
+        if m:
+            return json.loads(m.group(0))
+        raise
+
+
 @dataclass
 class LLMPrediction:
     """Result of an LLM prediction."""
@@ -299,7 +323,7 @@ Example response:
                         content = result['choices'][0]['message']['content']
 
                         try:
-                            parsed_response = json.loads(content)
+                            parsed_response = _loads_lenient(content)
                             predicted_label = parsed_response.get('label', '')
                             confidence_score = parsed_response.get('confidence', 1)
 
@@ -391,7 +415,7 @@ Example response:
 
                     # Parse label from JSON content
                     try:
-                        parsed = json.loads(content)
+                        parsed = _loads_lenient(content)
                     except json.JSONDecodeError:
                         return self._extract_from_raw_response(content, instance_id)
 
@@ -498,7 +522,7 @@ Example response:
                         content = result['choices'][0]['message']['content']
                         raw_responses.append(content)
                         try:
-                            parsed = json.loads(content)
+                            parsed = _loads_lenient(content)
                             labels.append(parsed.get('label', ''))
                         except json.JSONDecodeError:
                             pass

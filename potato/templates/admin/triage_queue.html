@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Triage Queue</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  /* Triage queue report. Inherits the Potato admin design system
+     (.dashboard-card, design tokens); only the table/priority typography
+     is local. Amber accent = queue priority, not error. */
+  .tq-meta { color: var(--muted-foreground); font-size: 0.875rem;
+             margin: 0 0 1.5rem 0; max-width: 72ch; line-height: 1.6; }
+  .tq-card { margin-bottom: 1.5rem; }
+  .tq-metrics { display: flex; gap: 2rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .tq-metric { display: flex; flex-direction: column; }
+  .tq-metric .label { font-size: 0.75rem; color: var(--muted-foreground);
+                      text-transform: uppercase; letter-spacing: 0.03em; }
+  .tq-metric .value { font-size: 1.5rem; font-weight: 700; color: var(--heading-color); }
+  .tq-table-wrap { overflow-x: auto; }
+  table.tq-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; margin-top: 0.5rem; }
+  table.tq-table th, table.tq-table td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }
+  table.tq-table th { background: var(--muted); font-weight: 600; }
+  /* Row-header (instance id): semantic <th scope="row"> but styled as a data
+     cell — no header shading/bold — so the table reads as a flat data grid. */
+  table.tq-table th.tq-rowhead { background: transparent; font-weight: 400; }
+  td.tq-rank { text-align: right; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  td.tq-priority { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tq-reason {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0.05rem 0.45rem; border-radius: var(--radius);
+    background: hsl(40 80% 92%); color: hsl(28 60% 28%);
+    font-weight: 600; font-size: 0.8rem;
+  }
+  .tq-reason::before { content: "!"; font-weight: 700; color: hsl(30 90% 33%); }
+  .tq-unflagged { color: var(--muted-foreground); font-style: italic; }
+  .tq-yes { color: hsl(140 45% 32%); font-weight: 600; }
+  .tq-no { color: var(--muted-foreground); }
+  .tq-mono { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); }
+  .tq-empty { color: var(--muted-foreground); font-style: italic; }
+  .tq-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+                overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <h1>Triage Queue</h1>
+  <p class="tq-meta">
+    Remaining items ranked by their <strong>triage priority</strong> — the
+    quality signal (agent error, negative feedback, low score, or a custom field)
+    assigned at load/ingestion time. With <span class="tq-mono">assignment_strategy: priority</span>
+    annotators are served the highest-priority items first. Ordering:
+    <span class="tq-mono">{{ report.order }}</span>.
+  </p>
+
+  {% if not report.enabled %}
+  <p class="tq-empty">Triage is not enabled. Add a <code>triage:</code> block to the
+  config (and optionally <code>assignment_strategy: priority</code>) to rank the queue.</p>
+  {% endif %}
+
+  <section class="dashboard-card tq-card" aria-label="Triage summary">
+    <div class="tq-metrics">
+      <div class="tq-metric">
+        <span class="label">Items remaining</span>
+        <span class="value">{{ report.n_items }}</span>
+      </div>
+      <div class="tq-metric">
+        <span class="label">Flagged</span>
+        <span class="value">{{ report.n_flagged }}</span>
+      </div>
+    </div>
+
+    {% if report['items'] %}
+    <div class="tq-table-wrap">
+    <table class="tq-table">
+      <caption class="tq-sr-only">Items ranked by triage priority, highest first.</caption>
+      <thead><tr>
+        <th scope="col">#</th>
+        <th scope="col">Instance</th>
+        <th scope="col">Priority</th>
+        <th scope="col">Reason</th>
+        <th scope="col">Annotations</th>
+        <th scope="col">Assigned</th>
+      </tr></thead>
+      <tbody>
+        {% for it in report['items'] %}
+        <tr>
+          <td class="tq-rank">{{ loop.index }}</td>
+          <th scope="row" class="tq-mono tq-rowhead">{{ it.id }}</th>
+          <td class="tq-priority">{{ '%g'|format(it.priority) }}</td>
+          <td>
+            {% if it.reason %}<span class="tq-reason">{{ it.reason }}</span>
+            {% else %}<span class="tq-unflagged">—</span>{% endif %}
+          </td>
+          <td>{{ it.annotations }}</td>
+          <td>{% if it.assigned %}<span class="tq-yes">yes</span>{% else %}<span class="tq-no">no</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="tq-empty">No items in the queue.</p>
+    {% endif %}
+  </section>
+</main>
+</body>
+</html>

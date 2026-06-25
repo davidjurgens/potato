@@ -1,0 +1,10 @@
+{% extends "judge_calibration/base_jc.html" %}
+{% block title %}Judge Calibration Status{% endblock %}
+{% block content %}
+<div class="jc-card">
+    <h1>Judge Calibration</h1>
+    <p class="jc-muted">No report has been generated yet.</p>
+    <p>Current phase: <span class="jc-pill">{{ status.phase }}</span></p>
+    <p><a class="jc-btn" href="/judge_calibration/admin">Go to setup</a></p>
+</div>
+{% endblock %}

@@ -173,6 +173,45 @@ def langsmith_webhook():
     })
 
 
+@trace_ingestion_bp.route("/api/traces/otel", methods=["POST"])
+def otel_endpoint():
+    """OpenTelemetry / OpenInference ingest endpoint.
+
+    Accepts an OTLP-JSON span export (``{"resourceSpans": [...]}``) emitted by any
+    OTel-instrumented agent framework (LangGraph, CrewAI, OpenAI Agents SDK,
+    Pydantic AI, …) and converts the GenAI/OpenInference spans into Potato traces.
+    """
+    receiver = _get_webhook_receiver()
+    if not receiver.validate_auth(dict(request.headers)):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    payload = request.get_json(silent=True)
+    if not payload:
+        return jsonify({"error": "Invalid JSON payload"}), 400
+
+    _stats["received"] += 1
+    _stats["last_received"] = time.time()
+
+    try:
+        from potato.trace_converter.converters.otel_converter import OTELConverter
+        traces = OTELConverter().convert(payload)
+    except Exception as e:
+        logger.error(f"OTLP convert failed: {e}")
+        _stats["errors"] += 1
+        return jsonify({"error": f"Failed to convert OTLP payload: {e}"}), 422
+
+    if not traces:
+        return jsonify({"status": "accepted", "ingested": 0,
+                        "note": "no GenAI/OpenInference spans found"}), 200
+
+    ingested = 0
+    for ct in traces:
+        if _inject_trace(ct.to_dict()):
+            ingested += 1
+    return jsonify({"status": "accepted", "ingested": ingested,
+                    "trace_ids": [ct.id for ct in traces]})
+
+
 @trace_ingestion_bp.route("/api/traces/stream")
 @_login_required
 def trace_stream():

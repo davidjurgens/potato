@@ -1,14 +1,16 @@
 # Potato: The Portable Annotation Tool
 
-[![Documentation](https://img.shields.io/badge/docs-readthedocs-blue)](https://potatoannotator.readthedocs.io/)
+[![Docs & Guides](https://img.shields.io/badge/docs%20%26%20guides-potatoannotator.com-brightgreen)](https://www.potatoannotator.com/docs)
+[![Technical Reference](https://img.shields.io/badge/reference-readthedocs-blue)](https://potatoannotator.readthedocs.io/)
 [![PyPI](https://img.shields.io/pypi/v/potato-annotation)](https://pypi.org/project/potato-annotation/)
-[![License](https://img.shields.io/badge/license-Polyform%20Shield-green)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![Paper](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
-[![Live Demo](https://img.shields.io/badge/demo-HuggingFace%20Spaces-yellow)](https://huggingface.co/spaces/Blablablab/potato)
+[![Live Demo](https://img.shields.io/badge/demo-HuggingFace%20Spaces-yellow)](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)
+[![Website](https://img.shields.io/badge/website-potatoannotator.com-brightgreen)](https://www.potatoannotator.com)
 
-**Potato** is a free, self-hosted annotation platform for NLP, Agentic, and GenAI research. Annotate text, audio, video, images, documents, agent traces, and more — configured entirely through YAML. No coding required.
+**Potato** is a free, self-hosted annotation platform for NLP, Agentic, GenAI, and qualitative research. Annotate text, audio, video, images, documents, agent traces, and more — or run a full qualitative data analysis (QDA) workflow with a living codebook, memos, and cases. Configured entirely through YAML. No coding required.
 
-**[Try the live demo on HuggingFace Spaces](https://huggingface.co/spaces/Blablablab/potato)** — no installation needed.
+**[Try the live demo on HuggingFace Spaces](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)** — no installation needed. More at **[www.potatoannotator.com](https://www.potatoannotator.com)**.
 
 ---
 
@@ -16,10 +18,13 @@
 
 ```bash
 pip install potato-annotation
+# The examples/ folder ships with the source repo (see "run from source" below).
+# After a PyPI install, clone the repo for the examples, or point `potato start`
+# at your own config (see docs/quick-start.md).
 potato start examples/classification/single-choice/config.yaml -p 8000
 ```
 
-Or run from source:
+Or run from source (recommended to get the `examples/`):
 
 ```bash
 git clone https://github.com/davidjurgens/potato.git
@@ -33,7 +38,9 @@ Open [http://localhost:8000](http://localhost:8000) and start annotating. Browse
 
 ## What Can You Annotate?
 
-Potato handles the full spectrum of annotation tasks — from traditional NLP labeling to evaluating the latest AI agent systems.
+Potato handles the full spectrum of annotation tasks — from traditional NLP labeling to evaluating the latest AI agent systems, to interpretive qualitative analysis.
+
+The tables below are a **representative sample, not a complete list.** Schemes and data types compose freely, [custom layouts](examples/custom-layouts/) and raw HTML let you build interfaces beyond these, and [new schema types](docs/annotation-types/schemas_and_templates.md) can be added. If you don't see your task here, it's likely still possible.
 
 ### Data Types
 
@@ -107,6 +114,23 @@ An interactive viewer for GUI agent traces — navigate step-by-step through scr
 
 ---
 
+## Qualitative Data Analysis (QDA)
+
+Potato isn't only for label-and-aggregate tasks — it also supports interpretive qualitative research, the kind of work done in tools like NVivo, ATLAS.ti, or MAXQDA, fully self-hosted and free.
+
+| Capability | Description |
+|------------|-------------|
+| **Living codebook** | The codebook is an evolving markdown document of rules, definitions, examples, and rationales — not just a label list. Edit it in a full-page document view or inline while coding, with versioning, diff, and restore; semantic edits can re-flag affected excerpts for review ([docs](docs/advanced/codebook.md)) |
+| **In-vivo coding** | Create codes directly from a highlighted passage, in the participant's own words ([example](examples/advanced/codebook-invivo-example/)) |
+| **Memos** | Attach analytic notes to excerpts, codes, or the whole project as your interpretation develops ([docs](docs/advanced/memos.md)) |
+| **Cases** | Group instances into units of analysis — participants, interviews, documents, sites — for case-based comparison ([docs](docs/advanced/cases.md)) |
+| **Search** | Full-text search across your corpus and annotations to find, revisit, and code recurring patterns ([docs](docs/advanced/search.md)) |
+| **Codebook distillation** | Turn the human-authored codebook into an LLM prompt for AI-assisted coding |
+
+Enable it with `qda_mode`, which sensibly cascades these features on; see the [QDA Mode guide](docs/advanced/qda.md) and the runnable [`qda-mode-example`](examples/advanced/qda-mode-example/).
+
+---
+
 ## AI-Powered Annotation
 
 ### LLM Label Suggestions
@@ -151,6 +175,19 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | **Crowdsourcing** | Prolific and MTurk integration with platform-specific auth ([docs](docs/deployment/crowdsourcing.md)) |
 | **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/annotation-types/triage.md)) |
 
+### Continuous Evaluation Loop
+
+Close the loop from production traces to graded, regression-gated evaluation:
+
+| Capability | Description |
+|------------|-------------|
+| **Capture** | Instrument any agent with the `@traceable` [tracing SDK](docs/integrations/tracing_sdk.md), or POST traces to the ingestion webhook |
+| **Automate** | [Rules](docs/agent-evaluation/automation_rules.md) (`filter → sample → actions`) route incoming traces to queues, datasets, evaluators, or webhooks |
+| **Curate** | Versioned [datasets & experiments](docs/agent-evaluation/datasets_and_experiments.md) + [semantic search/slices](docs/agent-evaluation/semantic_curation.md) to find what to review |
+| **Evaluate** | [Programmatic evaluators](docs/agent-evaluation/evaluators.md) (trajectory match, tool-use, LLM-judge, heuristics) + a side-by-side [model arena](docs/agent-evaluation/model_arena.md) |
+| **Gate** | [Run evals in pytest](docs/agent-evaluation/ci_evaluation.md) and fail CI on score-threshold regressions |
+| **Calibrate** | [LLM-judge ↔ human alignment](docs/agent-evaluation/judge_alignment.md) with auto-calibration from human corrections; judges categorical, span, and free-text outputs |
+
 ---
 
 ## Authentication & Deployment
@@ -183,8 +220,18 @@ Ready-to-use templates organized by type in [`examples/`](examples/):
 | [Video](examples/video/) | Frame-level labeling, temporal segments |
 | [Image](examples/image/) | Bounding boxes, PDF/document annotation |
 | [Advanced](examples/advanced/) | Solo mode, adjudication, quality control, conditional logic |
+| [QDA](examples/advanced/qda-mode-example/) | Qualitative analysis: living codebook, in-vivo coding, memos, cases |
 | [AI-Assisted](examples/ai-assisted/) | LLM suggestions, Ollama integration |
 | [Custom Layouts](examples/custom-layouts/) | Content moderation, dialogue QA, medical review |
+
+### Live Demos on HuggingFace
+
+Try Potato in your browser — no installation. A growing catalog of one-click demo Spaces
+covers classification, span/NER, agent-trace evaluation, multimodal, QDA, and more:
+
+- 🤗 **[Flagship demo](https://huggingface.co/spaces/Blablablab/potato)** — agent trace evaluation
+- 📋 **[Full demo catalog & collection](docs/data-export/potato_on_huggingface.md)** — every annotation type as a live Space
+- 🚀 **[Deploy your own](deployment/huggingface-spaces/deploy_spaces.md)** — `build_space.py` + `deploy_space.py` from a single manifest
 
 ### Research Showcase
 
@@ -194,6 +241,8 @@ The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** cont
 
 ## Documentation
 
+Potato has two complementary doc sites: **[potatoannotator.com/docs](https://www.potatoannotator.com/docs)** for guides, tutorials, and higher-level walkthroughs, and **[Read the Docs](https://potatoannotator.readthedocs.io/)** for the complete, version-matched technical reference (every config option, the full HTTP API, and internals). The links below point to the guide pages.
+
 | Topic | Link |
 |-------|------|
 | Quick Start | [docs/quick-start.md](docs/quick-start.md) |
@@ -201,9 +250,19 @@ The **[Potato Showcase](https://github.com/davidjurgens/potato-showcase/)** cont
 | Schema Gallery | [docs/annotation-types/schemas_and_templates.md](docs/annotation-types/schemas_and_templates.md) |
 | Agent Trace Evaluation | [docs/agent-evaluation/agent_traces.md](docs/agent-evaluation/agent_traces.md) |
 | Web Agent Annotation | [docs/agent-evaluation/web_agent_annotation.md](docs/agent-evaluation/web_agent_annotation.md) |
+| Datasets & Experiments | [docs/agent-evaluation/datasets_and_experiments.md](docs/agent-evaluation/datasets_and_experiments.md) |
+| Programmatic Evaluators | [docs/agent-evaluation/evaluators.md](docs/agent-evaluation/evaluators.md) |
+| Automation Rules | [docs/agent-evaluation/automation_rules.md](docs/agent-evaluation/automation_rules.md) |
+| CI Evaluation (pytest gating) | [docs/agent-evaluation/ci_evaluation.md](docs/agent-evaluation/ci_evaluation.md) |
+| Model Arena | [docs/agent-evaluation/model_arena.md](docs/agent-evaluation/model_arena.md) |
+| Semantic Curation (Catalog) | [docs/agent-evaluation/semantic_curation.md](docs/agent-evaluation/semantic_curation.md) |
+| Tracing SDK (potato_trace) | [docs/integrations/tracing_sdk.md](docs/integrations/tracing_sdk.md) |
 | AI Support | [docs/ai-intelligence/ai_support.md](docs/ai-intelligence/ai_support.md) |
+| Using HuggingFace Models | [docs/ai-intelligence/huggingface_models.md](docs/ai-intelligence/huggingface_models.md) |
+| Potato on HuggingFace | [docs/data-export/potato_on_huggingface.md](docs/data-export/potato_on_huggingface.md) |
 | Active Learning | [docs/ai-intelligence/active_learning_guide.md](docs/ai-intelligence/active_learning_guide.md) |
 | Solo Mode | [docs/solo-mode/solo_mode.md](docs/solo-mode/solo_mode.md) |
+| Qualitative Data Analysis (QDA) | [docs/advanced/qda.md](docs/advanced/qda.md) |
 | Quality Control | [docs/workflow/quality_control.md](docs/workflow/quality_control.md) |
 | Password Management | [docs/auth-users/password_management.md](docs/auth-users/password_management.md) |
 | SSO & OAuth | [docs/auth-users/sso_authentication.md](docs/auth-users/sso_authentication.md) |
@@ -241,21 +300,7 @@ pytest --cov=potato --cov-report=html
 
 ## License
 
-Potato is licensed under [Polyform Shield](LICENSE). Non-commercial applications can use Potato however they want. Commercial applications can use Potato to annotate all they want, but cannot integrate Potato into a commercial product.
-
-<details>
-<summary>License FAQ</summary>
-
-| Use Case | Allowed? |
-|----------|----------|
-| Academic research | Yes |
-| Company annotation | Yes |
-| Fork for personal development | Yes |
-| Integration in open-source pipelines | Yes |
-| Commercial annotation service | Contact us |
-| Competing annotation platform | Contact us |
-
-</details>
+Potato is free software, licensed under the [GNU General Public License v3.0 or later](LICENSE) (GPLv3+). You are free to use, study, modify, and redistribute it — including for commercial purposes — provided that any distributed derivative works are also licensed under the GPLv3+ and made available with their source code. See the [LICENSE](LICENSE) file for the full terms.
 
 ---
 

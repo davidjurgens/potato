@@ -1,0 +1,12 @@
+[
+  {"id": "1", "text": "I couldn't get an appointment for almost three weeks, and even then the clinic was nowhere near a bus line, so I had to take a whole day off work just to be seen.", "participant_id": "P01", "condition": "rural"},
+  {"id": "2", "text": "My copay went up again this year, so I've quietly been skipping the follow-up visits even though I know I really shouldn't be doing that.", "participant_id": "P01", "condition": "rural"},
+  {"id": "3", "text": "The front desk staff were dismissive when I asked about the sliding-scale fee, like the cost of care was something I should already understand.", "participant_id": "P01", "condition": "rural"},
+  {"id": "4", "text": "The doctor actually explained everything clearly and I felt listened to for the first time in years, which honestly surprised me after so many rushed visits.", "participant_id": "P02", "condition": "urban"},
+  {"id": "5", "text": "Getting a referral to the specialist took forever, and nobody warned me the wait list was four months long until I called to check.", "participant_id": "P02", "condition": "urban"},
+  {"id": "6", "text": "I trust my nurse practitioner more than any physician I've seen; she remembers my history and never makes me feel like a number.", "participant_id": "P02", "condition": "urban"},
+  {"id": "7", "text": "The patient portal is confusing, so I gave up on booking online and just call, but then I sit on hold for half an hour every single time.", "participant_id": "P03", "condition": "urban"},
+  {"id": "8", "text": "When my insurance changed, the billing office sent me to three different numbers before anyone could tell me whether the visit was even covered.", "participant_id": "P03", "condition": "urban"},
+  {"id": "9", "text": "There's no transit out here after six, so evening appointments are impossible unless a neighbor can drive me, and most of them work late too.", "participant_id": "P03", "condition": "rural"},
+  {"id": "10", "text": "Honestly the telehealth option was a lifesaver during the snow, but the connection kept dropping and we had to restart the call twice.", "participant_id": "P03", "condition": "rural"}
+]

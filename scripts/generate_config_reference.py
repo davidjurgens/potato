@@ -62,6 +62,10 @@ CATEGORY_ORDER = [
     ("AI Support", [
         "ai_support", "chat_support",
     ]),
+    ("Qualitative Coding (QDA)", [
+        "qda_mode", "codebook", "codebook_mode", "codebook_invivo_key",
+        "annotation_ui", "cases", "search",
+    ]),
     ("Advanced Features", [
         "training", "active_learning", "category_assignment",
         "diversity_ordering", "diversity_config", "embedding_visualization",
@@ -123,8 +127,12 @@ def get_type_hint(key):
 
 
 def format_subkeys(subkeys):
-    """Format sub-keys as a bullet list."""
+    """Format sub-keys as a bullet list. Handles both set-valued keys and
+    dict-valued keys (KNOWN_CONFIG_KEYS uses dicts when sub-key names are
+    known but their own values aren't enumerated, e.g. qda_mode/cases)."""
     if isinstance(subkeys, set):
+        return ", ".join(f"`{k}`" for k in sorted(subkeys))
+    if isinstance(subkeys, dict):
         return ", ".join(f"`{k}`" for k in sorted(subkeys))
     return ""
 
@@ -165,7 +173,7 @@ def generate_reference():
             required = "Yes" if key in REQUIRED_FIELDS else ""
             type_hint = get_type_hint(key)
             subkeys_val = KNOWN_CONFIG_KEYS[key]
-            subkeys_str = format_subkeys(subkeys_val) if isinstance(subkeys_val, set) else ""
+            subkeys_str = format_subkeys(subkeys_val)
             lines.append(f"| `{key}` | {required} | {type_hint} | {subkeys_str} |")
         lines.append("")
 

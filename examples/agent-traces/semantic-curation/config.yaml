@@ -1,0 +1,41 @@
+# Semantic Curation (Catalog) — find traces by similarity
+#
+# Builds an embedding index over items so you can search "find traces like this
+# failure" and save dynamic slices (semantic + metadata filters) that curate
+# into datasets. Manage from the admin dashboard → "Catalog".
+#
+# Run from repo root (needs sentence-transformers for real embeddings):
+#   python potato/flask_server.py start examples/agent-traces/semantic-curation/config.yaml -p 8000
+
+annotation_task_name: "Semantic Curation"
+
+data_files:
+  - data/traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Semantic curation. Build the index from the Catalog page (or set
+# embed_on_ingest to index runtime-ingested traces automatically).
+curation:
+  enabled: true
+  model_name: all-MiniLM-L6-v2
+  embed_on_ingest: false
+  text_key: task_description
+
+# Datasets are the target of "curate slice → dataset".
+datasets:
+  enabled: true
+  storage: file
+
+annotation_schemes:
+  - annotation_type: radio
+    name: verdict
+    description: "Is this trace correct?"
+    labels: [{name: correct}, {name: incorrect}]
+    sequential_key_binding: true

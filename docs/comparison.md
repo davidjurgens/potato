@@ -186,6 +186,27 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 Potato's pairwise comparison schema (binary A/B and scale slider modes), conversation tree annotation, and triage schema make it suitable for RLHF data collection and LLM evaluation. Combined with 12 AI endpoint types for model-assisted annotation, Potato handles preference annotation workflows that typically require specialized tools.
 
+## Agent-Evaluation Platforms (LangSmith, LabelBox, Braintrust)
+
+A newer class of tools focuses on **evaluating AI agents and LLM applications** rather than general annotation. Potato now provides this agent-evaluation loop as a free, self-hosted option.
+
+| Capability | Potato | LangSmith | LabelBox |
+|------------|--------|-----------|----------|
+| License / hosting | Free, open-source, self-hosted | Proprietary SaaS (self-host = Enterprise) | Proprietary SaaS |
+| Programmatic evaluators (trajectory match, tool-use, LLM-judge) | ✅ | ✅ (`agentevals`/`openevals`) | partial |
+| Versioned datasets + experiments | ✅ (file/SQLite) | ✅ | ✅ |
+| Automation rules (filter → sample → actions) | ✅ | ✅ | partial |
+| CI gating (pytest threshold) | ✅ | ✅ (pytest/Vitest) | ❌ |
+| LLM-as-judge ↔ human calibration (κ, ECE) | ✅ (auto-calibration) | ✅ (human-correction few-shot) | partial |
+| Span + free-text judging | ✅ | ✅ | ✅ |
+| Production tracing SDK | ✅ (`potato_trace`, OTel) | ✅ | partial |
+| Semantic search / dynamic slices | ✅ | partial | ✅ (Catalog) |
+| Multi-model arena | ✅ | ❌ | ✅ |
+| Human annotation depth (IAA, training, crowdsourcing) | ✅ | partial | ✅ (Alignerr workforce) |
+| Per-seat / per-trace cost | None | Yes | Yes |
+
+**Compared to LangSmith/LabelBox/Braintrust:** Potato covers the same capture → automate → curate → evaluate → CI-gate → calibrate loop, but free, self-hosted, and on top of a rigorous human-annotation platform (inter-annotator agreement, training phases, adjudication, crowdsourcing). The trade-off is that the SaaS tools offer managed cloud hosting, large-scale dashboards, and (for LabelBox) an on-demand expert workforce. See the [Agent Evaluation Guide](guides/agent-evaluation-guide.md).
+
 ---
 
 ## Recent Academic Annotation Systems (2022-2025)

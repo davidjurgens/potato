@@ -521,10 +521,16 @@ class AdjudicationManager:
                     val = user_annots[schema]
                     # Normalize to comparable form
                     if isinstance(val, dict):
-                        # For multiselect: frozenset of selected labels
+                        # Radio stores {label: label} (value is the label string)
+                        # and multiselect stores {label: value/true}. A label is
+                        # "selected" when its value is present/truthy. The old
+                        # filter (v is True / == "true" / == 1) dropped radio's
+                        # string value, collapsing every annotator to an empty
+                        # frozenset -> a spurious 1.0 agreement even on total
+                        # disagreement.
+                        falsey = (False, None, "", "false", "False", 0, "0")
                         selected = frozenset(
-                            k for k, v in val.items()
-                            if v is True or v == "true" or v == 1
+                            k for k, v in val.items() if v not in falsey
                         )
                         values.append(selected)
                     else:

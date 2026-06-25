@@ -1,0 +1,32 @@
+# Per-agent + per-team scorecard (M5)
+# Score each agent (role fidelity / contribution / coordination), the team, and milestones.
+# Run: python potato/flask_server.py start examples/agent-traces/agent-scorecard/config.yaml -p 8000
+annotation_task_name: "Multi-Agent Scorecard"
+data_files:
+  - data/traces.json
+item_properties:
+  id_key: id
+  text_key: task
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+instance_display:
+  layout: {direction: vertical, gap: 16px}
+  fields:
+    - key: task
+      type: text
+      label: "Task"
+    - key: steps
+      type: agent_trace
+      label: "Agent Interactions"
+      display_options: {show_turn_numbers: true, speaker_key: agent, text_key: content}
+annotation_schemes:
+  - annotation_type: agent_scorecard
+    name: scorecard
+    description: "Score each agent, the team, and which milestones were reached."
+    steps_key: steps
+    agent_key: agent
+    scale: 5
+    agent_dimensions: [role fidelity, contribution, coordination]
+    team_dimensions: [coordination, communication, efficiency]
+    milestones: [plan produced, task delegated correctly, result verified]

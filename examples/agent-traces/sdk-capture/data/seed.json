@@ -1,0 +1,10 @@
+[
+  {
+    "id": "seed-001",
+    "task_description": "Example seed trace (SDK runs arrive at runtime)",
+    "conversation": [
+      {"speaker": "User", "text": "What is 2 + 2?"},
+      {"speaker": "Agent", "text": "4"}
+    ]
+  }
+]

@@ -139,6 +139,9 @@ KNOWN_CONFIG_KEYS = {
     "category_assignment": {
         "enabled", "category_key", "qualification", "fallback", "dynamic",
     },
+    "batch_assignment": {
+        "groups", "annotator_key",
+    },
     "diversity_ordering": {
         "enabled", "model_name", "num_clusters", "items_per_cluster",
         "auto_clusters", "prefill_count", "batch_size",
@@ -158,6 +161,10 @@ KNOWN_CONFIG_KEYS = {
         "show_annotator_names",
         "output_subdir", "require_confidence",
         "show_all_items", "show_timing_data",
+    },
+    "annotator_dashboard": {
+        "enabled", "show_project_progress", "show_personal_progress",
+        "show_active_annotators",
     },
     "database": {"type", "host", "database", "username", "password", "port",
                  "pool_size", "pool_timeout", "connection_string"},
@@ -242,6 +249,27 @@ KNOWN_CONFIG_KEYS = {
     },
     "webhooks": {"enabled", "endpoints"},
     "trace_ingestion": {"enabled", "sources", "api_key", "notify_annotators"},
+    "judge_alignment": {"enabled", "ai_support", "schemas", "few_shot", "inline"},
+    # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
+    # Leaf sub-dicts (sampling/human/calibration/output) are validated by
+    # validate_judge_calibration_config(); kept shallow here to avoid
+    # unknown-key churn while the feature stabilizes.
+    "judge_calibration": {
+        "enabled", "prompt", "models", "k_samples", "max_items", "fraction",
+        "sampling", "human", "schemas", "calibration", "output", "state_dir",
+    },
+    "triage": {"enabled", "order", "default_priority", "show_badge",
+               "signal_field", "invert_signal", "rules"},
+    # Datasets / Experiments: versioned eval datasets + experiment runs.
+    "datasets": {"enabled", "storage"},
+    # Automation rules: filter -> sample -> actions over incoming items.
+    "automation": {"enabled", "rules"},
+    # Semantic curation: embedding index, similarity search, dynamic slices.
+    "curation": {"enabled", "model_name", "embed_on_ingest", "text_key"},
+    # Multi-model arena: fan a prompt out to N providers side by side.
+    "arena": {"enabled", "models"},
+    # Trace cost/latency analytics: optional per-model pricing + alert thresholds.
+    "analytics": {"pricing", "thresholds"},
     "huggingface_backup": None,
 
     # === Debug / logging ===
@@ -322,8 +350,9 @@ KNOWN_CONFIG_KEYS = {
     # In-vivo coding (D): single key that, with text selected in a
     # codebook-backed span scheme, opens the "code from selection"
     # composer. Default 'i'; only meaningful when a codebook span
-    # scheme exists.
-    "codebook_invivo_key": "i",
+    # scheme exists. (Schema value is None = scalar/any-value key; the
+    # 'i' default lives in the defaults map, not here.)
+    "codebook_invivo_key": None,
     # Universal cases: group instances into units of analysis. `key`
     # names the item-data field to group on; `auto_detect` lets QDA
     # scan participant_id/respondent_id/case_id; `attributes` lifts
@@ -516,6 +545,7 @@ _OPTIONAL_BOOL_FIELDS = {
 _VALID_ASSIGNMENT_STRATEGIES = [
     "random", "fixed_order", "active_learning", "llm_confidence",
     "max_diversity", "least_annotated", "category_based", "diversity_clustering",
+    "batch", "priority",
 ]
 
 
@@ -780,6 +810,41 @@ def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
             )
 
 
+def validate_judge_calibration_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``judge_calibration`` block when enabled.
+
+    Delegates to the typed config's ``validate()`` (so the rules live in one
+    place) and additionally cross-checks that referenced schema names exist in
+    ``annotation_schemes``. Raises ConfigValidationError on hard errors.
+    """
+    jc = config_data.get("judge_calibration")
+    if not isinstance(jc, dict) or not jc.get("enabled"):
+        return
+
+    from potato.judge_calibration.config import parse_judge_calibration_config
+
+    cfg = parse_judge_calibration_config(config_data)
+    errors = cfg.validate()
+
+    # Cross-check schema references against declared annotation_schemes.
+    declared = {
+        s.get("name")
+        for s in (config_data.get("annotation_schemes") or [])
+        if isinstance(s, dict)
+    }
+    for name in cfg.schemas:
+        if name not in declared:
+            errors.append(
+                f"judge_calibration.schemas references unknown scheme '{name}' "
+                f"(declared: {sorted(n for n in declared if n)})"
+            )
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid judge_calibration configuration:\n  - " + "\n  - ".join(errors)
+        )
+
+
 def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None, config_file_dir: str = None) -> None:
     """
     Validate the structure and content of the YAML configuration.
@@ -795,10 +860,13 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     if not isinstance(config_data, dict):
         raise ConfigValidationError("Configuration must be a YAML object (dictionary)")
 
-    # Required fields validation
+    # Required fields validation. NOTE: 'data_files' is intentionally NOT here —
+    # it is one of three mutually-acceptable data sources (data_files /
+    # data_directory / data_sources), enforced by the dedicated check below.
+    # Listing it here unconditionally made data_directory- and data_sources-only
+    # configs fail validation before that smarter check could run (F-038).
     required_fields = [
         'item_properties',
-        'data_files',
         'task_dir',
         'output_annotation_dir',
         'annotation_task_name',
@@ -874,6 +942,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate category assignment configuration if present
     validate_category_assignment_config(config_data)
 
+    # Validate batch assignment configuration if present
+    validate_batch_assignment_config(config_data)
+
     # Validate diversity ordering configuration if present
     validate_diversity_config(config_data)
 
@@ -921,6 +992,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate codebook_mode (and apply the crowd force-lock).
     validate_codebook_config(config_data)
 
+    # Validate judge_calibration configuration if present
+    validate_judge_calibration_config(config_data)
+
     # Warn about unrecognized keys at all nesting levels
     validate_unknown_keys(config_data)
 
@@ -929,7 +1003,7 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 _CLAIM_INCOMPATIBLE_STRATEGIES = {
     "random", "diversity_clustering", "max_diversity",
     "active_learning", "llm_confidence", "least_annotated",
-    "category_based",
+    "category_based", "batch",
 }
 
 
@@ -1862,9 +1936,19 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                 raise ConfigValidationError(f"{path}.min_value must be less than max_value")
 
     elif annotation_type == 'hierarchical_multiselect':
-        if 'taxonomy' not in scheme:
-            raise ConfigValidationError(f"{path} missing 'taxonomy' field for hierarchical_multiselect annotation type")
-        if not isinstance(scheme['taxonomy'], dict) or not scheme['taxonomy']:
+        # Either an explicit taxonomy or a built-in preset (e.g. MAST) is required.
+        preset = scheme.get('taxonomy_preset')
+        if 'taxonomy' not in scheme and not preset:
+            raise ConfigValidationError(
+                f"{path} requires 'taxonomy' or 'taxonomy_preset' for "
+                f"hierarchical_multiselect annotation type")
+        if preset:
+            from potato.server_utils.failure_taxonomy import TAXONOMY_PRESETS
+            if str(preset).strip().lower() not in TAXONOMY_PRESETS:
+                raise ConfigValidationError(
+                    f"{path}.taxonomy_preset '{preset}' is not a known preset "
+                    f"(available: {', '.join(sorted(TAXONOMY_PRESETS))})")
+        elif not isinstance(scheme['taxonomy'], dict) or not scheme['taxonomy']:
             raise ConfigValidationError(f"{path}.taxonomy must be a non-empty dictionary")
 
     elif annotation_type == 'vas':
@@ -2782,6 +2866,35 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
         except ConfigSecurityError as e:
             raise ConfigSecurityError(f"Data file {i}: {str(e)}")
 
+    # Validate batch assignment instance files
+    batch_config = config_data.get('batch_assignment')
+    if isinstance(batch_config, dict):
+        for i, group in enumerate(batch_config.get('groups') or []):
+            if not isinstance(group, dict):
+                continue
+            file_entry = group.get(
+                'instances_file',
+                group.get('items_file', group.get('instance_ids_file')),
+            )
+            if not file_entry:
+                continue
+            if isinstance(file_entry, dict):
+                file_path = file_entry.get("path")
+            else:
+                file_path = file_entry
+
+            try:
+                validated_path = validate_path_security(file_path, base_dir, project_dir)
+                if not os.path.exists(validated_path):
+                    raise ConfigValidationError(
+                        f"batch_assignment.groups[{i}] file not found: "
+                        f"{file_path} (resolved to: {validated_path})"
+                    )
+            except ConfigSecurityError as e:
+                raise ConfigSecurityError(
+                    f"batch_assignment.groups[{i}] file: {str(e)}"
+                )
+
     # Validate data_directory if configured
     if 'data_directory' in config_data:
         data_directory = config_data['data_directory']
@@ -3050,6 +3163,96 @@ def validate_training_data_file(data_file_path: str, annotation_schemes: List[Di
         if 'explanation' in instance:
             if not isinstance(instance['explanation'], str):
                 raise ConfigValidationError(f"Training instance {i}.explanation must be a string")
+
+
+def validate_batch_assignment_config(config_data: Dict[str, Any]) -> None:
+    """
+    Validate batch assignment configuration.
+
+    ``batch_assignment`` supports explicit annotator cohorts for repeat-round
+    studies. Each group defines annotators allowed to receive a fixed item set,
+    either inline or through a separate supported data file. Items may also
+    carry annotator lists via ``annotator_key``; that field is validated at
+    assignment time because data files load later.
+    """
+    if 'batch_assignment' not in config_data:
+        return
+
+    batch_config = config_data['batch_assignment']
+    if not isinstance(batch_config, dict):
+        raise ConfigValidationError("batch_assignment must be a dictionary")
+
+    annotator_key = batch_config.get('annotator_key')
+    if annotator_key is not None and (
+        not isinstance(annotator_key, str) or not annotator_key.strip()
+    ):
+        raise ConfigValidationError("batch_assignment.annotator_key must be a non-empty string")
+
+    groups = batch_config.get('groups', [])
+    if groups is None:
+        return
+    if not isinstance(groups, list):
+        raise ConfigValidationError("batch_assignment.groups must be a list")
+
+    for idx, group in enumerate(groups):
+        if not isinstance(group, dict):
+            raise ConfigValidationError(f"batch_assignment.groups[{idx}] must be a dictionary")
+
+        users = group.get('annotators', group.get('users'))
+        instances = group.get('instances', group.get('items', group.get('instance_ids')))
+        file_entry = group.get(
+            'instances_file',
+            group.get('items_file', group.get('instance_ids_file')),
+        )
+
+        if not isinstance(users, list) or not users:
+            raise ConfigValidationError(
+                f"batch_assignment.groups[{idx}] must define non-empty annotators/users list"
+            )
+        if not all(isinstance(user, str) and user.strip() for user in users):
+            raise ConfigValidationError(
+                f"batch_assignment.groups[{idx}].annotators/users must contain non-empty strings"
+            )
+
+        has_instances = instances is not None
+        has_file = file_entry is not None
+
+        if not has_instances and not has_file:
+            raise ConfigValidationError(
+                f"batch_assignment.groups[{idx}] must define either "
+                "instances/items/instance_ids or instances_file/items_file/instance_ids_file"
+            )
+
+        if has_instances and (not isinstance(instances, list) or not instances):
+            raise ConfigValidationError(
+                f"batch_assignment.groups[{idx}] must define non-empty instances/items/instance_ids list"
+            )
+        if has_instances and not all(isinstance(instance, str) and instance.strip() for instance in instances):
+            raise ConfigValidationError(
+                f"batch_assignment.groups[{idx}].instances/items/instance_ids must contain non-empty strings"
+            )
+
+        if has_file:
+            if isinstance(file_entry, str):
+                if not file_entry.strip():
+                    raise ConfigValidationError(
+                        f"batch_assignment.groups[{idx}] file path must be non-empty"
+                    )
+            elif isinstance(file_entry, dict):
+                path = file_entry.get('path')
+                if not isinstance(path, str) or not path.strip():
+                    raise ConfigValidationError(
+                        f"batch_assignment.groups[{idx}] file entry must define a non-empty path"
+                    )
+                encoding = file_entry.get('encoding')
+                if encoding is not None and not isinstance(encoding, str):
+                    raise ConfigValidationError(
+                        f"batch_assignment.groups[{idx}] file encoding must be a string"
+                    )
+            else:
+                raise ConfigValidationError(
+                    f"batch_assignment.groups[{idx}] file entry must be a path string or mapping"
+                )
 
 
 def validate_category_assignment_config(config_data: Dict[str, Any]) -> None:
@@ -3626,7 +3829,11 @@ def init_config(args):
         config_updates = {
             "verbose": args.verbose,
             "very_verbose": args.very_verbose,
-            "__config_file__": args.config_file,
+            # Store an ABSOLUTE path: the server chdir's into task_dir at startup,
+            # so a relative path would be re-resolved against the wrong CWD later
+            # (e.g. admin export doubled the project path). CWD is still the
+            # original launch dir here (chdir happens further below).
+            "__config_file__": os.path.abspath(args.config_file),
             "customjs": args.customjs,
             "customjs_hostname": args.customjs_hostname,
             "persist_sessions": args.persist_sessions,
@@ -4304,13 +4511,19 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
     # Track span targets for validation
     span_targets = []
 
-    # Valid display types - keep in sync with display registry
-    valid_display_types = [
-        "text", "html", "image", "video", "audio", "dialogue", "pairwise",
-        "pdf", "document", "spreadsheet", "code", "agent_trace", "gallery",
-        "conversation_tree", "interactive_chat", "web_agent_trace",
-        "live_agent", "coding_trace", "live_coding_agent",
-    ]
+    # Valid display types — sourced from the display registry (single source
+    # of truth) so new display types don't require editing this list. Falls
+    # back to a static list if the registry can't be imported.
+    try:
+        from .displays import display_registry
+        valid_display_types = display_registry.get_supported_types()
+    except Exception:
+        valid_display_types = [
+            "text", "html", "image", "video", "audio", "dialogue", "pairwise",
+            "pdf", "document", "spreadsheet", "code", "agent_trace", "eval_trace",
+            "gallery", "conversation_tree", "interactive_chat", "web_agent_trace",
+            "live_agent", "coding_trace", "live_coding_agent",
+        ]
 
     for i, field in enumerate(fields):
         if not isinstance(field, dict):

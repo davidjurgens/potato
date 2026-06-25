@@ -1,0 +1,72 @@
+# Automation Loop — production→eval flywheel
+#
+# Ingested traces are matched by automation rules that route them to the
+# annotation queue, curate them into eval datasets, and run evaluators —
+# automatically, as they arrive. Inspect activity at /admin/automation.
+#
+# Run from repo root:
+#   python potato/flask_server.py start examples/agent-traces/automation-loop/config.yaml -p 8000
+#
+# Push a trace (errored run -> matches the "route-errors" rule):
+#   curl -X POST http://localhost:8000/api/traces/webhook -H "Content-Type: application/json" \
+#     -d '{"id":"run-1","task_description":"buy milk","status":"error","steps":[{"action_type":"click"}]}'
+
+annotation_task_name: "Automation Loop"
+
+data_files:
+  - data/seed.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Receive traces at runtime.
+trace_ingestion:
+  enabled: true
+  api_key: ""
+  notify_annotators: true
+
+# Versioned eval datasets (target of add_to_dataset actions).
+datasets:
+  enabled: true
+  storage: file
+
+# Automation: filter -> sample -> actions over every incoming item.
+automation:
+  enabled: true
+  rules:
+    # Every ingested trace: curate into a review dataset + queue it.
+    - name: curate-ingested
+      when: {field: metadata.source, equals: webhook}
+      sample_rate: 1.0
+      actions:
+        - {type: add_to_dataset, dataset: incoming-traces}
+        - {type: notify, message: "New trace ingested"}
+
+    # Errored runs: high-priority queue + flag for review (10% sampled to
+    # demonstrate sampling; raise to 1.0 in practice).
+    - name: route-errors
+      when: {field: status, in: [error, failed, failure]}
+      sample_rate: 1.0
+      actions:
+        - {type: add_to_queue, priority: 100, reason: "Agent errored"}
+        - {type: add_to_dataset, dataset: errors-to-fix}
+
+instance_display:
+  layout: {direction: vertical, gap: 12px}
+  fields:
+    - {key: task_description, type: text, label: "Task"}
+    - {key: trace, type: eval_trace, label: "Agent Trace"}
+
+annotation_schemes:
+  - annotation_type: radio
+    name: verdict
+    description: "Is this trace correct?"
+    labels:
+      - name: correct
+      - name: incorrect
+    sequential_key_binding: true

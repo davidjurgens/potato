@@ -1,0 +1,40 @@
+# Orchestration-pattern confirm/correct (M6)
+# Recipe: a radio schema to confirm or correct the multi-agent orchestration pattern,
+# paired with the agent_trace display. The pattern label is the key metadata an
+# evaluator needs to pick the right downstream lens (MAESTRO, 2601.00481: architecture
+# dominates outcomes), and to choose how to lay the trace out (sequential -> lanes,
+# hierarchical -> tree, group-chat -> board). Pair with M3 (interaction_graph) for the
+# structural view and M5 (agent_scorecard) for per-agent scoring.
+# Run: python potato/flask_server.py start examples/agent-traces/orchestration-pattern/config.yaml -p 8000
+annotation_task_name: "Orchestration Pattern"
+data_files:
+  - data/traces.json
+item_properties:
+  id_key: id
+  text_key: task
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+instance_display:
+  layout: {direction: vertical, gap: 16px}
+  fields:
+    - key: task
+      type: text
+      label: "Task"
+    - key: steps
+      type: agent_trace
+      label: "Agent Interactions"
+      display_options: {show_turn_numbers: true, speaker_key: agent, text_key: content}
+annotation_schemes:
+  - annotation_type: radio
+    name: orchestration_pattern
+    description: "Which orchestration pattern does this run actually follow?"
+    labels:
+      - single_agent
+      - sequential_pipeline
+      - hierarchical_manager
+      - group_chat
+      - blackboard
+      - debate
+      - hub_and_spoke
+    has_free_response: true

@@ -135,13 +135,19 @@ class PromptOptimizer:
         self.prompt_setter = prompt_setter
         self.examples_getter = examples_getter
 
-        # Load optimization config
+        # Load optimization config. solo_config.prompt_optimization may be a
+        # PromptOptimizationConfig dataclass (typical) or a plain dict; read
+        # fields from either form.
         opt_config = getattr(solo_config, 'prompt_optimization', None)
         if opt_config:
+            def _opt(key, default):
+                if isinstance(opt_config, dict):
+                    return opt_config.get(key, default)
+                return getattr(opt_config, key, default)
             self.opt_config = OptimizationConfig(
-                enabled=opt_config.get('enabled', True),
-                find_smallest_model=opt_config.get('find_smallest_model', True),
-                target_accuracy=opt_config.get('target_accuracy', 0.85),
+                enabled=_opt('enabled', True),
+                find_smallest_model=_opt('find_smallest_model', True),
+                target_accuracy=_opt('target_accuracy', 0.85),
             )
         else:
             self.opt_config = OptimizationConfig()

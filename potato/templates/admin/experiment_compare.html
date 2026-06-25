@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compare experiments</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  .ec-back { font-size: 0.85rem; color: var(--muted-foreground); text-decoration: none; }
+  .ec-back:hover { text-decoration: underline; }
+  .ec-lede { color: var(--muted-foreground); max-width: 70ch; line-height: 1.6; margin: 0.25rem 0 1.5rem; }
+  table.ec-table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  table.ec-table th, table.ec-table td { border: 1px solid var(--border); padding: 0.55rem 0.75rem; }
+  table.ec-table th { background: var(--muted); font-weight: 600; text-align: left; }
+  table.ec-table th.metric { text-align: left; }
+  td.ec-val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  /* Best value in a metric row gets a subtle positive highlight; deltas vs the
+     first (baseline) experiment are shown beneath each non-baseline value. */
+  td.ec-best { background: hsl(140 55% 95%); color: hsl(140 50% 25%); }
+  .ec-delta { display: block; font-size: 0.72rem; font-weight: 600; }
+  .ec-delta.up { color: hsl(140 50% 32%); }
+  .ec-delta.down { color: hsl(0 60% 45%); }
+  .ec-delta.flat { color: var(--muted-foreground); }
+  .ec-sub { font-size: 0.72rem; color: var(--muted-foreground); font-weight: 400; }
+  .ec-empty { color: var(--muted-foreground); font-style: italic; }
+  /* Paired-significance badge on a delta: a significant change excludes 0 in its
+     bootstrap CI. n.s. = not significant (the delta may be noise). */
+  .ec-sig { display: inline-block; font-size: 0.66rem; font-weight: 600; margin-top: 1px;
+            padding: 0 0.3rem; border-radius: 999px; line-height: 1.5; }
+  .ec-sig.yes { background: hsl(140 50% 92%); color: hsl(140 50% 26%); }
+  .ec-sig.no  { background: var(--muted); color: var(--muted-foreground); }
+  .ec-ci { display: block; font-size: 0.66rem; color: var(--muted-foreground); font-weight: 400; }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <a class="ec-back" href="{{ url_for('datasets.admin') }}">&larr; Datasets &amp; Experiments</a>
+  <h1>Compare experiments</h1>
+  <p class="ec-lede">
+    Aggregate evaluator scores side by side. The first experiment is the
+    baseline; deltas and the best value per metric are highlighted so
+    regressions stand out. Each delta carries a <strong>paired-bootstrap</strong>
+    significance badge and 95% CI — so you can tell a real change from noise.
+  </p>
+
+  {% if experiments|length < 2 %}
+  <p class="ec-empty">Select at least two experiments to compare.</p>
+  {% else %}
+  <div style="overflow-x:auto;">
+    <table class="ec-table">
+      <thead>
+        <tr>
+          <th class="metric" scope="col">Metric</th>
+          {% for e in experiments %}
+          <th scope="col">{{ e.name or e.id }}<br>
+            <span class="ec-sub">{{ e.dataset_name }} · {{ e.dataset_version }}{% if loop.first %} · baseline{% endif %}</span>
+          </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for key in metric_keys %}
+        {# precompute the best (max) value across experiments for this metric #}
+        {% set vals = [] %}
+        {% for e in experiments %}{% set _ = vals.append(e.aggregate_scores.get(key)) %}{% endfor %}
+        {% set present = vals | select('ne', None) | list %}
+        {% set best = present | max if present else None %}
+        <tr>
+          <th class="metric" scope="row">{{ key }}</th>
+          {% for e in experiments %}
+            {% set v = e.aggregate_scores.get(key) %}
+            {% set base = experiments[0].aggregate_scores.get(key) %}
+            <td class="ec-val {% if v is not none and best is not none and v == best %}ec-best{% endif %}">
+              {% if v is none %}<span class="ec-empty">—</span>
+              {% else %}{{ '%.3f'|format(v) }}
+                {% if not loop.first and base is not none %}
+                  {% set d = v - base %}
+                  <span class="ec-delta {{ 'up' if d > 0.0005 else ('down' if d < -0.0005 else 'flat') }}">
+                    {{ '%+.3f'|format(d) }}
+                  </span>
+                  {% set sig = significance.get(e.id, {}).get(key) %}
+                  {% if sig and sig.mean_diff is not none and sig.n > 1 %}
+                    <span class="ec-sig {{ 'yes' if sig.significant else 'no' }}"
+                          title="Paired bootstrap vs baseline (n={{ sig.n }}{% if sig.p_value is not none %}, p={{ '%.3f'|format(sig.p_value) }}{% endif %})">
+                      {{ 'significant' if sig.significant else 'n.s.' }}</span>
+                    {% if sig.lo is not none %}<span class="ec-ci">95% CI [{{ '%+.3f'|format(sig.lo) }}, {{ '%+.3f'|format(sig.hi) }}]</span>{% endif %}
+                  {% endif %}
+                {% endif %}
+              {% endif %}
+            </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+        <tr>
+          <th class="metric" scope="row">Examples</th>
+          {% for e in experiments %}<td class="ec-val">{{ e.example_count }}</td>{% endfor %}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</main>
+</body>
+</html>

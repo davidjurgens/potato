@@ -29,6 +29,8 @@ import random
 import uuid
 import logging
 import threading
+import json
+import os
 
 # Singleton instance of the ItemStateManager with thread-safe lock
 ITEM_STATE_MANAGER = None
@@ -124,6 +126,27 @@ class Item:
         # This data structure keeps the span-based annotations the user has
         # completed so far
         self.span_annotations = {}
+
+    def __getattr__(self, name):
+        """Expose raw data fields as attributes for template access.
+
+        F-029: dynamic-label / video_as_label schemas reference instance data
+        fields in Jinja as ``{{instance_obj.<field>[i]}}`` (e.g.
+        ``instance_obj.gifs[0]``). Without this, only fields whose name happens
+        to collide with a real Item attribute resolve, and others (gifs,
+        gifs_path, …) raise UndefinedError -> 500 at render time.
+
+        __getattr__ is only invoked when normal attribute lookup fails, so real
+        attributes (item_id, item_data, metadata, labels, span_annotations) are
+        never shadowed. Names absent from the data dict still raise
+        AttributeError so Jinja's Undefined handling and copy/pickle behave.
+        """
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        data = self.__dict__.get("item_data")
+        if isinstance(data, dict) and name in data:
+            return data[name]
+        raise AttributeError(name)
 
     def add_metadata(self, metadata_name: str, metadata_value: str):
         """Add metadata to this item"""
@@ -682,6 +705,8 @@ class AssignmentStrategy(Enum):
     - LEAST_ANNOTATED: Prioritizes items with fewest annotations
     - CATEGORY_BASED: Assigns items matching user's qualified categories
     - DIVERSITY_CLUSTERING: Samples items round-robin from embedding clusters
+    - BATCH: Restricts assignment to configured annotator/item cohorts
+    - PRIORITY: Serves items by a triage signal (errors/low-score first)
     """
     RANDOM = 'random'
     FIXED_ORDER = 'fixed_order'
@@ -691,6 +716,8 @@ class AssignmentStrategy(Enum):
     LEAST_ANNOTATED = 'least_annotated'
     CATEGORY_BASED = 'category_based'
     DIVERSITY_CLUSTERING = 'diversity_clustering'
+    BATCH = 'batch'
+    PRIORITY = 'priority'
 
     def fromstr(phase: str) -> AssignmentStrategy:
         """
@@ -722,6 +749,10 @@ class AssignmentStrategy(Enum):
             return AssignmentStrategy.CATEGORY_BASED
         elif phase == "diversity_clustering":
             return AssignmentStrategy.DIVERSITY_CLUSTERING
+        elif phase == "batch":
+            return AssignmentStrategy.BATCH
+        elif phase == "priority":
+            return AssignmentStrategy.PRIORITY
         else:
             raise ValueError(f"Unknown phase: {phase}")
 
@@ -797,12 +828,27 @@ class ItemStateManager:
         # Queue of remaining instances to be assigned
         self.remaining_instance_ids = deque()
 
+        # Runtime assignment pause switch. When True, assign_instances_to_user
+        # is a no-op so admins can freeze new assignments (e.g. while curating an
+        # eval dataset or investigating). Existing assignments are untouched.
+        self._assignment_paused = False
+
         # NOTE: We use an extra set to keep track of completed instances to allow for
         # O(1) tests of whether an item needs to be removed from the remaining list
         self.completed_instance_ids = set()
 
         # Initialize item annotation counts for tracking
         self.item_annotation_counts = defaultdict(int)
+
+        # Signal-based triage: score each item into a priority from the
+        # `triage` config block (errors / thumbs-down / low score first). The
+        # scorer runs in add_item, so it covers both statically loaded data and
+        # traces ingested at runtime. None when triage is disabled.
+        try:
+            from potato.server_utils.triage import build_scorer
+            self.triage_scorer = build_scorer(config)
+        except ImportError:
+            self.triage_scorer = None
 
         # Load how we want to assign items to users
         if 'assignment_strategy' in config:
@@ -813,6 +859,10 @@ class ItemStateManager:
                 self.assignment_strategy = AssignmentStrategy.fromstr(strat['name'])
             else:
                 raise ValueError("Invalid assignment_strategy in config")
+        elif self.triage_scorer is not None:
+            # Triage enabled without an explicit strategy: prioritize the queue
+            # by the triage signal (the whole point of enabling triage).
+            self.assignment_strategy = AssignmentStrategy.PRIORITY
         else:
             self.assignment_strategy = AssignmentStrategy.FIXED_ORDER
 
@@ -842,6 +892,179 @@ class ItemStateManager:
         dynamic_config = category_assignment_config.get('dynamic', {})
         self.dynamic_expertise_enabled = dynamic_config.get('enabled', False)
 
+        # Batch assignment restricts items to explicit annotator cohorts. Groups
+        # can be configured centrally, or each item can carry an annotator list.
+        self.batch_assignment_config = config.get('batch_assignment') or {}
+        self.batch_assignment_annotator_key = self.batch_assignment_config.get(
+            'annotator_key',
+            'assigned_annotators',
+        )
+        self.batch_assignment_id_key = config.get('item_properties', {}).get('id_key', 'id')
+        self.batch_user_to_instance_ids: Dict[str, List[str]] = defaultdict(list)
+        self._load_batch_assignment_groups()
+
+    def _load_batch_assignment_groups(self) -> None:
+        """Index configured batch groups by annotator while preserving item order."""
+        groups = self.batch_assignment_config.get('groups') or []
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            users = group.get('annotators', group.get('users', []))
+            instance_ids = group.get(
+                'instances',
+                group.get('items', group.get('instance_ids', [])),
+            )
+            file_entry = group.get(
+                'instances_file',
+                group.get('items_file', group.get('instance_ids_file')),
+            )
+            if file_entry:
+                instance_ids = list(instance_ids) if isinstance(instance_ids, list) else []
+                instance_ids.extend(self._load_batch_instance_ids_from_file(file_entry))
+            if isinstance(users, str):
+                users = [users]
+            if isinstance(instance_ids, str):
+                instance_ids = [instance_ids]
+            users = [str(user) for user in users if isinstance(user, str) and user]
+            instance_ids = [
+                str(instance_id)
+                for instance_id in instance_ids
+                if isinstance(instance_id, str) and instance_id
+            ]
+            for user_id in users:
+                for instance_id in instance_ids:
+                    if instance_id not in self.batch_user_to_instance_ids[user_id]:
+                        self.batch_user_to_instance_ids[user_id].append(instance_id)
+
+    def _resolve_batch_file_path(self, path: str) -> str:
+        """Resolve a batch assignment file path relative to task_dir."""
+        task_dir = self.config.get('task_dir', '.')
+        raw_path = path if os.path.isabs(path) else os.path.join(task_dir, path)
+        from potato.server_utils.config_module import validate_path_security
+
+        return validate_path_security(os.path.normpath(raw_path), task_dir)
+
+    def _instance_id_from_batch_record(self, record, source: str, index: int) -> str:
+        """Extract an instance ID from a supported batch assignment record."""
+        if isinstance(record, str):
+            return record
+        if isinstance(record, dict):
+            if self.batch_assignment_id_key not in record:
+                raise KeyError(
+                    f"ID key '{self.batch_assignment_id_key}' not found in "
+                    f"batch assignment file {source} at item {index + 1}"
+                )
+            return str(record[self.batch_assignment_id_key])
+        raise ValueError(
+            f"Expected object or string in batch assignment file {source} "
+            f"at item {index + 1}, got {type(record).__name__}"
+        )
+
+    def _load_batch_instance_ids_from_file(self, file_entry) -> List[str]:
+        """
+        Load batch instance IDs from a supported Potato data file format.
+
+        Supports the same local formats as ``data_files``: JSON, JSONL, CSV,
+        TSV, and Parquet. JSON may be a list of item objects, a list of ID
+        strings, or a mapping with ``instances``/``items``/``instance_ids``.
+        """
+        if isinstance(file_entry, dict):
+            raw_path = file_entry.get('path')
+            encoding = file_entry.get('encoding', 'utf-8')
+        else:
+            raw_path = file_entry
+            encoding = 'utf-8'
+
+        if not raw_path or not isinstance(raw_path, str):
+            raise ValueError("batch assignment file entry must define a path")
+
+        path = self._resolve_batch_file_path(raw_path)
+        fmt = path.rsplit('.', 1)[-1].lower()
+        if fmt not in {'csv', 'tsv', 'json', 'jsonl', 'parquet'}:
+            raise ValueError(f"Unsupported batch assignment file format {fmt} for {path}")
+
+        if fmt == 'json':
+            with open(path, 'rt', encoding=encoding) as f:
+                parsed = json.load(f)
+            if isinstance(parsed, dict):
+                for key in ('instances', 'items', 'instance_ids'):
+                    if key in parsed:
+                        parsed = parsed[key]
+                        break
+            if not isinstance(parsed, list):
+                raise ValueError(f"Expected JSON list in batch assignment file {path}")
+            return [
+                self._instance_id_from_batch_record(record, path, idx)
+                for idx, record in enumerate(parsed)
+            ]
+
+        if fmt == 'jsonl':
+            instance_ids = []
+            with open(path, 'rt', encoding=encoding) as f:
+                for line_no, line in enumerate(f):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    record = json.loads(line)
+                    instance_ids.append(
+                        self._instance_id_from_batch_record(record, path, line_no)
+                    )
+            return instance_ids
+
+        if fmt == 'parquet':
+            import pyarrow.parquet as pq
+
+            table = pq.read_table(path)
+            df = table.to_pandas()
+        else:
+            import pandas as pd
+
+            sep = ',' if fmt == 'csv' else '\t'
+            df = pd.read_csv(path, sep=sep, encoding=encoding)
+
+        if self.batch_assignment_id_key not in df.columns:
+            raise KeyError(
+                f"ID column '{self.batch_assignment_id_key}' not found in "
+                f"batch assignment file {path}"
+            )
+        return [str(value) for value in df[self.batch_assignment_id_key].tolist()]
+
+    def _item_batch_annotators(self, instance_id: str) -> Set[str]:
+        """Return annotators allowed by an item's batch annotator key."""
+        item = self.instance_id_to_instance.get(instance_id)
+        if item is None:
+            return set()
+        item_data = item.get_data()
+        if not isinstance(item_data, dict):
+            return set()
+        annotators = item_data.get(self.batch_assignment_annotator_key)
+        if annotators is None:
+            return set()
+        if isinstance(annotators, str):
+            annotators = [annotators]
+        if not isinstance(annotators, list):
+            return set()
+        return {value for value in annotators if isinstance(value, str) and value}
+
+    def _batch_candidate_ids_for_user(self, user_id: str) -> List[str]:
+        """Return batch-eligible item IDs for a user in deterministic order."""
+        candidate_ids = []
+        seen = set()
+
+        for instance_id in self.batch_user_to_instance_ids.get(user_id, []):
+            if instance_id not in seen:
+                candidate_ids.append(instance_id)
+                seen.add(instance_id)
+
+        for instance_id in self.remaining_instance_ids:
+            if instance_id in seen:
+                continue
+            if user_id in self._item_batch_annotators(instance_id):
+                candidate_ids.append(instance_id)
+                seen.add(instance_id)
+
+        return candidate_ids
+
     def has_item(self, instance_id: str) -> bool:
         """Returns True if the item is in the state manager"""
         return instance_id in self.instance_id_to_instance
@@ -866,8 +1089,41 @@ class ItemStateManager:
             self.instance_id_ordering.append(instance_id)
             self.remaining_instance_ids.append(instance_id)
 
+            # Signal-based triage: store the quality-signal priority + reason on
+            # the item so the PRIORITY assignment strategy and the inline badge
+            # can read it. Runs for both static and runtime-ingested items.
+            if self.triage_scorer is not None:
+                try:
+                    score = self.triage_scorer.score(instance_data)
+                    for k, v in score.to_metadata().items():
+                        item.add_metadata(k, v)
+                except Exception as e:
+                    self.logger.warning(f"Triage scoring failed for {instance_id}: {e}")
+
             # Index categories for this item
             self._index_item_categories(instance_id, instance_data)
+
+        # Automation rules (Phase 4): run OUTSIDE the lock so action execution
+        # (dataset writes, notifies; heavy actions are dispatched to a worker)
+        # never holds the item-state lock. Runs after triage so add_to_queue can
+        # override the triage priority. Guarded — must never break ingestion.
+        try:
+            from potato.automation.manager import get_automation_manager
+            automation = get_automation_manager()
+            if automation is not None:
+                automation.process_item(instance_id, instance_data)
+        except Exception as e:
+            self.logger.warning(f"Automation processing failed for {instance_id}: {e}")
+
+        # Semantic curation: optionally embed the item into the search index on
+        # ingest (opt-in via curation.embed_on_ingest; guarded + lazy).
+        try:
+            from potato.curation.manager import get_curation_manager
+            curation = get_curation_manager()
+            if curation is not None and curation.embed_on_ingest:
+                curation.embed_instance(instance_id)
+        except Exception as e:
+            self.logger.warning(f"Curation embed-on-ingest failed for {instance_id}: {e}")
 
     def update_item(self, instance_id: str, instance_data: dict) -> bool:
         """
@@ -1066,12 +1322,55 @@ class ItemStateManager:
 
     def has_unlabeled_items_for_user(self, user_state: 'UserState') -> bool:
         """Check whether any items remain for this user to annotate (read-only)."""
+        if self.assignment_strategy == AssignmentStrategy.BATCH:
+            user_id = getattr(user_state, 'user_id', None)
+            if not user_id:
+                return False
+            for iid in self._batch_candidate_ids_for_user(str(user_id)):
+                if iid not in self.remaining_instance_ids:
+                    continue
+                if self._item_is_saturated(iid):
+                    continue
+                if not user_state.has_annotated(iid):
+                    return True
+            return False
+
         for iid in self.remaining_instance_ids:
             if self._item_is_saturated(iid):
                 continue
             if not user_state.has_annotated(iid):
                 return True
         return False
+
+    def _count_assignable_batch_items(self, user_state: 'UserState') -> int:
+        """Count batch-eligible items that can still be newly assigned."""
+        user_id = getattr(user_state, 'user_id', None)
+        if not user_id:
+            return 0
+        already_assigned = user_state.get_assigned_instance_ids()
+        count = 0
+        for iid in self._batch_candidate_ids_for_user(str(user_id)):
+            if iid not in self.remaining_instance_ids:
+                continue
+            if self._item_is_saturated(iid):
+                continue
+            if iid in already_assigned:
+                continue
+            if user_state.has_annotated(iid):
+                continue
+            count += 1
+        return count
+
+    def pause_assignment(self) -> None:
+        """Freeze new assignments (admin control). Idempotent."""
+        self._assignment_paused = True
+
+    def resume_assignment(self) -> None:
+        """Resume new assignments (admin control). Idempotent."""
+        self._assignment_paused = False
+
+    def is_assignment_paused(self) -> bool:
+        return self._assignment_paused
 
     def assign_instances_to_user(self, user_state: UserState) -> int:
         """
@@ -1098,6 +1397,12 @@ class ItemStateManager:
             - May modify remaining_instance_ids queue
         """
         self.logger.debug(f"Assigning instances to user {getattr(user_state, 'user_id', None)} with strategy {self.assignment_strategy} and random_seed={self.random_seed}")
+
+        # Respect the runtime pause switch — freeze new assignments without
+        # disturbing anything already assigned.
+        if self._assignment_paused:
+            self.logger.info("Assignment is paused; skipping new assignments")
+            return 0
 
         # Snapshot existing assignments so we can record timestamps for new ones
         existing_assignments = set(user_state.get_assigned_instance_ids()) if self.reclaim_enabled else None
@@ -1143,7 +1448,7 @@ class ItemStateManager:
                 return 0
             # For fixed_order strategy, assign all remaining capacity at once
             # For other strategies, use the original incremental logic
-            if self.assignment_strategy == AssignmentStrategy.FIXED_ORDER:
+            if self.assignment_strategy in {AssignmentStrategy.FIXED_ORDER, AssignmentStrategy.BATCH}:
                 instances_to_assign = remaining_capacity
             else:
                 # If user has less than 3 assignments, assign up to 3 more (or remaining capacity)
@@ -1153,8 +1458,13 @@ class ItemStateManager:
                     # Otherwise, assign one at a time
                     instances_to_assign = 1
         else:
-            # No maximum, assign one at a time
-            instances_to_assign = 1
+            # Batch assignment should still hand out the whole eligible batch
+            # when per-user quota is unlimited.
+            if self.assignment_strategy == AssignmentStrategy.BATCH:
+                instances_to_assign = self._count_assignable_batch_items(user_state)
+            else:
+                # No maximum, assign one at a time
+                instances_to_assign = 1
 
         # TODO: add strategy for assigning instances to users:
         #
@@ -1253,7 +1563,12 @@ class ItemStateManager:
                 assigned += 1
             return assigned
         elif self.assignment_strategy == AssignmentStrategy.ACTIVE_LEARNING:
-            # Active learning assignment strategy (currently falls back to random)
+            # Active learning: serve items in the current pool order. The
+            # ActiveLearningManager (when enabled) reorders remaining_instance_ids
+            # by query strategy (uncertainty/BADGE/BALD/hybrid) after each
+            # retrain, so taking items in-order surfaces the most informative
+            # unlabeled instances first. Before any retrain (cold start) this is
+            # simply the configured order.
             unlabeled_items = []
             for iid in list(self.remaining_instance_ids):
                 if self._item_is_saturated(iid):
@@ -1264,8 +1579,8 @@ class ItemStateManager:
                     unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
-            to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
-            self.logger.debug(f"Active learning (random fallback): assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
+            to_assign = unlabeled_items[:instances_to_assign]
+            self.logger.debug(f"Active learning: assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
                 user_state.assign_instance(self.instance_id_to_instance[item_id])
             return len(to_assign)
@@ -1383,6 +1698,44 @@ class ItemStateManager:
                 # Fallback to random if diversity manager unavailable
                 self.logger.debug("Diversity manager not available, falling back to random")
                 return self._assign_random_fallback(user_state, instances_to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.BATCH:
+            return self._assign_batch(user_state, instances_to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.PRIORITY:
+            # Signal-based triage: serve items by their stored triage priority
+            # (errors / thumbs-down / low score first). Mirrors MAX_DIVERSITY but
+            # sorts by the ingestion-time signal in item metadata instead of
+            # disagreement. Ties broken by the original queue order for
+            # determinism. `triage.order: asc` flips to lowest-priority-first.
+            candidates = []
+            for iid in list(self.remaining_instance_ids):
+                if self._item_is_saturated(iid):
+                    if iid in self.remaining_instance_ids:
+                        self.remaining_instance_ids.remove(iid)
+                    continue
+                if iid in user_state.get_assigned_instance_ids():
+                    continue
+                if user_state.has_annotated(iid):
+                    continue
+                candidates.append(iid)
+            if not candidates:
+                return 0
+            order_index = {iid: i for i, iid in enumerate(self.instance_id_ordering)}
+
+            def _priority_of(iid):
+                p = self.instance_id_to_instance[iid].get_metadata("triage_priority")
+                return p if p is not None else 0
+
+            ascending = bool(self.triage_scorer) and self.triage_scorer.order == "asc"
+            # Sort by priority (desc by default), tie-break by original order asc.
+            candidates.sort(key=lambda iid: (
+                _priority_of(iid) if ascending else -_priority_of(iid),
+                order_index.get(iid, 0),
+            ))
+            assigned = 0
+            for iid in candidates[:instances_to_assign]:
+                user_state.assign_instance(self.instance_id_to_instance[iid])
+                assigned += 1
+            return assigned
         else:
             # Default fallback to fixed order
             self.logger.warning(f"Unknown assignment strategy: {self.assignment_strategy}, falling back to fixed order")
@@ -1398,6 +1751,48 @@ class ItemStateManager:
                     if assigned >= instances_to_assign:
                         break
             return assigned
+
+    def _assign_batch(self, user_state: 'UserState', instances_to_assign: int) -> int:
+        """
+        Assign only items explicitly batched with this annotator.
+
+        This strategy supports round-to-round cohort preservation: a round-2
+        item can either be listed in ``batch_assignment.groups`` for a cohort,
+        or carry an annotator list in item data using ``annotator_key``.
+        """
+        user_id = getattr(user_state, 'user_id', None)
+        if not user_id:
+            return 0
+
+        assigned = 0
+        already_assigned = user_state.get_assigned_instance_ids()
+
+        for item_id in self._batch_candidate_ids_for_user(str(user_id)):
+            if item_id not in self.instance_id_to_instance:
+                self.logger.warning(
+                    "Batch assignment references unknown item %s for user %s",
+                    item_id,
+                    user_id,
+                )
+                continue
+            if item_id not in self.remaining_instance_ids:
+                continue
+            if self._item_is_saturated(item_id):
+                if item_id in self.remaining_instance_ids:
+                    self.remaining_instance_ids.remove(item_id)
+                continue
+            if item_id in already_assigned:
+                continue
+            if user_state.has_annotated(item_id):
+                continue
+
+            user_state.assign_instance(self.instance_id_to_instance[item_id])
+            already_assigned.add(item_id)
+            assigned += 1
+            if assigned >= instances_to_assign:
+                break
+
+        return assigned
 
     def _assign_category_based_dynamic(self, user_state: 'UserState', instances_to_assign: int) -> int:
         """

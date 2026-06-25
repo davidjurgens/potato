@@ -1,0 +1,20 @@
+{
+  "training_instances": [
+    {
+      "id": "train_1",
+      "text": "The app crashes every time I click the export button.",
+      "correct_answers": {
+        "thing_name": "bug"
+      },
+      "explanation": "A crash on a normal action is a defect in existing behavior, so this is a bug rather than a feature request."
+    },
+    {
+      "id": "train_2",
+      "text": "It would be great if the dashboard could also show a dark mode toggle.",
+      "correct_answers": {
+        "thing_name": "feature"
+      },
+      "explanation": "Asking for new capability that does not exist yet is a feature request, not a bug."
+    }
+  ]
+}

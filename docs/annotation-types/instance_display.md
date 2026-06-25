@@ -66,8 +66,11 @@ instance_display:
 | `spreadsheet` | Tabular data (Excel/CSV) | Yes (row/cell) |
 | `document` | Rich documents (Word, Markdown, HTML) | Yes |
 | `pdf` | PDF documents with page controls | Yes |
+| `agent_trace` | Agent trace as vertical step cards (Thought/Action/Observation) | No |
+| `coding_trace` | Coding agent trace with diffs, terminal blocks, file tree | Yes |
+| `eval_trace` | One trace split into three panes: reasoning \| function calls \| final answer | No |
 
-For detailed configuration of document formats (`code`, `spreadsheet`, `document`, `pdf`), see the [Extended Format Support](format_support.md) guide.
+For detailed configuration of document formats (`code`, `spreadsheet`, `document`, `pdf`), see the [Extended Format Support](format_support.md) guide. For agent-trace displays (`agent_trace`, `coding_trace`, `eval_trace`), see the [Agent Evaluation](../agent-evaluation/agent_traces.md) guides — `eval_trace` has its own [three-pane eval guide](../agent-evaluation/eval_trace.md).
 
 ## Display Type Options
 

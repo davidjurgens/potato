@@ -1,6 +1,6 @@
 {# Default ui_lang values if not provided by context processor #}
 {% if ui_lang is not defined %}
-{% set ui_lang = {'next_button': 'Next', 'previous_button': 'Previous', 'labeled_badge': 'Labeled', 'not_labeled_badge': 'Not labeled', 'submit_button': 'Submit', 'progress_label': 'Progress', 'go_button': 'Go', 'logout': 'Logout', 'loading': 'Loading annotation interface...', 'error_heading': 'Error', 'retry_button': 'Retry', 'adjudicate': 'Adjudicate', 'codebook': 'Codebook', 'instructions_heading': 'Instructions', 'text_to_annotate': 'Text to Annotate:', 'video_to_annotate': 'Video to Annotate:', 'audio_to_annotate': 'Audio to Annotate:', 'powered_by': 'Powered by', 'cite_us': 'Cite Us', 'html_lang': 'en', 'html_dir': 'ltr'} %}
+{% set ui_lang = {'next_button': 'Next', 'previous_button': 'Previous', 'jump_prev_unannotated': 'Previous unannotated', 'jump_next_unannotated': 'Next unannotated', 'labeled_badge': 'Labeled', 'not_labeled_badge': 'Not labeled', 'submit_button': 'Submit', 'progress_label': 'Progress', 'go_button': 'Go', 'logout': 'Logout', 'loading': 'Loading annotation interface...', 'error_heading': 'Error', 'retry_button': 'Retry', 'adjudicate': 'Adjudicate', 'codebook': 'Codebook', 'instructions_heading': 'Instructions', 'text_to_annotate': 'Text to Annotate:', 'video_to_annotate': 'Video to Annotate:', 'audio_to_annotate': 'Audio to Annotate:', 'powered_by': 'Powered by', 'cite_us': 'Cite Us', 'html_lang': 'en', 'html_dir': 'ltr'} %}
 {% endif %}
 <!DOCTYPE html>
 <html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=3">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}">
@@ -121,7 +121,7 @@
     <!-- Universal Memos sidebar styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=2">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}?v=2">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=10">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=12">
 
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
@@ -183,11 +183,11 @@
 
                 <div class="nav-controls">
                     <button type="button" class="nav-control-btn" id="jump-unannotated-prev-btn"
-                            onclick="jumpToUnannotatedPrev()" title="Previous unannotated">
+                            onclick="jumpToUnannotatedPrev()" title="{{ ui_lang.jump_prev_unannotated }}">
                         <i class="fas fa-backward"></i>
                     </button>
                     <button type="button" class="nav-control-btn" id="jump-unannotated-btn"
-                            onclick="jumpToUnannotated()" title="Next unannotated">
+                            onclick="jumpToUnannotated()" title="{{ ui_lang.jump_next_unannotated }}">
                         <i class="fas fa-forward"></i>
                     </button>
                 </div>
@@ -207,6 +207,11 @@
                 {% if is_adjudicator %}
                 <a href="/adjudicate" class="adjudicate-btn" title="Adjudication Mode">
                     <i class="fas fa-gavel"></i> {{ ui_lang.adjudicate }}
+                </a>
+                {% endif %}
+                {% if annotator_dashboard_enabled | default(false) %}
+                <a href="/progress" class="adjudicate-btn" title="View your progress">
+                    <i class="fas fa-chart-line"></i> {{ ui_lang.progress | default('Progress') }}
                 </a>
                 {% endif %}
                 {% if annotation_codebook_url %}
@@ -319,6 +324,77 @@
                     <div id="instance-json-data" style="display: none;"
                          data-instance-json='{{ (instance_record if instance_record is defined and instance_record else {}) | tojson }}'></div>
 
+                    <!-- Signal-based triage flag (why this item was prioritized) -->
+                    {% if triage_info is defined and triage_info %}
+                    <div class="triage-flag" id="triage-flag" role="note"
+                         aria-label="Triage: this item was prioritized in the queue">
+                      <span class="triage-flag-icon" aria-hidden="true">!</span>
+                      <span class="triage-flag-text">
+                        Prioritized for review<span class="triage-flag-sep"> · </span><span class="triage-flag-reason">{{ triage_info.reason }}</span>
+                      </span>
+                    </div>
+                    {% endif %}
+
+                    <!-- LLM-judge inline suggestion (judge ↔ human alignment) -->
+                    {% if judge_prediction is defined and judge_prediction %}
+                    {% set jp = judge_prediction %}
+                    {% set jconf = (jp.confidence * 100)|int %}
+                    {% set jqual = 'Low confidence' if jp.confidence < 0.5 else ('Moderate confidence' if jp.confidence < 0.8 else 'High confidence') %}
+                    <div class="judge-suggestion" id="judge-suggestion"
+                         data-schema="{{ jp.schema }}" data-judge-label="{{ jp.label }}">
+                      <div class="judge-suggestion-row">
+                        <div class="judge-suggestion-main">
+                          <span class="judge-badge-icon" aria-hidden="true">⚖</span>
+                          <span class="judge-suggestion-label">
+                            Judge suggests
+                            <span class="judge-suggested-value">{{ jp.label }}</span>
+                            for <span class="judge-schema-name">{{ jp.schema }}</span>
+                          </span>
+                          <span class="judge-confidence">{{ jqual }} · {{ jconf }}%</span>
+                        </div>
+                        <button type="button" class="btn btn-secondary judge-accept-btn"
+                                id="judge-accept-btn"
+                                data-schema="{{ jp.schema }}" data-judge-label="{{ jp.label }}">
+                          Accept
+                        </button>
+                        {% if jp.running and jp.running.n %}
+                        <span class="judge-running"
+                              title="Running agreement between you/your team and the judge on this task (Cohen's κ)">
+                          {{ (jp.running.agreement_rate * 100)|int }}% agree (n={{ jp.running.n }}){% if jp.running.kappa is not none %} · κ {{ '%.2f'|format(jp.running.kappa) }}{% endif %}
+                        </span>
+                        {% endif %}
+                      </div>
+                      {% if jp.reasoning %}
+                      <details class="judge-reasoning">
+                        <summary>Judge reasoning</summary>
+                        <p>{{ jp.reasoning }}</p>
+                      </details>
+                      {% endif %}
+                    </div>
+                    <script>
+                    (function() {
+                      var btn = document.getElementById('judge-accept-btn');
+                      if (!btn) return;
+                      btn.addEventListener('click', function() {
+                        var schema = btn.getAttribute('data-schema');
+                        var label = btn.getAttribute('data-judge-label');
+                        // Check the matching radio/checkbox input for this schema.
+                        var inputs = document.querySelectorAll(
+                          'input.annotation-input[schema="' + schema + '"]');
+                        var matched = false;
+                        inputs.forEach(function(inp) {
+                          if (inp.value === label || inp.getAttribute('label_name') === label) {
+                            inp.checked = true;
+                            inp.dispatchEvent(new Event('change', { bubbles: true }));
+                            matched = true;
+                          }
+                        });
+                        if (matched) { btn.textContent = 'Accepted'; btn.disabled = true; }
+                      });
+                    })();
+                    </script>
+                    {% endif %}
+
                     <!-- Annotation forms -->
                     <div id="annotation-forms">
                         {{ TASK_LAYOUT }}
@@ -382,6 +458,11 @@
             if (!prefix || typeof path !== 'string' || path.charAt(0) !== '/') {
                 return path;
             }
+            // Leave protocol-relative URLs ("//host/...") untouched — they are
+            // absolute to another origin, not app-root-relative.
+            if (path.charAt(1) === '/') {
+                return path;
+            }
             if (path.indexOf(prefix + '/') === 0 || path === prefix) {
                 return path;
             }
@@ -412,6 +493,23 @@
                 navigator.sendBeacon = function(url, data) {
                     return originalSendBeacon.call(this, window.potatoUrl(url), data);
                 };
+            }
+
+            // Server-Sent Events (live agent / live coding viewers) open
+            // root-relative stream URLs that fetch/sendBeacon patching misses.
+            // Wrap the constructor so new EventSource('/api/.../stream') resolves
+            // under the mounted prefix. Note: SSE behind a path-prefix proxy also
+            // needs `proxy_buffering off` on the stream location (see docs).
+            var OriginalEventSource = window.EventSource;
+            if (OriginalEventSource) {
+                window.EventSource = function(url, config) {
+                    return new OriginalEventSource(window.potatoUrl(url), config);
+                };
+                // Preserve instanceof checks and inherited members.
+                window.EventSource.prototype = OriginalEventSource.prototype;
+                ['CONNECTING', 'OPEN', 'CLOSED'].forEach(function(key) {
+                    window.EventSource[key] = OriginalEventSource[key];
+                });
             }
 
             function prefixAttribute(root, selector, attribute) {
@@ -505,7 +603,7 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=2"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=21"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=23"></script>
 
     <!-- Fabric.js for image annotation (loaded from CDN) -->
     {% if frontend_assets.image_annotation | default(false) %}
@@ -579,12 +677,12 @@
 
     <!-- Document bounding box annotation -->
     {% if frontend_assets.document_bbox | default(false) %}
-    <script src="{{ url_for('static', filename='document-bbox.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='document-bbox.js') }}?v=3"></script>
     {% endif %}
 
     <!-- PDF bounding box annotation -->
     {% if frontend_assets.pdf_bbox | default(false) %}
-    <script src="{{ url_for('static', filename='pdf-bbox.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='pdf-bbox.js') }}?v=3"></script>
     {% endif %}
 
     {% if agent_proxy_enabled | default(false) %}
@@ -697,7 +795,7 @@
                 one to add it to your queue.</div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='search.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='search.js') }}?v=3"></script>
 
     <!-- Universal Codebook tray (self-hides unless the codebook is
          enabled: the enable-probe is not 200 otherwise). The composer
@@ -792,7 +890,7 @@
             <div id="cb-mode-hint" class="cb-mode-hint"></div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='codebook.js') }}?v=10"></script>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=12"></script>
     {% endif %}
 </body>
 </html>

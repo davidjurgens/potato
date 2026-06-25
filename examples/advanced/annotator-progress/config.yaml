@@ -1,0 +1,36 @@
+port: 9001
+annotation_task_name: Annotator Progress Dashboard Example
+task_dir: .
+output_annotation_dir: annotation_output/annotator-progress/
+output_annotation_format: tsv
+annotation_codebook_url: ''
+data_files:
+- data/annotator-progress-example.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+
+# Opt-in, read-only progress dashboard for annotators (off by default).
+# When enabled, a "Progress" link appears in the annotation navbar and a
+# /progress page shows project-level aggregate progress plus the logged-in
+# annotator's own stats. It never exposes other annotators' identities,
+# admin actions, or configuration.
+annotator_dashboard:
+  enabled: true
+  show_project_progress: true
+  show_personal_progress: true
+  show_active_annotators: false   # count only; off by default
+
+annotation_schemes:
+- annotation_type: radio
+  name: sentiment
+  description: What is the overall sentiment of this text?
+  labels:
+  - positive
+  - neutral
+  - negative
+  sequential_key_binding: true
+site_dir: default

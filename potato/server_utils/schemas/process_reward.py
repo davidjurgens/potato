@@ -1,12 +1,21 @@
 """
 Process Reward Schema
 
-Binary per-step correct/incorrect signals for Process Reward Model (PRM)
-training. Two modes:
-- "per_step": annotate each step independently with thumbs-up/down
+Per-step correctness signals for Process Reward Model (PRM) training. Two modes:
+- "per_step": annotate each step independently
 - "first_error": click the first wrong step, all subsequent auto-marked wrong
 
-Research: AgentPRM, ToolRM, ToolRL, SPORT
+Step reward values: ``1`` = correct, ``-1`` = incorrect. By default a step is
+either correct, incorrect, or unmarked (``0``).
+
+Optional ``allow_neutral: true`` (per_step mode only) enables the PRM800K-style
+**three-way** label: ``1`` correct / ``0`` neutral / ``-1`` incorrect, where
+``0`` is a *deliberate* "neither helped nor hurt this step" judgment that is
+distinct from *unmarked*. When neutral is enabled, an unmarked step is
+represented as ``reward: null`` so consumers can tell a skipped step apart from
+a step the annotator explicitly judged neutral.
+
+Research: PRM800K (Lightman et al. 2023), AgentPRM, ToolRM, ToolRL, SPORT
 """
 
 import json
@@ -47,6 +56,10 @@ def _generate_internal(
     steps_key = annotation_scheme.get("steps_key", "steps")
     step_text_key = annotation_scheme.get("step_text_key", "action")
     mode = annotation_scheme.get("mode", "first_error")  # "first_error" or "per_step"
+    # PRM800K-style three-way labeling (correct/neutral/incorrect). Only
+    # meaningful in per_step mode -- the first_error cascade has no place for a
+    # neutral judgment, so it is forced off there.
+    allow_neutral = bool(annotation_scheme.get("allow_neutral", False)) and mode == "per_step"
     # When true, the per-step Correct/Wrong control is injected to the right
     # of each rendered trace step (a [data-turn-index] element) rather than a
     # separate card list at the bottom. Falls back to the card list if no
@@ -63,6 +76,7 @@ def _generate_internal(
         "step_text_key": step_text_key,
         "mode": mode,
         "inline_with_trace": inline_with_trace,
+        "allow_neutral": allow_neutral,
     })
 
     container_class = "process-reward-container"
@@ -82,7 +96,7 @@ def _generate_internal(
 
             <div class="prm-mode-label">
                 Mode: <strong>{escape_html_content(mode.replace('_', ' ').title())}</strong>
-                {' &mdash; click the first incorrect step' if mode == 'first_error' else ' &mdash; rate each step independently'}
+                {' &mdash; click the first incorrect step' if mode == 'first_error' else (' &mdash; rate each step correct, neutral, or incorrect' if allow_neutral else ' &mdash; rate each step independently')}
             </div>
 
             <div class="prm-steps-container" id="{esc_schema}-steps"></div>
@@ -108,6 +122,21 @@ def _generate_internal(
         var SCHEMA = '{esc_schema}';
         var CONFIG = {config_json};
         var _steps = [];
+        // Three-way labeling: when neutral is allowed, an *unmarked* step is
+        // null (distinct from a deliberate neutral judgment of 0). Otherwise
+        // unmarked stays 0 for backward compatibility.
+        var NEUTRAL = !!CONFIG.allow_neutral;
+        var UNMARKED = NEUTRAL ? null : 0;
+
+        // Restore a per-step reward from saved data, preserving the
+        // unmarked/neutral distinction (a stored 0 is a real neutral label
+        // only when neutral mode is on).
+        function restoreReward(saved) {{
+            if (saved === undefined) return UNMARKED;
+            var r = saved.reward;
+            if (r === undefined || r === null) return UNMARKED;
+            return r;
+        }}
 
         function getSteps() {{
             var steps = [];
@@ -156,18 +185,23 @@ def _generate_internal(
             }}
             _steps = [];
             steps.forEach(function(_, i) {{
-                var reward = 0;
-                if (existingData && existingData.steps && existingData.steps[i]) {{
-                    reward = existingData.steps[i].reward || 0;
-                }}
+                var reward = restoreReward(
+                    existingData && existingData.steps ? existingData.steps[i] : undefined);
                 _steps.push({{ index: i, reward: reward }});
             }});
+        }}
+
+        function neutralBtnHtml(idx) {{
+            if (!NEUTRAL) return '';
+            return '<button type="button" class="prm-btn prm-btn-neutral" data-step="' + idx +
+                '" data-value="0" title="Neutral — neither helped nor hurt">○</button>';
         }}
 
         function controlHtml(idx) {{
             return '<span class="prm-step-status" id="' + SCHEMA + '-st-' + idx + '"></span>' +
                 '<div class="prm-step-btns">' +
                     '<button type="button" class="prm-btn prm-btn-correct" data-step="' + idx + '" data-value="1" title="Correct">&#10003;</button>' +
+                    neutralBtnHtml(idx) +
                     '<button type="button" class="prm-btn prm-btn-incorrect" data-step="' + idx + '" data-value="-1" title="Incorrect">&#10007;</button>' +
                 '</div>';
         }}
@@ -248,10 +282,10 @@ def _generate_internal(
 
             _steps = [];
             steps.forEach(function(_, i) {{
-                var reward = 0; // 0 = unmarked, 1 = correct, -1 = incorrect
-                if (existingData && existingData.steps && existingData.steps[i]) {{
-                    reward = existingData.steps[i].reward || 0;
-                }}
+                // 1 = correct, -1 = incorrect, 0 = neutral (neutral mode only),
+                // UNMARKED (null or 0) = not yet judged.
+                var reward = restoreReward(
+                    existingData && existingData.steps ? existingData.steps[i] : undefined);
                 _steps.push({{ index: i, reward: reward }});
             }});
 
@@ -272,6 +306,7 @@ def _generate_internal(
                     '<div class="prm-step-text">' + escapeHtml(stepText) + '</div>' +
                     '<div class="prm-step-btns">' +
                         '<button type="button" class="prm-btn prm-btn-correct" data-step="' + idx + '" data-value="1" title="Correct">&#10003; Correct</button>' +
+                        (NEUTRAL ? '<button type="button" class="prm-btn prm-btn-neutral" data-step="' + idx + '" data-value="0" title="Neutral — neither helped nor hurt">○ Neutral</button>' : '') +
                         '<button type="button" class="prm-btn prm-btn-incorrect" data-step="' + idx + '" data-value="-1" title="Incorrect">&#10007; Wrong</button>' +
                     '</div>';
                 container.appendChild(card);
@@ -305,9 +340,10 @@ def _generate_internal(
                     if (CONFIG.mode === 'first_error') {{
                         handleFirstError(idx, val);
                     }} else {{
-                        // per_step mode: toggle
+                        // per_step mode: toggle. Clicking the active label again
+                        // clears it back to unmarked.
                         if (_steps[idx].reward === val) {{
-                            _steps[idx].reward = 0;
+                            _steps[idx].reward = UNMARKED;
                         }} else {{
                             _steps[idx].reward = val;
                         }}
@@ -321,7 +357,7 @@ def _generate_internal(
             if (resetBtn) {{
                 resetBtn.addEventListener('click', function() {{
                     _steps.forEach(function(s) {{
-                        s.reward = 0;
+                        s.reward = UNMARKED;
                     }});
                     _steps.forEach(function(s) {{ updateStepVisual(s.index); }});
                     saveState();
@@ -340,7 +376,7 @@ def _generate_internal(
                 if (_steps[clickIdx].reward === -1) {{
                     // Clear all marks
                     _steps.forEach(function(s) {{
-                        s.reward = 0;
+                        s.reward = UNMARKED;
                     }});
                 }} else {{
                     // All steps before are correct, this and after are incorrect
@@ -364,10 +400,11 @@ def _generate_internal(
             // In inline mode also tint the surrounding trace step.
             var host = card.closest('[data-turn-index]');
 
-            card.classList.remove('prm-correct', 'prm-incorrect', 'prm-unmarked');
-            if (host) host.classList.remove('prm-turn-correct', 'prm-turn-incorrect');
+            card.classList.remove('prm-correct', 'prm-incorrect', 'prm-neutral', 'prm-unmarked');
+            if (host) host.classList.remove('prm-turn-correct', 'prm-turn-incorrect', 'prm-turn-neutral');
             card.querySelectorAll('.prm-btn').forEach(function(b) {{ b.classList.remove('selected'); }});
 
+            var neutralBtn = card.querySelector('.prm-btn-neutral');
             if (reward === 1) {{
                 card.classList.add('prm-correct');
                 if (host) host.classList.add('prm-turn-correct');
@@ -378,6 +415,11 @@ def _generate_internal(
                 if (host) host.classList.add('prm-turn-incorrect');
                 card.querySelector('.prm-btn-incorrect').classList.add('selected');
                 if (status) {{ status.textContent = '\\u2717 incorrect'; status.className = 'prm-step-status prm-status-incorrect'; }}
+            }} else if (NEUTRAL && reward === 0) {{
+                card.classList.add('prm-neutral');
+                if (host) host.classList.add('prm-turn-neutral');
+                if (neutralBtn) neutralBtn.classList.add('selected');
+                if (status) {{ status.textContent = '\\u25cb neutral'; status.className = 'prm-step-status prm-status-neutral'; }}
             }} else {{
                 card.classList.add('prm-unmarked');
                 if (status) {{ status.textContent = ''; status.className = 'prm-step-status'; }}
@@ -387,14 +429,16 @@ def _generate_internal(
         function updateCount() {{
             var el = document.getElementById(SCHEMA + '-count');
             if (!el) return;
-            var correct = 0, incorrect = 0, total = _steps.length;
+            var correct = 0, incorrect = 0, neutral = 0, total = _steps.length;
             _steps.forEach(function(s) {{
                 if (s.reward === 1) correct++;
                 else if (s.reward === -1) incorrect++;
+                else if (NEUTRAL && s.reward === 0) neutral++;
             }});
-            var unmarked = total - correct - incorrect;
+            var unmarked = total - correct - incorrect - neutral;
             var parts = [];
             if (correct > 0) parts.push('<span class="prm-count-correct">' + correct + ' correct</span>');
+            if (neutral > 0) parts.push('<span class="prm-count-neutral">' + neutral + ' neutral</span>');
             if (incorrect > 0) parts.push('<span class="prm-count-incorrect">' + incorrect + ' incorrect</span>');
             if (unmarked > 0) parts.push('<span class="prm-count-unmarked">' + unmarked + ' unmarked</span>');
             el.innerHTML = parts.join(' &middot; ') + ' of ' + total + ' steps';
@@ -455,7 +499,7 @@ def _generate_internal(
             var waiting = container.querySelector('.prm-no-steps');
             if (waiting) waiting.remove();
             var idx = _steps.length;
-            _steps.push({{ index: idx, reward: 0 }});
+            _steps.push({{ index: idx, reward: UNMARKED }});
             // Rebuild to include new step
             buildCards();
         }};
@@ -481,6 +525,9 @@ def _generate_internal(
     .prm-step-card.prm-incorrect {{
         background: #ffebee; border-color: #ef5350;
     }}
+    .prm-step-card.prm-neutral {{
+        background: #fff8e1; border-color: #ffb300;
+    }}
     .prm-step-header {{
         display: flex; flex-direction: column; align-items: center;
         min-width: 60px; flex: 0 0 auto;
@@ -491,6 +538,7 @@ def _generate_internal(
     .prm-step-status {{ font-size: 0.75em; margin-top: 2px; }}
     .prm-status-correct {{ color: #2e7d32; }}
     .prm-status-incorrect {{ color: #c62828; }}
+    .prm-status-neutral {{ color: #b26a00; }}
     .prm-step-text {{
         flex: 1; font-size: 0.9em; white-space: pre-wrap;
         word-break: break-word; line-height: 1.4;
@@ -513,6 +561,9 @@ def _generate_internal(
     .prm-btn-incorrect.selected {{
         background: #f44336; color: #fff; border-color: #f44336;
     }}
+    .prm-btn-neutral.selected {{
+        background: #ffb300; color: #fff; border-color: #ffb300;
+    }}
     .prm-footer {{
         margin-top: 10px; display: flex; align-items: center; gap: 12px;
     }}
@@ -521,6 +572,7 @@ def _generate_internal(
     }}
     .prm-count-correct {{ color: #2e7d32; font-weight: 500; }}
     .prm-count-incorrect {{ color: #c62828; font-weight: 500; }}
+    .prm-count-neutral {{ color: #b26a00; font-weight: 500; }}
     .prm-count-unmarked {{ color: var(--muted-foreground, #71717a); }}
     .prm-reset-btn {{
         padding: 4px 12px; font-size: 0.85em; border: 1px solid var(--border, #e4e4e7);
@@ -569,6 +621,9 @@ def _generate_internal(
     }}
     [data-turn-index].prm-turn-incorrect {{
         box-shadow: inset 3px 0 0 #f44336; background: rgba(244, 67, 54, 0.05);
+    }}
+    [data-turn-index].prm-turn-neutral {{
+        box-shadow: inset 3px 0 0 #ffb300; background: rgba(255, 179, 0, 0.05);
     }}
     </style>
     """

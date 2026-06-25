@@ -8,6 +8,7 @@ Verifies:
 4. All built-in exporters are registered
 """
 
+import os
 import pytest
 from unittest.mock import MagicMock
 from potato.export.base import BaseExporter, ExportContext, ExportResult
@@ -133,6 +134,8 @@ class TestBuiltinExportersRegistered:
             # ML-format exporters (v2.1–2.2)
             "agent_eval", "coco", "coding_eval", "conll_2003", "conll_u",
             "eaf", "mask_png", "parquet", "pascal_voc", "textgrid", "yolo",
+            # Trajectory correction → SFT/DPO
+            "trajectory_correction",
             # Tabular exporters
             "csv", "tsv", "jsonl",
             # QDA-wave exporters (v2.5.0)
@@ -142,3 +145,53 @@ class TestBuiltinExportersRegistered:
         optional = {"huggingface"}
         assert core_expected.issubset(set(formats))
         assert set(formats) - core_expected <= optional
+
+
+class TestPhaseResponseExport:
+    """F-047: phase/survey responses must not be silently dropped from exports."""
+
+    def _ctx(self, include_flag, output_dir):
+        return ExportContext(
+            config=({"export_include_phase_data": True} if include_flag else {}),
+            annotations=[{"instance_id": "i1", "user_id": "u1",
+                          "labels": {"s": {"a": "a"}}, "spans": {}, "links": {}}],
+            items={}, schemas=[], output_dir=output_dir,
+            phase_responses=[
+                {"user_id": "u1", "phase": "consent", "page": "consent",
+                 "schema": "age_consent", "label_name": "I agree", "value": "I agree"},
+                {"user_id": "u1", "phase": "prestudy", "page": "p",
+                 "schema": "tipi_1", "label_name": "4", "value": "4"},
+            ],
+        )
+
+    def test_excluded_by_default_warns_and_reports_count(self, tmp_path):
+        """Default (flag off): no phase file, but a warning + excluded count, not silent."""
+        out = str(tmp_path / "noflag")
+        result = export_registry.export("jsonl", self._ctx(False, out), out)
+        assert result.success
+        # The misleading "0" is replaced by an honest excluded count + warning.
+        assert result.stats.get("num_phase_responses_excluded") == 2
+        assert result.stats.get("num_phase_responses") == 0
+        assert any("phase/survey responses" in w for w in result.warnings)
+        assert not os.path.exists(os.path.join(out, "phase_responses.jsonl"))
+
+    def test_included_with_flag_roundtrips(self, tmp_path):
+        """Flag on: phase responses written to a separate file, faithfully."""
+        import json
+        out = str(tmp_path / "flag")
+        result = export_registry.export("jsonl", self._ctx(True, out), out)
+        assert result.success
+        assert result.stats.get("num_phase_responses") == 2
+        assert not result.warnings
+        pf = os.path.join(out, "phase_responses.jsonl")
+        assert os.path.exists(pf)
+        rows = [json.loads(line) for line in open(pf)]
+        assert len(rows) == 2
+        assert rows[0]["schema"] == "age_consent" and rows[0]["value"] == "I agree"
+
+    def test_csv_path_also_warns(self, tmp_path):
+        """The delimited (CSV) path carries the same warning/stat."""
+        out = str(tmp_path / "csv")
+        result = export_registry.export("csv", self._ctx(False, out), out)
+        assert result.stats.get("num_phase_responses_excluded") == 2
+        assert any("phase/survey responses" in w for w in result.warnings)

@@ -62,8 +62,16 @@
                   + esc(n.color) + '"></span>'
                 : "";
             return '<li class="cb-node">'
-                + '<div class="cb-node-row">' + dot
-                + '<span class="cb-name">' + esc(n.name) + "</span></div>"
+                + '<div class="cb-node-row" data-code-id="' + esc(n.id) + '">'
+                + dot
+                + '<span class="cb-name">' + esc(n.name) + "</span>"
+                + '<button type="button" class="cb-node-edit"'
+                + ' data-code-id="' + esc(n.id) + '"'
+                + ' data-code-name="' + esc(n.name) + '"'
+                + ' title="Edit this code\'s content"'
+                + ' aria-label="Edit content for ' + esc(n.name) + '">'
+                + '&#9998;</button>'
+                + "</div>"
                 + (n.children && n.children.length
                     ? '<ul class="cb-children">'
                       + renderTree(n.children) + "</ul>"
@@ -81,14 +89,174 @@
         var box = el("cb-tree");
         if (box) {
             var tree = (data && data.tree) || [];
-            box.innerHTML = tree.length
+            var link = '<a class="cb-fullpage-link" href="/codebook">'
+                + '&#128214; Open full codebook</a>';
+            box.innerHTML = link + (tree.length
                 ? '<ul class="cb-root">' + renderTree(tree) + "</ul>"
-                : '<div class="cb-empty">No codes yet.</div>';
+                : '<div class="cb-empty">No codes yet.</div>');
+            // Show inline-edit affordances only when the user may mutate
+            // content (open mode / privileged); otherwise an edit still
+            // queues a proposal, but we keep the tray read-only-looking.
+            box.classList.toggle(
+                "cb-can-edit", !!(data && (data.can_edit || data.can_add)));
         }
         var composer = el("cb-composer");
         if (composer) composer.hidden = !(data && data.can_add);
         var hint = el("cb-mode-hint");
         if (hint && data) hint.textContent = MODE_HINT[data.mode] || "";
+    }
+
+    // ---- panel inline content edit (quick definition / add example) -----
+
+    function cbApi(method, path, body) {
+        var opts = {
+            method: method, credentials: "same-origin",
+            headers: { "Accept": "application/json" },
+        };
+        if (body !== undefined) {
+            opts.headers["Content-Type"] = "application/json";
+            opts.body = JSON.stringify(body);
+        }
+        return fetch(API + path, opts).then(function (r) {
+            return r.json().catch(function () { return {}; })
+                .then(function (j) {
+                    return { ok: r.ok, status: r.status, body: j };
+                });
+        });
+    }
+
+    function closeInlineEdit() {
+        var ex = document.querySelector(".cb-inline-edit");
+        if (ex) ex.parentNode.removeChild(ex);
+    }
+
+    function findBlock(blocks, type) {
+        for (var i = 0; i < (blocks || []).length; i++) {
+            if (blocks[i].block_type === type) return blocks[i];
+        }
+        return null;
+    }
+
+    function openInlineEdit(codeId, name, rowEl) {
+        if (!codeId || !rowEl) return;
+        var existing = rowEl.parentNode.querySelector(".cb-inline-edit");
+        if (existing) { closeInlineEdit(); return; }  // toggle
+        closeInlineEdit();
+        cbApi("GET", "/blocks?code_id=" + encodeURIComponent(codeId))
+            .then(function (res) {
+                var blocks = (res.body && res.body.blocks) || [];
+                var version = (res.body && res.body.scope_version) || 0;
+                buildInlineEdit(codeId, name, rowEl, blocks, version);
+            });
+    }
+
+    function buildInlineEdit(codeId, name, rowEl, blocks, version) {
+        var wrap = document.createElement("div");
+        wrap.className = "cb-inline-edit";
+
+        var defBlock = findBlock(blocks, "definition");
+        var dl = document.createElement("label");
+        dl.className = "cb-inline-label";
+        dl.textContent = "Definition";
+        var defTa = document.createElement("textarea");
+        defTa.className = "cb-inline-ta";
+        defTa.rows = 2;
+        defTa.value = defBlock ? (defBlock.body_md || "") : "";
+        defTa.placeholder = "What does “" + name + "” mean?";
+
+        var el2 = document.createElement("label");
+        el2.className = "cb-inline-label";
+        el2.textContent = "Add an example";
+        var exTa = document.createElement("textarea");
+        exTa.className = "cb-inline-ta";
+        exTa.rows = 2;
+        exTa.placeholder = "> a quote that should get this code (optional)";
+
+        var status = document.createElement("div");
+        status.className = "cb-inline-status";
+        status.setAttribute("role", "status");
+
+        var foot = document.createElement("div");
+        foot.className = "cb-inline-foot";
+        var cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.className = "cb-inline-btn cb-inline-cancel";
+        cancel.textContent = "Cancel";
+        cancel.addEventListener("click", closeInlineEdit);
+        var save = document.createElement("button");
+        save.type = "button";
+        save.className = "cb-inline-btn cb-inline-save";
+        save.textContent = "Save";
+
+        function doSave() {
+            var newBlocks = (blocks || []).map(function (b) {
+                return {
+                    block_type: b.block_type,
+                    custom_label: b.custom_label,
+                    body_md: b.body_md,
+                };
+            });
+            var def = findBlock(newBlocks, "definition");
+            var defVal = defTa.value.trim();
+            if (def) { def.body_md = defTa.value; }
+            else if (defVal) {
+                newBlocks.unshift({ block_type: "definition",
+                    body_md: defTa.value });
+            }
+            if (exTa.value.trim()) {
+                newBlocks.push({ block_type: "example",
+                    body_md: exTa.value });
+            }
+            save.disabled = true;
+            status.textContent = "Saving…";
+            cbApi("PUT", "/blocks", {
+                code_id: codeId, base_version: version, blocks: newBlocks,
+            }).then(function (res) {
+                save.disabled = false;
+                if (res.ok && res.body.queued) {
+                    status.textContent = "Submitted for admin review.";
+                    setTimeout(closeInlineEdit, 1200);
+                    return;
+                }
+                if (res.ok) {
+                    status.textContent = "Saved.";
+                    setTimeout(function () {
+                        closeInlineEdit();
+                        syncCodebook(instanceId());
+                    }, 700);
+                    return;
+                }
+                if (res.status === 409) {
+                    status.textContent =
+                        "Changed elsewhere — reloading latest…";
+                    setTimeout(function () {
+                        closeInlineEdit();
+                        openInlineEdit(codeId, name, rowEl);
+                    }, 900);
+                    return;
+                }
+                status.textContent =
+                    (res.body && res.body.error) || "Save failed.";
+            });
+        }
+        save.addEventListener("click", doSave);
+
+        foot.appendChild(status);
+        foot.appendChild(cancel);
+        foot.appendChild(save);
+        wrap.appendChild(dl);
+        wrap.appendChild(defTa);
+        wrap.appendChild(el2);
+        wrap.appendChild(exTa);
+        wrap.appendChild(foot);
+        // insert after the node row (inside the same <li>)
+        rowEl.parentNode.insertBefore(wrap, rowEl.nextSibling);
+        defTa.focus();
+        // In the narrow tray the editor can open below the fold; bring the
+        // whole box (including Save) into the scroll viewport.
+        if (wrap.scrollIntoView) {
+            wrap.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
     }
 
     // ---- form reconciliation (append missing codebook options) ----------
@@ -1101,6 +1269,21 @@
         // scheme exists (wire() runs only when the codebook is enabled).
         document.addEventListener("keydown", onGlobalKeydown);
         wireAdmin();
+
+        // Inline content edit: delegate clicks on the per-code pencil.
+        var tree = el("cb-tree");
+        if (tree) {
+            tree.addEventListener("click", function (e) {
+                var btn = e.target && e.target.closest
+                    ? e.target.closest(".cb-node-edit") : null;
+                if (!btn) return;
+                e.preventDefault();
+                openInlineEdit(
+                    btn.getAttribute("data-code-id"),
+                    btn.getAttribute("data-code-name"),
+                    btn.closest(".cb-node-row"));
+            });
+        }
 
         var add = el("cb-add-btn");
         if (add) add.addEventListener("click", addCode);

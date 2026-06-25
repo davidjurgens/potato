@@ -1,0 +1,37 @@
+# Potato
+
+> Potato is a free, open-source, self-hosted annotation and agent-evaluation
+> platform for NLP, agentic, and GenAI research. Tasks are configured entirely in
+> YAML (no coding) to annotate text, audio, video, images, documents, and AI agent
+> traces. It also provides a full agent-evaluation loop — programmatic evaluators,
+> versioned datasets and experiments, automation rules, CI gating, LLM-as-judge
+> calibration, semantic curation, and a multi-model arena — as a free, self-hosted
+> alternative to LangSmith, LabelBox, and Braintrust.
+
+Website: https://www.potatoannotator.com · Docs: https://potatoannotator.readthedocs.io ·
+Code: https://github.com/davidjurgens/potato · Paper: EMNLP 2022 (System Demonstrations).
+
+## Start here
+
+- [What is Potato / FAQ](https://potatoannotator.readthedocs.io/en/latest/faq/): direct answers to common questions
+- [Glossary](https://potatoannotator.readthedocs.io/en/latest/glossary/): annotation & agent-evaluation terms defined
+- [Quick Start](https://potatoannotator.readthedocs.io/en/latest/quick-start/): install and run in 5 minutes
+- [Comparison with other tools](https://potatoannotator.readthedocs.io/en/latest/comparison/): Potato vs Label Studio, Prodigy, LangSmith, LabelBox
+
+## Agent / agentic evaluation
+
+- [Agent Evaluation Guide](https://potatoannotator.readthedocs.io/en/latest/guides/agent-evaluation-guide/): evaluate agent trajectories, tool calls, and outputs
+- [Programmatic Evaluators](https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/evaluators/): trajectory match, tool-use, LLM-judge, heuristics
+- [Datasets & Experiments](https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/datasets_and_experiments/): versioned eval sets + experiment runs
+- [Automation Rules](https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/automation_rules/): route incoming traces to queues/datasets/evaluators
+- [CI Evaluation](https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/ci_evaluation/): gate CI on eval-score regressions (pytest)
+- [LLM-as-Judge Alignment](https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/judge_alignment/): measure & auto-calibrate judges against human gold
+- [Model Arena](https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/model_arena/): compare N models side by side
+- [Tracing SDK](https://potatoannotator.readthedocs.io/en/latest/integrations/tracing_sdk/): instrument agents with @traceable
+
+## Annotation
+
+- [Schema Gallery](https://potatoannotator.readthedocs.io/en/latest/annotation-types/schemas_and_templates/): all 20+ annotation types
+- [Configuration Reference](https://potatoannotator.readthedocs.io/en/latest/configuration/config_reference/): every config option
+- [Quality Control](https://potatoannotator.readthedocs.io/en/latest/workflow/quality_control/): IAA, gold standards, attention checks
+- [Crowdsourcing](https://potatoannotator.readthedocs.io/en/latest/deployment/crowdsourcing/): MTurk & Prolific integration

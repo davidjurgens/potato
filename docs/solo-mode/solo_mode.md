@@ -2,6 +2,8 @@
 
 Solo Mode enables a single annotator to efficiently label large datasets with LLM assistance through collaborative annotation.
 
+> **Using a HuggingFace model?** See [Using HuggingFace Models in Potato](../ai-intelligence/huggingface_models.md) for wiring `solo_mode.labeling_models[]` to an HF-hosted model.
+
 ## Overview
 
 Solo Mode provides a streamlined workflow where a human annotator works alongside an LLM to annotate data. The system learns from human feedback, progressively improving its predictions until the human can step back and let the LLM complete the remaining annotations autonomously.

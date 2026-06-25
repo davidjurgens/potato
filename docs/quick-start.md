@@ -67,6 +67,8 @@ item_properties:
   text_key: text
 
 # Output Configuration
+# output_annotation_dir is REQUIRED — it is where annotations are written.
+output_annotation_dir: annotation_output/
 # Annotations are always saved as per-user JSON (user_state.json).
 # To auto-export in additional formats during annotation:
 # export_annotation_format: "csv"             # single format
@@ -101,12 +103,9 @@ annotation_schemes:
     rows: 3
     cols: 50
 
-# Server Configuration
-server:
-  port: 8000
-  host: 0.0.0.0
-  require_password: true
-  persist_sessions: false
+# Server Configuration (top-level keys; the -p CLI flag overrides `port`)
+require_password: true
+persist_sessions: false
 
 # Optional: Custom UI settings
 site_dir: default
@@ -120,9 +119,16 @@ alert_time_each_instance: 10000000
 Start the annotation server with your configuration:
 
 ```bash
-# From the parent directory of your task
+# If you installed from PyPI (Option 1):
+potato start my_annotation_task/config.yaml -p 8000
+
+# If you cloned the repo (Option 2), run from the repo root:
 python potato/flask_server.py start my_annotation_task/config.yaml -p 8000
 ```
+
+> **Note:** The `examples/` directory referenced elsewhere in the docs ships only
+> with the cloned repository (Option 2), not with the PyPI package. After
+> `pip install potato-annotation`, create your own task directory as shown above.
 
 ## Project Structure
 
@@ -133,10 +139,11 @@ my_annotation_task/
 ├── config.yaml              # ✅ Config file in task_dir
 ├── data/
 │   └── my_data.json         # Your annotation data
-├── output/                  # Will be created automatically
-│   └── annotations/         # Annotation results
-└── templates/               # Optional: custom templates
-    └── custom_layout.html
+├── annotation_output/       # Created automatically (per output_annotation_dir)
+│   └── <user>/user_state.json   # Per-user annotation results
+├── project.sqlite           # Created automatically (search/codebook index)
+├── admin_api_key.txt        # Created automatically (key for the /admin dashboard)
+└── layouts/                 # Created automatically (generated task layout)
 ```
 
 ## Alternative: Multiple Config Files

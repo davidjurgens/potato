@@ -17,6 +17,7 @@ user_config:
   users: []
 
 # Active learning with LLM cold-start and ICL ensemble
+assignment_strategy: active_learning
 active_learning:
   enabled: true
   query_strategy: "uncertainty"

@@ -1,0 +1,21 @@
+[
+  {
+    "id": "contention_db_001",
+    "task": "Two agents update the shared inventory DB concurrently — flag any unsafe contention.",
+    "calls": [
+      {"agent": "OrderAgent", "tool": "read_inventory", "resource": "inventory_db", "start": 0.0, "end": 2.0},
+      {"agent": "RestockAgent", "tool": "write_inventory", "resource": "inventory_db", "start": 1.0, "end": 3.5},
+      {"agent": "OrderAgent", "tool": "write_inventory", "resource": "inventory_db", "start": 1.5, "end": 3.0},
+      {"agent": "RestockAgent", "tool": "send_email", "resource": "smtp", "start": 4.0, "end": 5.0}
+    ]
+  },
+  {
+    "id": "contention_lock_002",
+    "task": "A planner and a worker both grab the deploy lock — check for deadlock.",
+    "calls": [
+      {"agent": "Planner", "tool": "acquire_lock", "resource": "deploy_lock", "start": 0.0, "end": 4.0},
+      {"agent": "Worker", "tool": "acquire_lock", "resource": "deploy_lock", "start": 2.0, "end": 6.0},
+      {"agent": "Worker", "tool": "build", "resource": "ci_runner", "start": 0.5, "end": 2.5}
+    ]
+  }
+]

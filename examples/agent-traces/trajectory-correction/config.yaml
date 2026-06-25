@@ -1,0 +1,68 @@
+# Trajectory Correction — edit agent traces into SFT/DPO training data
+#
+# Annotators rewrite the steps of an agent trace (and optionally the final
+# answer). The corrected trajectory is saved alongside the original; the
+# `trajectory_correction` exporter turns the pair into SFT targets and DPO
+# preference pairs.
+#
+# Each example trace contains a deliberate, fixable flaw (a typo'd tool arg,
+# a wrong parameter, or a weak final answer) so editing is meaningful.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/trajectory-correction/config.yaml -p 8000
+#
+# Debug (skip login, jump to annotation):
+#   python potato/flask_server.py start examples/agent-traces/trajectory-correction/config.yaml -p 8000 --debug --debug-phase annotation
+
+annotation_task_name: "Trajectory Correction"
+
+data_files:
+  - data/trajectory-correction-example.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Show the task as read-only context above the editor.
+instance_display:
+  layout:
+    direction: vertical
+    gap: 12px
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+annotation_schemes:
+  # The editor: each step's action is editable (thought shown for context),
+  # plus the final answer. Live diff + edit-distance highlight what changed.
+  - annotation_type: trajectory_edit
+    name: corrected_trajectory
+    description: "Fix any wrong steps, then correct the final answer"
+    steps_key: steps
+    step_text_key: action
+    editable_fields:
+      - action
+    show_diff: true
+    show_edit_distance: true
+    allow_reset: true
+    edit_final_answer: true
+    final_answer_key: final_answer
+
+  # Optional metadata: why the trajectory needed fixing.
+  - annotation_type: multiselect
+    name: failure_reason
+    description: "What was wrong with the original trajectory? (select all that apply)"
+    labels:
+      - name: tool_typo
+      - name: wrong_argument
+      - name: wrong_reasoning
+      - name: weak_final_answer
+      - name: nothing_minor_edit
+
+user_config:
+  allow_all_users: true

@@ -1,0 +1,570 @@
+# Potato HuggingFace Spaces — catalog manifest
+# =============================================
+# Single source of truth for every Potato demo Space.
+#
+# Each entry stamps out a self-contained, push-ready HF Space (Docker SDK, port 7860)
+# from an existing examples/ project. To add a Space later: add one entry here, then run
+#   python deployment/huggingface-spaces/build_space.py <id>
+#   bash   deployment/huggingface-spaces/deploy_space.sh <id> <hf-org>
+#
+# Per-entry fields:
+#   id         (required) Space repo name (kebab-case). Becomes <org>/<id> on HF.
+#   source     (required) Path (repo-relative) to the examples/ project: must hold config.yaml + data/.
+#   title      (required) HF Space display title (README frontmatter).
+#   summary    (required) One-line description (README body + collection card).
+#   category   (required) Grouping for the docs index / collection.
+#   tags       (optional) Extra HF tags (always merged with: annotation, potato, + category).
+#   emoji      (optional) HF Space emoji. Default: 🥔
+#   color_from / color_to (optional) HF gradient. Default: yellow / yellow.
+#   needs_lfs  (optional) true if data/ carries media (mp4/webm/wav/mp3/png/jpg/pdf) → .gitattributes.
+#   needs_ai   (optional) true if the demo calls an LLM at annotation time → wire to HF Inference API
+#              (HF_TOKEN) before deploy; lower priority wave.
+#   status     (optional) "gated" = deploy only if it renders from bundled static data (Phase 2
+#              boot-check is the gate); otherwise local-only, not a Space. Default: "ready".
+
+defaults:
+  emoji: "🥔"
+  color_from: yellow
+  color_to: yellow
+  license: apache-2.0
+  needs_lfs: false
+  needs_ai: false
+  status: ready
+
+spaces:
+
+  # ── Text classification ───────────────────────────────────────────────────
+  - id: sentiment-analysis
+    source: examples/classification/single-choice
+    title: "Potato — Sentiment & Single-Choice"
+    summary: "Single-choice radio labeling with sequential keybindings."
+    category: classification
+    color_from: yellow
+    color_to: yellow
+  - id: multi-label
+    source: examples/classification/check-box
+    title: "Potato — Multi-Label Classification"
+    summary: "Checkbox multi-select labeling for overlapping categories."
+    category: classification
+    color_from: yellow
+    color_to: yellow
+  - id: likert-scales
+    source: examples/classification/likert
+    title: "Potato — Likert Rating Scales"
+    summary: "Likert-scale rating for agreement / intensity judgments."
+    category: classification
+    color_from: yellow
+    color_to: yellow
+  - id: slider-rating
+    source: examples/classification/slider
+    title: "Potato — Slider Rating"
+    summary: "Continuous slider scoring for fine-grained judgments."
+    category: classification
+    color_from: yellow
+    color_to: yellow
+  - id: best-worst-scaling
+    source: examples/classification/best-worst-scaling
+    title: "Potato — Best-Worst Scaling"
+    summary: "Best-worst scaling for robust relative ranking."
+    category: classification
+    color_from: yellow
+    color_to: yellow
+  - id: llm-preference
+    source: examples/classification/llm-preference
+    title: "Potato — LLM Preference (Pairwise)"
+    summary: "Pairwise preference judgments over LLM responses (RLHF-style)."
+    category: classification
+    tags: [llm, preference, rlhf]
+    color_from: yellow
+    color_to: red
+  - id: pairwise-comparison
+    source: examples/classification/pairwise-comparison
+    title: "Potato — Pairwise Comparison"
+    summary: "A/B comparison of two items side by side."
+    category: classification
+    color_from: yellow
+    color_to: yellow
+  - id: ranking
+    source: examples/classification/ranking
+    title: "Potato — Ranking"
+    summary: "Drag-to-rank ordering of candidate items."
+    category: classification
+    color_from: yellow
+    color_to: yellow
+  - id: survey
+    source: examples/classification/survey-demo
+    title: "Potato — Survey Flow"
+    summary: "Multi-question survey with mixed input types."
+    category: classification
+    color_from: yellow
+    color_to: yellow
+
+  # ── Span & structure ──────────────────────────────────────────────────────
+  - id: ner-span
+    source: examples/span/span-labeling
+    title: "Potato — Span Labeling (NER)"
+    summary: "Highlight-and-label text spans for NER / extraction."
+    category: span
+    tags: [ner, span]
+    color_from: green
+    color_to: blue
+  - id: coreference
+    source: examples/span/coreference
+    title: "Potato — Coreference"
+    summary: "Link coreferent mentions across a document."
+    category: span
+    color_from: green
+    color_to: blue
+  - id: entity-linking
+    source: examples/span/entity-linking
+    title: "Potato — Entity Linking"
+    summary: "Link entity spans to a knowledge-base catalog."
+    category: span
+    color_from: green
+    color_to: blue
+  - id: dependency-tree
+    source: examples/span/dependency-tree
+    title: "Potato — Dependency Tree"
+    summary: "Annotate syntactic dependency arcs between tokens."
+    category: span
+    color_from: green
+    color_to: blue
+  - id: multi-span
+    source: examples/span/multi-span
+    title: "Potato — Multi-Field Spans"
+    summary: "Span annotation across multiple text fields."
+    category: span
+    color_from: green
+    color_to: blue
+  - id: event-annotation
+    source: examples/span/event-annotation
+    title: "Potato — Event Annotation"
+    summary: "Mark event triggers and arguments in text."
+    category: span
+    color_from: green
+    color_to: blue
+
+  # ── Agent & GenAI evaluation (all feasible agent annotations) ─────────────
+  - id: agent-trace-evaluation
+    source: examples/agent-traces/agent-trace-evaluation
+    title: "Potato — Agent Trace Evaluation"
+    summary: "Evaluate AI agent traces: success, efficiency, side effects, hallucination spans."
+    category: agent
+    tags: [agent-traces, evaluation, llm]
+    color_from: indigo
+    color_to: purple
+  - id: agent-comparison
+    source: examples/agent-traces/agent-comparison
+    title: "Potato — Agent Comparison"
+    summary: "Side-by-side comparison of two agent trajectories."
+    category: agent
+    tags: [agent-traces, comparison]
+    color_from: indigo
+    color_to: purple
+  - id: anthropic-evaluation
+    source: examples/agent-traces/anthropic-evaluation
+    title: "Potato — Anthropic Trace Evaluation"
+    summary: "Annotate Claude/Anthropic agent traces."
+    category: agent
+    tags: [agent-traces, anthropic]
+    color_from: indigo
+    color_to: purple
+  - id: openai-evaluation
+    source: examples/agent-traces/openai-evaluation
+    title: "Potato — OpenAI Trace Evaluation"
+    summary: "Annotate OpenAI agent / tool-use traces."
+    category: agent
+    tags: [agent-traces, openai]
+    color_from: indigo
+    color_to: purple
+  - id: coding-agent-evaluation
+    source: examples/agent-traces/coding-agent-evaluation
+    title: "Potato — Coding Agent Evaluation"
+    summary: "Evaluate coding-agent runs and code edits."
+    category: agent
+    tags: [agent-traces, coding]
+    color_from: indigo
+    color_to: purple
+  - id: coding-agent-comparison
+    source: examples/agent-traces/coding-agent-comparison
+    title: "Potato — Coding Agent Comparison"
+    summary: "Compare two coding-agent solutions."
+    category: agent
+    tags: [agent-traces, coding]
+    color_from: indigo
+    color_to: purple
+  - id: coding-agent-prm
+    source: examples/agent-traces/coding-agent-prm
+    title: "Potato — Coding Agent PRM"
+    summary: "Step-level process-reward annotation of coding agents."
+    category: agent
+    tags: [agent-traces, coding, prm]
+    color_from: indigo
+    color_to: purple
+  - id: coding-agent-review
+    source: examples/agent-traces/coding-agent-review
+    title: "Potato — Coding Agent Review"
+    summary: "Review and rate coding-agent pull requests."
+    category: agent
+    tags: [agent-traces, coding]
+    color_from: indigo
+    color_to: purple
+  - id: swebench-evaluation
+    source: examples/agent-traces/swebench-evaluation
+    title: "Potato — SWE-bench Evaluation"
+    summary: "Annotate SWE-bench task attempts and patches."
+    category: agent
+    tags: [agent-traces, swebench, coding]
+    color_from: indigo
+    color_to: purple
+  - id: multi-agent-evaluation
+    source: examples/agent-traces/multi-agent-evaluation
+    title: "Potato — Multi-Agent Evaluation"
+    summary: "Evaluate multi-agent system interactions."
+    category: agent
+    tags: [agent-traces, multi-agent]
+    color_from: indigo
+    color_to: purple
+  - id: multi-dim-comparison
+    source: examples/agent-traces/multi-dim-comparison
+    title: "Potato — Multi-Dimensional Comparison"
+    summary: "Compare agent outputs across multiple quality dimensions."
+    category: agent
+    tags: [agent-traces, comparison]
+    color_from: indigo
+    color_to: purple
+  - id: complex-annotation
+    source: examples/agent-traces/complex-annotation
+    title: "Potato — Complex Trace Annotation"
+    summary: "Rich multi-schema annotation over complex agent traces."
+    category: agent
+    tags: [agent-traces]
+    color_from: indigo
+    color_to: purple
+  - id: continuous-eval
+    source: examples/agent-traces/continuous-eval
+    title: "Potato — Continuous Evaluation"
+    summary: "Continuous / streaming evaluation of agent runs."
+    category: agent
+    tags: [agent-traces]
+    color_from: indigo
+    color_to: purple
+  - id: trajectory-evaluation
+    source: examples/agent-traces/trajectory-evaluation
+    title: "Potato — Trajectory Evaluation"
+    summary: "Step-by-step trajectory quality assessment."
+    category: agent
+    tags: [agent-traces, trajectory]
+    color_from: indigo
+    color_to: purple
+  - id: trajectory-correction
+    source: examples/agent-traces/trajectory-correction
+    title: "Potato — Trajectory Correction"
+    summary: "Edit/correct agent trajectories for SFT/DPO data."
+    category: agent
+    tags: [agent-traces, trajectory, sft, dpo]
+    color_from: indigo
+    color_to: purple
+  - id: rag-evaluation
+    source: examples/agent-traces/rag-evaluation
+    title: "Potato — RAG Evaluation"
+    summary: "Rate retrieval relevance, faithfulness, citation accuracy."
+    category: agent
+    tags: [agent-traces, rag]
+    color_from: indigo
+    color_to: purple
+  - id: visual-agent-evaluation
+    source: examples/agent-traces/visual-agent-evaluation
+    title: "Potato — Visual Agent Evaluation"
+    summary: "Screenshot-based evaluation of GUI/vision agents."
+    category: agent
+    tags: [agent-traces, vision, web-agent]
+    color_from: indigo
+    color_to: purple
+    needs_lfs: true
+  - id: web-agent-review
+    source: examples/agent-traces/web-agent-review
+    title: "Potato — Web Agent Review"
+    summary: "Review web-agent runs with screenshot + click/scroll overlays."
+    category: agent
+    tags: [agent-traces, web-agent]
+    color_from: indigo
+    color_to: purple
+    needs_lfs: true
+  - id: triage-queue
+    source: examples/agent-traces/triage-queue
+    title: "Potato — Triage Queue"
+    summary: "Signal-based triage queue for prioritizing traces to review."
+    category: agent
+    tags: [agent-traces, triage]
+    color_from: indigo
+    color_to: purple
+  - id: judge-alignment
+    source: examples/agent-traces/judge-alignment
+    title: "Potato — LLM Judge ↔ Human Alignment"
+    summary: "Measure LLM-judge agreement with human annotations."
+    category: agent
+    tags: [agent-traces, llm-judge]
+    color_from: indigo
+    color_to: purple
+  # Live / ingestion variants — gated on the Phase 2 boot-check (static render only).
+  - id: live-agent-evaluation
+    source: examples/agent-traces/live-agent-evaluation
+    title: "Potato — Live Agent Evaluation"
+    summary: "Annotate live-captured agent sessions (static replay)."
+    category: agent
+    tags: [agent-traces, live]
+    color_from: indigo
+    color_to: purple
+    status: gated
+  - id: live-coding-agent
+    source: examples/agent-traces/live-coding-agent
+    title: "Potato — Live Coding Agent"
+    summary: "Annotate live-captured coding-agent sessions (static replay)."
+    category: agent
+    tags: [agent-traces, live, coding]
+    color_from: indigo
+    color_to: purple
+    status: gated
+  - id: web-agent-creation
+    source: examples/agent-traces/web-agent-creation
+    title: "Potato — Web Agent Creation"
+    summary: "Create web-agent traces by live browsing (needs live backend)."
+    category: agent
+    tags: [agent-traces, web-agent, live]
+    color_from: indigo
+    color_to: purple
+    status: gated
+    needs_lfs: true
+  - id: langchain-integration
+    source: examples/agent-traces/langchain-integration
+    title: "Potato — LangChain Integration"
+    summary: "Annotate ingested LangChain traces (static replay)."
+    category: agent
+    tags: [agent-traces, langchain]
+    color_from: indigo
+    color_to: purple
+    status: gated
+
+  # ── Multimodal ────────────────────────────────────────────────────────────
+  - id: image-classification
+    source: examples/image/image-classification
+    title: "Potato — Image Classification"
+    summary: "Classify images with radio / checkbox schemes."
+    category: multimodal
+    tags: [image, vision]
+    color_from: pink
+    color_to: red
+    needs_lfs: true
+  - id: image-bbox
+    source: examples/image/image-annotation
+    title: "Potato — Image Bounding Boxes"
+    summary: "Draw labeled bounding boxes on images."
+    category: multimodal
+    tags: [image, bbox, vision]
+    color_from: pink
+    color_to: red
+    needs_lfs: true
+  - id: image-ai-detection
+    source: examples/image/image-ai-detection
+    title: "Potato — AI-Generated Image Detection"
+    summary: "Label images as real vs AI-generated."
+    category: multimodal
+    tags: [image, vision]
+    color_from: pink
+    color_to: red
+    needs_lfs: true
+  - id: pdf-annotation
+    source: examples/image/pdf-annotation
+    title: "Potato — PDF Annotation"
+    summary: "Annotate PDF documents with coordinate mapping."
+    category: multimodal
+    tags: [pdf, document]
+    color_from: pink
+    color_to: red
+    needs_lfs: true
+  - id: pdf-bbox
+    source: examples/image/pdf-bbox
+    title: "Potato — PDF Bounding Boxes"
+    summary: "Draw bounding boxes over PDF page regions."
+    category: multimodal
+    tags: [pdf, bbox, document]
+    color_from: pink
+    color_to: red
+    needs_lfs: true
+  - id: audio-annotation
+    source: examples/audio/audio-annotation
+    title: "Potato — Audio Annotation"
+    summary: "Waveform display with segment labeling."
+    category: multimodal
+    tags: [audio]
+    color_from: pink
+    color_to: red
+    needs_lfs: true
+  - id: audio-classification
+    source: examples/audio/audio-classification
+    title: "Potato — Audio Classification"
+    summary: "Classify audio clips (emotion / event / speaker)."
+    category: multimodal
+    tags: [audio]
+    color_from: pink
+    color_to: red
+    needs_lfs: true
+  - id: video-annotation
+    source: examples/video/video-annotation
+    title: "Potato — Video Annotation"
+    summary: "Video player with temporal segment labeling."
+    category: multimodal
+    tags: [video]
+    color_from: pink
+    color_to: red
+    needs_lfs: true
+  - id: video-classification
+    source: examples/video/video-classification
+    title: "Potato — Video Classification"
+    summary: "Whole-clip video classification."
+    category: multimodal
+    tags: [video]
+    color_from: pink
+    color_to: red
+    needs_lfs: true
+  - id: multimodal
+    source: examples/advanced/multi-modal
+    title: "Potato — Multimodal Annotation"
+    summary: "Combine media + text fields in one task."
+    category: multimodal
+    tags: [multimodal]
+    color_from: pink
+    color_to: red
+    needs_lfs: true
+
+  # ── Advanced workflows ────────────────────────────────────────────────────
+  - id: qda-mode
+    source: examples/advanced/qda-mode-example
+    title: "Potato — QDA Mode (Qualitative Coding)"
+    summary: "Codebook-driven qualitative coding with memos and cases."
+    category: advanced
+    tags: [qda, qualitative, codebook]
+    color_from: blue
+    color_to: indigo
+  - id: codebook
+    source: examples/advanced/codebook-example
+    title: "Potato — Codebook Annotation"
+    summary: "Shared evolving codebook across annotators."
+    category: advanced
+    tags: [qda, codebook]
+    color_from: blue
+    color_to: indigo
+  - id: adjudication
+    source: examples/advanced/adjudication
+    title: "Potato — Adjudication"
+    summary: "Resolve multi-annotator disagreements."
+    category: advanced
+    tags: [adjudication, quality-control]
+    color_from: blue
+    color_to: indigo
+  - id: quality-control
+    source: examples/advanced/quality-control
+    title: "Potato — Quality Control"
+    summary: "Attention checks and gold-standard items."
+    category: advanced
+    tags: [quality-control]
+    color_from: blue
+    color_to: indigo
+  - id: conditional-logic
+    source: examples/advanced/conditional-logic
+    title: "Potato — Conditional Logic"
+    summary: "Branching questions that adapt to prior answers."
+    category: advanced
+    tags: [conditional]
+    color_from: blue
+    color_to: indigo
+  - id: mace
+    source: examples/advanced/mace-demo
+    title: "Potato — MACE Agreement"
+    summary: "Annotator competence estimation with MACE."
+    category: advanced
+    tags: [agreement, mace]
+    color_from: blue
+    color_to: indigo
+  - id: all-annotation-types
+    source: examples/advanced/all-annotation-types
+    title: "Potato — All Annotation Types Showcase"
+    summary: "Every schema type in a single task."
+    category: showcase
+    tags: [showcase]
+    color_from: gray
+    color_to: yellow
+
+  # ── AI-assisted (need an LLM endpoint; wire to HF Inference API before deploy) ──
+  - id: solo-mode
+    source: examples/advanced/solo-mode
+    title: "Potato — Solo Mode (LLM-as-Annotator)"
+    summary: "LLM auto-labels while you calibrate; human-in-the-loop."
+    category: ai-assisted
+    tags: [llm, solo-mode, ai-assisted]
+    color_from: purple
+    color_to: pink
+    needs_ai: true
+  - id: judge-calibration
+    source: examples/ai-assisted/judge-calibration
+    title: "Potato — LLM-as-Judge Calibration"
+    summary: "Calibrate an LLM judge against blind human labels."
+    category: ai-assisted
+    tags: [llm, llm-judge, ai-assisted]
+    color_from: purple
+    color_to: pink
+    needs_ai: true
+  - id: ai-hints
+    source: examples/ai-assisted/ollama-ai-demo
+    title: "Potato — AI-Assisted Hints"
+    summary: "LLM label suggestions inline in the annotation UI."
+    category: ai-assisted
+    tags: [llm, ai-assisted, hints]
+    color_from: purple
+    color_to: pink
+    needs_ai: true
+  - id: span-ai-keywords
+    source: examples/ai-assisted/span-ai-keywords-demo
+    title: "Potato — AI Keyword Highlights"
+    summary: "LLM-suggested keyword spans to accept/reject."
+    category: ai-assisted
+    tags: [llm, ai-assisted, span]
+    color_from: purple
+    color_to: pink
+    needs_ai: true
+  - id: llm-chat
+    source: examples/ai-assisted/llm-chat
+    title: "Potato — Interactive LLM Chat Eval"
+    summary: "Evaluate a live LLM chat conversation."
+    category: ai-assisted
+    tags: [llm, chat, ai-assisted]
+    color_from: purple
+    color_to: pink
+    needs_ai: true
+
+  # ── Domain custom layouts ─────────────────────────────────────────────────
+  - id: content-moderation
+    source: examples/custom-layouts/content-moderation
+    title: "Potato — Content Moderation"
+    summary: "Custom moderation layout with policy categories."
+    category: custom
+    tags: [moderation, custom-layout]
+    color_from: gray
+    color_to: red
+  - id: medical-review
+    source: examples/custom-layouts/medical-review
+    title: "Potato — Medical Record Review"
+    summary: "Domain layout for clinical text review."
+    category: custom
+    tags: [medical, custom-layout]
+    color_from: gray
+    color_to: blue
+  - id: dialogue-qa
+    source: examples/custom-layouts/dialogue-qa
+    title: "Potato — Dialogue QA"
+    summary: "Turn-level dialogue question-answering layout."
+    category: custom
+    tags: [dialogue, custom-layout]
+    color_from: gray
+    color_to: green

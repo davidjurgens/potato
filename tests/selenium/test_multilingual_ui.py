@@ -148,7 +148,13 @@ class TestMultilingualUI(unittest.TestCase):
     def test_previous_button_shows_german_text(self):
         """Previous button should show 'Zur\u00fcck' instead of 'Previous'."""
         self._login()
-        prev_btn = self.driver.find_element(By.ID, "prev-btn")
+        # The Previous button is intentionally hidden (replaced by a placeholder)
+        # on the first instance, where back-navigation is unavailable. Advance one
+        # instance so the button is actually rendered before checking its text.
+        self.driver.find_element(By.ID, "next-btn").click()
+        prev_btn = WebDriverWait(self.driver, 10).until(
+            EC.visibility_of_element_located((By.ID, "prev-btn"))
+        )
         self.assertIn("Zur\u00fcck", prev_btn.text,
                        "Previous button should display German text")
 

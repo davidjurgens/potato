@@ -2950,6 +2950,301 @@ def admin_iaa():
     return jsonify(report)
 
 
+def _record_judge_comparison_if_enabled(username, instance_id):
+    """On human save, log the human↔judge comparison if inline mode is on."""
+    ja = config.get("judge_alignment", {}) or {}
+    if not (ja.get("inline", {}) or {}).get("enabled"):
+        return
+    try:
+        from potato.server_utils import judge_alignment as ja_mod
+        schemas = ja_mod.judge_scoped_schemas(config)
+        allow = set((ja.get("inline", {}) or {}).get("schemas", []) or [])
+        if allow:
+            schemas = [s for s in schemas if s.get("name") in allow]
+        preds = ja_mod.load_predictions(config)
+        version = ja_mod.latest_prompt_version(config)
+        version_preds = preds.get(version, {}) if version else {}
+        for schema_info in schemas:
+            schema_name = schema_info.get("name")
+            pred = version_preds.get(f"{instance_id}::{schema_name}")
+            if not pred:
+                continue
+            human_label = ja_mod.human_label_for(instance_id, schema_name, username)
+            if human_label is None:
+                continue
+            ja_mod.record_comparison(
+                config, instance_id, schema_name, human_label,
+                pred.get("predicted_label"), version or "",
+            )
+    except Exception as e:
+        logger.warning(f"Judge comparison recording failed for {instance_id}: {e}")
+
+
+@app.route("/admin/judge-alignment", methods=["GET"])
+def admin_judge_alignment():
+    """LLM-judge ↔ human alignment report: Cohen's κ, confusion, disagreements.
+
+    Mirrors /admin/iaa. Pass ?format=html for the rendered page (default JSON),
+    and ?prompt_version=<v> to view a specific judge prompt version.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.server_utils.judge_alignment import (
+            compute_judge_alignment, gather_pairs, judge_scoped_schemas, latest_prompt_version)
+        users = get_users()
+        pv = request.args.get("prompt_version")
+        report = compute_judge_alignment(config, users, prompt_version=pv)
+        # E4: judge bias + robustness eval cards (the axis beyond κ).
+        try:
+            from potato.server_utils.judge_bias import eval_cards_from_pairs
+
+            def _text_len(iid):
+                from potato.item_state_management import get_item_state_manager
+                ism = get_item_state_manager()
+                try:
+                    return len(str(ism.get_item(iid).get_data())) if ism else 0
+                except Exception:
+                    return 0
+            schemas = [s.get("name") for s in judge_scoped_schemas(config)]
+            pairs = gather_pairs(config, users, schemas, pv or latest_prompt_version(config))
+            report["eval_cards"] = eval_cards_from_pairs(
+                pairs, report.get("per_schema", {}), _text_len,
+                prompt_version=report.get("prompt_version") or "")
+        except Exception:
+            logger.exception("eval-card computation failed (non-fatal)")
+    except Exception as exc:
+        logger.exception("Failed to compute judge alignment")
+        return jsonify({"error": str(exc)}), 500
+
+    if (request.args.get("format") or "json").lower() == "html":
+        try:
+            return render_template("admin/judge_alignment.html", report=report)
+        except Exception:
+            pass
+    return jsonify(report)
+
+
+@app.route("/admin/api/judge-alignment/run", methods=["POST"])
+def admin_judge_alignment_run():
+    """Run/re-run the judge over human-annotated instances.
+
+    Optional JSON body: {"rubrics": {schema_name: rubric}, "max_per_schema": N}.
+    Editing a rubric creates a new prompt version so κ can be tracked across
+    calibration rounds. Returns a run summary.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    body = request.get_json(silent=True) or {}
+    try:
+        from potato.server_utils.judge_alignment import run_judge_batch
+        summary = run_judge_batch(
+            config, get_users(),
+            rubric_overrides=body.get("rubrics"),
+            max_per_schema=body.get("max_per_schema"),
+        )
+    except Exception as exc:
+        logger.exception("Failed to run judge batch")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(summary)
+
+
+@app.route("/admin/api/judge-alignment/autocalibrate", methods=["POST"])
+def admin_judge_alignment_autocalibrate():
+    """Auto-calibrate the judge: re-run with human corrections injected as
+    few-shot examples, creating a new prompt version, and report base vs new κ.
+
+    Optional JSON body: {"max_corrections": N, "max_per_schema": N}.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    body = request.get_json(silent=True) or {}
+    try:
+        from potato.server_utils.judge_autocalibrate import autocalibrate
+        report = autocalibrate(
+            config, get_users(),
+            max_corrections=int(body.get("max_corrections", 5)),
+            max_per_schema=body.get("max_per_schema"),
+        )
+    except Exception as exc:
+        logger.exception("Failed to auto-calibrate judge")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(report)
+
+
+def _build_annotation_observations(users, schemas):
+    """(worker, item::schema, label) observations from stored annotations (E2)."""
+    from potato.server_utils.judge_alignment import human_label_for
+    from potato.item_state_management import get_item_state_manager
+    ism = get_item_state_manager()
+    if ism is None:
+        return []
+    obs = []
+    for iid in ism.get_instance_ids():
+        for schema in schemas:
+            key = f"{iid}::{schema}"
+            for u in users:
+                lab = human_label_for(str(iid), schema, u)
+                if lab is not None:
+                    obs.append((u, key, lab))
+    return obs
+
+
+@app.route("/admin/annotation-integrity", methods=["GET"])
+def admin_annotation_integrity():
+    """Per-annotator LLM-cheating / low-effort detection (E2), no ground truth.
+
+    ?format=html for the dashboard. Uses the judge to supply reference LLM labels
+    when available (for the LLM-echo signal); otherwise Correlated-Agreement only.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    try:
+        from potato.server_utils.cheating_detection import detect_llm_cheating
+        from potato.server_utils.judge_alignment import judge_scoped_schemas, run_judge_batch
+        # schemas: prefer judge-scoped (categorical) schemes; fall back to all radio/multiselect names
+        schemas = [s.get("name") for s in judge_scoped_schemas(config)]
+        if not schemas:
+            schemas = [s.get("name") for s in (config.get("annotation_schemes") or [])
+                       if s.get("annotation_type") in ("radio", "multiselect", "multiple_choice")]
+        users = get_users()
+        obs = _build_annotation_observations(users, schemas)
+        # Optional reference LLM labels from cached judge predictions (best-effort).
+        llm_labels = None
+        try:
+            from potato.server_utils.judge_alignment import load_predictions, latest_prompt_version
+            preds = load_predictions(config).get(latest_prompt_version(config) or "", {})
+            llm_labels = {f"{k.split('::')[0]}::{k.split('::')[1]}": v.get("predicted_label")
+                          for k, v in preds.items()
+                          if isinstance(v, dict) and v.get("predicted_label") and "::" in k}
+            llm_labels = llm_labels or None
+        except Exception:
+            llm_labels = None
+        reports = [r.to_dict() for r in detect_llm_cheating(obs, llm_labels=llm_labels)]
+    except Exception as exc:
+        logger.exception("Failed to compute annotation integrity")
+        return jsonify({"error": str(exc)}), 500
+
+    payload = {"reports": reports, "n_annotators": len(reports),
+               "used_llm_labels": bool(llm_labels)}
+    if (request.args.get("format") or "json").lower() == "html":
+        try:
+            return render_template("admin/annotation_integrity.html", **payload)
+        except Exception:
+            pass
+    return jsonify(payload)
+
+
+@app.route("/admin/api/perspectivist", methods=["GET"])
+def admin_perspectivist_export():
+    """Soft-label / perspectivist export (E3): per-item label distributions,
+    ambiguity flags, and per-annotator perspectives — preserves disagreement
+    instead of collapsing to one answer. ?schema=<name> to restrict; default all.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    try:
+        from potato.server_utils.perspectivist import perspectivist_export, annotator_perspectives
+        from potato.server_utils.judge_alignment import judge_scoped_schemas
+        wanted = request.args.get("schema")
+        schemas = ([wanted] if wanted else
+                   [s.get("name") for s in (config.get("annotation_schemes") or [])
+                    if s.get("annotation_type") in ("radio", "multiselect", "multiple_choice")]
+                   or [s.get("name") for s in judge_scoped_schemas(config)])
+        obs = _build_annotation_observations(get_users(), schemas)
+        try:
+            thr = float(request.args.get("ambiguity_threshold", 0.5))
+        except (TypeError, ValueError):
+            thr = 0.5
+        items = perspectivist_export(obs, ambiguity_threshold=thr)
+        ambiguous = sum(1 for it in items if it["ambiguous"])
+        return jsonify({"items": items, "n_items": len(items),
+                        "n_ambiguous": ambiguous,
+                        "perspectives": annotator_perspectives(obs)})
+    except Exception as exc:
+        logger.exception("Failed to build perspectivist export")
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/admin/api/induce-metrics", methods=["GET"])
+def admin_induce_metrics():
+    """Agent-metric induction (E11): mine recurring evaluation metrics from the
+    free-text annotations on a scheme, for a human to confirm into a rubric.
+
+    ?schema=<free-text scheme name> (required), ?min_support=N (default 2).
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+    schema = request.args.get("schema")
+    if not schema:
+        return jsonify({"error": "schema query param is required"}), 400
+    try:
+        from potato.server_utils.metric_induction import induce_metrics
+        from potato.ai.judge import JudgeService
+        from potato.item_state_management import get_item_state_manager
+        ism = get_item_state_manager()
+        comments = []
+        if ism is not None:
+            for iid in ism.get_instance_ids():
+                for u in get_users():
+                    anns = get_annotations_for_user_on(u, str(iid)) or {}
+                    val = anns.get(schema)
+                    text = None
+                    if isinstance(val, dict):
+                        text = val.get("text") or (next(iter(val.keys())) if val else None)
+                    elif isinstance(val, str):
+                        text = val
+                    if text and len(str(text).strip()) > 3:
+                        comments.append(str(text).strip())
+        llm = JudgeService(config)._get_endpoint()
+        if llm is None:
+            return jsonify({"error": "no LLM endpoint configured for induction"}), 400
+        min_support = int(request.args.get("min_support", 2))
+        cands = [c.to_dict() for c in induce_metrics(comments, llm, min_support=min_support)]
+    except Exception as exc:
+        logger.exception("Failed to induce metrics")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"schema": schema, "n_comments": len(comments),
+                    "candidate_metrics": cands})
+
+
+@app.route("/admin/triage-queue", methods=["GET"])
+def admin_triage_queue():
+    """Signal-based triage queue: items ranked by their quality signal.
+
+    Shows the remaining (incomplete) items ordered by the triage priority that
+    was assigned at load/ingestion time (errors / thumbs-down / low score
+    first), with the reason that flagged each one. Pass ?format=html for the
+    rendered page (default JSON).
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.server_utils.triage import compute_triage_queue
+        report = compute_triage_queue(config)
+    except Exception as exc:
+        logger.exception("Failed to compute triage queue")
+        return jsonify({"error": str(exc)}), 500
+
+    if (request.args.get("format") or "json").lower() == "html":
+        try:
+            return render_template("admin/triage_queue.html", report=report)
+        except Exception:
+            pass
+    return jsonify(report)
+
+
 @app.route("/admin/api/code_cooccurrence", methods=["GET"])
 def admin_api_code_cooccurrence():
     """
@@ -4193,12 +4488,30 @@ def update_instance():
             "request_size": len(request.get_data()) if request.get_data() else 0
         }
 
+        # Capture whether this instance already had annotations BEFORE we mutate
+        # state, so the webhook below can correctly distinguish annotation.created
+        # from annotation.updated. F-032.
+        _had_prior_annotation = bool(
+            getattr(user_state, "instance_id_to_label_to_value", {}).get(instance_id)
+        )
+
         # Check if this is the frontend format (annotations, span_annotations, link_annotations, event_annotations)
         if "annotations" in request.json or "span_annotations" in request.json or "link_annotations" in request.json or "event_annotations" in request.json:
             logger.debug("Processing frontend format (annotations, span_annotations)")
 
             # Handle label annotations from frontend format
             annotations = request.json.get("annotations", {})
+
+            # Guard against malformed payloads: `annotations` must be a mapping.
+            # A non-dict (e.g. a JSON string or list) would crash the .items()
+            # loop below with AttributeError → an unhandled HTTP 500 (F-046).
+            # Reject cleanly instead.
+            if not isinstance(annotations, dict):
+                logger.warning(
+                    f"Rejected /updateinstance from {username}: 'annotations' is "
+                    f"{type(annotations).__name__}, expected object")
+                return jsonify({"status": "error",
+                                "message": "'annotations' must be an object"})
 
             # Pre-clear stale labels for radio/multiselect schemas.
             # The client always sends the COMPLETE current state, so any label
@@ -4269,6 +4582,9 @@ def update_instance():
                 # Update annotation
                 user_state.add_label_annotation(instance_id, label, value)
                 logger.debug(f"Added label annotation: {schema_name}:{label_name} = {value[:100]}..." if len(str(value)) > 100 else f"Added label annotation: {schema_name}:{label_name} = {value}")
+
+            # Record human↔judge comparison for the alignment loop (inline mode).
+            _record_judge_comparison_if_enabled(username, instance_id)
 
             # Handle span annotations from frontend format
             span_annotations = request.json.get("span_annotations", [])
@@ -4530,29 +4846,32 @@ def update_instance():
             logger.warning("Unknown data format in /updateinstance")
             return jsonify({"status": "error", "message": "Unknown data format"})
 
+        # Collect all annotations for this instance. Used by both QC validation
+        # and the webhook payload below — must be defined unconditionally, since
+        # webhooks can be enabled without quality control (otherwise the webhook
+        # emit block raises UnboundLocalError and every save 500s). F-030.
+        all_annotations = {}
+        if "annotations" in request.json:
+            for key, value in request.json.get("annotations", {}).items():
+                # Parse schema:label format
+                if ":" in key:
+                    schema_name, label_name = key.split(":", 1)
+                    all_annotations[schema_name] = value
+                else:
+                    all_annotations[key] = value
+        elif "schema" in request.json:
+            schema_name = request.json.get("schema")
+            schema_state = request.json.get("state", [])
+            # Convert state list to dict for validation
+            for sv in schema_state:
+                if "value" in sv:
+                    all_annotations[schema_name] = sv.get("value")
+
         # Quality control validation (attention checks and gold standards)
         qc_manager = get_quality_control_manager()
         qc_result = None
 
         if qc_manager:
-            # Collect all annotations for validation
-            all_annotations = {}
-            if "annotations" in request.json:
-                for key, value in request.json.get("annotations", {}).items():
-                    # Parse schema:label format
-                    if ":" in key:
-                        schema_name, label_name = key.split(":", 1)
-                        all_annotations[schema_name] = value
-                    else:
-                        all_annotations[key] = value
-            elif "schema" in request.json:
-                schema_name = request.json.get("schema")
-                schema_state = request.json.get("state", [])
-                # Convert state list to dict for validation
-                for sv in schema_state:
-                    if "value" in sv:
-                        all_annotations[schema_name] = sv.get("value")
-
             # Calculate response time
             response_time = None
             if client_timestamp:
@@ -4642,7 +4961,7 @@ def update_instance():
         )
         _wh = get_webhook_emitter()
         if _wh:
-            _evt = ANNOTATION_CREATED
+            _evt = ANNOTATION_UPDATED if _had_prior_annotation else ANNOTATION_CREATED
             _wh.emit(
                 _evt,
                 build_annotation_payload(
@@ -4653,12 +4972,18 @@ def update_instance():
                 ),
             )
 
-            # Check if item is now fully annotated
+            # Check if item is now fully annotated. Use the canonical resolver
+            # for num_annotators_per_item (int or dict.default form); the prior
+            # code read annotation_task_name (a string) and always fell back to
+            # 3, ignoring the configured annotator count. F-031.
             ism = get_item_state_manager()
             annotators = ism.get_annotators_for_item(instance_id)
-            num_annotators = config.get("annotation_task_name",
-                                         config.get("num_annotators_per_item", 3))
-            if isinstance(num_annotators, str):
+            try:
+                from potato.server_utils.config_module import resolve_num_annotators_per_item
+                num_annotators = resolve_num_annotators_per_item(config)
+            except Exception:
+                num_annotators = config.get("num_annotators_per_item", 3)
+            if not isinstance(num_annotators, int) or num_annotators < 1:
                 num_annotators = 3
             if len(annotators) >= num_annotators:
                 _wh.emit(
@@ -4670,12 +4995,48 @@ def update_instance():
                     ),
                 )
 
+            # Emit task.completed once, when this save annotates the user's LAST
+            # remaining assigned item. The documented event had a payload builder
+            # but zero emit sites. Fire-once is guarded by _had_prior_annotation:
+            # a re-save of an already-annotated item won't re-trigger it. F-033.
+            try:
+                assigned = set(user_state.get_assigned_instance_ids() or [])
+                if assigned and not _had_prior_annotation:
+                    annotated = (
+                        set(getattr(user_state, "instance_id_to_label_to_value", {}).keys())
+                        | set(getattr(user_state, "instance_id_to_span_to_value", {}).keys())
+                    ) & assigned
+                    if assigned.issubset(annotated):
+                        from potato.webhooks.events import (
+                            TASK_COMPLETED, build_task_completed_payload,
+                        )
+                        _wh.emit(
+                            TASK_COMPLETED,
+                            build_task_completed_payload(
+                                user_id=username,
+                                total_annotations=len(annotated),
+                            ),
+                        )
+            except Exception as _e:
+                logger.debug(f"task.completed webhook check skipped: {_e}")
+
         # Trigger MACE competence estimation check
         from potato.mace_manager import get_mace_manager
         mace_mgr = get_mace_manager()
         if mace_mgr and mace_mgr.mace_config.enabled:
             total = mace_mgr.count_total_annotations()
             mace_mgr.check_and_run(total)
+
+        # Trigger active-learning retraining check. When enough new annotations
+        # have accumulated, this queues a background train + reorder of the
+        # unlabeled pool; never allowed to break the save.
+        try:
+            from potato.active_learning_manager import get_active_learning_manager
+            al_mgr = get_active_learning_manager()
+            if al_mgr and al_mgr.config.enabled:
+                al_mgr.check_and_trigger_training()
+        except Exception as e:
+            logger.debug("Active learning trigger skipped: %s", e)
 
         # Stamp this annotation with the codebook revision in effect so
         # an instance labeled before later code additions can be softly
@@ -4808,6 +5169,89 @@ def done():
                           auto_redirect=auto_redirect,
                           auto_redirect_delay=auto_redirect_delay)
 
+def _annotator_dashboard_config():
+    """Return the normalized annotator_dashboard config block.
+
+    Disabled (returns enabled=False) unless explicitly turned on. Accepts a
+    bare ``annotator_dashboard: true`` shorthand as well as a dict.
+    """
+    raw = config.get("annotator_dashboard", False)
+    if raw is True:
+        raw = {"enabled": True}
+    if not isinstance(raw, dict):
+        raw = {}
+    return {
+        "enabled": bool(raw.get("enabled", False)),
+        "show_project_progress": bool(raw.get("show_project_progress", True)),
+        "show_personal_progress": bool(raw.get("show_personal_progress", True)),
+        "show_active_annotators": bool(raw.get("show_active_annotators", False)),
+    }
+
+
+@app.route("/progress", methods=["GET"])
+def annotator_progress():
+    """
+    Read-only, opt-in progress dashboard for annotators.
+
+    Shows ONLY project-level aggregate progress and the requesting annotator's
+    own stats. Never exposes other annotators' identities, admin actions, or
+    configuration. Disabled by default (see annotator_dashboard config).
+    """
+    dash = _annotator_dashboard_config()
+    if not dash["enabled"]:
+        # Feature off: behave as if the route does not exist.
+        return home()
+
+    if 'username' not in session:
+        return home()
+
+    return render_template(
+        "annotator_dashboard.html",
+        title=config.get("annotation_task_name", "Annotation Platform"),
+        annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
+        dashboard_config=dash,
+    )
+
+
+@app.route("/progress/api/summary", methods=["GET"])
+def annotator_progress_summary():
+    """JSON progress numbers for the annotator dashboard (read-only)."""
+    dash = _annotator_dashboard_config()
+    if not dash["enabled"]:
+        return jsonify({"error": "Not found"}), 404
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    username = session['username']
+
+    from potato.server_utils.progress_stats import (
+        compute_project_progress,
+        compute_personal_progress,
+    )
+
+    result = {}
+
+    if dash["show_project_progress"]:
+        project = compute_project_progress()
+        project_out = {
+            "total_items": project["total_items"],
+            "items_with_annotations": project["items_with_annotations"],
+            "completion_percentage": project["completion_percentage"],
+            "total_annotations": project["total_annotations"],
+        }
+        # active annotators is a COUNT only and separately gated
+        if dash["show_active_annotators"]:
+            project_out["active_annotators"] = project["active_annotators"]
+        result["project"] = project_out
+
+    if dash["show_personal_progress"]:
+        # Only ever the requesting user's own data.
+        result["personal"] = compute_personal_progress(username)
+
+    return jsonify(result)
+
+
 @app.route("/admin", methods=["GET"])
 def admin():
     """
@@ -4843,6 +5287,12 @@ def admin():
         "mace_enabled": config.get("mace", {}).get("enabled", False),
         "bws_enabled": bool(config.get("bws_config")),
         "embedding_viz_enabled": embedding_viz_enabled,
+        "datasets_enabled": config.get("datasets", {}).get("enabled", False),
+        "judge_calibration_enabled": config.get("judge_calibration", {}).get("enabled", False),
+        "triage_enabled": config.get("triage", {}).get("enabled", False),
+        "automation_enabled": config.get("automation", {}).get("enabled", False),
+        "curation_enabled": config.get("curation", {}).get("enabled", False),
+        "arena_enabled": config.get("arena", {}).get("enabled", False),
     }
 
     return render_template("admin.html", **context)
@@ -5028,8 +5478,11 @@ def get_default_label_color(label_name, index=0):
     Get a default color for a label based on its name or index.
     First checks for named colors, then falls back to palette by index.
     """
-    # Check for named color match (case-insensitive)
-    lower_name = label_name.lower().strip()
+    # Check for named color match (case-insensitive).
+    # F-027: YAML parses unquoted yes/no/on/off/true/false as Python bools (and
+    # bare numbers as int/float), so a label "name" may not be a str — coerce
+    # before string ops to avoid a 500 in /api/colors.
+    lower_name = str(label_name).lower().strip()
     if lower_name in NAMED_LABEL_COLORS:
         return NAMED_LABEL_COLORS[lower_name]
 
@@ -5085,7 +5538,10 @@ def get_span_colors():
             labels = schema.get('labels', [])
             for i, label in enumerate(labels):
                 if isinstance(label, dict):
-                    label_name = label.get('name', str(label))
+                    # F-027: str() so a YAML-bool/number label name (yes/no/1)
+                    # doesn't become a non-str dict key (jsonify sort_keys then
+                    # raises "'<' not supported between 'str' and 'bool'").
+                    label_name = str(label.get('name', label))
                     # Check for inline color definition
                     if 'color' in label and label_name not in color_map[schema_name]:
                         normalized = normalize_color(label['color'])
@@ -6808,6 +7264,8 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/poststudy", "poststudy", poststudy, methods=["GET", "POST"])
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])
+    app.add_url_rule("/progress", "annotator_progress", annotator_progress, methods=["GET"])
+    app.add_url_rule("/progress/api/summary", "annotator_progress_summary", annotator_progress_summary, methods=["GET"])
 
     app.add_url_rule("/api/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
 
@@ -6838,6 +7296,12 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/entity_linking/update_span", "entity_linking_update_span", entity_linking_update_span, methods=["POST"])
 
     app.add_url_rule("/api/current_instance", "get_current_instance", get_current_instance, methods=["GET"])
+    # F-024: get_instance_data is registered only via a module-level @app.route,
+    # which binds to a throwaway app in the CLI start path; without this explicit
+    # re-registration on the serving app the route 404s on every `potato start`
+    # server (dynamic schemas — extractive_qa/error_span/text_edit/card_sort/
+    # conjoint — then rely solely on annotation.js's embedded-JSON fallback).
+    app.add_url_rule("/api/instance_data", "get_instance_data", get_instance_data, methods=["GET"])
     app.add_url_rule("/api/ai_assistant", "ai_assistant", ai_assistant, methods=["GET"])
     app.add_url_rule("/api/audio/proxy", "audio_proxy", audio_proxy, methods=["GET"])
     app.add_url_rule("/admin/user_state/<user_id>", "admin_user_state", admin_user_state, methods=["GET"])
@@ -6861,6 +7325,35 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/user/<username>/set_instances", "admin_api_set_user_instances", admin_api_set_user_instances, methods=["POST"])
     app.add_url_rule("/admin/api/stale_assignments", "admin_api_stale_assignments", admin_api_stale_assignments, methods=["GET"])
     app.add_url_rule("/admin/api/reclaim_instance", "admin_api_reclaim_instance", admin_api_reclaim_instance, methods=["POST"])
+    # F-041 (F-024 class): debug-gated test-state reset. It existed only as a
+    # module-level @app.route, so it 404'd on the serving app built by
+    # configure_routes — leaving Selenium suites that rely on it (e.g. video
+    # annotation persistence) without per-test isolation.
+    app.add_url_rule("/admin/api/test/reset_state", "admin_api_test_reset_state", admin_api_test_reset_state, methods=["POST"])
+    # F-042 (F-024 class): these were registered ONLY via module-level @app.route
+    # and so 404'd on every live `potato start` server (the serving app is built
+    # by configure_routes). Audit: diff of @app.route paths vs add_url_rule paths.
+    app.add_url_rule("/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
+    app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
+    app.add_url_rule("/admin/annotation-integrity", "admin_annotation_integrity", admin_annotation_integrity, methods=["GET"])
+    app.add_url_rule("/admin/api/perspectivist", "admin_perspectivist_export", admin_perspectivist_export, methods=["GET"])
+    app.add_url_rule("/admin/api/induce-metrics", "admin_induce_metrics", admin_induce_metrics, methods=["GET"])
+    app.add_url_rule("/admin/judge-alignment", "admin_judge_alignment", admin_judge_alignment, methods=["GET"])
+    app.add_url_rule("/admin/api/judge-alignment/run", "admin_judge_alignment_run", admin_judge_alignment_run, methods=["POST"])
+    app.add_url_rule("/admin/api/judge-alignment/autocalibrate", "admin_judge_alignment_autocalibrate", admin_judge_alignment_autocalibrate, methods=["POST"])
+    app.add_url_rule("/admin/triage-queue", "admin_triage_queue", admin_triage_queue, methods=["GET"])
+    app.add_url_rule("/admin/api/step_agreement", "admin_api_step_agreement", admin_api_step_agreement, methods=["GET"])
+    app.add_url_rule("/admin/api/step_quality", "admin_api_step_quality", admin_api_step_quality, methods=["GET"])
+    app.add_url_rule("/api/waveform/<cache_key>", "get_waveform_data", get_waveform_data, methods=["GET"])
+    app.add_url_rule("/api/waveform/generate", "generate_waveform", generate_waveform, methods=["POST"])
+    app.add_url_rule("/api/video/metadata", "get_video_metadata", get_video_metadata, methods=["POST"])
+    app.add_url_rule("/api/video/waveform/generate", "generate_video_waveform", generate_video_waveform, methods=["POST"])
+    app.add_url_rule("/admin/api/data_sources", "admin_api_data_sources", admin_api_data_sources, methods=["GET"])
+    app.add_url_rule("/admin/api/data_sources/<source_id>/load_more", "admin_api_data_sources_load_more", admin_api_data_sources_load_more, methods=["POST"])
+    app.add_url_rule("/admin/api/data_sources/<source_id>/refresh", "admin_api_data_sources_refresh", admin_api_data_sources_refresh, methods=["POST"])
+    app.add_url_rule("/admin/api/cache/clear", "admin_api_cache_clear", admin_api_cache_clear, methods=["POST"])
+    app.add_url_rule("/admin/api/webhooks", "admin_api_webhooks", admin_api_webhooks, methods=["GET"])
+    app.add_url_rule("/admin/api/webhooks/test", "admin_api_webhooks_test", admin_api_webhooks_test, methods=["POST"])
     app.add_url_rule("/admin/api/questions", "admin_api_questions", admin_api_questions, methods=["GET"])
     app.add_url_rule("/admin/api/annotation_history", "admin_api_annotation_history", admin_api_annotation_history, methods=["GET"])
     app.add_url_rule("/admin/api/suspicious_activity", "admin_api_suspicious_activity", admin_api_suspicious_activity, methods=["GET"])
@@ -6975,11 +7468,28 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register the Codebook full-page document view (separate blueprint so
+    # it serves /codebook at the site root, not under /api).
+    if 'codebook_page' not in app.blueprints:
+        try:
+            from potato.codebook.page import codebook_page_bp
+            app.register_blueprint(codebook_page_bp)
+        except ImportError:
+            pass
+
     # Register universal Cases blueprint if not already registered
     if 'cases' not in app.blueprints:
         try:
             from potato.cases.api import cases_bp
             app.register_blueprint(cases_bp)
+        except ImportError:
+            pass
+
+    # Register Judge Calibration blueprint if not already registered
+    if 'judge_calibration' not in app.blueprints:
+        try:
+            from potato.judge_calibration.routes import judge_calibration_bp
+            app.register_blueprint(judge_calibration_bp)
         except ImportError:
             pass
 
@@ -7769,6 +8279,13 @@ def admin_api_export():
         from potato.export import export_registry
 
         context = build_export_context(config_file)
+        # Default the output directory when the caller didn't supply one, so the
+        # admin dashboard "Export" button works without requiring a path. Writes
+        # under <output_annotation_dir>/exports/<format>/ (auto-export convention).
+        if not output:
+            base_out = getattr(context, "output_dir", "") or os.getcwd()
+            output = os.path.join(base_out, "exports", fmt)
+            os.makedirs(output, exist_ok=True)
         result = export_registry.export(fmt, context, output, options)
 
         return jsonify({

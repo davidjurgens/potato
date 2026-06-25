@@ -1,8 +1,11 @@
 site_name: Potato Annotation
-site_url: https://github.com/davidjurgens/potato
+site_url: https://potatoannotator.readthedocs.io/
+site_description: Free, open-source, self-hosted annotation and agent-evaluation platform for NLP, agentic, and GenAI research.
 nav:
     - Home: index.md
     - Quick Start: quick-start.md
+    - FAQ: faq.md
+    - Glossary: glossary.md
     - Comparison: comparison.md
     - Guides:
         - Getting Started: guides/getting-started.md
@@ -70,9 +73,25 @@ nav:
         - Diversity Ordering: workflow/diversity_ordering.md
     - Agent Evaluation:
         - Agent Traces: agent-evaluation/agent_traces.md
+        - Three-Pane Trace Eval: agent-evaluation/eval_trace.md
         - Coding Agent Annotation: agent-evaluation/coding_agent_annotation.md
         - Web Agent Annotation: agent-evaluation/web_agent_annotation.md
         - Trajectory Evaluation: agent-evaluation/trajectory_eval.md
+        - Trajectory Correction: agent-evaluation/trajectory_correction.md
+        - Process Supervision (PRM): agent-evaluation/process_supervision.md
+        - Failure-Mode Taxonomy (MAST): agent-evaluation/failure_taxonomy.md
+        - Multi-Agent Team Annotation: agent-evaluation/multi_agent_annotation.md
+        - Multimodal-Agent Annotation: agent-evaluation/multimodal_agent_annotation.md
+        - Programmatic Evaluators: agent-evaluation/evaluators.md
+        - Datasets & Experiments: agent-evaluation/datasets_and_experiments.md
+        - Automation Rules: agent-evaluation/automation_rules.md
+        - CI Evaluation: agent-evaluation/ci_evaluation.md
+        - Judge Alignment: agent-evaluation/judge_alignment.md
+        - Semantic Curation: agent-evaluation/semantic_curation.md
+        - Model Arena: agent-evaluation/model_arena.md
+        - Trace Analytics & Alerts: agent-evaluation/trace_analytics.md
+        - Persona Simulation (multi-turn): agent-evaluation/persona_simulation.md
+        - Triage Queue: agent-evaluation/triage_queue.md
         - Live Agent Interaction: agent-evaluation/live_agent.md
     - Solo Mode:
         - Solo Mode: solo-mode/solo_mode.md
@@ -117,6 +136,7 @@ nav:
     - Integrations:
         - Webhooks: integrations/webhooks.md
         - LangChain Integration: integrations/langchain_integration.md
+        - Tracing SDK (potato_trace): integrations/tracing_sdk.md
     - Deployment:
         - Usage: deployment/usage.md
         - Crowdsourcing: deployment/crowdsourcing.md
@@ -125,6 +145,11 @@ nav:
     - API Reference:
         - API Reference: api-reference/api_reference.md
     - Release Notes:
+        - v2.6.2: releasenotes/v2.6.2.md
+        - v2.6.1: releasenotes/v2.6.1.md
+        - v2.6.0: releasenotes/v2.6.0.md
+        - v2.5.0: releasenotes/v2.5.0.md
+        - v2.4.5: releasenotes/v2.4.5.md
         - v2.4.4: releasenotes/v2.4.4.md
         - v2.4.3: releasenotes/v2.4.3.md
         - v2.4.1: releasenotes/v2.4.1.md
@@ -133,4 +158,47 @@ nav:
         - v2.2.0: releasenotes/v2.2.0.md
         - v2.1.0: releasenotes/v2.1.0.md
         - v2.0.0: releasenotes/v2.0.0.md
-theme: readthedocs
+repo_url: https://github.com/davidjurgens/potato
+repo_name: davidjurgens/potato
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true

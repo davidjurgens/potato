@@ -81,6 +81,7 @@ python potato/flask_server.py start examples/advanced/memos-example/config.yaml 
 
 ## Related
 
+- [QDA Mode](qda.md) — turns memos on alongside the codebook, cases & search
 - [Solo Mode](../solo-mode/solo_mode.md)
 - [Quality Control](../workflow/quality_control.md)
 - [Data Export](../data-export/export_formats.md)

@@ -156,6 +156,11 @@ def humanize_label(text: str) -> str:
     """
     if not text:
         return ""
+    # Never mangle Jinja/template expressions (e.g. dynamic_labels:
+    # "{{instance_obj.labels[0]}}"). Humanizing would rewrite `instance_obj`
+    # to `instance Obj`, producing invalid Jinja and a 500 at render time.
+    if "{{" in str(text) or "{%" in str(text):
+        return str(text)
     s = str(text).replace("_", " ").replace("-", " ")
     s = " ".join(s.split())  # collapse whitespace
     out = []

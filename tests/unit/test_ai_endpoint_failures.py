@@ -259,9 +259,11 @@ class TestParseStringToJson:
         result = endpoint.parseStringToJson(content)
         assert result == {"label": "neutral"}
 
-    def test_malformed_json_raises_value_error(self, endpoint):
-        with pytest.raises(ValueError, match="Failed to parse JSON"):
-            endpoint.parseStringToJson("this is not json at all {")
+    def test_malformed_json_returns_raw_text(self, endpoint):
+        # Graceful final-fallback: unparseable -> {"response": <raw>} (no raise),
+        # so a model's malformed output can't crash annotation.
+        result = endpoint.parseStringToJson("this is not json at all {")
+        assert result == {"response": "this is not json at all {"}
 
     def test_dict_passthrough(self, endpoint):
         original = {"already": "parsed"}

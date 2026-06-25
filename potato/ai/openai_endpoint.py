@@ -68,13 +68,23 @@ class OpenAIEndpoint(BaseAIEndpoint):
             AIEndpointRequestError: If the request fails
         """
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                text_format=output_format.model_json_schema(),
-            )
+            kwargs = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+            }
+            # Free-text when no schema is requested (e.g. the model arena);
+            # structured JSON output only when an output_format is supplied.
+            if output_format is not None and hasattr(output_format, "model_json_schema"):
+                kwargs["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": getattr(output_format, "__name__", "output"),
+                        "schema": output_format.model_json_schema(),
+                    },
+                }
+            response = self.client.chat.completions.create(**kwargs)
             return response.choices[0].message.content
         except Exception as e:
             raise AIEndpointRequestError(f"OpenAI request failed: {e}")

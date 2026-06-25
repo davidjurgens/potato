@@ -20,6 +20,36 @@
         <h1>📊 {{ annotation_task_name }} - Admin Dashboard</h1>
         <div class="header-actions">
           <span class="status-badge status-active">Admin Mode</span>
+          {% if datasets_enabled %}
+          <a href="{{ url_for('datasets.admin') }}"
+             class="shadcn-button shadcn-button-outline"
+             title="Versioned eval datasets & experiment runs">Datasets &amp; Experiments</a>
+          {% endif %}
+          {% if judge_calibration_enabled %}
+          <a href="{{ url_for('judge_calibration.admin') }}"
+             class="shadcn-button shadcn-button-outline"
+             title="LLM-as-judge calibration">Judge Calibration</a>
+          {% endif %}
+          {% if triage_enabled %}
+          <a href="/admin/triage-queue"
+             class="shadcn-button shadcn-button-outline"
+             title="Signal-prioritized annotation queue">Triage Queue</a>
+          {% endif %}
+          {% if automation_enabled %}
+          <a href="{{ url_for('automation.admin_page') }}"
+             class="shadcn-button shadcn-button-outline"
+             title="Filter→sample→action rules over incoming items">Automation</a>
+          {% endif %}
+          {% if curation_enabled %}
+          <a href="{{ url_for('curation.catalog_page') }}"
+             class="shadcn-button shadcn-button-outline"
+             title="Semantic search & dynamic slices over items">Catalog</a>
+          {% endif %}
+          {% if arena_enabled %}
+          <a href="{{ url_for('arena.arena_page') }}"
+             class="shadcn-button shadcn-button-outline"
+             title="Compare N models side by side on one prompt">Arena</a>
+          {% endif %}
           <button
             onclick="logout()"
             class="shadcn-button shadcn-button-outline"

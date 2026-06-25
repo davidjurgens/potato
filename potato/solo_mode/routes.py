@@ -864,11 +864,20 @@ def api_optimize_prompt():
     """Trigger prompt optimization."""
     manager = get_solo_mode_manager()
 
-    if not hasattr(manager, 'prompt_optimizer') or manager.prompt_optimizer is None:
+    # Access the (lazily-constructed) optimizer explicitly. Don't guard with
+    # hasattr(): hasattr() swallows any exception raised while building the
+    # property and would mislabel a real init failure as "not configured".
+    try:
+        optimizer = manager.prompt_optimizer if manager is not None else None
+    except Exception:
+        logger.error("Prompt optimizer failed to initialize: %s", traceback.format_exc())
+        return jsonify({'error': 'Prompt optimizer failed to initialize'}), 500
+
+    if optimizer is None:
         return jsonify({'error': 'Prompt optimizer not configured'}), 400
 
     try:
-        result = manager.prompt_optimizer.optimize()
+        result = optimizer.optimize()
         return jsonify({
             'success': True,
             'result': result,

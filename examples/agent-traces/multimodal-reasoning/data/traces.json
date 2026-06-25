@@ -1,0 +1,24 @@
+[
+  {
+    "id": "vlm_chart_001",
+    "task": "A VLM agent is asked: 'Which quarter had the highest revenue in this chart?'",
+    "steps": [
+      {"type": "text", "text": "Let me look at the bar chart to compare the four quarters."},
+      {"type": "image", "caption": "Bar chart: Q1=40, Q2=55, Q3=70, Q4=62",
+       "image": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='160'><rect width='300' height='160' fill='%23ffffff'/><rect x='30' y='100' width='40' height='40' fill='%234dabf7'/><rect x='90' y='75' width='40' height='65' fill='%234dabf7'/><rect x='150' y='50' width='40' height='90' fill='%236e56cf'/><rect x='210' y='62' width='40' height='78' fill='%234dabf7'/><text x='42' y='154' font-family='sans-serif' font-size='11'>Q1</text><text x='102' y='154' font-family='sans-serif' font-size='11'>Q2</text><text x='162' y='154' font-family='sans-serif' font-size='11'>Q3</text><text x='222' y='154' font-family='sans-serif' font-size='11'>Q4</text></svg>"},
+      {"type": "text", "text": "Q3 has the tallest bar, so Q3 had the highest revenue at about 70."},
+      {"type": "action", "action": "Answer: Q3 had the highest revenue."}
+    ]
+  },
+  {
+    "id": "vlm_hallucination_002",
+    "task": "A VLM agent is asked to count the people in the photo.",
+    "steps": [
+      {"type": "image", "caption": "A photo containing two people",
+       "image": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='150'><rect width='240' height='150' fill='%23e9ecef'/><circle cx='80' cy='60' r='18' fill='%23495057'/><rect x='66' y='80' width='28' height='50' fill='%23495057'/><circle cx='160' cy='60' r='18' fill='%23495057'/><rect x='146' y='80' width='28' height='50' fill='%23495057'/></svg>"},
+      {"type": "text", "text": "I can see five people standing in a row in the image."},
+      {"type": "tool", "tool": "count_objects", "args": {"category": "person"}},
+      {"type": "action", "action": "Answer: There are 5 people."}
+    ]
+  }
+]

@@ -40,6 +40,22 @@ from .codebook import Codebook
 from .similar import derive_code_name, similar_code_names
 from . import revision
 from . import changelog
+from . import blocks
+from . import markdown
+from . import snapshots
+from . import events
+from . import distiller
+from . import content_service
+from .content_service import (
+    ContentError,
+    StaleContentError,
+    apply_content_proposal,
+    get_document,
+    get_scope,
+    propose_content_edit,
+    restore_snapshot,
+    save_scope,
+)
 from .changelog import propose_change
 from .revision import (
     all_stale_instances,
@@ -81,4 +97,19 @@ __all__ = [
     "similar_code_names",
     "changelog",
     "propose_change",
+    # living-document layer
+    "blocks",
+    "markdown",
+    "snapshots",
+    "events",
+    "distiller",
+    "content_service",
+    "get_document",
+    "get_scope",
+    "save_scope",
+    "restore_snapshot",
+    "propose_content_edit",
+    "apply_content_proposal",
+    "ContentError",
+    "StaleContentError",
 ]

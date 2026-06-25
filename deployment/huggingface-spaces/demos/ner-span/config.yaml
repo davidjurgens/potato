@@ -1,0 +1,87 @@
+# Potato Demo Space — Named Entity Recognition
+#
+# Showcases span annotation with multiple entity labels for NER tasks.
+
+annotation_task_name: "Named Entity Recognition"
+
+data_files:
+  - data/ner-texts.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+annotation_instructions: |
+  <h4>Task: Named Entity Recognition</h4>
+  <p>Highlight and label <strong>named entities</strong> in the text.</p>
+
+  <h4>How to annotate</h4>
+  <ol>
+    <li>Click a <strong>label checkbox</strong> to select an entity type</li>
+    <li><strong>Select text</strong> in the passage to create a span</li>
+    <li>Hover over a span and click <strong>&times;</strong> to delete it</li>
+  </ol>
+
+  <h4>Entity types</h4>
+  <ul>
+    <li><strong>PERSON</strong> — Names of people (e.g., Tim Cook, Dr. Sarah Chen)</li>
+    <li><strong>ORG</strong> — Organizations, companies, institutions (e.g., Apple, MIT, WHO)</li>
+    <li><strong>LOC</strong> — Locations, cities, countries (e.g., Davos, Switzerland, Texas)</li>
+    <li><strong>DATE</strong> — Dates, time periods (e.g., January 23, 2025, fourth quarter)</li>
+    <li><strong>MISC</strong> — Other notable entities (e.g., product names, events, awards)</li>
+  </ul>
+
+annotation_schemes:
+  - annotation_type: span
+    name: entities
+    description: "Select a label, then highlight entities in the text"
+    columns: 5
+    labels:
+      - name: PERSON
+        tooltip: "Names of people"
+      - name: ORG
+        tooltip: "Organizations, companies, institutions"
+      - name: LOC
+        tooltip: "Locations, cities, countries, regions"
+      - name: DATE
+        tooltip: "Dates, time periods, years"
+      - name: MISC
+        tooltip: "Other notable entities (products, events, awards)"
+
+ui:
+  spans:
+    span_colors:
+      entities:
+        PERSON: "(59, 130, 246)"
+        ORG: "(16, 185, 129)"
+        LOC: "(245, 158, 11)"
+        DATE: "(139, 92, 246)"
+        MISC: "(236, 72, 153)"
+
+require_password: false
+
+user_config:
+  allow_all_users: true
+
+site_dir: default
+
+custom_footer_html: |
+  <div class="potato-promo-banner">
+    <p class="promo-headline">This demo was built with Potato</p>
+    <p>Potato is a free, open-source annotation platform with 20+ annotation types, AI-assisted labeling, and quality control. Set up your own annotation project in minutes with a single YAML config file.</p>
+    <div class="promo-links">
+      <a href="https://potatoannotator.com/" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-primary">
+        <i class="fas fa-globe"></i> potatoannotator.com
+      </a>
+      <a href="https://github.com/davidjurgens/potato" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-outline">
+        <i class="fab fa-github"></i> GitHub
+      </a>
+      <a href="https://github.com/davidjurgens/potato/tree/master/examples" target="_blank" rel="noopener noreferrer" class="promo-link promo-link-outline">
+        <i class="fas fa-book-open"></i> 100+ Examples
+      </a>
+    </div>
+  </div>
