@@ -125,19 +125,52 @@ batch_assignment:
       instances: ["r2_item_001", "r2_item_002"]
 ```
 
-For long batches, move the instance list into a separate data file. The file can
-use the same local formats supported by `data_files` (`json`, `jsonl`, `csv`,
-`tsv`, or `parquet`) and IDs are read using `item_properties.id_key`:
+For long batches, move the instance list into a separate data file. If the
+batch file is already a full Potato input data file, use `data_file`: Potato
+will load the items and use the same file to define the group order. This lets
+one config point each annotator cohort at a specific input file:
 
 ```yaml
 assignment_strategy: batch
 num_annotators_per_item: 4
+data_files: []
 
 batch_assignment:
   groups:
     - name: round1_batch_a
       annotators: ["u1", "u2", "u3", "u4"]
-      instances_file: batches/round1_batch_a.csv
+      data_file: batches/round1_batch_a.csv
+    - name: round1_batch_b
+      annotators: ["u5", "u6", "u7", "u8"]
+      data_file: batches/round1_batch_b.csv
+```
+
+If the file contains only IDs and the items are loaded through top-level
+`data_files`, use `instances_file` instead. `data_file` and `instances_file`
+support the same local formats as `data_files` (`json`, `jsonl`, `csv`, `tsv`,
+or `parquet`) and IDs are read using `item_properties.id_key`.
+
+When annotator IDs are not known ahead of time, such as a fresh Prolific launch,
+enable automatic cohort assignment. Potato assigns each first-arriving user to
+the least-filled batch group and keeps that user's group stable for the session.
+Group size defaults to `num_annotators_per_item`/`max_annotations_per_item`, or
+you can set `max_annotators` per group:
+
+```yaml
+assignment_strategy: batch
+num_annotators_per_item: 4
+data_files: []
+
+batch_assignment:
+  auto_assign_annotators: true
+  groups:
+    - name: batch_a
+      data_file: batches/batch_a.csv
+    - name: batch_b
+      data_file: batches/batch_b.csv
+    - name: batch_c
+      data_file: batches/batch_c.csv
+      max_annotators: 6
 ```
 
 Items can also define their allowed annotators directly. This is useful when

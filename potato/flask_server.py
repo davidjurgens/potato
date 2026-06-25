@@ -466,7 +466,17 @@ def load_instance_data(config: dict):
         _load_from_data_sources(config, ism, id_key, text_key)
         return
 
-    data_files = config.get("data_files", [])
+    data_files = list(config.get("data_files", []))
+    seen_data_files = {
+        _data_file_entry_identity(data_file_entry, config.get("task_dir", "."))
+        for data_file_entry in data_files
+    }
+    for data_file_entry in _batch_assignment_data_file_entries(config):
+        key = _data_file_entry_identity(data_file_entry, config.get("task_dir", "."))
+        if key not in seen_data_files:
+            data_files.append(data_file_entry)
+            seen_data_files.add(key)
+
     if not data_files:
         # No data_files, might use data_directory which is handled elsewhere
         logger.debug("No data_files configured, skipping file-based loading")
@@ -703,6 +713,48 @@ def load_instance_data(config: dict):
 
     # For each item, render the text to display in the UI ahead of time.
     _render_displayed_text(text_key)
+
+
+def _data_file_entry_identity(data_file_entry, task_dir: str = ".") -> str:
+    if isinstance(data_file_entry, dict):
+        data_file_entry = data_file_entry.get("path", "")
+    path = str(data_file_entry)
+    if path and not os.path.isabs(path):
+        path = os.path.join(task_dir, path)
+    return os.path.normcase(os.path.abspath(os.path.normpath(path)))
+
+
+def _batch_assignment_data_file_entries(config: dict) -> list:
+    batch_config = config.get("batch_assignment")
+    if not isinstance(batch_config, dict):
+        return []
+
+    entries = []
+    for group in batch_config.get("groups") or []:
+        if not isinstance(group, dict):
+            continue
+        data_file = group.get(
+            "data_file",
+            group.get("input_data_file", group.get("input_file")),
+        )
+        if data_file:
+            entries.append(_resolve_batch_assignment_data_file_entry(config, data_file))
+    return entries
+
+
+def _resolve_batch_assignment_data_file_entry(config: dict, data_file_entry):
+    task_dir = config.get("task_dir", ".")
+
+    if isinstance(data_file_entry, dict):
+        resolved_entry = dict(data_file_entry)
+        path = resolved_entry.get("path")
+        if isinstance(path, str) and path and not os.path.isabs(path):
+            resolved_entry["path"] = os.path.normpath(os.path.join(task_dir, path))
+        return resolved_entry
+
+    if isinstance(data_file_entry, str) and data_file_entry and not os.path.isabs(data_file_entry):
+        return os.path.normpath(os.path.join(task_dir, data_file_entry))
+    return data_file_entry
 
 
 def _default_max_annotations_per_user(config: dict, ism) -> int:
