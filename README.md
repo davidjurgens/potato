@@ -4,7 +4,8 @@
 [![Technical Reference](https://img.shields.io/badge/reference-readthedocs-blue)](https://potatoannotator.readthedocs.io/)
 [![PyPI](https://img.shields.io/pypi/v/potato-annotation)](https://pypi.org/project/potato-annotation/)
 [![License](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
-[![Paper](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
+[![Paper (Potato 2.0)](https://img.shields.io/badge/paper-ACL%202026-red)](https://aclanthology.org/2026.acl-demo.37/)
+[![Paper (Potato 1.0)](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
 [![Live Demo](https://img.shields.io/badge/demo-HuggingFace%20Spaces-yellow)](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)
 [![Website](https://img.shields.io/badge/website-potatoannotator.com-brightgreen)](https://www.potatoannotator.com)
 
@@ -306,11 +307,48 @@ Potato is free software, licensed under the [GNU General Public License v3.0 or 
 
 ## Citation
 
+If you use Potato in your research, please cite the **Potato 2.0** paper ([ACL 2026 System Demonstrations](https://aclanthology.org/2026.acl-demo.37/)):
+
 ```bibtex
-@inproceedings{jurgens2026potato,
-  title={POTATO 2.0: A Comprehensive Annotation Platform\\with Support for AI-in-the-Loop and Agentic Systems},
-  author={Jurgens, David and Chen, Michael and Iyer, Lina},
-  booktitle={Proceedings of the The 64th Annual Meeting of the Association for Computational Linguistics: System Demonstrations},
-  year={2026}
+@inproceedings{jurgens-etal-2026-potato,
+    title = "Potato 2.0: A Comprehensive Annotation Platform with {AI}-in-the-Loop Support",
+    author = "Jurgens, David  and
+      Chen, Michael  and
+      Iyer, Lina",
+    editor = "Durrett, Greg  and
+      Jian, Ping",
+    booktitle = "Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations)",
+    month = jul,
+    year = "2026",
+    address = "San Diego, California, United States",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2026.acl-demo.37/",
+    pages = "374--386",
+    ISBN = "979-8-89176-392-0",
+}
+```
+
+To reference the original Potato release, cite the **Potato 1.0** paper ([EMNLP 2022 System Demonstrations](https://aclanthology.org/2022.emnlp-demos.33/)):
+
+```bibtex
+@inproceedings{pei-etal-2022-potato,
+    title = "{POTATO}: The Portable Text Annotation Tool",
+    author = "Pei, Jiaxin  and
+      Ananthasubramaniam, Aparna  and
+      Wang, Xingyao  and
+      Zhou, Naitian  and
+      Dedeloudis, Apostolos  and
+      Sargent, Jackson  and
+      Jurgens, David",
+    editor = "Che, Wanxiang  and
+      Shutova, Ekaterina",
+    booktitle = "Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing: System Demonstrations",
+    month = dec,
+    year = "2022",
+    address = "Abu Dhabi, UAE",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2022.emnlp-demos.33/",
+    doi = "10.18653/v1/2022.emnlp-demos.33",
+    pages = "327--337",
 }
 ```

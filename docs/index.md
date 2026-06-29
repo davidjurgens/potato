@@ -281,3 +281,29 @@ See the [examples](https://github.com/davidjurgens/potato/tree/main/examples) di
 - `advanced/` - Advanced features (conditional logic, quality control, etc.)
 - `agent-traces/` - Agent trace evaluation examples (RAG, GUI agents, comparisons)
 - `custom-layouts/` - Sophisticated custom layout examples
+
+---
+
+## Citation
+
+If you use Potato in your research, please cite the **Potato 2.0** paper
+([ACL 2026 System Demonstrations](https://aclanthology.org/2026.acl-demo.37/)):
+
+```bibtex
+@inproceedings{jurgens-etal-2026-potato,
+    title = "Potato 2.0: A Comprehensive Annotation Platform with {AI}-in-the-Loop Support",
+    author = "Jurgens, David  and Chen, Michael  and Iyer, Lina",
+    booktitle = "Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations)",
+    month = jul,
+    year = "2026",
+    address = "San Diego, California, United States",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2026.acl-demo.37/",
+    pages = "374--386",
+}
+```
+
+The original Potato release is described in the **Potato 1.0** paper
+([EMNLP 2022 System Demonstrations](https://aclanthology.org/2022.emnlp-demos.33/),
+Pei et al., 2022). See the [README](https://github.com/davidjurgens/potato#citation)
+for both BibTeX entries.
