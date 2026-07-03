@@ -5,13 +5,18 @@ import json
 import pytest
 
 from potato.item_state_management import init_item_state_manager, Label
+from potato.flask_server import load_instance_data
 from potato.server_utils.config_module import (
     ConfigSecurityError,
     ConfigValidationError,
     validate_file_paths,
     validate_yaml_structure,
 )
-from potato.user_state_management import InMemoryUserState
+from potato.user_state_management import (
+    InMemoryUserState,
+    clear_user_state_manager,
+    init_user_state_manager,
+)
 
 
 def _reset_item_manager():
@@ -137,6 +142,66 @@ def test_batch_assignment_blocks_users_outside_any_cohort():
     assert outsider.instance_id_ordering == []
 
 
+def test_batch_assignment_auto_assigns_unknown_users_to_balanced_groups():
+    config = _config(
+        max_annotations_per_item=2,
+        batch_assignment={
+            "auto_assign_annotators": True,
+            "groups": [
+                {
+                    "name": "batch_a",
+                    "instances": ["a1", "a2"],
+                },
+                {
+                    "name": "batch_b",
+                    "instances": ["b1"],
+                },
+            ],
+        },
+    )
+    ism = _manager(config)
+
+    user_1 = _user("PROLIFIC_PID_1")
+    user_2 = _user("PROLIFIC_PID_2")
+    user_3 = _user("PROLIFIC_PID_3")
+    user_4 = _user("PROLIFIC_PID_4")
+    user_5 = _user("PROLIFIC_PID_5")
+
+    assert ism.assign_instances_to_user(user_1) == 2
+    assert user_1.instance_id_ordering == ["a1", "a2"]
+
+    assert ism.assign_instances_to_user(user_2) == 1
+    assert user_2.instance_id_ordering == ["b1"]
+
+    assert ism.assign_instances_to_user(user_3) == 2
+    assert user_3.instance_id_ordering == ["a1", "a2"]
+
+    assert ism.assign_instances_to_user(user_4) == 1
+    assert user_4.instance_id_ordering == ["b1"]
+
+    assert ism.assign_instances_to_user(user_5) == 0
+    assert user_5.instance_id_ordering == []
+
+
+def test_batch_assignment_auto_group_choice_is_stable_for_same_unknown_user():
+    config = _config(
+        max_annotations_per_item=2,
+        batch_assignment={
+            "auto_assign_annotators": True,
+            "groups": [
+                {"name": "batch_a", "instances": ["a1", "a2"]},
+                {"name": "batch_b", "instances": ["b1"]},
+            ],
+        },
+    )
+    ism = _manager(config)
+    user = _user("PROLIFIC_PID_1")
+
+    assert ism.assign_instances_to_user(user) == 2
+    assert ism.assign_instances_to_user(user) == 0
+    assert user.instance_id_ordering == ["a1", "a2"]
+
+
 def test_batch_assignment_can_use_item_level_round_one_annotator_key():
     config = _config(
         batch_assignment={
@@ -217,6 +282,46 @@ def test_batch_assignment_group_can_load_instances_from_csv_data_file(tmp_path):
     ism = _manager_with_items(config, ["a1", "a2", "b1"])
     alice = _user("alice")
 
+    assert ism.assign_instances_to_user(alice) == 2
+    assert alice.instance_id_ordering == ["a1", "a2"]
+
+
+def test_batch_assignment_group_data_file_loads_items_and_batch_ids(tmp_path):
+    batch_file = tmp_path / "batch_a.json"
+    batch_file.write_text(
+        json.dumps(
+            [
+                {"id": "a1", "text": "round 2 item 1"},
+                {"id": "a2", "text": "round 2 item 2"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config = _valid_yaml_config(
+        task_dir=str(tmp_path),
+        output_annotation_dir=str(tmp_path),
+        data_files=[],
+        batch_assignment={
+            "groups": [
+                {
+                    "annotators": ["alice", "bob", "chris", "dana"],
+                    "data_file": "batch_a.json",
+                }
+            ],
+        },
+    )
+    validate_yaml_structure(config)
+    validate_file_paths(config, str(tmp_path))
+
+    _reset_item_manager()
+    clear_user_state_manager()
+    init_user_state_manager(config)
+    ism = init_item_state_manager(config)
+    load_instance_data(config)
+
+    alice = _user("alice")
+
+    assert ism.get_instance_ids() == ["a1", "a2"]
     assert ism.assign_instances_to_user(alice) == 2
     assert alice.instance_id_ordering == ["a1", "a2"]
 
@@ -328,6 +433,23 @@ def test_batch_assignment_config_validation_accepts_group_file_reference():
             ],
         }
     )
+    validate_yaml_structure(config)
+
+
+def test_batch_assignment_config_validation_accepts_auto_groups_without_known_users():
+    config = _valid_yaml_config(
+        batch_assignment={
+            "auto_assign_annotators": True,
+            "groups": [
+                {
+                    "name": "batch_a",
+                    "instances": ["item_1", "item_2"],
+                    "max_annotators": 4,
+                }
+            ],
+        }
+    )
+
     validate_yaml_structure(config)
 
 
