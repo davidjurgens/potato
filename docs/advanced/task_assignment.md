@@ -152,9 +152,10 @@ or `parquet`) and IDs are read using `item_properties.id_key`.
 
 When annotator IDs are not known ahead of time, such as a fresh Prolific launch,
 enable automatic cohort assignment. Potato assigns each first-arriving user to
-the least-filled batch group and keeps that user's group stable for the session.
-Group size defaults to `num_annotators_per_item`/`max_annotations_per_item`, or
-you can set `max_annotators` per group:
+the least-filled batch group and keeps that user in the same group for the rest
+of the study. Group size defaults to
+`num_annotators_per_item`/`max_annotations_per_item`, or you can set
+`max_annotators` per group:
 
 ```yaml
 assignment_strategy: batch
@@ -172,6 +173,18 @@ batch_assignment:
       data_file: batches/batch_c.csv
       max_annotators: 6
 ```
+
+Cohort assignments **persist across server restarts**. The user→group mapping is
+reconstructed on startup from each user's saved assignments, so restarting the
+server (deploy, crash, reboot) keeps returning users in their original group and
+lets new users keep balancing against accurate per-group counts. No extra state
+file is written — the mapping is derived from the annotations already on disk.
+
+For this to work, each auto-assigned group's items must be **disjoint** (an item
+should belong to only one batch). If an item appears in more than one group, or a
+user's saved items span multiple groups, Potato logs a warning and attributes the
+user to the group holding the majority of their items (ties break toward the
+first-listed group).
 
 Items can also define their allowed annotators directly. This is useful when
 round-2 data is generated from round-1 annotations:

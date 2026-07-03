@@ -4,8 +4,12 @@ import json
 
 import pytest
 
-from potato.item_state_management import init_item_state_manager, Label
-from potato.flask_server import load_instance_data
+from potato.item_state_management import (
+    get_item_state_manager,
+    init_item_state_manager,
+    Label,
+)
+from potato.flask_server import load_instance_data, load_user_data
 from potato.server_utils.config_module import (
     ConfigSecurityError,
     ConfigValidationError,
@@ -13,6 +17,7 @@ from potato.server_utils.config_module import (
     validate_yaml_structure,
 )
 from potato.user_state_management import (
+    get_user_state_manager,
     InMemoryUserState,
     clear_user_state_manager,
     init_user_state_manager,
@@ -202,6 +207,117 @@ def test_batch_assignment_auto_group_choice_is_stable_for_same_unknown_user():
     assert user.instance_id_ordering == ["a1", "a2"]
 
 
+def _auto_pin_maps(ism):
+    """Snapshot the auto-batch pin state, dropping empty reverse-map entries."""
+    return (
+        dict(ism.batch_auto_user_to_group),
+        {index: set(users) for index, users in ism.batch_auto_group_to_users.items() if users},
+    )
+
+
+def test_batch_assignment_auto_pins_survive_restart():
+    """Reconstruct cohort pins from persisted assignments so a restart keeps
+    every user in their group and new users balance against accurate counts."""
+    config = _config(
+        max_annotations_per_item=100,  # groups effectively unbounded here
+        batch_assignment={
+            "auto_assign_annotators": True,
+            "groups": [
+                {"name": "batch_a", "instances": ["a1", "a2"]},
+                {"name": "batch_b", "instances": ["b1"]},
+            ],
+        },
+    )
+
+    ism = _manager(config)
+    user_1, user_2, user_3 = _user("PID_1"), _user("PID_2"), _user("PID_3")
+    assert ism.assign_instances_to_user(user_1) == 2  # -> batch_a
+    assert ism.assign_instances_to_user(user_2) == 1  # -> batch_b
+    assert ism.assign_instances_to_user(user_3) == 2  # tie -> batch_a
+    pins_before, counts_before = _auto_pin_maps(ism)
+    assert pins_before == {"PID_1": 0, "PID_2": 1, "PID_3": 0}
+    assert counts_before == {0: {"PID_1", "PID_3"}, 1: {"PID_2"}}
+
+    # Simulate a restart: a brand-new manager starts with empty pins, then
+    # reconstructs them from the users' persisted assignments.
+    restarted = _manager(config)
+    assert _auto_pin_maps(restarted) == ({}, {})
+    user_map = {
+        u.user_id: set(u.get_assigned_instance_ids())
+        for u in (user_1, user_2, user_3)
+    }
+    restarted.rebuild_auto_batch_pins_from_users(user_map)
+
+    assert _auto_pin_maps(restarted) == (pins_before, counts_before)
+
+    # A new user must balance against the reconstructed counts (batch_b is the
+    # least-filled), not against a zeroed-out map (which would pick batch_a).
+    user_4 = _user("PID_4")
+    assert restarted.assign_instances_to_user(user_4) == 1
+    assert user_4.instance_id_ordering == ["b1"]
+    assert restarted.batch_auto_user_to_group["PID_4"] == 1
+
+
+def test_batch_assignment_auto_pin_released_when_group_saturated():
+    """A user routed to a group whose items are all saturated is assigned
+    nothing and must not consume an auto-batch slot (so the pin stays
+    reconstructable from real assignments)."""
+    config = _config(
+        max_annotations_per_item=1,  # items saturate after one annotator
+        batch_assignment={
+            "auto_assign_annotators": True,
+            "groups": [
+                # High capacity so the group is chosen by selection, but its
+                # items are already saturated below.
+                {"name": "batch_a", "instances": ["a1", "a2"], "max_annotators": 5},
+            ],
+        },
+    )
+    ism = _manager(config)
+
+    # Saturate both items via prior annotators (cap = 1).
+    ism.register_annotator("a1", "prior_1")
+    ism.register_annotator("a2", "prior_2")
+
+    latecomer = _user("PID_LATE")
+    assert ism.assign_instances_to_user(latecomer) == 0
+    assert latecomer.instance_id_ordering == []
+    # No slot consumed: the fresh pin was rolled back.
+    assert "PID_LATE" not in ism.batch_auto_user_to_group
+    assert _auto_pin_maps(ism) == ({}, {})
+
+
+def test_batch_assignment_auto_pin_reconstruction_handles_overlap(caplog):
+    """Overlapping group items and cross-group users pin to the majority group
+    (ties -> lowest index) and emit warnings."""
+    config = _config(
+        max_annotations_per_item=100,
+        batch_assignment={
+            "auto_assign_annotators": True,
+            "groups": [
+                {"name": "batch_a", "instances": ["a1", "a2"]},
+                {"name": "batch_b", "instances": ["a2", "b1"]},  # a2 overlaps
+            ],
+        },
+    )
+    ism = _manager(config)
+
+    with caplog.at_level("WARNING"):
+        ism.rebuild_auto_batch_pins_from_users(
+            {
+                "spanner": {"a1", "a2", "b1"},  # 2 in batch_a, 1 in batch_b
+                "tied": {"a2", "b1"},           # after overlap: a2->A, b1->B, tie
+            }
+        )
+
+    pins, _ = _auto_pin_maps(ism)
+    assert pins["spanner"] == 0  # majority is batch_a
+    assert pins["tied"] == 0     # tie broken by lowest index
+    warnings = caplog.text
+    assert "overlap" in warnings.lower()
+    assert "spanning multiple" in warnings.lower()
+
+
 def test_batch_assignment_can_use_item_level_round_one_annotator_key():
     config = _config(
         batch_assignment={
@@ -324,6 +440,68 @@ def test_batch_assignment_group_data_file_loads_items_and_batch_ids(tmp_path):
     assert ism.get_instance_ids() == ["a1", "a2"]
     assert ism.assign_instances_to_user(alice) == 2
     assert alice.instance_id_ordering == ["a1", "a2"]
+
+
+def test_batch_assignment_auto_pins_restored_through_load_user_data(tmp_path):
+    """End-to-end boot path: assign auto users, persist to disk, then reload via
+    load_user_data() and confirm the cohort pins are rebuilt."""
+    (tmp_path / "batch_a.json").write_text(
+        json.dumps([{"id": "a1", "text": "A1"}, {"id": "a2", "text": "A2"}]),
+        encoding="utf-8",
+    )
+    (tmp_path / "batch_b.json").write_text(
+        json.dumps([{"id": "b1", "text": "B1"}]),
+        encoding="utf-8",
+    )
+    config = _valid_yaml_config(
+        task_dir=str(tmp_path),
+        output_annotation_dir=str(tmp_path),
+        data_files=[],
+        max_annotations_per_item=100,
+        batch_assignment={
+            "auto_assign_annotators": True,
+            "groups": [
+                {"name": "batch_a", "data_file": "batch_a.json"},
+                {"name": "batch_b", "data_file": "batch_b.json"},
+            ],
+        },
+    )
+    validate_yaml_structure(config)
+    validate_file_paths(config, str(tmp_path))
+
+    def _boot():
+        _reset_item_manager()
+        clear_user_state_manager()
+        init_user_state_manager(config)
+        init_item_state_manager(config)
+        load_instance_data(config)
+
+    # First run: two unknown users land in different balanced groups.
+    _boot()
+    ism = get_item_state_manager()
+    usm = get_user_state_manager()
+    user_a = _user("PID_A")
+    user_b = _user("PID_B")
+    assert ism.assign_instances_to_user(user_a) == 2  # batch_a
+    assert ism.assign_instances_to_user(user_b) == 1  # batch_b
+    usm.save_user_state(user_a)
+    usm.save_user_state(user_b)
+
+    # Restart: reload persisted users; pins must be reconstructed.
+    _boot()
+    load_user_data(config)
+    restarted = get_item_state_manager()
+    assert restarted.batch_auto_user_to_group == {"PID_A": 0, "PID_B": 1}
+
+    # Returning user (reloaded from disk) keeps their batch and gets nothing new.
+    reloaded_a = get_user_state_manager().get_user_state("PID_A")
+    assert reloaded_a.instance_id_ordering == ["a1", "a2"]
+    assert restarted.assign_instances_to_user(reloaded_a) == 0
+
+    # A new user fills the least-filled group.
+    user_c = _user("PID_C")
+    assert restarted.assign_instances_to_user(user_c) == 2  # both had 1 -> batch_a
+    assert restarted.batch_auto_user_to_group["PID_C"] == 0
 
 
 def test_batch_assignment_instances_file_blocks_path_traversal(tmp_path):

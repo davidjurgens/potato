@@ -19,7 +19,7 @@ active learning, and diversity-based assignment to optimize annotation efficienc
 from __future__ import annotations
 
 # Need to import UserState as a type hint for the ItemStateManager
-from typing import TYPE_CHECKING, Dict, Set, List, Optional
+from typing import TYPE_CHECKING, Dict, Set, List, Optional, Tuple
 if TYPE_CHECKING:
     from potato.user_state_management import UserState
 
@@ -1073,13 +1073,25 @@ class ItemStateManager:
             return set()
         return {value for value in annotators if isinstance(value, str) and value}
 
-    def _select_auto_batch_group_for_user(self, user_id: str, persist: bool = False) -> Optional[Dict[str, object]]:
+    def _select_auto_batch_group_for_user(
+        self, user_id: str, persist: bool = False
+    ) -> Optional[Tuple[int, Dict[str, object], bool]]:
+        """Choose an auto-batch group for a user.
+
+        Returns ``(group_index, group, newly_pinned)`` or ``None`` when
+        auto-assignment is disabled or every group is full. When ``persist`` is
+        set and the user is not already pinned, the pin is committed atomically
+        under ``self._lock`` (so concurrent new users balance correctly) and
+        ``newly_pinned`` is ``True``. Callers roll a fresh pin back via
+        :meth:`_rollback_auto_batch_pin` when it ends up yielding no items.
+        """
         if not self.batch_auto_assign_annotators or not self.batch_auto_groups:
             return None
 
         with self._lock:
             if user_id in self.batch_auto_user_to_group:
-                return self.batch_auto_groups[self.batch_auto_user_to_group[user_id]]
+                index = self.batch_auto_user_to_group[user_id]
+                return index, self.batch_auto_groups[index], False
 
             available = []
             for index, group in enumerate(self.batch_auto_groups):
@@ -1093,13 +1105,33 @@ class ItemStateManager:
                 return None
 
             _, index, group = min(available, key=lambda entry: (entry[0], entry[1]))
+            newly_pinned = False
             if persist:
                 self.batch_auto_user_to_group[user_id] = index
                 self.batch_auto_group_to_users[index].add(user_id)
-            return group
+                newly_pinned = True
+            return index, group, newly_pinned
 
-    def _batch_candidate_ids_for_user(self, user_id: str, assign_auto: bool = False) -> List[str]:
-        """Return batch-eligible item IDs for a user in deterministic order."""
+    def _rollback_auto_batch_pin(self, user_id: str, group_index: int) -> None:
+        """Undo a pin created this pass when it yielded no assignable items.
+
+        Only removes the pin if it still points at ``group_index`` (so a
+        concurrent re-pin is never clobbered).
+        """
+        with self._lock:
+            if self.batch_auto_user_to_group.get(user_id) == group_index:
+                del self.batch_auto_user_to_group[user_id]
+                self.batch_auto_group_to_users[group_index].discard(user_id)
+
+    def _batch_candidate_ids_for_user(
+        self, user_id: str, assign_auto: bool = False
+    ) -> Tuple[List[str], Optional[int]]:
+        """Return ``(batch-eligible item IDs, rollback_group_index)`` for a user.
+
+        ``rollback_group_index`` is the index of an auto-group this call freshly
+        pinned the user to; the caller must roll it back if it assigns nothing.
+        It is ``None`` unless a new pin was committed this call.
+        """
         candidate_ids = []
         seen = set()
 
@@ -1108,11 +1140,15 @@ class ItemStateManager:
                 candidate_ids.append(instance_id)
                 seen.add(instance_id)
 
-        auto_group = self._select_auto_batch_group_for_user(
+        rollback_group_index = None
+        selection = self._select_auto_batch_group_for_user(
             user_id,
             persist=assign_auto and not candidate_ids,
         )
-        if auto_group is not None and not candidate_ids:
+        if selection is not None and not candidate_ids:
+            group_index, auto_group, newly_pinned = selection
+            if newly_pinned:
+                rollback_group_index = group_index
             for instance_id in auto_group.get('instance_ids', []):
                 if instance_id not in seen:
                     candidate_ids.append(instance_id)
@@ -1125,7 +1161,68 @@ class ItemStateManager:
                 candidate_ids.append(instance_id)
                 seen.add(instance_id)
 
-        return candidate_ids
+        return candidate_ids, rollback_group_index
+
+    def rebuild_auto_batch_pins_from_users(
+        self, user_id_to_instance_ids: Dict[str, Set[str]]
+    ) -> None:
+        """Reconstruct auto-batch cohort pins from persisted user assignments.
+
+        Called once at boot (after items and auto-groups are loaded, before the
+        server serves requests) so the in-memory pins survive a restart. Each
+        user is pinned to the auto-group holding the majority of their
+        assigned/annotated items (ties broken by lowest group index). Users
+        whose items match no auto-group are left unpinned and treated as new.
+
+        Existing pins are authoritative: a group may end up over ``max_annotators``
+        here, which only gates *new* users in
+        :meth:`_select_auto_batch_group_for_user`.
+        """
+        if not self.batch_auto_assign_annotators or not self.batch_auto_groups:
+            return
+
+        # Reverse index: instance_id -> group index. Warn on overlap since
+        # auto-groups are meant to be disjoint input batches.
+        instance_to_group: Dict[str, int] = {}
+        for index, group in enumerate(self.batch_auto_groups):
+            for instance_id in group.get('instance_ids', []):
+                if instance_id in instance_to_group and instance_to_group[instance_id] != index:
+                    self.logger.warning(
+                        "Auto-batch groups overlap on item %s (groups %s and %s); "
+                        "reconstruction will attribute it to the first group",
+                        instance_id,
+                        instance_to_group[instance_id],
+                        index,
+                    )
+                    continue
+                instance_to_group[instance_id] = index
+
+        with self._lock:
+            self.batch_auto_user_to_group.clear()
+            self.batch_auto_group_to_users = defaultdict(set)
+
+            for user_id, instance_ids in user_id_to_instance_ids.items():
+                counts: Dict[int, int] = defaultdict(int)
+                for instance_id in instance_ids:
+                    group_index = instance_to_group.get(instance_id)
+                    if group_index is not None:
+                        counts[group_index] += 1
+
+                if not counts:
+                    continue
+
+                if len(counts) > 1:
+                    self.logger.warning(
+                        "User %s has items spanning multiple auto-batch groups %s; "
+                        "pinning to the majority group",
+                        user_id,
+                        sorted(counts),
+                    )
+
+                # Majority group, ties broken by lowest index.
+                best_index = min(counts, key=lambda idx: (-counts[idx], idx))
+                self.batch_auto_user_to_group[str(user_id)] = best_index
+                self.batch_auto_group_to_users[best_index].add(str(user_id))
 
     def has_item(self, instance_id: str) -> bool:
         """Returns True if the item is in the state manager"""
@@ -1388,7 +1485,8 @@ class ItemStateManager:
             user_id = getattr(user_state, 'user_id', None)
             if not user_id:
                 return False
-            for iid in self._batch_candidate_ids_for_user(str(user_id)):
+            candidate_ids, _ = self._batch_candidate_ids_for_user(str(user_id))
+            for iid in candidate_ids:
                 if iid not in self.remaining_instance_ids:
                     continue
                 if self._item_is_saturated(iid):
@@ -1411,7 +1509,8 @@ class ItemStateManager:
             return 0
         already_assigned = user_state.get_assigned_instance_ids()
         count = 0
-        for iid in self._batch_candidate_ids_for_user(str(user_id)):
+        candidate_ids, _ = self._batch_candidate_ids_for_user(str(user_id))
+        for iid in candidate_ids:
             if iid not in self.remaining_instance_ids:
                 continue
             if self._item_is_saturated(iid):
@@ -1829,7 +1928,10 @@ class ItemStateManager:
         assigned = 0
         already_assigned = user_state.get_assigned_instance_ids()
 
-        for item_id in self._batch_candidate_ids_for_user(str(user_id), assign_auto=True):
+        candidate_ids, rollback_group_index = self._batch_candidate_ids_for_user(
+            str(user_id), assign_auto=True
+        )
+        for item_id in candidate_ids:
             if item_id not in self.instance_id_to_instance:
                 self.logger.warning(
                     "Batch assignment references unknown item %s for user %s",
@@ -1853,6 +1955,12 @@ class ItemStateManager:
             assigned += 1
             if assigned >= instances_to_assign:
                 break
+
+        # Don't consume an auto-batch slot for a user that received nothing this
+        # pass (e.g. the chosen group is fully saturated) — release the fresh pin
+        # so it stays reconstructable from real assignments after a restart.
+        if assigned == 0 and rollback_group_index is not None:
+            self._rollback_auto_batch_pin(str(user_id), rollback_group_index)
 
         return assigned
 

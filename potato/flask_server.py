@@ -865,6 +865,7 @@ def load_user_data(config: dict):
     # adjudication build_queue() (and other code that relies on
     # ism.instance_annotators) works with pre-loaded annotation data.
     ism = get_item_state_manager()
+    user_id_to_instance_ids = {}
     for user_id in usm.get_user_ids():
         user_state = usm.get_user_state(user_id)
         if user_state:
@@ -874,6 +875,19 @@ def load_user_data(config: dict):
             for instance_id in user_state.instance_id_to_span_to_value:
                 if instance_id in ism.instance_id_to_instance:
                     ism.register_annotator(instance_id, user_id)
+            # Collect assigned + annotated items so auto-batch cohort pins can be
+            # reconstructed below (they are otherwise in-memory only and reset on
+            # every restart).
+            user_id_to_instance_ids[user_id] = (
+                set(user_state.get_assigned_instance_ids())
+                | set(user_state.get_annotated_instance_ids())
+            )
+
+    # Restore auto-assigned batch cohort pins from persisted assignments so that
+    # returning users stay in their original group and new users keep balancing
+    # against accurate per-group counts after a restart. No-op unless
+    # batch_assignment.auto_assign_annotators is enabled.
+    ism.rebuild_auto_batch_pins_from_users(user_id_to_instance_ids)
 
     logger.info("Loaded user data for %d users" % len(usm.get_user_ids()))
 
