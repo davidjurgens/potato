@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -93,71 +93,79 @@
         <h1 class="potato-page-title" style="text-align:center;">
             <i class="fas fa-chart-line me-2" aria-hidden="true"></i>{{ annotation_task_name }}
         </h1>
-        <p class="potato-page-subtitle" style="text-align:center;">Your annotation progress</p>
+        <p class="potato-page-subtitle" style="text-align:center;">{{ ui_lang.dash_subtitle|default('Your annotation progress') }}</p>
 
         {% if dashboard_config.show_personal_progress %}
-        <h2 class="section-title"><i class="fas fa-user" aria-hidden="true"></i> Your progress</h2>
+        <h2 class="section-title"><i class="fas fa-user" aria-hidden="true"></i> {{ ui_lang.dash_your_progress|default('Your progress') }}</h2>
         <div class="pbar-track">
             <div class="pbar-fill" id="personal-bar" role="progressbar"
-                 aria-label="Your completion" aria-valuemin="0" aria-valuemax="100"></div>
+                 aria-label="{{ ui_lang.dash_your_progress|default('Your progress') }}" aria-valuemin="0" aria-valuemax="100"></div>
         </div>
-        <div class="pbar-caption" id="personal-caption" aria-live="polite">Loading…</div>
+        <div class="pbar-caption" id="personal-caption" aria-live="polite">{{ ui_lang.dash_loading|default('Loading…') }}</div>
         <div class="progress-grid" aria-live="polite">
             <div class="stat-card">
                 <div class="stat-value" id="personal-annotated">–</div>
-                <div class="stat-label">Annotated</div>
+                <div class="stat-label">{{ ui_lang.dash_stat_annotated|default('Annotated') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="personal-assigned">–</div>
-                <div class="stat-label">Assigned</div>
+                <div class="stat-label">{{ ui_lang.dash_stat_assigned|default('Assigned') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="personal-pct">–</div>
-                <div class="stat-label">Complete</div>
+                <div class="stat-label">{{ ui_lang.dash_stat_complete|default('Complete') }}</div>
             </div>
         </div>
         {% endif %}
 
         {% if dashboard_config.show_project_progress %}
-        <h2 class="section-title"><i class="fas fa-layer-group" aria-hidden="true"></i> Project progress</h2>
+        <h2 class="section-title"><i class="fas fa-layer-group" aria-hidden="true"></i> {{ ui_lang.dash_project_progress|default('Project progress') }}</h2>
         <div class="pbar-track">
             <div class="pbar-fill" id="project-bar" role="progressbar"
-                 aria-label="Project completion" aria-valuemin="0" aria-valuemax="100"></div>
+                 aria-label="{{ ui_lang.dash_project_progress|default('Project progress') }}" aria-valuemin="0" aria-valuemax="100"></div>
         </div>
-        <div class="pbar-caption" id="project-caption" aria-live="polite">Loading…</div>
+        <div class="pbar-caption" id="project-caption" aria-live="polite">{{ ui_lang.dash_loading|default('Loading…') }}</div>
         <div class="progress-grid" aria-live="polite">
             <div class="stat-card">
                 <div class="stat-value" id="project-items">–</div>
-                <div class="stat-label">Total items</div>
+                <div class="stat-label">{{ ui_lang.dash_stat_total_items|default('Total items') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="project-annotated-items">–</div>
-                <div class="stat-label">Items started</div>
+                <div class="stat-label">{{ ui_lang.dash_stat_items_started|default('Items started') }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="project-annotations">–</div>
-                <div class="stat-label">Annotations</div>
+                <div class="stat-label">{{ ui_lang.dash_stat_annotations|default('Annotations') }}</div>
             </div>
             {% if dashboard_config.show_active_annotators %}
             <div class="stat-card">
                 <div class="stat-value" id="project-active">–</div>
-                <div class="stat-label">Active annotators</div>
+                <div class="stat-label">{{ ui_lang.dash_stat_active_annotators|default('Active annotators') }}</div>
             </div>
             {% endif %}
         </div>
         {% endif %}
 
         <div class="dash-error" id="dash-error" role="status">
-            <i class="fas fa-circle-exclamation me-1" aria-hidden="true"></i> Could not load progress right now.
+            <i class="fas fa-circle-exclamation me-1" aria-hidden="true"></i> {{ ui_lang.dash_error|default('Could not load progress right now.') }}
         </div>
 
         <div class="dash-actions">
-            <a class="dash-link" href="/annotate"><i class="fas fa-arrow-left me-1" aria-hidden="true"></i> Back to annotating</a>
-            <span style="color: var(--muted-foreground);">Read-only view</span>
+            <a class="dash-link" href="/annotate"><i class="fas fa-arrow-left me-1" aria-hidden="true"></i> {{ ui_lang.dash_back_to_annotating|default('Back to annotating') }}</a>
+            <span style="color: var(--muted-foreground);">{{ ui_lang.dash_readonly|default('Read-only view') }}</span>
         </div>
     </div>
 
+    <script>window.UI_LANG = {{ ui_lang|tojson }};</script>
     <script>
+        var L = window.UI_LANG || {};
+        // Replace {token} placeholders in a translated string with values.
+        function fmt(template, params) {
+            return String(template).replace(/\{(\w+)\}/g, function (m, key) {
+                return (params && key in params) ? params[key] : m;
+            });
+        }
         function setText(id, value) {
             var el = document.getElementById(id);
             if (el) el.textContent = value;
@@ -206,8 +214,9 @@
                     setText("personal-pct", ppct + "%");
                     setBar("personal-bar", ppct);
                     setText("personal-caption", assigned === 0
-                        ? "No items assigned to you yet"
-                        : annotated + " of " + assigned + " assigned items completed");
+                        ? (L.dash_no_items_assigned || "No items assigned to you yet")
+                        : fmt(L.dash_assigned_completed || "{n} of {total} assigned items completed",
+                              {n: annotated, total: assigned}));
                 }
                 var pr = data.project;
                 if (pr) {
@@ -223,8 +232,9 @@
                     setText("project-pct", prpct + "%");
                     setBar("project-bar", prpct);
                     setText("project-caption", items === 0
-                        ? "No items in this project yet"
-                        : started + " of " + items + " items started (" + prpct + "%)");
+                        ? (L.dash_no_items_project || "No items in this project yet")
+                        : fmt(L.dash_items_started_pct || "{started} of {total} items started ({pct}%)",
+                              {started: started, total: items, pct: prpct}));
                 }
                 // A well-formed but empty response still means "nothing to show".
                 if (!p && !pr) showError();

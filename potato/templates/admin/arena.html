@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Model Arena</title>
+<title>{{ ui_lang.arena_page_title|default('Model Arena') }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
 <style>
@@ -45,44 +45,41 @@
 </head>
 <body>
 <main class="dashboard" role="main">
-  <h1>Model Arena</h1>
+  <h1>{{ ui_lang.arena_heading|default('Model Arena') }}</h1>
   <p class="ar-lede">
-    Send one prompt to every configured model side by side, compare the responses,
-    and pick the best — building a Bradley-Terry &amp; Elo leaderboard and exportable
-    DPO preference data. Models are provider-agnostic (any of Potato's LLM endpoints).
+    {{ ui_lang.arena_lede|default('Send one prompt to every configured model side by side, compare the responses, and pick the best — building a Bradley-Terry &amp; Elo leaderboard and exportable DPO preference data. Models are provider-agnostic (any of Potato\'s LLM endpoints).') }}
   </p>
 
   <section class="dashboard-card ar-card" aria-labelledby="ar-run-h">
-    <h2 id="ar-run-h">Prompt</h2>
-    <label for="ar-prompt" class="ar-empty" style="font-size:0.8125rem;">Sent to {{ models|length }} model(s): {{ models|join(', ') }}</label>
-    <textarea id="ar-prompt" class="ar-prompt" placeholder="Ask the models something…"></textarea>
+    <h2 id="ar-run-h">{{ ui_lang.arena_prompt_heading|default('Prompt') }}</h2>
+    <label for="ar-prompt" class="ar-empty" style="font-size:0.8125rem;">{{ ui_lang.arena_sent_to|default('Sent to') }} {{ models|length }} {{ ui_lang.arena_models_label|default('model(s):') }} {{ models|join(', ') }}</label>
+    <textarea id="ar-prompt" class="ar-prompt" placeholder="{{ ui_lang.arena_prompt_placeholder|default('Ask the models something…') }}"></textarea>
     <div class="ar-row">
-      <button class="shadcn-button shadcn-button-primary" id="ar-run">Run</button>
+      <button class="shadcn-button shadcn-button-primary" id="ar-run">{{ ui_lang.arena_run|default('Run') }}</button>
       <span class="ar-status" id="ar-status" role="status" aria-live="polite"></span>
     </div>
   </section>
 
   <section class="dashboard-card ar-card" aria-labelledby="ar-resp-h" id="ar-resp-card" style="display:none;">
-    <h2 id="ar-resp-h">Responses</h2>
+    <h2 id="ar-resp-h">{{ ui_lang.arena_responses_heading|default('Responses') }}</h2>
     <div class="ar-grid" id="ar-grid"></div>
   </section>
 
   <section class="dashboard-card ar-card" aria-labelledby="ar-lb-h">
     <div class="ar-lb-head">
-      <h2 id="ar-lb-h">Leaderboard</h2>
+      <h2 id="ar-lb-h">{{ ui_lang.arena_leaderboard_heading|default('Leaderboard') }}</h2>
       <button class="shadcn-button shadcn-button-outline ar-export" id="ar-export"
-              title="Download arena preferences as DPO (chosen/rejected) pairs">Export DPO</button>
+              title="{{ ui_lang.arena_export_title|default('Download arena preferences as DPO (chosen/rejected) pairs') }}">{{ ui_lang.arena_export|default('Export DPO') }}</button>
     </div>
-    <p class="ar-lb-note">Ranked by <strong>Bradley-Terry</strong> score (accounts for opponent
-      strength), with <strong>Elo</strong> ratings. Win rate shown for reference.</p>
+    <p class="ar-lb-note">{{ ui_lang.arena_lb_note|default('Ranked by <strong>Bradley-Terry</strong> score (accounts for opponent strength), with <strong>Elo</strong> ratings. Win rate shown for reference.')|safe }}</p>
     <table class="ar-lb" id="ar-lb">
       <thead><tr>
-        <th scope="col">Model</th>
-        <th scope="col">BT score</th>
-        <th scope="col">Elo</th>
-        <th scope="col">Wins</th>
-        <th scope="col">Comparisons</th>
-        <th scope="col">Win rate</th>
+        <th scope="col">{{ ui_lang.arena_th_model|default('Model') }}</th>
+        <th scope="col">{{ ui_lang.arena_th_bt|default('BT score') }}</th>
+        <th scope="col">{{ ui_lang.arena_th_elo|default('Elo') }}</th>
+        <th scope="col">{{ ui_lang.arena_th_wins|default('Wins') }}</th>
+        <th scope="col">{{ ui_lang.arena_th_comparisons|default('Comparisons') }}</th>
+        <th scope="col">{{ ui_lang.arena_th_win_rate|default('Win rate') }}</th>
       </tr></thead>
       <tbody id="ar-lb-body">
         {% for r in leaderboard %}
@@ -97,8 +94,10 @@
   </section>
 </main>
 
+<script>window.UI_LANG = {{ ui_lang|tojson }};</script>
 <script>
 (function () {
+  var L = window.UI_LANG || {};
   let lastPrompt = "";
   // Escape untrusted model output before inserting into innerHTML.
   function esc(s) {
@@ -124,7 +123,7 @@
     const r = await fetch("{{ url_for('arena.api_export_dpo') }}");
     const data = await r.json().catch(() => ({}));
     if (!r.ok || !data.pairs || !data.pairs.length) {
-      exportBtn.textContent = "No DPO pairs yet"; setTimeout(() => exportBtn.textContent = "Export DPO", 1800); return;
+      exportBtn.textContent = (L.arena_no_dpo_pairs || "No DPO pairs yet"); setTimeout(() => exportBtn.textContent = (L.arena_export || "Export DPO"), 1800); return;
     }
     const blob = new Blob([data.pairs.map(p => JSON.stringify(p)).join("\n")], {type: "application/jsonl"});
     const a = document.createElement("a");
@@ -135,26 +134,26 @@
   runBtn.addEventListener("click", async () => {
     const prompt = document.getElementById("ar-prompt").value.trim();
     const st = document.getElementById("ar-status");
-    if (!prompt) { st.textContent = "Enter a prompt."; return; }
-    runBtn.disabled = true; st.textContent = "Running…";
+    if (!prompt) { st.textContent = (L.arena_enter_prompt || "Enter a prompt."); return; }
+    runBtn.disabled = true; st.textContent = (L.arena_running || "Running…");
     try {
       const r = await post("{{ url_for('arena.api_run') }}", {prompt});
-      if (!r.ok) { st.textContent = r.data.error || "Failed."; return; }
+      if (!r.ok) { st.textContent = r.data.error || (L.arena_failed || "Failed."); return; }
       lastPrompt = prompt; st.textContent = "";
       document.getElementById("ar-resp-card").style.display = "";
       document.getElementById("ar-grid").innerHTML = r.data.results.map(res => `
         <div class="ar-model">
           <div class="ar-model-head"><span class="name">${esc(res.label)}</span>
-            <span class="ar-latency">${Number(res.latency_ms)} ms</span></div>
-          <div class="ar-response${res.error ? ' err' : ''}">${esc(res.error ? 'Error: ' + res.error : res.response) || '(empty)'}</div>
-          <button class="shadcn-button shadcn-button-outline ar-pick" data-label="${esc(res.label)}"${res.error ? ' disabled' : ''}>Pick as best</button>
+            <span class="ar-latency">${Number(res.latency_ms)} ${L.arena_ms || 'ms'}</span></div>
+          <div class="ar-response${res.error ? ' err' : ''}">${esc(res.error ? (L.arena_error_prefix || 'Error: ') + res.error : res.response) || (L.arena_empty || '(empty)')}</div>
+          <button class="shadcn-button shadcn-button-outline ar-pick" data-label="${esc(res.label)}"${res.error ? ' disabled' : ''}>${L.arena_pick_as_best || 'Pick as best'}</button>
         </div>`).join("");
       document.querySelectorAll(".ar-pick").forEach(b => b.addEventListener("click", async () => {
         const pr = await post("{{ url_for('arena.api_preference') }}", {prompt: lastPrompt, winner: b.dataset.label});
         if (pr.ok) {
           renderLeaderboard(pr.data.leaderboard);
           document.querySelectorAll(".ar-pick").forEach(x => x.classList.remove("won"));
-          b.classList.add("won"); b.textContent = "✓ Picked";
+          b.classList.add("won"); b.textContent = (L.arena_picked || "✓ Picked");
         }
       }));
     } finally { runBtn.disabled = false; }

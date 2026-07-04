@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LLM-Judge ↔ Human Alignment</title>
+<title>{{ ui_lang.judge_page_title|default('LLM-Judge ↔ Human Alignment') }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
 <style>
@@ -75,18 +75,16 @@
 </head>
 <body>
 <main class="dashboard" role="main">
-  <h1>LLM-Judge ↔ Human Alignment</h1>
+  <h1>{{ ui_lang.judge_heading|default('LLM-Judge ↔ Human Alignment') }}</h1>
   <p class="ja-meta">
-    How well does the configured LLM judge agree with human gold labels?
-    Cohen's κ and the confusion matrix are computed over instances that have
-    both a human label and a judge verdict. Inspect disagreements, edit the
-    judge rubric, and re-run to calibrate. Current prompt version:
+    {{ ui_lang.judge_intro|default("How well does the configured LLM judge agree with human gold labels? Cohen's κ and the confusion matrix are computed over instances that have both a human label and a judge verdict. Inspect disagreements, edit the judge rubric, and re-run to calibrate.") }}
+    {{ ui_lang.judge_current_prompt_version|default('Current prompt version:') }}
     <span class="ja-mono">{{ report.prompt_version or "—" }}</span>.
   </p>
 
   {% if report.prompt_versions %}
   <section class="dashboard-card ja-card" aria-label="Prompt versions">
-    <div class="ja-card-header"><h2>Prompt versions</h2></div>
+    <div class="ja-card-header"><h2>{{ ui_lang.judge_prompt_versions|default('Prompt versions') }}</h2></div>
     {% if report.kappa_trend %}
     {% set t = report.kappa_trend %}
     <figure class="ja-trend trend-{{ t.direction }}" aria-label="Mean Cohen's κ across prompt versions">
@@ -97,10 +95,10 @@
         <circle cx="{{ t.last_x }}" cy="{{ t.last_y }}" r="2.5" fill="currentColor" />
       </svg>
       <figcaption class="ja-trend-cap">
-        Mean κ drift:
+        {{ ui_lang.judge_mean_kappa_drift|default('Mean κ drift:') }}
         <span class="ja-trend-tag trend-{{ t.direction }}">{{ t.direction }}</span>
         {{ '%.3f'|format(t.first) }} → {{ '%.3f'|format(t.last) }}
-        (<span class="ja-mono">{{ '%+.3f'|format(t.delta) }}</span> over {{ t.series|length }} versions)
+        (<span class="ja-mono">{{ '%+.3f'|format(t.delta) }}</span> {{ (ui_lang.judge_over_versions|default('over {n} versions'))|replace('{n}', t.series|length|string) }})
       </figcaption>
     </figure>
     {% endif %}
@@ -108,9 +106,9 @@
       {% for v in report.prompt_versions %}
       <li>
         <span class="ja-mono">{{ v.prompt_version }}</span> —
-        mean κ {{ '%.3f'|format(v.mean_kappa) if v.mean_kappa is not none else 'n/a' }},
-        {{ v.n_predictions }} prediction(s)
-        {% if v.prompt_version == report.prompt_version %}<strong>(current)</strong>{% endif %}
+        {{ ui_lang.judge_mean_kappa|default('mean κ') }} {{ '%.3f'|format(v.mean_kappa) if v.mean_kappa is not none else 'n/a' }},
+        {{ v.n_predictions }} {{ ui_lang.judge_predictions|default('prediction(s)') }}
+        {% if v.prompt_version == report.prompt_version %}<strong>{{ ui_lang.judge_current_paren|default('(current)') }}</strong>{% endif %}
       </li>
       {% endfor %}
     </ul>
@@ -119,10 +117,9 @@
 
   {% if report.eval_cards %}
   <section class="dashboard-card ja-card" aria-label="Judge eval cards">
-    <div class="ja-card-header"><h2>Judge eval cards <span class="ja-mono">(bias &amp; robustness)</span></h2></div>
+    <div class="ja-card-header"><h2>{{ ui_lang.judge_eval_cards|default('Judge eval cards') }} <span class="ja-mono">{{ ui_lang.judge_bias_robustness|default('(bias &amp; robustness)') }}</span></h2></div>
     <p class="ja-meta" style="margin:0 0 0.6rem;">
-      Beyond agreement (κ): does the judge favor longer outputs, is its confidence
-      calibrated, is it order-robust? A portable certificate to ship with the eval.
+      {{ ui_lang.judge_eval_cards_intro|default('Beyond agreement (κ): does the judge favor longer outputs, is its confidence calibrated, is it order-robust? A portable certificate to ship with the eval.') }}
     </p>
     {% for schema, card in report.eval_cards.items() %}
     <div class="ja-evalcard">
@@ -133,7 +130,7 @@
       <div class="ja-evalcard-metrics">
         <span>κ <strong>{{ '%.3f'|format(card.agreement.kappa) if card.agreement.kappa is not none else '—' }}</strong></span>
         {% if card.verbosity and card.verbosity.length_bias_excess is not none %}
-          <span title="judge minus human positive-class length gap">length bias <strong>{{ '%+.0f'|format(card.verbosity.length_bias_excess) }}</strong> chars</span>
+          <span title="judge minus human positive-class length gap">{{ ui_lang.judge_length_bias|default('length bias') }} <strong>{{ '%+.0f'|format(card.verbosity.length_bias_excess) }}</strong> {{ ui_lang.judge_chars|default('chars') }}</span>
         {% endif %}
         {% if card.calibration and card.calibration.ece is not none %}
           <span title="expected calibration error (lower better)">ECE <strong>{{ '%.2f'|format(card.calibration.ece) }}</strong></span>
@@ -148,22 +145,18 @@
   {% endif %}
 
   <section class="dashboard-card ja-card" aria-label="Auto-calibrate">
-    <div class="ja-card-header"><h2>Auto-calibrate</h2></div>
+    <div class="ja-card-header"><h2>{{ ui_lang.judge_autocalibrate|default('Auto-calibrate') }}</h2></div>
     <p class="ja-meta" style="margin:0;">
-      Close the loop automatically: the instances where a human <em>corrected</em>
-      the judge (human label ≠ judge label) are its most informative examples.
-      POST to <code>/admin/api/judge-alignment/autocalibrate</code> to re-run the
-      judge with those corrections injected as few-shot examples
-      (leakage-guarded — an instance never sees its own correction), creating a
-      new prompt version whose mean κ is compared against the baseline. Optional
-      body: <code>{"max_corrections": 5, "max_per_schema": N}</code>. The new
-      version appears in <strong>Prompt versions</strong> above.
+      {{ ui_lang.judge_autocalibrate_intro_1|default('Close the loop automatically: the instances where a human') }}
+      <em>{{ ui_lang.judge_corrected|default('corrected') }}</em>
+      {{ ui_lang.judge_autocalibrate_intro_2|default('the judge (human label ≠ judge label) are its most informative examples.') }}
+      {{ ui_lang.judge_autocalibrate_intro_3|default('POST to') }} <code>/admin/api/judge-alignment/autocalibrate</code> {{ ui_lang.judge_autocalibrate_intro_4|default('to re-run the judge with those corrections injected as few-shot examples (leakage-guarded — an instance never sees its own correction), creating a new prompt version whose mean κ is compared against the baseline. Optional body:') }} <code>{"max_corrections": 5, "max_per_schema": N}</code>. {{ ui_lang.judge_autocalibrate_intro_5|default('The new version appears in') }} <strong>{{ ui_lang.judge_prompt_versions|default('Prompt versions') }}</strong> {{ ui_lang.judge_above|default('above.') }}
     </p>
   </section>
 
   {% if not report.per_schema %}
-    <p class="ja-empty">No judge predictions yet. Configure <code>judge_alignment</code>
-    and POST to <code>/admin/api/judge-alignment/run</code> to generate verdicts.</p>
+    <p class="ja-empty">{{ ui_lang.judge_empty_1|default('No judge predictions yet. Configure') }} <code>judge_alignment</code>
+    {{ ui_lang.judge_empty_2|default('and POST to') }} <code>/admin/api/judge-alignment/run</code> {{ ui_lang.judge_empty_3|default('to generate verdicts.') }}</p>
   {% endif %}
 
   {% for schema, r in report.per_schema.items() %}
@@ -176,31 +169,31 @@
 
     <div class="ja-metrics">
       <div class="ja-metric">
-        <span class="label">Cohen's κ</span>
+        <span class="label">{{ ui_lang.judge_cohens_kappa|default("Cohen's κ") }}</span>
         <span class="value">{{ '%.3f'|format(r.kappa) if r.kappa is not none else '—' }}</span>
       </div>
       <div class="ja-metric">
-        <span class="label">Agreement</span>
+        <span class="label">{{ ui_lang.judge_agreement|default('Agreement') }}</span>
         <span class="value">{{ (r.agreement_rate * 100)|round(1) }}%</span>
       </div>
       <div class="ja-metric">
-        <span class="label">Compared (n)</span>
+        <span class="label">{{ ui_lang.judge_compared_n|default('Compared (n)') }}</span>
         <span class="value">{{ r.n }}</span>
       </div>
       <div class="ja-metric">
-        <span class="label">Disagreements</span>
+        <span class="label">{{ ui_lang.judge_disagreements|default('Disagreements') }}</span>
         <span class="value">{{ r.disagreements|length }}</span>
       </div>
     </div>
 
     {% if r.confusion %}
-    <div class="ja-section-label" id="conf-{{ schema }}">Confusion (rows = human, columns = judge)</div>
+    <div class="ja-section-label" id="conf-{{ schema }}">{{ ui_lang.judge_confusion_label|default('Confusion (rows = human, columns = judge)') }}</div>
     {% set cols = [] %}
     {% for h, js in r.confusion.items() %}{% for j in js.keys() %}{% if j not in cols %}{% set _ = cols.append(j) %}{% endif %}{% endfor %}{% endfor %}
     <div class="ja-table-wrap">
     <table class="ja-table ja-confusion" aria-labelledby="conf-{{ schema }}">
-      <caption class="ja-sr-only">Confusion matrix for {{ schema }}: rows are human gold labels, columns are judge labels.</caption>
-      <thead><tr><th scope="col">human ＼ judge</th>{% for c in cols %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
+      <caption class="ja-sr-only">{{ ui_lang.judge_confusion_caption|default('Confusion matrix for') }} {{ schema }}: {{ ui_lang.judge_confusion_caption_2|default('rows are human gold labels, columns are judge labels.') }}</caption>
+      <thead><tr><th scope="col">{{ ui_lang.judge_human_vs_judge|default('human ＼ judge') }}</th>{% for c in cols %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
       <tbody>
         {% for h, js in r.confusion.items() %}
         <tr><th scope="row">{{ h }}</th>
@@ -215,10 +208,10 @@
     {% endif %}
 
     {% if r.disagreements %}
-    <div class="ja-section-label">Disagreements</div>
+    <div class="ja-section-label">{{ ui_lang.judge_disagreements|default('Disagreements') }}</div>
     <div class="ja-table-wrap">
     <table class="ja-table">
-      <thead><tr><th scope="col">Instance</th><th scope="col">Human</th><th scope="col">Judge</th><th scope="col">Conf.</th><th scope="col">Judge reasoning</th></tr></thead>
+      <thead><tr><th scope="col">{{ ui_lang.judge_col_instance|default('Instance') }}</th><th scope="col">{{ ui_lang.judge_col_human|default('Human') }}</th><th scope="col">{{ ui_lang.judge_col_judge|default('Judge') }}</th><th scope="col">{{ ui_lang.judge_col_conf|default('Conf.') }}</th><th scope="col">{{ ui_lang.judge_col_reasoning|default('Judge reasoning') }}</th></tr></thead>
       <tbody>
         {% for d in r.disagreements %}
         <tr>

@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Compare experiments</title>
+<title>{{ ui_lang.expcompare_page_title|default('Compare experiments') }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
 <style>
@@ -35,26 +35,25 @@
 </head>
 <body>
 <main class="dashboard" role="main">
-  <a class="ec-back" href="{{ url_for('datasets.admin') }}">&larr; Datasets &amp; Experiments</a>
-  <h1>Compare experiments</h1>
+  <a class="ec-back" href="{{ url_for('datasets.admin') }}">&larr; {{ ui_lang.expcompare_back_link|default('Datasets &amp; Experiments') }}</a>
+  <h1>{{ ui_lang.expcompare_heading|default('Compare experiments') }}</h1>
   <p class="ec-lede">
-    Aggregate evaluator scores side by side. The first experiment is the
-    baseline; deltas and the best value per metric are highlighted so
-    regressions stand out. Each delta carries a <strong>paired-bootstrap</strong>
-    significance badge and 95% CI — so you can tell a real change from noise.
+    {{ ui_lang.expcompare_lede_part1|default('Aggregate evaluator scores side by side. The first experiment is the baseline; deltas and the best value per metric are highlighted so regressions stand out. Each delta carries a') }}
+    <strong>{{ ui_lang.expcompare_lede_strong|default('paired-bootstrap') }}</strong>
+    {{ ui_lang.expcompare_lede_part2|default('significance badge and 95% CI — so you can tell a real change from noise.') }}
   </p>
 
   {% if experiments|length < 2 %}
-  <p class="ec-empty">Select at least two experiments to compare.</p>
+  <p class="ec-empty">{{ ui_lang.expcompare_empty|default('Select at least two experiments to compare.') }}</p>
   {% else %}
   <div style="overflow-x:auto;">
     <table class="ec-table">
       <thead>
         <tr>
-          <th class="metric" scope="col">Metric</th>
+          <th class="metric" scope="col">{{ ui_lang.expcompare_col_metric|default('Metric') }}</th>
           {% for e in experiments %}
           <th scope="col">{{ e.name or e.id }}<br>
-            <span class="ec-sub">{{ e.dataset_name }} · {{ e.dataset_version }}{% if loop.first %} · baseline{% endif %}</span>
+            <span class="ec-sub">{{ e.dataset_name }} · {{ e.dataset_version }}{% if loop.first %} · {{ ui_lang.expcompare_baseline|default('baseline') }}{% endif %}</span>
           </th>
           {% endfor %}
         </tr>
@@ -82,9 +81,9 @@
                   {% set sig = significance.get(e.id, {}).get(key) %}
                   {% if sig and sig.mean_diff is not none and sig.n > 1 %}
                     <span class="ec-sig {{ 'yes' if sig.significant else 'no' }}"
-                          title="Paired bootstrap vs baseline (n={{ sig.n }}{% if sig.p_value is not none %}, p={{ '%.3f'|format(sig.p_value) }}{% endif %})">
-                      {{ 'significant' if sig.significant else 'n.s.' }}</span>
-                    {% if sig.lo is not none %}<span class="ec-ci">95% CI [{{ '%+.3f'|format(sig.lo) }}, {{ '%+.3f'|format(sig.hi) }}]</span>{% endif %}
+                          title="{{ ui_lang.expcompare_sig_title|default('Paired bootstrap vs baseline') }} (n={{ sig.n }}{% if sig.p_value is not none %}, p={{ '%.3f'|format(sig.p_value) }}{% endif %})">
+                      {{ ui_lang.expcompare_significant|default('significant') if sig.significant else ui_lang.expcompare_not_significant|default('n.s.') }}</span>
+                    {% if sig.lo is not none %}<span class="ec-ci">{{ ui_lang.expcompare_ci_label|default('95% CI') }} [{{ '%+.3f'|format(sig.lo) }}, {{ '%+.3f'|format(sig.hi) }}]</span>{% endif %}
                   {% endif %}
                 {% endif %}
               {% endif %}
@@ -93,7 +92,7 @@
         </tr>
         {% endfor %}
         <tr>
-          <th class="metric" scope="row">Examples</th>
+          <th class="metric" scope="row">{{ ui_lang.expcompare_row_examples|default('Examples') }}</th>
           {% for e in experiments %}<td class="ec-val">{{ e.example_count }}</td>{% endfor %}
         </tr>
       </tbody>

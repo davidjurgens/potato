@@ -727,22 +727,10 @@ class FlaskTestServer:
                 @app.context_processor
                 def inject_template_context():
                     from potato.logging_config import is_ui_debug_enabled, is_server_debug_enabled
-                    ui_lang_defaults = {
-                        'next_button': 'Next',
-                        'previous_button': 'Previous',
-                        'labeled_badge': 'Labeled',
-                        'not_labeled_badge': 'Not labeled',
-                        'submit_button': 'Submit',
-                        'progress_label': 'Progress',
-                        'go_button': 'Go',
-                        'logout': 'Logout',
-                        'loading': 'Loading annotation interface...',
-                        'error_heading': 'Error',
-                        'retry_button': 'Retry',
-                        'adjudicate': 'Adjudicate',
-                    }
-                    ui_lang_config = config.get('ui_language', {})
-                    ui_lang = {**ui_lang_defaults, **ui_lang_config}
+                    # Use the same shared English defaults as production so the
+                    # test harness renders the full ui_lang key set.
+                    from potato.server_utils.i18n import UI_LANG_DEFAULTS, resolve_ui_language
+                    ui_lang = resolve_ui_language(config.get('ui_language'), UI_LANG_DEFAULTS)
                     return {
                         'ui_debug': is_ui_debug_enabled(),
                         'server_debug': is_server_debug_enabled(),

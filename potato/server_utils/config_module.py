@@ -37,6 +37,12 @@ class ConfigSecurityError(Exception):
 
 import difflib
 
+# The localizable UI string keys (single source of truth). The ui_language
+# whitelist below is derived from these so a new string never needs a duplicate
+# whitelist edit. Safe import: i18n has no dependency back on this module.
+from potato.server_utils.i18n import UI_LANG_DEFAULTS as _UI_LANG_DEFAULTS
+_UI_LANG_KEYS = set(_UI_LANG_DEFAULTS)
+
 # ============================================================================
 # Known config key schema (hierarchical)
 # Keys map to None (leaf), set (known sub-keys), or dict (nested schema).
@@ -188,23 +194,10 @@ KNOWN_CONFIG_KEYS = {
     "layout": {"grid", "breakpoints", "groups", "order", "styling"},
     "instance_display": {"fields", "layout", "resizable"},
     "format_handling": {"enabled", "default_format", "pdf", "spreadsheet"},
-    "ui_language": {
-        "html_lang", "html_dir",
-        "next_button", "previous_button", "submit_button", "go_button",
-        "retry_button", "logout",
-        "labeled_badge", "in_progress_badge", "not_labeled_badge",
-        "progress_label", "loading", "error_heading",
-        "adjudicate", "codebook", "instructions_heading",
-        "text_to_annotate", "video_to_annotate", "audio_to_annotate",
-        "login_title", "login_subtitle_password", "login_subtitle_username",
-        "sign_in_tab", "register_tab",
-        "username_label", "password_label",
-        "sign_in_button", "continue_button", "register_button",
-        "forgot_password", "username_placeholder",
-        "choose_username_placeholder", "create_password_placeholder",
-        "sign_in_with", "or_divider",
-        "powered_by", "cite_us",
-    },
+    # Derived from the shared English defaults (single source of truth) plus
+    # the "_base" control key, which selects a bundled catalog to layer inline
+    # overrides on top of. Adding a UI string in i18n.py auto-updates this.
+    "ui_language": {"_base", *_UI_LANG_KEYS},
     "base_css": None,
     "ui_debug": None,
     "hide_navbar": None,
@@ -411,6 +404,47 @@ KNOWN_CONFIG_KEYS = {
     "__config_file__": None,
     "_bws_pool_items": None,
 }
+
+
+def validate_ui_language_config(config_data):
+    """Warn (never raise) about an unresolvable ``ui_language`` setting.
+
+    Accepts a bundled language-code string (``ui_language: es``), the legacy
+    inline dict, or a dict with ``_base`` naming a bundled catalog. Unknown
+    codes degrade to English at render time, so this only surfaces a warning to
+    help the author catch typos.
+    """
+    if not isinstance(config_data, dict) or "ui_language" not in config_data:
+        return
+
+    from potato.server_utils.i18n import (
+        available_language_codes,
+        is_valid_language_code,
+    )
+
+    value = config_data["ui_language"]
+
+    def _warn_unknown(code):
+        available = ", ".join(sorted(available_language_codes())) or "(none)"
+        logger.warning(
+            "ui_language references unknown language code '%s'. Falling back "
+            "to English. Available bundled languages: %s", code, available,
+        )
+
+    if isinstance(value, str):
+        code = value.strip()
+        if not is_valid_language_code(code) or code not in available_language_codes():
+            _warn_unknown(value)
+    elif isinstance(value, dict):
+        base = value.get("_base")
+        if base is not None:
+            if not isinstance(base, str) or base.strip() not in available_language_codes():
+                _warn_unknown(base)
+    else:
+        logger.warning(
+            "ui_language must be a language-code string or a mapping; got %s. "
+            "It will be ignored.", type(value).__name__,
+        )
 
 
 def validate_unknown_keys(config_data, schema=None, path=""):
@@ -997,6 +1031,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate judge_calibration configuration if present
     validate_judge_calibration_config(config_data)
+
+    # Validate ui_language (bundled code / _base / inline overrides)
+    validate_ui_language_config(config_data)
 
     # Warn about unrecognized keys at all nesting levels
     validate_unknown_keys(config_data)

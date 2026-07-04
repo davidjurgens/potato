@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Automation Rules</title>
+<title>{{ ui_lang.automation_page_title|default('Automation Rules') }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
 <style>
@@ -33,56 +33,53 @@
 </head>
 <body>
 <main class="dashboard" role="main">
-  <h1>Automation Rules</h1>
+  <h1>{{ ui_lang.automation_heading|default('Automation Rules') }}</h1>
   <p class="au-lede">
-    Rules run <span class="au-mono">filter → sample → actions</span> over every item
-    entering Potato (loaded or runtime-ingested), closing the production→eval loop.
-    Rules are configured in the <span class="au-mono">automation</span> block of your
-    config; this page inspects what's configured and what has fired.
+    {{ ui_lang.automation_lede_1|default('Rules run') }} <span class="au-mono">filter → sample → actions</span> {{ ui_lang.automation_lede_2|default('over every item entering Potato (loaded or runtime-ingested), closing the production→eval loop. Rules are configured in the') }} <span class="au-mono">automation</span> {{ ui_lang.automation_lede_3|default("block of your config; this page inspects what's configured and what has fired.") }}
   </p>
 
   <section class="dashboard-card au-card" aria-labelledby="au-counters-h">
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
-      <h2 id="au-counters-h">Activity</h2>
+      <h2 id="au-counters-h">{{ ui_lang.automation_activity|default('Activity') }}</h2>
       <a class="au-empty" href="{{ url_for('automation.admin_page') }}"
          style="font-size:0.8125rem;text-decoration:none;"
-         title="This page is a snapshot from page load">↻ Reload to refresh</a>
+         title="{{ ui_lang.automation_snapshot_title|default('This page is a snapshot from page load') }}">↻ {{ ui_lang.automation_reload|default('Reload to refresh') }}</a>
     </div>
     <div class="au-statgrid">
       {% set c = status.counters %}
-      <div class="au-stat"><span class="label">Items processed</span><span class="value">{{ c.items_processed }}</span></div>
-      <div class="au-stat"><span class="label">Rules fired</span><span class="value">{{ c.rules_fired }}</span></div>
-      <div class="au-stat"><span class="label">Actions ok</span><span class="value">{{ c.actions_ok }}</span></div>
-      <div class="au-stat"><span class="label">Actions error</span><span class="value">{{ c.actions_error }}</span></div>
-      <div class="au-stat"><span class="label">Actions skipped</span><span class="value">{{ c.actions_skipped }}</span></div>
+      <div class="au-stat"><span class="label">{{ ui_lang.automation_items_processed|default('Items processed') }}</span><span class="value">{{ c.items_processed }}</span></div>
+      <div class="au-stat"><span class="label">{{ ui_lang.automation_rules_fired|default('Rules fired') }}</span><span class="value">{{ c.rules_fired }}</span></div>
+      <div class="au-stat"><span class="label">{{ ui_lang.automation_actions_ok|default('Actions ok') }}</span><span class="value">{{ c.actions_ok }}</span></div>
+      <div class="au-stat"><span class="label">{{ ui_lang.automation_actions_error|default('Actions error') }}</span><span class="value">{{ c.actions_error }}</span></div>
+      <div class="au-stat"><span class="label">{{ ui_lang.automation_actions_skipped|default('Actions skipped') }}</span><span class="value">{{ c.actions_skipped }}</span></div>
     </div>
   </section>
 
   <section class="dashboard-card au-card" aria-labelledby="au-rules-h">
-    <h2 id="au-rules-h">Configured rules <span class="au-empty" style="font-weight:400;">({{ status.rules|length }})</span></h2>
+    <h2 id="au-rules-h">{{ ui_lang.automation_configured_rules|default('Configured rules') }} <span class="au-empty" style="font-weight:400;">({{ status.rules|length }})</span></h2>
     {% if status.rules %}
     <table class="au-table">
-      <thead><tr><th scope="col">Rule</th><th scope="col">Sample rate</th><th scope="col">Actions</th><th scope="col">Enabled</th></tr></thead>
+      <thead><tr><th scope="col">{{ ui_lang.automation_col_rule|default('Rule') }}</th><th scope="col">{{ ui_lang.automation_col_sample_rate|default('Sample rate') }}</th><th scope="col">{{ ui_lang.automation_col_actions|default('Actions') }}</th><th scope="col">{{ ui_lang.automation_col_enabled|default('Enabled') }}</th></tr></thead>
       <tbody>
         {% for r in status.rules %}
         <tr>
           <td>{{ r.name }}</td>
           <td class="au-mono">{{ '%.2f'|format(r.sample_rate) }}</td>
           <td>{% for a in r.actions %}<span class="au-pill">{{ a }}</span>{% endfor %}</td>
-          <td>{{ 'yes' if r.enabled else 'no' }}</td>
+          <td>{{ ui_lang.automation_yes|default('yes') if r.enabled else ui_lang.automation_no|default('no') }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-    {% else %}<p class="au-empty">No rules configured.</p>{% endif %}
+    {% else %}<p class="au-empty">{{ ui_lang.automation_no_rules|default('No rules configured.') }}</p>{% endif %}
   </section>
 
   <section class="dashboard-card au-card" aria-labelledby="au-out-h">
-    <h2 id="au-out-h">Recent outcomes <span class="au-empty" style="font-weight:400;">(latest {{ outcomes|length }})</span></h2>
+    <h2 id="au-out-h">{{ ui_lang.automation_recent_outcomes|default('Recent outcomes') }} <span class="au-empty" style="font-weight:400;">({{ ui_lang.automation_latest|default('latest') }} {{ outcomes|length }})</span></h2>
     {% if outcomes %}
     <div style="overflow-x:auto;">
       <table class="au-table">
-        <thead><tr><th scope="col">Item</th><th scope="col">Rule</th><th scope="col">Action</th><th scope="col">Status</th><th scope="col">Detail</th></tr></thead>
+        <thead><tr><th scope="col">{{ ui_lang.automation_col_item|default('Item') }}</th><th scope="col">{{ ui_lang.automation_col_rule|default('Rule') }}</th><th scope="col">{{ ui_lang.automation_col_action|default('Action') }}</th><th scope="col">{{ ui_lang.automation_col_status|default('Status') }}</th><th scope="col">{{ ui_lang.automation_col_detail|default('Detail') }}</th></tr></thead>
         <tbody>
           {% for o in outcomes %}
           <tr>
@@ -96,7 +93,7 @@
         </tbody>
       </table>
     </div>
-    {% else %}<p class="au-empty">No actions have fired yet.</p>{% endif %}
+    {% else %}<p class="au-empty">{{ ui_lang.automation_no_actions|default('No actions have fired yet.') }}</p>{% endif %}
   </section>
 </main>
 </body>

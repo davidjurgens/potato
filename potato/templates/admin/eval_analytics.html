@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Trace analytics</title>
+<title>{{ ui_lang.evalanalytics_title|default('Trace analytics') }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=3">
 <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
 <style>
@@ -29,29 +29,28 @@
 </head>
 <body>
 <main class="dashboard" role="main">
-  <h1>Trace analytics</h1>
+  <h1>{{ ui_lang.evalanalytics_title|default('Trace analytics') }}</h1>
   <p class="ea-lede">
-    Operational metrics aggregated across {{ trace_count }} ingested trace(s): token
-    usage, latency, error rate, and (when pricing is configured) cost. Append
-    <code>?recent=N</code> to flag regressions of the latest N traces against the rest.
+    {{ ui_lang.evalanalytics_lede_before|default('Operational metrics aggregated across') }} {{ trace_count }} {{ ui_lang.evalanalytics_lede_after|default('ingested trace(s): token usage, latency, error rate, and (when pricing is configured) cost. Append') }}
+    <code>?recent=N</code> {{ ui_lang.evalanalytics_lede_tail|default('to flag regressions of the latest N traces against the rest.') }}
   </p>
 
   {% if trace_count == 0 %}
-  <p class="ea-empty">No ingested traces yet. Send traces via the webhook or the tracing SDK.</p>
+  <p class="ea-empty">{{ ui_lang.evalanalytics_empty|default('No ingested traces yet. Send traces via the webhook or the tracing SDK.') }}</p>
   {% else %}
 
   <section class="ea-cards">
-    <div class="ea-stat"><div class="label">Traces</div><div class="value">{{ analytics.count }}</div></div>
-    <div class="ea-stat"><div class="label">Total tokens</div><div class="value">{{ '{:,}'.format(analytics.total_tokens) }}</div></div>
-    <div class="ea-stat"><div class="label">Total cost</div><div class="value">{{ '${:.4f}'.format(analytics.total_cost) if analytics.total_cost is not none else '—' }}</div></div>
-    <div class="ea-stat"><div class="label">Error rate</div><div class="value">{{ '{:.1f}%'.format(analytics.error_rate*100) }}</div></div>
-    <div class="ea-stat"><div class="label">Avg latency</div><div class="value">{{ '{:.0f} ms'.format(analytics.avg_latency_ms) if analytics.avg_latency_ms is not none else '—' }}</div></div>
-    <div class="ea-stat"><div class="label">p95 latency</div><div class="value">{{ '{:.0f} ms'.format(analytics.p95_latency_ms) if analytics.p95_latency_ms is not none else '—' }}</div></div>
+    <div class="ea-stat"><div class="label">{{ ui_lang.evalanalytics_stat_traces|default('Traces') }}</div><div class="value">{{ analytics.count }}</div></div>
+    <div class="ea-stat"><div class="label">{{ ui_lang.evalanalytics_stat_total_tokens|default('Total tokens') }}</div><div class="value">{{ '{:,}'.format(analytics.total_tokens) }}</div></div>
+    <div class="ea-stat"><div class="label">{{ ui_lang.evalanalytics_stat_total_cost|default('Total cost') }}</div><div class="value">{{ '${:.4f}'.format(analytics.total_cost) if analytics.total_cost is not none else '—' }}</div></div>
+    <div class="ea-stat"><div class="label">{{ ui_lang.evalanalytics_stat_error_rate|default('Error rate') }}</div><div class="value">{{ '{:.1f}%'.format(analytics.error_rate*100) }}</div></div>
+    <div class="ea-stat"><div class="label">{{ ui_lang.evalanalytics_stat_avg_latency|default('Avg latency') }}</div><div class="value">{{ '{:.0f} ms'.format(analytics.avg_latency_ms) if analytics.avg_latency_ms is not none else '—' }}</div></div>
+    <div class="ea-stat"><div class="label">{{ ui_lang.evalanalytics_stat_p95_latency|default('p95 latency') }}</div><div class="value">{{ '{:.0f} ms'.format(analytics.p95_latency_ms) if analytics.p95_latency_ms is not none else '—' }}</div></div>
   </section>
 
   {% if alerts %}
-  <section class="dashboard-card" aria-label="Regression alerts">
-    <h2>Regression alerts</h2>
+  <section class="dashboard-card" aria-label="{{ ui_lang.evalanalytics_alerts_heading|default('Regression alerts') }}">
+    <h2>{{ ui_lang.evalanalytics_alerts_heading|default('Regression alerts') }}</h2>
     {% for a in alerts %}
     <div class="ea-alert {{ a.severity }}">
       <span class="sev">{{ a.severity }}</span>
@@ -61,12 +60,12 @@
   </section>
   {% endif %}
 
-  <section class="dashboard-card" aria-label="Per-model breakdown">
-    <h2>By model</h2>
+  <section class="dashboard-card" aria-label="{{ ui_lang.evalanalytics_permodel_aria|default('Per-model breakdown') }}">
+    <h2>{{ ui_lang.evalanalytics_permodel_heading|default('By model') }}</h2>
     <table class="ea-table">
       <thead><tr>
-        <th scope="col">Model</th><th scope="col">Traces</th><th scope="col">Tokens</th>
-        <th scope="col">Cost</th><th scope="col">Errors</th><th scope="col">Avg latency</th>
+        <th scope="col">{{ ui_lang.evalanalytics_col_model|default('Model') }}</th><th scope="col">{{ ui_lang.evalanalytics_col_traces|default('Traces') }}</th><th scope="col">{{ ui_lang.evalanalytics_col_tokens|default('Tokens') }}</th>
+        <th scope="col">{{ ui_lang.evalanalytics_col_cost|default('Cost') }}</th><th scope="col">{{ ui_lang.evalanalytics_col_errors|default('Errors') }}</th><th scope="col">{{ ui_lang.evalanalytics_col_avg_latency|default('Avg latency') }}</th>
       </tr></thead>
       <tbody>
         {% for model, d in analytics.per_model.items() %}

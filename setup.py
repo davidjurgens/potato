@@ -129,6 +129,7 @@ setup(
         # only invite drift as new static/ folders are added.
         "potato": [
             "templates/*.html",
+            "i18n/*.yaml",
         ],
     },
 )

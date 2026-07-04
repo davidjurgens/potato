@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{{ annotation_task_name }} - Admin Dashboard</title>
+    <title>{{ annotation_task_name }} - {{ ui_lang.admin_page_title|default('Admin Dashboard') }}</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='styles.css') }}"
@@ -17,13 +17,13 @@
     <div class="admin-container">
       <!-- Header -->
       <header class="admin-header">
-        <h1>📊 {{ annotation_task_name }} - Admin Dashboard</h1>
+        <h1>📊 {{ annotation_task_name }} - {{ ui_lang.admin_page_title|default('Admin Dashboard') }}</h1>
         <div class="header-actions">
-          <span class="status-badge status-active">Admin Mode</span>
+          <span class="status-badge status-active">{{ ui_lang.admin_mode_badge|default('Admin Mode') }}</span>
           {% if datasets_enabled %}
           <a href="{{ url_for('datasets.admin') }}"
              class="shadcn-button shadcn-button-outline"
-             title="Versioned eval datasets & experiment runs">Datasets &amp; Experiments</a>
+             title="Versioned eval datasets & experiment runs">{{ ui_lang.admin_tab_datasets|default('Datasets &amp; Experiments') }}</a>
           {% endif %}
           {% if judge_calibration_enabled %}
           <a href="{{ url_for('judge_calibration.admin') }}"
@@ -54,7 +54,7 @@
             onclick="logout()"
             class="shadcn-button shadcn-button-outline"
           >
-            Logout
+            {{ ui_lang.logout|default('Logout') }}
           </button>
         </div>
       </header>
@@ -63,22 +63,22 @@
       <main class="admin-main">
         <!-- Tab Navigation -->
         <div class="admin-tabs">
-          <div class="admin-tab active" data-tab="overview">Overview</div>
-          <div class="admin-tab" data-tab="annotators">Annotators</div>
-          <div class="admin-tab" data-tab="instances">Instances</div>
-          <div class="admin-tab" data-tab="questions">Questions</div>
-          <div class="admin-tab" data-tab="behavioral">Behavioral</div>
-          <div class="admin-tab" data-tab="crowdsourcing">Crowdsourcing</div>
+          <div class="admin-tab active" data-tab="overview">{{ ui_lang.admin_tab_overview|default('Overview') }}</div>
+          <div class="admin-tab" data-tab="annotators">{{ ui_lang.admin_tab_annotators|default('Annotators') }}</div>
+          <div class="admin-tab" data-tab="instances">{{ ui_lang.admin_tab_instances|default('Instances') }}</div>
+          <div class="admin-tab" data-tab="questions">{{ ui_lang.admin_tab_questions|default('Questions') }}</div>
+          <div class="admin-tab" data-tab="behavioral">{{ ui_lang.admin_tab_behavioral|default('Behavioral') }}</div>
+          <div class="admin-tab" data-tab="crowdsourcing">{{ ui_lang.admin_tab_crowdsourcing|default('Crowdsourcing') }}</div>
           {% if bws_enabled %}
-          <div class="admin-tab" data-tab="bws-scoring">BWS Scoring</div>
+          <div class="admin-tab" data-tab="bws-scoring">{{ ui_lang.admin_tab_bws|default('BWS Scoring') }}</div>
           {% endif %}
           {% if mace_enabled %}
-          <div class="admin-tab" data-tab="mace">MACE</div>
+          <div class="admin-tab" data-tab="mace">{{ ui_lang.admin_tab_mace|default('MACE') }}</div>
           {% endif %}
           {% if embedding_viz_enabled %}
-          <div class="admin-tab" data-tab="embedding-viz">Embeddings</div>
+          <div class="admin-tab" data-tab="embedding-viz">{{ ui_lang.admin_tab_embeddings|default('Embeddings') }}</div>
           {% endif %}
-          <div class="admin-tab" data-tab="config">Configuration</div>
+          <div class="admin-tab" data-tab="config">{{ ui_lang.admin_tab_configuration|default('Configuration') }}</div>
         </div>
 
         <!-- Overview Tab -->
@@ -88,7 +88,7 @@
           </div>
 
           <div class="config-form">
-            <h3>System Information</h3>
+            <h3>{{ ui_lang.admin_section_system_info|default('System Information') }}</h3>
             <div id="systemInfo">
               <!-- System info will be loaded here -->
             </div>
@@ -110,15 +110,15 @@
             <table class="admin-table" id="annotatorsTable">
               <thead>
                 <tr>
-                  <th>User ID</th>
-                  <th>Phase</th>
-                  <th>Annotations</th>
-                  <th>Working Time</th>
-                  <th>Avg Time/Annotation</th>
-                  <th>Speed (per hour)</th>
-                  <th>Completion %</th>
-                  <th>Max Instances</th>
-                  <th>Last Activity</th>
+                  <th>{{ ui_lang.admin_th_user_id|default('User ID') }}</th>
+                  <th>{{ ui_lang.admin_th_phase|default('Phase') }}</th>
+                  <th>{{ ui_lang.admin_th_annotations|default('Annotations') }}</th>
+                  <th>{{ ui_lang.admin_th_working_time|default('Working Time') }}</th>
+                  <th>{{ ui_lang.admin_th_avg_time_per_annotation|default('Avg Time/Annotation') }}</th>
+                  <th>{{ ui_lang.admin_th_speed_per_hour|default('Speed (per hour)') }}</th>
+                  <th>{{ ui_lang.admin_th_completion_pct|default('Completion %') }}</th>
+                  <th>{{ ui_lang.admin_th_max_instances|default('Max Instances') }}</th>
+                  <th>{{ ui_lang.admin_th_last_activity|default('Last Activity') }}</th>
                 </tr>
               </thead>
               <tbody id="annotatorsTableBody">
@@ -136,28 +136,28 @@
         <div class="admin-tab-content" id="instances">
           <div class="table-controls">
             <select id="pageSize" onchange="loadInstances()">
-              <option value="25">25 per page</option>
-              <option value="50">50 per page</option>
-              <option value="100">100 per page</option>
+              <option value="25">{{ ui_lang.admin_opt_per_page|default('{n} per page')|replace('{n}','25') }}</option>
+              <option value="50">{{ ui_lang.admin_opt_per_page|default('{n} per page')|replace('{n}','50') }}</option>
+              <option value="100">{{ ui_lang.admin_opt_per_page|default('{n} per page')|replace('{n}','100') }}</option>
             </select>
 
             <select id="sortBy" onchange="loadInstances()">
-              <option value="annotation_count">Sort by Annotations</option>
-              <option value="completion_percentage">Sort by Completion</option>
-              <option value="disagreement">Sort by Disagreement</option>
-              <option value="id">Sort by ID</option>
-              <option value="average_time">Sort by Avg Time</option>
+              <option value="annotation_count">{{ ui_lang.admin_sort_annotations|default('Sort by Annotations') }}</option>
+              <option value="completion_percentage">{{ ui_lang.admin_sort_completion|default('Sort by Completion') }}</option>
+              <option value="disagreement">{{ ui_lang.admin_sort_disagreement|default('Sort by Disagreement') }}</option>
+              <option value="id">{{ ui_lang.admin_sort_id|default('Sort by ID') }}</option>
+              <option value="average_time">{{ ui_lang.admin_sort_avg_time|default('Sort by Avg Time') }}</option>
             </select>
 
             <select id="sortOrder" onchange="loadInstances()">
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
+              <option value="desc">{{ ui_lang.admin_order_desc|default('Descending') }}</option>
+              <option value="asc">{{ ui_lang.admin_order_asc|default('Ascending') }}</option>
             </select>
 
             <select id="filterCompletion" onchange="loadInstances()">
-              <option value="">All Instances</option>
-              <option value="completed">Completed Only</option>
-              <option value="incomplete">Incomplete Only</option>
+              <option value="">{{ ui_lang.admin_filter_all|default('All Instances') }}</option>
+              <option value="completed">{{ ui_lang.admin_filter_completed|default('Completed Only') }}</option>
+              <option value="incomplete">{{ ui_lang.admin_filter_incomplete|default('Incomplete Only') }}</option>
             </select>
 
             <button
@@ -172,15 +172,15 @@
             <table class="admin-table" id="instancesTable">
               <thead>
                 <tr>
-                  <th>Instance ID</th>
-                  <th>Text Preview</th>
-                  <th>Annotations</th>
-                  <th>Completion %</th>
-                  <th>Most Frequent Label</th>
-                  <th>Disagreement</th>
-                  <th>Avg Time</th>
-                  <th>Annotators</th>
-                  <th>Num AI Used</th>
+                  <th>{{ ui_lang.admin_th_instance_id|default('Instance ID') }}</th>
+                  <th>{{ ui_lang.admin_th_text_preview|default('Text Preview') }}</th>
+                  <th>{{ ui_lang.admin_th_annotations|default('Annotations') }}</th>
+                  <th>{{ ui_lang.admin_th_completion_pct|default('Completion %') }}</th>
+                  <th>{{ ui_lang.admin_th_most_frequent_label|default('Most Frequent Label') }}</th>
+                  <th>{{ ui_lang.admin_th_disagreement|default('Disagreement') }}</th>
+                  <th>{{ ui_lang.admin_th_avg_time|default('Avg Time') }}</th>
+                  <th>{{ ui_lang.admin_th_annotators|default('Annotators') }}</th>
+                  <th>{{ ui_lang.admin_th_num_ai_used|default('Num AI Used') }}</th>
                 </tr>
               </thead>
               <tbody id="instancesTableBody">
@@ -229,7 +229,7 @@
           <!-- AI Usage Section -->
           <div class="question-card" id="aiUsageSection" style="margin-bottom: 1.5rem;">
             <div class="question-header">
-              <h3 class="question-title">AI Assistance Usage</h3>
+              <h3 class="question-title">{{ ui_lang.admin_section_ai_usage|default('AI Assistance Usage') }}</h3>
             </div>
             <div id="aiUsageContent">
               <!-- AI usage data will be loaded here -->
@@ -239,7 +239,7 @@
           <!-- Quality Summary Section -->
           <div class="question-card" id="qualitySection" style="margin-bottom: 1.5rem;">
             <div class="question-header">
-              <h3 class="question-title">Quality Indicators</h3>
+              <h3 class="question-title">{{ ui_lang.admin_section_quality|default('Quality Indicators') }}</h3>
             </div>
             <div id="qualityContent">
               <!-- Quality indicators will be loaded here -->
@@ -251,14 +251,14 @@
             <table class="admin-table" id="behavioralTable">
               <thead>
                 <tr>
-                  <th>User ID</th>
-                  <th>Instances</th>
-                  <th>Avg Time (s)</th>
-                  <th>Interactions</th>
-                  <th>Changes</th>
-                  <th>AI Requests</th>
-                  <th>AI Accept Rate</th>
-                  <th>Suspicion</th>
+                  <th>{{ ui_lang.admin_th_user_id|default('User ID') }}</th>
+                  <th>{{ ui_lang.admin_th_instances|default('Instances') }}</th>
+                  <th>{{ ui_lang.admin_th_avg_time_s|default('Avg Time (s)') }}</th>
+                  <th>{{ ui_lang.admin_th_interactions|default('Interactions') }}</th>
+                  <th>{{ ui_lang.admin_th_changes|default('Changes') }}</th>
+                  <th>{{ ui_lang.admin_th_ai_requests|default('AI Requests') }}</th>
+                  <th>{{ ui_lang.admin_th_ai_accept_rate|default('AI Accept Rate') }}</th>
+                  <th>{{ ui_lang.admin_th_suspicion|default('Suspicion') }}</th>
                 </tr>
               </thead>
               <tbody id="behavioralTableBody">
@@ -342,8 +342,8 @@
                     Refresh Visualization
                   </button>
                   <select id="embedding-viz-label-source" onchange="changeEmbeddingVizLabelSource()" style="padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius);">
-                    <option value="mace">Color by MACE Labels</option>
-                    <option value="majority">Color by Majority Vote</option>
+                    <option value="mace">{{ ui_lang.admin_opt_color_mace|default('Color by MACE Labels') }}</option>
+                    <option value="majority">{{ ui_lang.admin_opt_color_majority|default('Color by Majority Vote') }}</option>
                   </select>
                 </div>
               </div>
@@ -360,15 +360,15 @@
 
           <div class="dashboard-card" style="margin-bottom: 1.5rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-              <h3 style="margin: 0;">BWS Item Scores</h3>
+              <h3 style="margin: 0;">{{ ui_lang.admin_section_bws_scores|default('BWS Item Scores') }}</h3>
               <div style="display: flex; gap: 8px; align-items: center;">
                 <select id="bwsScoringMethod" class="shadcn-input" style="width: auto; padding: 6px 12px;">
-                  <option value="counting">Counting</option>
+                  <option value="counting">{{ ui_lang.admin_opt_scoring_counting|default('Counting') }}</option>
                   <option value="bradley_terry">Bradley-Terry</option>
                   <option value="plackett_luce">Plackett-Luce</option>
                 </select>
                 <button class="shadcn-button shadcn-button-primary" onclick="generateBwsScores()">
-                  Generate Scores
+                  {{ ui_lang.admin_btn_generate_scores|default('Generate Scores') }}
                 </button>
               </div>
             </div>
@@ -380,13 +380,13 @@
               <table class="admin-table">
                 <thead>
                   <tr>
-                    <th>Rank</th>
-                    <th>Item ID</th>
-                    <th>Text</th>
-                    <th>Score</th>
-                    <th>Best Count</th>
-                    <th>Worst Count</th>
-                    <th>Appearances</th>
+                    <th>{{ ui_lang.admin_th_rank|default('Rank') }}</th>
+                    <th>{{ ui_lang.admin_th_item_id|default('Item ID') }}</th>
+                    <th>{{ ui_lang.admin_th_text|default('Text') }}</th>
+                    <th>{{ ui_lang.admin_th_score|default('Score') }}</th>
+                    <th>{{ ui_lang.admin_th_best_count|default('Best Count') }}</th>
+                    <th>{{ ui_lang.admin_th_worst_count|default('Worst Count') }}</th>
+                    <th>{{ ui_lang.admin_th_appearances|default('Appearances') }}</th>
                   </tr>
                 </thead>
                 <tbody id="bwsScoresBody">
@@ -407,7 +407,7 @@
 
           <div class="dashboard-card" style="margin-bottom: 1.5rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-              <h3 style="margin: 0;">Annotator Competence</h3>
+              <h3 style="margin: 0;">{{ ui_lang.admin_section_competence|default('Annotator Competence') }}</h3>
               <button class="shadcn-button shadcn-button-primary" onclick="triggerMace()">
                 Run MACE
               </button>
@@ -419,9 +419,9 @@
               <table class="admin-table">
                 <thead>
                   <tr>
-                    <th>Annotator</th>
-                    <th>Competence</th>
-                    <th>Reliability</th>
+                    <th>{{ ui_lang.admin_th_annotator|default('Annotator') }}</th>
+                    <th>{{ ui_lang.admin_th_competence|default('Competence') }}</th>
+                    <th>{{ ui_lang.admin_th_reliability|default('Reliability') }}</th>
                   </tr>
                 </thead>
                 <tbody id="maceCompetenceBody">
@@ -432,12 +432,12 @@
           </div>
 
           <div class="dashboard-card" style="margin-bottom: 1.5rem;">
-            <h3>Predicted Labels</h3>
+            <h3>{{ ui_lang.admin_section_predicted_labels|default('Predicted Labels') }}</h3>
             <p style="color: var(--muted-foreground); margin-bottom: 1rem;">
-              MACE's best estimate of the true label for each item, weighted by annotator competence.
+              {{ ui_lang.admin_mace_predicted_help|default("MACE's best estimate of the true label for each item, weighted by annotator competence.") }}
             </p>
             <div id="macePredictionsContainer">
-              <p style="color: var(--muted-foreground);">Run MACE to see predictions.</p>
+              <p style="color: var(--muted-foreground);">{{ ui_lang.admin_mace_run_predictions|default('Run MACE to see predictions.') }}</p>
             </div>
           </div>
         </div>
@@ -445,11 +445,11 @@
 
         <div class="admin-tab-content" id="config">
           <div class="config-form">
-            <h3>System Configuration</h3>
+            <h3>{{ ui_lang.admin_section_system_config|default('System Configuration') }}</h3>
             <form id="configForm">
               <div class="config-group">
                 <label for="maxAnnotationsPerUser"
-                  >Max Annotations per User</label
+                  >{{ ui_lang.admin_label_max_per_user|default('Max Annotations per User') }}</label
                 >
                 <input
                   type="number"
@@ -458,12 +458,12 @@
                   min="-1"
                   value="-1"
                 />
-                <small>Use -1 for unlimited</small>
+                <small>{{ ui_lang.admin_hint_unlimited|default('Use -1 for unlimited') }}</small>
               </div>
 
               <div class="config-group">
                 <label for="maxAnnotationsPerItem"
-                  >Max Annotations per Item</label
+                  >{{ ui_lang.admin_label_max_per_item|default('Max Annotations per Item') }}</label
                 >
                 <input
                   type="number"
@@ -476,14 +476,14 @@
               </div>
 
               <div class="config-group">
-                <label for="assignmentStrategy">Assignment Strategy</label>
+                <label for="assignmentStrategy">{{ ui_lang.admin_label_assignment_strategy|default('Assignment Strategy') }}</label>
                 <select id="assignmentStrategy" name="assignmentStrategy">
-                  <option value="random">Random</option>
-                  <option value="fixed_order">Fixed Order</option>
-                  <option value="least_annotated">Least Annotated</option>
-                  <option value="max_diversity">Max Diversity</option>
-                  <option value="active_learning">Active Learning</option>
-                  <option value="llm_confidence">LLM Confidence</option>
+                  <option value="random">{{ ui_lang.admin_opt_strat_random|default('Random') }}</option>
+                  <option value="fixed_order">{{ ui_lang.admin_opt_strat_fixed_order|default('Fixed Order') }}</option>
+                  <option value="least_annotated">{{ ui_lang.admin_opt_strat_least_annotated|default('Least Annotated') }}</option>
+                  <option value="max_diversity">{{ ui_lang.admin_opt_strat_max_diversity|default('Max Diversity') }}</option>
+                  <option value="active_learning">{{ ui_lang.admin_opt_strat_active_learning|default('Active Learning') }}</option>
+                  <option value="llm_confidence">{{ ui_lang.admin_opt_strat_llm_confidence|default('LLM Confidence') }}</option>
                 </select>
               </div>
 
@@ -492,14 +492,14 @@
                   type="submit"
                   class="shadcn-button shadcn-button-primary"
                 >
-                  Save Changes
+                  {{ ui_lang.admin_btn_save_changes|default('Save Changes') }}
                 </button>
                 <button
                   type="button"
                   onclick="loadConfig()"
                   class="shadcn-button shadcn-button-outline"
                 >
-                  Reload
+                  {{ ui_lang.admin_btn_reload|default('Reload') }}
                 </button>
               </div>
             </form>
@@ -508,7 +508,10 @@
       </main>
     </div>
 
+    <script>window.UI_LANG = {{ ui_lang|tojson }};</script>
     <script>
+      // Localized UI strings (falls back to the English literal if a key is absent)
+      var L = window.UI_LANG || {};
       // Global state
       let currentTab = "overview";
       let currentPage = 1;
@@ -615,7 +618,7 @@
           displayOverview(data);
         } catch (error) {
           console.error("Error loading overview:", error);
-          showError("Failed to load overview data");
+          showError(L.admin_err_overview || "Failed to load overview data");
         }
       }
 
@@ -700,7 +703,7 @@
           displayAnnotators(data);
         } catch (error) {
           console.error("Error loading annotators:", error);
-          showError("Failed to load annotators data");
+          showError(L.admin_err_annotators || "Failed to load annotators data");
         }
       }
 
@@ -788,7 +791,7 @@
           displayInstances(data);
         } catch (error) {
           console.error("Error loading instances:", error);
-          showError("Failed to load instances data");
+          showError(L.admin_err_instances || "Failed to load instances data");
         }
       }
 
@@ -883,7 +886,7 @@
           displayQuestions(data);
         } catch (error) {
           console.error("Error loading questions:", error);
-          showError("Failed to load questions data");
+          showError(L.admin_err_questions || "Failed to load questions data");
         }
       }
 
@@ -1151,7 +1154,7 @@
           displayCrowdsourcing(data);
         } catch (error) {
           console.error("Error loading crowdsourcing data:", error);
-          showError("Failed to load crowdsourcing data");
+          showError(L.admin_err_crowdsourcing || "Failed to load crowdsourcing data");
         }
       }
 
@@ -1263,19 +1266,19 @@
               <table class="admin-table">
                 <thead>
                   <tr>
-                    <th>Worker ID</th>
-                    <th>Phase</th>
-                    <th>Annotations</th>
-                    <th>Time</th>
-                    <th>Speed</th>
-                    <th>Completion</th>
-                    <th>Status</th>
+                    <th>{{ ui_lang.admin_th_worker_id|default('Worker ID') }}</th>
+                    <th>{{ ui_lang.admin_th_phase|default('Phase') }}</th>
+                    <th>{{ ui_lang.admin_th_annotations|default('Annotations') }}</th>
+                    <th>{{ ui_lang.admin_th_time|default('Time') }}</th>
+                    <th>{{ ui_lang.admin_th_speed|default('Speed') }}</th>
+                    <th>{{ ui_lang.admin_th_completion|default('Completion') }}</th>
+                    <th>{{ ui_lang.admin_th_status|default('Status') }}</th>
         `;
 
         if (platformKey === "prolific") {
-          html += `<th>Session ID</th>`;
+          html += `<th>{{ ui_lang.admin_th_session_id|default('Session ID') }}</th>`;
         } else if (platformKey === "mturk") {
-          html += `<th>Assignment ID</th>`;
+          html += `<th>{{ ui_lang.admin_th_assignment_id|default('Assignment ID') }}</th>`;
         }
 
         html += `
@@ -1337,7 +1340,7 @@
           displayBehavioral(data);
         } catch (error) {
           console.error("Error loading behavioral data:", error);
-          showError("Failed to load behavioral analytics data");
+          showError(L.admin_err_behavioral || "Failed to load behavioral analytics data");
         }
       }
 
@@ -1483,7 +1486,7 @@
           displayConfig(data);
         } catch (error) {
           console.error("Error loading config:", error);
-          showError("Failed to load configuration");
+          showError(L.admin_err_config || "Failed to load configuration");
         }
       }
 
@@ -1519,11 +1522,11 @@
               body: JSON.stringify(formData),
             });
 
-            showSuccess("Configuration updated successfully");
+            showSuccess(L.admin_ok_config_saved || "Configuration updated successfully");
             loadOverview(); // Refresh overview to show updated stats
           } catch (error) {
             console.error("Error updating config:", error);
-            showError("Failed to update configuration");
+            showError(L.admin_err_config || "Failed to update configuration");
           }
         });
 
@@ -1542,19 +1545,19 @@
         try {
           const method = document.getElementById('bwsScoringMethod').value;
           const btn = document.querySelector('#bws-scoring .shadcn-button-primary');
-          if (btn) { btn.textContent = 'Computing...'; btn.disabled = true; }
+          if (btn) { btn.textContent = L.admin_btn_computing || 'Computing…'; btn.disabled = true; }
           const result = await makeApiRequest(`/admin/api/bws_scoring/generate?method=${method}`, { method: "POST" });
           if (result.status === "success") {
             displayBwsScoring(result);
           } else {
             showError(result.error || "BWS score generation failed");
           }
-          if (btn) { btn.textContent = 'Generate Scores'; btn.disabled = false; }
+          if (btn) { btn.textContent = L.admin_btn_generate_scores || 'Generate Scores'; btn.disabled = false; }
         } catch (error) {
           console.error("Error generating BWS scores:", error);
           showError("Failed to generate BWS scores");
           const btn = document.querySelector('#bws-scoring .shadcn-button-primary');
-          if (btn) { btn.textContent = 'Generate Scores'; btn.disabled = false; }
+          if (btn) { btn.textContent = L.admin_btn_generate_scores || 'Generate Scores'; btn.disabled = false; }
         }
       }
 
@@ -1610,7 +1613,7 @@
           displayMace(data);
         } catch (error) {
           console.error("Error loading MACE data:", error);
-          showError("Failed to load MACE data");
+          showError(L.admin_err_mace_load || "Failed to load MACE data");
         }
       }
 
@@ -1627,7 +1630,7 @@
           if (btn) { btn.textContent = 'Run MACE'; btn.disabled = false; }
         } catch (error) {
           console.error("Error triggering MACE:", error);
-          showError("Failed to trigger MACE");
+          showError(L.admin_err_mace_trigger || "Failed to trigger MACE");
           const btn = document.querySelector('#mace .shadcn-button-primary');
           if (btn) { btn.textContent = 'Run MACE'; btn.disabled = false; }
         }
@@ -1732,9 +1735,9 @@
                 <table class="admin-table">
                   <thead>
                     <tr>
-                      <th>Instance</th>
-                      <th>Predicted Label</th>
-                      <th>Uncertainty</th>
+                      <th>{{ ui_lang.admin_th_instance|default('Instance') }}</th>
+                      <th>{{ ui_lang.admin_th_predicted_label|default('Predicted Label') }}</th>
+                      <th>{{ ui_lang.admin_th_uncertainty|default('Uncertainty') }}</th>
                     </tr>
                   </thead>
                   <tbody>

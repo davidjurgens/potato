@@ -3433,57 +3433,14 @@ def create_app(config_file=None):
         """Inject debug settings and common config values into all templates."""
         from potato.logging_config import is_ui_debug_enabled, is_server_debug_enabled
 
-        # Build ui_lang dict with defaults, overridden by config
-        ui_lang_defaults = {
-            # Navigation & controls
-            'next_button': 'Next',
-            'previous_button': 'Previous',
-            'submit_button': 'Submit',
-            'go_button': 'Go',
-            'retry_button': 'Retry',
-            'logout': 'Logout',
-            'jump_prev_unannotated': 'Previous unannotated',
-            'jump_next_unannotated': 'Next unannotated',
-            # Status indicators
-            'labeled_badge': 'Labeled',
-            'in_progress_badge': 'In Progress',
-            'not_labeled_badge': 'Not labeled',
-            'progress_label': 'Progress',
-            'loading': 'Loading annotation interface...',
-            'error_heading': 'Error',
-            # Annotation interface
-            'adjudicate': 'Adjudicate',
-            'codebook': 'Codebook',
-            'instructions_heading': 'Instructions',
-            'text_to_annotate': 'Text to Annotate:',
-            'video_to_annotate': 'Video to Annotate:',
-            'audio_to_annotate': 'Audio to Annotate:',
-            # Login / registration page
-            'login_title': 'Annotation Platform',
-            'login_subtitle_password': 'Sign in to continue',
-            'login_subtitle_username': 'Enter your username to continue',
-            'sign_in_tab': 'Sign In',
-            'register_tab': 'Register',
-            'username_label': 'Username',
-            'password_label': 'Password',
-            'sign_in_button': 'Sign In',
-            'continue_button': 'Continue',
-            'register_button': 'Register',
-            'forgot_password': 'Forgot Password?',
-            'username_placeholder': 'Enter your username',
-            'choose_username_placeholder': 'Choose a username',
-            'create_password_placeholder': 'Create a password',
-            'sign_in_with': 'Sign in with',
-            'or_divider': 'or',
-            # Footer
-            'powered_by': 'Powered by',
-            'cite_us': 'Cite Us',
-            # Language / direction
-            'html_lang': 'en',
-            'html_dir': 'ltr',
-        }
-        ui_lang_config = config.get('ui_language', {})
-        ui_lang = {**ui_lang_defaults, **ui_lang_config}
+        # ui_lang_defaults is the shared English source of truth (single
+        # definition in server_utils/i18n.py); the whitelist and catalog
+        # key-filter derive from it.
+        from potato.server_utils.i18n import UI_LANG_DEFAULTS as ui_lang_defaults
+        # Resolve ui_lang from English defaults + an optional bundled language
+        # catalog (e.g. ui_language: es) + optional inline per-key overrides.
+        from potato.server_utils.i18n import resolve_ui_language
+        ui_lang = resolve_ui_language(config.get('ui_language'), ui_lang_defaults)
 
         # Load project-level base CSS if configured
         from potato.server_utils.front_end import load_project_base_css_html, resolve_header_logo_src
