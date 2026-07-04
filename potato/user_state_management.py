@@ -1629,8 +1629,20 @@ class UserState:
         return suspicious_analysis['suspicious_actions']
 
     def get_performance_metrics(self) -> Dict[str, Any]:
-        """Get current performance metrics."""
-        return self.performance_metrics.copy()
+        """Get current performance metrics (JSON-safe).
+
+        ``fastest_action_time_ms`` starts as ``float('inf')`` as a min() sentinel
+        until the first action. Non-finite floats serialize to the non-standard
+        JSON tokens ``Infinity``/``NaN``, which strict clients (e.g. requests'
+        simplejson) reject — so coerce any non-finite value to None here. This
+        matches the inf->None convention already used in admin.py.
+        """
+        import math
+        metrics = self.performance_metrics.copy()
+        for key, value in metrics.items():
+            if isinstance(value, float) and not math.isfinite(value):
+                metrics[key] = None
+        return metrics
 
     def start_session(self, session_id: str) -> None:
         """Start a new annotation session."""

@@ -210,9 +210,15 @@ class JudgeService:
             if isinstance(response, str):
                 # Robust parse: models often wrap JSON in ```json fences / <think>
                 # blocks, and vLLM doesn't strictly enforce response_format.
+                # Prefer the endpoint's fence-aware parser, but fall back to a
+                # plain json.loads if it's absent or doesn't yield a dict.
+                data = None
                 if hasattr(endpoint, "parseStringToJson"):
-                    data = endpoint.parseStringToJson(response)
-                else:
+                    try:
+                        data = endpoint.parseStringToJson(response)
+                    except Exception:
+                        data = None
+                if not isinstance(data, dict):
                     data = json.loads(response)
             elif hasattr(response, "model_dump"):
                 data = response.model_dump()

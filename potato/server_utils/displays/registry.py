@@ -548,7 +548,9 @@ def _register_builtin_displays():
                 "link_steps": True,
                 "compact": False,
             },
-            supports_span_target=False,
+            # Matches EvalTraceDisplay.supports_span_target: the three-pane block
+            # is span-annotatable (offset-based highlight across panes).
+            supports_span_target=True,
             description="Three-pane agent trace eval: reasoning, function calls, and final answer side-by-side"
         ),
         DisplayDefinition(

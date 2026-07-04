@@ -66,6 +66,20 @@ PERSISTENCE_TEST_MAP = {
     # Agent-evaluation schemas — Selenium persistence tests to be created
     "process_reward": "tests/selenium/test_process_reward_ui.py",
     "code_review": "tests/selenium/test_code_review_ui.py",
+    # M-series multi-agent + multimodal schemas (each has a dedicated UI test)
+    "agent_interaction_graph": "tests/selenium/test_agent_interaction_graph_ui.py",
+    "agent_scorecard": "tests/selenium/test_agent_scorecard_ui.py",
+    "emergent_behavior": "tests/selenium/test_emergent_behavior_ui.py",
+    "failure_attribution": "tests/selenium/test_failure_attribution_ui.py",
+    "gui_trajectory": "tests/selenium/test_gui_trajectory_ui.py",
+    "handoff_review": "tests/selenium/test_handoff_review_ui.py",
+    "multimodal_reasoning": "tests/selenium/test_multimodal_reasoning_ui.py",
+    "speech_transcript": "tests/selenium/test_speech_transcript_ui.py",
+    "table_grid": "tests/selenium/test_table_grid_ui.py",
+    "temporal_grounding": "tests/selenium/test_temporal_grounding_ui.py",
+    "tool_call_review": "tests/selenium/test_tool_call_review_ui.py",
+    "tool_contention": "tests/selenium/test_tool_contention_ui.py",
+    "voice_interaction": "tests/selenium/test_voice_interaction_ui.py",
 }
 
 # Types that are exempt from the file-existence check because their
