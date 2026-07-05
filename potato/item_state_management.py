@@ -1123,6 +1123,40 @@ class ItemStateManager:
                 del self.batch_auto_user_to_group[user_id]
                 self.batch_auto_group_to_users[group_index].discard(user_id)
 
+    def get_group_name_for_user(self, user_id: str) -> Optional[str]:
+        """Return the batch-assignment cohort name for a user, or None.
+
+        Resolves membership from two sources (read-only; never creates a pin):
+          1. Explicit config groups: the first ``batch_assignment.groups`` entry
+             whose ``annotators``/``users`` list contains ``user_id``.
+          2. Auto-assigned pin: ``batch_auto_user_to_group`` -> the pinned
+             auto-group's name.
+
+        Used by the per-cohort schema resolver to pick a user's scheme set.
+        """
+        if not user_id:
+            return None
+
+        # Explicit config groups (may be unnamed -> synthesize a stable name).
+        for idx, group in enumerate(self.batch_assignment_config.get('groups') or []):
+            if not isinstance(group, dict):
+                continue
+            users = group.get('annotators', group.get('users', []))
+            if isinstance(users, str):
+                users = [users]
+            if user_id in (users or []):
+                return group.get('name') or f"group_{idx}"
+
+        # Auto-assigned pin (set during item assignment).
+        index = self.batch_auto_user_to_group.get(user_id)
+        if index is not None and 0 <= index < len(self.batch_auto_groups):
+            group = self.batch_auto_groups[index]
+            name = group.get('name')
+            if name:
+                return str(name)
+
+        return None
+
     def _batch_candidate_ids_for_user(
         self, user_id: str, assign_auto: bool = False
     ) -> Tuple[List[str], Optional[int]]:

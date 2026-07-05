@@ -298,6 +298,16 @@ KNOWN_CONFIG_KEYS = {
     # Per-annotator workload caps:
     #   { default: int, by_user: {user_id: int}, by_user_role: {role: int} }
     "per_annotator_quota": None,
+    # Role labels: { user_id: role }. Drives per_annotator_quota.by_user_role
+    # and (when the label names a permissioned RBAC role) confers permissions.
+    "user_roles": None,
+    # Role-based access control: role -> permissions, user/SSO role assignment.
+    "rbac": {
+        "enabled", "roles", "user_role_assignments", "sso_role_mapping",
+    },
+    # Named, reusable annotation-scheme sets referenced by batch_assignment
+    # groups for per-cohort schema assignment.
+    "scheme_sets": None,
     # qda_mode sub-keys are deliberately leaf (None): validation stops at
     # memos/codebook and does NOT recurse into their sub-keys. This is
     # intentional forward-compat — parse_qda_mode_config() routes any
@@ -981,6 +991,12 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate batch assignment configuration if present
     validate_batch_assignment_config(config_data)
+
+    # Validate RBAC configuration if present
+    validate_rbac_config(config_data)
+
+    # Validate per-cohort scheme sets / group scheme bindings if present
+    validate_cohort_schemes_config(config_data)
 
     # Validate diversity ordering configuration if present
     validate_diversity_config(config_data)
@@ -3329,6 +3345,124 @@ def _batch_assignment_has_group_data_files(config_data: Dict[str, Any]) -> bool:
         if group.get('data_file') or group.get('input_data_file') or group.get('input_file'):
             return True
     return False
+
+
+def validate_rbac_config(config_data: Dict[str, Any]) -> None:
+    """Validate the optional ``rbac`` block.
+
+    Rules:
+      * ``rbac`` is a mapping.
+      * ``roles`` maps role names to lists of known permission strings.
+      * ``user_role_assignments`` / ``sso_role_mapping`` map strings to role
+        names that resolve (built-in defaults or a role declared in ``roles``).
+    """
+    rbac = config_data.get('rbac')
+    if rbac is None:
+        return
+    if not isinstance(rbac, dict):
+        raise ConfigValidationError("rbac must be a dictionary")
+
+    from potato.server_utils.rbac import Permission, DEFAULT_ROLE_PERMISSIONS
+
+    known_roles = set(DEFAULT_ROLE_PERMISSIONS.keys())
+    roles = rbac.get('roles')
+    if roles is not None:
+        if not isinstance(roles, dict):
+            raise ConfigValidationError("rbac.roles must be a mapping of role -> permissions")
+        for role, perms in roles.items():
+            if not isinstance(perms, (list, tuple)):
+                raise ConfigValidationError(
+                    f"rbac.roles['{role}'] must be a list of permissions"
+                )
+            for perm in perms:
+                if perm not in Permission.ALL:
+                    raise ConfigValidationError(
+                        f"rbac.roles['{role}'] has unknown permission '{perm}'. "
+                        f"Valid permissions: {sorted(Permission.ALL)}"
+                    )
+            known_roles.add(role)
+
+    for field in ('user_role_assignments', 'sso_role_mapping'):
+        mapping = rbac.get(field)
+        if mapping is None:
+            continue
+        if not isinstance(mapping, dict):
+            raise ConfigValidationError(f"rbac.{field} must be a mapping")
+        for key, role in mapping.items():
+            if not isinstance(role, str) or role not in known_roles:
+                raise ConfigValidationError(
+                    f"rbac.{field}['{key}'] references unknown role '{role}'. "
+                    f"Declare it under rbac.roles or use a built-in role "
+                    f"({sorted(DEFAULT_ROLE_PERMISSIONS)})."
+                )
+
+    enabled = rbac.get('enabled', True)
+    if not isinstance(enabled, bool):
+        raise ConfigValidationError("rbac.enabled must be a boolean")
+
+
+def validate_cohort_schemes_config(config_data: Dict[str, Any]) -> None:
+    """Validate ``scheme_sets`` and per-group ``schemes`` bindings.
+
+    A ``schemes`` binding (top-level scheme_set or batch group) may be:
+      * a string naming a ``scheme_sets`` entry or a global scheme's ``name``;
+      * a list whose items are global scheme names or inline scheme dicts.
+    Named references must resolve against ``scheme_sets`` or the global
+    ``annotation_schemes``.
+    """
+    scheme_sets = config_data.get('scheme_sets')
+    global_schemes = config_data.get('annotation_schemes') or []
+    global_scheme_names = {
+        s.get('name') for s in global_schemes if isinstance(s, dict) and s.get('name')
+    }
+    scheme_set_names = set()
+
+    if scheme_sets is not None:
+        if not isinstance(scheme_sets, dict):
+            raise ConfigValidationError("scheme_sets must be a mapping of name -> scheme list")
+        scheme_set_names = set(scheme_sets.keys())
+        for name, members in scheme_sets.items():
+            _validate_scheme_binding(
+                members, f"scheme_sets['{name}']",
+                global_scheme_names, scheme_set_names=set(),
+            )
+
+    batch_config = config_data.get('batch_assignment')
+    if isinstance(batch_config, dict):
+        for idx, group in enumerate(batch_config.get('groups') or []):
+            if not isinstance(group, dict) or 'schemes' not in group:
+                continue
+            _validate_scheme_binding(
+                group['schemes'], f"batch_assignment.groups[{idx}].schemes",
+                global_scheme_names, scheme_set_names,
+            )
+
+
+def _validate_scheme_binding(binding, path, global_scheme_names, scheme_set_names):
+    """Validate a single ``schemes`` binding value (str, or list of str/dicts)."""
+    if isinstance(binding, str):
+        if binding not in scheme_set_names and binding not in global_scheme_names:
+            raise ConfigValidationError(
+                f"{path} references unknown scheme set / scheme name '{binding}'"
+            )
+        return
+    if not isinstance(binding, list) or not binding:
+        raise ConfigValidationError(
+            f"{path} must be a non-empty scheme-set name or list of schemes"
+        )
+    for member in binding:
+        if isinstance(member, str):
+            if member not in global_scheme_names:
+                raise ConfigValidationError(
+                    f"{path} references unknown scheme name '{member}' "
+                    f"(not found in annotation_schemes)"
+                )
+        elif isinstance(member, dict):
+            validate_single_annotation_scheme(member, path)
+        else:
+            raise ConfigValidationError(
+                f"{path} entries must be scheme names or inline scheme mappings"
+            )
 
 
 def validate_category_assignment_config(config_data: Dict[str, Any]) -> None:

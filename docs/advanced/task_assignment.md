@@ -466,6 +466,9 @@ See [Admin Dashboard](../administration/admin_dashboard.md) for more details.
 
 ## Related Documentation
 
+- [Per-Cohort Schemas](per_cohort_schemas.md) - Bind different annotation schemes to the cohorts defined here
+- [Roles & Permissions (RBAC)](../auth-users/roles_and_permissions.md) - Control who can annotate, adjudicate, export, and administer
+- [Scaling & Large Datasets](../deployment/scaling.md) - Shard large datasets across cohorts; indexing and memory notes
 - [Diversity Ordering](../workflow/diversity_ordering.md) - Embedding-based diverse item presentation
 - [Active Learning Guide](../ai-intelligence/active_learning_guide.md) - ML-based assignment prioritization
 - [Quality Control](../workflow/quality_control.md) - Attention checks and gold standards

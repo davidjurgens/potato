@@ -81,6 +81,29 @@ best-worst scaling, pairwise/conjoint comparison, sliders, soft labels, rubric
 grids, and agent-specific schemes (trajectory eval, process-reward, code review).
 See the [Schema Gallery](annotation-types/schemas_and_templates.md).
 
+## How large a dataset can Potato handle?
+
+Potato holds items in an ID-keyed in-memory index, so **lookups are O(1)**, not
+file scans — the "un-indexed files" concern does not apply. Memory scales with
+the number of items (the ML stack is *not* loaded unless you enable a feature
+that needs it): the reference 50k-item boot runs in ~5.7 s at ~365 MB RSS, and a
+benchmark (`tests/performance/test_large_dataset_boot.py`) guards against
+regressions. For very large projects, shard work across
+[cohorts](advanced/task_assignment.md) and cap workload with `per_annotator_quota`
+so annotators only ever load their own queue. See
+[Scaling & Large Datasets](deployment/scaling.md) for details, including bulk
+export behavior.
+
+## Can different annotators see different questions or have different permissions?
+
+Yes to both. Assign different annotation schemes to different cohorts with
+[Per-Cohort Schemas](advanced/per_cohort_schemas.md), and control who can do what
+with [role-based access control](auth-users/roles_and_permissions.md) (admin,
+adjudicator, annotator, or custom roles — assigned by user or SSO claim). Dynamic
+assignment of *items* to unknown annotators is also built in via
+[batch assignment](advanced/task_assignment.md) (cohorts, auto-assignment,
+restart-persistent pins).
+
 ## Is my data private?
 
 Yes. Potato is self-hosted — your data stays on your infrastructure. There is no

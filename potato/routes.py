@@ -250,8 +250,25 @@ def get_admin_api_key():
     return _get_admin_api_key(config)
 
 def validate_admin_api_key(provided_key: str) -> bool:
-    """Validate an admin API key. See potato.server_utils.admin_key for details."""
-    return _validate_admin_api_key(provided_key, config)
+    """Authorize an admin request.
+
+    Backward compatible: a valid shared admin API key (or debug mode) always
+    passes. Additionally, a logged-in user holding the RBAC
+    ``view_admin_dashboard`` permission is authorized without the key, so
+    role-based admins can use the admin endpoints. This single wrapper routes
+    every inline admin guard in this module through RBAC without touching each
+    call site.
+    """
+    if _validate_admin_api_key(provided_key, config):
+        return True
+    # Consult RBAC for the current logged-in user, when in a request context.
+    try:
+        from potato.server_utils.rbac import get_rbac_manager, Permission
+        return get_rbac_manager().check(
+            Permission.VIEW_ADMIN_DASHBOARD, request, session
+        )
+    except Exception:
+        return False
 
 
 # -------------------------------------------------------------------
@@ -811,6 +828,9 @@ def oauth_callback(provider):
                              require_password=config.get("require_password", True),
                              oauth_providers=authenticator.get_login_providers())
 
+    # SSO claims captured for RBAC sso_role_mapping (e.g. "org:acme").
+    sso_claims = [f"provider:{provider}"]
+
     # Check GitHub org restriction (requires API call)
     allowed_org = oauth_backend.get_allowed_org(provider)
     if allowed_org and provider == "github":
@@ -818,6 +838,7 @@ def oauth_callback(provider):
             orgs_resp = client.get("user/orgs", token=token)
             orgs = orgs_resp.json()
             user_orgs = [o.get("login", "").lower() for o in orgs]
+            sso_claims.extend(f"org:{o}" for o in user_orgs if o)
             if allowed_org.lower() not in user_orgs:
                 reason = (
                     f"Access restricted to members of the '{allowed_org}' "
@@ -866,6 +887,7 @@ def oauth_callback(provider):
     # Create Flask session
     session.clear()
     session['username'] = user_id
+    session['sso_claims'] = sso_claims
     session.permanent = True
     logger.info("OAuth login successful: provider=%s, user=%s", provider, user_id)
 
@@ -4519,7 +4541,14 @@ def update_instance():
             # radio options or unchecked checkboxes persist as stale data.
             _exclusive_types = {'radio', 'multiselect'}
             _schema_type_cache = {}
-            for scheme in config.get('annotation_schemes', []):
+            # Resolve the user's cohort schemes so exclusive-label clearing keys
+            # off the schemes this user actually sees (falls back to global).
+            try:
+                from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+                _user_schemes = get_cohort_scheme_resolver().get_schemes_for_user(username)
+            except Exception:
+                _user_schemes = config.get('annotation_schemes', [])
+            for scheme in _user_schemes:
                 _schema_type_cache[scheme.get('name')] = scheme.get('annotation_type')
 
             # Collect which schemas appear in the incoming annotations
@@ -7037,15 +7066,23 @@ def ai_assistant():
         logger.debug("[AI Assistant] Failed to parse annotation ID")
         return jsonify({"html": "", "error": None})
 
+    username = session['username']
+    # annotation_id is positional within the schemes this user sees, so resolve
+    # against the user's cohort schemes (falls back to the global list).
+    try:
+        from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+        _user_schemes = get_cohort_scheme_resolver().get_schemes_for_user(username)
+    except Exception:
+        _user_schemes = config.get("annotation_schemes", [])
+
     # Check if annotation_id is valid
-    if annotation_id < 0 or annotation_id >= len(config.get("annotation_schemes", [])):
+    if annotation_id < 0 or annotation_id >= len(_user_schemes):
         logger.debug(f"[AI Assistant] annotation_id {annotation_id} out of range")
         return jsonify({"html": "", "error": None})
 
-    username = session['username']
     user_state = get_user_state(username)
     instance = user_state.get_current_instance_index()
-    annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
+    annotation_type = _user_schemes[annotation_id]["annotation_type"]
 
     result = generate_ai_help_html(instance, annotation_id, annotation_type)
     logger.debug(f"[AI Assistant] Result for instance={instance}, annotation_id={annotation_id}, type={annotation_type}: '{result[:100] if result else 'empty'}...'")
@@ -7511,10 +7548,22 @@ def _check_adjudicator_auth():
     if not adj_mgr or not adj_mgr.adj_config.enabled:
         return False, username, (jsonify({"error": "Adjudication not enabled"}), 404)
 
-    if not adj_mgr.is_adjudicator(username):
+    if not _is_authorized_adjudicator(username, adj_mgr):
         return False, username, (jsonify({"error": "Not authorized as adjudicator"}), 403)
 
     return True, username, None
+
+
+def _is_authorized_adjudicator(username, adj_mgr):
+    """True if the user may adjudicate: legacy allow-list OR RBAC permission.
+
+    Keeps ``adjudicator_users`` working while letting role-based adjudicators
+    (and the shared-key superuser) through.
+    """
+    if adj_mgr and adj_mgr.is_adjudicator(username):
+        return True
+    from potato.server_utils.rbac import get_rbac_manager, Permission
+    return get_rbac_manager().check(Permission.ADJUDICATE, request, session)
 
 
 @app.route('/adjudicate', methods=['GET'])
@@ -7528,11 +7577,14 @@ def adjudicate():
     if not adj_mgr or not adj_mgr.adj_config.enabled:
         return redirect(url_for('home'))
 
-    if not adj_mgr.is_adjudicator(username):
+    if not _is_authorized_adjudicator(username, adj_mgr):
         return redirect(url_for('home'))
 
-    # Get annotation schemes for form rendering
-    annotation_schemes = config.get('annotation_schemes', [])
+    # Get annotation schemes for form rendering. Adjudicators review every
+    # cohort, so they see the union of all cohort scheme sets (falls back to the
+    # global annotation_schemes when per-cohort schemas are not configured).
+    from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+    annotation_schemes = get_cohort_scheme_resolver().union_of_all_schemes()
 
     return render_template(
         'adjudication.html',

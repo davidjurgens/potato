@@ -390,118 +390,18 @@ def generate_annotation_html_template(config: dict) -> str:
     annotation_schemes = config["annotation_schemes"]
     logger.debug("Saw %d annotation scheme(s)" % len(annotation_schemes))
 
-    # insert annotation id to each of the schemes
-    for idx, annotation_scheme in enumerate(annotation_schemes):
-        annotation_scheme["annotation_id"] = idx
-
-    # Pre-allocate non-conflicting keybindings across all schemas
-    allocation = allocate_keybindings(annotation_schemes)
-    for annotation_scheme in annotation_schemes:
-        name = annotation_scheme.get("name", "")
-        if name in allocation:
-            annotation_scheme["_allocated_keys"] = allocation[name]
-
-    # Keep track of all the keybindings we have
-    all_keybindings = [("&#8592;", "Move backward"), ("&#8594;", "Move forward")]
-
     # Check if we're using the new API-based template that generates forms dynamically
     is_api_template = "base_template_v2.html" in html_template_file
 
-    # Handle annotation layout generation
-    # Check if user provided a custom task_layout file
+    # Custom task_layout file (shared across all cohorts if set).
     task_layout_file = config.get("task_layout")
 
-    if task_layout_file:
-        # User provided a custom task layout file
-        logger.info(f"Using custom task layout file: {task_layout_file}")
-
-        # Resolve the path relative to the config file
-        task_layout_file = resolve_project_asset_path(config, task_layout_file)
-
-        # Read the custom task layout
-        with open(task_layout_file, "rt", encoding="utf-8") as f:
-            task_html_layout = "".join(f.readlines())
-
-        # Extract keybindings from the annotation schemes for the sidebar
-        for annotation_scheme in annotation_schemes:
-            _, keybindings = generate_schematic(annotation_scheme)
-            all_keybindings.extend(keybindings)
-
-    else:
-        # Use the dedicated annotation layout file system (auto-generated)
-        try:
-            layout_file_path = get_or_generate_annotation_layout(config, annotation_schemes)
-            # Read the generated layout file
-            with open(layout_file_path, "rt", encoding="utf-8") as f:
-                task_html_layout = "".join(f.readlines())
-
-            # Extract keybindings from the annotation schemes for the sidebar
-            for annotation_scheme in annotation_schemes:
-                _, keybindings = generate_schematic(annotation_scheme)
-                all_keybindings.extend(keybindings)
-            
-        except Exception as e:
-            logger.warning(f"Failed to use dedicated layout file: {e}. Falling back to inline generation.")
-
-            # Fallback to inline generation
-            if is_api_template:
-                # For the new API-based template, generate server-side forms but use API endpoints
-                # The frontend JavaScript will handle form interactions via API calls
-                logger.info("Using API-based template - generating server-side forms with API integration")
-
-                # Generate the forms using the existing schematic generation
-                schema_layouts = ""
-                for annotation_scheme in annotation_schemes:
-                    schema_layout, keybindings = generate_schematic(annotation_scheme)
-                    schema_layouts += schema_layout + "\n"
-                    all_keybindings.extend(keybindings)
-
-                task_html_layout = schema_layouts
-            else:
-                # Generate inline layout
-                schema_layouts = ""
-                for annotation_scheme in annotation_schemes:
-                    schema_layout, keybindings = generate_schematic(annotation_scheme)
-                    schema_layouts += schema_layout + "\n"
-                    all_keybindings.extend(keybindings)
-
-                task_html_layout = f'<div class="annotation_schema">{schema_layouts}</div>'
-
-    # Add in a codebook link if the admin specified one
+    # Add in a codebook link if the admin specified one (schema-independent).
     codebook_html = ""
     if len(config.get("annotation_codebook_url", "")) > 0:
         annotation_codebook = config["annotation_codebook_url"]
         codebook_html = '<a href="{{annotation_codebook_url}}" class="nav-item nav-link">Annotation Codebook</a>'
         codebook_html = codebook_html.replace("{{annotation_codebook_url}}", annotation_codebook)
-
-    #
-    # Step 3, drop in the annotation layout and insert the rest of the task-specific variables
-    #
-
-    # Swap in the task's layout
-    html_template = html_template.replace("{{ TASK_LAYOUT }}", task_html_layout)
-    html_template = html_template.replace("{{annotation_codebook}}", codebook_html)
-    html_template = html_template.replace(
-        "{{annotation_task_name}}", config["annotation_task_name"]
-    )
-
-    # For API-based templates, replace debug placeholder
-    if is_api_template:
-        html_template = html_template.replace("{{ debug | tojson | safe }}", str(config.get("debug", False)).lower())
-
-    keybindings_desc = generate_keybindings_sidebar(config, all_keybindings)
-    html_template = html_template.replace("{{keybindings}}", keybindings_desc)
-
-    statistics_layout = generate_statistics_sidebar(STATS_KEYS)
-    html_template = html_template.replace("{{statistics_nav}}", statistics_layout)
-
-    # Jiaxin: change the basename from the template name to the project name +
-    # template name, to allow multiple annotation tasks using the same template
-    site_name = (
-        "-".join(config["annotation_task_name"].split(" "))
-        + "-"
-        + os.path.basename(html_template_file)
-    )
 
     # Create generated subdirectory within the templates directory
     generated_dir = os.path.join(config["site_dir"], "generated")
@@ -509,21 +409,114 @@ def generate_annotation_html_template(config: dict) -> str:
         os.makedirs(generated_dir)
         logger.info(f"Created generated templates directory: {generated_dir}")
 
-    output_html_fname = os.path.join(generated_dir, site_name)
-    logger.debug(f"Output HTML filename: {output_html_fname}")
+    def _bake_site_template(schemes_for_layout, site_suffix=None):
+        """Bake a full site template for a given scheme list.
+
+        ``schemes_for_layout`` is mutated in place (annotation_id / keybinding
+        allocation), so callers pass deep copies for cohorts to avoid clobbering
+        the global schemes or one another. Returns the generated site file name.
+        """
+        # insert annotation id to each of the schemes
+        for idx, annotation_scheme in enumerate(schemes_for_layout):
+            annotation_scheme["annotation_id"] = idx
+
+        # Pre-allocate non-conflicting keybindings across all schemas
+        allocation = allocate_keybindings(schemes_for_layout)
+        for annotation_scheme in schemes_for_layout:
+            name = annotation_scheme.get("name", "")
+            if name in allocation:
+                annotation_scheme["_allocated_keys"] = allocation[name]
+
+        # Keep track of all the keybindings we have
+        all_keybindings = [("&#8592;", "Move backward"), ("&#8594;", "Move forward")]
+
+        if task_layout_file:
+            # User provided a custom task layout file (shared by all cohorts).
+            logger.info(f"Using custom task layout file: {task_layout_file}")
+            resolved_layout = resolve_project_asset_path(config, task_layout_file)
+            with open(resolved_layout, "rt", encoding="utf-8") as f:
+                task_html_layout = "".join(f.readlines())
+            for annotation_scheme in schemes_for_layout:
+                _, keybindings = generate_schematic(annotation_scheme)
+                all_keybindings.extend(keybindings)
+        else:
+            # Use the dedicated annotation layout file system (auto-generated).
+            try:
+                layout_file_path = get_or_generate_annotation_layout(
+                    config, schemes_for_layout, layout_name=site_suffix
+                )
+                with open(layout_file_path, "rt", encoding="utf-8") as f:
+                    task_html_layout = "".join(f.readlines())
+                for annotation_scheme in schemes_for_layout:
+                    _, keybindings = generate_schematic(annotation_scheme)
+                    all_keybindings.extend(keybindings)
+            except Exception as e:
+                logger.warning(f"Failed to use dedicated layout file: {e}. Falling back to inline generation.")
+                schema_layouts = ""
+                for annotation_scheme in schemes_for_layout:
+                    schema_layout, keybindings = generate_schematic(annotation_scheme)
+                    schema_layouts += schema_layout + "\n"
+                    all_keybindings.extend(keybindings)
+                if is_api_template:
+                    task_html_layout = schema_layouts
+                else:
+                    task_html_layout = f'<div class="annotation_schema">{schema_layouts}</div>'
+
+        # Swap in the task's layout and the rest of the task-specific variables
+        tmpl = html_template.replace("{{ TASK_LAYOUT }}", task_html_layout)
+        tmpl = tmpl.replace("{{annotation_codebook}}", codebook_html)
+        tmpl = tmpl.replace("{{annotation_task_name}}", config["annotation_task_name"])
+        if is_api_template:
+            tmpl = tmpl.replace("{{ debug | tojson | safe }}", str(config.get("debug", False)).lower())
+
+        keybindings_desc = generate_keybindings_sidebar(config, all_keybindings)
+        tmpl = tmpl.replace("{{keybindings}}", keybindings_desc)
+        statistics_layout = generate_statistics_sidebar(STATS_KEYS)
+        tmpl = tmpl.replace("{{statistics_nav}}", statistics_layout)
+
+        # Site file name: project + template basename, plus cohort suffix.
+        site_name = (
+            "-".join(config["annotation_task_name"].split(" "))
+            + "-"
+            + os.path.basename(html_template_file)
+        )
+        if site_suffix:
+            site_name += "-" + site_suffix
+
+        output_html_fname = os.path.join(generated_dir, site_name)
+        config_hash = compute_config_md5(config)
+        html_template_with_hash = f"<!-- CONFIG_HASH: {config_hash} -->\n{tmpl}"
+        with open(output_html_fname, "wt", encoding="utf-8") as outf:
+            outf.write(html_template_with_hash)
+        logger.debug("writing annotation html to %s" % output_html_fname)
+        return site_name
+
+    # Default site file uses the global annotation schemes.
+    site_name = _bake_site_template(annotation_schemes)
 
     # Cache this path as a shortcut to figure out which page to render
     config["site_file"] = site_name
 
-    # Compute config hash and add it to the template
-    config_hash = compute_config_md5(config)
-    html_template_with_hash = f"<!-- CONFIG_HASH: {config_hash} -->\n{html_template}"
-
-    # Write the file
-    with open(output_html_fname, "wt", encoding="utf-8") as outf:
-        outf.write(html_template_with_hash)
-
-    logger.debug("writing annotation html to %s" % output_html_fname)
+    # Per-cohort site files: one per cohort that binds its own scheme set. Each
+    # gets a deep copy so annotation_id/keybinding mutations stay isolated.
+    try:
+        from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+        resolver = get_cohort_scheme_resolver()
+        cohort_schemes = resolver.deep_copy_cohort_schemes()
+        if cohort_schemes:
+            if task_layout_file:
+                logger.warning(
+                    "Per-cohort schemes with a custom task_layout are not "
+                    "differentiated (all cohorts share the custom layout)."
+                )
+            cohort_site_files = {}
+            for cohort_name, schemes in cohort_schemes.items():
+                suffix = resolver.layout_name_for_cohort(cohort_name)
+                cohort_site_files[cohort_name] = _bake_site_template(schemes, site_suffix=suffix)
+            config["cohort_site_files"] = cohort_site_files
+            logger.info(f"Generated {len(cohort_site_files)} per-cohort site template(s)")
+    except Exception as e:
+        logger.warning(f"Per-cohort site template generation skipped: {e}")
 
     return site_name
 

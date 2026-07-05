@@ -138,9 +138,10 @@ class AdminDashboard:
         Returns:
             bool: True if admin access is granted, False otherwise
         """
-        from potato.server_utils.admin_key import validate_admin_api_key
-        api_key = request.headers.get('X-API-Key') or session.get('admin_api_key')
-        return validate_admin_api_key(api_key, config)
+        from potato.server_utils.rbac import get_rbac_manager, Permission
+        return get_rbac_manager().check(
+            Permission.VIEW_ADMIN_DASHBOARD, request, session
+        )
 
     def get_dashboard_overview(self) -> Dict[str, Any]:
         """

@@ -101,27 +101,12 @@ def same_origin_required(f):
     return decorated_function
 
 
-def admin_required(f):
-    """Require a valid admin API key (X-API-Key header) for destructive ops.
+# Admin gate for destructive ops (forced phase transitions, refinement approval,
+# etc.). Routed through the shared RBAC layer so the shared admin API key remains
+# a superuser bypass (unchanged behavior) while role-based admins also pass.
+from potato.server_utils.rbac import require_permission, Permission
 
-    Bypasses the standard session login; used for endpoints that can corrupt
-    workflow state (forced phase transitions, refinement approval, etc.).
-    Falls back to allowing in debug mode via the existing admin key system.
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Lazy import to avoid circular dependencies at module load.
-        from potato.server_utils.admin_key import validate_admin_api_key
-        from potato.flask_server import config as _config
-
-        api_key = (
-            request.headers.get('X-API-Key')
-            or session.get('admin_api_key')
-        )
-        if not validate_admin_api_key(api_key, _config):
-            return jsonify({'error': 'Admin authentication required'}), 403
-        return f(*args, **kwargs)
-    return decorated_function
+admin_required = require_permission(Permission.VIEW_ADMIN_DASHBOARD)
 
 
 # =============================================================================

@@ -2198,8 +2198,19 @@ def render_page_with_annotations(username: str):
     # print(all_statistics)
 
     # Set the html file as surveyflow pages when the instance is a not an
-    # annotation page (survey pages, prestudy pass or fail page)
+    # annotation page (survey pages, prestudy pass or fail page).
+    # When the user's cohort binds its own annotation schemes, serve that
+    # cohort's pre-generated site file; otherwise fall back to the default.
     html_file = config["site_file"]
+    cohort_site_files = config.get("cohort_site_files") or {}
+    if cohort_site_files:
+        try:
+            from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+            _cohort = get_cohort_scheme_resolver().get_cohort_for_user(username)
+            if _cohort and _cohort in cohort_site_files:
+                html_file = cohort_site_files[_cohort]
+        except Exception as e:
+            logger.debug(f"Cohort site-file selection skipped: {e}")
 
     var_elems_html = "".join(
         map(lambda item : (
@@ -2254,7 +2265,13 @@ def render_page_with_annotations(username: str):
 
     # Get UI configuration from config
     ui_config = config.get("ui", {})
-    annotation_schemes = config.get("annotation_schemes", [])
+    # Resolve the schemes for this user's cohort (falls back to the global
+    # annotation_schemes when per-cohort schemas are not configured).
+    try:
+        from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+        annotation_schemes = get_cohort_scheme_resolver().get_schemes_for_user(username)
+    except Exception:
+        annotation_schemes = config.get("annotation_schemes", [])
 
     # Add layout configuration to ui_config for JavaScript access
     if config.get("layout"):
@@ -3638,6 +3655,12 @@ def _initialize_from_config(config_file):
     if config.get("adjudication", {}).get("enabled", False):
         init_adjudication_manager(config)
 
+    # Initialize RBAC + per-cohort schema resolver (always; cheap and lazy-safe)
+    from potato.server_utils.rbac import init_rbac_manager
+    from potato.server_utils.cohort_schemes import init_cohort_scheme_resolver
+    init_rbac_manager(config)
+    init_cohort_scheme_resolver(config)
+
     # Initialize knowledge base manager
     init_kb_manager(config)
 
@@ -3971,6 +3994,12 @@ def run_server(args):
     if config.get('adjudication', {}).get('enabled', False):
         init_adjudication_manager(config)
         logger.info("Adjudication manager initialized")
+
+    # Initialize RBAC + per-cohort schema resolver (always; cheap and lazy-safe)
+    from potato.server_utils.rbac import init_rbac_manager
+    from potato.server_utils.cohort_schemes import init_cohort_scheme_resolver
+    init_rbac_manager(config)
+    init_cohort_scheme_resolver(config)
 
     # Initialize MACE competence estimation if configured
     if config.get('mace', {}).get('enabled', False):

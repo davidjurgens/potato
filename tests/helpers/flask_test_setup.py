@@ -45,6 +45,11 @@ def clear_all_global_state():
         ("potato.qda_mode", "clear_qda_mode_manager"),
         ("potato.solo_mode", "clear_solo_mode_manager"),
         ("potato.search", "clear_search"),
+        # RBAC + per-cohort schema resolver: their lazy singletons would
+        # otherwise carry a prior in-process server's (possibly no-cohort /
+        # no-rbac) config into the next server.
+        ("potato.server_utils.rbac", "clear_rbac_manager"),
+        ("potato.server_utils.cohort_schemes", "clear_cohort_scheme_resolver"),
     ):
         try:
             import importlib

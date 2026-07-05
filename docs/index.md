@@ -78,6 +78,7 @@ Role-based guides that walk you through Potato for your specific use case:
 
 - [Annotation Navigation](workflow/annotation_navigation.md) - Navigation tools and status indicators
 - [Task Assignment](advanced/task_assignment.md) - Assignment strategies and configuration
+- [Per-Cohort Schemas](advanced/per_cohort_schemas.md) - Show different annotation schemes to different annotator cohorts
 - [Heterogeneous Coverage](advanced/heterogeneous_coverage.md) - Single-annotator default with a multi-annotator overlap sample, adaptive boost, per-annotator quotas, and full IAA reporting
 - [Diversity Ordering](workflow/diversity_ordering.md) - Embedding-based clustering for diverse item presentation
 - [Training Phase](workflow/training_phase.md) - Annotator training and qualification
@@ -134,6 +135,7 @@ Role-based guides that walk you through Potato for your specific use case:
 ## Authentication & User Management
 
 - [Users & Collaboration](auth-users/user_and_collaboration.md) - User registration, access control, and collaboration
+- [Roles & Permissions (RBAC)](auth-users/roles_and_permissions.md) - Role-based access control: role→permission mapping, per-user and SSO role assignment
 - [Password Management](auth-users/password_management.md) - Password security, reset flows, database backend, and shared credentials
 - [Passwordless Login](auth-users/passwordless_login.md) - Authentication without passwords
 - [SSO & OAuth Authentication](auth-users/sso_authentication.md) - Google, GitHub, and institutional SSO login
@@ -145,6 +147,7 @@ Role-based guides that walk you through Potato for your specific use case:
 
 ## Administration
 
+- [Scaling & Large Datasets](deployment/scaling.md) - How Potato handles big datasets, indexing, memory, and bulk exports
 - [Admin Dashboard](administration/admin_dashboard.md) - Monitoring and management
 - [Annotator Progress Dashboard](administration/annotator_dashboard.md) - Opt-in, read-only progress view for annotators
 - [Behavioral Tracking](advanced/behavioral_tracking.md) - User behavior analytics
