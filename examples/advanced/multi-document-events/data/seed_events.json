@@ -1,0 +1,12 @@
+{
+  "events": [
+    {
+      "id": "evt_seed_thailand_flood",
+      "title": "2011 Central Thailand Floods",
+      "slot_values": {
+        "event_type": "flood"
+      },
+      "member_doc_ids": ["doc_01"]
+    }
+  ]
+}

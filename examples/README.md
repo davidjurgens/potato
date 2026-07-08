@@ -107,6 +107,7 @@ python potato/flask_server.py start examples/classification/check-box/config.yam
 | `diversity/` | Diversity-based ordering |
 | `diversity-test/` | Diversity ordering test |
 | `embedding-visualization/` | Embedding space visualization |
+| `multi-document-events/` | Cross-document event annotation with a 2D corpus map, cluster browser, KNN, and evidence-cited template slots |
 | `kwargs-example/` | Custom keyword arguments |
 | `url-data/` | Loading data from URLs |
 | `html-annotation/` | HTML content annotation |

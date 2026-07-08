@@ -81,6 +81,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Per-Cohort Schemas](advanced/per_cohort_schemas.md) - Show different annotation schemes to different annotator cohorts
 - [Heterogeneous Coverage](advanced/heterogeneous_coverage.md) - Single-annotator default with a multi-annotator overlap sample, adaptive boost, per-annotator quotas, and full IAA reporting
 - [Diversity Ordering](workflow/diversity_ordering.md) - Embedding-based clustering for diverse item presentation
+- [Multi-Document Event Annotation](advanced/multi_document_events.md) - Cross-document events with a 2D corpus map, cluster browser, KNN, and evidence-cited template slots
 - [Training Phase](workflow/training_phase.md) - Annotator training and qualification
 - [Quality Control](workflow/quality_control.md) - Attention checks and gold standards
 - [Adjudication](administration/adjudication.md) - Multi-annotator disagreement resolution
