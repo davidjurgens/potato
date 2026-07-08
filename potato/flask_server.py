@@ -333,6 +333,7 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "tiered_annotation": ("tiered-annotation-container",),
     "document_bbox": ("document-bbox-mode", "document-bbox-container", "document-bbox-canvas"),
     "pdf_bbox": ("pdf-bbox-mode", "pdf-bbox-container", "pdf-bbox-canvas"),
+    "pdf_link": ("pdf-link-mode",),
     "web_agent_viewer": ('class="web-agent-viewer"', 'class="live-agent-viewer"'),
     "web_agent_playback": ('data-auto-playback="true"',),
     "web_agent_recorder": ("web-agent-recorder",),

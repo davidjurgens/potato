@@ -5004,6 +5004,22 @@ def _validate_display_options(field_type: str, options: Dict[str, Any], path: st
                     f"{path}.display_options.view_mode must be one of: {', '.join(valid_modes)}"
                 )
 
+        if "annotation_mode" in options:
+            # "link" enables the multi-page anchor+cross-page-linking mode
+            # (text spans + region bboxes as unified linkable anchors).
+            valid_anno_modes = ["span", "bounding_box", "link"]
+            if options["annotation_mode"] not in valid_anno_modes:
+                raise ConfigValidationError(
+                    f"{path}.display_options.annotation_mode must be one of: {', '.join(valid_anno_modes)}"
+                )
+
+        if "ocr" in options:
+            # Opt-in OCR for scanned PDFs in link mode: False | True | "auto".
+            if options["ocr"] not in (True, False, "auto"):
+                raise ConfigValidationError(
+                    f"{path}.display_options.ocr must be true, false, or \"auto\""
+                )
+
         if "text_layer" in options:
             if not isinstance(options["text_layer"], bool):
                 raise ConfigValidationError(f"{path}.display_options.text_layer must be a boolean")

@@ -17,6 +17,7 @@ Usage:
 
 import html as html_module
 import logging
+import os
 from typing import Dict, Any, List, Optional
 
 from .displays import display_registry
@@ -270,6 +271,26 @@ class InstanceDisplayRenderer:
         display_options = field.get("display_options", {})
 
         if display_type == "pdf":
+            # Link mode renders the visual PDF client-side (PDF.js). For scanned /
+            # image-only PDFs the client text layer is empty, so when OCR is
+            # enabled we extract per-page words server-side and hand them to the
+            # client to build a selectable text layer. The original path/URL is
+            # kept as source_path so PDF.js still renders the page image.
+            if display_options.get("annotation_mode") == "link" and display_options.get("ocr"):
+                local_path = self._resolve_local_pdf_path(file_path)
+                try:
+                    from potato.format_handlers.pdf_handler import PDFHandler
+                    ocr_pages = PDFHandler().extract_words_by_page(local_path, {
+                        "ocr": display_options.get("ocr"),
+                        "ocr_dpi": display_options.get("ocr_dpi", 200),
+                        "ocr_lang": display_options.get("ocr_lang", "eng"),
+                        "max_pages": display_options.get("max_pages"),
+                    })
+                    return {"source_path": file_path, "ocr_pages": ocr_pages}
+                except Exception as e:
+                    logger.warning(f"PDF OCR word extraction failed for {file_path}: {e}")
+                    return file_path
+
             # By default, PDFs use client-side rendering (return path as-is)
             # If server_extract is set, use the format handler
             if not display_options.get("server_extract", False):
@@ -297,6 +318,25 @@ class InstanceDisplayRenderer:
         except Exception as e:
             logger.warning(f"Format handler extraction failed for {file_path}: {e}")
             return file_path
+
+    def _resolve_local_pdf_path(self, value: str) -> str:
+        """
+        Map a PDF field value to a local filesystem path for server-side OCR.
+
+        Client-facing values are usually ``/media/<file>`` URLs (served from
+        ``<task_dir>/<media_directory>/``); OCR needs the file on disk. Absolute
+        or already-local paths are returned as-is (resolved against task_dir).
+        """
+        if not isinstance(value, str) or value.startswith(("http://", "https://")):
+            return value
+        task_dir = self.config.get("task_dir", ".")
+        if value.startswith("/media/"):
+            media_dir = self.config.get("media_directory", "media")
+            base = media_dir if os.path.isabs(media_dir) else os.path.join(task_dir, media_dir)
+            return os.path.join(base, value[len("/media/"):])
+        if os.path.isabs(value):
+            return value
+        return os.path.join(task_dir, value)
 
     def get_template_variables(self, instance_data: Dict[str, Any]) -> Dict[str, Any]:
         """

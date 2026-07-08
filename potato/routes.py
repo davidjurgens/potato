@@ -4412,6 +4412,12 @@ def get_span_data(instance_id):
             if kb_label:
                 span_entry['kb_label'] = kb_label
 
+        # Include format-specific coordinates (PDF page/bbox/anchor_kind) so the
+        # client can rebuild PDF anchors (text highlights + region boxes) on load.
+        format_coords = span.get_format_coords() if hasattr(span, 'get_format_coords') else getattr(span, 'format_coords', None)
+        if format_coords:
+            span_entry['format_coords'] = format_coords
+
         span_data.append(span_entry)
 
     response_data = {
@@ -4619,9 +4625,16 @@ def update_instance():
             span_annotations = request.json.get("span_annotations", [])
             for span_data in span_annotations:
                 if isinstance(span_data, dict) and "schema" in span_data:
-                    # Use provided ID or generate deterministic one to preserve span identity
+                    # Format-specific coordinates (PDF page/bbox, spreadsheet cell,
+                    # etc). Previously dropped here, so PDF anchor geometry never
+                    # persisted. anchor_kind/page are folded into the deterministic
+                    # ID so a text span and a region anchor at the same char offsets
+                    # (start==end==0 for regions) don't collide.
+                    fc = span_data.get("format_coords") or {}
                     span_id = span_data.get("id") or span_data.get("span_id") or \
-                              f"{span_data['schema']}_{span_data['name']}_{span_data['start']}_{span_data['end']}"
+                              (f"{span_data['schema']}_{span_data['name']}_"
+                               f"{fc.get('anchor_kind', '')}_{fc.get('page', '')}_"
+                               f"{span_data['start']}_{span_data['end']}")
 
                     span = SpanAnnotation(
                         span_data["schema"],
@@ -4630,7 +4643,8 @@ def update_instance():
                         int(span_data["start"]),
                         int(span_data["end"]),
                         id=span_id,
-                        target_field=span_data.get("target_field")
+                        target_field=span_data.get("target_field"),
+                        format_coords=span_data.get("format_coords"),
                     )
                     value = span_data.get("value")
 
@@ -4668,6 +4682,24 @@ def update_instance():
                         # Update annotation
                         user_state.add_span_annotation(instance_id, span, value)
                         logger.debug(f"Added span annotation: {span_data}")
+                    else:
+                        # value is None -> delete this span BY ID. PDF region
+                        # anchors are zero-length (start==end==0), so matching on
+                        # schema/name/offsets (as the nested-annotations path does)
+                        # would delete the wrong anchor. Match on the exact id and
+                        # cascade orphaned links/events, mirroring that path.
+                        spans_by_id = user_state.instance_id_to_span_to_value.get(instance_id, {})
+                        to_delete = [s for s in spans_by_id.keys() if s.get_id() == span_id]
+                        for s in to_delete:
+                            del user_state.instance_id_to_span_to_value[instance_id][s]
+                            if instance_id in user_state.instance_id_to_link_to_value:
+                                orphaned = [
+                                    lid for lid, link in user_state.instance_id_to_link_to_value[instance_id].items()
+                                    if span_id in link.get_span_ids()
+                                ]
+                                for lid in orphaned:
+                                    del user_state.instance_id_to_link_to_value[instance_id][lid]
+                            logger.debug(f"Deleted span annotation by id: {span_id}")
 
             # Handle link annotations from frontend format
             link_annotations = request.json.get("link_annotations", [])

@@ -695,6 +695,12 @@
     <script src="{{ url_for('static', filename='pdf-bbox.js') }}?v=3"></script>
     {% endif %}
 
+    <!-- PDF multi-page anchor + cross-page linking -->
+    {% if frontend_assets.pdf_link | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='pdf-link-mode.css') }}?v=1">
+    <script src="{{ url_for('static', filename='pdf-link-mode.js') }}?v=4"></script>
+    {% endif %}
+
     {% if agent_proxy_enabled | default(false) %}
     <!-- Agent Chat UI -->
     <script src="{{ url_for('static', filename='agent-chat.js') }}?v=1"></script>
