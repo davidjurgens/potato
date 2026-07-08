@@ -9,6 +9,7 @@ Configuration:
       type: openai
       api_key: "${OPENAI_API_KEY}"   # or set OPENAI_API_KEY env var
       model: "gpt-4o"
+      base_url: "http://localhost:8001/v1"   # optional, any OpenAI-compatible server
       system_prompt: "You are a helpful travel agent."
       temperature: 0.7
       max_tokens: 1024
@@ -16,10 +17,23 @@ Configuration:
 
 import logging
 import os
+from urllib.parse import urlparse
 
 from .base import BaseAgentProxy, AgentMessage, AgentResponse, AgentProxyFactory
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_base_url(raw: str) -> str:
+    """The OpenAI SDK appends '/chat/completions' to base_url. For bare host
+    URLs (vLLM/local servers) append the conventional '/v1'; URLs that
+    already carry a path (e.g. Gemini's /v1beta/openai/) are left intact."""
+    if not raw:
+        return raw
+    u = raw.rstrip("/")
+    if not urlparse(u).path:
+        u = u + "/v1"
+    return u
 
 
 class OpenAIChatProxy(BaseAgentProxy):
@@ -37,14 +51,21 @@ class OpenAIChatProxy(BaseAgentProxy):
         if not api_key:
             api_key = os.environ.get("OPENAI_API_KEY", "")
 
+        base_url = _normalize_base_url(self.config.get("base_url", "")) or None
+
         if not api_key:
-            raise ValueError(
-                "OpenAI proxy requires api_key in config or OPENAI_API_KEY env var"
-            )
+            if base_url:
+                # Local/OpenAI-compatible servers (vLLM etc.) ignore the key,
+                # but the SDK requires a non-empty value.
+                api_key = "EMPTY"
+            else:
+                raise ValueError(
+                    "OpenAI proxy requires api_key in config or OPENAI_API_KEY env var"
+                )
 
         try:
             import openai
-            self.client = openai.OpenAI(api_key=api_key)
+            self.client = openai.OpenAI(api_key=api_key, base_url=base_url)
         except ImportError:
             raise ImportError(
                 "openai package is required for the OpenAI proxy. "

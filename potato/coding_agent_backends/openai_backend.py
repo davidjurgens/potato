@@ -48,12 +48,14 @@ def _to_openai_tools(tools: list) -> list:
 
 
 def _normalize_base_url(raw: str) -> str:
-    """The OpenAI SDK appends '/chat/completions' to base_url, so it must
-    end at the '/v1' root. Accept either the server root or a '/v1' URL."""
+    """The OpenAI SDK appends '/chat/completions' to base_url, so bare host
+    URLs (vLLM/local servers) need the conventional '/v1' suffix. URLs that
+    already carry a path (e.g. Gemini's /v1beta/openai/) are left intact."""
     if not raw:
         return raw
+    from urllib.parse import urlparse
     u = raw.rstrip("/")
-    if not u.endswith("/v1"):
+    if not urlparse(u).path:
         u = u + "/v1"
     return u
 
