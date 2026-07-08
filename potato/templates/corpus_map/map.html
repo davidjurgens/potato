@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Corpus Map</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='corpus-map.css') }}?v=2">
+</head>
+<body>
+  <header class="cm-header">
+    <h1 class="cm-title">Corpus Map</h1>
+    <div class="cm-status" data-role="status">Loading…</div>
+    <button type="button" class="cm-rebuild" data-role="rebuild" title="Rebuild the map (admin)">Rebuild</button>
+  </header>
+
+  <main class="cm-main">
+    <aside class="cm-left">
+      <div class="cm-map" data-role="map"></div>
+      <div class="cm-clusters">
+        <div class="cm-clusters-head">
+          <span>Clusters</span>
+          <button type="button" class="cm-clear-filter" data-role="clear-filter" style="display:none;">
+            Show all
+          </button>
+        </div>
+        <ul class="cm-cluster-list" data-role="cluster-list"></ul>
+      </div>
+      <div class="cm-knn" data-role="knn" style="display:none;">
+        <div class="cm-knn-head">Similar documents</div>
+        <ul class="cm-knn-list" data-role="knn-list"></ul>
+      </div>
+    </aside>
+
+    <section class="cm-right">
+      <iframe class="cm-frame" data-role="frame" src="/annotate"
+              title="Document reader and event form"></iframe>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='corpus-map.js') }}?v=2"></script>
+</body>
+</html>

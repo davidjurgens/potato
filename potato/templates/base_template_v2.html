@@ -48,6 +48,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='event-annotation.css') }}">
     {% endif %}
 
+    <!-- Multi-Document Event Annotation Styles -->
+    {% if frontend_assets.multi_document_event | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='multi-document-event.css') }}?v=2">
+    {% endif %}
+
     <!-- Spreadsheet Display Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='spreadsheet-display.css') }}">
 
@@ -639,6 +644,11 @@
     <!-- Event annotation manager -->
     {% if frontend_assets.event_annotation | default(false) %}
     <script src="{{ url_for('static', filename='event-annotation.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- Multi-document event annotation manager -->
+    {% if frontend_assets.multi_document_event | default(false) %}
+    <script src="{{ url_for('static', filename='multi-document-event.js') }}?v=4"></script>
     {% endif %}
 
     <!-- Entity linking for knowledge bases (Wikidata, UMLS) -->
