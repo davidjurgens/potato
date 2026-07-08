@@ -133,6 +133,41 @@ def test_debug_mode_is_superuser():
     assert m.is_admin_superuser(req, {})
 
 
+def test_debug_grants_admin_dashboard_but_not_adjudicate():
+    """Debug mode opens the admin-dashboard tier for any logged-in user, but
+    must NOT auto-confer the adjudicator role (which was gated separately
+    before RBAC by the adjudicator_users allow-list)."""
+    m = RBACManager({"debug": True})
+    req = _FakeRequest({})
+    session = {"username": "random_annotator"}
+    # Admin-dashboard tier: still open under debug (pre-RBAC behavior).
+    assert m.check(Permission.VIEW_ADMIN_DASHBOARD, req, session)
+    assert m.check(Permission.MANAGE_ASSIGNMENT, req, session)
+    assert m.check(Permission.EXPORT_DATA, req, session)
+    # Adjudicator gate: debug alone does NOT grant it to a role-less user.
+    assert not m.check(Permission.ADJUDICATE, req, session)
+
+
+def test_debug_adjudicate_still_granted_via_role_or_key():
+    """Under debug, a genuine adjudicator (role, legacy allow-list, or real
+    key) still passes the ADJUDICATE gate."""
+    # Real shared admin key -> full superuser, adjudicate included.
+    m_key = RBACManager({"debug": True, "admin_api_key": "secret"})
+    assert m_key.check(
+        Permission.ADJUDICATE, _FakeRequest({"X-API-Key": "secret"}), {}
+    )
+    # Explicit adjudicator role still works under debug.
+    m_role = RBACManager(
+        {"debug": True, "rbac": {"user_role_assignments": {"ed": "adjudicator"}}}
+    )
+    assert m_role.check(Permission.ADJUDICATE, _FakeRequest({}), {"username": "ed"})
+    # Legacy adjudicator_users allow-list still works under debug.
+    m_legacy = RBACManager(
+        {"debug": True, "adjudication": {"adjudicator_users": ["ed"]}}
+    )
+    assert m_legacy.check(Permission.ADJUDICATE, _FakeRequest({}), {"username": "ed"})
+
+
 def test_check_reads_sso_claims_from_session():
     m = RBACManager({"rbac": {"sso_role_mapping": {"org:acme": "adjudicator"}}})
     req = _FakeRequest({})

@@ -28,16 +28,12 @@ def _enabled_required(f):
     return wrapper
 
 
-def admin_required(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        from potato.server_utils.admin_key import validate_admin_api_key
-        from potato.flask_server import config as _config
-        api_key = request.headers.get("X-API-Key") or session.get("admin_api_key")
-        if not validate_admin_api_key(api_key, _config):
-            return jsonify({"error": "Admin authentication required"}), 403
-        return f(*args, **kwargs)
-    return wrapper
+# Admin authorization now routes through RBAC: a valid shared admin key (or
+# debug) still passes, and a logged-in user holding the ``view_admin_dashboard``
+# permission is authorized without the key. The 403 contract is unchanged.
+from potato.server_utils.rbac import require_permission, Permission
+
+admin_required = require_permission(Permission.VIEW_ADMIN_DASHBOARD)
 
 
 @arena_bp.route("", methods=["GET"])

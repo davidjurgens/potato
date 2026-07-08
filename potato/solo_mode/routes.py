@@ -760,13 +760,12 @@ def api_advance_phase():
 
     force = bool(payload.get('force', False))
     if force:
-        from potato.server_utils.admin_key import validate_admin_api_key
-        from potato.flask_server import config as _config
-        api_key = (
-            request.headers.get('X-API-Key')
-            or session.get('admin_api_key')
-        )
-        if not validate_admin_api_key(api_key, _config):
+        # Route through RBAC so the shared key/debug superuser AND role-based
+        # admins are honored; preserves the force-specific 403 message.
+        from potato.server_utils.rbac import get_rbac_manager, Permission
+        if not get_rbac_manager().check(
+            Permission.VIEW_ADMIN_DASHBOARD, request, session
+        ):
             return jsonify({
                 'error': 'force=True requires admin authentication',
             }), 403

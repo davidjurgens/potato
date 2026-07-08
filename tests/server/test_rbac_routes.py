@@ -15,6 +15,7 @@ off, and 403 otherwise.
 import pytest
 import requests
 
+from potato.server_utils.rbac import get_rbac_manager, Permission
 from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.test_utils import TestConfigManager
 
@@ -37,6 +38,7 @@ RBAC_CONFIG = {
             "boss@example.com": "admin",
             "worker@example.com": "annotator",
         },
+        "sso_role_mapping": {"org:acme": "admin"},
     }
 }
 
@@ -101,3 +103,29 @@ class TestRBACRoutes:
         s = self._login("worker@example.com")
         r = s.get(f"{self.base_url}/annotate")
         assert r.status_code == 200
+
+    # --- SSO claim -> role mapping ------------------------------------
+    #
+    # SSO claims are only populated by the OAuth callback (a real provider +
+    # token exchange), which is impractical to drive over `requests`. This
+    # asserts the integration seam instead: the live server loaded
+    # `rbac.sso_role_mapping` from YAML into the singleton manager, so a request
+    # carrying the mapped claim would resolve to the `admin` role and its
+    # permissions. (The session-reading half is covered in test_rbac_manager.py.)
+
+    def test_sso_role_mapping_loaded_from_config(self):
+        mgr = get_rbac_manager()
+        roles = mgr.get_roles_for_user("newcomer@example.com", ["org:acme"])
+        assert "admin" in roles
+
+    def test_sso_claim_confers_admin_permission(self):
+        mgr = get_rbac_manager()
+        assert mgr.has_permission(
+            "newcomer@example.com",
+            Permission.VIEW_ADMIN_DASHBOARD,
+            ["org:acme"],
+        )
+
+    def test_sso_unmapped_claim_confers_nothing(self):
+        mgr = get_rbac_manager()
+        assert mgr.get_roles_for_user("newcomer@example.com", ["org:other"]) == set()

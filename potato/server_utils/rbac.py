@@ -151,14 +151,10 @@ class RBACManager:
     # ------------------------------------------------------------------
     # Superuser (shared admin key) bypass
     # ------------------------------------------------------------------
-    def is_admin_superuser(self, request, session):
-        """True if the request carries a valid admin API key (or debug mode).
+    def _debug_enabled(self):
+        return bool(self.config.get("debug", False))
 
-        Mirrors the pre-RBAC admin check so key-based admins keep full access.
-        """
-        # Lazy import to avoid a circular dependency at module load.
-        from potato.server_utils.admin_key import validate_admin_api_key
-
+    def _extract_api_key(self, request, session):
         api_key = None
         try:
             api_key = request.headers.get("X-API-Key")
@@ -166,7 +162,37 @@ class RBACManager:
             api_key = None
         if not api_key and session is not None:
             api_key = session.get("admin_api_key")
-        return validate_admin_api_key(api_key, self.config)
+        return api_key
+
+    def has_valid_admin_key(self, request, session):
+        """True only if a real shared admin key was provided and matches.
+
+        Unlike ``admin_key.validate_admin_api_key`` this deliberately does NOT
+        treat debug mode as a pass: debug is handled separately in ``check`` so
+        that it opens the admin-dashboard tier without silently conferring the
+        adjudicator role (which was gated independently before RBAC).
+        """
+        import hmac
+
+        # Lazy import to avoid a circular dependency at module load.
+        from potato.server_utils.admin_key import get_admin_api_key
+
+        api_key = self._extract_api_key(request, session)
+        if not api_key:
+            return False
+        expected_key = get_admin_api_key(self.config)
+        if not expected_key:
+            return False
+        return hmac.compare_digest(str(api_key), str(expected_key))
+
+    def is_admin_superuser(self, request, session):
+        """True if the request carries a valid admin API key (or debug mode).
+
+        Mirrors the pre-RBAC admin check so key-based admins keep full access.
+        Retained for backward compatibility; note ``check`` does NOT use this
+        blanket bypass for the ``ADJUDICATE`` permission (see below).
+        """
+        return self.has_valid_admin_key(request, session) or self._debug_enabled()
 
     # ------------------------------------------------------------------
     # Single authorization entry point
@@ -174,10 +200,18 @@ class RBACManager:
     def check(self, permission, request, session):
         """Return True if this request is authorized for ``permission``.
 
-        Order: shared-key/debug superuser bypass, then the logged-in user's
-        role-derived permissions.
+        Order:
+          1. A valid shared admin key is a full superuser (all permissions).
+          2. Debug mode opens the admin-dashboard tier exactly as before RBAC,
+             but NOT the ``ADJUDICATE`` role -- that gate was always separate
+             (the legacy ``adjudicator_users`` allow-list), so debug must not
+             turn every logged-in user into an adjudicator.
+          3. Otherwise, the logged-in user's role-derived permissions.
         """
-        if self.is_admin_superuser(request, session):
+        if self.has_valid_admin_key(request, session):
+            return True
+
+        if self._debug_enabled() and permission != Permission.ADJUDICATE:
             return True
 
         username = session.get("username") if session is not None else None
