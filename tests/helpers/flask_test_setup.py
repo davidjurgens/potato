@@ -836,6 +836,27 @@ class FlaskTestServer:
                     except ImportError:
                         pass
 
+                # Register cross-document event-registry / corpus-map blueprints
+                if (config.get("event_template", {}).get("enabled", False)
+                        or config.get("corpus_map", {}).get("enabled", False)):
+                    from potato.event_registry import (
+                        init_event_registry_manager, clear_event_registry_manager,
+                    )
+                    from potato.event_registry.routes import event_registry_bp
+                    clear_event_registry_manager()
+                    init_event_registry_manager(config)
+                    if 'event_registry' not in app.blueprints:
+                        app.register_blueprint(event_registry_bp)
+                if config.get("corpus_map", {}).get("enabled", False):
+                    from potato.corpus_map import (
+                        init_corpus_map_manager, clear_corpus_map_manager,
+                    )
+                    from potato.corpus_map.routes import corpus_map_bp
+                    clear_corpus_map_manager()
+                    init_corpus_map_manager(config)
+                    if 'corpus_map' not in app.blueprints:
+                        app.register_blueprint(corpus_map_bp)
+
                 # Initialize OAuth with Flask app if using OAuth authentication
                 auth_method = config.get("authentication", {}).get("method", "in_memory")
                 if auth_method == "oauth":
