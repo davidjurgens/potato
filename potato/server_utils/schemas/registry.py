@@ -243,6 +243,7 @@ def _register_builtin_schemas():
     from .tree_annotation import generate_tree_annotation_layout
     from .triage import generate_triage_layout
     from .event_annotation import generate_event_annotation_layout
+    from .multi_document_event import generate_multi_document_event_layout
     from .tiered_annotation import generate_tiered_annotation_layout
     from .bws import generate_bws_layout
     from .soft_label import generate_soft_label_layout
@@ -437,6 +438,14 @@ def _register_builtin_schemas():
             optional_fields=["visual_display"],
             supports_keybindings=False,
             description="N-ary event annotation with triggers and typed arguments"
+        ),
+        SchemaDefinition(
+            name="multi_document_event",
+            generator=generate_multi_document_event_layout,
+            required_fields=["name", "description", "slots"],
+            optional_fields=["allow_annotator_create", "template_name"],
+            supports_keybindings=False,
+            description="Cross-document event annotation: template slots filled with evidence from many documents"
         ),
         SchemaDefinition(
             name="tiered_annotation",

@@ -325,6 +325,7 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "video_annotation": ("video-annotation-container",),
     "span_link": ("span-link-container",),
     "event_annotation": ("event-annotation-container",),
+    "multi_document_event": ('data-annotation-type="multi_document_event"', "mde-container"),
     "coreference": ('data-annotation-type="coreference"', "coref-chain-panel"),
     "conversation_tree": ("conv-tree",),
     "tracking": ("tracking-panel", "tracking-overlay", "tracking-controls-group"),
@@ -3389,6 +3390,38 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         if "arena" not in flask_app.blueprints:
             flask_app.register_blueprint(arena_bp)
         logger.info("Registered model-arena blueprint")
+
+    # Multi-document event annotation: cross-document event registry (import-light,
+    # safe at boot) + optional corpus map (ML, lazy). The event registry powers the
+    # multi_document_event schema; the corpus map adds the 2D navigation surface.
+    if config.get("event_template", {}).get("enabled", False) or config.get("corpus_map", {}).get("enabled", False):
+        from potato.event_registry import (
+            init_event_registry_manager,
+            get_event_registry_manager,
+        )
+        from potato.event_registry.routes import event_registry_bp
+        if get_event_registry_manager() is None:
+            init_event_registry_manager(config)
+        if "event_registry" not in flask_app.blueprints:
+            flask_app.register_blueprint(event_registry_bp)
+        logger.info("Registered cross-document event-registry blueprint")
+
+    # Corpus map: 2D cluster-map navigation surface for multi-document tasks.
+    # The heavy embed/cluster/UMAP build runs lazily in a background thread so it
+    # never blocks boot; the annotator page polls /corpus/api/build_status.
+    if config.get("corpus_map", {}).get("enabled", False):
+        from potato.corpus_map import init_corpus_map_manager, get_corpus_map_manager
+        from potato.corpus_map.routes import corpus_map_bp
+        if get_corpus_map_manager() is None:
+            init_corpus_map_manager(config)
+        if "corpus_map" not in flask_app.blueprints:
+            flask_app.register_blueprint(corpus_map_bp)
+        _cm = get_corpus_map_manager()
+        if _cm and _cm.build_on_start and not _cm.is_built():
+            import threading as _threading
+            _threading.Thread(target=lambda: _cm.build(force=False), daemon=True).start()
+            logger.info("Corpus map build started in background")
+        logger.info("Registered corpus-map blueprint")
 
 # Function to create and initialize the Flask application
 def create_app(config_file=None):

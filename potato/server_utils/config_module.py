@@ -308,6 +308,29 @@ KNOWN_CONFIG_KEYS = {
     # Named, reusable annotation-scheme sets referenced by batch_assignment
     # groups for per-cohort schema assignment.
     "scheme_sets": None,
+    # Multi-document corpus map: embed -> cluster -> UMAP -> KNN at ingest,
+    # exposed to annotators as a 2D navigation surface. Heavy compute is lazy
+    # (never at boot). Sub-keys clustering/umap/knn/cluster_labeling are leaf
+    # (None) — parsed by parse_corpus_map_config, not recursed here.
+    "corpus_map": {
+        "enabled": None,
+        "build_on_start": None,
+        "embedding_model": None,
+        "clustering": None,
+        "umap": None,
+        "knn": None,
+        "cluster_labeling": None,
+        "sample_size": None,
+    },
+    # Cross-document event registry: admin-defined template slots that
+    # annotators fill with evidence drawn from many documents.
+    "event_template": {
+        "enabled": None,
+        "name": None,
+        "allow_annotator_create": None,
+        "seed_events": None,
+        "slots": None,
+    },
     # qda_mode sub-keys are deliberately leaf (None): validation stops at
     # memos/codebook and does NOT recurse into their sub-keys. This is
     # intentional forward-compat — parse_qda_mode_config() routes any
@@ -889,6 +912,70 @@ def validate_judge_calibration_config(config_data: Dict[str, Any]) -> None:
         )
 
 
+def validate_event_template_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``event_template`` block when enabled."""
+    et = config_data.get("event_template")
+    if not isinstance(et, dict) or not et.get("enabled"):
+        return
+
+    errors = []
+    slots = et.get("slots")
+    if not isinstance(slots, list) or not slots:
+        errors.append("event_template.slots must be a non-empty list")
+    else:
+        seen = set()
+        for i, s in enumerate(slots):
+            if not isinstance(s, dict) or not s.get("name"):
+                errors.append(f"event_template.slots[{i}] must be a dict with a 'name'")
+                continue
+            name = s["name"]
+            if name in seen:
+                errors.append(f"event_template.slots has duplicate slot name '{name}'")
+            seen.add(name)
+
+    seed = et.get("seed_events")
+    if seed is not None and not isinstance(seed, (str, list)):
+        errors.append("event_template.seed_events must be a file path or a list")
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid event_template configuration:\n  - " + "\n  - ".join(errors)
+        )
+
+
+def validate_corpus_map_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``corpus_map`` block when enabled and warn on quota conflict.
+
+    Cross-document event annotation needs every annotator to reach the whole
+    corpus (the map is the navigator, not the assignment queue). A restrictive
+    per-user quota alongside ``corpus_map.enabled`` is almost always a mistake,
+    so warn loudly (mirrors validate_search_assignment_compat's spirit).
+    """
+    cm = config_data.get("corpus_map")
+    if not isinstance(cm, dict) or not cm.get("enabled"):
+        return
+
+    errors = []
+    for key in ("clustering", "umap", "knn", "cluster_labeling"):
+        val = cm.get(key)
+        if val is not None and not isinstance(val, dict):
+            errors.append(f"corpus_map.{key} must be a mapping")
+    if errors:
+        raise ConfigValidationError(
+            "Invalid corpus_map configuration:\n  - " + "\n  - ".join(errors)
+        )
+
+    quota = config_data.get("per_annotator_quota")
+    if quota:
+        logger.warning(
+            "corpus_map.enabled is set alongside per_annotator_quota=%s. "
+            "Cross-document event annotation expects annotators to browse the "
+            "whole corpus via the map; a restrictive per-user quota will hide "
+            "documents from the reading pane. Consider removing the quota.",
+            quota,
+        )
+
+
 def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None, config_file_dir: str = None) -> None:
     """
     Validate the structure and content of the YAML configuration.
@@ -1047,6 +1134,10 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate judge_calibration configuration if present
     validate_judge_calibration_config(config_data)
+
+    # Validate multi-document event annotation blocks if present
+    validate_event_template_config(config_data)
+    validate_corpus_map_config(config_data)
 
     # Validate ui_language (bundled code / _base / inline overrides)
     validate_ui_language_config(config_data)
