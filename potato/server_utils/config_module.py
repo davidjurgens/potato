@@ -3880,6 +3880,70 @@ def validate_embedding_visualization_config(config_data: Dict[str, Any]) -> None
             )
 
 
+# Config blocks that carry LLM endpoint settings (endpoint_type, model,
+# base_url, api_key, max_tokens, ...). Environment variable references
+# (${VAR}) inside these blocks are substituted at load time so a single set
+# of env vars can retarget every config at a different LLM endpoint.
+# Substitution is deliberately NOT applied to the whole config: prompt
+# templates, layouts, and instance text elsewhere may legitimately contain
+# ${...}-looking content.
+_LLM_ENV_SUBSTITUTION_BLOCKS = (
+    "live_agent",
+    "live_coding_agent",
+    "solo_mode",
+    "judge_calibration",
+    "agent_proxy",
+    "chat_support",
+)
+
+# Keys whose values must be numeric after env substitution (YAML gives typed
+# scalars, but ${VAR} substitution always yields strings).
+_NUMERIC_LLM_KEYS = {"max_tokens", "temperature", "timeout", "max_turns", "max_steps", "top_p"}
+
+
+def _substitute_env_typed(value: Any, key: Optional[str] = None) -> Any:
+    """Recursively substitute ${VAR} references, coercing numeric LLM settings.
+
+    Behaves like credentials.substitute_env_vars, but when a substitution
+    happens under a known-numeric key (e.g. max_tokens), the resulting string
+    is converted back to int/float so downstream API clients receive typed
+    values.
+    """
+    from potato.data_sources.credentials import substitute_env_vars
+
+    if isinstance(value, dict):
+        return {k: _substitute_env_typed(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_substitute_env_typed(v, key) for v in value]
+    if isinstance(value, str):
+        substituted = substitute_env_vars(value)
+        if key in _NUMERIC_LLM_KEYS and isinstance(substituted, str) and substituted != value:
+            try:
+                return int(substituted)
+            except ValueError:
+                try:
+                    return float(substituted)
+                except ValueError:
+                    return substituted
+        return substituted
+    return value
+
+
+def _substitute_llm_block_env_vars(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply env var substitution to the whitelisted LLM config blocks.
+
+    Complements _merge_ai_config_file (which handles ai_support): blocks like
+    live_agent, solo_mode, judge_calibration, and agent_proxy configure their
+    own endpoints and previously received no substitution (solo_mode only
+    expanded api_key itself).
+    """
+    for block_name in _LLM_ENV_SUBSTITUTION_BLOCKS:
+        block = config_data.get(block_name)
+        if isinstance(block, dict):
+            config_data[block_name] = _substitute_env_typed(block)
+    return config_data
+
+
 def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[str, Any]:
     """
     Merge an external ai-config.yaml into the main config if specified.
@@ -3905,8 +3969,7 @@ def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[
     if not ai_config_file:
         # No external file specified - apply env var substitution to inline ai_config
         if "ai_config" in ai_support:
-            from potato.data_sources.credentials import substitute_env_vars
-            ai_support["ai_config"] = substitute_env_vars(ai_support["ai_config"])
+            ai_support["ai_config"] = _substitute_env_typed(ai_support["ai_config"])
             config_data["ai_support"] = ai_support
         return config_data
 
@@ -3940,8 +4003,7 @@ def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[
         return config_data
 
     # Apply environment variable substitution to external config
-    from potato.data_sources.credentials import substitute_env_vars
-    external_config = substitute_env_vars(external_config)
+    external_config = _substitute_env_typed(external_config)
 
     # Extract endpoint_type from external config (top-level key)
     if "endpoint_type" in external_config:
@@ -3955,7 +4017,7 @@ def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[
     ai_support["ai_config"] = ai_config
 
     # Also apply env var substitution to the final merged ai_config
-    ai_support["ai_config"] = substitute_env_vars(ai_support["ai_config"])
+    ai_support["ai_config"] = _substitute_env_typed(ai_support["ai_config"])
 
     config_data["ai_support"] = ai_support
     logger.info(f"Loaded AI endpoint config from {ai_config_file}")
@@ -4003,6 +4065,10 @@ def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, An
 
     # Merge external AI config file if specified (before validation)
     config_data = _merge_ai_config_file(config_data, config_file_dir)
+
+    # Substitute ${ENV_VAR} references in LLM endpoint config blocks
+    # (live_agent, solo_mode, judge_calibration, agent_proxy, ...)
+    config_data = _substitute_llm_block_env_vars(config_data)
 
     # Apply default values for common configuration options
     if 'task_dir' not in config_data:
