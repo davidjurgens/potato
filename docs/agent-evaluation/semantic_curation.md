@@ -92,6 +92,38 @@ LLM labeling is optional (`use_llm: false` returns clusters + examples for fully
 manual coding). Restrict to a subset (e.g. only failed traces) with `instance_ids`.
 This complements the MAST tagging schema: discover the modes, then tag at scale.
 
+## Topics (persisted auto-grouping)
+
+Where discovery is a one-shot analysis, **Topics** are the durable artifact:
+*Refresh topics* on the Catalog page persists each discovered cluster as a
+named topic (LLM-suggested name/description when a judge is configured),
+storing its centroid. Traces ingested **afterwards** are auto-assigned to the
+nearest topic above a similarity threshold — the topic set stays fresh as
+production data streams in ("Tool call failed", "Confident but incorrect",
+…). Each topic can be curated into a dataset with one click; manually created
+topics survive refreshes, discovered ones are replaced.
+
+```bash
+curl -X POST localhost:8000/admin/catalog/api/topics/refresh -H "X-API-Key: <key>" \
+  -H "Content-Type: application/json" -d '{"k": 6}'
+# -> {"topics": [{name, description, size, auto_assign, refreshed_at}, ...]}
+```
+
+Keep topics refreshing automatically with an [automation rule](automation_rules.md):
+
+```yaml
+automation:
+  enabled: true
+  rules:
+    - name: refresh-topics-periodically
+      when: []                 # match every ingested trace...
+      sample_rate: 0.02        # ...but only fire on ~2% of them
+      actions:
+        - type: refresh_topics
+          k: 8
+          min_indexed: 20      # skip until enough traces are embedded
+```
+
 ## API summary
 
 | Method | Path | Purpose |
@@ -99,6 +131,11 @@ This complements the MAST tagging schema: discover the modes, then tag at scale.
 | POST | `/admin/catalog/api/build` | Build the embedding index over current items |
 | POST | `/admin/catalog/api/search` | `{query\|anchor_id, top_k, threshold}` |
 | POST | `/admin/catalog/api/discover` | `{k, instance_ids?, use_llm?}` → candidate failure-mode clusters |
+| POST | `/admin/catalog/api/topics/refresh` | `{k, instance_ids?, use_llm?}` → persist clusters as topics |
+| GET | `/admin/catalog/api/topics` | List topics (name/description/size) |
+| GET | `/admin/catalog/api/topics/<n>/members` | Member instance ids |
+| POST | `/admin/catalog/api/topics/<n>/to_dataset` | Curate a topic into a dataset |
+| DELETE | `/admin/catalog/api/topics/<n>` | Delete a topic |
 | GET/POST | `/admin/catalog/api/slices` | List / create slices |
 | GET | `/admin/catalog/api/slices/<n>/resolve` | Resolve a slice → instance ids |
 | DELETE | `/admin/catalog/api/slices/<n>` | Delete a slice |

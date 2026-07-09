@@ -1178,6 +1178,13 @@ function clearAllFormInputs() {
         }
     });
 
+    // Re-seed turn-level annotation proxy widgets from their hidden inputs
+    // (the global input resets above wiped their visual state; the hidden
+    // turn-anno inputs survive when server-set, so refresh() repaints them)
+    if (window.turnAnnotations && typeof window.turnAnnotations.refresh === 'function') {
+        window.turnAnnotations.refresh();
+    }
+
     // Reset image annotation managers if they exist
     // BUT only if there's no server-provided annotation data to load
     const imageContainers = document.querySelectorAll('.image-annotation-container');
@@ -2282,6 +2289,57 @@ function handleInputChange(element) {
     textSaveTimer = setTimeout(() => {
         saveAnnotations();
     }, 500);
+
+    // Hotkey review mode: auto-advance once the instance is complete
+    maybeAutoAdvance();
+}
+
+/**
+ * Review mode (config: review_mode: {enabled, auto_advance, advance_on, delay_ms}).
+ *
+ * After each annotation change, if auto-advance is on and the instance is
+ * "complete", navigate to the next instance automatically — this turns
+ * keyboard-labeled schemas into a hotkey-driven review queue (press key,
+ * page advances).
+ *
+ * advance_on:
+ *   "complete" (default) — every annotation schema on the page has a value
+ *   "required"           — all required-validated schemas are filled
+ */
+let autoAdvanceTimer = null;
+function maybeAutoAdvance() {
+    const rm = (window.config && window.config.review_mode) || {};
+    if (!rm.enabled || rm.auto_advance === false) return;
+    if (isLoading) return;
+
+    const advanceOn = rm.advance_on || 'complete';
+    let ready;
+    if (advanceOn === 'required') {
+        ready = validateRequiredFields();
+    } else {
+        // Every schema form on the page must have at least one annotation.
+        const forms = document.querySelectorAll('.annotation-form[data-schema-name]');
+        ready = forms.length > 0;
+        forms.forEach(form => {
+            const name = form.getAttribute('data-schema-name');
+            if (!name) return;
+            const inState = currentAnnotations[name] &&
+                Object.keys(currentAnnotations[name]).length > 0;
+            // Hidden data-input schemas (turn-level, tool_call_review, ...)
+            // hold state in their input value instead of currentAnnotations.
+            const dataInput = form.querySelector('.annotation-data-input');
+            const inInput = dataInput && dataInput.value;
+            if (!inState && !inInput) ready = false;
+        });
+    }
+    if (!ready) return;
+
+    const delay = typeof rm.delay_ms === 'number' ? rm.delay_ms : 350;
+    clearTimeout(autoAdvanceTimer);
+    autoAdvanceTimer = setTimeout(() => {
+        debugLog('[review-mode] instance complete — auto-advancing');
+        navigateToNext();
+    }, delay);
 }
 
 function populateInputValues() {

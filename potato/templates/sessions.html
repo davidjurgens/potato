@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sessions · {{ annotation_task_name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  .sess-lede { color: var(--muted-foreground); font-size: 0.9375rem; max-width: 72ch;
+               line-height: 1.6; margin: 0 0 1.25rem; }
+  .sess-layout { display: grid; grid-template-columns: minmax(240px, 340px) 1fr;
+                 gap: 1rem; align-items: start; }
+  @media (max-width: 860px) { .sess-layout { grid-template-columns: 1fr; } }
+  .sess-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 75vh; overflow-y: auto; }
+  .sess-item { text-align: left; border: 1px solid var(--border); border-radius: var(--radius);
+               background: var(--background); color: var(--foreground); padding: 0.55rem 0.7rem;
+               cursor: pointer; font: inherit; }
+  .sess-item:hover { background: var(--muted); }
+  .sess-item.active { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+  .sess-item .sess-name { font-weight: 600; font-size: 0.9rem; }
+  .sess-item .sess-meta { font-size: 0.75rem; color: var(--muted-foreground); margin-top: 0.15rem;
+                          display: flex; gap: 0.6rem; }
+  .sess-done { color: hsl(140 45% 32%); font-weight: 600; }
+  .sess-empty { color: var(--muted-foreground); font-style: italic; }
+  .sess-members { margin: 0.5rem 0 0; padding: 0; list-style: none; }
+  .sess-members li { border: 1px solid var(--border); border-radius: var(--radius);
+                     padding: 0.4rem 0.6rem; margin-bottom: 0.35rem; font-size: 0.82rem; }
+  .sess-members .mono { font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+                        font-size: 0.72rem; color: var(--muted-foreground); }
+  .sess-scheme { border: 1px solid var(--border); border-radius: var(--radius);
+                 padding: 0.6rem 0.8rem; margin-top: 0.6rem; }
+  .sess-scheme-label { font-weight: 600; font-size: 0.875rem; margin-bottom: 0.4rem; }
+  .sess-chips { display: inline-flex; gap: 0.3rem; flex-wrap: wrap; }
+  .sess-chip { border: 1px solid var(--border); border-radius: 999px; background: var(--background);
+               color: var(--foreground); padding: 0.2rem 0.7rem; font: inherit; font-size: 0.82rem;
+               cursor: pointer; }
+  .sess-chip:hover { background: var(--muted); }
+  .sess-chip.selected { background: var(--primary); border-color: var(--primary);
+                        color: var(--primary-foreground, #fff); }
+  .sess-scale-label { font-size: 0.75rem; color: var(--muted-foreground); margin: 0 0.35rem; }
+  .sess-scheme textarea, .sess-scheme input[type="number"], .sess-scheme select {
+      font: inherit; padding: 0.35rem 0.5rem; border: 1px solid var(--border);
+      border-radius: var(--radius); background: var(--background); color: var(--foreground); }
+  .sess-scheme textarea { width: 100%; min-height: 3.2em; }
+  .sess-agg { font-size: 0.78rem; color: var(--muted-foreground); margin-top: 0.35rem; }
+  .sess-status { font-size: 0.85rem; min-height: 1.2em; }
+  .sess-status.err { color: hsl(0 65% 45%); }
+  .sess-status.ok { color: hsl(140 45% 32%); }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <h1>Sessions</h1>
+  <p class="sess-lede">
+    Score whole <strong>sessions</strong> — every trace that shares a
+    <code>session_id</code>/<code>thread_id</code> — instead of individual traces.
+    Pick a session, review its member traces, and answer the session-level questions.
+  </p>
+
+  <div class="sess-layout">
+    <section class="dashboard-card" aria-labelledby="list-h">
+      <h2 id="list-h" style="margin-top:0;font-size:1.05rem;">Queue</h2>
+      <div class="sess-list" id="sess-list" role="listbox" aria-label="Sessions">
+        <span class="sess-empty">Loading…</span>
+      </div>
+    </section>
+
+    <section class="dashboard-card" aria-labelledby="detail-h">
+      <h2 id="detail-h" style="margin-top:0;font-size:1.05rem;" >
+        <span id="detail-name">Select a session</span>
+      </h2>
+      <div id="detail-body" hidden>
+        <div id="schemes-root"></div>
+        <span class="sess-status" id="save-status" role="status" aria-live="polite"></span>
+        <h3 style="font-size:0.95rem;margin:1rem 0 0.2rem;">
+          Member traces (<span id="member-count">0</span>)</h3>
+        <ul class="sess-members" id="members"></ul>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var SCHEMES = {{ session_schemes | tojson }};
+  var current = null;         // case_id
+  var myAnnotations = {};     // schema -> {value|values}
+  var saveTimer = null;
+
+  function el(tag, attrs, text) {
+    var e = document.createElement(tag);
+    for (var k in (attrs || {})) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function loadQueue(selectId) {
+    fetch('/api/sessions').then(function (r) { return r.json(); }).then(function (data) {
+      var list = document.getElementById('sess-list');
+      list.innerHTML = '';
+      var sessions = data.sessions || [];
+      if (!sessions.length) {
+        list.appendChild(el('span', {'class': 'sess-empty'},
+          'No sessions found — do your items carry a session_id / thread_id?'));
+        return;
+      }
+      sessions.forEach(function (s) {
+        var btn = el('button', {'class': 'sess-item', 'type': 'button',
+                                'data-case-id': s.case_id, 'role': 'option'});
+        btn.appendChild(el('div', {'class': 'sess-name'}, s.name));
+        var meta = el('div', {'class': 'sess-meta'});
+        meta.appendChild(el('span', {}, s.n_traces + ' trace(s)'));
+        var done = (s.my_schemas_done || []).length;
+        meta.appendChild(el('span', {'class': done >= SCHEMES.length ? 'sess-done' : ''},
+          done + '/' + SCHEMES.length + ' scored'));
+        btn.appendChild(meta);
+        btn.addEventListener('click', function () { select(s.case_id); });
+        var isActive = s.case_id === (selectId || current);
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        list.appendChild(btn);
+      });
+    });
+  }
+
+  function select(caseId) {
+    current = caseId;
+    document.querySelectorAll('.sess-item').forEach(function (b) {
+      var on = b.getAttribute('data-case-id') === caseId;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    fetch('/api/sessions/' + encodeURIComponent(caseId))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        myAnnotations = data.my_annotations || {};
+        document.getElementById('detail-name').textContent = data.name;
+        document.getElementById('detail-body').hidden = false;
+        renderSchemes(data.aggregates || {});
+        renderMembers(data.members || []);
+      });
+  }
+
+  function renderMembers(members) {
+    document.getElementById('member-count').textContent = members.length;
+    var ul = document.getElementById('members');
+    ul.innerHTML = '';
+    members.forEach(function (m) {
+      var li = el('li');
+      li.appendChild(el('div', {'class': 'mono'}, m.instance_id));
+      if (m.preview) li.appendChild(el('div', {}, m.preview));
+      ul.appendChild(li);
+    });
+  }
+
+  function renderSchemes(aggregates) {
+    var root = document.getElementById('schemes-root');
+    root.innerHTML = '';
+    SCHEMES.forEach(function (scheme) {
+      var box = el('div', {'class': 'sess-scheme', 'data-schema': scheme.name,
+                           'role': 'group'});
+      var labelId = 'sess-lbl-' + scheme.name;
+      box.setAttribute('aria-labelledby', labelId);
+      box.appendChild(el('div', {'class': 'sess-scheme-label', 'id': labelId},
+                         scheme.description));
+      box.appendChild(buildWidget(scheme, labelId));
+      var agg = aggregates[scheme.name];
+      if (agg) {
+        var parts = [agg.n_annotators + ' annotator(s)'];
+        if (agg.mean != null) parts.push('mean ' + agg.mean.toFixed(2));
+        var counts = Object.keys(agg.value_counts || {}).map(function (k) {
+          return k + '×' + agg.value_counts[k];
+        });
+        if (counts.length) parts.push(counts.join(', '));
+        box.appendChild(el('div', {'class': 'sess-agg'}, parts.join(' · ')));
+      }
+      root.appendChild(box);
+    });
+  }
+
+  // Keep each chip's aria-pressed in sync with its .selected class so the
+  // choice is announced to assistive tech (visual class alone is silent).
+  function syncPressed(container) {
+    container.querySelectorAll('.sess-chip').forEach(function (c) {
+      c.setAttribute('aria-pressed', c.classList.contains('selected') ? 'true' : 'false');
+    });
+  }
+
+  function buildWidget(scheme, labelId) {
+    var mine = myAnnotations[scheme.name] || {};
+    var t = scheme.annotation_type;
+    var wrap = el('div');
+
+    if (t === 'radio' || t === 'multiselect') {
+      var chips = el('div', {'class': 'sess-chips', 'role': 'group',
+                             'aria-labelledby': labelId});
+      var selected = t === 'multiselect'
+        ? (mine.values || []) : (mine.value != null ? [mine.value] : []);
+      scheme.labels.forEach(function (label) {
+        var chip = el('button', {'class': 'sess-chip', 'type': 'button',
+          'aria-pressed': selected.indexOf(label) !== -1 ? 'true' : 'false'}, label);
+        if (selected.indexOf(label) !== -1) chip.classList.add('selected');
+        chip.addEventListener('click', function () {
+          if (t === 'radio') {
+            var was = chip.classList.contains('selected');
+            chips.querySelectorAll('.sess-chip').forEach(function (c) {
+              c.classList.remove('selected'); });
+            if (!was) chip.classList.add('selected');
+          } else {
+            chip.classList.toggle('selected');
+          }
+          syncPressed(chips);
+          var picked = Array.prototype.map.call(
+            chips.querySelectorAll('.sess-chip.selected'),
+            function (c) { return c.textContent; });
+          save(scheme.name, t === 'radio'
+            ? (picked.length ? {value: picked[0]} : null)
+            : (picked.length ? {values: picked} : null));
+        });
+        chips.appendChild(chip);
+      });
+      wrap.appendChild(chips);
+
+    } else if (t === 'likert') {
+      var size = scheme.size || scheme.labels.length || 5;
+      if (scheme.min_label) wrap.appendChild(
+        el('span', {'class': 'sess-scale-label'}, scheme.min_label));
+      var lchips = el('span', {'class': 'sess-chips', 'role': 'group',
+                               'aria-labelledby': labelId});
+      for (var v = 1; v <= size; v++) (function (v) {
+        var chip = el('button', {'class': 'sess-chip', 'type': 'button',
+          'aria-pressed': mine.value === v ? 'true' : 'false'}, String(v));
+        if (mine.value === v) chip.classList.add('selected');
+        chip.addEventListener('click', function () {
+          var was = chip.classList.contains('selected');
+          lchips.querySelectorAll('.sess-chip').forEach(function (c) {
+            c.classList.remove('selected'); });
+          if (!was) chip.classList.add('selected');
+          syncPressed(lchips);
+          save(scheme.name, was ? null : {value: v});
+        });
+        lchips.appendChild(chip);
+      })(v);
+      wrap.appendChild(lchips);
+      if (scheme.max_label) wrap.appendChild(
+        el('span', {'class': 'sess-scale-label'}, scheme.max_label));
+
+    } else if (t === 'slider' || t === 'number') {
+      var input = el('input', {type: t === 'slider' ? 'range' : 'number',
+                               min: scheme.min_value, max: scheme.max_value,
+                               'aria-labelledby': labelId});
+      if (mine.value != null) input.value = mine.value;
+      input.addEventListener('change', function () {
+        save(scheme.name, input.value === '' ? null : {value: Number(input.value)});
+      });
+      wrap.appendChild(input);
+
+    } else if (t === 'select') {
+      var sel = el('select', {'aria-labelledby': labelId});
+      sel.appendChild(el('option', {value: ''}, '--'));
+      scheme.labels.forEach(function (label) {
+        var o = el('option', {value: label}, label);
+        if (mine.value === label) o.setAttribute('selected', 'selected');
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', function () {
+        save(scheme.name, sel.value ? {value: sel.value} : null);
+      });
+      wrap.appendChild(sel);
+
+    } else if (t === 'textbox' || t === 'text') {
+      var ta = el('textarea', {'aria-labelledby': labelId});
+      if (mine.value != null) ta.value = mine.value;
+      ta.addEventListener('input', function () {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+          save(scheme.name, ta.value.trim() ? {value: ta.value} : null);
+        }, 800);
+      });
+      wrap.appendChild(ta);
+    }
+    return wrap;
+  }
+
+  function save(schema, value) {
+    if (!current) return;
+    if (value === null) delete myAnnotations[schema];
+    else myAnnotations[schema] = value;
+    var status = document.getElementById('save-status');
+    fetch('/api/sessions/' + encodeURIComponent(current) + '/annotate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({schema: schema, value: value})
+    }).then(function (r) {
+      status.className = 'sess-status ' + (r.ok ? 'ok' : 'err');
+      status.textContent = r.ok ? 'Saved' : 'Save failed';
+      if (r.ok) { loadQueue(current); setTimeout(function () {
+        if (status.textContent === 'Saved') status.textContent = ''; }, 1500); }
+    }).catch(function () {
+      status.className = 'sess-status err';
+      status.textContent = 'Save failed';
+    });
+  }
+
+  loadQueue();
+})();
+</script>
+</body>
+</html>

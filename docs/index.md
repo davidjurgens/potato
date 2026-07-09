@@ -101,6 +101,12 @@ Role-based guides that walk you through Potato for your specific use case:
 
 - **[Coding Agent Annotation](agent-evaluation/coding_agent_annotation.md)** - Evaluate agentic coding systems (Claude Code, SWE-Agent, Aider) with diff rendering, PRM annotation, and code review
 - [Agent Traces](agent-evaluation/agent_traces.md) - Evaluate AI agent traces and trajectories
+- [Turn-Level Annotation](agent-evaluation/turn_level_annotation.md) - Bind any rating/tagging/comment schema per-turn with declarative filters (by speaker, agent, step type, tool)
+- [Multi-Agent Discussion](agent-evaluation/multi_agent_discussion.md) - Annotate agent-to-agent discussions/debates with agent identity, addressees, reply threading, and consensus tracking
+- [Agent Task Recipes](agent-evaluation/agent_task_recipes.md) - Ready-to-run configs: debate judging, plan review, negotiation, safety escalation, context-use annotation
+- [Session-Level Scoring](agent-evaluation/session_level_scoring.md) - Group traces by session_id/thread_id and score whole sessions on a dedicated queue page
+- [Sub-Agent Run Tree](agent-evaluation/run_tree.md) - Interactive run-hierarchy sidebar for orchestrator traces; bind per-turn schemes to specific sub-agent runs
+- [Reviewer Routing + Kanban](agent-evaluation/review_workflow.md) - Route instances to reviewers with first-match rules; track review states on a kanban board with adjudication handoff
 - [Three-Pane Trace Eval](agent-evaluation/eval_trace.md) - Reasoning | function calls | final answer side-by-side, for continuous evaluation
 - [Trajectory Correction](agent-evaluation/trajectory_correction.md) - Edit traces into SFT/DPO training data
 - [Datasets & Experiments](agent-evaluation/datasets_and_experiments.md) - Versioned eval datasets + experiment runs that score outputs over time
@@ -110,6 +116,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Semantic Curation](agent-evaluation/semantic_curation.md) - embedding search + dynamic slices to find traces by similarity and curate them into datasets
 - [LLM-Judge ↔ Human Alignment](agent-evaluation/judge_alignment.md) - Measure & calibrate an LLM judge against human gold (Cohen's κ)
 - [Signal-Based Triage Queue](agent-evaluation/triage_queue.md) - Prioritize the queue by a quality signal (errors / low score first)
+- [Hotkey Review Mode](guides/hotkey_review_mode.md) - Keyboard-driven review queue with auto-advance on completion
 - [Live Agent Interaction](agent-evaluation/live_agent.md) - Observe and interact with a live AI agent in real time
 - [Model Arena](agent-evaluation/model_arena.md) - Compare N models side by side on one prompt; pick the best, build a win-rate leaderboard (provider-agnostic)
 - [Web Agent Annotation](agent-evaluation/web_agent_annotation.md) - Review and create web agent browsing traces

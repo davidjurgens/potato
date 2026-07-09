@@ -50,6 +50,13 @@ class InstanceDisplayRenderer:
         self.fields = self.display_config.get("fields", [])
         self.layout = self.display_config.get("layout", {})
 
+        # Turn-level annotation schemes (turn_level: true) attach inline
+        # widgets to turns of turn-capable displays. Resolved here (the one
+        # place with access to the full config) and injected into field
+        # configs via the internal "_turn_schemes" key at render time.
+        from .turn_annotations import get_turn_level_schemes
+        self.turn_level_schemes = get_turn_level_schemes(config)
+
         # Extract span targets — query the registry instead of a hardcoded list
         self.span_targets = [
             f["key"] for f in self.fields
@@ -200,6 +207,9 @@ class InstanceDisplayRenderer:
         if field_type in format_display_types and isinstance(data, str):
             data = self._process_format_file(data, field_type, field)
 
+        field = self._with_turn_schemes(field)
+        field = self._with_run_tree(field, instance_data)
+
         try:
             rendered = display_registry.render(field_type, field, data)
 
@@ -215,6 +225,40 @@ class InstanceDisplayRenderer:
         except ValueError as e:
             logger.error(f"Error rendering field '{key}': {e}")
             return f'<div class="display-error">Error rendering field "{key}": {e}</div>'
+
+    def _with_turn_schemes(self, field: Dict[str, Any]) -> Dict[str, Any]:
+        """Return a field config copy carrying its bound turn-level schemes.
+
+        Uses the internal "_turn_schemes" key (never user-configurable) so
+        turn-capable displays can render per-turn annotation slots. Fields
+        with no bound schemes are returned unchanged.
+        """
+        if not self.turn_level_schemes:
+            return field
+        from .turn_annotations import schemes_for_field
+        bound = schemes_for_field(self.turn_level_schemes, field.get("key", ""))
+        if not bound:
+            return field
+        field = dict(field)
+        field["_turn_schemes"] = bound
+        return field
+
+    def _with_run_tree(self, field: Dict[str, Any], instance_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Return a field config copy carrying the item's run tree.
+
+        The run tree (sub-agent hierarchy, ``extra_fields["run_tree"]`` from
+        trace converters) lives at item level, but displays only see their
+        own field's data — inject it via the internal "_run_tree" key for
+        the trace displays that render it as a sidebar.
+        """
+        if field.get("type") != "agent_trace":
+            return field
+        run_tree = instance_data.get("run_tree")
+        if not isinstance(run_tree, list) or not run_tree:
+            return field
+        field = dict(field)
+        field["_run_tree"] = run_tree
+        return field
 
     def _wrap_resizable(self, inner_html: str, field: Dict[str, Any]) -> str:
         """
@@ -392,7 +436,11 @@ class InstanceDisplayRenderer:
             result["display_raw"][key] = data
 
             try:
-                result["display_fields"][key] = display_registry.render(field_type, field, data)
+                result["display_fields"][key] = display_registry.render(
+                    field_type,
+                    self._with_run_tree(self._with_turn_schemes(field),
+                                        instance_data),
+                    data)
             except ValueError as e:
                 logger.error(f"Error rendering field '{key}': {e}")
                 result["display_fields"][key] = f'<div class="display-error">Error: {e}</div>'

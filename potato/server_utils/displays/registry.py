@@ -343,6 +343,7 @@ def _register_builtin_displays():
     from .spreadsheet_display import SpreadsheetDisplay
     from .code_display import CodeDisplay
     from .conversation_tree_display import ConversationTreeDisplay
+    from .multi_agent_discussion_display import MultiAgentDiscussionDisplay
     from .agent_trace_display import AgentTraceDisplay
     from .eval_trace_display import EvalTraceDisplay
     from .gallery_display import GalleryDisplay
@@ -428,6 +429,20 @@ def _register_builtin_displays():
             },
             supports_span_target=True,
             description="Dialogue/conversation turns display"
+        ),
+        DisplayDefinition(
+            name="multi_agent_discussion",
+            renderer=MultiAgentDiscussionDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "show_turn_numbers": False,
+                "show_legend": True,
+                "show_addressees": True,
+                "thread_replies": True,
+                "collapse_environment": False,
+            },
+            supports_span_target=True,
+            description="Multi-agent discussion with agent legend, colors, addressees, and filtering"
         ),
         DisplayDefinition(
             name="pairwise",

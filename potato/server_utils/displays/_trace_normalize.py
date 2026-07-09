@@ -13,6 +13,15 @@ A normalized step is a dict with keys:
     timestamp:  optional timestamp string ("")
     screenshot: optional screenshot URL ("")
 
+Optional identity keys are passed through from the source dict when present
+(consumed by turn-level annotation bindings and multi-agent displays):
+    turn_id / step_id:  stable id for the turn
+    agent_id:           which agent produced the turn
+    role:               the agent's role
+    addressee:          which agent the turn is directed at
+    tool:               tool name for tool-call steps
+    run_id:             id of the run-tree node that produced the turn
+
 Supported input formats (see ``normalize_steps``):
     - a single string                       -> one observation step
     - list of strings                       -> one step each (type inferred)
@@ -76,6 +85,27 @@ def format_action_text(action: Any) -> str:
     return str(action)
 
 
+# Identity keys copied through from source dicts when present (turn-level
+# annotation bindings + multi-agent displays consume these). run_id links a
+# turn to its node in the trace's run tree (sub-agent hierarchy).
+PASSTHROUGH_KEYS = ("turn_id", "step_id", "agent_id", "role", "addressee", "tool", "run_id")
+
+
+def _passthrough(step: Dict[str, Any], item: Dict[str, Any], skip_ids: bool = False) -> Dict[str, Any]:
+    """Copy optional identity keys from a source dict onto a normalized step.
+
+    ``skip_ids=True`` omits turn_id/step_id — used when one source dict
+    expands into multiple steps (thought/action/observation format), where a
+    shared explicit id would collide across the expanded steps.
+    """
+    for key in PASSTHROUGH_KEYS:
+        if skip_ids and key in ("turn_id", "step_id"):
+            continue
+        if key in item and item[key] not in (None, ""):
+            step[key] = item[key]
+    return step
+
+
 def normalize_steps(
     data: Any,
     speaker_key: str = "speaker",
@@ -104,43 +134,43 @@ def normalize_steps(
                 speaker = item[speaker_key]
                 text = item[text_key]
                 step_type = item.get("step_type", infer_type_from_speaker(speaker))
-                steps.append({
+                steps.append(_passthrough({
                     "type": step_type,
                     "speaker": speaker,
                     "text": text,
                     "timestamp": item.get("timestamp", ""),
                     "screenshot": item.get("screenshot", ""),
-                })
+                }, item))
             # Format 2: thought/action/observation (one dict = up to 3 steps)
             elif any(k in item for k in ("thought", "action", "observation")):
                 if item.get("thought"):
-                    steps.append({
+                    steps.append(_passthrough({
                         "type": "thought",
                         "speaker": "Agent (Thought)",
                         "text": str(item["thought"]),
                         "timestamp": item.get("timestamp", ""),
-                    })
+                    }, item, skip_ids=True))
                 if item.get("action"):
-                    steps.append({
+                    steps.append(_passthrough({
                         "type": "action",
                         "speaker": "Agent (Action)",
                         "text": format_action_text(item["action"]),
-                    })
+                    }, item, skip_ids=True))
                 if item.get("observation"):
-                    steps.append({
+                    steps.append(_passthrough({
                         "type": "observation",
                         "speaker": "Environment",
                         "text": str(item["observation"]),
                         "screenshot": item.get("screenshot", ""),
-                    })
+                    }, item, skip_ids=True))
             # Format 3: step_type/content
             elif "step_type" in item:
-                steps.append({
+                steps.append(_passthrough({
                     "type": item["step_type"],
                     "speaker": item.get("speaker", item.get("step_type", "").capitalize()),
                     "text": item.get("content", item.get("text", "")),
                     "timestamp": item.get("timestamp", ""),
                     "screenshot": item.get("screenshot", ""),
-                })
+                }, item))
 
     return steps

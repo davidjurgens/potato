@@ -265,6 +265,8 @@ def _register_builtin_schemas():
     from .process_reward import generate_process_reward_layout
     from .failure_attribution import generate_failure_attribution_layout
     from .tool_call_review import generate_tool_call_review_layout
+    from .consensus_tracking import generate_consensus_tracking_layout
+    from .context_attribution import generate_context_attribution_layout
     from .agent_scorecard import generate_agent_scorecard_layout
     from .handoff_review import generate_handoff_review_layout
     from .agent_interaction_graph import generate_agent_interaction_graph_layout
@@ -606,6 +608,22 @@ def _register_builtin_schemas():
             optional_fields=["steps_key", "verdict_options"],
             supports_keybindings=False,
             description="Per-tool-call correctness review (right tool / args / ordering)"
+        ),
+        SchemaDefinition(
+            name="consensus_tracking",
+            generator=generate_consensus_tracking_layout,
+            required_fields=["name", "description"],
+            optional_fields=["turns_key", "acts", "linked_acts", "hint"],
+            supports_keybindings=False,
+            description="Tag discussion acts per turn (proposal/agreement/disagreement/decision/concession) with cross-turn links to referenced proposals"
+        ),
+        SchemaDefinition(
+            name="context_attribution",
+            generator=generate_context_attribution_layout,
+            required_fields=["name", "description"],
+            optional_fields=["turns_key", "acts", "linked_acts", "hint"],
+            supports_keybindings=False,
+            description="Tag how each turn uses earlier context (used correctly / hallucinated / ignored) with links to the source turn"
         ),
         SchemaDefinition(
             name="agent_scorecard",

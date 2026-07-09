@@ -20,8 +20,8 @@ from typing import Any, Dict
 
 logger = logging.getLogger("potato.automation")
 
-FAST_ACTIONS = {"add_to_queue", "add_to_dataset", "notify"}
-HEAVY_ACTIONS = {"run_evaluator", "fire_webhook"}
+FAST_ACTIONS = {"add_to_queue", "add_to_dataset", "notify", "enroll_review"}
+HEAVY_ACTIONS = {"run_evaluator", "fire_webhook", "refresh_topics"}
 
 
 def is_heavy(action: Dict[str, Any]) -> bool:
@@ -87,6 +87,21 @@ def _notify(action, ctx) -> Dict[str, Any]:
         return _outcome("notify", "error", str(e))
 
 
+def _enroll_review(action, ctx) -> Dict[str, Any]:
+    """Enroll a runtime-ingested item into the review workflow board (D4),
+    applying the configured routing rules. Idempotent."""
+    from potato.server_utils.config_module import config
+    from potato.review_workflow import enroll_with_routing, review_enabled
+    if not review_enabled(config):
+        return _outcome("enroll_review", "skipped", "review workflow not enabled")
+    data = ctx.get("item_data")
+    created = enroll_with_routing(
+        config, str(ctx["item_id"]),
+        data if isinstance(data, dict) else {}, actor="automation")
+    return _outcome("enroll_review", "ok",
+                    "enrolled" if created else "already enrolled")
+
+
 # ----- HEAVY actions (run in the worker) -----
 
 def _run_evaluator(action, ctx) -> Dict[str, Any]:
@@ -112,6 +127,32 @@ def _run_evaluator(action, ctx) -> Dict[str, Any]:
     return _outcome("run_evaluator", "ok", f"{result.key}={result.score}")
 
 
+def _refresh_topics(action, ctx) -> Dict[str, Any]:
+    """Re-discover trace clusters and persist them as topics (D2 Topics).
+
+    Heavy (embeddings + optional LLM naming). Typical rule: sample a small
+    fraction of ingested traces so topics refresh periodically as production
+    data drifts, e.g. ``{"type": "refresh_topics", "k": 8, "min_indexed": 20}``.
+    """
+    from potato.curation.manager import get_curation_manager
+    mgr = get_curation_manager()
+    if mgr is None:
+        return _outcome("refresh_topics", "skipped", "curation not enabled")
+    min_indexed = int(action.get("min_indexed", 10))
+    if len(mgr.index) < min_indexed:
+        return _outcome("refresh_topics", "skipped",
+                        f"only {len(mgr.index)} indexed (< {min_indexed})")
+    from datetime import datetime, timezone
+    try:
+        topics = mgr.refresh_topics(
+            k=int(action.get("k", 6)),
+            use_llm=bool(action.get("use_llm", True)),
+            refreshed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    except Exception as e:
+        return _outcome("refresh_topics", "error", str(e))
+    return _outcome("refresh_topics", "ok", f"{len(topics)} topics")
+
+
 def _fire_webhook(action, ctx) -> Dict[str, Any]:
     url = action.get("url")
     if not url:
@@ -135,8 +176,10 @@ _EXECUTORS = {
     "add_to_queue": _add_to_queue,
     "add_to_dataset": _add_to_dataset,
     "notify": _notify,
+    "enroll_review": _enroll_review,
     "run_evaluator": _run_evaluator,
     "fire_webhook": _fire_webhook,
+    "refresh_topics": _refresh_topics,
 }
 
 

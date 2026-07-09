@@ -99,6 +99,38 @@
     <div id="disc-results"></div>
   </section>
 
+  <section class="dashboard-card cat-card" aria-labelledby="topics-h">
+    <h2 id="topics-h">{{ ui_lang.catalog_topics_heading|default('Topics') }}</h2>
+    <p class="cat-empty" style="margin:0 0 0.5rem;">
+      {{ ui_lang.catalog_topics_desc|default('Persisted pattern groups: refresh re-clusters the indexed traces into named topics (LLM-suggested names when a judge is configured), and newly ingested traces are auto-assigned to the nearest topic. Curate any topic into a dataset.') }}
+    </p>
+    <div class="cat-row" style="margin-bottom:0.5rem;">
+      <div class="cat-field"><label for="t-k">{{ ui_lang.catalog_clusters_label|default('Clusters (k)') }}</label>
+        <input type="number" id="t-k" class="num" value="6" min="2" max="30"></div>
+      <button class="shadcn-button shadcn-button-primary" id="t-refresh">{{ ui_lang.catalog_topics_refresh|default('Refresh topics') }}</button>
+    </div>
+    <span class="cat-status" id="topic-status" role="status" aria-live="polite"></span>
+    {% if topics %}
+    <table class="cat-table">
+      <thead><tr><th scope="col">{{ ui_lang.catalog_th_topic|default('Topic') }}</th><th scope="col">{{ ui_lang.catalog_th_description|default('Description') }}</th><th scope="col">{{ ui_lang.catalog_th_size|default('Size') }}</th><th scope="col">{{ ui_lang.catalog_th_actions|default('Actions') }}</th></tr></thead>
+      <tbody>
+        {% for t in topics %}
+        <tr data-topic="{{ t.name }}">
+          <td>{{ t.name }}</td>
+          <td>{{ t.description }}</td>
+          <td class="cat-mono">{{ t.size }}</td>
+          <td>
+            <button class="shadcn-button shadcn-button-outline t-members" data-name="{{ t.name }}">{{ ui_lang.catalog_members_button|default('Members') }}</button>
+            <button class="shadcn-button shadcn-button-outline t-todataset" data-name="{{ t.name }}">{{ ui_lang.catalog_to_dataset_button|default('→ Dataset') }}</button>
+            <button class="shadcn-button shadcn-button-outline t-delete" data-name="{{ t.name }}">{{ ui_lang.catalog_delete_button|default('Delete') }}</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="cat-empty">{{ ui_lang.catalog_no_topics|default('No topics yet — refresh to discover them.') }}</p>{% endif %}
+  </section>
+
   <section class="dashboard-card cat-card" aria-labelledby="slices-h">
     <h2 id="slices-h">{{ ui_lang.catalog_slices_heading|default('Dynamic slices') }}</h2>
     <div class="cat-row" style="margin-bottom:0.5rem;">
@@ -234,6 +266,45 @@
         </div>`).join("");
     } finally { discBtn.disabled = false; }
   });
+
+  // ----- Topics (persisted pattern groups) -----
+  const topicRefresh = document.getElementById("t-refresh");
+  if (topicRefresh) topicRefresh.addEventListener("click", async () => {
+    const st = document.getElementById("topic-status");
+    st.className = "cat-status"; st.textContent = (L.catalog_status_clustering || "Clustering & labeling…"); topicRefresh.disabled = true;
+    try {
+      const r = await post("{{ url_for('curation.api_topics_refresh') }}",
+                           {k: parseInt(document.getElementById("t-k").value) || 6});
+      if (!r.ok) { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); return; }
+      st.className = "cat-status ok"; st.textContent = `${r.data.count} ${L.catalog_status_topics || "topic(s)"}`;
+      setTimeout(() => location.reload(), 700);
+    } finally { topicRefresh.disabled = false; }
+  });
+
+  document.querySelectorAll(".t-members").forEach(b => b.addEventListener("click", async () => {
+    const st = document.getElementById("topic-status"); st.className = "cat-status";
+    const r = await fetch(`/admin/catalog/api/topics/${encodeURIComponent(b.dataset.name)}/members`);
+    const d = await r.json();
+    st.textContent = r.ok
+      ? `${b.dataset.name}: ${(d.member_ids || []).length} ${L.catalog_status_matching_instances || "matching instance(s)"} — ${(d.member_ids || []).slice(0, 8).join(", ")}${(d.member_ids || []).length > 8 ? "…" : ""}`
+      : (d.error || (L.catalog_status_failed || "Failed."));
+  }));
+
+  document.querySelectorAll(".t-todataset").forEach(b => b.addEventListener("click", async () => {
+    const st = document.getElementById("topic-status");
+    const dataset = prompt((L.catalog_prompt_topic_prefix || "Curate topic '") + b.dataset.name + (L.catalog_prompt_curate_suffix || "' into which dataset?"));
+    if (!dataset) return;
+    st.className = "cat-status"; st.textContent = (L.catalog_status_curating || "Curating…");
+    const r = await post(`/admin/catalog/api/topics/${encodeURIComponent(b.dataset.name)}/to_dataset`, {dataset});
+    if (r.ok) { st.className = "cat-status ok"; st.textContent = `${L.catalog_status_imported_prefix || "Imported "}${r.data.imported}${L.catalog_status_imported_mid || " into '"}${dataset}${L.catalog_status_imported_suffix || "'."}`; }
+    else { st.className = "cat-status err"; st.textContent = r.data.error || (L.catalog_status_failed || "Failed."); }
+  }));
+
+  document.querySelectorAll(".t-delete").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm((L.catalog_confirm_delete_topic || "Delete topic '") + b.dataset.name + "'?")) return;
+    const r = await fetch(`/admin/catalog/api/topics/${encodeURIComponent(b.dataset.name)}`, {method: "DELETE"});
+    if (r.ok) location.reload();
+  }));
 })();
 </script>
 </body>

@@ -1,0 +1,105 @@
+# Negotiation Outcome Review Recipe
+#
+# Annotate agent-vs-agent negotiations: whole-trace outcome (deal reached,
+# surplus split, fairness), per-turn tactic tagging, and negotiation-move
+# structure with cross-turn links. Composes existing schemas — no custom code:
+#
+#   - multi_agent_discussion display
+#   - consensus_tracking with negotiation acts (offer/counter/accept/reject)
+#   - turn-level multiselect (tactics: anchor, concession, threat, ...)
+#   - whole-trace outcome schemas
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/negotiation-review/config.yaml -p 8000
+
+annotation_task_name: "Negotiation Review"
+
+data_files:
+  - data/negotiations.json
+
+item_properties:
+  id_key: id
+  text_key: scenario
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: scenario
+      type: text
+      label: "Scenario"
+
+    - key: conversation
+      type: multi_agent_discussion
+      label: "Negotiation"
+      display_options:
+        show_turn_numbers: true
+        show_legend: true
+        show_addressees: true
+
+annotation_schemes:
+  # Negotiation-move structure
+  - annotation_type: consensus_tracking
+    name: negotiation_moves
+    description: "Tag the negotiation moves"
+    turns_key: conversation
+    acts: [offer, counter_offer, accept, reject, concession]
+    linked_acts: [counter_offer, accept, reject, concession]
+
+  # Per-turn tactics (turn-level binding on the negotiating agents)
+  - annotation_type: multiselect
+    name: turn_tactics
+    description: "Tactics in this turn"
+    labels:
+      - anchoring
+      - concession
+      - threat_or_walkaway
+      - information_reveal
+      - value_creation
+      - deadline_pressure
+    turn_level: true
+    turn_binding:
+      field: conversation
+      agents: [buyer, seller]
+
+  # Outcome
+  - annotation_type: radio
+    name: deal_reached
+    description: "Was a deal reached?"
+    labels: [deal, no_deal, ambiguous]
+    sequential_key_binding: true
+
+  - annotation_type: slider
+    name: surplus_split
+    description: "How was the surplus split? (0 = all to buyer, 100 = all to seller)"
+    min_value: 0
+    max_value: 100
+    starting_value: 50
+
+  - annotation_type: likert
+    name: fairness
+    description: "How fair was the final outcome?"
+    min_label: "Exploitative"
+    max_label: "Fair"
+    size: 5
+
+  - annotation_type: radio
+    name: pareto_efficiency
+    description: "Did the agents leave value on the table?"
+    labels:
+      - name: efficient
+        tooltip: "No mutually beneficial trade was missed"
+      - name: minor_inefficiency
+        tooltip: "Small missed opportunities"
+      - name: major_inefficiency
+        tooltip: "Clear mutually beneficial trades were missed"
+    sequential_key_binding: true
+
+user_config:
+  allow_all_users: true

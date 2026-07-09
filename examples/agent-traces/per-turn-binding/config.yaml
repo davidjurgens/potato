@@ -1,0 +1,100 @@
+# Per-Turn Schema Binding Example
+#
+# Demonstrates the turn-level annotation framework: ANY supported schema
+# (radio, multiselect, likert, slider, select, textbox, number) can be bound
+# per-turn with declarative filters — by speaker, agent, step type, tool
+# name, or turn range — instead of applying once per instance.
+#
+# Three bindings are shown here:
+#   1. turn_errors    — multiselect on every Assistant turn (inline chips)
+#   2. action_quality — likert on action steps only (inline scale)
+#   3. tool_verdict   — radio on search/browser tool calls (drawer placement)
+#
+# Values are stored per turn under a stable turn id with speaker/step-type
+# snapshots, and round-trip through the standard annotation pipeline.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/per-turn-binding/config.yaml -p 8000
+
+annotation_task_name: "Per-Turn Schema Binding"
+
+data_files:
+  - data/traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: conversation
+      type: agent_trace
+      label: "Agent Trace"
+      display_options:
+        show_step_numbers: true
+        show_summary: true
+
+annotation_schemes:
+  # 1. Multiselect bound to every Assistant turn
+  - annotation_type: multiselect
+    name: turn_errors
+    description: "Errors in this turn"
+    labels:
+      - hallucination
+      - ignored_context
+      - contradiction
+    turn_level: true
+    turn_binding:
+      field: conversation
+      speakers: ["Assistant"]
+
+  # 2. Likert bound to action steps only
+  - annotation_type: likert
+    name: action_quality
+    description: "Action quality"
+    min_label: "Poor"
+    max_label: "Excellent"
+    size: 5
+    turn_level: true
+    turn_binding:
+      field: conversation
+      step_types: [action]
+
+  # 3. Radio verdict on specific tool calls, opened via drawer
+  - annotation_type: radio
+    name: tool_verdict
+    description: "Tool call verdict"
+    labels:
+      - correct
+      - wrong_tool
+      - wrong_args
+    turn_level: true
+    turn_binding:
+      field: conversation
+      tools: [search, browser]
+      placement: drawer
+
+  # Whole-trace assessment still works alongside turn-level schemes
+  - annotation_type: radio
+    name: task_success
+    description: "Did the agent complete the task?"
+    labels:
+      - success
+      - partial
+      - failure
+    sequential_key_binding: true
+
+user_config:
+  allow_all_users: true

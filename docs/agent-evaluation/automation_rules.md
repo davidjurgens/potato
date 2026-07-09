@@ -48,13 +48,16 @@ A rule fires for an item when **both**:
 | `add_to_queue` | inline (fast) | Boost the item's triage priority so the `priority` assignment strategy surfaces it. Params: `priority`, `reason`. |
 | `add_to_dataset` | inline (fast) | Append the item as an example to a dataset (created if absent). Params: `dataset`. |
 | `notify` | inline (fast) | Notify connected annotators via SSE. Params: `message`. |
+| `enroll_review` | inline (fast) | Enroll the item on the [review board](review_workflow.md), applying `review_workflow.routing`. No params. |
 | `run_evaluator` | background worker | Score the item with an [evaluator](evaluators.md); the score is stored on the item (`metadata.automation_eval`). Params: `evaluator`, `params`. |
 | `fire_webhook` | background worker | POST `{rule, item_id, item_data}` to an external URL. Params: `url`, `headers`. |
+| `refresh_topics` | background worker | Re-cluster the curation index and persist the clusters as [topics](semantic_curation.md). Params: `k`, `min_indexed`, `use_llm`. |
 
 **Fast actions** run inline in the ingestion path (cheap, in-process). **Heavy
-actions** (`run_evaluator`, `fire_webhook`) are dispatched to a background worker
-so ingestion never blocks. Every action records an outcome; failures are caught
-and logged as `error` outcomes — automation never breaks ingestion.
+actions** (`run_evaluator`, `fire_webhook`, `refresh_topics`) are dispatched to a
+background worker so ingestion never blocks. Every action records an outcome;
+failures are caught and logged as `error` outcomes — automation never breaks
+ingestion.
 
 > Ordering note: actions within a rule run in listed order, but heavy actions
 > complete asynchronously, so a `fire_webhook` may finish after a later inline

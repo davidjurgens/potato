@@ -216,6 +216,7 @@ KNOWN_CONFIG_KEYS = {
     "highlight_linebreaks": None,
     "list_as_text": {"text_list_prefix_type", "horizontal", "alternating_shading"},
     "jumping_to_id_disabled": None,
+    "review_mode": {"enabled", "auto_advance", "advance_on", "delay_ms"},
     "horizontal_key_bindings": None,
     "completion_code": None,
     "allow_phase_back_navigation": None,
@@ -388,6 +389,24 @@ KNOWN_CONFIG_KEYS = {
         "key": None,
         "auto_detect": None,
         "attributes": None,
+    },
+    # Session-level scoring: group traces by session_id/thread_id and
+    # score whole sessions on /sessions (schemes opt in with
+    # `session_level: true`). `key` overrides the detected field;
+    # `attributes` lifts item fields onto the session.
+    "sessions": {
+        "enabled": None,
+        "key": None,
+        "attributes": None,
+    },
+    # Reviewer routing + kanban board (/admin/review). A parallel review-
+    # state store (pending/in_review/needs_second/adjudication/done) with
+    # first-match routing rules over the shared condition grammar.
+    "review_workflow": {
+        "enabled": None,
+        "reviewers": None,
+        "auto_enroll": None,
+        "routing": None,
     },
     "solo_mode": {
         "enabled": None,
@@ -1400,6 +1419,71 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
     all_schemes = _collect_all_annotation_schemes(config_data)
     if all_schemes:
         validate_display_logic_references(all_schemes)
+        _validate_turn_level_bindings(config_data, all_schemes)
+        _validate_session_level_schemes(config_data, all_schemes)
+
+
+def _validate_session_level_schemes(config_data: Dict[str, Any], schemes: List[Dict[str, Any]]) -> None:
+    """Cross-check session-level schemes against the sessions block.
+
+    session_level schemes never render on the per-instance form, so a
+    config that declares them without enabling sessions would silently
+    lose those questions — warn loudly.
+    """
+    session_schemes = [s for s in schemes
+                       if isinstance(s, dict) and s.get('session_level')]
+    sessions_on = bool((config_data.get('sessions') or {}).get('enabled'))
+    if session_schemes and not sessions_on:
+        logger.warning(
+            "Schemes %s are session_level but 'sessions.enabled' is not set — "
+            "they will not be scoreable anywhere. Add a top-level "
+            "sessions: {enabled: true} block.",
+            [s.get('name') for s in session_schemes],
+        )
+    if sessions_on and not session_schemes:
+        logger.warning(
+            "sessions.enabled is true but no annotation scheme sets "
+            "session_level: true — the /sessions page will have no questions."
+        )
+
+
+def _validate_turn_level_bindings(config_data: Dict[str, Any], schemes: List[Dict[str, Any]]) -> None:
+    """Cross-check turn-level schemes against instance_display fields.
+
+    Hard error when ``turn_binding.field`` references a field key that does
+    not exist; warning when turn slots land on a span_target field (slot
+    widget text changes the container textContent, misaligning span offsets —
+    same caveat as dialogue per_turn_ratings).
+    """
+    turn_schemes = [s for s in schemes if isinstance(s, dict) and s.get('turn_level')]
+    if not turn_schemes:
+        return
+
+    fields = (config_data.get('instance_display') or {}).get('fields') or []
+    field_keys = {f.get('key') for f in fields if isinstance(f, dict)}
+    span_target_keys = {
+        f.get('key') for f in fields
+        if isinstance(f, dict) and f.get('span_target')
+    }
+
+    for scheme in turn_schemes:
+        binding = scheme.get('turn_binding') or {}
+        bound_field = binding.get('field')
+        if bound_field is not None and field_keys and bound_field not in field_keys:
+            raise ConfigValidationError(
+                f"annotation scheme '{scheme.get('name')}': turn_binding.field "
+                f"'{bound_field}' does not match any instance_display field. "
+                f"Available fields: {sorted(k for k in field_keys if k)}"
+            )
+        affected = {bound_field} if bound_field is not None else field_keys
+        overlapping = affected & span_target_keys
+        if overlapping:
+            logger.warning(
+                "Turn-level scheme '%s' attaches widgets to span_target field(s) %s. "
+                "Slot widget text changes the container textContent, so span "
+                "annotation offsets may misalign on those fields.",
+                scheme.get('name'), sorted(k for k in overlapping if k),
+            )
 
 
 def _collect_all_annotation_schemes(config_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1722,6 +1806,56 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
     valid_types = schema_registry.get_supported_types()
     if scheme['annotation_type'] not in valid_types:
         raise ConfigValidationError(f"{path}.annotation_type must be one of: {', '.join(sorted(valid_types))}")
+
+    # Turn-level binding validation (per-turn annotation framework)
+    if scheme.get('turn_level'):
+        from potato.server_utils.turn_annotations import (
+            TURN_LEVEL_SUPPORTED_TYPES, TURN_BINDING_KEYS,
+        )
+        if scheme['annotation_type'] not in TURN_LEVEL_SUPPORTED_TYPES:
+            raise ConfigValidationError(
+                f"{path}: turn_level is not supported for annotation_type "
+                f"'{scheme['annotation_type']}'. Supported types: "
+                f"{', '.join(sorted(TURN_LEVEL_SUPPORTED_TYPES))}"
+            )
+        binding = scheme.get('turn_binding')
+        if binding is not None:
+            if not isinstance(binding, dict):
+                raise ConfigValidationError(f"{path}.turn_binding must be a dictionary")
+            unknown = set(binding) - TURN_BINDING_KEYS
+            if unknown:
+                raise ConfigValidationError(
+                    f"{path}.turn_binding has unknown keys: {sorted(unknown)}. "
+                    f"Allowed: {sorted(TURN_BINDING_KEYS)}"
+                )
+            for list_key in ('speakers', 'agents', 'step_types', 'tools', 'runs'):
+                if list_key in binding and not isinstance(binding[list_key], list):
+                    raise ConfigValidationError(f"{path}.turn_binding.{list_key} must be a list")
+            if 'turn_range' in binding:
+                tr = binding['turn_range']
+                if (not isinstance(tr, list) or len(tr) != 2
+                        or not all(isinstance(v, int) for v in tr) or tr[0] > tr[1]):
+                    raise ConfigValidationError(
+                        f"{path}.turn_binding.turn_range must be [start, end] with start <= end"
+                    )
+            if binding.get('placement') not in (None, 'inline', 'drawer'):
+                raise ConfigValidationError(
+                    f"{path}.turn_binding.placement must be 'inline' or 'drawer'"
+                )
+
+    # Session-level scoring validation (D1)
+    if scheme.get('session_level'):
+        from potato.sessions.service import SESSION_LEVEL_SUPPORTED_TYPES
+        if scheme['annotation_type'] not in SESSION_LEVEL_SUPPORTED_TYPES:
+            raise ConfigValidationError(
+                f"{path}: session_level is not supported for annotation_type "
+                f"'{scheme['annotation_type']}'. Supported types: "
+                f"{', '.join(sorted(SESSION_LEVEL_SUPPORTED_TYPES))}"
+            )
+        if scheme.get('turn_level'):
+            raise ConfigValidationError(
+                f"{path}: a scheme cannot be both turn_level and session_level"
+            )
 
     # Registry-driven required field check: validate fields that are unconditionally
     # required for this type. Types with alternative forms (e.g., likert accepts either
@@ -4890,6 +5024,7 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
             "pdf", "document", "spreadsheet", "code", "agent_trace", "eval_trace",
             "gallery", "conversation_tree", "interactive_chat", "web_agent_trace",
             "live_agent", "coding_trace", "live_coding_agent",
+            "multi_agent_discussion",
         ]
 
     for i, field in enumerate(fields):
@@ -4922,7 +5057,7 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
         # Validate span_target
         if field.get("span_target"):
             # Types that support span annotation targets
-            span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code", "agent_trace", "interactive_chat"]
+            span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code", "agent_trace", "interactive_chat", "multi_agent_discussion"]
             if field_type not in span_target_types:
                 raise ConfigValidationError(
                     f"instance_display.fields[{i}].span_target is set but type '{field_type}' "

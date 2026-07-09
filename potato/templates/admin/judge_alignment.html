@@ -38,6 +38,10 @@
   .ja-table-wrap { overflow-x: auto; }
   table.ja-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; margin-top: 0.5rem; }
   td.ja-reason { max-width: 42ch; }
+  .ja-adjudicate-link { font-size: 0.8rem; font-weight: 600; white-space: nowrap;
+    padding: 0.1rem 0.5rem; border: 1px solid var(--border, #e4e4e7); border-radius: 999px;
+    text-decoration: none; }
+  .ja-adjudicate-link:hover { background: var(--secondary, #f4f4f5); }
   .ja-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
                 overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
   table.ja-table th, table.ja-table td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }
@@ -211,7 +215,7 @@
     <div class="ja-section-label">{{ ui_lang.judge_disagreements|default('Disagreements') }}</div>
     <div class="ja-table-wrap">
     <table class="ja-table">
-      <thead><tr><th scope="col">{{ ui_lang.judge_col_instance|default('Instance') }}</th><th scope="col">{{ ui_lang.judge_col_human|default('Human') }}</th><th scope="col">{{ ui_lang.judge_col_judge|default('Judge') }}</th><th scope="col">{{ ui_lang.judge_col_conf|default('Conf.') }}</th><th scope="col">{{ ui_lang.judge_col_reasoning|default('Judge reasoning') }}</th></tr></thead>
+      <thead><tr><th scope="col">{{ ui_lang.judge_col_instance|default('Instance') }}</th><th scope="col">{{ ui_lang.judge_col_human|default('Human') }}</th><th scope="col">{{ ui_lang.judge_col_judge|default('Judge') }}</th><th scope="col">{{ ui_lang.judge_col_conf|default('Conf.') }}</th><th scope="col">{{ ui_lang.judge_col_reasoning|default('Judge reasoning') }}</th><th scope="col"><span class="ja-sr-only">{{ ui_lang.judge_col_actions|default('Actions') }}</span></th></tr></thead>
       <tbody>
         {% for d in r.disagreements %}
         <tr>
@@ -220,6 +224,8 @@
           <td>{{ d.judge_label }}</td>
           <td>{{ '%.2f'|format(d.judge_confidence) if d.judge_confidence is not none else '—' }}</td>
           <td class="ja-reason">{{ d.reasoning }}</td>
+          <td><a class="ja-adjudicate-link" href="/adjudicate?instance={{ d.instance_id | urlencode }}"
+                 title="{{ ui_lang.judge_open_adjudication_title|default('Open this instance in the adjudication view') }}">{{ ui_lang.judge_open_adjudication|default('Adjudicate') }}</a></td>
         </tr>
         {% endfor %}
       </tbody>

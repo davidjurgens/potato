@@ -2417,6 +2417,8 @@ def render_page_with_annotations(username: str):
         can_go_back=get_user_state_manager().can_user_go_back(username),
         # Hide jump-to-ID navigation controls when disabled
         jumping_to_id_disabled=config.get("jumping_to_id_disabled", False),
+        # Hotkey review mode (auto-advance when all required schemas complete)
+        review_mode=config.get("review_mode", {}) or {},
         # ai=ai_hints,
         **kwargs
     )
@@ -3743,6 +3745,22 @@ def _initialize_from_config(config_file):
     except Exception as e:
         logger.warning(f"Cases auto-detect skipped: {e}")
 
+    # Group traces into sessions by session_id/thread_id (no-op unless
+    # sessions enabled).
+    try:
+        from potato.sessions import init_sessions_from_config
+        init_sessions_from_config(config)
+    except Exception as e:
+        logger.warning(f"Sessions auto-detect skipped: {e}")
+
+    # Enroll instances into the review workflow board (no-op unless
+    # review_workflow enabled).
+    try:
+        from potato.review_workflow import init_review_workflow_from_config
+        init_review_workflow_from_config(config)
+    except Exception as e:
+        logger.warning(f"Review workflow init skipped: {e}")
+
     # Build the universal search index (no-op if search disabled).
     try:
         from potato.search import init_search_from_item_state
@@ -3948,6 +3966,22 @@ def run_server(args):
         init_cases_from_config(config)
     except Exception as e:
         logger.warning(f"Cases auto-detect skipped: {e}")
+
+    # Group traces into sessions by session_id/thread_id (no-op unless
+    # sessions enabled).
+    try:
+        from potato.sessions import init_sessions_from_config
+        init_sessions_from_config(config)
+    except Exception as e:
+        logger.warning(f"Sessions auto-detect skipped: {e}")
+
+    # Enroll instances into the review workflow board (no-op unless
+    # review_workflow enabled).
+    try:
+        from potato.review_workflow import init_review_workflow_from_config
+        init_review_workflow_from_config(config)
+    except Exception as e:
+        logger.warning(f"Review workflow init skipped: {e}")
 
     # Build the universal search index (no-op if search disabled).
     try:

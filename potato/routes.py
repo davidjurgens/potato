@@ -2937,6 +2937,31 @@ def admin_api_agreement():
     return jsonify(result)
 
 
+@app.route("/admin/api/agent_rollup", methods=["GET"])
+def admin_api_agent_rollup():
+    """
+    Per-agent aggregation of turn-level annotations across the dataset.
+
+    For every turn-level scheme (``turn_level: true``), rolls up annotated
+    turns by the ``agent_id`` snapshot stored with each value: counts,
+    numeric means (likert/slider/number), and categorical value counts
+    (radio/multiselect/select). Admin-only endpoint requiring API key.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.server_utils.turn_annotations import compute_agent_rollup
+        report = compute_agent_rollup(
+            get_item_state_manager(), get_user_state_manager(), config,
+        )
+    except Exception as exc:
+        logger.exception("Failed to compute agent rollup")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(report)
+
+
 @app.route("/admin/iaa", methods=["GET"])
 def admin_iaa():
     """
@@ -7404,6 +7429,7 @@ def configure_routes(flask_app, app_config):
     # by configure_routes). Audit: diff of @app.route paths vs add_url_rule paths.
     app.add_url_rule("/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
     app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
+    app.add_url_rule("/admin/api/agent_rollup", "admin_api_agent_rollup", admin_api_agent_rollup, methods=["GET"])
     app.add_url_rule("/admin/annotation-integrity", "admin_annotation_integrity", admin_annotation_integrity, methods=["GET"])
     app.add_url_rule("/admin/api/perspectivist", "admin_perspectivist_export", admin_perspectivist_export, methods=["GET"])
     app.add_url_rule("/admin/api/induce-metrics", "admin_induce_metrics", admin_induce_metrics, methods=["GET"])
@@ -7551,6 +7577,23 @@ def configure_routes(flask_app, app_config):
         try:
             from potato.cases.api import cases_bp
             app.register_blueprint(cases_bp)
+        except ImportError:
+            pass
+
+    # Register Sessions blueprint (session-level scoring) if not already registered
+    if 'sessions' not in app.blueprints:
+        try:
+            from potato.sessions.api import sessions_bp
+            app.register_blueprint(sessions_bp)
+        except ImportError:
+            pass
+
+    # Register Review Workflow blueprint (reviewer routing + kanban) if not
+    # already registered
+    if 'review_workflow' not in app.blueprints:
+        try:
+            from potato.review_workflow import review_bp
+            app.register_blueprint(review_bp)
         except ImportError:
             pass
 

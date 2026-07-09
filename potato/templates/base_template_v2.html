@@ -21,6 +21,12 @@
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}">
 
+    <!-- Turn-Level Annotation Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='turn-annotations.css') }}?v=1">
+
+    <!-- Multi-Agent Discussion Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='multi-agent-discussion.css') }}?v=1">
+
     {% set frontend_assets = frontend_assets | default({}) %}
 
     <!-- Image Annotation Styles -->
@@ -455,6 +461,7 @@
             api_key: "test_api_key",
             username: {{ username | tojson }},
             url_prefix: {{ url_prefix | default('') | tojson }},
+            review_mode: {{ review_mode | default({}) | tojson }},
             ui_config: {}
         };
 
@@ -606,9 +613,15 @@
     <script src="{{ url_for('static', filename='display-logic.js') }}?v=1"></script>
     <!-- Instance display manager (for new instance_display configuration) -->
     {% if has_instance_display | default(false) %}
-    <script src="{{ url_for('static', filename='instance-display.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='instance-display.js') }}?v=3"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=23"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=24"></script>
+    <!-- Turn-level annotation module (per-turn schema binding) -->
+    <script src="{{ url_for('static', filename='turn-annotations.js') }}?v=1"></script>
+    <!-- Multi-agent discussion display (agent filtering) -->
+    <script src="{{ url_for('static', filename='multi-agent-discussion.js') }}?v=1"></script>
+    <!-- Sub-agent run-tree sidebar (agent_trace display) -->
+    <script src="{{ url_for('static', filename='run-tree.js') }}?v=1"></script>
 
     <!-- Fabric.js for image annotation (loaded from CDN) -->
     {% if frontend_assets.image_annotation | default(false) %}

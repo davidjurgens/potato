@@ -9,6 +9,11 @@ Admin routes for semantic curation (the "Catalog").
     GET  /admin/catalog/api/slices/<n>/resolve   resolve a slice -> instance ids
     DELETE /admin/catalog/api/slices/<n>
     POST /admin/catalog/api/slices/<n>/to_dataset  {dataset}  curate -> dataset
+    POST /admin/catalog/api/topics/refresh   re-discover clusters -> persisted topics
+    GET  /admin/catalog/api/topics           list topics (name/description/size)
+    GET  /admin/catalog/api/topics/<n>/members  member instance ids
+    POST /admin/catalog/api/topics/<n>/to_dataset  {dataset}  topic -> dataset
+    DELETE /admin/catalog/api/topics/<n>
 """
 
 from __future__ import annotations
@@ -54,6 +59,7 @@ def catalog_page():
         "admin/catalog.html",
         indexed=len(mgr.index),
         slices=[s.to_dict() for s in mgr.slices.list()],
+        topics=[t.summary() for t in mgr.topics.list()],
         embeddings_available=_embeddings_available(),
     )
 
@@ -151,6 +157,89 @@ def api_slice_to_dataset(name):
         dataset, instance_ids=ids,
         include_annotations=bool(body.get("include_annotations", False)))
     return jsonify({"dataset": dataset, "imported": len(ids),
+                    "version": version.to_dict()}), 201
+
+
+@curation_bp.route("/api/topics/refresh", methods=["POST"])
+@admin_required
+@_enabled_required
+def api_topics_refresh():
+    """Re-discover clusters and persist them as Topics (auto-grouping).
+
+    Body: {k?: int, instance_ids?: [...], use_llm?: bool}. Discovered topics
+    replace previous *discovered* topics (manual ones are kept); traces
+    ingested afterwards are auto-assigned to the nearest topic centroid.
+    """
+    body = request.get_json(silent=True) or {}
+    mgr = get_curation_manager()
+    if len(mgr.index) == 0:
+        return jsonify({"error": "embedding index is empty; build it first"}), 400
+    from datetime import datetime, timezone
+    try:
+        topics = mgr.refresh_topics(
+            k=int(body.get("k", 6)),
+            instance_ids=body.get("instance_ids"),
+            use_llm=bool(body.get("use_llm", True)),
+            refreshed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"topics": [t.summary() for t in topics], "count": len(topics)})
+
+
+@curation_bp.route("/api/topics", methods=["GET"])
+@admin_required
+@_enabled_required
+def api_list_topics():
+    mgr = get_curation_manager()
+    return jsonify({"topics": [t.summary() for t in mgr.topics.list()]})
+
+
+@curation_bp.route("/api/topics/<name>/members", methods=["GET"])
+@admin_required
+@_enabled_required
+def api_topic_members(name):
+    mgr = get_curation_manager()
+    topic = mgr.topics.get(name)
+    if topic is None:
+        return jsonify({"error": "topic not found"}), 404
+    return jsonify({"name": topic.name, "description": topic.description,
+                    "member_ids": topic.member_ids})
+
+
+@curation_bp.route("/api/topics/<name>", methods=["DELETE"])
+@admin_required
+@_enabled_required
+def api_delete_topic(name):
+    mgr = get_curation_manager()
+    if not mgr.topics.delete(name):
+        return jsonify({"error": "topic not found"}), 404
+    return jsonify({"deleted": name})
+
+
+@curation_bp.route("/api/topics/<name>/to_dataset", methods=["POST"])
+@admin_required
+@_enabled_required
+def api_topic_to_dataset(name):
+    """Curate a topic's members into a named eval dataset."""
+    body = request.get_json(silent=True) or {}
+    dataset = body.get("dataset")
+    if not dataset:
+        return jsonify({"error": "dataset is required"}), 400
+    mgr = get_curation_manager()
+    topic = mgr.topics.get(name)
+    if topic is None:
+        return jsonify({"error": "topic not found"}), 404
+    if not topic.member_ids:
+        return jsonify({"error": "topic has no members"}), 400
+
+    from potato.eval_datasets.manager import get_datasets_manager
+    dm = get_datasets_manager()
+    if dm is None:
+        return jsonify({"error": "datasets not enabled"}), 400
+    version = dm.import_from_instances(
+        dataset, instance_ids=topic.member_ids,
+        include_annotations=bool(body.get("include_annotations", False)))
+    return jsonify({"dataset": dataset, "imported": len(topic.member_ids),
                     "version": version.to_dict()}), 201
 
 

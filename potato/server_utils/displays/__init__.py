@@ -26,6 +26,7 @@ from .gallery_display import GalleryDisplay
 from .interactive_chat_display import InteractiveChatDisplay
 from .web_agent_trace_display import WebAgentTraceDisplay
 from .live_agent_display import LiveAgentDisplay
+from .multi_agent_discussion_display import MultiAgentDiscussionDisplay
 
 __all__ = [
     'display_registry',
@@ -44,4 +45,5 @@ __all__ = [
     'InteractiveChatDisplay',
     'WebAgentTraceDisplay',
     'LiveAgentDisplay',
+    'MultiAgentDiscussionDisplay',
 ]

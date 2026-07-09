@@ -1,0 +1,59 @@
+# Reviewer Routing + Kanban Example
+#
+# A parallel review-workflow board over annotation instances: every item
+# carries a review state (pending → in_review → needs_second → adjudication
+# → done), an assignee, and a priority. Routing rules pre-sort new items —
+# here, error traces go straight to "in review" assigned round-robin across
+# the reviewer pool.
+#
+# The board never changes what annotators are served; it tracks the review
+# process on top of normal annotation. The adjudication column deep-links
+# into the adjudication UI.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/advanced/review-workflow/config.yaml -p 8000
+# then log in as an admin and open http://localhost:8000/admin/review
+# (reviewers see their own queue at /api/review/my_queue)
+
+annotation_task_name: "Review Workflow"
+
+data_files:
+  - data/review-traces.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+review_workflow:
+  enabled: true
+  reviewers: [alice, bob]
+  auto_enroll: true
+  routing:
+    # Failed traces jump the queue, spread across the reviewer pool
+    - when:
+        - {field: "status", equals: "error"}
+      state: in_review
+      round_robin: true
+      priority: 10
+    # Low-confidence traces need a second opinion
+    - when:
+        - {field: "metadata.confidence", lt: 0.5}
+      state: needs_second
+      priority: 5
+
+annotation_schemes:
+  - annotation_type: radio
+    name: verdict
+    description: "Is this trace acceptable?"
+    labels:
+      - acceptable
+      - needs_fix
+      - reject
+    sequential_key_binding: true
+
+user_config:
+  allow_all_users: true

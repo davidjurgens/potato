@@ -281,6 +281,33 @@ def generate_schematic(annotation_scheme):
     if "annotation_id" not in annotation_scheme:
         annotation_scheme["annotation_id"] = 0
 
+    # Turn-level schemes render inline per-turn widgets inside the display
+    # instead of a full form here; the form area only gets a compact anchor
+    # block holding the hidden annotation-data-input (persistence carrier).
+    if annotation_scheme.get("turn_level"):
+        from potato.server_utils.turn_annotations import generate_turn_level_anchor_layout
+        return generate_turn_level_anchor_layout(annotation_scheme)
+
+    # Session-level schemes are scored on the /sessions page (stored in the
+    # case_annotations table), never on the per-instance form — emit only an
+    # informational note so the layout stays coherent. No annotation-form /
+    # annotation-input markup, so the persistence pipeline and required-field
+    # validation both skip it.
+    if annotation_scheme.get("session_level"):
+        import html as _html
+        note = (
+            '<div class="session-level-note" data-schema-name="{name}" '
+            'style="font-size:0.85rem;color:#6b7280;border:1px dashed #d1d5db;'
+            'border-radius:6px;padding:0.4rem 0.7rem;margin:0.3rem 0;">'
+            '{desc} &mdash; scored per session on the '
+            '<a href="/sessions">Sessions</a> page</div>'
+        ).format(
+            name=_html.escape(annotation_scheme["name"], quote=True),
+            desc=_html.escape(str(annotation_scheme.get(
+                "description", annotation_scheme["name"]))),
+        )
+        return note, []
+
     # Figure out which kind of tasks we're doing and build the input frame
     annotation_type = annotation_scheme["annotation_type"]
 

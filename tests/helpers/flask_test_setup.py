@@ -668,6 +668,21 @@ class FlaskTestServer:
                 except Exception as e:
                     print(f"[DEBUG] Cases auto-detect skipped: {e}")
 
+                # Group traces into sessions (no-op unless sessions enabled).
+                try:
+                    from potato.sessions import init_sessions_from_config
+                    init_sessions_from_config(config)
+                except Exception as e:
+                    print(f"[DEBUG] Sessions auto-detect skipped: {e}")
+
+                # Enroll instances onto the review board (no-op unless
+                # review_workflow enabled).
+                try:
+                    from potato.review_workflow import init_review_workflow_from_config
+                    init_review_workflow_from_config(config)
+                except Exception as e:
+                    print(f"[DEBUG] Review workflow init skipped: {e}")
+
                 # Build the universal search index (no-op if disabled)
                 try:
                     from potato.search import (
