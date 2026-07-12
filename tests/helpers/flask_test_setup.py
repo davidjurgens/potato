@@ -610,6 +610,18 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Reset + (re)initialize Think-Aloud manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale transcripts.
+                try:
+                    from potato.thinkaloud import init_thinkaloud_manager, clear_thinkaloud_manager
+                    clear_thinkaloud_manager()
+                    if config.get('thinkaloud', {}).get('enabled', False):
+                        init_thinkaloud_manager(config)
+                        print("[DEBUG] Think-Aloud manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Think-Aloud manager: {e}")
+
                 # Reset + (re)initialize QDA Mode manager. The clear runs
                 # unconditionally so a leaked singleton from a prior in-process
                 # test server cannot make a QDA-disabled server report enabled.

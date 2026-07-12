@@ -165,6 +165,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | Inter-annotator agreement | Krippendorff's alpha (general) and Cohen's kappa (step-level agent evaluation) |
 | Training phase | Practice annotations with feedback before the real task |
 | Behavioral tracking | Timing, click patterns, and annotation change history |
+| **Think-Aloud Mode** | Speak while you annotate: fully-local speech-to-text, verbatim rationale streams, labels committed by voice via rule-based phrase detection — no LLM ([docs](docs/advanced/think_aloud.md)) |
 
 ### Annotation Workflows
 

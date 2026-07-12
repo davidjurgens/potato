@@ -2351,6 +2351,20 @@ def render_page_with_annotations(username: str):
     # Check if chat support is enabled (for conditional loading of llm-chat-sidebar assets)
     chat_enabled = config.get("chat_support", {}).get("enabled", False)
 
+    # Think-Aloud (voice rationales): conditional assets + JS config
+    thinkaloud_client_config = None
+    if config.get("thinkaloud", {}).get("enabled", False):
+        from potato.thinkaloud import get_thinkaloud_manager
+        ta_manager = get_thinkaloud_manager()
+        if ta_manager and ta_manager.ta_config.schema:
+            ta = ta_manager.ta_config
+            thinkaloud_client_config = {
+                "schema": ta.schema,
+                "chunk_seconds": ta.chunk_seconds,
+                "require_spoken_label": ta.require_spoken_label,
+            }
+    thinkaloud_enabled = thinkaloud_client_config is not None
+
     # Check if live agent is enabled (for conditional loading of live-agent assets)
     live_agent_enabled = bool(config.get("live_agent"))
 
@@ -2432,6 +2446,9 @@ def render_page_with_annotations(username: str):
         agent_proxy_enabled=agent_proxy_enabled,
         # Chat support (for conditional loading of llm-chat-sidebar assets)
         chat_enabled=chat_enabled,
+        # Think-Aloud (voice rationales, rule-based label phrases)
+        thinkaloud_enabled=thinkaloud_enabled,
+        thinkaloud_client_config=thinkaloud_client_config,
         # Live agent (for conditional loading of live-agent assets)
         live_agent_enabled=live_agent_enabled,
         # Annotation instructions (collapsible banner)
@@ -3757,6 +3774,13 @@ def _initialize_from_config(config_file):
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
 
+    # Initialize Think-Aloud if enabled (parity with run_server()).
+    if config.get("thinkaloud", {}).get("enabled", False):
+        logger.info("Initializing Think-Aloud...")
+        from potato.thinkaloud import init_thinkaloud_manager
+        init_thinkaloud_manager(config)
+        logger.info("Think-Aloud initialized successfully")
+
     # Initialize Judge Calibration if enabled (parity with run_server()).
     if config.get("judge_calibration", {}).get("enabled", False):
         logger.info("Initializing Judge Calibration...")
@@ -3978,6 +4002,13 @@ def run_server(args):
         logger.info("Initializing QDA Mode...")
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
+
+    # Initialize Think-Aloud if enabled
+    if config.get("thinkaloud", {}).get("enabled", False):
+        logger.info("Initializing Think-Aloud...")
+        from potato.thinkaloud import init_thinkaloud_manager
+        init_thinkaloud_manager(config)
+        logger.info("Think-Aloud initialized successfully")
 
     # Initialize Judge Calibration if enabled
     if config.get("judge_calibration", {}).get("enabled", False):

@@ -248,6 +248,9 @@ KNOWN_CONFIG_KEYS = {
         "markers", "sentences_per_step", "llm_max_chars",
     },
     "judge_alignment": {"enabled", "ai_support", "schemas", "few_shot", "inline"},
+    # Think-Aloud: local voice rationales + rule-based spoken-label phrases.
+    "thinkaloud": {"enabled", "schema", "stt", "model", "chunk_seconds",
+                   "stems", "fillers", "require_spoken_label", "language"},
     # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
     # Leaf sub-dicts (sampling/human/calibration/output) are validated by
     # validate_judge_calibration_config(); kept shallow here to avoid

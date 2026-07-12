@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Think-Aloud Review — {{ task_name }}</title>
+<style>
+    :root {
+        --ink: #2b2440; --ink-soft: #6d6a85; --ink-faint: #a5a2bd;
+        --line: #e8e2ef; --accent: #7c3aed; --accent-deep: #5b21b6;
+        --good: #166534; --good-bg: #dcf5e2; --warn: #b45309; --warn-bg: #fff1e4;
+        --paper: #f9f7fd;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+           Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: #f4f2f9; }
+    header { background: linear-gradient(120deg, var(--accent-deep), var(--accent));
+             color: #fff; padding: 26px 32px 22px; }
+    header h1 { margin: 0; font-size: 1.45rem; }
+    header .sub { margin-top: 5px; color: rgba(255,255,255,0.85); font-size: 0.92rem; }
+    header .task { font-weight: 600; color: #e9d5ff; }
+    main { max-width: 980px; margin: 0 auto; padding: 26px 24px 60px; }
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .tile { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 12px; }
+    .tile .num { font-size: 1.7rem; font-weight: 700; }
+    .tile .lbl { color: var(--ink-soft); font-size: 0.82rem; margin-top: 2px; }
+    .tile.hi .num { color: var(--accent); }
+    .session { background: #fff; border: 1px solid var(--line); border-radius: 12px;
+               padding: 16px 18px; margin-bottom: 14px; }
+    .session .meta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+                     font-size: 0.83rem; color: var(--ink-soft); margin-bottom: 10px; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 999px;
+             font-size: 0.78rem; font-weight: 600; }
+    .badge.voice { background: var(--good-bg); color: var(--good); }
+    .badge.none  { background: var(--warn-bg); color: var(--warn); }
+    .transcript { background: var(--paper); border: 1px solid var(--line);
+                  border-radius: 9px; padding: 12px 14px; line-height: 1.6;
+                  font-size: 0.92rem; white-space: pre-wrap; }
+    .transcript mark { background: #ede9fe; color: var(--accent-deep);
+                       border-radius: 3px; padding: 0 2px; font-weight: 600; }
+    .empty { text-align: center; color: var(--ink-soft); padding: 40px 20px;
+             background: #fff; border: 1px dashed var(--line); border-radius: 12px; }
+    .error-box { background: #ffe1e1; color: #b91c1c; border-radius: 10px;
+                 padding: 14px 18px; margin-top: 20px; }
+    .muted { color: var(--ink-faint); }
+</style>
+</head>
+<body>
+<header>
+    <h1>&#127908; Think-Aloud Review</h1>
+    <div class="sub">Verbatim reasoning streams and spoken-label commitments for
+        <span class="task">{{ task_name }}</span></div>
+</header>
+<main>
+    <div class="tiles" id="tiles"></div>
+    <div id="sessions"></div>
+    <div class="error-box" id="error" style="display:none"></div>
+</main>
+<script>
+(function () {
+    'use strict';
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+    function tile(num, label, hi) {
+        return '<div class="tile' + (hi ? ' hi' : '') + '"><div class="num">' + num +
+               '</div><div class="lbl">' + label + '</div></div>';
+    }
+    function highlight(transcript, detection) {
+        var safe = esc(transcript);
+        if (!detection) return safe;
+        var phrase = esc(detection.stem_text + ' ' + detection.matched_text);
+        // Best-effort: mark the normalized phrase where it appears verbatim
+        var idx = safe.toLowerCase().indexOf(esc(detection.matched_text).toLowerCase());
+        if (idx < 0) return safe;
+        return safe.slice(0, idx) + '<mark>' + safe.slice(idx, idx + detection.matched_text.length) +
+               '</mark>' + safe.slice(idx + detection.matched_text.length);
+    }
+    fetch('/thinkaloud/api/export')
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (data) {
+            var sessions = data.sessions || [];
+            var withVoice = sessions.filter(function (s) { return s.detection; });
+            var fillers = sessions.reduce(function (a, s) { return a + s.filler_count; }, 0);
+            document.getElementById('tiles').innerHTML =
+                tile(sessions.length, 'think-aloud sessions', true) +
+                tile(withVoice.length, 'labels committed by voice') +
+                tile(fillers, 'filler words (hesitation signal)');
+            var host = document.getElementById('sessions');
+            if (!sessions.length) {
+                host.innerHTML = '<div class="empty">No think-aloud sessions yet. ' +
+                    'They appear as soon as an annotator records.</div>';
+                return;
+            }
+            host.innerHTML = sessions.map(function (s) {
+                return '<div class="session">' +
+                    '<div class="meta">' +
+                    '<strong>' + esc(s.username) + '</strong>' +
+                    '<span>instance ' + esc(s.instance_id) + '</span>' +
+                    (s.detection
+                        ? '<span class="badge voice">voice label: ' + esc(s.detection.label) +
+                          ' (' + esc(s.detection.confidence) + ')</span>'
+                        : '<span class="badge none">no spoken label</span>') +
+                    '<span class="muted">' + s.n_chunks + ' chunks &middot; ' +
+                        s.filler_count + ' fillers &middot; ~' + s.duration_seconds + 's</span>' +
+                    '</div>' +
+                    '<div class="transcript">' +
+                    (s.transcript ? highlight(s.transcript, s.detection)
+                                  : '<span class="muted">(silence)</span>') +
+                    '</div></div>';
+            }).join('');
+        })
+        .catch(function (err) {
+            var box = document.getElementById('error');
+            box.style.display = 'block';
+            box.textContent = 'Could not load sessions (' + err.message +
+                '). Admin access required — run with --debug or supply the admin API key.';
+        });
+})();
+</script>
+</body>
+</html>
