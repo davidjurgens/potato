@@ -5089,7 +5089,7 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
             "pdf", "document", "spreadsheet", "code", "agent_trace", "eval_trace",
             "gallery", "conversation_tree", "interactive_chat", "web_agent_trace",
             "live_agent", "coding_trace", "live_coding_agent",
-            "multi_agent_discussion",
+            "multi_agent_discussion", "cot_trace",
         ]
 
     for i, field in enumerate(fields):
