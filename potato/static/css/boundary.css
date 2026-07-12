@@ -1,0 +1,306 @@
+/* Boundary Lab — counterfactual probe panel (light theme; Potato is light-only) */
+
+.boundary-panel {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    width: 400px;
+    max-width: calc(100vw - 32px);
+    max-height: 70vh;
+    overflow-y: auto;
+    background: #ffffff;
+    border: 1px solid #e2e0ef;
+    border-radius: 14px;
+    box-shadow: 0 12px 32px rgba(49, 39, 131, 0.18), 0 2px 8px rgba(0, 0, 0, 0.06);
+    font-size: 0.925rem;
+    z-index: 1045;
+    animation: boundary-slide-in 0.28s cubic-bezier(0.21, 1.02, 0.55, 1);
+}
+
+@keyframes boundary-slide-in {
+    from { transform: translateY(14px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+
+.boundary-hidden { display: none !important; }
+
+.boundary-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: linear-gradient(120deg, #38306b, #4f46a5);
+    color: #ffffff;
+    border-radius: 13px 13px 0 0;
+}
+
+.boundary-title {
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
+.boundary-progress {
+    display: flex;
+    gap: 5px;
+    margin-left: auto;
+}
+
+.boundary-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.boundary-dot.active { background: #ffe27a; }
+.boundary-dot.hold   { background: #6fdc8c; }
+.boundary-dot.flip   { background: #ff9d57; }
+.boundary-dot.unsure { background: rgba(255, 255, 255, 0.7); }
+
+.boundary-close {
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1.15rem;
+    line-height: 1;
+    min-width: 28px;
+    min-height: 28px;
+    margin: -4px -6px -4px 0;
+    cursor: pointer;
+}
+
+.boundary-close:hover { color: #ffffff; background: rgba(255, 255, 255, 0.14); }
+
+.boundary-body {
+    padding: 14px 16px 6px;
+    animation: boundary-body-fade 0.18s ease-out;
+}
+
+@keyframes boundary-body-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.boundary-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #6d6a85;
+    padding-bottom: 16px;
+}
+
+.boundary-spinner {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    border: 2px solid #e2e0ef;
+    border-top-color: #4f46a5;
+    border-radius: 50%;
+    animation: boundary-spin 0.7s linear infinite;
+}
+
+@keyframes boundary-spin {
+    to { transform: rotate(360deg); }
+}
+
+.boundary-question {
+    color: #3b3660;
+    margin-bottom: 10px;
+    line-height: 1.4;
+}
+
+.boundary-kind {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    vertical-align: baseline;
+}
+
+.boundary-kind.flip       { background: #fff1e4; color: #b45309; }
+.boundary-kind.invariance { background: #e8f6ff; color: #0369a1; }
+
+.boundary-diff {
+    background: #faf9ff;
+    border: 1px solid #e8e6f5;
+    border-radius: 9px;
+    padding: 10px 12px;
+    line-height: 1.55;
+    color: #26233d;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.boundary-diff del {
+    background: #ffe1e1;
+    color: #9f1d1d;
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    border-radius: 3px;
+    padding: 0 1px;
+}
+
+.boundary-diff ins {
+    background: #dcf5e2;
+    color: #14652d;
+    text-decoration: none;
+    border-radius: 3px;
+    padding: 0 1px;
+}
+
+.boundary-hint {
+    margin-top: 6px;
+    font-size: 0.8rem;
+    color: #8b87a8;
+    font-style: italic;
+}
+
+.boundary-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.boundary-btn {
+    flex: 1 1 auto;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    background: #f4f3fa;
+    color: #3b3660;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.boundary-btn.holds  { border-color: #b7e4c3; color: #166534; background: #f2fbf4; }
+.boundary-btn.holds:hover { background: #dcf5e2; }
+.boundary-btn.flips  { border-color: #f6cf9e; color: #b45309; background: #fffaf2; }
+.boundary-btn.flips:hover,
+.boundary-btn.flips.open { background: #fff1e4; }
+.boundary-btn.unsure { border-color: #dedce9; color: #6d6a85; background: #fbfbfd; }
+.boundary-btn.unsure:hover { background: #efeef6; }
+
+.boundary-flip-form {
+    margin-top: 10px;
+    padding: 10px;
+    background: #fffaf2;
+    border: 1px dashed #f6cf9e;
+    border-radius: 9px;
+}
+
+.boundary-flip-labels {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.boundary-label-chip {
+    border: 1.5px solid #4f46a5;
+    background: #ffffff;
+    color: #4f46a5;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 0.83rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+
+.boundary-label-chip:hover {
+    background: #4f46a5;
+    color: #ffffff;
+}
+
+.boundary-rationale {
+    width: 100%;
+    border: 1px solid #e2e0ef;
+    border-radius: 7px;
+    padding: 6px 9px;
+    font-size: 0.85rem;
+    color: #26233d;
+}
+
+.boundary-rationale:focus {
+    outline: none;
+    border-color: #4f46a5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 165, 0.12);
+}
+
+.boundary-error {
+    margin-top: 8px;
+    font-size: 0.82rem;
+    color: #b91c1c;
+}
+
+.boundary-done {
+    text-align: center;
+    padding: 22px 16px 14px;
+}
+
+.boundary-done-mark {
+    width: 42px;
+    height: 42px;
+    margin: 0 auto 8px;
+    border-radius: 50%;
+    background: #dcf5e2;
+    color: #166534;
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 42px;
+}
+
+.boundary-done-text {
+    font-weight: 700;
+    color: #26233d;
+    font-size: 1rem;
+}
+
+.boundary-done-sub {
+    color: #6d6a85;
+    font-size: 0.85rem;
+    margin-top: 4px;
+    line-height: 1.45;
+}
+
+.boundary-footer {
+    padding: 7px 16px 10px;
+    font-size: 0.74rem;
+    color: #a5a2bd;
+    border-top: 1px solid #f1f0f8;
+    text-align: center;
+}
+
+.boundary-btn:focus-visible,
+.boundary-close:focus-visible,
+.boundary-label-chip:focus-visible {
+    outline: 2px solid #4f46a5;
+    outline-offset: 2px;
+}
+
+.boundary-close:focus-visible { outline-color: #ffe27a; }
+
+@media (max-width: 640px) {
+    .boundary-panel {
+        right: 8px;
+        left: 8px;
+        bottom: 8px;
+        width: auto;
+    }
+
+    .boundary-btn { padding: 10px 12px; }
+    .boundary-label-chip { padding: 8px 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .boundary-panel { animation: none; }
+    .boundary-body { animation: none; }
+    .boundary-btn { transition: none; }
+    .boundary-label-chip { transition: none; }
+}

@@ -7669,6 +7669,15 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register Boundary Lab blueprint (counterfactual boundary probing) if not
+    # already registered
+    if 'boundary' not in app.blueprints:
+        try:
+            from potato.boundary.routes import boundary_bp
+            app.register_blueprint(boundary_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================

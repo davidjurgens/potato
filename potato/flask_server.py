@@ -2351,6 +2351,21 @@ def render_page_with_annotations(username: str):
     # Check if chat support is enabled (for conditional loading of llm-chat-sidebar assets)
     chat_enabled = config.get("chat_support", {}).get("enabled", False)
 
+    # Boundary Lab (counterfactual boundary probing): conditional assets + JS config
+    boundary_client_config = None
+    boundary_block = config.get("boundary_probing", {})
+    if boundary_block.get("enabled", False):
+        from potato.boundary import get_boundary_manager
+        boundary_manager = get_boundary_manager()
+        if boundary_manager and boundary_manager.boundary_config.schema:
+            bc = boundary_manager.boundary_config
+            boundary_client_config = {
+                "schema": bc.schema,
+                "debounce_ms": bc.debounce_ms,
+                "rationale_on_flip": bc.rationale_on_flip,
+            }
+    boundary_enabled = boundary_client_config is not None
+
     # Check if live agent is enabled (for conditional loading of live-agent assets)
     live_agent_enabled = bool(config.get("live_agent"))
 
@@ -2432,6 +2447,9 @@ def render_page_with_annotations(username: str):
         agent_proxy_enabled=agent_proxy_enabled,
         # Chat support (for conditional loading of llm-chat-sidebar assets)
         chat_enabled=chat_enabled,
+        # Boundary Lab (counterfactual boundary probing)
+        boundary_enabled=boundary_enabled,
+        boundary_client_config=boundary_client_config,
         # Live agent (for conditional loading of live-agent assets)
         live_agent_enabled=live_agent_enabled,
         # Annotation instructions (collapsible banner)
@@ -3757,6 +3775,13 @@ def _initialize_from_config(config_file):
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
 
+    # Initialize Boundary Lab if enabled (parity with run_server()).
+    if config.get("boundary_probing", {}).get("enabled", False):
+        logger.info("Initializing Boundary Lab...")
+        from potato.boundary import init_boundary_manager
+        init_boundary_manager(config)
+        logger.info("Boundary Lab initialized successfully")
+
     # Initialize Judge Calibration if enabled (parity with run_server()).
     if config.get("judge_calibration", {}).get("enabled", False):
         logger.info("Initializing Judge Calibration...")
@@ -3978,6 +4003,13 @@ def run_server(args):
         logger.info("Initializing QDA Mode...")
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
+
+    # Initialize Boundary Lab if enabled
+    if config.get("boundary_probing", {}).get("enabled", False):
+        logger.info("Initializing Boundary Lab...")
+        from potato.boundary import init_boundary_manager
+        init_boundary_manager(config)
+        logger.info("Boundary Lab initialized successfully")
 
     # Initialize Judge Calibration if enabled
     if config.get("judge_calibration", {}).get("enabled", False):

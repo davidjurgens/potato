@@ -37,6 +37,38 @@ Open [http://localhost:8000](http://localhost:8000) and start annotating. Browse
 
 ---
 
+## ⚡ Boundary Lab: Annotate the Boundary, Not the Point
+
+Every annotation tool collects point labels: item X gets label Y. **Potato is the first
+annotation tool that captures decision boundaries.** The moment an annotator commits a
+label, Potato generates minimal counterfactual edits of the text and asks — one click
+per probe — *"Would your label survive this change?"*
+
+```yaml
+boundary_probing:
+  enabled: true
+  sources: [precomputed, llm, rules]   # curated probes, LLM-generated, or offline rules
+```
+
+Ordinary annotation then yields three things no label export can give you:
+
+| You get | Why it matters |
+|---------|----------------|
+| **Contrast sets, for free** | Every answered probe is a labeled (original, counterfactual) pair — the counterfactually-augmented data shown to improve model robustness ([Gardner et al. 2020](https://aclanthology.org/2020.findings-emnlp.117/), [Kaushik et al. 2020](https://openreview.net/forum?id=Sklgs0NFvr)), normally built as an expensive separate effort |
+| **Boundary rationales** | When a label flips, annotators say what crossed the line — pinpointing exactly where your codebook is ambiguous |
+| **Invisible quality control** | Paraphrase probes should never flip a label; annotators who flip on them are flagged — attention checks without planting a single fake gold item |
+
+A live dashboard (`/boundary/dashboard`) shows per-label boundary sensitivity, per-annotator
+consistency, and a gallery of the exact edits where labels flip. Try it:
+
+```bash
+python potato/flask_server.py start examples/advanced/boundary-probing/config.yaml -p 8000 --debug
+```
+
+See the [Boundary Lab documentation](docs/advanced/boundary_lab.md).
+
+---
+
 ## What Can You Annotate?
 
 Potato handles the full spectrum of annotation tasks — from traditional NLP labeling to evaluating the latest AI agent systems, to interpretive qualitative analysis.
@@ -165,6 +197,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | Inter-annotator agreement | Krippendorff's alpha (general) and Cohen's kappa (step-level agent evaluation) |
 | Training phase | Practice annotations with feedback before the real task |
 | Behavioral tracking | Timing, click patterns, and annotation change history |
+| **Boundary probing** | Counterfactual probes map each annotator's decision boundary; paraphrase-invariance flags inconsistency ([docs](docs/advanced/boundary_lab.md)) |
 
 ### Annotation Workflows
 
