@@ -257,6 +257,9 @@ KNOWN_CONFIG_KEYS = {
     },
     # Truth Serum: surprisingly-popular scoring (peer-prediction micro-question).
     "truth_serum": {"enabled", "schema", "question", "min_annotators"},
+    # Think-Aloud: local voice rationales + rule-based spoken-label phrases.
+    "thinkaloud": {"enabled", "schema", "stt", "model", "chunk_seconds",
+                   "stems", "fillers", "require_spoken_label", "language"},
     # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
     # Leaf sub-dicts (sampling/human/calibration/output) are validated by
     # validate_judge_calibration_config(); kept shallow here to avoid

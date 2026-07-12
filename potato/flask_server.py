@@ -2376,6 +2376,19 @@ def render_page_with_annotations(username: str):
                 "question": ts_manager.ts_config.question,
             }
     truth_serum_enabled = truth_serum_client_config is not None
+    # Think-Aloud (voice rationales): conditional assets + JS config
+    thinkaloud_client_config = None
+    if config.get("thinkaloud", {}).get("enabled", False):
+        from potato.thinkaloud import get_thinkaloud_manager
+        ta_manager = get_thinkaloud_manager()
+        if ta_manager and ta_manager.ta_config.schema:
+            ta = ta_manager.ta_config
+            thinkaloud_client_config = {
+                "schema": ta.schema,
+                "chunk_seconds": ta.chunk_seconds,
+                "require_spoken_label": ta.require_spoken_label,
+            }
+    thinkaloud_enabled = thinkaloud_client_config is not None
 
     # Check if live agent is enabled (for conditional loading of live-agent assets)
     live_agent_enabled = bool(config.get("live_agent"))
@@ -2464,6 +2477,9 @@ def render_page_with_annotations(username: str):
         # Truth Serum (surprisingly-popular scoring)
         truth_serum_enabled=truth_serum_enabled,
         truth_serum_client_config=truth_serum_client_config,
+        # Think-Aloud (voice rationales, rule-based label phrases)
+        thinkaloud_enabled=thinkaloud_enabled,
+        thinkaloud_client_config=thinkaloud_client_config,
         # Live agent (for conditional loading of live-agent assets)
         live_agent_enabled=live_agent_enabled,
         # Annotation instructions (collapsible banner)
@@ -3801,6 +3817,12 @@ def _initialize_from_config(config_file):
         from potato.truth_serum import init_truth_serum_manager
         init_truth_serum_manager(config)
         logger.info("Truth Serum initialized successfully")
+    # Initialize Think-Aloud if enabled (parity with run_server()).
+    if config.get("thinkaloud", {}).get("enabled", False):
+        logger.info("Initializing Think-Aloud...")
+        from potato.thinkaloud import init_thinkaloud_manager
+        init_thinkaloud_manager(config)
+        logger.info("Think-Aloud initialized successfully")
 
     # Initialize Judge Calibration if enabled (parity with run_server()).
     if config.get("judge_calibration", {}).get("enabled", False):
@@ -4036,6 +4058,12 @@ def run_server(args):
         from potato.truth_serum import init_truth_serum_manager
         init_truth_serum_manager(config)
         logger.info("Truth Serum initialized successfully")
+    # Initialize Think-Aloud if enabled
+    if config.get("thinkaloud", {}).get("enabled", False):
+        logger.info("Initializing Think-Aloud...")
+        from potato.thinkaloud import init_thinkaloud_manager
+        init_thinkaloud_manager(config)
+        logger.info("Think-Aloud initialized successfully")
 
     # Initialize Judge Calibration if enabled
     if config.get("judge_calibration", {}).get("enabled", False):

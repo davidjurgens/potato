@@ -632,6 +632,14 @@
     </script>
     <script src="{{ url_for('static', filename='truth-serum.js') }}?v=1"></script>
     {% endif %}
+    <!-- Think-Aloud: voice rationales + rule-based label phrases (conditional) -->
+    {% if thinkaloud_enabled | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/thinkaloud.css') }}?v=1">
+    <script type="text/javascript">
+        window.thinkAloudConfig = {{ thinkaloud_client_config | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='thinkaloud.js') }}?v=1"></script>
+    {% endif %}
     <!-- Turn-level annotation module (per-turn schema binding) -->
     <script src="{{ url_for('static', filename='turn-annotations.js') }}?v=1"></script>
     <!-- Multi-agent discussion display (agent filtering) -->

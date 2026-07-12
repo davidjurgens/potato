@@ -7687,6 +7687,15 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register Think-Aloud blueprint (voice rationales, rule-based labels) if
+    # not already registered
+    if 'thinkaloud' not in app.blueprints:
+        try:
+            from potato.thinkaloud.routes import thinkaloud_bp
+            app.register_blueprint(thinkaloud_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================

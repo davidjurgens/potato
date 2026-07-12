@@ -87,6 +87,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - **[Boundary Lab](advanced/boundary_lab.md)** - Counterfactual boundary probing: collect contrast sets during ordinary annotation, capture boundary rationales, and get paraphrase-invariance quality control
 - **[Truth Serum](advanced/truth_serum.md)** - Surprisingly-popular scoring: gold-free item verdicts that beat majority vote, plus annotator calibration
 - **[Paper Mode](advanced/paper_mode.md)** - One command generates a cut-paste LaTeX dataset report: description, distributions, annotator table, IAA, limitations
+- **[Think-Aloud Mode](advanced/think_aloud.md)** - Voice rationales with fully-local STT and rule-based spoken-label commitment; verbatim reasoning streams, no LLM
 - [Adjudication](administration/adjudication.md) - Multi-annotator disagreement resolution
 - [MACE](advanced/mace.md) - Multi-Annotator Competence Estimation via variational inference
 - [Iterative BWS](annotation-types/comparison/iterative_bws.md) - Adaptive Best-Worst Scaling for fine-grained ordinal rankings
