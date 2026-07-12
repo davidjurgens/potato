@@ -643,6 +643,17 @@ class FlaskTestServer:
                         print("[DEBUG] Think-Aloud manager initialized successfully")
                 except Exception as e:
                     print(f"[DEBUG] Error initializing Think-Aloud manager: {e}")
+                # Reset + (re)initialize Psychometrics manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale model fits.
+                try:
+                    from potato.psychometrics import init_psychometrics_manager, clear_psychometrics_manager
+                    clear_psychometrics_manager()
+                    if config.get('psychometrics', {}).get('enabled', False):
+                        init_psychometrics_manager(config)
+                        print("[DEBUG] Psychometrics manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Psychometrics manager: {e}")
                 # Reset + (re)initialize Pocket Mode config holder. The clear
                 # runs unconditionally so a leaked config from a prior
                 # in-process test server cannot enable /pocket unexpectedly.

@@ -7705,6 +7705,15 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register Psychometrics blueprint (live IRT: labels with error bars,
+    # adaptive routing, study designer) if not already registered
+    if 'psychometrics' not in app.blueprints:
+        try:
+            from potato.psychometrics.routes import psychometrics_bp
+            app.register_blueprint(psychometrics_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================

@@ -3829,6 +3829,12 @@ def _initialize_from_config(config_file):
         from potato.pocket.routes import init_pocket
         init_pocket(config)
         logger.info("Pocket Mode initialized successfully")
+    # Initialize Psychometrics if enabled (parity with run_server()).
+    if config.get("psychometrics", {}).get("enabled", False):
+        logger.info("Initializing Psychometrics...")
+        from potato.psychometrics import init_psychometrics_manager
+        init_psychometrics_manager(config)
+        logger.info("Psychometrics initialized successfully")
 
     # Initialize Judge Calibration if enabled (parity with run_server()).
     if config.get("judge_calibration", {}).get("enabled", False):
@@ -4076,6 +4082,12 @@ def run_server(args):
         from potato.pocket.routes import init_pocket
         init_pocket(config)
         logger.info("Pocket Mode initialized successfully")
+    # Initialize Psychometrics if enabled
+    if config.get("psychometrics", {}).get("enabled", False):
+        logger.info("Initializing Psychometrics...")
+        from potato.psychometrics import init_psychometrics_manager
+        init_psychometrics_manager(config)
+        logger.info("Psychometrics initialized successfully")
 
     # Initialize Judge Calibration if enabled
     if config.get("judge_calibration", {}).get("enabled", False):

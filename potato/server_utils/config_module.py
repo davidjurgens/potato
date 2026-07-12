@@ -262,6 +262,10 @@ KNOWN_CONFIG_KEYS = {
                    "stems", "fillers", "require_spoken_label", "language"},
     # Pocket Mode: mobile-first annotation surface (PWA) at /pocket.
     "pocket": {"enabled", "batch_size"},
+    # Psychometrics: live IRT (labels with error bars) + adaptive routing.
+    "psychometrics": {"enabled", "schema", "refit_interval", "min_observations",
+                      "min_annotators_per_item", "confidence_threshold",
+                      "cost_per_judgment", "discrimination_flag_threshold"},
     # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
     # Leaf sub-dicts (sampling/human/calibration/output) are validated by
     # validate_judge_calibration_config(); kept shallow here to avoid
@@ -649,7 +653,7 @@ _OPTIONAL_BOOL_FIELDS = {
 _VALID_ASSIGNMENT_STRATEGIES = [
     "random", "fixed_order", "active_learning", "llm_confidence",
     "max_diversity", "least_annotated", "category_based", "diversity_clustering",
-    "batch", "priority",
+    "batch", "priority", "psychometric",
 ]
 
 
@@ -1230,7 +1234,7 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 _CLAIM_INCOMPATIBLE_STRATEGIES = {
     "random", "diversity_clustering", "max_diversity",
     "active_learning", "llm_confidence", "least_annotated",
-    "category_based", "batch",
+    "category_based", "batch", "psychometric",
 }
 
 
