@@ -165,6 +165,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | Inter-annotator agreement | Krippendorff's alpha (general) and Cohen's kappa (step-level agent evaluation) |
 | Training phase | Practice annotations with feedback before the real task |
 | Behavioral tracking | Timing, click patterns, and annotation change history |
+| **Paper Mode** | `python -m potato.paper config.yaml` emits a compilable LaTeX dataset report — methods paragraphs, booktabs tables, IAA, limitations — ready to cut-paste ([docs](docs/advanced/paper_mode.md)) |
 
 ### Annotation Workflows
 
