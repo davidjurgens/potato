@@ -1,0 +1,35 @@
+port: 8000
+annotation_task_name: "Pocket — Sentiment Triage"
+task_dir: .
+output_annotation_dir: annotation_output/pocket-mode/
+output_annotation_format: jsonl
+annotation_codebook_url: ''
+data_files:
+- data/reviews.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: radio
+  name: sentiment
+  description: How does this review read?
+  labels:
+  - Positive
+  - Mixed
+  - Negative
+  sequential_key_binding: true
+
+# Pocket Mode: a mobile-first card-stack surface at /pocket — thumb-zone label
+# buttons, swipe navigation, haptics, offline annotation (saves queue locally
+# and sync on reconnect), installable to the home screen as a PWA. Works for
+# touch-capable schemes (radio, multiselect, likert, slider, text); tasks with
+# desktop-class schemes (spans, bounding boxes) are politely redirected.
+# Single-radio tasks auto-advance on tap: one tap = one labeled item.
+pocket:
+  enabled: true
+  batch_size: 25
+site_dir: default

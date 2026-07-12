@@ -260,6 +260,8 @@ KNOWN_CONFIG_KEYS = {
     # Think-Aloud: local voice rationales + rule-based spoken-label phrases.
     "thinkaloud": {"enabled", "schema", "stt", "model", "chunk_seconds",
                    "stems", "fillers", "require_spoken_label", "language"},
+    # Pocket Mode: mobile-first annotation surface (PWA) at /pocket.
+    "pocket": {"enabled", "batch_size"},
     # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
     # Leaf sub-dicts (sampling/human/calibration/output) are validated by
     # validate_judge_calibration_config(); kept shallow here to avoid

@@ -3823,6 +3823,12 @@ def _initialize_from_config(config_file):
         from potato.thinkaloud import init_thinkaloud_manager
         init_thinkaloud_manager(config)
         logger.info("Think-Aloud initialized successfully")
+    # Initialize Pocket Mode if enabled (parity with run_server()).
+    if config.get("pocket", {}).get("enabled", False):
+        logger.info("Initializing Pocket Mode...")
+        from potato.pocket.routes import init_pocket
+        init_pocket(config)
+        logger.info("Pocket Mode initialized successfully")
 
     # Initialize Judge Calibration if enabled (parity with run_server()).
     if config.get("judge_calibration", {}).get("enabled", False):
@@ -4064,6 +4070,12 @@ def run_server(args):
         from potato.thinkaloud import init_thinkaloud_manager
         init_thinkaloud_manager(config)
         logger.info("Think-Aloud initialized successfully")
+    # Initialize Pocket Mode if enabled
+    if config.get("pocket", {}).get("enabled", False):
+        logger.info("Initializing Pocket Mode...")
+        from potato.pocket.routes import init_pocket
+        init_pocket(config)
+        logger.info("Pocket Mode initialized successfully")
 
     # Initialize Judge Calibration if enabled
     if config.get("judge_calibration", {}).get("enabled", False):

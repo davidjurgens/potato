@@ -7696,6 +7696,15 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register Pocket Mode blueprint (mobile-first annotation PWA) if not
+    # already registered
+    if 'pocket' not in app.blueprints:
+        try:
+            from potato.pocket.routes import pocket_bp
+            app.register_blueprint(pocket_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================

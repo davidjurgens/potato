@@ -1,0 +1,384 @@
+/* Potato Pocket — mobile-first annotation surface (light theme). */
+
+:root {
+    --pk-ink: #26233d;
+    --pk-ink-soft: #6d6a85;
+    --pk-ink-faint: #a5a2bd;
+    --pk-line: #e6e3f2;
+    --pk-accent: #5b21b6;
+    --pk-accent-soft: #7c3aed;
+    --pk-accent-bg: #f4f0fd;
+    --pk-good: #166534;
+    --pk-good-bg: #dcf5e2;
+    --pk-warn: #b45309;
+    --pk-warn-bg: #fff1e4;
+    --pk-paper: #faf9ff;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+    margin: 0;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 Helvetica, Arial, sans-serif;
+    background: #f4f2f9;
+    color: var(--pk-ink);
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ------------------------------------------------------------- header --- */
+
+.pk-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: linear-gradient(120deg, #38306b, #5b21b6);
+    color: #fff;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 0;
+}
+
+.pk-header-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 10px;
+}
+
+.pk-logo { font-size: 1.15rem; }
+
+.pk-task {
+    font-weight: 650;
+    font-size: 0.98rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.pk-count {
+    margin-left: auto;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.85);
+    white-space: nowrap;
+}
+
+.pk-progress {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.22);
+    border-radius: 999px 999px 0 0;
+    overflow: hidden;
+}
+
+.pk-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: #ffe27a;
+    border-radius: 999px;
+    transition: width 0.35s ease;
+}
+
+/* --------------------------------------------------------------- main --- */
+
+.pk-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 16px 20px;
+    max-width: 640px;
+    width: 100%;
+    margin: 0 auto;
+    min-height: 0;
+}
+
+.pk-loading, .pk-message {
+    margin: auto;
+    color: var(--pk-ink-soft);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+    flex-direction: column;
+    padding: 24px;
+    line-height: 1.5;
+}
+
+.pk-spinner {
+    width: 22px;
+    height: 22px;
+    border: 2.5px solid var(--pk-line);
+    border-top-color: var(--pk-accent);
+    border-radius: 50%;
+    animation: pk-spin 0.7s linear infinite;
+}
+
+@keyframes pk-spin { to { transform: rotate(360deg); } }
+
+/* --------------------------------------------------------------- card --- */
+
+.pk-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    animation: pk-card-in 0.22s ease-out;
+}
+
+@keyframes pk-card-in {
+    from { transform: translateX(24px); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+}
+
+.pk-card.pk-out-left  { animation: pk-card-out 0.16s ease-in forwards; }
+
+@keyframes pk-card-out {
+    to { transform: translateX(-32px); opacity: 0; }
+}
+
+.pk-text {
+    background: #ffffff;
+    border: 1px solid var(--pk-line);
+    border-radius: 16px;
+    padding: 18px;
+    font-size: 1.08rem;
+    line-height: 1.65;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 96px;
+    box-shadow: 0 2px 10px rgba(56, 48, 107, 0.06);
+}
+
+.pk-swipe-hint {
+    text-align: center;
+    color: var(--pk-ink-faint);
+    font-size: 0.75rem;
+    padding: 8px 0 2px;
+}
+
+/* ------------------------------------------------------------ controls --- */
+
+.pk-controls {
+    padding-top: 12px;
+}
+
+.pk-scheme + .pk-scheme { margin-top: 14px; }
+
+.pk-scheme-title {
+    font-size: 0.86rem;
+    font-weight: 650;
+    color: var(--pk-ink-soft);
+    margin: 0 0 8px 2px;
+}
+
+.pk-options { display: grid; gap: 8px; }
+.pk-options.pk-grid-2 { grid-template-columns: 1fr 1fr; }
+
+.pk-opt {
+    display: block;
+    width: 100%;
+    border: 1.5px solid var(--pk-line);
+    background: #fff;
+    color: var(--pk-ink);
+    border-radius: 13px;
+    padding: 14px 16px;
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    min-height: 50px;
+    transition: border-color 0.12s ease, background 0.12s ease,
+                transform 0.08s ease;
+}
+
+.pk-opt:active { transform: scale(0.98); }
+
+.pk-opt.selected {
+    border-color: var(--pk-accent-soft);
+    background: var(--pk-accent-bg);
+    color: var(--pk-accent);
+}
+
+.pk-opt .pk-check { display: none; margin-right: 6px; }
+.pk-opt.selected .pk-check { display: inline; }
+
+/* Likert segmented row */
+.pk-likert {
+    display: flex;
+    gap: 6px;
+}
+
+.pk-likert .pk-opt {
+    flex: 1;
+    padding: 12px 4px;
+    border-radius: 11px;
+}
+
+.pk-likert-legend {
+    display: flex;
+    justify-content: space-between;
+    color: var(--pk-ink-faint);
+    font-size: 0.72rem;
+    margin-top: 4px;
+    padding: 0 2px;
+}
+
+/* Slider */
+.pk-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #fff;
+    border: 1.5px solid var(--pk-line);
+    border-radius: 13px;
+    padding: 14px 16px;
+}
+
+.pk-slider {
+    flex: 1;
+    accent-color: var(--pk-accent-soft);
+    min-height: 30px;
+}
+
+.pk-slider-value {
+    min-width: 44px;
+    text-align: right;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--pk-accent);
+}
+
+/* Textarea */
+.pk-textarea {
+    width: 100%;
+    border: 1.5px solid var(--pk-line);
+    border-radius: 13px;
+    padding: 12px 14px;
+    font-size: 1rem;
+    font-family: inherit;
+    min-height: 84px;
+    resize: vertical;
+    background: #fff;
+    color: var(--pk-ink);
+}
+
+.pk-textarea:focus {
+    outline: none;
+    border-color: var(--pk-accent-soft);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.14);
+}
+
+/* Footer actions */
+.pk-actions {
+    display: flex;
+    gap: 10px;
+    padding-top: 14px;
+}
+
+.pk-nav {
+    border: 1.5px solid var(--pk-line);
+    background: #fff;
+    color: var(--pk-ink-soft);
+    border-radius: 13px;
+    min-width: 54px;
+    min-height: 48px;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.pk-nav:disabled { opacity: 0.4; cursor: default; }
+
+.pk-next {
+    flex: 1;
+    border: none;
+    background: var(--pk-accent);
+    color: #fff;
+    border-radius: 13px;
+    min-height: 48px;
+    font-size: 1rem;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.08s ease;
+}
+
+.pk-next:active { transform: scale(0.985); }
+.pk-next:disabled { background: #cabfe4; cursor: default; }
+
+/* --------------------------------------------------------------- done --- */
+
+.pk-done {
+    margin: auto;
+    text-align: center;
+    padding: 32px 24px;
+}
+
+.pk-done-mark {
+    width: 62px;
+    height: 62px;
+    margin: 0 auto 14px;
+    border-radius: 50%;
+    background: var(--pk-good-bg);
+    color: var(--pk-good);
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 62px;
+    animation: pk-pop 0.35s cubic-bezier(0.2, 1.4, 0.5, 1);
+}
+
+@keyframes pk-pop {
+    from { transform: scale(0.4); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+}
+
+.pk-done-title { font-size: 1.2rem; font-weight: 700; }
+.pk-done-sub { color: var(--pk-ink-soft); margin-top: 6px; line-height: 1.5; }
+
+/* --------------------------------------------------------------- sync --- */
+
+.pk-sync {
+    position: fixed;
+    left: 50%;
+    /* sits above the card's action row (48px buttons + paddings) */
+    bottom: calc(96px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    background: var(--pk-warn-bg);
+    color: var(--pk-warn);
+    border: 1px solid #f6cf9e;
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    z-index: 20;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
+}
+
+.pk-sync.pk-ok {
+    background: var(--pk-good-bg);
+    color: var(--pk-good);
+    border-color: #b7e4c3;
+}
+
+/* ------------------------------------------------------------- a11y ----- */
+
+.pk-opt:focus-visible,
+.pk-nav:focus-visible,
+.pk-next:focus-visible,
+.pk-slider:focus-visible {
+    outline: 2.5px solid var(--pk-accent-soft);
+    outline-offset: 2px;
+}
+
+@media (min-width: 700px) {
+    .pk-text { font-size: 1.15rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pk-card, .pk-card.pk-out-left, .pk-done-mark { animation: none; }
+    .pk-progress-fill { transition: none; }
+    .pk-opt, .pk-next { transition: none; }
+}
