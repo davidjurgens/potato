@@ -165,6 +165,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | Inter-annotator agreement | Krippendorff's alpha (general) and Cohen's kappa (step-level agent evaluation) |
 | Training phase | Practice annotations with feedback before the real task |
 | Behavioral tracking | Timing, click patterns, and annotation change history |
+| **Truth Serum** | Surprisingly-popular scoring (Prelec et al., Nature 2017): gold-free verdicts that beat majority vote on hard items, plus annotator calibration ([docs](docs/advanced/truth_serum.md)) |
 
 ### Annotation Workflows
 

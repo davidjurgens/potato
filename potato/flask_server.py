@@ -2351,6 +2351,18 @@ def render_page_with_annotations(username: str):
     # Check if chat support is enabled (for conditional loading of llm-chat-sidebar assets)
     chat_enabled = config.get("chat_support", {}).get("enabled", False)
 
+    # Truth Serum (surprisingly-popular scoring): conditional assets + JS config
+    truth_serum_client_config = None
+    if config.get("truth_serum", {}).get("enabled", False):
+        from potato.truth_serum import get_truth_serum_manager
+        ts_manager = get_truth_serum_manager()
+        if ts_manager and ts_manager.ts_config.schema:
+            truth_serum_client_config = {
+                "schema": ts_manager.ts_config.schema,
+                "question": ts_manager.ts_config.question,
+            }
+    truth_serum_enabled = truth_serum_client_config is not None
+
     # Check if live agent is enabled (for conditional loading of live-agent assets)
     live_agent_enabled = bool(config.get("live_agent"))
 
@@ -2432,6 +2444,9 @@ def render_page_with_annotations(username: str):
         agent_proxy_enabled=agent_proxy_enabled,
         # Chat support (for conditional loading of llm-chat-sidebar assets)
         chat_enabled=chat_enabled,
+        # Truth Serum (surprisingly-popular scoring)
+        truth_serum_enabled=truth_serum_enabled,
+        truth_serum_client_config=truth_serum_client_config,
         # Live agent (for conditional loading of live-agent assets)
         live_agent_enabled=live_agent_enabled,
         # Annotation instructions (collapsible banner)
@@ -3757,6 +3772,13 @@ def _initialize_from_config(config_file):
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
 
+    # Initialize Truth Serum if enabled (parity with run_server()).
+    if config.get("truth_serum", {}).get("enabled", False):
+        logger.info("Initializing Truth Serum...")
+        from potato.truth_serum import init_truth_serum_manager
+        init_truth_serum_manager(config)
+        logger.info("Truth Serum initialized successfully")
+
     # Initialize Judge Calibration if enabled (parity with run_server()).
     if config.get("judge_calibration", {}).get("enabled", False):
         logger.info("Initializing Judge Calibration...")
@@ -3978,6 +4000,13 @@ def run_server(args):
         logger.info("Initializing QDA Mode...")
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
+
+    # Initialize Truth Serum if enabled
+    if config.get("truth_serum", {}).get("enabled", False):
+        logger.info("Initializing Truth Serum...")
+        from potato.truth_serum import init_truth_serum_manager
+        init_truth_serum_manager(config)
+        logger.info("Truth Serum initialized successfully")
 
     # Initialize Judge Calibration if enabled
     if config.get("judge_calibration", {}).get("enabled", False):

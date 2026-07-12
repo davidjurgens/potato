@@ -84,6 +84,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Multi-Document Event Annotation](advanced/multi_document_events.md) - Cross-document events with a 2D corpus map, cluster browser, KNN, and evidence-cited template slots
 - [Training Phase](workflow/training_phase.md) - Annotator training and qualification
 - [Quality Control](workflow/quality_control.md) - Attention checks and gold standards
+- **[Truth Serum](advanced/truth_serum.md)** - Surprisingly-popular scoring: gold-free item verdicts that beat majority vote, plus annotator calibration
 - [Adjudication](administration/adjudication.md) - Multi-annotator disagreement resolution
 - [MACE](advanced/mace.md) - Multi-Annotator Competence Estimation via variational inference
 - [Iterative BWS](annotation-types/comparison/iterative_bws.md) - Adaptive Best-Worst Scaling for fine-grained ordinal rankings

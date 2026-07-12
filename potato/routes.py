@@ -7669,6 +7669,15 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register Truth Serum blueprint (surprisingly-popular scoring) if not
+    # already registered
+    if 'truth_serum' not in app.blueprints:
+        try:
+            from potato.truth_serum.routes import truth_serum_bp
+            app.register_blueprint(truth_serum_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================

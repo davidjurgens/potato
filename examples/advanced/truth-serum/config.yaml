@@ -1,0 +1,35 @@
+port: 8000
+annotation_task_name: "Truth Serum — Sarcasm"
+task_dir: .
+output_annotation_dir: annotation_output/truth-serum/
+output_annotation_format: jsonl
+annotation_codebook_url: ''
+data_files:
+- data/sarcasm.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: radio
+  name: sarcasm
+  description: Is this statement sarcastic or sincere?
+  labels:
+  - Sarcastic
+  - Sincere
+  sequential_key_binding: true
+
+# Truth Serum: after each label, one micro-question — "What percentage of other
+# annotators will choose the same label as you?" The surprisingly-popular
+# principle (Prelec, Seung & McCoy, Nature 2017) turns those predictions into
+# item verdicts that beat majority vote on hard items, with no gold labels.
+# Dashboard: /truth_serum/dashboard (admin; --debug passes automatically).
+truth_serum:
+  enabled: true
+  schema: sarcasm
+  min_annotators: 3
+  # question: "What percentage of other annotators will choose the same label as you?"
+site_dir: default

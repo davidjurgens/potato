@@ -610,6 +610,18 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Reset + (re)initialize Truth Serum manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale predictions.
+                try:
+                    from potato.truth_serum import init_truth_serum_manager, clear_truth_serum_manager
+                    clear_truth_serum_manager()
+                    if config.get('truth_serum', {}).get('enabled', False):
+                        init_truth_serum_manager(config)
+                        print("[DEBUG] Truth Serum manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Truth Serum manager: {e}")
+
                 # Reset + (re)initialize QDA Mode manager. The clear runs
                 # unconditionally so a leaked singleton from a prior in-process
                 # test server cannot make a QDA-disabled server report enabled.
