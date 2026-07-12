@@ -13,6 +13,21 @@ AI support in Potato offers four main features:
 3. **Label Rationales**: Generates explanations for why each label might apply to the text, helping annotators understand the reasoning behind different classifications
 4. **Label Suggestions**: Visually highlights which labels the AI thinks are most likely (with sparkle indicator on hint)
 
+## Installation
+
+AI provider SDKs are **optional dependencies** — a base Potato install runs
+without any of them, and each SDK is only imported when a config selects that
+`endpoint_type`. Install the common LLM SDKs (ollama, openai, anthropic,
+google-genai) in one step with the `ai` extra:
+
+```bash
+pip install "potato-annotation[ai]"
+```
+
+Or install just the SDK for your provider (listed per provider below). If a
+config selects an endpoint whose SDK is missing, the server reports which
+package to install rather than failing at import time.
+
 ## Supported LLM Providers
 
 Potato supports multiple LLM providers, allowing you to choose the best option for your needs:
@@ -318,7 +333,7 @@ ai_support:
 
 **Setup:**
 1. Get an API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Install the Google Generative AI package: `pip install google-generativeai`
+2. Install the Google Gen AI SDK: `pip install google-genai`
 
 ### Hugging Face
 
