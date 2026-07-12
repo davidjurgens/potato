@@ -2365,6 +2365,17 @@ def render_page_with_annotations(username: str):
                 "rationale_on_flip": bc.rationale_on_flip,
             }
     boundary_enabled = boundary_client_config is not None
+    # Truth Serum (surprisingly-popular scoring): conditional assets + JS config
+    truth_serum_client_config = None
+    if config.get("truth_serum", {}).get("enabled", False):
+        from potato.truth_serum import get_truth_serum_manager
+        ts_manager = get_truth_serum_manager()
+        if ts_manager and ts_manager.ts_config.schema:
+            truth_serum_client_config = {
+                "schema": ts_manager.ts_config.schema,
+                "question": ts_manager.ts_config.question,
+            }
+    truth_serum_enabled = truth_serum_client_config is not None
 
     # Check if live agent is enabled (for conditional loading of live-agent assets)
     live_agent_enabled = bool(config.get("live_agent"))
@@ -2450,6 +2461,9 @@ def render_page_with_annotations(username: str):
         # Boundary Lab (counterfactual boundary probing)
         boundary_enabled=boundary_enabled,
         boundary_client_config=boundary_client_config,
+        # Truth Serum (surprisingly-popular scoring)
+        truth_serum_enabled=truth_serum_enabled,
+        truth_serum_client_config=truth_serum_client_config,
         # Live agent (for conditional loading of live-agent assets)
         live_agent_enabled=live_agent_enabled,
         # Annotation instructions (collapsible banner)
@@ -3781,6 +3795,12 @@ def _initialize_from_config(config_file):
         from potato.boundary import init_boundary_manager
         init_boundary_manager(config)
         logger.info("Boundary Lab initialized successfully")
+    # Initialize Truth Serum if enabled (parity with run_server()).
+    if config.get("truth_serum", {}).get("enabled", False):
+        logger.info("Initializing Truth Serum...")
+        from potato.truth_serum import init_truth_serum_manager
+        init_truth_serum_manager(config)
+        logger.info("Truth Serum initialized successfully")
 
     # Initialize Judge Calibration if enabled (parity with run_server()).
     if config.get("judge_calibration", {}).get("enabled", False):
@@ -4010,6 +4030,12 @@ def run_server(args):
         from potato.boundary import init_boundary_manager
         init_boundary_manager(config)
         logger.info("Boundary Lab initialized successfully")
+    # Initialize Truth Serum if enabled
+    if config.get("truth_serum", {}).get("enabled", False):
+        logger.info("Initializing Truth Serum...")
+        from potato.truth_serum import init_truth_serum_manager
+        init_truth_serum_manager(config)
+        logger.info("Truth Serum initialized successfully")
 
     # Initialize Judge Calibration if enabled
     if config.get("judge_calibration", {}).get("enabled", False):

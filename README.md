@@ -198,6 +198,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | Training phase | Practice annotations with feedback before the real task |
 | Behavioral tracking | Timing, click patterns, and annotation change history |
 | **Boundary probing** | Counterfactual probes map each annotator's decision boundary; paraphrase-invariance flags inconsistency ([docs](docs/advanced/boundary_lab.md)) |
+| **Truth Serum** | Surprisingly-popular scoring (Prelec et al., Nature 2017): gold-free verdicts that beat majority vote on hard items, plus annotator calibration ([docs](docs/advanced/truth_serum.md)) |
 
 ### Annotation Workflows
 

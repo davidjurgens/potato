@@ -255,6 +255,8 @@ KNOWN_CONFIG_KEYS = {
         "sources", "precomputed_key", "rationale_on_flip", "debounce_ms",
         "ai_support",
     },
+    # Truth Serum: surprisingly-popular scoring (peer-prediction micro-question).
+    "truth_serum": {"enabled", "schema", "question", "min_annotators"},
     # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
     # Leaf sub-dicts (sampling/human/calibration/output) are validated by
     # validate_judge_calibration_config(); kept shallow here to avoid
