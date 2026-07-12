@@ -199,6 +199,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | Behavioral tracking | Timing, click patterns, and annotation change history |
 | **Boundary probing** | Counterfactual probes map each annotator's decision boundary; paraphrase-invariance flags inconsistency ([docs](docs/advanced/boundary_lab.md)) |
 | **Truth Serum** | Surprisingly-popular scoring (Prelec et al., Nature 2017): gold-free verdicts that beat majority vote on hard items, plus annotator calibration ([docs](docs/advanced/truth_serum.md)) |
+| **Paper Mode** | `python -m potato.paper config.yaml` emits a compilable LaTeX dataset report — methods paragraphs, booktabs tables, IAA, limitations — ready to cut-paste ([docs](docs/advanced/paper_mode.md)) |
 
 ### Annotation Workflows
 
