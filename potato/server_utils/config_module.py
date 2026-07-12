@@ -248,6 +248,13 @@ KNOWN_CONFIG_KEYS = {
         "markers", "sentences_per_step", "llm_max_chars",
     },
     "judge_alignment": {"enabled", "ai_support", "schemas", "few_shot", "inline"},
+    # Boundary Lab: counterfactual boundary probing (decision boundaries,
+    # contrast-set export, invariance-probe quality control).
+    "boundary_probing": {
+        "enabled", "schema", "probes_per_item", "include_invariance",
+        "sources", "precomputed_key", "rationale_on_flip", "debounce_ms",
+        "ai_support",
+    },
     # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
     # Leaf sub-dicts (sampling/human/calibration/output) are validated by
     # validate_judge_calibration_config(); kept shallow here to avoid

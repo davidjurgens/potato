@@ -610,6 +610,18 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Reset + (re)initialize Boundary Lab manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale probes.
+                try:
+                    from potato.boundary import init_boundary_manager, clear_boundary_manager
+                    clear_boundary_manager()
+                    if config.get('boundary_probing', {}).get('enabled', False):
+                        init_boundary_manager(config)
+                        print("[DEBUG] Boundary Lab manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Boundary Lab manager: {e}")
+
                 # Reset + (re)initialize QDA Mode manager. The clear runs
                 # unconditionally so a leaked singleton from a prior in-process
                 # test server cannot make a QDA-disabled server report enabled.
