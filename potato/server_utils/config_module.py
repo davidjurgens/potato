@@ -243,6 +243,10 @@ KNOWN_CONFIG_KEYS = {
     },
     "webhooks": {"enabled", "endpoints"},
     "trace_ingestion": {"enabled", "sources", "api_key", "notify_annotators"},
+    "cot_segmentation": {
+        "source_key", "target_key", "strategy", "min_step_chars", "max_steps",
+        "markers", "sentences_per_step", "llm_max_chars",
+    },
     "judge_alignment": {"enabled", "ai_support", "schemas", "few_shot", "inline"},
     # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
     # Leaf sub-dicts (sampling/human/calibration/output) are validated by
@@ -962,6 +966,46 @@ def validate_event_template_config(config_data: Dict[str, Any]) -> None:
         )
 
 
+def validate_cot_segmentation_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``cot_segmentation`` block when present.
+
+    Splits a long chain-of-thought string into per-step lists for the
+    ``cot_trace`` display + ``process_reward`` schema.
+    """
+    seg = config_data.get("cot_segmentation")
+    if seg is None:
+        return
+    if not isinstance(seg, dict):
+        raise ConfigValidationError("cot_segmentation must be a mapping")
+
+    valid_strategies = {"blank_line", "numbered", "markers", "sentence", "llm", "auto"}
+    errors = []
+    if not seg.get("source_key") or not isinstance(seg.get("source_key"), str):
+        errors.append("cot_segmentation.source_key is required and must be a string")
+    strategy = seg.get("strategy", "auto")
+    if strategy not in valid_strategies:
+        errors.append(
+            f"cot_segmentation.strategy must be one of: {', '.join(sorted(valid_strategies))}"
+        )
+    if "target_key" in seg and not isinstance(seg["target_key"], str):
+        errors.append("cot_segmentation.target_key must be a string")
+    for num_key in ("min_step_chars", "max_steps", "sentences_per_step", "llm_max_chars"):
+        if num_key in seg and not isinstance(seg[num_key], int):
+            errors.append(f"cot_segmentation.{num_key} must be an integer")
+    if "markers" in seg and not isinstance(seg["markers"], list):
+        errors.append("cot_segmentation.markers must be a list of strings")
+    if strategy == "llm" and not (config_data.get("ai_support") or config_data.get("judge_alignment")):
+        logger.warning(
+            "cot_segmentation.strategy is 'llm' but no ai_support/judge_alignment "
+            "endpoint is configured; segmentation will fall back to heuristics."
+        )
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid cot_segmentation configuration:\n  - " + "\n  - ".join(errors)
+        )
+
+
 def validate_corpus_map_config(config_data: Dict[str, Any]) -> None:
     """Validate the ``corpus_map`` block when enabled and warn on quota conflict.
 
@@ -1157,6 +1201,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate multi-document event annotation blocks if present
     validate_event_template_config(config_data)
     validate_corpus_map_config(config_data)
+
+    # Validate chain-of-thought segmentation block if present
+    validate_cot_segmentation_config(config_data)
 
     # Validate ui_language (bundled code / _base / inline overrides)
     validate_ui_language_config(config_data)

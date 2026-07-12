@@ -100,6 +100,7 @@ Role-based guides that walk you through Potato for your specific use case:
 ## Agent Evaluation
 
 - **[Coding Agent Annotation](agent-evaluation/coding_agent_annotation.md)** - Evaluate agentic coding systems (Claude Code, SWE-Agent, Aider) with diff rendering, PRM annotation, and code review
+- **[CoT Process Reward (LLM pre-label + verify)](agent-evaluation/process_reward_cot.md)** - Segment a long chain-of-thought into steps, have an LLM pre-label each step's reward, and have a human verify — fast PRM data collection
 - [Agent Traces](agent-evaluation/agent_traces.md) - Evaluate AI agent traces and trajectories
 - [Turn-Level Annotation](agent-evaluation/turn_level_annotation.md) - Bind any rating/tagging/comment schema per-turn with declarative filters (by speaker, agent, step type, tool)
 - [Multi-Agent Discussion](agent-evaluation/multi_agent_discussion.md) - Annotate agent-to-agent discussions/debates with agent identity, addressees, reply threading, and consensus tracking

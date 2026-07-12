@@ -1234,10 +1234,45 @@ def _prefill_diversity_embeddings(dm, config: dict) -> None:
         )
 
 
+def apply_cot_segmentation_to_all(config: dict) -> None:
+    """Segment long CoT reasoning on every loaded item, per the ``cot_segmentation``
+    config block. No-op when the block is absent. The ``llm`` strategy reuses the
+    configured AI/judge endpoint; any endpoint error falls back to heuristics.
+    """
+    seg_config = config.get("cot_segmentation")
+    if not seg_config or not isinstance(seg_config, dict):
+        return
+
+    from potato.server_utils.cot_segmentation import apply_cot_segmentation
+
+    endpoint = None
+    if seg_config.get("strategy") == "llm":
+        try:
+            from potato.ai.ai_endpoint import AIEndpointFactory
+            endpoint = AIEndpointFactory.create_endpoint(config)
+        except Exception as exc:  # noqa: BLE001 - heuristic fallback on any error
+            logger.warning("cot_segmentation 'llm' endpoint unavailable, using heuristics: %s", exc)
+
+    count = 0
+    for item in get_item_state_manager().items():
+        data = item.get_data()
+        if isinstance(data, dict):
+            before = data.get(seg_config.get("target_key", "cot_steps"))
+            apply_cot_segmentation(data, seg_config, endpoint=endpoint)
+            if data.get(seg_config.get("target_key", "cot_steps")) is not before:
+                count += 1
+    logger.info("CoT segmentation applied to %d items (strategy=%s)",
+                count, seg_config.get("strategy", "auto"))
+
+
 def load_all_data(config: dict):
     '''Loads instance and annotation data from the files specified in the config.'''
     load_annotation_schematic_data(config)
     load_instance_data(config)
+    # Segment long chain-of-thought reasoning into per-step lists (feeds the
+    # cot_trace display + process_reward schema). Must run after items load so
+    # every static item is segmented before assignment/rendering.
+    apply_cot_segmentation_to_all(config)
     # Stamp per-item annotator caps for the overlap sample (must run before
     # user_data so that initial assignments see the heterogeneous caps).
     try:

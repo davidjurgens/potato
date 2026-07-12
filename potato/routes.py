@@ -2051,6 +2051,69 @@ def get_ai_suggestion():
         return jsonify(res)
 
 
+# Per-(instance, schema) cache of LLM step pre-labels so repeated clicks on the
+# "AI pre-label" button don't re-query the model. Keyed by (instance_id, schema).
+_PRM_PRELABEL_CACHE: dict = {}
+
+
+@app.route('/api/prm/prelabel', methods=['GET'])
+def prm_prelabel():
+    """Return LLM-suggested per-step process rewards for one process_reward schema.
+
+    Query params: ``instance_id`` and ``schema`` (the process_reward scheme
+    name). Response: ``{"steps": [{index, reward, reasoning, confidence}],
+    "cached": bool}``. The human verifies each suggestion in the UI.
+    """
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    instance_id = request.args.get('instance_id')
+    schema_name = request.args.get('schema')
+    if not instance_id or not schema_name:
+        return jsonify({"error": "instance_id and schema are required"}), 400
+
+    # Resolve the process_reward scheme by name.
+    scheme = None
+    for s in config.get("annotation_schemes", []):
+        if s.get("name") == schema_name:
+            scheme = s
+            break
+    if scheme is None or scheme.get("annotation_type") != "process_reward":
+        return jsonify({"error": f"No process_reward schema named '{schema_name}'"}), 404
+    if not scheme.get("ai_prelabel"):
+        return jsonify({"error": "AI pre-labeling is not enabled for this schema"}), 400
+
+    ism = get_item_state_manager()
+    if not ism.has_item(str(instance_id)):
+        return jsonify({"error": f"Unknown instance '{instance_id}'"}), 404
+    item = ism.get_item(str(instance_id))
+    data = item.get_data()
+    steps_key = scheme.get("steps_key", "steps")
+    steps = data.get(steps_key) if isinstance(data, dict) else None
+    if not isinstance(steps, list) or not steps:
+        return jsonify({"steps": [], "error": f"No steps found under '{steps_key}'"}), 200
+
+    cache_key = (str(instance_id), schema_name)
+    cached = _PRM_PRELABEL_CACHE.get(cache_key)
+    if cached is not None:
+        return jsonify({"steps": cached, "cached": True})
+
+    try:
+        from potato.ai.judge import JudgeService
+        suggestions = JudgeService(config).judge_steps(str(instance_id), scheme, steps)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("PRM prelabel failed for %s/%s: %s", instance_id, schema_name, exc)
+        return jsonify({"error": "AI pre-labeling failed"}), 500
+
+    if suggestions is None:
+        return jsonify({
+            "error": "AI judge unavailable — check ai_support / judge_alignment config"
+        }), 503
+
+    _PRM_PRELABEL_CACHE[cache_key] = suggestions
+    return jsonify({"steps": suggestions, "cached": False})
+
+
 @app.route('/api/option_highlights/<int:annotation_id>', methods=['GET'])
 def get_option_highlights(annotation_id):
     """Get AI-suggested option highlights for a specific annotation.
@@ -7362,6 +7425,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/progress/api/summary", "annotator_progress_summary", annotator_progress_summary, methods=["GET"])
 
     app.add_url_rule("/api/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
+    app.add_url_rule("/api/prm/prelabel", "prm_prelabel", prm_prelabel, methods=["GET"])
 
     # Option highlighting API routes
     app.add_url_rule("/api/option_highlights/config", "get_option_highlighting_config", get_option_highlighting_config, methods=["GET"])

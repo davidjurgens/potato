@@ -22,6 +22,7 @@ from .spreadsheet_display import SpreadsheetDisplay
 from .code_display import CodeDisplay
 from .agent_trace_display import AgentTraceDisplay
 from .eval_trace_display import EvalTraceDisplay
+from .cot_trace_display import CotTraceDisplay
 from .gallery_display import GalleryDisplay
 from .interactive_chat_display import InteractiveChatDisplay
 from .web_agent_trace_display import WebAgentTraceDisplay
@@ -41,6 +42,7 @@ __all__ = [
     'CodeDisplay',
     'AgentTraceDisplay',
     'EvalTraceDisplay',
+    'CotTraceDisplay',
     'GalleryDisplay',
     'InteractiveChatDisplay',
     'WebAgentTraceDisplay',

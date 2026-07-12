@@ -352,6 +352,7 @@ def _register_builtin_displays():
     from .live_agent_display import LiveAgentDisplay
     from .coding_trace_display import CodingTraceDisplay
     from .live_coding_agent_display import LiveCodingAgentDisplay
+    from .cot_trace_display import CotTraceDisplay
 
     displays = [
         DisplayDefinition(
@@ -550,6 +551,21 @@ def _register_builtin_displays():
             },
             supports_span_target=False,
             description="Agent trace display with step cards and type badges"
+        ),
+        DisplayDefinition(
+            name="cot_trace",
+            renderer=CotTraceDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "show_step_numbers": True,
+                "show_types": True,
+                "show_rail": True,
+                "collapse_long_steps": True,
+                "clamp_lines": 12,
+                "compact": False,
+            },
+            supports_span_target=False,
+            description="Long chain-of-thought trace: vertical step cards with a sticky progress rail for process-reward verification",
         ),
         DisplayDefinition(
             name="eval_trace",

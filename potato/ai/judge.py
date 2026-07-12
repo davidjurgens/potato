@@ -369,6 +369,154 @@ class JudgeService:
             "model_name": getattr(endpoint, "model", ""),
         }
 
+    # ----- per-step process-reward judging -------------------------------
+
+    def judge_steps(self, instance_id: str, schema_info: Dict[str, Any],
+                    steps: List[Any], rubric: Optional[str] = None
+                    ) -> Optional[List[Dict[str, Any]]]:
+        """Assign a process reward to each step of a chain-of-thought.
+
+        ``steps`` is the step list (dicts with ``text``/``content``/``reasoning``
+        or bare strings). Returns a list of
+        ``{index, reward, reasoning, confidence}`` — reward is ``1`` (correct),
+        ``-1`` (incorrect), or ``0`` (neutral, only when the scheme allows it) —
+        or ``None`` on failure. The human then verifies each suggestion.
+        """
+        endpoint = self._get_endpoint()
+        if endpoint is None or not steps:
+            return None
+
+        allow_neutral = bool(schema_info.get("allow_neutral"))
+        rubric = rubric if rubric is not None else self.get_rubric(schema_info)
+
+        step_texts = []
+        for i, s in enumerate(steps):
+            if isinstance(s, dict):
+                text = s.get("text") or s.get("content") or s.get("reasoning") or ""
+            else:
+                text = str(s)
+            step_texts.append(f"[{i}] {_truncate(str(text), 800)}")
+
+        scale = "correct (1), neutral (0), or incorrect (-1)" if allow_neutral \
+            else "correct (1) or incorrect (-1)"
+        allowed = "1, 0, or -1" if allow_neutral else "1 or -1"
+        parts = [
+            "You are an expert evaluator assigning a PROCESS REWARD to each step",
+            "of a chain-of-thought. Judge whether the reasoning AT EACH STEP is",
+            f"{scale}. A step is incorrect if it introduces an error, invalid",
+            "logic, or a wrong fact — even if later steps recover.",
+            f"Task: {schema_info.get('description', '')}".rstrip(),
+            (f"Rubric: {rubric}".rstrip()) if rubric else "",
+            "\nSteps (index in brackets):",
+            "\n".join(step_texts),
+            '\nRespond ONLY as JSON: {"steps": [{"index": <int>, "reward": <'
+            + allowed + '>, "reasoning": <short phrase>, "confidence": <0.0-1.0>}]}'
+            ' with exactly one entry per step index above.',
+        ]
+        prompt = "\n".join(p for p in parts if p != "")
+
+        # Long CoT + per-step verdicts need a generous token budget (the endpoint
+        # default is ~100). Raise it for this call, then restore.
+        prev_max = getattr(endpoint, "max_tokens", None)
+        try:
+            if isinstance(prev_max, int):
+                endpoint.max_tokens = max(prev_max, 512, 24 * len(steps))
+            data = _robust_query_json(endpoint, prompt)
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Judge steps: query/parse failed for {instance_id}: {e}")
+            return None
+        finally:
+            if isinstance(prev_max, int):
+                endpoint.max_tokens = prev_max
+
+        if not isinstance(data, dict):
+            return None
+        raw_steps = data.get("steps", []) or []
+        out: List[Dict[str, Any]] = []
+        seen = set()
+        for r in raw_steps:
+            if not isinstance(r, dict):
+                continue
+            try:
+                idx = int(r.get("index"))
+            except (TypeError, ValueError):
+                continue
+            if idx < 0 or idx >= len(steps) or idx in seen:
+                continue
+            reward = _coerce_reward(r.get("reward"), allow_neutral)
+            if reward is None:
+                continue
+            seen.add(idx)
+            conf = r.get("confidence")
+            try:
+                conf = max(0.0, min(1.0, float(conf)))
+            except (TypeError, ValueError):
+                conf = None
+            out.append({
+                "index": idx,
+                "reward": reward,
+                "reasoning": str(r.get("reasoning", ""))[:400],
+                "confidence": conf,
+            })
+        out.sort(key=lambda x: x["index"])
+        return out
+
+
+def _coerce_reward(value: Any, allow_neutral: bool) -> Optional[int]:
+    """Coerce a model-returned reward to 1 / 0 / -1 (0 only when allowed)."""
+    if isinstance(value, bool):  # guard: bool is an int subclass
+        return 1 if value else -1
+    if isinstance(value, (int, float)):
+        v = int(value)
+    elif isinstance(value, str):
+        s = value.strip().lower()
+        mapping = {
+            "1": 1, "+1": 1, "correct": 1, "good": 1, "true": 1,
+            "-1": -1, "incorrect": -1, "wrong": -1, "bad": -1, "false": -1, "error": -1,
+            "0": 0, "neutral": 0,
+        }
+        if s not in mapping:
+            return None
+        v = mapping[s]
+    else:
+        return None
+    if v > 0:
+        return 1
+    if v < 0:
+        return -1
+    return 0 if allow_neutral else None
+
+
+def _robust_query_json(endpoint: Any, prompt: str, model: Any = None) -> Dict[str, Any]:
+    """Query an endpoint for JSON, tolerating provider differences.
+
+    Handles the Anthropic endpoint whose ``query`` lacks an ``output_format``
+    parameter, and prefers the endpoint's ``parseStringToJson`` (fenced /
+    truncated JSON salvage) over a bare ``json.loads``.
+    """
+    try:
+        import inspect
+        takes_of = "output_format" in inspect.signature(endpoint.query).parameters
+    except (ValueError, TypeError):
+        takes_of = True
+    raw = endpoint.query(prompt, model) if takes_of else endpoint.query(prompt)
+    if isinstance(raw, dict):
+        return raw
+    if hasattr(raw, "model_dump"):
+        return raw.model_dump()
+    if isinstance(raw, str):
+        parser = getattr(endpoint, "parseStringToJson", None)
+        if callable(parser):
+            try:
+                return parser(raw)
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            return json.loads(raw)
+        except Exception:  # noqa: BLE001
+            return {}
+    return raw or {}
+
 
 def _response_to_dict(response: Any) -> Dict[str, Any]:
     """Normalize an endpoint response (str/JSON, pydantic, or dict) to a dict."""
