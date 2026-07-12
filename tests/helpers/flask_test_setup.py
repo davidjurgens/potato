@@ -610,6 +610,18 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Reset + (re)initialize Pocket Mode config holder. The clear
+                # runs unconditionally so a leaked config from a prior
+                # in-process test server cannot enable /pocket unexpectedly.
+                try:
+                    from potato.pocket.routes import init_pocket, clear_pocket
+                    clear_pocket()
+                    if config.get('pocket', {}).get('enabled', False):
+                        init_pocket(config)
+                        print("[DEBUG] Pocket Mode initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Pocket Mode: {e}")
+
                 # Reset + (re)initialize QDA Mode manager. The clear runs
                 # unconditionally so a leaked singleton from a prior in-process
                 # test server cannot make a QDA-disabled server report enabled.

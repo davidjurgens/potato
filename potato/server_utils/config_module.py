@@ -248,6 +248,8 @@ KNOWN_CONFIG_KEYS = {
         "markers", "sentences_per_step", "llm_max_chars",
     },
     "judge_alignment": {"enabled", "ai_support", "schemas", "few_shot", "inline"},
+    # Pocket Mode: mobile-first annotation surface (PWA) at /pocket.
+    "pocket": {"enabled", "batch_size"},
     # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
     # Leaf sub-dicts (sampling/human/calibration/output) are validated by
     # validate_judge_calibration_config(); kept shallow here to avoid

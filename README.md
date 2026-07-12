@@ -175,6 +175,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | **Solo mode** | Human-LLM collaboration with progressive automation ([docs](docs/solo-mode/solo_mode.md)) |
 | **Crowdsourcing** | Prolific and MTurk integration with platform-specific auth ([docs](docs/deployment/crowdsourcing.md)) |
 | **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/annotation-types/triage.md)) |
+| **Pocket Mode** | Annotate from your phone: installable PWA with a card-stack UI, one-tap labeling, and offline annotation that syncs on reconnect ([docs](docs/advanced/pocket_mode.md)) |
 
 ### Continuous Evaluation Loop
 
