@@ -61,6 +61,9 @@ class TestAutoRedirectCapableTask:
         response = session.get(f"{flask_server.base_url}/annotate",
                                allow_redirects=False, timeout=5)
         assert response.status_code == 200
+        # Desktop users can reach the card-stack UI too: the navbar carries a
+        # (JS-revealed) Compact view link pointing at /pocket.
+        assert 'id="compact-view-link"' in response.text
 
     def test_mobile_ua_redirected_to_pocket(self, flask_server):
         session = login(flask_server.base_url, "phone_user")

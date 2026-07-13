@@ -13,6 +13,9 @@
  *    recommended.
  * 3. Touch devices that chose "Desktop site": shown a quiet link back to the
  *    mobile interface instead of being re-redirected.
+ * 4. Desktop users on a pocket-capable task: the navbar's hidden
+ *    "Compact view" link is revealed — the card-stack interface is open to
+ *    everyone, routing is only automatic for touch devices.
  *
  * The "Desktop site" choice (?desktop=1) is remembered in sessionStorage on
  * the client and in the Flask session on the server, so neither side loops.
@@ -87,11 +90,16 @@
         }
     }
 
+    function revealCompactViewLink() {
+        var link = document.getElementById("compact-view-link");
+        if (!link) return;
+        link.href = potatoUrl("/pocket");
+        link.hidden = false;
+    }
+
     function run() {
         rememberDesktopChoice();
-        if (!isTouchDevice()) {
-            return;
-        }
+        var touch = isTouchDevice();
 
         fetch(potatoUrl("/pocket/api/routing"), { credentials: "same-origin" })
             .then(function (response) {
@@ -99,6 +107,13 @@
                 return response.json();
             })
             .then(function (routing) {
+                if (!touch) {
+                    // Desktop: no routing, just discoverability.
+                    if (routing.enabled && routing.capable) {
+                        revealCompactViewLink();
+                    }
+                    return;
+                }
                 // Let the server know a touch device is here even though the
                 // User-Agent may claim desktop (iPad case) — admin dashboard.
                 fetch(potatoUrl("/pocket/api/device_hint"), {

@@ -51,6 +51,14 @@ Detection happens in two layers:
 Routing only applies to annotators in the annotation phase. Consent,
 instruction, and survey pages are unaffected.
 
+### Desktop users can use it too
+
+Routing is only automatic for touch devices — the mobile interface itself is
+open to everyone. On pocket-capable tasks the desktop navbar shows a
+**Compact view** link to `/pocket`; with a mouse, the card stack becomes a
+rapid one-click-per-item labeling view (the arrow buttons replace swiping).
+Desktop users are never redirected in either direction.
+
 ### Letting users opt out
 
 The mobile interface has a **Desktop site** link in its header. Choosing it

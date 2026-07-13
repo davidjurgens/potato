@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=4">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}">
@@ -234,6 +234,10 @@
                     <i class="fas fa-book-open"></i> {{ ui_lang.codebook }}
                 </a>
                 {% endif %}
+                <a id="compact-view-link" class="compact-view-link" href="/pocket" hidden
+                   title="Card-stack interface: one item per card, one click per label">
+                    {{ ui_lang.compact_view|default('Compact view') }}
+                </a>
                 <div class="user-pill">
                     <span class="username" id="username-display">{{username}}</span>
                     <a href="/logout" class="logout-btn">{{ ui_lang.logout }}</a>
@@ -627,7 +631,7 @@
     <!-- Device routing: send phones/tablets to /pocket when the task supports
          it; warn them when it doesn't. Unconditional — the "not mobile
          friendly" warning must work even when Pocket Mode is off. -->
-    <script src="{{ url_for('static', filename='device-routing.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='device-routing.js') }}?v=2"></script>
     <!-- Truth Serum: surprisingly-popular prediction widget (conditional) -->
     {% if truth_serum_enabled | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/truth-serum.css') }}?v=1">
