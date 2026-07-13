@@ -206,6 +206,7 @@ Role-based guides that walk you through Potato for your specific use case:
 
 ## Release Notes
 
+- [v2.7.0](releasenotes/v2.7.0.md) - Seven New Ways to Annotate (Psychometrics, Multiplayer Rooms, Boundary Lab, Truth Serum, Think-Aloud, Paper Mode, Pocket Mode)
 - [v2.6.1](releasenotes/v2.6.1.md) - Agentic Evaluation Suite (evaluators, datasets/experiments, automation, CI gating, tracing SDK, curation, arena)
 - [v2.6.0](releasenotes/v2.6.0.md) - QDA Mode, LLM-as-Judge Calibration & Trajectory Editing
 - [v2.4.4](releasenotes/v2.4.4.md) - Span Annotation Fixes & UX Improvements
