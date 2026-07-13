@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rooms · {{ task_name }}</title>
+  <style>
+    :root {
+      --paper: #faf8f4;
+      --card: #ffffff;
+      --ink: #22271f;
+      --ink-soft: #5b6353;
+      --ink-faint: #6d7462; /* lightest text tier that still clears WCAG AA */
+      --line: #e4e1d8;
+      --spruce: #2f6d4f;
+      --spruce-deep: #1f4e38;
+      --spruce-soft: #e3efe8;
+      --amber: #b97a1b;
+      --amber-soft: #fdf3e2;
+      --danger: #a63d2f;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(43, 48, 38, 0.08);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* Elements given an explicit display would override the hidden attribute. */
+    [hidden] { display: none !important; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--paper); color: var(--ink); line-height: 1.5;
+    }
+    header {
+      display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+      padding: 18px 28px; background: var(--card); border-bottom: 1px solid var(--line);
+    }
+    header h1 { font-size: 1.3rem; color: var(--spruce-deep); }
+    .task-name { color: var(--ink-soft); font-size: 0.9rem; }
+    header .spacer { flex: 1; }
+
+    .wrap { max-width: 980px; margin: 0 auto; padding: 24px 28px 60px; }
+    .intro { color: var(--ink-soft); font-size: 0.95rem; max-width: 62ch; margin-bottom: 24px; }
+
+    .columns { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 22px; align-items: start; }
+    .header-link {
+      display: inline-flex; align-items: center; min-height: 44px;
+      padding: 8px 16px; border: 1px solid var(--line); border-radius: var(--radius);
+      background: var(--card); color: var(--ink-soft); font-size: 0.88rem;
+      text-decoration: none;
+    }
+    .header-link:hover { border-color: var(--ink-faint); color: var(--ink); }
+    .header-link:focus-visible { outline: 2px solid var(--spruce); outline-offset: 2px; }
+    @media (max-width: 760px) { .columns { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+    }
+    .card h2 {
+      font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.09em; color: var(--ink-faint); padding: 14px 18px 0;
+    }
+
+    .room-list { list-style: none; padding: 8px 18px 18px; }
+    .room-row {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 12px 0; border-bottom: 1px solid var(--line);
+    }
+    .room-row:last-child { border-bottom: none; }
+    .room-row .code { font-weight: 700; letter-spacing: 0.1em; color: var(--spruce-deep); }
+    .room-row .meta { color: var(--ink-soft); font-size: 0.85rem; flex: 1; }
+    .chip {
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.07em; padding: 2px 9px; border-radius: 99px;
+      background: var(--spruce-soft); color: var(--spruce-deep);
+    }
+    .chip.shadow-chip { background: var(--amber-soft); color: var(--amber); }
+    .chip.closed-chip { background: var(--line); color: var(--ink-soft); }
+    .empty-note { padding: 16px 18px 20px; color: var(--ink-faint); font-size: 0.9rem; }
+
+    .join-btn, .primary-btn {
+      min-height: 44px; padding: 8px 18px; font-size: 0.92rem; font-weight: 600;
+      border: none; border-radius: var(--radius); cursor: pointer;
+      background: var(--spruce); color: #fff;
+      transition: background 140ms ease-out;
+    }
+    .join-btn:hover, .primary-btn:hover { background: var(--spruce-deep); }
+    .join-btn:focus-visible, .primary-btn:focus-visible {
+      outline: 2px solid var(--spruce-deep); outline-offset: 2px;
+    }
+    .primary-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
+
+    form.create { padding: 12px 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+    .field label { display: block; font-size: 0.84rem; color: var(--ink-soft); margin-bottom: 5px; }
+    .field select, .field input {
+      width: 100%; min-height: 44px; padding: 8px 12px; font-size: 0.92rem;
+      border: 1.5px solid var(--line); border-radius: var(--radius);
+      background: var(--card); color: var(--ink);
+    }
+    .field select:focus-visible, .field input:focus-visible {
+      outline: 2px solid var(--spruce); outline-offset: 1px;
+    }
+    .type-help { font-size: 0.8rem; color: var(--ink-faint); margin-top: 5px; }
+
+    .how { padding: 10px 18px 18px; color: var(--ink-soft); font-size: 0.88rem; }
+    .how dt { font-weight: 600; color: var(--ink); margin-top: 10px; }
+    .how dd { margin-left: 0; }
+
+    #error-banner {
+      display: none; margin: 0 0 16px; padding: 10px 16px;
+      border: 1px solid var(--danger); border-radius: var(--radius);
+      background: #fbeeec; color: var(--danger); font-size: 0.88rem;
+    }
+    a { color: var(--spruce); }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Annotation rooms</h1>
+    <span class="task-name">{{ task_name }}</span>
+    <span class="spacer"></span>
+    <span class="task-name">you are {{ username }}</span>
+    <a class="header-link" href="/annotate">← Back to task</a>
+  </header>
+
+  <main class="wrap">
+    <p class="intro">
+      Label together, live. In a <strong>norming room</strong> everyone votes
+      blind, the host reveals, and the agreement meter shows how much the
+      discussion actually helped. Or open a <strong>shadow room</strong> to let
+      trainees watch an expert work in real time.
+    </p>
+
+    <div id="error-banner" role="alert"></div>
+
+    <div class="columns">
+      <div class="card">
+        <h2>Open rooms</h2>
+        <ul class="room-list" id="room-list"></ul>
+        <div class="empty-note" id="empty-note" hidden>
+          No rooms yet — {% if can_create %}start one on the right{% else %}ask an admin to start one{% endif %}.
+        </div>
+      </div>
+
+      <div>
+        {% if can_create %}
+        <div class="card">
+          <h2>Start a room</h2>
+          <form class="create" id="create-form">
+            <div class="field">
+              <label for="room-type">Room type</label>
+              <select id="room-type">
+                <option value="norming">Norming — blind vote, reveal, discuss</option>
+                <option value="huddle">Huddle — resolve existing disagreements</option>
+                <option value="shadow">Shadow — trainees watch the host</option>
+              </select>
+              <div class="type-help" id="type-help">
+                Everyone votes blind; the host reveals; changes are tracked.
+              </div>
+            </div>
+            <div class="field" id="n-items-field">
+              <label for="n-items">Items (random sample)</label>
+              <input type="number" id="n-items" min="1" max="200" value="10">
+            </div>
+            <button class="primary-btn" type="submit" id="create-btn">Create room</button>
+          </form>
+        </div>
+        {% endif %}
+
+        <div class="card" style="margin-top: 22px;">
+          <h2>How it works</h2>
+          <dl class="how">
+            <dt>1 · Blind vote</dt>
+            <dd>Everyone labels the same item. Votes stay hidden.</dd>
+            <dt>2 · Reveal &amp; discuss</dt>
+            <dd>The host reveals. Talk it out; anyone can change their vote — changes are logged.</dd>
+            <dt>3 · Measure</dt>
+            <dd>Blind α vs after-discussion α shows what the session was worth.</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    "use strict";
+    const POLL_MS = {{ poll_interval_ms | tojson }};
+    const url = (path) => window.potatoUrl ? window.potatoUrl(path) : path;
+
+    function showError(text) {
+      const banner = document.getElementById("error-banner");
+      banner.textContent = text;
+      banner.style.display = "block";
+    }
+
+    async function api(path, options) {
+      const response = await fetch(url(path), Object.assign({
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+      }, options));
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
+      return payload;
+    }
+
+    function roomRow(room) {
+      const li = document.createElement("li");
+      li.className = "room-row";
+      const code = document.createElement("span");
+      code.className = "code";
+      code.textContent = room.room_id;
+      li.appendChild(code);
+      const chip = document.createElement("span");
+      chip.className = "chip"
+        + (room.room_type === "shadow" ? " shadow-chip" : "")
+        + (room.status === "closed" ? " closed-chip" : "");
+      chip.textContent = room.status === "closed" ? "finished" : room.room_type;
+      li.appendChild(chip);
+      const meta = document.createElement("span");
+      meta.className = "meta";
+      meta.textContent = `${room.host} hosting · ${room.n_members} in · `
+        + `item ${Math.min(room.current_index + 1, room.n_items)} of ${room.n_items}`;
+      li.appendChild(meta);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "join-btn";
+      btn.textContent = room.status === "closed" ? "View results" : "Join";
+      btn.addEventListener("click", () => {
+        window.location.href = url(`/rooms/${room.room_id}`);
+      });
+      li.appendChild(btn);
+      return li;
+    }
+
+    async function refresh() {
+      try {
+        const payload = await api("/rooms/api/list");
+        const list = document.getElementById("room-list");
+        list.innerHTML = "";
+        for (const room of payload.rooms) list.appendChild(roomRow(room));
+        document.getElementById("empty-note").hidden = payload.rooms.length > 0;
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    const createForm = document.getElementById("create-form");
+    if (createForm) {
+      const typeHelp = {
+        norming: "Everyone votes blind; the host reveals; changes are tracked.",
+        huddle: "Walks the items your team currently disagrees on, with the original annotations shown as context.",
+        shadow: "Only the host votes — everyone else joins as an observer.",
+      };
+      document.getElementById("room-type").addEventListener("change", async (event) => {
+        const type = event.target.value;
+        document.getElementById("n-items-field").hidden = (type === "huddle");
+        let help = typeHelp[type];
+        if (type === "huddle") {
+          try {
+            const payload = await api("/rooms/api/disagreements");
+            const n = payload.disagreements.length;
+            help += n ? ` ${n} disagreement${n === 1 ? "" : "s"} found right now.`
+                      : " No disagreements found right now.";
+          } catch (e) { /* count is best-effort */ }
+        }
+        document.getElementById("type-help").textContent = help;
+      });
+      createForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const btn = document.getElementById("create-btn");
+        btn.disabled = true;
+        try {
+          const payload = await api("/rooms/api/create", {
+            method: "POST",
+            body: JSON.stringify({
+              room_type: document.getElementById("room-type").value,
+              n_items: parseInt(document.getElementById("n-items").value, 10) || 10,
+            }),
+          });
+          window.location.href = url(`/rooms/${payload.room_id}`);
+        } catch (e) {
+          showError(e.message);
+          btn.disabled = false;
+        }
+      });
+    }
+
+    // Route the static back-link through the URL-prefix helper when present.
+    if (window.potatoUrl) {
+      document.querySelectorAll(".header-link").forEach((a) => {
+        a.href = window.potatoUrl(a.getAttribute("href"));
+      });
+    }
+
+    refresh();
+    setInterval(() => { if (!document.hidden) refresh(); },
+                Math.max(POLL_MS, 2000));
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refresh();
+    });
+  </script>
+</body>
+</html>

@@ -266,6 +266,9 @@ KNOWN_CONFIG_KEYS = {
     "psychometrics": {"enabled", "schema", "refit_interval", "min_observations",
                       "min_annotators_per_item", "confidence_threshold",
                       "cost_per_judgment", "discrimination_flag_threshold"},
+    # Multiplayer Rooms: live norming sessions, adjudication huddles, shadowing.
+    "rooms": {"enabled", "who_can_create", "persist_votes", "poll_interval_ms",
+              "max_members", "schema"},
     # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
     # Leaf sub-dicts (sampling/human/calibration/output) are validated by
     # validate_judge_calibration_config(); kept shallow here to avoid

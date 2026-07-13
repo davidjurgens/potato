@@ -654,6 +654,17 @@ class FlaskTestServer:
                         print("[DEBUG] Psychometrics manager initialized successfully")
                 except Exception as e:
                     print(f"[DEBUG] Error initializing Psychometrics manager: {e}")
+                # Reset + (re)initialize Rooms manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale rooms.
+                try:
+                    from potato.rooms import init_rooms_manager, clear_rooms_manager
+                    clear_rooms_manager()
+                    if config.get('rooms', {}).get('enabled', False):
+                        init_rooms_manager(config)
+                        print("[DEBUG] Rooms manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Rooms manager: {e}")
                 # Reset + (re)initialize Pocket Mode config holder. The clear
                 # runs unconditionally so a leaked config from a prior
                 # in-process test server cannot enable /pocket unexpectedly.

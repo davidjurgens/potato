@@ -7714,6 +7714,15 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register Multiplayer Rooms blueprint (norming sessions, adjudication
+    # huddles, shadowing) if not already registered
+    if 'rooms' not in app.blueprints:
+        try:
+            from potato.rooms.routes import rooms_bp
+            app.register_blueprint(rooms_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================

@@ -90,6 +90,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - **[Think-Aloud Mode](advanced/think_aloud.md)** - Voice rationales with fully-local STT and rule-based spoken-label commitment; verbatim reasoning streams, no LLM
 - **[Pocket Mode](advanced/pocket_mode.md)** - Mobile-first card-stack annotation PWA: thumb-zone labels, swipe navigation, offline queue with auto-sync
 - **[Psychometrics](advanced/psychometrics.md)** - Labels with error bars: live IRT (ability + difficulty, no gold, no LLM), information-gain adaptive routing, codebook-bug detection, and pre-study power analysis
+- **[Multiplayer Rooms](advanced/multiplayer_rooms.md)** - Live group annotation: blind-vote norming sessions with a real-time agreement meter and conformity logging, adjudication huddles, and expert shadowing
 - [Adjudication](administration/adjudication.md) - Multi-annotator disagreement resolution
 - [MACE](advanced/mace.md) - Multi-Annotator Competence Estimation via variational inference
 - [Iterative BWS](annotation-types/comparison/iterative_bws.md) - Adaptive Best-Worst Scaling for fine-grained ordinal rankings
