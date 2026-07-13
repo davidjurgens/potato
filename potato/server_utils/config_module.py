@@ -261,7 +261,7 @@ KNOWN_CONFIG_KEYS = {
     "thinkaloud": {"enabled", "schema", "stt", "model", "chunk_seconds",
                    "stems", "fillers", "require_spoken_label", "language"},
     # Pocket Mode: mobile-first annotation surface (PWA) at /pocket.
-    "pocket": {"enabled", "batch_size"},
+    "pocket": {"enabled", "batch_size", "auto_redirect"},
     # Psychometrics: live IRT (labels with error bars) + adaptive routing.
     "psychometrics": {"enabled", "schema", "refit_interval", "min_observations",
                       "min_annotators_per_item", "confidence_threshold",

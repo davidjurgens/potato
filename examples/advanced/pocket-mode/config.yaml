@@ -31,5 +31,6 @@ annotation_schemes:
 # Single-radio tasks auto-advance on tap: one tap = one labeled item.
 pocket:
   enabled: true
+  auto_redirect: true  # phones/tablets opening /annotate land here automatically
   batch_size: 25
 site_dir: default

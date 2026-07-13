@@ -382,3 +382,13 @@ body {
     .pk-progress-fill { transition: none; }
     .pk-opt, .pk-next { transition: none; }
 }
+
+/* "Desktop site" escape hatch (device auto-routing opt-out) */
+.pk-desktop-link {
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: underline;
+    white-space: nowrap;
+    padding: 6px 0 6px 10px; /* keep a finger-sized hit area */
+}
+.pk-desktop-link:active { color: #fff; }

@@ -29,10 +29,14 @@ class PocketConfig:
         enabled: Master switch for the /pocket surface.
         batch_size: Items served per /pocket/api/batch request (prefetch +
             offline queue depth).
+        auto_redirect: When the task is pocket-capable, send phones/tablets
+            that open /annotate to /pocket automatically. They can opt back
+            out via the "Desktop site" link (?desktop=1).
     """
 
     enabled: bool = False
     batch_size: int = 25
+    auto_redirect: bool = True
 
 
 def parse_pocket_config(config: Dict[str, Any]) -> PocketConfig:
@@ -40,6 +44,7 @@ def parse_pocket_config(config: Dict[str, Any]) -> PocketConfig:
     pc = PocketConfig(
         enabled=bool(block.get("enabled", False)),
         batch_size=int(block.get("batch_size", 25)),
+        auto_redirect=bool(block.get("auto_redirect", True)),
     )
     if not 1 <= pc.batch_size <= 200:
         logger.warning("pocket.batch_size must be 1-200; using 25")

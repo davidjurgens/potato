@@ -624,6 +624,10 @@
     </script>
     <script src="{{ url_for('static', filename='boundary-probe.js') }}?v=2"></script>
     {% endif %}
+    <!-- Device routing: send phones/tablets to /pocket when the task supports
+         it; warn them when it doesn't. Unconditional — the "not mobile
+         friendly" warning must work even when Pocket Mode is off. -->
+    <script src="{{ url_for('static', filename='device-routing.js') }}?v=1"></script>
     <!-- Truth Serum: surprisingly-popular prediction widget (conditional) -->
     {% if truth_serum_enabled | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/truth-serum.css') }}?v=1">

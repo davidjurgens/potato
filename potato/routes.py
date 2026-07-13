@@ -1798,6 +1798,28 @@ def annotate():
         # so POST data is preserved for phase processing
         return home()
 
+    # Device routing: phones/tablets get the touch surface (/pocket) when the
+    # task supports it; either way, record the device class so admins can see
+    # who annotates from mobile. ?desktop=1 is the sticky opt-out ("Desktop
+    # site"); opening /pocket clears it again. Tracking/redirect failures must
+    # never take down the annotation page.
+    if request.method == "GET":
+        try:
+            from potato.pocket.devices import get_device_tracker, is_touch_device
+            from potato.pocket.routes import pocket_routing_state
+
+            user_agent = request.headers.get("User-Agent", "")
+            get_device_tracker().record(username, user_agent, "annotate")
+            if request.args.get("desktop") == "1":
+                session["force_desktop"] = True
+            if (is_touch_device(user_agent)
+                    and not session.get("force_desktop")
+                    and pocket_routing_state()["available"]):
+                logger.info(f"Touch device detected for {username}; routing to /pocket")
+                return redirect("/pocket")
+        except Exception:
+            logger.debug("Device routing check failed", exc_info=True)
+
     # If the user hasn't yet been assigned anything to annotate, do so now
     if not user_state.has_assignments():
         logger.debug(f"User {username} has no assignments, assigning instances")

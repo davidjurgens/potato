@@ -670,7 +670,9 @@ class FlaskTestServer:
                 # in-process test server cannot enable /pocket unexpectedly.
                 try:
                     from potato.pocket.routes import init_pocket, clear_pocket
+                    from potato.pocket.devices import clear_device_tracker
                     clear_pocket()
+                    clear_device_tracker()  # lazy singleton pins output dir
                     if config.get('pocket', {}).get('enabled', False):
                         init_pocket(config)
                         print("[DEBUG] Pocket Mode initialized successfully")

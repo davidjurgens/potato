@@ -88,6 +88,34 @@ def api_login_required(f):
     return decorated_function
 
 
+def pocket_routing_state() -> Dict[str, Any]:
+    """What device routing should do for this task.
+
+    Safe to call whether or not Pocket Mode is enabled — used by the
+    annotate route (server-side redirect) and by /pocket/api/routing
+    (the client-side coarse-pointer fallback and the mobile warning).
+    ``capable`` reflects the task's schemas regardless of the pocket
+    config, so "this task is not mobile friendly" warnings stay accurate
+    even when Pocket Mode is off.
+    """
+    enabled = _pocket_config is not None
+    app_config = _app_config
+    if app_config is None:
+        try:
+            from potato.server_utils.config_module import config as app_config
+        except Exception:
+            app_config = {}
+    capable, incompatible = pocket_capability(app_config or {})
+    auto_redirect = bool(_pocket_config.auto_redirect) if enabled else False
+    return {
+        "enabled": enabled,
+        "capable": capable,
+        "auto_redirect": auto_redirect,
+        "available": enabled and capable and auto_redirect,
+        "incompatible_schemes": incompatible,
+    }
+
+
 def _scheme_spec(scheme: Dict[str, Any]) -> Dict[str, Any]:
     labels = []
     for label in scheme.get("labels", []) or []:
@@ -127,10 +155,52 @@ def _serialize_annotations(raw: Dict[Any, Any]) -> Dict[str, Dict[str, Any]]:
 def page():
     if "username" not in session:
         return redirect(url_for("login"))
+    # Opening /pocket explicitly clears a previous "Desktop site" choice.
+    session.pop("force_desktop", None)
+    try:
+        from potato.pocket.devices import get_device_tracker
+        get_device_tracker().record(
+            session["username"], request.headers.get("User-Agent"), "pocket")
+    except Exception:  # tracking must never break the page
+        logger.debug("pocket: device tracking failed", exc_info=True)
     return render_template(
         "pocket.html",
         task_name=_app_config.get("annotation_task_name", "Annotation Task"),
     )
+
+
+@pocket_bp.route("/api/routing", methods=["GET"])
+@api_login_required
+def routing():
+    """Device-routing facts for the current task (works even when Pocket
+    Mode is disabled — the annotation page uses this to decide whether to
+    client-side redirect touch devices or warn them)."""
+    return jsonify(pocket_routing_state())
+
+
+@pocket_bp.route("/api/device_hint", methods=["POST"])
+@api_login_required
+def device_hint():
+    """Client-side touch detection (primary pointer is coarse) for devices
+    whose User-Agent looks like desktop — e.g. iPadOS Safari."""
+    from potato.pocket.devices import get_device_tracker
+    data = request.get_json(silent=True) or {}
+    device = str(data.get("device") or "")
+    get_device_tracker().record_client_hint(session["username"], device)
+    return jsonify({"success": True})
+
+
+@pocket_bp.route("/api/devices", methods=["GET"])
+def devices():
+    """Per-annotator device usage for the admin dashboard."""
+    from potato.server_utils.rbac import Permission, get_rbac_manager
+    if not get_rbac_manager().check(
+            Permission.VIEW_ADMIN_DASHBOARD, request, session):
+        return jsonify({"error": "Admin authentication required"}), 403
+    from potato.pocket.devices import get_device_tracker
+    payload = get_device_tracker().stats()
+    payload["routing"] = pocket_routing_state()
+    return jsonify(payload)
 
 
 @pocket_bp.route("/api/task", methods=["GET"])
@@ -164,6 +234,10 @@ def batch():
     username = session["username"]
     user_state = get_user_state_manager().get_user_state(username)
     ism = get_item_state_manager()
+    # Users auto-routed here on their first visit have never run through
+    # /annotate's assignment step — assign now or the card stack is empty.
+    if not user_state.has_assignments():
+        ism.assign_instances_to_user(user_state)
     text_key = (_app_config.get("item_properties") or {}).get("text_key", "text")
 
     items = []

@@ -68,6 +68,7 @@
           <div class="admin-tab" data-tab="instances">{{ ui_lang.admin_tab_instances|default('Instances') }}</div>
           <div class="admin-tab" data-tab="questions">{{ ui_lang.admin_tab_questions|default('Questions') }}</div>
           <div class="admin-tab" data-tab="behavioral">{{ ui_lang.admin_tab_behavioral|default('Behavioral') }}</div>
+          <div class="admin-tab" data-tab="devices">{{ ui_lang.admin_tab_devices|default('Devices') }}</div>
           <div class="admin-tab" data-tab="crowdsourcing">{{ ui_lang.admin_tab_crowdsourcing|default('Crowdsourcing') }}</div>
           {% if bws_enabled %}
           <div class="admin-tab" data-tab="bws-scoring">{{ ui_lang.admin_tab_bws|default('BWS Scoring') }}</div>
@@ -211,6 +212,46 @@
         </div>
 
         <!-- Behavioral Analytics Tab -->
+        <!-- Devices Tab -->
+        <div class="admin-tab-content" id="devices">
+          <div class="table-controls">
+            <button
+              onclick="loadDevices()"
+              class="shadcn-button shadcn-button-primary"
+            >
+              Refresh Data
+            </button>
+          </div>
+
+          <div class="question-card" id="devicesSummaryCard" style="margin-bottom: 1.5rem;">
+            <div class="question-header">
+              <h3 class="question-title">{{ ui_lang.admin_section_devices|default('Annotator Devices') }}</h3>
+            </div>
+            <div id="devicesSummary">
+              <!-- Device summary loads here -->
+            </div>
+          </div>
+
+          <div class="admin-table-container">
+            <table class="admin-table" id="devicesTable">
+              <thead>
+                <tr>
+                  <th>{{ ui_lang.admin_th_user_id|default('User ID') }}</th>
+                  <th>{{ ui_lang.admin_th_last_device|default('Last Device') }}</th>
+                  <th>{{ ui_lang.admin_th_mobile_visits|default('Mobile Visits') }}</th>
+                  <th>{{ ui_lang.admin_th_tablet_visits|default('Tablet Visits') }}</th>
+                  <th>{{ ui_lang.admin_th_desktop_visits|default('Desktop Visits') }}</th>
+                  <th>{{ ui_lang.admin_th_pocket_visits|default('Mobile UI Visits') }}</th>
+                  <th>{{ ui_lang.admin_th_last_seen|default('Last Seen') }}</th>
+                </tr>
+              </thead>
+              <tbody id="devicesTableBody">
+                <!-- Device data loads here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="admin-tab-content" id="behavioral">
           <div class="table-controls">
             <button
@@ -572,6 +613,9 @@
           case "behavioral":
             loadBehavioral();
             break;
+          case "devices":
+            loadDevices();
+            break;
           case "crowdsourcing":
             loadCrowdsourcing();
             break;
@@ -696,6 +740,50 @@
       }
 
       // Annotators functions
+      async function loadDevices() {
+        try {
+          const data = await makeApiRequest("/pocket/api/devices");
+          displayDevices(data);
+        } catch (error) {
+          console.error("Error loading device data:", error);
+          showError("Failed to load device data");
+        }
+      }
+
+      function displayDevices(data) {
+        const summary = document.getElementById("devicesSummary");
+        const routing = data.routing || {};
+        const s = data.summary || {};
+        const routingLine = routing.available
+          ? "Touch devices are auto-routed to the mobile interface (/pocket)."
+          : routing.capable
+            ? "Task is touch-capable, but Pocket Mode is not enabled — phones get the desktop UI."
+            : "This task includes annotation types that are not mobile friendly; touch visitors see a warning.";
+        summary.innerHTML = `
+          <p><strong>${s.n_touch_users || 0}</strong> of <strong>${s.n_users_seen || 0}</strong>
+          users seen so far have visited from a phone or tablet.</p>
+          <p style="color:#666;">${routingLine}</p>`;
+
+        const tbody = document.getElementById("devicesTableBody");
+        const rows = data.users || [];
+        if (!rows.length) {
+          tbody.innerHTML = `<tr><td colspan="7" style="color:#666;">No visits recorded yet.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = rows
+          .map((u) => `
+                <tr${u.used_touch_device ? ' style="background:#fdf6ec;"' : ""}>
+                    <td>${u.username}</td>
+                    <td>${u.last_device || "—"}${u.used_touch_device ? " 📱" : ""}</td>
+                    <td>${u.mobile_visits}</td>
+                    <td>${u.tablet_visits}</td>
+                    <td>${u.desktop_visits}</td>
+                    <td>${u.pocket_visits}</td>
+                    <td>${u.last_seen ? new Date(u.last_seen * 1000).toLocaleString() : "—"}</td>
+                </tr>`)
+          .join("");
+      }
+
       async function loadAnnotators() {
         try {
           const data = await makeApiRequest("/admin/api/annotators");

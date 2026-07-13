@@ -8,7 +8,7 @@
 <link rel="manifest" href="/pocket/manifest.webmanifest">
 <link rel="icon" href="/static/pocket-icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/pocket-icon.svg">
-<link rel="stylesheet" href="/static/css/pocket.css?v=1">
+<link rel="stylesheet" href="/static/css/pocket.css?v=2">
 </head>
 <body>
 <header class="pk-header">
@@ -16,6 +16,7 @@
         <span class="pk-logo" aria-hidden="true">&#129364;</span>
         <span class="pk-task">{{ task_name }}</span>
         <span class="pk-count" id="pk-count" aria-live="polite"></span>
+        <a class="pk-desktop-link" href="/annotate?desktop=1">Desktop site</a>
     </div>
     <div class="pk-progress" role="progressbar" aria-label="Annotation progress"
          aria-valuemin="0" aria-valuemax="100">
