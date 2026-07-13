@@ -22,9 +22,7 @@ from potato.ai.ai_endpoint import (
     VisualAnnotationInput,
     ModelCapabilities,
 )
-from potato.ai.ollama_endpoint import OllamaEndpoint
-from potato.ai.openrouter_endpoint import OpenRouterEndpoint
-from potato.ai.ai_prompt import ModelManager, get_ai_prompt 
+from potato.ai.ai_prompt import ModelManager, get_ai_prompt
 
 
 AICACHEMANAGER = None
@@ -233,33 +231,8 @@ class AiCacheManager:
         self.lock = threading.RLock()
         self.executor = ThreadPoolExecutor(max_workers=20)
         
-        AIEndpointFactory.register_endpoint("ollama", OllamaEndpoint)
-        AIEndpointFactory.register_endpoint("open_router", OpenRouterEndpoint)
-
-        # Register visual AI endpoints
-        try:
-            from potato.ai.yolo_endpoint import YOLOEndpoint
-            AIEndpointFactory.register_endpoint("yolo", YOLOEndpoint)
-        except ImportError:
-            logger.debug("YOLO endpoint not available (ultralytics not installed)")
-
-        try:
-            from potato.ai.ollama_vision_endpoint import OllamaVisionEndpoint
-            AIEndpointFactory.register_endpoint("ollama_vision", OllamaVisionEndpoint)
-        except ImportError:
-            logger.debug("Ollama Vision endpoint not available")
-
-        try:
-            from potato.ai.openai_vision_endpoint import OpenAIVisionEndpoint
-            AIEndpointFactory.register_endpoint("openai_vision", OpenAIVisionEndpoint)
-        except ImportError:
-            logger.debug("OpenAI Vision endpoint not available")
-
-        try:
-            from potato.ai.anthropic_vision_endpoint import AnthropicVisionEndpoint
-            AIEndpointFactory.register_endpoint("anthropic_vision", AnthropicVisionEndpoint)
-        except ImportError:
-            logger.debug("Anthropic Vision endpoint not available")
+        # Text and visual endpoint types are registered lazily by
+        # potato.ai.ai_endpoint at import time — no SDK imports happen here.
 
         # Degrade gracefully if the AI backend (e.g. a local Ollama/vLLM server)
         # is unreachable at boot: log a warning and serve the task with AI
@@ -931,7 +904,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         # Try to find a visual endpoint from registered types
         visual_types = ['yolo', 'ollama_vision', 'openai_vision', 'anthropic_vision']
         for vtype in visual_types:
-            if vtype in AIEndpointFactory._endpoints:
+            if AIEndpointFactory.has_endpoint(vtype):
                 try:
                     visual_config = {
                         "ai_support": {

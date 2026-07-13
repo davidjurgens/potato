@@ -248,6 +248,27 @@ KNOWN_CONFIG_KEYS = {
         "markers", "sentences_per_step", "llm_max_chars",
     },
     "judge_alignment": {"enabled", "ai_support", "schemas", "few_shot", "inline"},
+    # Boundary Lab: counterfactual boundary probing (decision boundaries,
+    # contrast-set export, invariance-probe quality control).
+    "boundary_probing": {
+        "enabled", "schema", "probes_per_item", "include_invariance",
+        "sources", "precomputed_key", "rationale_on_flip", "debounce_ms",
+        "ai_support",
+    },
+    # Truth Serum: surprisingly-popular scoring (peer-prediction micro-question).
+    "truth_serum": {"enabled", "schema", "question", "min_annotators"},
+    # Think-Aloud: local voice rationales + rule-based spoken-label phrases.
+    "thinkaloud": {"enabled", "schema", "stt", "model", "chunk_seconds",
+                   "stems", "fillers", "require_spoken_label", "language"},
+    # Pocket Mode: mobile-first annotation surface (PWA) at /pocket.
+    "pocket": {"enabled", "batch_size"},
+    # Psychometrics: live IRT (labels with error bars) + adaptive routing.
+    "psychometrics": {"enabled", "schema", "refit_interval", "min_observations",
+                      "min_annotators_per_item", "confidence_threshold",
+                      "cost_per_judgment", "discrimination_flag_threshold"},
+    # Multiplayer Rooms: live norming sessions, adjudication huddles, shadowing.
+    "rooms": {"enabled", "who_can_create", "persist_votes", "poll_interval_ms",
+              "max_members", "schema"},
     # Judge Calibration: LLM-as-judge auto-labeling + blind human calibration.
     # Leaf sub-dicts (sampling/human/calibration/output) are validated by
     # validate_judge_calibration_config(); kept shallow here to avoid
@@ -635,7 +656,7 @@ _OPTIONAL_BOOL_FIELDS = {
 _VALID_ASSIGNMENT_STRATEGIES = [
     "random", "fixed_order", "active_learning", "llm_confidence",
     "max_diversity", "least_annotated", "category_based", "diversity_clustering",
-    "batch", "priority",
+    "batch", "priority", "psychometric",
 ]
 
 
@@ -1216,7 +1237,7 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 _CLAIM_INCOMPATIBLE_STRATEGIES = {
     "random", "diversity_clustering", "max_diversity",
     "active_learning", "llm_confidence", "least_annotated",
-    "category_based", "batch",
+    "category_based", "batch", "psychometric",
 }
 
 
@@ -5071,7 +5092,7 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
             "pdf", "document", "spreadsheet", "code", "agent_trace", "eval_trace",
             "gallery", "conversation_tree", "interactive_chat", "web_agent_trace",
             "live_agent", "coding_trace", "live_coding_agent",
-            "multi_agent_discussion",
+            "multi_agent_discussion", "cot_trace",
         ]
 
     for i, field in enumerate(fields):

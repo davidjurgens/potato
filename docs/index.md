@@ -84,6 +84,13 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Multi-Document Event Annotation](advanced/multi_document_events.md) - Cross-document events with a 2D corpus map, cluster browser, KNN, and evidence-cited template slots
 - [Training Phase](workflow/training_phase.md) - Annotator training and qualification
 - [Quality Control](workflow/quality_control.md) - Attention checks and gold standards
+- **[Boundary Lab](advanced/boundary_lab.md)** - Counterfactual boundary probing: collect contrast sets during ordinary annotation, capture boundary rationales, and get paraphrase-invariance quality control
+- **[Truth Serum](advanced/truth_serum.md)** - Surprisingly-popular scoring: gold-free item verdicts that beat majority vote, plus annotator calibration
+- **[Paper Mode](advanced/paper_mode.md)** - One command generates a cut-paste LaTeX dataset report: description, distributions, annotator table, IAA, limitations
+- **[Think-Aloud Mode](advanced/think_aloud.md)** - Voice rationales with fully-local STT and rule-based spoken-label commitment; verbatim reasoning streams, no LLM
+- **[Pocket Mode](advanced/pocket_mode.md)** - Mobile-first card-stack annotation PWA: thumb-zone labels, swipe navigation, offline queue with auto-sync
+- **[Psychometrics](advanced/psychometrics.md)** - Labels with error bars: live IRT (ability + difficulty, no gold, no LLM), information-gain adaptive routing, codebook-bug detection, and pre-study power analysis
+- **[Multiplayer Rooms](advanced/multiplayer_rooms.md)** - Live group annotation: blind-vote norming sessions with a real-time agreement meter and conformity logging, adjudication huddles, and expert shadowing
 - [Adjudication](administration/adjudication.md) - Multi-annotator disagreement resolution
 - [MACE](advanced/mace.md) - Multi-Annotator Competence Estimation via variational inference
 - [Iterative BWS](annotation-types/comparison/iterative_bws.md) - Adaptive Best-Worst Scaling for fine-grained ordinal rankings

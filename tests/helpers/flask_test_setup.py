@@ -610,6 +610,73 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Reset + (re)initialize Boundary Lab manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale probes.
+                try:
+                    from potato.boundary import init_boundary_manager, clear_boundary_manager
+                    clear_boundary_manager()
+                    if config.get('boundary_probing', {}).get('enabled', False):
+                        init_boundary_manager(config)
+                        print("[DEBUG] Boundary Lab manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Boundary Lab manager: {e}")
+                # Reset + (re)initialize Truth Serum manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale predictions.
+                try:
+                    from potato.truth_serum import init_truth_serum_manager, clear_truth_serum_manager
+                    clear_truth_serum_manager()
+                    if config.get('truth_serum', {}).get('enabled', False):
+                        init_truth_serum_manager(config)
+                        print("[DEBUG] Truth Serum manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Truth Serum manager: {e}")
+                # Reset + (re)initialize Think-Aloud manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale transcripts.
+                try:
+                    from potato.thinkaloud import init_thinkaloud_manager, clear_thinkaloud_manager
+                    clear_thinkaloud_manager()
+                    if config.get('thinkaloud', {}).get('enabled', False):
+                        init_thinkaloud_manager(config)
+                        print("[DEBUG] Think-Aloud manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Think-Aloud manager: {e}")
+                # Reset + (re)initialize Psychometrics manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale model fits.
+                try:
+                    from potato.psychometrics import init_psychometrics_manager, clear_psychometrics_manager
+                    clear_psychometrics_manager()
+                    if config.get('psychometrics', {}).get('enabled', False):
+                        init_psychometrics_manager(config)
+                        print("[DEBUG] Psychometrics manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Psychometrics manager: {e}")
+                # Reset + (re)initialize Rooms manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale rooms.
+                try:
+                    from potato.rooms import init_rooms_manager, clear_rooms_manager
+                    clear_rooms_manager()
+                    if config.get('rooms', {}).get('enabled', False):
+                        init_rooms_manager(config)
+                        print("[DEBUG] Rooms manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Rooms manager: {e}")
+                # Reset + (re)initialize Pocket Mode config holder. The clear
+                # runs unconditionally so a leaked config from a prior
+                # in-process test server cannot enable /pocket unexpectedly.
+                try:
+                    from potato.pocket.routes import init_pocket, clear_pocket
+                    clear_pocket()
+                    if config.get('pocket', {}).get('enabled', False):
+                        init_pocket(config)
+                        print("[DEBUG] Pocket Mode initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Pocket Mode: {e}")
+
                 # Reset + (re)initialize QDA Mode manager. The clear runs
                 # unconditionally so a leaked singleton from a prior in-process
                 # test server cannot make a QDA-disabled server report enabled.

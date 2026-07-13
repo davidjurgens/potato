@@ -1,0 +1,50 @@
+port: 8000
+annotation_task_name: "Boundary Lab — Politeness"
+task_dir: .
+output_annotation_dir: annotation_output/boundary-probing/
+output_annotation_format: jsonl
+annotation_codebook_url: ''
+data_files:
+- data/politeness.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: radio
+  name: politeness
+  description: How polite is this workplace message?
+  labels:
+  - Polite
+  - Neutral
+  - Impolite
+  sequential_key_binding: true
+
+# Boundary Lab: after each label, probe the annotator's decision boundary with
+# minimal counterfactual edits. Every verdict becomes a contrast-set record;
+# invariance (paraphrase) probes double as invisible quality control.
+boundary_probing:
+  enabled: true
+  schema: politeness
+  probes_per_item: 3
+  include_invariance: true
+  # Probe sources, in priority order. This example ships handcrafted
+  # counterfactuals with the data (the `counterfactuals` field), so it runs
+  # fully offline; `rules` fills any gaps deterministically. Add `llm` (and an
+  # `ai_support` block, or reuse the global one) to generate probes on the fly:
+  #
+  #   sources: [precomputed, llm, rules]
+  #   ai_support:
+  #     enabled: true
+  #     endpoint_type: anthropic
+  #     ai_config:
+  #       model: claude-sonnet-5
+  #       api_key: YOUR_KEY
+  sources:
+  - precomputed
+  - rules
+  rationale_on_flip: true
+site_dir: default

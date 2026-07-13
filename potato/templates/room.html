@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Room {{ room_id }} · {{ task_name }}</title>
+  <style>
+    :root {
+      --paper: #faf8f4;
+      --card: #ffffff;
+      --ink: #22271f;
+      --ink-soft: #5b6353;
+      --ink-faint: #6d7462; /* lightest text tier that still clears WCAG AA */
+      --line: #e4e1d8;
+      --spruce: #2f6d4f;
+      --spruce-deep: #1f4e38;
+      --spruce-soft: #e3efe8;
+      --amber: #b97a1b;
+      --amber-soft: #fdf3e2;
+      --danger: #a63d2f;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(43, 48, 38, 0.08);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* Elements given an explicit display (flex/grid/inline-block) would
+       otherwise override the hidden attribute. */
+    [hidden] { display: none !important; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    a { color: var(--spruce); }
+
+    /* ---- header ---- */
+    header {
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      padding: 14px 28px;
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+    }
+    .room-code {
+      font-size: 1.35rem; font-weight: 700; letter-spacing: 0.12em;
+      color: var(--spruce-deep);
+    }
+    .chip {
+      font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.08em; padding: 3px 10px; border-radius: 99px;
+      background: var(--spruce-soft); color: var(--spruce-deep);
+    }
+    .chip.shadow-chip { background: var(--amber-soft); color: var(--amber); }
+    .task-name { color: var(--ink-soft); font-size: 0.9rem; }
+    header .spacer { flex: 1; }
+    .header-btn {
+      min-height: 44px; padding: 8px 16px; border-radius: var(--radius);
+      border: 1px solid var(--line); background: var(--card);
+      color: var(--ink-soft); font-size: 0.88rem; cursor: pointer;
+    }
+    .header-btn:hover { border-color: var(--ink-faint); color: var(--ink); }
+    .header-btn:focus-visible { outline: 2px solid var(--spruce); outline-offset: 2px; }
+    .header-link { display: inline-flex; align-items: center; text-decoration: none; }
+
+    /* ---- layout ---- */
+    .layout {
+      display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(260px, 1fr);
+      gap: 20px; max-width: 1240px; margin: 0 auto; padding: 22px 28px 48px;
+    }
+    @media (max-width: 880px) { .layout { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+    }
+    .card h2 {
+      font-size: 0.76rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.09em; color: var(--ink-faint);
+      padding: 12px 18px 0;
+    }
+
+    /* ---- item ---- */
+    .item-card { padding: 0 0 18px; }
+    .item-meta {
+      display: flex; align-items: baseline; gap: 12px;
+      padding: 14px 18px 4px;
+      color: var(--ink-faint); font-size: 0.82rem;
+    }
+    .item-progress { letter-spacing: 0.14em; }
+    .item-progress .done { color: var(--spruce); }
+    .item-text {
+      font-family: Charter, Georgia, "Times New Roman", serif;
+      font-size: 1.35rem; line-height: 1.55;
+      padding: 8px 22px 4px;
+      white-space: pre-wrap;
+    }
+    .item-text mark {
+      background: var(--amber-soft); color: inherit;
+      border-bottom: 2px solid var(--amber);
+    }
+    .shadow-note { padding: 4px 22px; color: var(--amber); font-size: 0.82rem; }
+
+    /* ---- huddle seed context ---- */
+    .seed-panel {
+      margin: 14px 18px 0; padding: 12px 16px;
+      border: 1px dashed var(--line); border-radius: var(--radius);
+      background: var(--paper);
+    }
+    .seed-panel h3 {
+      font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--ink-faint); margin-bottom: 8px;
+    }
+
+    /* ---- voting ---- */
+    .vote-panel { margin-top: 18px; padding: 0 18px 18px; }
+    .vote-status {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 0 10px; color: var(--ink-soft); font-size: 0.9rem;
+    }
+    .vote-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+    .vote-btn {
+      min-height: 48px; padding: 10px 22px; font-size: 1rem; cursor: pointer;
+      border: 1.5px solid var(--line); border-radius: var(--radius);
+      background: var(--card); color: var(--ink);
+      transition: border-color 140ms ease-out, background 140ms ease-out;
+    }
+    .vote-btn:hover { border-color: var(--spruce); }
+    .vote-btn:focus-visible { outline: 2px solid var(--spruce); outline-offset: 2px; }
+    .vote-btn.mine {
+      border-color: var(--spruce); background: var(--spruce-soft);
+      color: var(--spruce-deep); font-weight: 600;
+    }
+    .vote-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .vote-hint { margin-top: 8px; color: var(--ink-faint); font-size: 0.8rem; }
+
+    /* ---- reveal ---- */
+    .reveal-panel {
+      margin: 18px 18px 0; border: 1px solid var(--amber);
+      border-radius: var(--radius); background: var(--amber-soft);
+      padding: 14px 16px;
+    }
+    .reveal-panel h3 {
+      font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.09em;
+      color: var(--amber); margin-bottom: 10px;
+    }
+    .reveal-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+    .reveal-label { font-weight: 700; min-width: 110px; }
+    .voter-chip {
+      display: inline-block; padding: 2px 10px; border-radius: 99px;
+      background: var(--card); border: 1px solid var(--line);
+      font-size: 0.82rem; color: var(--ink-soft);
+    }
+    .voter-chip.me { border-color: var(--spruce); color: var(--spruce-deep); font-weight: 600; }
+    .change-note { color: var(--ink-soft); font-size: 0.82rem; margin-top: 6px; }
+    .change-note strong { color: var(--amber); }
+
+    /* ---- host controls ---- */
+    .host-controls { display: flex; gap: 10px; padding: 16px 18px 0; flex-wrap: wrap; }
+    .primary-btn {
+      min-height: 46px; padding: 10px 20px; font-size: 0.95rem; font-weight: 600;
+      border: none; border-radius: var(--radius); cursor: pointer;
+      background: var(--spruce); color: #fff;
+      transition: background 140ms ease-out;
+    }
+    .primary-btn:hover { background: var(--spruce-deep); }
+    .primary-btn:focus-visible { outline: 2px solid var(--spruce-deep); outline-offset: 2px; }
+    .primary-btn:disabled { background: var(--ink-faint); cursor: not-allowed; }
+    .ghost-btn {
+      min-height: 46px; padding: 10px 18px; font-size: 0.95rem;
+      border: 1.5px solid var(--line); border-radius: var(--radius);
+      background: var(--card); color: var(--ink-soft); cursor: pointer;
+    }
+    .ghost-btn:hover { border-color: var(--ink-faint); color: var(--ink); }
+    .ghost-btn:focus-visible { outline: 2px solid var(--spruce); outline-offset: 2px; }
+    .waiting-note { padding: 14px 18px 0; color: var(--ink-faint); font-size: 0.85rem; }
+
+    /* ---- right rail ---- */
+    .rail { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+    .member-list { list-style: none; padding: 10px 18px 16px; }
+    .member-list li {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 0; font-size: 0.92rem;
+    }
+    .member-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .role-badge {
+      font-size: 0.66rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; padding: 2px 7px; border-radius: 4px;
+      background: var(--spruce-soft); color: var(--spruce-deep);
+    }
+    .role-badge.observer { background: var(--amber-soft); color: var(--amber); }
+    .voted-dot { color: var(--spruce); font-weight: 700; }
+    .inactive { opacity: 0.45; }
+
+    /* ---- agreement meter ---- */
+    .meter-block { padding: 12px 18px 18px; }
+    .meter-row { margin-bottom: 12px; }
+    .meter-head { display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--ink-soft); margin-bottom: 4px; }
+    .meter-value { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+    .meter-track {
+      height: 10px; border-radius: 5px; background: var(--line);
+      position: relative; overflow: hidden;
+    }
+    .meter-fill {
+      position: absolute; inset: 0; width: 100%;
+      transform: scaleX(0); transform-origin: left;
+      border-radius: 5px; transition: transform 400ms ease-out;
+    }
+    .meter-fill.blind { background: var(--ink-faint); }
+    .meter-fill.final { background: var(--spruce); }
+    .lift-badge {
+      display: inline-block; margin-top: 2px; padding: 3px 10px;
+      border-radius: 99px; font-size: 0.8rem; font-weight: 600;
+      background: var(--spruce-soft); color: var(--spruce-deep);
+    }
+    .lift-badge.negative { background: var(--amber-soft); color: var(--danger); }
+    .meter-note { color: var(--ink-faint); font-size: 0.78rem; margin-top: 8px; }
+    .conformity-line { font-size: 0.84rem; color: var(--ink-soft); margin-top: 8px; }
+
+    /* ---- chat ---- */
+    .chat-card { display: flex; flex-direction: column; min-height: 260px; }
+    .chat-log {
+      flex: 1; overflow-y: auto; max-height: 320px;
+      padding: 10px 18px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .chat-msg { font-size: 0.9rem; }
+    .chat-msg .who { font-weight: 600; color: var(--spruce-deep); margin-right: 6px; }
+    .chat-msg.system { color: var(--ink-faint); font-size: 0.8rem; font-style: italic; }
+    .chat-form { display: flex; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid var(--line); }
+    .chat-form input {
+      flex: 1; min-height: 44px; padding: 8px 12px; font-size: 0.92rem;
+      border: 1.5px solid var(--line); border-radius: var(--radius);
+      background: var(--card); color: var(--ink);
+    }
+    .chat-form input:focus-visible { outline: 2px solid var(--spruce); outline-offset: 1px; }
+
+    /* ---- closed summary ---- */
+    .summary { padding: 26px 22px; text-align: left; }
+    .summary h2 { padding: 0 0 6px; }
+    .summary .big-line { font-size: 1.25rem; font-weight: 600; margin: 10px 0 2px; }
+    .summary p { color: var(--ink-soft); font-size: 0.92rem; margin-top: 6px; }
+
+    #error-banner {
+      display: none; margin: 12px 28px 0; padding: 10px 16px;
+      border: 1px solid var(--danger); border-radius: var(--radius);
+      background: #fbeeec; color: var(--danger); font-size: 0.88rem;
+      max-width: 1184px;
+    }
+    .visually-hidden {
+      position: absolute; width: 1px; height: 1px; margin: -1px;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 class="room-code" id="room-code">{{ room_id }}</h1>
+    <span class="chip" id="room-type-chip">room</span>
+    <span class="task-name">{{ task_name }}</span>
+    <span class="spacer"></span>
+    <span class="task-name" id="me-line">you are {{ username }}</span>
+    <a class="header-btn header-link" href="/annotate">← Back to task</a>
+    <button class="header-btn" id="leave-btn" type="button">Leave room</button>
+  </header>
+
+  <div id="error-banner" role="alert"></div>
+
+  <div class="layout" id="layout" hidden>
+    <main>
+      <div class="card item-card">
+        <div class="item-meta">
+          <span id="item-counter">Item — of —</span>
+          <span class="item-progress" id="item-progress" aria-hidden="true"></span>
+        </div>
+        <div class="item-text" id="item-text"></div>
+        <div class="shadow-note" id="shadow-note" hidden></div>
+
+        <div class="seed-panel" id="seed-panel" hidden>
+          <h3>Original annotations (what sent this item to the huddle)</h3>
+          <div id="seed-rows"></div>
+        </div>
+
+        <div class="vote-panel" id="vote-panel">
+          <div class="vote-status" id="vote-status" aria-live="polite"></div>
+          <div class="vote-buttons" id="vote-buttons" role="group" aria-label="Vote"></div>
+          <div class="vote-hint" id="vote-hint"></div>
+        </div>
+
+        <div class="reveal-panel" id="reveal-panel" hidden aria-live="polite">
+          <h3>Votes revealed</h3>
+          <div id="reveal-rows"></div>
+          <div id="change-notes"></div>
+        </div>
+
+        <div class="host-controls" id="host-controls" hidden>
+          <button class="primary-btn" id="reveal-btn" type="button">Reveal votes</button>
+          <button class="ghost-btn" id="advance-btn" type="button">Next item →</button>
+          <button class="ghost-btn" id="close-btn" type="button">End session</button>
+        </div>
+        <div class="waiting-note" id="waiting-note" hidden></div>
+      </div>
+
+      <div class="card summary" id="summary-card" hidden></div>
+    </main>
+
+    <aside class="rail">
+      <div class="card">
+        <h2>In the room</h2>
+        <ul class="member-list" id="member-list"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Agreement meter</h2>
+        <div class="meter-block">
+          <div class="meter-row">
+            <div class="meter-head"><span>Blind α</span>
+              <span class="meter-value" id="blind-alpha">—</span></div>
+            <div class="meter-track"><div class="meter-fill blind" id="blind-fill"></div></div>
+          </div>
+          <div class="meter-row">
+            <div class="meter-head"><span>After discussion α</span>
+              <span class="meter-value" id="final-alpha">—</span></div>
+            <div class="meter-track"><div class="meter-fill final" id="final-fill"></div></div>
+          </div>
+          <span class="lift-badge" id="lift-badge" hidden></span>
+          <div class="conformity-line" id="conformity-line"></div>
+          <div class="meter-note" id="meter-note">Krippendorff's α over revealed items — meaningful from 2 items on.</div>
+        </div>
+      </div>
+
+      <div class="card chat-card">
+        <h2>Discussion</h2>
+        <div class="chat-log" id="chat-log" aria-live="polite"></div>
+        <form class="chat-form" id="chat-form">
+          <input type="text" id="chat-input" placeholder="Say something…"
+                 autocomplete="off" maxlength="2000" aria-label="Discussion message">
+          <button class="primary-btn" type="submit">Send</button>
+        </form>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    "use strict";
+    const ROOM_ID = {{ room_id | tojson }};
+    const ME = {{ username | tojson }};
+    const POLL_MS = {{ poll_interval_ms | tojson }};
+    const API = (window.potatoUrl ? window.potatoUrl(`/rooms/api/${ROOM_ID}`)
+                                  : `/rooms/api/${ROOM_ID}`);
+
+    let state = null;
+    let cursor = 0;
+    let presenceCursor = 0;
+    let pollTimer = null;
+    let pollBackoff = POLL_MS;
+    let stateFetchInFlight = false;
+    let renderedChatSeqs = new Set();
+
+    const $ = (id) => document.getElementById(id);
+
+    function showError(text) {
+      const banner = $("error-banner");
+      banner.textContent = text;
+      banner.style.display = "block";
+    }
+    function clearError() { $("error-banner").style.display = "none"; }
+
+    async function api(path, options) {
+      const response = await fetch(`${API}${path}`, Object.assign({
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+      }, options));
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || `Request failed (${response.status})`);
+      }
+      return payload;
+    }
+    const post = (path, body) => api(path, { method: "POST", body: JSON.stringify(body || {}) });
+
+    // ---- boot: join, then load state, then poll -----------------------
+    async function boot() {
+      try {
+        await post("/join", {});
+      } catch (e) {
+        showError(`Could not join room: ${e.message}`);
+        return;
+      }
+      await refreshState();
+      $("layout").hidden = false;
+      schedulePoll(POLL_MS);
+    }
+
+    async function refreshState() {
+      if (stateFetchInFlight) return;
+      stateFetchInFlight = true;
+      try {
+        state = await api("/state");
+        cursor = Math.max(cursor, state.cursor);
+        clearError();
+        render();
+      } catch (e) {
+        showError(e.message);
+      } finally {
+        stateFetchInFlight = false;
+      }
+    }
+
+    function schedulePoll(delay) {
+      clearTimeout(pollTimer);
+      if (document.hidden) return;  // visibilitychange restarts the loop
+      pollTimer = setTimeout(poll, delay);
+    }
+
+    async function poll() {
+      try {
+        const isShadow = state && state.room_type === "shadow";
+        const query = `/events?since=${cursor}` + (isShadow ? `&presence=${presenceCursor}` : "");
+        const page = await api(query);
+        pollBackoff = POLL_MS;
+        clearError();
+        let needState = false;
+        for (const event of page.events) {
+          if (event.type === "message") appendChat(event);
+          else needState = true;
+          if (event.type === "revealed" || event.type === "vote_changed"
+              || event.type === "advanced" || event.type === "room_closed"
+              || event.type === "member_joined" || event.type === "member_left"
+              || event.type === "vote_cast") needState = true;
+        }
+        cursor = Math.max(cursor, page.cursor);
+        if (page.presence) {
+          renderPresence(page.presence);
+          for (const p of page.presence) presenceCursor = Math.max(presenceCursor, p.seq + 1);
+        }
+        if (needState) await refreshState();
+      } catch (e) {
+        pollBackoff = Math.min(pollBackoff * 2, 12000);
+        showError(`Connection hiccup — retrying (${e.message})`);
+      }
+      schedulePoll(pollBackoff);
+    }
+
+    // ---- rendering ----------------------------------------------------
+    function render() {
+      if (!state) return;
+      renderHeader();
+      renderMembers();
+      renderMeters();
+      if (state.status === "closed") { renderClosed(); return; }
+      $("summary-card").hidden = true;
+      renderItem();
+      renderSeedPanel();
+      renderVotePanel();
+      renderRevealPanel();
+      renderControls();
+    }
+
+    function renderSeedPanel() {
+      const panel = $("seed-panel");
+      const seeds = state.seed_votes;
+      if (!seeds || !Object.keys(seeds).length) { panel.hidden = true; return; }
+      panel.hidden = false;
+      const byLabel = {};
+      for (const [user, label] of Object.entries(seeds)) {
+        (byLabel[label] = byLabel[label] || []).push(user);
+      }
+      const rows = $("seed-rows");
+      rows.innerHTML = "";
+      for (const label of state.labels) {
+        const users = byLabel[label] || [];
+        if (!users.length) continue;
+        const row = document.createElement("div");
+        row.className = "reveal-row";
+        const labelEl = document.createElement("span");
+        labelEl.className = "reveal-label";
+        labelEl.textContent = `${label} · ${users.length}`;
+        row.appendChild(labelEl);
+        for (const user of users.sort()) {
+          const chip = document.createElement("span");
+          chip.className = "voter-chip";
+          chip.textContent = user;
+          row.appendChild(chip);
+        }
+        rows.appendChild(row);
+      }
+    }
+
+    function renderHeader() {
+      const chip = $("room-type-chip");
+      chip.textContent = state.room_type;
+      chip.classList.toggle("shadow-chip", state.room_type === "shadow");
+    }
+
+    function renderItem() {
+      const index = state.current_index;
+      $("item-counter").textContent = `Item ${index + 1} of ${state.n_items}`;
+      const dots = [];
+      for (let i = 0; i < state.n_items; i++) {
+        dots.push(i < index ? '<span class="done">●</span>' : (i === index ? "●" : "○"));
+      }
+      $("item-progress").innerHTML = dots.join(" ");
+      const textEl = $("item-text");
+      textEl.textContent = state.item_text || "(no text)";
+      textEl.dataset.raw = state.item_text || "";
+      const shadowNote = $("shadow-note");
+      if (state.room_type === "shadow") {
+        shadowNote.hidden = false;
+        shadowNote.textContent = state.my_role === "observer"
+          ? "Shadow session — you are watching the expert work."
+          : "Shadow session — observers see your votes and text selections live.";
+      } else {
+        shadowNote.hidden = true;
+      }
+    }
+
+    function renderVotePanel() {
+      const item = state.current_item;
+      const revealed = state.phase === "revealed";
+      const isObserver = state.my_role === "observer";
+      const status = $("vote-status");
+      if (revealed) {
+        status.textContent = "Votes are on the table — you can still change yours.";
+      } else {
+        const voters = state.members.filter(m => m.active && m.role !== "observer").length;
+        status.textContent = `${item ? item.n_voted : 0} of ${voters} voted · votes stay hidden until the host reveals`;
+      }
+      const buttons = $("vote-buttons");
+      buttons.innerHTML = "";
+      for (const label of state.labels) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "vote-btn";
+        btn.textContent = label;
+        const mine = item && item.my_vote === label;
+        if (mine) btn.classList.add("mine");
+        btn.disabled = isObserver || (revealed && mine);
+        btn.setAttribute("aria-pressed", mine ? "true" : "false");
+        btn.addEventListener("click", () => castVote(label));
+        buttons.appendChild(btn);
+      }
+      $("vote-hint").textContent = isObserver
+        ? "Observers don't vote."
+        : (revealed ? "Changing your vote now is recorded as a post-reveal change."
+                    : (item && item.my_vote ? "You can change your blind vote until the reveal." : ""));
+    }
+
+    function renderRevealPanel() {
+      const item = state.current_item;
+      const panel = $("reveal-panel");
+      if (!item || state.phase !== "revealed") { panel.hidden = true; return; }
+      panel.hidden = false;
+      const byLabel = {};
+      for (const [user, label] of Object.entries(item.current_votes || {})) {
+        (byLabel[label] = byLabel[label] || []).push(user);
+      }
+      const rows = $("reveal-rows");
+      rows.innerHTML = "";
+      for (const label of state.labels) {
+        const users = byLabel[label] || [];
+        if (!users.length) continue;
+        const row = document.createElement("div");
+        row.className = "reveal-row";
+        const labelEl = document.createElement("span");
+        labelEl.className = "reveal-label";
+        labelEl.textContent = `${label} · ${users.length}`;
+        row.appendChild(labelEl);
+        for (const user of users.sort()) {
+          const chip = document.createElement("span");
+          chip.className = "voter-chip" + (user === ME ? " me" : "");
+          chip.textContent = user === ME ? `${user} (you)` : user;
+          row.appendChild(chip);
+        }
+        rows.appendChild(row);
+      }
+      const notes = $("change-notes");
+      notes.innerHTML = "";
+      for (const change of item.changes || []) {
+        const note = document.createElement("div");
+        note.className = "change-note";
+        const who = document.createElement("strong");
+        who.textContent = change.user === ME ? "you" : change.user;
+        note.appendChild(who);
+        note.appendChild(document.createTextNode(
+          ` switched ${change.from} → ${change.to}`));
+        notes.appendChild(note);
+      }
+    }
+
+    function renderControls() {
+      const isHost = state.my_role === "host";
+      const controls = $("host-controls");
+      const waiting = $("waiting-note");
+      controls.hidden = !isHost;
+      if (!isHost) {
+        waiting.hidden = false;
+        waiting.textContent = state.phase === "revealed"
+          ? "Waiting for the host to move to the next item."
+          : "Waiting for everyone to vote — the host reveals when ready.";
+        return;
+      }
+      waiting.hidden = true;
+      const item = state.current_item;
+      const revealBtn = $("reveal-btn");
+      revealBtn.hidden = state.phase === "revealed";
+      revealBtn.disabled = !item || item.n_voted === 0;
+      revealBtn.textContent = state.all_voted
+        ? "Reveal votes — everyone's in"
+        : `Reveal votes (${item ? item.n_voted : 0} so far)`;
+      $("advance-btn").textContent =
+        state.current_index + 1 >= state.n_items ? "Finish session →" : "Next item →";
+    }
+
+    function renderMembers() {
+      const list = $("member-list");
+      list.innerHTML = "";
+      const item = state.current_item;
+      const revealed = state.phase === "revealed";
+      const members = [...state.members].sort((a, b) =>
+        (a.role === "host" ? -1 : 1) - (b.role === "host" ? -1 : 1)
+        || a.username.localeCompare(b.username));
+      for (const member of members) {
+        const li = document.createElement("li");
+        if (!member.active) li.classList.add("inactive");
+        const name = document.createElement("span");
+        name.className = "member-name";
+        name.textContent = member.username === ME ? `${member.username} (you)` : member.username;
+        li.appendChild(name);
+        if (member.role !== "member") {
+          const badge = document.createElement("span");
+          badge.className = "role-badge" + (member.role === "observer" ? " observer" : "");
+          badge.textContent = member.role;
+          li.appendChild(badge);
+        }
+        if (item && !revealed && member.role !== "observer"
+            && item.voted_users.includes(member.username)) {
+          const dot = document.createElement("span");
+          dot.className = "voted-dot";
+          dot.textContent = "✓ voted";
+          li.appendChild(dot);
+        }
+        list.appendChild(li);
+      }
+    }
+
+    function formatAlpha(value) {
+      return (value === null || value === undefined) ? "—" : value.toFixed(2);
+    }
+
+    function renderMeters() {
+      const metrics = state.metrics || {};
+      $("blind-alpha").textContent = formatAlpha(metrics.blind_alpha);
+      $("final-alpha").textContent = formatAlpha(metrics.final_alpha);
+      const toScale = (a) => (a === null || a === undefined)
+        ? "scaleX(0)" : `scaleX(${Math.max(0, Math.min(1, a))})`;
+      $("blind-fill").style.transform = toScale(metrics.blind_alpha);
+      $("final-fill").style.transform = toScale(metrics.final_alpha);
+      const n = metrics.n_revealed || 0;
+      $("meter-note").textContent = n < 2
+        ? "Krippendorff's α over revealed items — meaningful from 2 items on."
+        : `Krippendorff's α over ${n} revealed items. Blind = first votes; after = current votes.`;
+      const lift = $("lift-badge");
+      // An α gap over a single item is noise — earn the badge at 2+.
+      if (n < 2 || metrics.alpha_lift === null || metrics.alpha_lift === undefined) {
+        lift.hidden = true;
+      } else {
+        lift.hidden = false;
+        const sign = metrics.alpha_lift >= 0 ? "+" : "−";
+        lift.textContent = `norming lift ${sign}${Math.abs(metrics.alpha_lift).toFixed(2)} α`;
+        lift.classList.toggle("negative", metrics.alpha_lift < 0);
+      }
+      const conformity = $("conformity-line");
+      if (metrics.total_changes) {
+        conformity.textContent =
+          `${metrics.total_changes} post-reveal change${metrics.total_changes === 1 ? "" : "s"}, `
+          + `${metrics.toward_majority} toward the majority`;
+      } else {
+        conformity.textContent = "No post-reveal changes yet.";
+      }
+    }
+
+    function renderClosed() {
+      const metrics = state.metrics || {};
+      $("summary-card").hidden = false;
+      const isHost = state.my_role === "host";
+      $("summary-card").innerHTML = `
+        <h2>Session complete</h2>
+        <div class="big-line">Blind α ${formatAlpha(metrics.blind_alpha)}
+          → after discussion α ${formatAlpha(metrics.final_alpha)}</div>
+        <p>${metrics.n_revealed} item${metrics.n_revealed === 1 ? "" : "s"} discussed ·
+           ${metrics.total_changes} post-reveal vote change${metrics.total_changes === 1 ? "" : "s"}
+           (${metrics.toward_majority} toward the majority).</p>
+        <p>${isHost ? `<a href="${API}/export" download="room-${ROOM_ID}.json">Download the full session log</a> ·` : ""}
+           <a href="${window.potatoUrl ? window.potatoUrl('/rooms') : '/rooms'}">Back to the lobby</a></p>`;
+      document.querySelector(".item-card").hidden = true;
+      // The session is over — retire the chat composer.
+      $("chat-input").disabled = true;
+      $("chat-input").placeholder = "Session ended";
+      $("chat-form").querySelector("button").disabled = true;
+    }
+
+    // ---- chat ----------------------------------------------------------
+    function appendChat(event) {
+      if (renderedChatSeqs.has(event.seq)) return;
+      renderedChatSeqs.add(event.seq);
+      const log = $("chat-log");
+      const msg = document.createElement("div");
+      msg.className = "chat-msg";
+      const who = document.createElement("span");
+      who.className = "who";
+      who.textContent = event.user === ME ? "you" : event.user;
+      msg.appendChild(who);
+      msg.appendChild(document.createTextNode(event.data.text));
+      log.appendChild(msg);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function seedChatFromHistory(events) {
+      for (const event of events) {
+        if (event.type === "message") appendChat(event);
+      }
+    }
+
+    // ---- shadow presence ------------------------------------------------
+    function renderPresence(presenceEvents) {
+      if (!presenceEvents.length || state.my_role !== "observer") return;
+      const last = presenceEvents[presenceEvents.length - 1];
+      if (!last.data || last.data.kind !== "selection") return;
+      const textEl = $("item-text");
+      const raw = textEl.dataset.raw || "";
+      const start = Math.max(0, Math.min(last.data.start | 0, raw.length));
+      const end = Math.max(start, Math.min(last.data.end | 0, raw.length));
+      if (end <= start) { textEl.textContent = raw; return; }
+      textEl.textContent = "";
+      textEl.appendChild(document.createTextNode(raw.slice(0, start)));
+      const mark = document.createElement("mark");
+      mark.textContent = raw.slice(start, end);
+      mark.title = `${last.user} is looking here`;
+      textEl.appendChild(mark);
+      textEl.appendChild(document.createTextNode(raw.slice(end)));
+    }
+
+    function wireExpertSelectionBroadcast() {
+      $("item-text").addEventListener("mouseup", () => {
+        if (!state || state.room_type !== "shadow" || state.my_role === "observer") return;
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        const range = selection.getRangeAt(0);
+        const textEl = $("item-text");
+        if (!textEl.contains(range.startContainer) || !textEl.contains(range.endContainer)) return;
+        const pre = document.createRange();
+        pre.selectNodeContents(textEl);
+        pre.setEnd(range.startContainer, range.startOffset);
+        const start = pre.toString().length;
+        const end = start + range.toString().length;
+        if (end > start) {
+          post("/presence", { data: { kind: "selection", start, end } }).catch(() => {});
+        }
+      });
+    }
+
+    // ---- actions --------------------------------------------------------
+    async function castVote(label) {
+      try {
+        await post("/vote", { label });
+        await refreshState();
+      } catch (e) { showError(e.message); }
+    }
+
+    $("reveal-btn").addEventListener("click", async () => {
+      try { await post("/reveal"); await refreshState(); }
+      catch (e) { showError(e.message); }
+    });
+    $("advance-btn").addEventListener("click", async () => {
+      try { await post("/advance"); await refreshState(); }
+      catch (e) { showError(e.message); }
+    });
+    $("close-btn").addEventListener("click", async () => {
+      if (!window.confirm("End this session for everyone?")) return;
+      try { await post("/close"); await refreshState(); }
+      catch (e) { showError(e.message); }
+    });
+    $("leave-btn").addEventListener("click", async () => {
+      try { await post("/leave"); } catch (e) { /* leaving is best-effort */ }
+      window.location.href = window.potatoUrl ? window.potatoUrl("/rooms") : "/rooms";
+    });
+    $("chat-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const input = $("chat-input");
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      try { await post("/message", { text }); }
+      catch (e) { showError(e.message); }
+    });
+
+    // Pause polling while the tab is hidden; catch up the moment it returns.
+    document.addEventListener("visibilitychange", () => {
+      if (!state) return;
+      if (document.hidden) clearTimeout(pollTimer);
+      else { pollBackoff = POLL_MS; poll(); }
+    });
+
+    // Route the static back-link through the URL-prefix helper when present.
+    if (window.potatoUrl) {
+      document.querySelectorAll(".header-link").forEach((a) => {
+        a.href = window.potatoUrl(a.getAttribute("href"));
+      });
+    }
+
+    // Load chat history once at boot, then boot the poll loop.
+    (async () => {
+      await boot();
+      try {
+        const history = await api("/events?since=0");
+        seedChatFromHistory(history.events);
+        cursor = Math.max(cursor, history.cursor);
+      } catch (e) { /* chat history is best-effort */ }
+      wireExpertSelectionBroadcast();
+    })();
+  </script>
+</body>
+</html>

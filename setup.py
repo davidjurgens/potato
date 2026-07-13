@@ -38,9 +38,13 @@ _CORE_DEPS = [
 
 # Optional dependency groups for specific features.
 # Install with: pip install potato-annotation[ai,formats]
+# All AI SDKs are imported lazily (see potato/ai/ai_endpoint.py's lazy
+# endpoint registry), so none of these are needed for basic server startup.
 _AI_DEPS = [
     "ollama>=0.6.0",
     "openai>=1.0.0",
+    "anthropic>=0.30.0",
+    "google-genai>=1.0.0",
 ]
 _FORMAT_DEPS = [
     "pdfplumber>=0.10.0",

@@ -2351,6 +2351,45 @@ def render_page_with_annotations(username: str):
     # Check if chat support is enabled (for conditional loading of llm-chat-sidebar assets)
     chat_enabled = config.get("chat_support", {}).get("enabled", False)
 
+    # Boundary Lab (counterfactual boundary probing): conditional assets + JS config
+    boundary_client_config = None
+    boundary_block = config.get("boundary_probing", {})
+    if boundary_block.get("enabled", False):
+        from potato.boundary import get_boundary_manager
+        boundary_manager = get_boundary_manager()
+        if boundary_manager and boundary_manager.boundary_config.schema:
+            bc = boundary_manager.boundary_config
+            boundary_client_config = {
+                "schema": bc.schema,
+                "debounce_ms": bc.debounce_ms,
+                "rationale_on_flip": bc.rationale_on_flip,
+            }
+    boundary_enabled = boundary_client_config is not None
+    # Truth Serum (surprisingly-popular scoring): conditional assets + JS config
+    truth_serum_client_config = None
+    if config.get("truth_serum", {}).get("enabled", False):
+        from potato.truth_serum import get_truth_serum_manager
+        ts_manager = get_truth_serum_manager()
+        if ts_manager and ts_manager.ts_config.schema:
+            truth_serum_client_config = {
+                "schema": ts_manager.ts_config.schema,
+                "question": ts_manager.ts_config.question,
+            }
+    truth_serum_enabled = truth_serum_client_config is not None
+    # Think-Aloud (voice rationales): conditional assets + JS config
+    thinkaloud_client_config = None
+    if config.get("thinkaloud", {}).get("enabled", False):
+        from potato.thinkaloud import get_thinkaloud_manager
+        ta_manager = get_thinkaloud_manager()
+        if ta_manager and ta_manager.ta_config.schema:
+            ta = ta_manager.ta_config
+            thinkaloud_client_config = {
+                "schema": ta.schema,
+                "chunk_seconds": ta.chunk_seconds,
+                "require_spoken_label": ta.require_spoken_label,
+            }
+    thinkaloud_enabled = thinkaloud_client_config is not None
+
     # Check if live agent is enabled (for conditional loading of live-agent assets)
     live_agent_enabled = bool(config.get("live_agent"))
 
@@ -2432,6 +2471,15 @@ def render_page_with_annotations(username: str):
         agent_proxy_enabled=agent_proxy_enabled,
         # Chat support (for conditional loading of llm-chat-sidebar assets)
         chat_enabled=chat_enabled,
+        # Boundary Lab (counterfactual boundary probing)
+        boundary_enabled=boundary_enabled,
+        boundary_client_config=boundary_client_config,
+        # Truth Serum (surprisingly-popular scoring)
+        truth_serum_enabled=truth_serum_enabled,
+        truth_serum_client_config=truth_serum_client_config,
+        # Think-Aloud (voice rationales, rule-based label phrases)
+        thinkaloud_enabled=thinkaloud_enabled,
+        thinkaloud_client_config=thinkaloud_client_config,
         # Live agent (for conditional loading of live-agent assets)
         live_agent_enabled=live_agent_enabled,
         # Annotation instructions (collapsible banner)
@@ -3757,6 +3805,43 @@ def _initialize_from_config(config_file):
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
 
+    # Initialize Boundary Lab if enabled (parity with run_server()).
+    if config.get("boundary_probing", {}).get("enabled", False):
+        logger.info("Initializing Boundary Lab...")
+        from potato.boundary import init_boundary_manager
+        init_boundary_manager(config)
+        logger.info("Boundary Lab initialized successfully")
+    # Initialize Truth Serum if enabled (parity with run_server()).
+    if config.get("truth_serum", {}).get("enabled", False):
+        logger.info("Initializing Truth Serum...")
+        from potato.truth_serum import init_truth_serum_manager
+        init_truth_serum_manager(config)
+        logger.info("Truth Serum initialized successfully")
+    # Initialize Think-Aloud if enabled (parity with run_server()).
+    if config.get("thinkaloud", {}).get("enabled", False):
+        logger.info("Initializing Think-Aloud...")
+        from potato.thinkaloud import init_thinkaloud_manager
+        init_thinkaloud_manager(config)
+        logger.info("Think-Aloud initialized successfully")
+    # Initialize Pocket Mode if enabled (parity with run_server()).
+    if config.get("pocket", {}).get("enabled", False):
+        logger.info("Initializing Pocket Mode...")
+        from potato.pocket.routes import init_pocket
+        init_pocket(config)
+        logger.info("Pocket Mode initialized successfully")
+    # Initialize Psychometrics if enabled (parity with run_server()).
+    if config.get("psychometrics", {}).get("enabled", False):
+        logger.info("Initializing Psychometrics...")
+        from potato.psychometrics import init_psychometrics_manager
+        init_psychometrics_manager(config)
+        logger.info("Psychometrics initialized successfully")
+    # Initialize Multiplayer Rooms if enabled (parity with run_server()).
+    if config.get("rooms", {}).get("enabled", False):
+        logger.info("Initializing Multiplayer Rooms...")
+        from potato.rooms import init_rooms_manager
+        init_rooms_manager(config)
+        logger.info("Multiplayer Rooms initialized successfully")
+
     # Initialize Judge Calibration if enabled (parity with run_server()).
     if config.get("judge_calibration", {}).get("enabled", False):
         logger.info("Initializing Judge Calibration...")
@@ -3978,6 +4063,43 @@ def run_server(args):
         logger.info("Initializing QDA Mode...")
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
+
+    # Initialize Boundary Lab if enabled
+    if config.get("boundary_probing", {}).get("enabled", False):
+        logger.info("Initializing Boundary Lab...")
+        from potato.boundary import init_boundary_manager
+        init_boundary_manager(config)
+        logger.info("Boundary Lab initialized successfully")
+    # Initialize Truth Serum if enabled
+    if config.get("truth_serum", {}).get("enabled", False):
+        logger.info("Initializing Truth Serum...")
+        from potato.truth_serum import init_truth_serum_manager
+        init_truth_serum_manager(config)
+        logger.info("Truth Serum initialized successfully")
+    # Initialize Think-Aloud if enabled
+    if config.get("thinkaloud", {}).get("enabled", False):
+        logger.info("Initializing Think-Aloud...")
+        from potato.thinkaloud import init_thinkaloud_manager
+        init_thinkaloud_manager(config)
+        logger.info("Think-Aloud initialized successfully")
+    # Initialize Pocket Mode if enabled
+    if config.get("pocket", {}).get("enabled", False):
+        logger.info("Initializing Pocket Mode...")
+        from potato.pocket.routes import init_pocket
+        init_pocket(config)
+        logger.info("Pocket Mode initialized successfully")
+    # Initialize Psychometrics if enabled
+    if config.get("psychometrics", {}).get("enabled", False):
+        logger.info("Initializing Psychometrics...")
+        from potato.psychometrics import init_psychometrics_manager
+        init_psychometrics_manager(config)
+        logger.info("Psychometrics initialized successfully")
+    # Initialize Multiplayer Rooms if enabled
+    if config.get("rooms", {}).get("enabled", False):
+        logger.info("Initializing Multiplayer Rooms...")
+        from potato.rooms import init_rooms_manager
+        init_rooms_manager(config)
+        logger.info("Multiplayer Rooms initialized successfully")
 
     # Initialize Judge Calibration if enabled
     if config.get("judge_calibration", {}).get("enabled", False):

@@ -707,6 +707,9 @@ class AssignmentStrategy(Enum):
     - DIVERSITY_CLUSTERING: Samples items round-robin from embedding clusters
     - BATCH: Restricts assignment to configured annotator/item cohorts
     - PRIORITY: Serves items by a triage signal (errors/low-score first)
+    - PSYCHOMETRIC: Routes items by expected information gain under a live
+      IRT model (annotator ability x item uncertainty); confident items
+      stop consuming annotation budget
     """
     RANDOM = 'random'
     FIXED_ORDER = 'fixed_order'
@@ -718,6 +721,7 @@ class AssignmentStrategy(Enum):
     DIVERSITY_CLUSTERING = 'diversity_clustering'
     BATCH = 'batch'
     PRIORITY = 'priority'
+    PSYCHOMETRIC = 'psychometric'
 
     def fromstr(phase: str) -> AssignmentStrategy:
         """
@@ -753,6 +757,8 @@ class AssignmentStrategy(Enum):
             return AssignmentStrategy.BATCH
         elif phase == "priority":
             return AssignmentStrategy.PRIORITY
+        elif phase == "psychometric":
+            return AssignmentStrategy.PSYCHOMETRIC
         else:
             raise ValueError(f"Unknown phase: {phase}")
 
@@ -1529,6 +1535,30 @@ class ItemStateManager:
                     return True
             return False
 
+        if self.assignment_strategy == AssignmentStrategy.PSYCHOMETRIC:
+            # Early-stopped (resolved) items are excluded from assignment, so
+            # they must not count as available either — otherwise users spin
+            # on an "annotate" page that will never serve them anything.
+            candidates = [
+                iid for iid in self.remaining_instance_ids
+                if not self._item_is_saturated(iid)
+                and not user_state.has_annotated(iid)
+            ]
+            if not candidates:
+                return False
+            try:
+                from potato.psychometrics import get_psychometrics_manager
+                pm = get_psychometrics_manager()
+            except ImportError:
+                pm = None
+            if pm is None:
+                return True  # random fallback will serve these candidates
+            user_id = getattr(user_state, 'user_id', 'anonymous')
+            ranked = pm.rank_items(user_id, candidates)
+            if ranked is None:
+                return True  # cold start: random fallback serves them
+            return len(ranked) > 0
+
         for iid in self.remaining_instance_ids:
             if self._item_is_saturated(iid):
                 continue
@@ -1893,6 +1923,40 @@ class ItemStateManager:
                 # Fallback to random if diversity manager unavailable
                 self.logger.debug("Diversity manager not available, falling back to random")
                 return self._assign_random_fallback(user_state, instances_to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.PSYCHOMETRIC:
+            # Psychometric adaptive routing: rank candidates by expected
+            # information gain for THIS annotator under the live IRT model.
+            from potato.psychometrics import get_psychometrics_manager
+            pm = get_psychometrics_manager()
+
+            if pm is not None:
+                # Get available items (respecting per-item / global annotator caps)
+                available_ids = []
+                for iid in self.remaining_instance_ids:
+                    if self._item_is_saturated(iid):
+                        continue
+                    if user_state.has_annotated(iid):
+                        continue
+                    available_ids.append(iid)
+
+                if not available_ids:
+                    return 0
+
+                user_id = getattr(user_state, 'user_id', 'anonymous')
+                ranked = pm.rank_items(user_id, available_ids)
+
+                if ranked is not None:
+                    assigned = 0
+                    for item_id in ranked[:instances_to_assign]:
+                        user_state.assign_instance(self.instance_id_to_instance[item_id])
+                        assigned += 1
+                    return assigned
+                # rank_items returned None: cold start — random assignment
+                # builds the annotator overlap the model needs to identify.
+
+            self.logger.debug(
+                "Psychometrics unavailable or in cold start, falling back to random")
+            return self._assign_random_fallback(user_state, instances_to_assign)
         elif self.assignment_strategy == AssignmentStrategy.BATCH:
             return self._assign_batch(user_state, instances_to_assign)
         elif self.assignment_strategy == AssignmentStrategy.PRIORITY:

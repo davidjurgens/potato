@@ -8,6 +8,7 @@ including OpenAI, Anthropic, Hugging Face, Ollama, and VLLM endpoints.
 
 from dataclasses import dataclass, field
 from enum import Enum
+import importlib
 import logging
 from abc import ABC, abstractmethod
 import os
@@ -561,14 +562,60 @@ class BaseAIEndpoint(ABC):
 class AIEndpointFactory:
     """
     Factory class for creating AI endpoint instances.
+
+    Endpoint classes whose modules pull in optional SDKs (ollama, openai,
+    anthropic, google-genai, huggingface_hub, ...) are registered lazily as
+    (module, class name) specs and only imported when a config actually
+    selects that endpoint_type. A core install must be able to import this
+    module — and boot the server — without any of those SDKs present.
     """
 
     _endpoints = { }
+    # endpoint_type -> (relative module name, class name), resolved on demand
+    _lazy_endpoints = { }
+    # endpoint_type -> pip requirement to suggest when the import fails
+    _install_hints = { }
 
     @classmethod
     def register_endpoint(cls, endpoint_type: str, endpoint_class: type):
         """Register a new endpoint type."""
         cls._endpoints[endpoint_type] = endpoint_class
+
+    @classmethod
+    def register_lazy_endpoint(cls, endpoint_type: str, module_name: str,
+                               class_name: str, install_hint: str = None):
+        """Register an endpoint type without importing its module yet."""
+        cls._lazy_endpoints[endpoint_type] = (module_name, class_name)
+        if install_hint:
+            cls._install_hints[endpoint_type] = install_hint
+
+    @classmethod
+    def has_endpoint(cls, endpoint_type: str) -> bool:
+        """Whether an endpoint type is registered (its SDK may still be missing)."""
+        return endpoint_type in cls._endpoints or endpoint_type in cls._lazy_endpoints
+
+    @classmethod
+    def _resolve_endpoint_class(cls, endpoint_type: str) -> type:
+        """Return the class for an endpoint type, importing its module on first use.
+
+        Raises AIEndpointConfigError if the endpoint's optional dependency is
+        not installed.
+        """
+        if endpoint_type in cls._endpoints:
+            return cls._endpoints[endpoint_type]
+        module_name, class_name = cls._lazy_endpoints[endpoint_type]
+        try:
+            module = importlib.import_module(module_name, package=__package__)
+        except ImportError as e:
+            hint = cls._install_hints.get(endpoint_type)
+            hint_msg = f" Install it with: pip install {hint}" if hint else ""
+            raise AIEndpointConfigError(
+                f"The '{endpoint_type}' endpoint requires an optional dependency "
+                f"that is not installed ({e}).{hint_msg}"
+            )
+        endpoint_class = getattr(module, class_name)
+        cls._endpoints[endpoint_type] = endpoint_class
+        return endpoint_class
 
     @classmethod
     def create_endpoint(cls, config: Dict[str, Any]) -> Optional[BaseAIEndpoint]:
@@ -593,8 +640,12 @@ class AIEndpointFactory:
         if not endpoint_type:
             raise AIEndpointConfigError("endpoint_type is required when ai_support is enabled")
 
-        if endpoint_type not in cls._endpoints:
+        if not cls.has_endpoint(endpoint_type):
             raise AIEndpointConfigError(f"Unknown endpoint type: {endpoint_type}")
+
+        # May raise AIEndpointConfigError with an install hint if the
+        # endpoint's optional SDK is not installed.
+        endpoint_class = cls._resolve_endpoint_class(endpoint_type)
 
         # Prepare endpoint configuration
         endpoint_config = {
@@ -602,7 +653,6 @@ class AIEndpointFactory:
         }
 
         try:
-            endpoint_class = cls._endpoints[endpoint_type]
             return endpoint_class(endpoint_config)
         except Exception as e:
             raise AIEndpointConfigError(f"Failed to create {endpoint_type} endpoint: {e}")
@@ -619,70 +669,23 @@ def get_ai_endpoint(config: dict):
     return AIEndpointFactory.create_endpoint(config)
 
 
-# Register built-in endpoints
-try:
-    from .ollama_endpoint import OllamaEndpoint
-    AIEndpointFactory.register_endpoint("ollama", OllamaEndpoint)
-except ImportError:
-    logger.debug("Ollama endpoint not available")
-
-try:
-    from .openai_endpoint import OpenAIEndpoint
-    AIEndpointFactory.register_endpoint("openai", OpenAIEndpoint)
-except ImportError:
-    logger.debug("OpenAI endpoint not available")
-
-try:
-    from .huggingface_endpoint import HuggingfaceEndpoint
-    AIEndpointFactory.register_endpoint("huggingface", HuggingfaceEndpoint)
-except ImportError:
-    logger.debug("Hugging Face endpoint not available")
-
-try:
-    from .gemini_endpoint import GeminiEndpoint
-    AIEndpointFactory.register_endpoint("gemini", GeminiEndpoint)
-except ImportError:
-    logger.debug("Gemini endpoint not available")
-
-try:
-    from .anthropic_endpoint import AnthropicEndpoint
-    AIEndpointFactory.register_endpoint("anthropic", AnthropicEndpoint)
-except ImportError:
-    logger.debug("Anthropic endpoint not available")
-
-try:
-    from .vllm_endpoint import VLLMEndpoint
-    AIEndpointFactory.register_endpoint("vllm", VLLMEndpoint)
-except ImportError:
-    logger.debug("VLLM endpoint not available")
-
-# Register visual AI endpoints
-try:
-    from .yolo_endpoint import YOLOEndpoint
-    AIEndpointFactory.register_endpoint("yolo", YOLOEndpoint)
-except ImportError:
-    logger.debug("YOLO endpoint not available (ultralytics not installed)")
-
-try:
-    from .ollama_vision_endpoint import OllamaVisionEndpoint
-    AIEndpointFactory.register_endpoint("ollama_vision", OllamaVisionEndpoint)
-except ImportError:
-    logger.debug("Ollama Vision endpoint not available")
-
-try:
-    from .openai_vision_endpoint import OpenAIVisionEndpoint
-    AIEndpointFactory.register_endpoint("openai_vision", OpenAIVisionEndpoint)
-except ImportError:
-    logger.debug("OpenAI Vision endpoint not available")
-
-try:
-    from .anthropic_vision_endpoint import AnthropicVisionEndpoint
-    AIEndpointFactory.register_endpoint("anthropic_vision", AnthropicVisionEndpoint)
-except ImportError:
-    logger.debug("Anthropic Vision endpoint not available")
-
-try:
-    from .openrouter_endpoint import OpenRouterEndpoint
-    AIEndpointFactory.register_endpoint("openrouter", OpenRouterEndpoint)
-except ImportError:
-    logger.debug("OpenRouter endpoint not available")
+# Register built-in endpoints lazily: nothing here imports an SDK. The
+# endpoint module (and the optional package it wraps) is imported the first
+# time a config selects that endpoint_type.
+for _type, _module, _class, _hint in [
+    ("ollama", ".ollama_endpoint", "OllamaEndpoint", "ollama"),
+    ("openai", ".openai_endpoint", "OpenAIEndpoint", "openai"),
+    ("huggingface", ".huggingface_endpoint", "HuggingfaceEndpoint", "huggingface_hub"),
+    ("gemini", ".gemini_endpoint", "GeminiEndpoint", "google-genai"),
+    ("anthropic", ".anthropic_endpoint", "AnthropicEndpoint", "anthropic"),
+    ("vllm", ".vllm_endpoint", "VLLMEndpoint", None),
+    ("yolo", ".yolo_endpoint", "YOLOEndpoint", "ultralytics"),
+    ("ollama_vision", ".ollama_vision_endpoint", "OllamaVisionEndpoint", "ollama"),
+    ("openai_vision", ".openai_vision_endpoint", "OpenAIVisionEndpoint", "openai"),
+    ("anthropic_vision", ".anthropic_vision_endpoint", "AnthropicVisionEndpoint", "anthropic"),
+    ("openrouter", ".openrouter_endpoint", "OpenRouterEndpoint", None),
+    # Alias kept for configs written against the old AICacheManager name.
+    ("open_router", ".openrouter_endpoint", "OpenRouterEndpoint", None),
+]:
+    AIEndpointFactory.register_lazy_endpoint(_type, _module, _class, _hint)
+del _type, _module, _class, _hint

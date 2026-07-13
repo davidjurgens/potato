@@ -181,6 +181,40 @@ class TestAIEndpointFactory:
         # Factory passes ai_config to endpoint
         assert endpoint.temperature == 0.3
 
+    def test_builtin_endpoints_registered_lazily(self):
+        """Built-in types are known without their SDK modules being imported."""
+        for endpoint_type in ("ollama", "openai", "anthropic", "gemini",
+                              "huggingface", "vllm", "openrouter", "open_router",
+                              "yolo", "ollama_vision", "openai_vision",
+                              "anthropic_vision"):
+            assert AIEndpointFactory.has_endpoint(endpoint_type)
+            # Lazy spec only — nothing resolved into the eager registry yet
+            # (setup_method cleared it) and has_endpoint must not resolve.
+            assert endpoint_type not in AIEndpointFactory._endpoints
+
+    def test_lazy_resolution_imports_on_first_use(self):
+        """Resolving a lazy endpoint imports its module and caches the class."""
+        cls = AIEndpointFactory._resolve_endpoint_class("openrouter")
+        assert cls.__name__ == "OpenRouterEndpoint"
+        # Cached for subsequent lookups
+        assert AIEndpointFactory._endpoints["openrouter"] is cls
+
+    def test_lazy_resolution_missing_dependency_hint(self):
+        """A lazy endpoint whose module can't import gets an actionable error."""
+        AIEndpointFactory.register_lazy_endpoint(
+            "broken_lazy", ".does_not_exist_endpoint", "Nope",
+            install_hint="some-package")
+        try:
+            with pytest.raises(AIEndpointConfigError,
+                               match="pip install some-package"):
+                AIEndpointFactory.create_endpoint({
+                    "ai_support": {"enabled": True,
+                                   "endpoint_type": "broken_lazy"}
+                })
+        finally:
+            AIEndpointFactory._lazy_endpoints.pop("broken_lazy", None)
+            AIEndpointFactory._install_hints.pop("broken_lazy", None)
+
 
 class TestAIEndpointErrors:
     """Test AI endpoint error handling."""

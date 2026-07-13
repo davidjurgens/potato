@@ -7669,6 +7669,60 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register Boundary Lab blueprint (counterfactual boundary probing) if not
+    # already registered
+    if 'boundary' not in app.blueprints:
+        try:
+            from potato.boundary.routes import boundary_bp
+            app.register_blueprint(boundary_bp)
+        except ImportError:
+            pass
+
+    # Register Truth Serum blueprint (surprisingly-popular scoring) if not
+    # already registered
+    if 'truth_serum' not in app.blueprints:
+        try:
+            from potato.truth_serum.routes import truth_serum_bp
+            app.register_blueprint(truth_serum_bp)
+        except ImportError:
+            pass
+
+    # Register Think-Aloud blueprint (voice rationales, rule-based labels) if
+    # not already registered
+    if 'thinkaloud' not in app.blueprints:
+        try:
+            from potato.thinkaloud.routes import thinkaloud_bp
+            app.register_blueprint(thinkaloud_bp)
+        except ImportError:
+            pass
+
+    # Register Pocket Mode blueprint (mobile-first annotation PWA) if not
+    # already registered
+    if 'pocket' not in app.blueprints:
+        try:
+            from potato.pocket.routes import pocket_bp
+            app.register_blueprint(pocket_bp)
+        except ImportError:
+            pass
+
+    # Register Psychometrics blueprint (live IRT: labels with error bars,
+    # adaptive routing, study designer) if not already registered
+    if 'psychometrics' not in app.blueprints:
+        try:
+            from potato.psychometrics.routes import psychometrics_bp
+            app.register_blueprint(psychometrics_bp)
+        except ImportError:
+            pass
+
+    # Register Multiplayer Rooms blueprint (norming sessions, adjudication
+    # huddles, shadowing) if not already registered
+    if 'rooms' not in app.blueprints:
+        try:
+            from potato.rooms.routes import rooms_bp
+            app.register_blueprint(rooms_bp)
+        except ImportError:
+            pass
+
 # ============================================================================
 # Adjudication Routes
 # ============================================================================
