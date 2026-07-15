@@ -371,7 +371,9 @@ def _generate_html(
 
                 <!-- Timeline (Peaks.js) -->
                 <div class="timeline-wrapper">
+                    <div class="zoomview-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px;">Timeline <span class="zoomview-hint">(right-click drag to annotate · drag past the edge to keep scrolling)</span></div>
                     <div id="zoomview-{escaped_name}" class="timeline-container" style="height: {timeline_height}px;"></div>
+                    <div class="overview-label" style="font-size: 0.85em; color: #666; margin: 8px 0 4px;">Full Video Overview <span class="overview-hint">(left-click to navigate · right-click drag to annotate)</span></div>
                     <div id="overview-{escaped_name}" class="overview-container" style="height: {overview_height}px;"></div>
                 </div>
 

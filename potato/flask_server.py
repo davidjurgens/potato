@@ -1745,6 +1745,75 @@ def get_abs_or_rel_path(fname: str, config: dict) -> str:
         raise FileNotFoundError("File not found: %s" % fname2)
     return fname2
 
+#: Annotation schemes whose item "text" is often just a media file path/URL.
+_TEMPORAL_MEDIA_TYPES = frozenset({
+    "audio_annotation",
+    "video_annotation",
+    "tiered_annotation",
+    "temporal_grounding",
+    "speech_transcript",
+})
+
+#: File extensions that mark a string as a media path even without a slash.
+_MEDIA_PATH_EXTENSIONS = (
+    ".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac",
+    ".mp4", ".webm", ".mov", ".avi", ".mkv",
+)
+
+
+def _looks_like_media_path(value):
+    """Heuristic: does this string look like a bare media path/URL (not prose)?
+
+    A genuine prompt/transcript contains whitespace; a path does not. We treat a
+    whitespace-free string as a path when it is a URL, contains a path separator,
+    or ends in a known media extension.
+    """
+    if not isinstance(value, str):
+        return False
+    s = value.strip()
+    if not s or any(c.isspace() for c in s):
+        return False
+    lowered = s.lower()
+    if lowered.startswith(("http://", "https://", "//", "/")):
+        return True
+    if "/" in s or "\\" in s:
+        return True
+    return lowered.endswith(_MEDIA_PATH_EXTENSIONS)
+
+
+def _compute_instance_text_is_media_path(annotation_schemes, item_data, displayed_text):
+    """Whether the instance-text header is just the media path (so it can be hidden).
+
+    True when a temporal-media scheme is present AND the displayed text is either
+    equal to that scheme's media source field value or otherwise looks like a bare
+    media path/URL. Returns False when the item carries a real prompt/transcript.
+    """
+    media_scheme = next(
+        (s for s in (annotation_schemes or [])
+         if s.get("annotation_type") in _TEMPORAL_MEDIA_TYPES),
+        None,
+    )
+    if media_scheme is None:
+        return False
+
+    display = displayed_text.strip() if isinstance(displayed_text, str) else ""
+    if not display:
+        # No visible text at all — nothing to show, treat as "hide".
+        return True
+
+    source_field = (
+        media_scheme.get("source_field")
+        or media_scheme.get("video_key")
+        or media_scheme.get("audio_key")
+    )
+    if source_field and isinstance(item_data, dict):
+        source_value = str(item_data.get(source_field, "") or "").strip()
+        if source_value and display == source_value:
+            return True
+
+    return _looks_like_media_path(display)
+
+
 def get_displayed_text(text):
     """Render the text to display to the user in the annotation interface.
 
@@ -2315,10 +2384,11 @@ def render_page_with_annotations(username: str):
         ui_config = dict(ui_config)  # Make a copy to avoid modifying the original
         ui_config["layout"] = config["layout"]
 
-    # Detect if any annotation scheme is video_annotation type
+    # Detect if any annotation scheme is video_annotation type (or tiered_annotation with video media)
     # This is used to customize the display (show "Video to Annotate:" instead of "Text to Annotate:")
     has_video_annotation = any(
         scheme.get("annotation_type") == "video_annotation"
+        or (scheme.get("annotation_type") == "tiered_annotation" and scheme.get("media_type") == "video")
         for scheme in annotation_schemes
     )
 
@@ -2335,6 +2405,14 @@ def render_page_with_annotations(username: str):
     has_image_annotation = any(
         scheme.get("annotation_type") == "image_annotation"
         for scheme in annotation_schemes
+    )
+
+    # For temporal media schemes the item's "text" is often just the media file
+    # path/URL. When that is the case we hide the redundant header (the player IS
+    # the content); but if the item has a genuine prompt/transcript we still show
+    # it. See base_template_v2.html instance-display branches.
+    instance_text_is_media_path = _compute_instance_text_is_media_path(
+        annotation_schemes, item_data, original_plain_text
     )
 
     # Initialize display_html before it's referenced by _detect_frontend_assets_for_page
@@ -2451,6 +2529,7 @@ def render_page_with_annotations(username: str):
         has_video_annotation=has_video_annotation,
         has_audio_annotation=has_audio_annotation,
         has_image_annotation=has_image_annotation,
+        instance_text_is_media_path=instance_text_is_media_path,
         ai_enabled=ai_enabled,
         # Pre-annotation data for model predictions
         pre_annotations=pre_annotation_data,

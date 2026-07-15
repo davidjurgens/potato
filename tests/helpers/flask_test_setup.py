@@ -958,6 +958,12 @@ class FlaskTestServer:
                     from flask import send_from_directory
                     return send_from_directory(test_data_dir, filename)
 
+                @app.route('/test-video/<path:filename>')
+                def serve_test_video(filename):
+                    """Serve test video files from the tests/data directory."""
+                    from flask import send_from_directory
+                    return send_from_directory(test_data_dir, filename)
+
                 # Use make_server instead of app.run() for proper shutdown support
                 from werkzeug.serving import make_server
                 self._wsgi_server = make_server('0.0.0.0', self.port, app, threaded=True)

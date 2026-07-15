@@ -332,11 +332,11 @@ def _generate_html(
 
                 <!-- 1. Full waveform overview at top -->
                 <div class="waveform-wrapper">
-                    <div class="overview-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px;">Full Audio Overview (click to navigate)</div>
+                    <div class="overview-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px;">Full Audio Overview <span class="overview-hint">(left-click to navigate · right-click drag to annotate)</span></div>
                     <div id="overview-{escaped_name}" class="overview-container" style="margin-bottom: 12px;"></div>
 
                     <!-- 2. Zoomed waveform below -->
-                    <div class="zoomview-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px;">Zoomed View (right-click drag to annotate)</div>
+                    <div class="zoomview-label" style="font-size: 0.85em; color: #666; margin-bottom: 4px;">Zoomed View <span class="zoomview-hint">(right-click drag to annotate · drag past the edge to keep scrolling)</span></div>
                     <div id="waveform-{escaped_name}" class="waveform-container"></div>
 
                     {spectrogram_html}

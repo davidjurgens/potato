@@ -36,12 +36,12 @@
 
     <!-- Audio Annotation Styles -->
     {% if frontend_assets.audio_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}?v=4">
     {% endif %}
 
     <!-- Video Annotation Styles -->
     {% if frontend_assets.video_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='video-annotation.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='video-annotation.css') }}?v=3">
     {% endif %}
 
     <!-- Span Link Styles -->
@@ -288,17 +288,35 @@
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
                         {% elif has_video_annotation | default(false) %}
-                        <h5 class="mb-3">{{ ui_lang.video_to_annotate|default('Video to Annotate:') }}</h5>
-                        <!-- For video annotation, keep the text-content element accessible for JS but visually hidden -->
-                        <div id="instance-text" class="instance-text-container" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);">
+                        {% if instance_text_is_media_path | default(false) %}
+                        <!-- Item text is just the media path: hide it (the video player is the content).
+                             Keep the node in the DOM so the JS media-URL fallback can still read it. -->
+                        <div id="instance-text" style="display: none;">
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
+                        {% else %}
+                        <!-- Item text is a real prompt/transcript: show it in a readable box above the player. -->
+                        <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
+                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
+                                <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;"></div>
+                            </div>
+                        </div>
+                        {% endif %}
                         {% elif has_audio_annotation | default(false) %}
-                        <h5 class="mb-3">{{ ui_lang.audio_to_annotate|default('Audio to Annotate:') }}</h5>
-                        <!-- For audio annotation, keep the text-content element accessible for JS but visually hidden -->
-                        <div id="instance-text" class="instance-text-container" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);">
+                        {% if instance_text_is_media_path | default(false) %}
+                        <!-- Item text is just the media path: hide it (the waveform player is the content).
+                             Keep the node in the DOM so the JS media-URL fallback can still read it. -->
+                        <div id="instance-text" style="display: none;">
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
+                        {% else %}
+                        <!-- Item text is a real prompt/transcript: show it in a readable box above the player. -->
+                        <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
+                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
+                                <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;"></div>
+                            </div>
+                        </div>
+                        {% endif %}
                         {% elif has_image_annotation | default(false) %}
                         <!-- For image annotation, hide this section - the image is loaded directly into the annotation canvas -->
                         <!-- Store the image URL in a hidden element for JavaScript to access -->
@@ -671,14 +689,16 @@
     <!-- Peaks.js for audio/video annotation (stored locally for reliability) -->
     {% if (frontend_assets.audio_annotation | default(false)) or (frontend_assets.video_annotation | default(false)) %}
     <script src="{{ url_for('static', filename='peaks.min.js') }}"></script>
+    <!-- Shared right-click-drag range selection + edge auto-scroll for Peaks views -->
+    <script src="{{ url_for('static', filename='peaks-range-select.js') }}?v=2"></script>
     {% endif %}
     <!-- Audio annotation manager -->
     {% if frontend_assets.audio_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=4"></script>
     {% endif %}
     <!-- Video annotation manager -->
     {% if frontend_assets.video_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=10"></script>
+    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=16"></script>
     {% endif %}
 
     <!-- Span link manager -->
@@ -727,7 +747,7 @@
 
     <!-- Tiered annotation manager (ELAN-style hierarchical annotation) -->
     {% if frontend_assets.tiered_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=2"></script>
     {% endif %}
 
     <!-- Document bounding box annotation -->

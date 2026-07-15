@@ -166,6 +166,12 @@ item_properties:
 
 Supported formats: MP3, WAV, OGG, and other formats supported by the browser.
 
+> **Header behavior:** When `text_key` points at the media file path/URL (as above),
+> the redundant "instance text" header is hidden automatically — the waveform player
+> is the content. If the item instead carries a real prompt or transcript (text with
+> spaces, not a bare path), that text is shown above the player. The same applies to
+> video and tiered/temporal tasks.
+
 ### Output Data
 
 Annotations are saved as JSON:
@@ -224,10 +230,26 @@ Annotations are saved as JSON:
 
 ### Waveform Display
 
-- **Main Waveform**: Zoomable view showing amplitude
-- **Overview**: Mini-map showing full audio with current view highlighted
+- **Main Waveform (zoomed view)**: Zoomable view showing amplitude
+- **Overview**: Mini-map showing the full audio with the current view highlighted
 - **Segments**: Color-coded regions on the waveform
 - **Playhead**: Current playback position indicator
+
+### Creating Segments by Dragging
+
+Segments can be drawn directly on either panel:
+
+- **Zoomed view** — **right-click and drag** to draw a segment precisely. If the
+  drag reaches the left or right edge, the view **auto-scrolls** so you can extend
+  the selection past the currently visible window in a single gesture (no need to
+  zoom out first).
+- **Overview** — **right-click and drag** to draw a coarse segment anywhere across
+  the whole clip, even outside the current zoom window. This makes the entire
+  recording annotatable without first navigating to it.
+
+**Left-click** on either panel still seeks / navigates the playhead, so the two
+gestures never conflict. You can also create segments with the `[` / `]` / `Enter`
+keyboard shortcuts or the toolbar buttons.
 
 ### Segment List
 

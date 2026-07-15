@@ -341,6 +341,15 @@
     overflow: hidden;
 }
 
+/* Affordance hints on the timeline / overview labels.
+   #6b7280 keeps a WCAG-AA (>=4.5:1) contrast on the light background. */
+.overview-hint,
+.zoomview-hint {
+    font-style: italic;
+    color: var(--muted-foreground, #6b7280);
+    font-weight: 400;
+}
+
 /* Annotation List */
 .annotation-list-container {
     background: var(--muted, #f9fafb);
