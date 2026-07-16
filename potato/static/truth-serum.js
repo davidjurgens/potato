@@ -61,7 +61,11 @@
     }
 
     function showPanel() {
-        ensurePanel().classList.remove('ts-hidden');
+        var panel = ensurePanel();
+        panel.classList.remove('ts-hidden');
+        // The card is anchored bottom-left — directly on top of Previous — and
+        // would otherwise swallow clicks meant for it with no feedback.
+        if (window.potatoFloatingPanel) window.potatoFloatingPanel.avoidNav(panel);
     }
 
     // ------------------------------------------------------------- render --
@@ -188,6 +192,14 @@
             })
             .catch(function () { /* enhancement only; stay quiet */ });
     }
+
+    // Resizing moves the nav row, so re-check that the card still clears it.
+    window.addEventListener('resize', function () {
+        if (state.panel && !state.panel.classList.contains('ts-hidden') &&
+            window.potatoFloatingPanel) {
+            window.potatoFloatingPanel.avoidNav(state.panel);
+        }
+    });
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {

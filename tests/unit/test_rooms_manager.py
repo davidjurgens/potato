@@ -221,6 +221,40 @@ class TestMetrics:
         assert metrics["per_member"]["carol"]["toward_majority"] == 1
         assert metrics["per_member"]["alice"]["changes"] == 0
 
+    def test_single_revealed_item_reports_no_alpha(self):
+        """One item cannot support an alpha, so the meter must stay empty.
+
+        Krippendorff's alpha estimates expected disagreement from variation
+        across units: over a single item it collapses to exactly 0.0 no matter
+        how the room voted. Reporting that 0.0 showed "Blind alpha 0.00" and
+        invited a near-consensus to be read as chance-level agreement. Only
+        unanimity used to be caught, and only because it divides by zero.
+        """
+        manager = make_manager()
+        room = self.seeded_room(manager)
+        # A 2-1 split: real disagreement, but still only one item.
+        self.run_item(manager, room,
+                      {"alice": "Sarcastic", "bob": "Sarcastic", "carol": "Sincere"},
+                      changes=[])
+        metrics = manager.metrics(room)
+        assert metrics["n_revealed"] == 1
+        assert metrics["blind_alpha"] is None
+        assert metrics["final_alpha"] is None
+        assert metrics["alpha_lift"] is None
+
+    def test_alpha_appears_once_a_second_item_is_revealed(self):
+        manager = make_manager()
+        room = self.seeded_room(manager)
+        self.run_item(manager, room,
+                      {"alice": "Sarcastic", "bob": "Sarcastic", "carol": "Sarcastic"},
+                      changes=[])
+        assert manager.metrics(room)["blind_alpha"] is None
+        self.run_item(manager, room,
+                      {"alice": "Sincere", "bob": "Sincere", "carol": "Sincere"},
+                      changes=[])
+        # Two items with perfect within-item agreement → alpha is now real.
+        assert manager.metrics(room)["blind_alpha"] is not None
+
     def test_metrics_empty_room(self):
         manager = make_manager()
         room = manager.create_room("alice", "norming", ["s1"], LABELS)

@@ -194,11 +194,16 @@
     border-radius: 9px;
 }
 
+.boundary-flip-caption {
+    font-size: 12px;
+    color: #9a6a2c;
+    margin: 8px 0 6px;
+}
+
 .boundary-flip-labels {
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
-    margin-bottom: 8px;
 }
 
 .boundary-label-chip {

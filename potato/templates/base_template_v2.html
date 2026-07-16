@@ -641,13 +641,17 @@
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=3"></script>
     {% endif %}
     <script src="{{ url_for('static', filename='annotation.js') }}?v=24"></script>
+    <!-- Shared geometry for the bottom-anchored floating widgets below; must
+         load before them. Unconditional: tiny, and several may be enabled at
+         once (see the combined showcase example). -->
+    <script src="{{ url_for('static', filename='floating-panel-utils.js') }}?v=4"></script>
     <!-- Boundary Lab: counterfactual boundary probing (conditional) -->
     {% if boundary_enabled | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/boundary.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/boundary.css') }}?v=3">
     <script type="text/javascript">
         window.boundaryConfig = {{ boundary_client_config | tojson }};
     </script>
-    <script src="{{ url_for('static', filename='boundary-probe.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='boundary-probe.js') }}?v=4"></script>
     {% endif %}
     <!-- Device routing: send phones/tablets to /pocket when the task supports
          it; warn them when it doesn't. Unconditional — the "not mobile
@@ -659,7 +663,7 @@
     <script type="text/javascript">
         window.truthSerumConfig = {{ truth_serum_client_config | tojson }};
     </script>
-    <script src="{{ url_for('static', filename='truth-serum.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='truth-serum.js') }}?v=2"></script>
     {% endif %}
     <!-- Think-Aloud: voice rationales + rule-based label phrases (conditional) -->
     {% if thinkaloud_enabled | default(false) %}
@@ -667,7 +671,7 @@
     <script type="text/javascript">
         window.thinkAloudConfig = {{ thinkaloud_client_config | tojson }};
     </script>
-    <script src="{{ url_for('static', filename='thinkaloud.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='thinkaloud.js') }}?v=2"></script>
     {% endif %}
     <!-- Turn-level annotation module (per-turn schema binding) -->
     <script src="{{ url_for('static', filename='turn-annotations.js') }}?v=1"></script>

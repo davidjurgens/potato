@@ -226,7 +226,18 @@ class RoomsManager:
 
     @staticmethod
     def _alpha(votes_by_item: Dict[str, Dict[str, str]]) -> Optional[float]:
-        """Nominal Krippendorff's alpha over an incomplete item×user table."""
+        """Nominal Krippendorff's alpha over an incomplete item×user table.
+
+        Needs at least two items, not merely two ratings: alpha estimates
+        expected disagreement from variation *across* units, so over a single
+        item it collapses to exactly 0.0 whatever the votes were — a 5-1
+        near-consensus and a 1-1-1 three-way split both score 0.0, and only
+        unanimity is caught (it divides by zero). Returning that 0.0 put
+        "Blind alpha 0.00" on the meter and invited the room to read a
+        near-consensus as chance-level agreement.
+        """
+        if len(votes_by_item) < 2:
+            return None
         rows = [(iid, user, label)
                 for iid, votes in votes_by_item.items()
                 for user, label in votes.items()]

@@ -13,6 +13,9 @@ Speech-to-text runs **fully locally** via faster-whisper (CPU real-time with the
 ## How it works
 
 1. The annotator taps **🎤 Think aloud** (bottom-center pill) and speaks freely.
+   Recording carries across Next/Previous — tap once and keep talking for the
+   whole session; only **Stop** ends it. The chunk in progress when they
+   navigate is flushed rather than dropped.
 2. Audio is captured in complete ~6-second chunks and transcribed locally.
 3. To commit a label by voice, they use one of the accepted phrasings:
    - *"I label this **Polite**"* / *"I'd call it **neutral**"*
@@ -20,7 +23,8 @@ Speech-to-text runs **fully locally** via faster-whisper (CPU real-time with the
    - *"Final answer: **polite**"* / *"I go with **neutral**"*
 4. Detection auto-selects the matching option in the UI (the normal save pipeline
    fires), and the pill confirms: **Heard: Impolite ✓**. Saying a new phrase later
-   changes the label — last commitment wins.
+   changes the label — last commitment wins, including when the correction reuses
+   the same phrasing ("I label this polite. I label this neutral.").
 5. With `require_spoken_label: on`, pressing **Next** with no committed label triggers
    a one-time nudge showing the expected phrasing (a second Next passes through, and
    clicking labels always works).

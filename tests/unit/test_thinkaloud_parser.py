@@ -66,6 +66,24 @@ class TestLastWins:
             "final answer polite. hmm. I label this impolite")
         assert detection.label == "Impolite"
 
+    # A correction that REUSES the phrasing is the natural way people correct
+    # themselves, and it lands inside the first match's greedy `rest` capture.
+    # Every case below regressed while the cross-stem tests above still passed.
+    def test_mind_change_reusing_the_same_stem(self, parser):
+        detection = parser.parse("I label this polite. I label this neutral.")
+        assert detection.label == "Neutral"
+
+    def test_correcting_a_mishearing_does_not_keep_the_misheard_label(self, parser):
+        # "in polite" fuzzy-matches Impolite; saying the label again must win,
+        # otherwise the annotator is recorded as the label they corrected away from.
+        detection = parser.parse("I label this in polite. I label this polite.")
+        assert detection.label == "Polite"
+
+    def test_last_of_several_same_stem_commitments_wins(self, parser):
+        detection = parser.parse(
+            "I label this polite. I label this impolite. I label this neutral.")
+        assert detection.label == "Neutral"
+
 
 class TestFuzzyMatching:
     def test_split_mishearing(self, parser):

@@ -82,10 +82,14 @@ def _description_paragraph(m: Dict[str, Any]) -> str:
     schemes = m["schemes"]
     scheme_bits = []
     for s in schemes:
-        labels = ", ".join(latex_escape(l) for l in s["distribution"])
-        scheme_bits.append(
-            f"\\emph{{{latex_escape(s['name'])}}} "
-            f"({latex_escape(s['annotation_type'])}; labels: {labels})")
+        # Declared labels, not observed ones: a label nobody picked is still
+        # part of the scheme, and falling back to `distribution` would print a
+        # free-text scheme's raw answers as if they were its label set.
+        declared = s.get("labels") or []
+        detail = latex_escape(s["annotation_type"])
+        if declared:
+            detail += "; labels: " + ", ".join(latex_escape(l) for l in declared)
+        scheme_bits.append(f"\\emph{{{latex_escape(s['name'])}}} ({detail})")
     total = (f"{m['n_total_items']:,} items, of which {m['n_annotated_instances']:,} "
              f"have been annotated"
              if m["n_total_items"] else
@@ -170,12 +174,29 @@ def _limitations_paragraph(m: Dict[str, Any]) -> str:
 # ------------------------------------------------------------------- tables --
 
 
+def _distribution_counts(s: Dict[str, Any]) -> List[Any]:
+    """Observed counts, plus any declared label that was never chosen (count 0).
+
+    Dropping an unused label would hide it from the report entirely, so a
+    reader could not tell it was on offer — and a dead or starved option is
+    exactly the class-imbalance signal a dataset paper should show. Labels seen
+    in the data but absent from the config are kept as well, never discarded.
+    """
+    dist = s["distribution"]
+    rows = list(dist.items())   # already ordered most-common first
+    for label in (s.get("labels") or []):
+        if label not in dist:
+            rows.append((label, 0))
+    return rows
+
+
 def _distribution_tables(m: Dict[str, Any], tables_dir: str) -> List[str]:
     blocks = []
     for s in m["schemes"]:
         total = s["total_labels"]
+        counts = _distribution_counts(s)
         rows = [[latex_escape(label), f"{count:,}", f"{100.0 * count / total:.1f}\\%"]
-                for label, count in s["distribution"].items()]
+                for label, count in counts]
         table = _booktabs(
             caption=f"Label distribution for the "
                     f"\\emph{{{latex_escape(s['name'])}}} scheme.",
@@ -189,7 +210,7 @@ def _distribution_tables(m: Dict[str, Any], tables_dir: str) -> List[str]:
         _write_csv(os.path.join(tables_dir, f"distribution_{s['name']}.csv"),
                    ["label", "count", "share_pct"],
                    [[label, count, round(100.0 * count / total, 1)]
-                    for label, count in s["distribution"].items()])
+                    for label, count in counts])
     return blocks
 
 

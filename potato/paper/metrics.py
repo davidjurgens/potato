@@ -59,6 +59,23 @@ def cohen_kappa(pairs: List[Tuple[str, str]]) -> Optional[float]:
     return (observed - expected) / (1 - expected)
 
 
+def configured_labels(scheme: Dict[str, Any]) -> List[str]:
+    """The scheme's declared label set, verbatim from the config.
+
+    Distinct from the observed distribution: a label nobody happened to pick is
+    still part of the annotation scheme, and a dataset report has to describe
+    the choices annotators were offered, not just the ones they used.
+    """
+    out: List[str] = []
+    for label in scheme.get("labels", []) or []:
+        if isinstance(label, dict):
+            if label.get("name"):
+                out.append(str(label["name"]))
+        else:
+            out.append(str(label))
+    return out
+
+
 def _units_for_scheme(records: List[LabelRecord], scheme: Dict[str, Any]
                       ) -> Dict[Any, List[str]]:
     """unit -> values. Radio/likert: unit = instance, value = chosen label.
@@ -84,9 +101,7 @@ def _units_for_scheme(records: List[LabelRecord], scheme: Dict[str, Any]
     for r in scheme_records:
         annotators_by_instance[r.instance_id].add(r.annotator)
         selected[(r.instance_id, r.annotator)].add(r.value)
-    labels = []
-    for label in scheme.get("labels", []) or []:
-        labels.append(label.get("name") if isinstance(label, dict) else str(label))
+    labels = configured_labels(scheme)
     units = defaultdict(list)
     for instance_id, annotators in annotators_by_instance.items():
         for label in labels:
@@ -158,6 +173,10 @@ def compute_metrics(project: ProjectData) -> Dict[str, Any]:
             "name": name,
             "annotation_type": scheme.get("annotation_type"),
             "description": scheme.get("description", ""),
+            # The declared label set — what annotators could choose. Reporting
+            # only `distribution` would understate the scheme whenever a label
+            # went unused.
+            "labels": configured_labels(scheme),
             "distribution": dict(distribution.most_common()),
             "total_labels": sum(distribution.values()),
             "alpha": alpha,

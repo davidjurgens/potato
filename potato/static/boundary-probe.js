@@ -126,7 +126,14 @@
     }
 
     function showPanel() {
-        ensurePanel().classList.remove('boundary-hidden');
+        var panel = ensurePanel();
+        panel.classList.remove('boundary-hidden');
+        avoidNavButtons(panel);
+    }
+
+    /** Keep the bottom-right panel from covering (and swallowing clicks on) Next. */
+    function avoidNavButtons(panel) {
+        if (window.potatoFloatingPanel) window.potatoFloatingPanel.avoidNav(panel);
     }
 
     function answeredCount() {
@@ -195,17 +202,21 @@
                 '    <button type="button" class="boundary-btn flips" data-verdict="flips">Label flips&hellip;</button>' +
                 '    <button type="button" class="boundary-btn unsure" data-verdict="unsure">Can’t tell</button>' +
                 '  </div>' +
+                // Rationale first: a label chip SUBMITS, so chips-above-input
+                // meant the natural click order silently discarded the
+                // rationale — the very signal this feature exists to collect.
                 '  <div class="boundary-flip-form boundary-hidden">' +
+                (cfg.rationale_on_flip
+                    ? '<input type="text" class="boundary-rationale" maxlength="500" ' +
+                      'aria-label="Why did the label flip?" placeholder="What crossed the line? (optional)">'
+                    : '') +
+                '    <div class="boundary-flip-caption">Then pick the new label:</div>' +
                 '    <div class="boundary-flip-labels">' +
                 state.labels.filter(function (l) { return l !== state.originalLabel; })
                     .map(function (l) {
                         return '<button type="button" class="boundary-label-chip" data-label="' + esc(l) + '">' + esc(l) + '</button>';
                     }).join('') +
                 '    </div>' +
-                (cfg.rationale_on_flip
-                    ? '<input type="text" class="boundary-rationale" maxlength="500" ' +
-                      'aria-label="Why did the label flip?" placeholder="What crossed the line? (optional)">'
-                    : '') +
                 '  </div>' +
                 '  <div class="boundary-error boundary-hidden"></div>' +
                 '</div>';
@@ -230,6 +241,7 @@
                 if (verdict === 'flips') {
                     flipForm.classList.toggle('boundary-hidden');
                     btn.classList.toggle('open');
+                    avoidNavButtons(panel);   // the form makes the panel taller
                     var rationale = flipForm.querySelector('.boundary-rationale');
                     if (!flipForm.classList.contains('boundary-hidden') && rationale) rationale.focus();
                 } else {
@@ -344,4 +356,11 @@
     document.addEventListener('click', function (e) {
         if (isProbedInput(e.target)) scheduleProbe();
     }, true);
+
+    // Resizing moves the nav row, so re-check that the panel still clears it.
+    window.addEventListener('resize', function () {
+        if (state.panel && !state.panel.classList.contains('boundary-hidden')) {
+            avoidNavButtons(state.panel);
+        }
+    });
 })();

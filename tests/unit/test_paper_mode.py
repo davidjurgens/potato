@@ -168,6 +168,48 @@ class TestRender:
         summary = json.load(open(paths["summary"]))
         assert summary["n_annotators"] == 2
 
+    def test_unused_label_is_still_reported(self):
+        """A label nobody picked must not vanish from the report.
+
+        Both the description and the distribution table were built from the
+        observed counts, so a declared-but-unchosen label disappeared entirely:
+        the paper claimed a two-way scheme offered one choice, and the class
+        imbalance it represents was invisible.
+        """
+        test_dir = create_test_directory("paper_unused_label")
+        # Nobody ever chooses "Neg".
+        config_path = build_project(test_dir, {
+            "u1": {"i0": "Pos", "i1": "Pos"},
+            "u2": {"i0": "Pos", "i1": "Pos"},
+        })
+        metrics = compute_metrics(collect_project(config_path))
+        out_dir = os.path.join(test_dir, "paper_export")
+        paths = render_report(metrics, out_dir)
+        tex = open(paths["tex"]).read()
+
+        sentiment = next(s for s in metrics["schemes"] if s["name"] == "sentiment")
+        assert sentiment["labels"] == ["Pos", "Neg"]        # declared set, not observed
+        assert "labels: Pos, Neg" in tex                    # description names both
+        assert "Neg & 0 & 0.0\\%" in tex                    # table shows the zero row
+
+        csv_text = open(os.path.join(paths["tables_dir"],
+                                     "distribution_sentiment.csv")).read()
+        assert "Neg,0,0.0" in csv_text
+
+    def test_free_text_scheme_does_not_print_answers_as_labels(self):
+        """A scheme with no declared labels must not list its values as labels."""
+        test_dir = create_test_directory("paper_freetext")
+        config_path = build_project(test_dir, {"u1": {"i0": "Pos"}}, schemes=[
+            {"annotation_type": "radio", "name": "sentiment",
+             "description": "d", "labels": ["Pos", "Neg"]},
+            {"annotation_type": "textbox", "name": "notes", "description": "d"},
+        ])
+        metrics = compute_metrics(collect_project(config_path))
+        paths = render_report(metrics, os.path.join(test_dir, "paper_export"))
+        tex = open(paths["tex"]).read()
+        assert "labels: Pos, Neg" in tex
+        assert "labels: )" not in tex and "; labels: ." not in tex
+
 
 class TestCLI:
     def test_end_to_end_anonymizes(self, capsys):

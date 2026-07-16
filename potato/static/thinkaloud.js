@@ -26,11 +26,30 @@
         recorder: null,
         cycleTimer: null,
         seq: 0,
+        parts: [],        // fragments of the chunk currently being recorded
+        mime: 'audio/webm',
         lastText: '',
         detected: null,   // {label, ...}
         nudged: false,
         pill: null
     };
+
+    // Advancing to the next instance reloads the page, which would otherwise
+    // drop the mic and make the annotator re-tap the pill on every item —
+    // defeating hands-free use. Remember the intent across the reload; only an
+    // explicit Stop (or a mic failure) clears it.
+    var RESUME_KEY = 'thinkaloud.resume';
+
+    function setResume(on) {
+        try {
+            if (on) sessionStorage.setItem(RESUME_KEY, '1');
+            else sessionStorage.removeItem(RESUME_KEY);
+        } catch (e) { /* private mode: resume is best-effort */ }
+    }
+
+    function wantsResume() {
+        try { return sessionStorage.getItem(RESUME_KEY) === '1'; } catch (e) { return false; }
+    }
 
     function esc(s) {
         var d = document.createElement('div');
@@ -132,11 +151,27 @@
             state.recording = true;
             state.detected = null;
             state.lastText = '';
+            setResume(true);
             renderRecording();
-            recordCycle();
+            seedSeq(recordCycle);
         }).catch(function () {
+            // Don't retry a denied mic on every subsequent instance.
+            setResume(false);
             renderIdle('Microphone unavailable or permission denied.');
         });
+    }
+
+    /** Continue this instance's seq numbering (it may already have chunks). */
+    function seedSeq(done) {
+        var id = instanceId();
+        if (!id) { done(); return; }
+        fetch('/thinkaloud/api/state?instance_id=' + encodeURIComponent(id))
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                if (d && typeof d.n_chunks === 'number') state.seq = d.n_chunks;
+            })
+            .catch(function () { /* fall back to seq 0 */ })
+            .then(done);
     }
 
     /** Record one complete chunk, upload it, then start the next cycle. */
@@ -144,23 +179,44 @@
         if (!state.recording || !state.stream) return;
         var mime = pickMimeType();
         var recorder = new MediaRecorder(state.stream, mime ? { mimeType: mime } : {});
-        var parts = [];
+        state.mime = mime || 'audio/webm';
+        state.parts = [];
         recorder.ondataavailable = function (e) {
-            if (e.data && e.data.size) parts.push(e.data);
+            if (e.data && e.data.size) state.parts.push(e.data);
         };
         recorder.onstop = function () {
-            if (parts.length) uploadChunk(new Blob(parts, { type: mime || 'audio/webm' }));
+            var parts = state.parts;
+            state.parts = [];   // claim them, so an unload flush can't re-send
+            if (parts.length) uploadChunk(new Blob(parts, { type: state.mime }));
             recordCycle(); // next complete chunk
         };
         state.recorder = recorder;
-        recorder.start();
+        // Emit fragments as we go. The first fragment carries the container
+        // header, so `state.parts` is always a decodable prefix — that's what
+        // lets flushPartial() salvage speech when the annotator hits Next
+        // mid-chunk. The chunk finally uploaded is byte-identical either way.
+        recorder.start(1000);
         state.cycleTimer = setTimeout(function () {
             if (recorder.state !== 'inactive') recorder.stop();
         }, (cfg.chunk_seconds || 6) * 1000);
     }
 
+    /** Salvage the in-progress chunk on unload — fetch() would be cancelled. */
+    function flushPartial() {
+        if (!state.recording || !state.parts.length) return;
+        var id = instanceId();
+        if (!id || !navigator.sendBeacon) return;
+        var form = new FormData();
+        form.append('audio', new Blob(state.parts, { type: state.mime }), 'chunk.webm');
+        form.append('instance_id', id);
+        form.append('seq', String(state.seq++));
+        try { navigator.sendBeacon('/thinkaloud/api/chunk', form); } catch (e) { /* best effort */ }
+        state.parts = [];
+    }
+
     function stopRecording() {
         state.recording = false;
+        setResume(false);
         clearTimeout(state.cycleTimer);
         if (state.recorder && state.recorder.state !== 'inactive') {
             try { state.recorder.stop(); } catch (e) { /* already stopped */ }
@@ -221,6 +277,7 @@
     }, true);
 
     window.addEventListener('beforeunload', function () {
+        flushPartial();   // before the tracks stop: parts must still be intact
         if (state.stream) {
             state.stream.getTracks().forEach(function (t) { t.stop(); });
         }
@@ -229,9 +286,16 @@
     // Expose for tests and degraded (text) input paths.
     window.thinkAloud = { handleResponse: handleResponse, state: state };
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () { renderIdle(); });
-    } else {
+    function init() {
         renderIdle();
+        // Resume across the Next/Previous reload so a session spans instances.
+        // Permission is already granted for this origin, so no prompt appears.
+        if (wantsResume()) startRecording();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
     }
 })();

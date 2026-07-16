@@ -650,13 +650,23 @@ def _generate_internal(
                             + '&schema=' + encodeURIComponent(SCHEMA), {{
                         headers: {{ 'X-Requested-With': 'XMLHttpRequest' }}
                     }})
-                    .then(function(r) {{ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }})
+                    .then(function(r) {{
+                        if (r.ok) return r.json();
+                        // The server says WHY it failed -- e.g. "AI judge
+                        // unavailable -- check ai_support / judge_alignment
+                        // config". A bare status code hides the one detail
+                        // that tells an admin what to fix.
+                        return r.json().catch(function() {{ return {{}}; }})
+                            .then(function(body) {{
+                                throw new Error(body.error || ('HTTP ' + r.status));
+                            }});
+                    }})
                     .then(function(d) {{
                         var n = applyAiSuggestions(d.steps || []);
                         if (acceptBtn && anyAiSuggestions()) acceptBtn.style.display = '';
                         if (statusEl) statusEl.textContent = n
                             ? (n + ' step' + (n === 1 ? '' : 's') + ' pre-labeled \\u2014 verify each below.')
-                            : 'No suggestions returned.';
+                            : (d.error || 'No suggestions returned.');
                     }})
                     .catch(function(e) {{
                         if (statusEl) statusEl.textContent = 'AI pre-label failed: ' + e.message;

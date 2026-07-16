@@ -100,18 +100,38 @@ class LabelPhraseParser:
         confidence = {0: "exact", 1: "prefix", 2: "fuzzy"}[tier]
         return label, matched, confidence
 
+    @staticmethod
+    def _iter_stems(pattern, text: str):
+        """Yield every stem match, including ones starting inside an earlier match.
+
+        ``rest`` deliberately captures greedily (labels can be several words),
+        so a repeated stem — "I label this polite. I label this neutral." —
+        falls inside the first match's ``rest`` and ``finditer`` would skip it,
+        silently dropping the annotator's correction. Resuming the scan one
+        character past each stem's *start* keeps every commitment visible.
+        """
+        pos = 0
+        while pos <= len(text):
+            match = pattern.search(text, pos)
+            if match is None:
+                return
+            yield match
+            pos = match.start() + 1
+
     def parse(self, text: str) -> Optional[LabelDetection]:
         """Return the LAST label-commitment phrase in `text`, or None.
 
-        Last wins so an annotator can change their mind mid-stream
-        ("I'd call this polite... no wait, my answer is neutral").
+        Last wins so an annotator can change their mind mid-stream, whether or
+        not the correction reuses the same phrasing ("I'd call this polite...
+        no wait, my answer is neutral" / "I label this polite. I label this
+        neutral.").
         """
         if not text:
             return None
         normalized = normalize(text)
         result = None
         for pattern in self._patterns:
-            for match in pattern.finditer(normalized):
+            for match in self._iter_stems(pattern, normalized):
                 hit = self._match_label(match.group("rest"))
                 if not hit:
                     continue
