@@ -1,0 +1,116 @@
+# Audio Dialogue (Podcast Turn Annotation) Example
+#
+# Annotate a spoken multi-speaker transcript as a chat of colored speaker
+# bubbles synced to audio. Each turn has a start/end time and a ▶ button that
+# plays just that turn; a sticky transport bar plays the whole episode and
+# highlights the active turn. Demonstrates the full feature set:
+#
+#   * per-turn ratings          (turn_level radio, bound to every turn)
+#   * whole-conversation rating (normal likert scheme)
+#   * span highlighting         (span scheme, target_field: conversation)
+#   * cross-turn linking         (span_link: answer span -> its question span)
+#   * speaker assignment         (undiarized instance: annotator picks speaker,
+#                                 which recolors + repositions the bubble)
+#
+# The `conversation` field value is a dict {audio, turns}. `turns` may come
+# from native turn JSON, WhisperX/diarized JSON, plain Whisper JSON, or VTT/SRT
+# (see potato/server_utils/transcript_ingest.py) — all normalized on render.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/audio/audio-dialogue/config.yaml -p 8000
+# Debug straight to annotation:
+#   python potato/flask_server.py start examples/audio/audio-dialogue/config.yaml -p 8000 --debug --debug-phase annotation
+
+annotation_task_name: "Podcast Dialogue Annotation"
+
+task_dir: .
+data_files:
+  - data/audio-dialogue-example.json
+
+output_annotation_dir: annotation_output/audio-dialogue/
+output_annotation_format: json
+
+item_properties:
+  id_key: id
+  text_key: title
+
+user_config:
+  allow_all_users: true
+  users: []
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+  fields:
+    - key: title
+      type: text
+      label: "Episode"
+
+    - key: conversation
+      type: audio_dialogue
+      label: "Transcript"
+      span_target: true
+      display_options:
+        audio_key: audio
+        turns_key: turns
+        scroll_height: 460px
+        show_timestamps: true
+        # Roster: fixed speakers get a stable color + side. Unlisted speakers
+        # fall back to a deterministic color and alternating side.
+        speakers:
+          - id: host
+            name: "Host"
+            color: "#7c3aed"
+            side: left
+          - id: guest
+            name: "Guest"
+            color: "#059669"
+            side: right
+
+annotation_schemes:
+  # Per-turn rating: bound to every turn of the conversation field.
+  - annotation_type: radio
+    name: turn_category
+    description: "Category of this turn"
+    labels:
+      - claim
+      - question
+      - answer
+      - aside
+    turn_level: true
+    turn_binding:
+      field: conversation
+
+  # Span highlighting inside turns.
+  - annotation_type: span
+    name: highlights
+    description: "Highlight questions and answers"
+    target_field: conversation
+    labels:
+      - name: question
+        key_value: "q"
+      - name: answer
+        key_value: "a"
+
+  # Cross-turn linking: connect an answer span to the question it answers.
+  - annotation_type: span_link
+    name: qa_links
+    description: "Link each answer to the question it answers"
+    span_schema: highlights
+    link_types:
+      - name: answers
+        directed: true
+        allowed_source_labels: [answer]
+        allowed_target_labels: [question]
+        color: "#2563eb"
+
+  # Whole-conversation rating (normal, non-turn scheme).
+  - annotation_type: likert
+    name: overall_quality
+    description: "Overall conversation quality"
+    min_label: "Poor"
+    max_label: "Excellent"
+    size: 5
+
+site_dir: default

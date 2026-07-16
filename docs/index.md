@@ -44,6 +44,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Conditional Logic](configuration/conditional_logic.md) - Show/hide questions based on prior answers
 - [Image Annotation](annotation-types/multimedia/image_annotation.md) - Bounding boxes, polygons, and landmarks
 - [Audio Annotation](annotation-types/multimedia/audio_annotation.md) - Audio segmentation with waveform visualization
+- [Audio Dialogue](annotation-types/multimedia/audio_dialogue.md) - Podcast/interview turn annotation: speaker bubbles, per-turn audio playback, ratings, spans, and cross-turn linking
 - [Video Annotation](annotation-types/multimedia/video_annotation.md) - Frame-by-frame video labeling
 - [Tiered Annotation](annotation-types/multimedia/tiered_annotation.md) - ELAN-style hierarchical multi-tier annotation
 - [Triage](annotation-types/triage.md) - Rapid accept/reject/skip data curation interface

@@ -27,6 +27,9 @@
     <!-- Multi-Agent Discussion Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='multi-agent-discussion.css') }}?v=1">
 
+    <!-- Audio Dialogue (podcast turn annotation) Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='audio-dialogue.css') }}?v=3">
+
     {% set frontend_assets = frontend_assets | default({}) %}
 
     <!-- Image Annotation Styles -->
@@ -670,6 +673,8 @@
     <script src="{{ url_for('static', filename='turn-annotations.js') }}?v=1"></script>
     <!-- Multi-agent discussion display (agent filtering) -->
     <script src="{{ url_for('static', filename='multi-agent-discussion.js') }}?v=1"></script>
+    <!-- Audio dialogue display (podcast transport, per-turn play, speaker assignment) -->
+    <script src="{{ url_for('static', filename='audio-dialogue.js') }}?v=3"></script>
     <!-- Sub-agent run-tree sidebar (agent_trace display) -->
     <script src="{{ url_for('static', filename='run-tree.js') }}?v=1"></script>
 

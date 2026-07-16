@@ -353,6 +353,7 @@ def _register_builtin_displays():
     from .coding_trace_display import CodingTraceDisplay
     from .live_coding_agent_display import LiveCodingAgentDisplay
     from .cot_trace_display import CotTraceDisplay
+    from .audio_dialogue_display import AudioDialogueDisplay
 
     displays = [
         DisplayDefinition(
@@ -430,6 +431,24 @@ def _register_builtin_displays():
             },
             supports_span_target=True,
             description="Dialogue/conversation turns display"
+        ),
+        DisplayDefinition(
+            name="audio_dialogue",
+            renderer=AudioDialogueDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "audio_key": "audio",
+                "turns_key": "turns",
+                "speaker_key": "speaker",
+                "text_key": "text",
+                "speakers": [],
+                "allow_speaker_assignment": "auto",
+                "scroll_height": "480px",
+                "show_timestamps": True,
+                "playback_rates": [1, 1.25, 1.5, 2],
+            },
+            supports_span_target=True,
+            description="Podcast / interview dialogue: speaker bubbles, per-turn audio playback, ratings, spans, cross-turn linking",
         ),
         DisplayDefinition(
             name="multi_agent_discussion",
