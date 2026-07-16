@@ -61,6 +61,55 @@ class TestSchemaBridge:
         apply_codebook_to_schemes(cfg)
         assert len(Codebook.load(td, "P")) == 1
 
+    def test_seeds_from_every_codebook_scheme_not_just_the_first(self, td):
+        """A label declared only on a later scheme must still reach the codebook.
+
+        Codebook-backed schemes share one codebook, and seeding was gated on
+        `is_empty()` *inside* the per-scheme loop: the first scheme closed the
+        gate, so every later scheme's own labels were dropped and never
+        rendered anywhere. Every other test here uses a single codebook scheme,
+        which is why this went unseen.
+        """
+        cfg = {
+            "task_dir": td, "annotation_task_name": "P",
+            "annotation_schemes": [
+                {"name": "codes", "annotation_type": "span",
+                 "codebook": True, "labels": ["a", "b"]},
+                {"name": "themes", "annotation_type": "multiselect",
+                 "codebook": True, "labels": ["a", "b", "only_on_themes"]},
+            ],
+        }
+        apply_codebook_to_schemes(cfg)
+        assert "only_on_themes" in Codebook.load(td, "P").labels()
+        # Both schemes source the same shared codebook.
+        assert cfg["annotation_schemes"][0]["labels"] == \
+               cfg["annotation_schemes"][1]["labels"]
+        assert "only_on_themes" in cfg["annotation_schemes"][0]["labels"]
+
+    def test_multi_scheme_seed_does_not_resurrect_deleted_codes(self, td):
+        """Seeding stays a first-run bootstrap, even across several schemes."""
+        from potato.codebook.service import delete_code
+
+        def cfg():
+            return {
+                "task_dir": td, "annotation_task_name": "P",
+                "annotation_schemes": [
+                    {"name": "codes", "annotation_type": "span",
+                     "codebook": True, "labels": ["a"]},
+                    {"name": "themes", "annotation_type": "multiselect",
+                     "codebook": True, "labels": ["a", "doomed"]},
+                ],
+            }
+
+        apply_codebook_to_schemes(cfg())
+        book = Codebook.load(td, "P")
+        assert "doomed" in book.labels()
+        delete_code(td, project="P", code_id=book.label_to_id()["doomed"])
+
+        second = cfg()
+        apply_codebook_to_schemes(second)   # restart
+        assert "doomed" not in second["annotation_schemes"][1]["labels"]
+
     def test_db_is_source_of_truth_after_seed(self, td):
         create_code(td, project="P", name="from_db", created_by="alice")
         cfg = {
