@@ -208,9 +208,16 @@
     background-color: color-mix(in srgb, var(--primary-color, #6E56CF) 85%, black);
 }
 
+/* Clearly-disabled until every required slot is filled (grey, not faded purple,
+ * so the enable transition reads as a real state change). */
 .span-link-create-btn:disabled {
-    opacity: 0.5;
+    background-color: var(--bg-secondary, #f3f4f6);
+    color: var(--text-muted, #9ca3af);
     cursor: not-allowed;
+    box-shadow: inset 0 0 0 1px var(--border-color, #e5e7eb);
+}
+.span-link-create-btn:not(:disabled) {
+    box-shadow: 0 1px 2px rgba(110, 86, 207, 0.25);
 }
 
 .span-link-clear-btn {
@@ -243,19 +250,46 @@
 .link-item {
     display: flex;
     align-items: center;
+    gap: 8px;
     justify-content: space-between;
-    padding: 8px 12px;
+    padding: 8px 10px;
     background-color: var(--card-bg, #fff);
     border: 1px solid var(--border-color, #e5e7eb);
     border-left: 3px solid var(--link-color, #dc2626);
-    border-radius: 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.12s ease, box-shadow 0.12s ease;
+}
+.link-item:hover {
+    background-color: color-mix(in srgb, var(--link-color, #dc2626) 6%, #fff);
+}
+.link-item:focus-visible {
+    outline: 2px solid var(--link-color, #dc2626);
+    outline-offset: 1px;
+}
+
+/* Number badge — matches the numbered chip pinned to the span in the transcript. */
+.link-num-badge {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px color-mix(in srgb, var(--link-color, #dc2626) 40%, transparent);
 }
 
 .link-info {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px 8px;
     flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .link-type-badge {
@@ -265,17 +299,66 @@
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
+    white-space: nowrap;
 }
+.link-arrow-in-badge { opacity: 0.85; font-weight: 700; }
 
 .link-spans {
     font-size: 13px;
     color: var(--text-color, #1f2937);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
 }
 
+/* Each linked span rendered as a labelled chip with its snippet. */
+.link-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--muted, #f4f4f5);
+    border: 1px solid var(--border-color, #e5e7eb);
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: capitalize;
+    max-width: 100%;
+}
+.link-chip.is-source { border-color: color-mix(in srgb, var(--link-color, #dc2626) 55%, var(--border-color, #e5e7eb)); }
+.link-chip.is-target { background: color-mix(in srgb, var(--link-color, #dc2626) 8%, #fff); }
+.link-chip-text {
+    font-weight: 400;
+    color: var(--text-muted, #6b7280);
+    font-style: italic;
+    text-transform: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 160px;
+}
+.link-arrow {
+    color: var(--text-muted, #6b7280);
+    font-weight: 700;
+    margin: 0 1px;
+}
 .link-direction {
     color: var(--text-muted, #6b7280);
     margin: 0 4px;
 }
+
+/* Pulse a linked span when its list entry is clicked. */
+@keyframes span-link-flash-kf {
+    0%, 100% { box-shadow: 0 0 0 0 transparent; }
+    30%, 70% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--link-color, #f59e0b) 70%, transparent); }
+}
+.span-highlight-segment.span-link-flash {
+    animation: span-link-flash-kf 1.4s ease;
+    border-radius: 3px;
+}
+.span-link-simple-arcs.span-link-arcs-emphasis path { stroke-width: 3.5 !important; opacity: 1 !important; }
+.span-link-simple-arcs .span-link-badge { transition: transform 0.12s ease; }
 
 .delete-link-btn {
     background: none;
@@ -477,28 +560,101 @@ body.span-link-mode-active #instance-text {
     background-attachment: local, local, scroll, scroll;
 }
 
-/* Dark Mode Support */
-@media (prefers-color-scheme: dark) {
-    .span-link-container {
-        background-color: var(--card-bg-dark, #1f2937);
-        border-color: var(--border-color-dark, #374151);
-    }
+/* Potato is a light-only UI. A prefers-color-scheme: dark block here used to
+ * flip ONLY this panel to a dark palette on dark-OS machines, so the link panel
+ * looked dark and unreadable while the rest of the interface stayed light. The
+ * panel now inherits the same light theme tokens as everything else. */
 
-    .span-link-selection {
-        background-color: var(--bg-secondary-dark, #111827);
-    }
-
-    .selected-span-item,
-    .link-item {
-        background-color: var(--card-bg-dark, #1f2937);
-        border-color: var(--border-color-dark, #374151);
-    }
-
-    .constraint-error {
-        background-color: rgba(220, 38, 38, 0.1);
-        border-color: rgba(220, 38, 38, 0.3);
-    }
+/* The link panel is content-heavy (link types, selected spans, existing links,
+ * options). The annotation form area lays schemes out two-up (flex-wrap in
+ * .annotation_schema, or a grid), which crams the panel into a half-width strip
+ * — give it the full row in either layout so it reads comfortably. */
+.span-link-container.annotation-form {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
 }
+.annotation-forms-layout .annotation-form[data-annotation-type="span_link"],
+.annotation-forms-grid .annotation-form[data-annotation-type="span_link"] {
+    grid-column: 1 / -1;
+}
+
+/* ---- Guided link builder (slots + step guidance) --------------------- */
+.span-link-guide {
+    font-size: 0.86em;
+    line-height: 1.5;
+    color: var(--text-color, #374151);
+    margin: 0;
+}
+.span-link-guide-sub {
+    margin-top: 8px;
+    font-size: 0.82em;
+    color: var(--text-muted, #6b7280);
+}
+.span-link-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin: 0 5px 0 0;
+    border-radius: 50%;
+    background: var(--primary-color, #6E56CF);
+    color: #fff;
+    font-size: 0.72em;
+    font-weight: 700;
+    vertical-align: 1px;
+}
+.span-link-guide .span-link-step:not(:first-child) { margin-left: 6px; }
+
+.span-link-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.span-link-slot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 8px;
+    background: var(--card-bg, #fff);
+}
+.span-link-slot.is-empty {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--primary-color, #6E56CF) 40%, var(--border-color, #e5e7eb));
+    background: color-mix(in srgb, var(--primary-color, #6E56CF) 4%, transparent);
+}
+.span-link-slot.is-filled {
+    border-color: color-mix(in srgb, var(--primary-color, #6E56CF) 55%, var(--border-color, #e5e7eb));
+}
+.span-link-slot-head {
+    flex-shrink: 0;
+    min-width: 38px;
+    font-size: 0.7em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, #6b7280);
+}
+.span-link-slot-hint { font-size: 0.85em; color: var(--text-muted, #6b7280); }
+.span-link-slot-opt { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted, #6b7280); }
+.span-link-slot-type {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color, #6E56CF) 12%, var(--card-bg, #fff));
+    color: var(--primary-color, #6E56CF);
+    font-weight: 600;
+    font-size: 0.94em;
+}
+.span-link-slot-fill { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.span-link-slot-fill .selected-span-text {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--text-color, #374151);
+}
+.span-link-slot .remove-span-btn { margin-left: auto; }
 
 /* Responsive */
 @media (max-width: 640px) {

@@ -54,6 +54,9 @@ class SpanLinkManager {
         // Load existing links if any
         this.loadExistingLinks();
 
+        // Render the initial guidance ("highlight spans first…") into the panel.
+        this.updateUI();
+
         console.log(`[SpanLinkManager] Initialization complete for schema: ${this.schemaName}`);
         console.log('[SpanLinkManager] Post-init state:', {
             hasArcsContainer: !!this.arcsContainer,
@@ -79,6 +82,12 @@ class SpanLinkManager {
                     console.log('[SpanLinkManager] Span change detected, re-rendering arcs');
                     this.renderArcs();
                 }
+                // Refresh the panel so the guidance/slots track how many spans
+                // exist (e.g. "highlight first" -> "choose a link type").
+                this.updateUI();
+                // Keep spans clickable if they were highlighted while already in
+                // link mode (so a follow-up link can select them).
+                if (this.isLinkMode) this.makeOverlaysSelectable();
             }, 100);
         };
 
@@ -168,6 +177,14 @@ class SpanLinkManager {
             });
         }
 
+        // Reposition simple connector arcs when the layout reflows.
+        window.addEventListener('resize', () => {
+            clearTimeout(this._arcResizeTimer);
+            this._arcResizeTimer = setTimeout(() => {
+                if (this.simpleArcs && this.links.length) this.renderSimpleConnectors();
+            }, 150);
+        });
+
         // Listen for span clicks when in link mode - use capture phase
         document.addEventListener('click', (e) => {
             if (!this.isLinkMode) return;
@@ -220,6 +237,21 @@ class SpanLinkManager {
         console.log('[SpanLinkManager] showArcs:', showArcs);
         if (!showArcs) {
             console.log('[SpanLinkManager] Arc visualization disabled');
+            return;
+        }
+
+        // instance_display / multi-field displays (audio_dialogue, dialogue,
+        // multi_agent_discussion, …) render text into a per-field
+        // ``text-content-{field}`` container, not the legacy flat ``#instance-text``.
+        // The spacer/dependency-arc model reflows a single paragraph and does not
+        // fit a scrollable chat-bubble layout, so use a lightweight SVG connector
+        // overlay drawn directly between the linked span overlays instead.
+        const fieldHost = document.querySelector('.text-content[id^="text-content-"]');
+        if (fieldHost && fieldHost.offsetParent !== null) {
+            this.arcHost = fieldHost;
+            this.simpleArcs = true;
+            this.ensureSimpleArcSvg();
+            console.log('[SpanLinkManager] Using simple connector arcs over', fieldHost.id);
             return;
         }
 
@@ -337,26 +369,31 @@ class SpanLinkManager {
         // Set the link color as a CSS variable on the body for use in selection styles
         document.body.style.setProperty('--current-link-color', linkColor);
 
-        // Enable pointer events and highlight clickable spans
-        const spanOverlays = document.querySelectorAll('.span-overlay-pure, .span-overlay, .span-overlay-ai, .span-highlight');
-        console.log(`[SpanLinkManager] Found ${spanOverlays.length} span overlays to make selectable`);
-        spanOverlays.forEach(overlay => {
-            overlay.classList.add('link-selectable');
-            // Set the link color on each overlay for CSS to use
-            overlay.style.setProperty('--current-link-color', linkColor);
-            // Enable pointer events so we can click on them
-            overlay.style.pointerEvents = 'auto';
-            overlay.style.cursor = 'pointer';
-        });
+        // Make every current span overlay clickable.
+        this.makeOverlaysSelectable(linkColor);
 
-        // Also enable pointer events on highlight segments inside overlays
-        const segments = document.querySelectorAll('.span-highlight-segment');
-        segments.forEach(segment => {
+        console.log(`[SpanLinkManager] Entered link mode with type: ${this.currentLinkType}`);
+    }
+
+    /**
+     * Enable pointer events + selectable styling on all span overlays. Called on
+     * enterLinkMode AND whenever spans change while in link mode, so spans
+     * highlighted *after* entering link mode are still clickable (otherwise a
+     * second link can't select the freshly-created spans).
+     */
+    makeOverlaysSelectable(linkColor) {
+        const color = linkColor || this.linkTypeConfig[this.currentLinkType]?.color || '#6E56CF';
+        document.querySelectorAll('.span-overlay-pure, .span-overlay, .span-overlay-ai, .span-highlight')
+            .forEach(overlay => {
+                overlay.classList.add('link-selectable');
+                overlay.style.setProperty('--current-link-color', color);
+                overlay.style.pointerEvents = 'auto';
+                overlay.style.cursor = 'pointer';
+            });
+        document.querySelectorAll('.span-highlight-segment').forEach(segment => {
             segment.style.pointerEvents = 'auto';
             segment.style.cursor = 'pointer';
         });
-
-        console.log(`[SpanLinkManager] Entered link mode with type: ${this.currentLinkType}`);
     }
 
     exitLinkMode() {
@@ -406,6 +443,22 @@ class SpanLinkManager {
             return '(unknown)';
         }
 
+        // Slice the exact text the offsets were measured against. The
+        // positioning strategy that produced them owns that text, so ask it
+        // rather than re-deriving it here: a local re-walk silently drifts out
+        // of sync with the offset basis (it used to whitespace-collapse, which
+        // shifted every snippet by the whitespace preceding the span).
+        // ``data-target-field`` picks the right per-field strategy in
+        // multi-field displays (audio_dialogue / dialogue / MAD); flat tasks
+        // fall through to the single positioningStrategy.
+        const strategies = (window.spanManager && window.spanManager.fieldStrategies) || {};
+        const strategy = strategies[spanOverlay.dataset.targetField] ||
+            (window.spanManager && window.spanManager.positioningStrategy);
+        if (strategy && typeof strategy.getCanonicalText === 'function') {
+            const slice = strategy.getCanonicalText().substring(start, end);
+            if (slice.trim()) return slice.trim();
+        }
+
         // Get the original text - span-core.js stores it in #text-content's data-original-text
         const textContent = document.getElementById('text-content');
         if (textContent && textContent.hasAttribute('data-original-text')) {
@@ -434,9 +487,30 @@ class SpanLinkManager {
         return '(unknown)';
     }
 
+    /**
+     * The overlay's ``data-label`` is sometimes a stale "unknown" (the real
+     * label is baked into the deterministic annotation id, e.g.
+     * ``highlights_answer_958_980``). Recover the true label so the typed
+     * source/target slots match — otherwise every directed link silently fails.
+     */
+    resolveSpanLabel(spanOverlay) {
+        const raw = spanOverlay.dataset.label;
+        if (raw && raw !== 'unknown') return raw;
+        const id = spanOverlay.dataset.annotationId || spanOverlay.dataset.spanId || '';
+        const known = new Set();
+        Object.values(this.linkTypeConfig).forEach(cfg => {
+            (cfg.sourceLabels || []).forEach(l => known.add(l));
+            (cfg.targetLabels || []).forEach(l => known.add(l));
+        });
+        // Longest match first so "answer" wins over a hypothetical "ans".
+        const match = [...known].sort((a, b) => b.length - a.length)
+            .find(l => id.includes('_' + l + '_') || id.endsWith('_' + l));
+        return match || raw || 'unknown';
+    }
+
     handleSpanClick(spanOverlay) {
         const spanId = spanOverlay.dataset.spanId || spanOverlay.dataset.annotationId;
-        const spanLabel = spanOverlay.dataset.label;
+        const spanLabel = this.resolveSpanLabel(spanOverlay);
 
         if (!spanId) {
             console.warn('Span overlay has no span ID');
@@ -447,55 +521,76 @@ class SpanLinkManager {
         const spanText = this.getSpanText(spanOverlay);
         console.log(`[SpanLinkManager] Span clicked: ${spanLabel} = "${spanText}"`);
 
-        // Validate span label constraints
-        if (this.currentLinkType && this.linkTypeConfig[this.currentLinkType]) {
-            const config = this.linkTypeConfig[this.currentLinkType];
-            const isFirst = this.selectedSpans.length === 0;
-
-            // Check source label constraint for first span (directed links)
-            if (isFirst && config.directed && config.sourceLabels.length > 0) {
-                if (!config.sourceLabels.includes(spanLabel)) {
-                    console.log(`Span label ${spanLabel} not allowed as source`);
-                    this.showConstraintError(`Source must be: ${config.sourceLabels.join(', ')}`);
-                    return;
-                }
-            }
-
-            // Check target label constraint for subsequent spans (directed links)
-            if (!isFirst && config.directed && config.targetLabels.length > 0) {
-                if (!config.targetLabels.includes(spanLabel)) {
-                    console.log(`Span label ${spanLabel} not allowed as target`);
-                    this.showConstraintError(`Target must be: ${config.targetLabels.join(', ')}`);
-                    return;
-                }
-            }
+        if (!this.currentLinkType) {
+            this.showConstraintError('Pick a link type above to start linking.');
+            return;
         }
 
-        // Toggle selection
+        // Clicking an already-selected span removes it (frees its slot).
         const existingIndex = this.selectedSpans.findIndex(s => s.id === spanId);
         if (existingIndex >= 0) {
-            // Deselect
             this.selectedSpans.splice(existingIndex, 1);
             spanOverlay.classList.remove('link-selected');
-        } else {
-            // Check max spans limit
-            const maxSpans = this.linkTypeConfig[this.currentLinkType]?.maxSpans || 2;
-            if (this.selectedSpans.length >= maxSpans) {
-                this.showConstraintError(`Maximum ${maxSpans} spans for this link type`);
-                return;
-            }
-
-            // Select - use extracted text, not textContent
-            this.selectedSpans.push({
-                id: spanId,
-                label: spanLabel,
-                text: spanText,
-                element: spanOverlay
-            });
-            spanOverlay.classList.add('link-selected');
+            this.updateUI();
+            return;
         }
 
+        const config = this.linkTypeConfig[this.currentLinkType] || {};
+        const typed = config.directed && (config.sourceLabels.length || config.targetLabels.length);
+
+        const maxSpans = config.maxSpans || 2;
+
+        if (typed) {
+            // Directed link: one SOURCE + up to (maxSpans-1) TARGETS (an n-ary
+            // event has one trigger and several arguments). Slot-filling is by
+            // span TYPE and order-independent — a clicked span drops into the
+            // first open slot its label fits.
+            const hasSource = this.selectedSpans.some(s => s.role === 'source');
+            const targetCount = this.selectedSpans.filter(s => s.role === 'target').length;
+            const maxTargets = Math.max(1, maxSpans - 1);
+            const fitsSource = !config.sourceLabels.length || config.sourceLabels.includes(spanLabel);
+            const fitsTarget = !config.targetLabels.length || config.targetLabels.includes(spanLabel);
+
+            let role = null;
+            if (fitsSource && !hasSource) role = 'source';
+            else if (fitsTarget && targetCount < maxTargets) role = 'target';
+
+            if (!role) {
+                const needSource = !hasSource;
+                const wanted = (needSource ? config.sourceLabels : config.targetLabels).join(' or ');
+                const slotName = needSource ? 'source' : 'target';
+                let msg;
+                if (!needSource && targetCount >= maxTargets) {
+                    msg = `All ${maxTargets} target slot${maxTargets > 1 ? 's are' : ' is'} full — remove one to change it.`;
+                } else {
+                    msg = wanted
+                        ? `The ${slotName} needs a “${wanted}” span — “${spanLabel}” doesn’t fit that slot.`
+                        : `That span doesn’t fit an open slot.`;
+                }
+                this.showConstraintError(msg);
+                return;
+            }
+            this.selectedSpans.push({ id: spanId, label: spanLabel, text: spanText, element: spanOverlay, role });
+        } else {
+            // Undirected / n-ary group: fill the next open slot up to maxSpans.
+            if (this.selectedSpans.length >= maxSpans) {
+                this.showConstraintError(`This link connects up to ${maxSpans} spans — remove one to change it.`);
+                return;
+            }
+            this.selectedSpans.push({ id: spanId, label: spanLabel, text: spanText, element: spanOverlay });
+        }
+
+        spanOverlay.classList.add('link-selected');
         this.updateUI();
+    }
+
+    /** Ordered spans for the current link (source before target on directed links). */
+    orderedSelection() {
+        const config = this.linkTypeConfig[this.currentLinkType] || {};
+        if (!config.directed) return this.selectedSpans.slice();
+        const byRole = (r) => this.selectedSpans.filter(s => s.role === r);
+        const rest = this.selectedSpans.filter(s => !s.role);
+        return [...byRole('source'), ...byRole('target'), ...rest];
     }
 
     showConstraintError(message) {
@@ -505,6 +600,7 @@ class SpanLinkManager {
 
         const errorDiv = document.createElement('div');
         errorDiv.className = 'constraint-error';
+        errorDiv.setAttribute('role', 'alert');
         errorDiv.textContent = message;
         this.container.querySelector('.span-link-selection').appendChild(errorDiv);
 
@@ -540,8 +636,12 @@ class SpanLinkManager {
 
         const config = this.linkTypeConfig[this.currentLinkType] || {};
 
+        // Source-before-target order for directed links (slots can be filled in
+        // any click order, so normalize here).
+        const ordered = this.orderedSelection();
+
         // Extract span positions for repair matching on reload
-        const spanPositions = this.selectedSpans.map(s => {
+        const spanPositions = ordered.map(s => {
             if (s.element) {
                 return {
                     start: parseInt(s.element.dataset.start),
@@ -555,12 +655,12 @@ class SpanLinkManager {
             id: `link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             schema: this.schemaName,
             link_type: this.currentLinkType,
-            span_ids: this.selectedSpans.map(s => s.id),
+            span_ids: ordered.map(s => s.id),
             direction: config.directed ? 'directed' : 'undirected',
             properties: {
                 color: config.color,
-                span_labels: this.selectedSpans.map(s => s.label),
-                span_texts: this.selectedSpans.map(s => s.text.substring(0, 30)),
+                span_labels: ordered.map(s => s.label),
+                span_texts: ordered.map(s => s.text.substring(0, 30)),
                 span_positions: spanPositions  // For fallback matching when span IDs change
             }
         };
@@ -574,7 +674,13 @@ class SpanLinkManager {
         // Update UI
         this.updateLinkList();
         this.renderArcs();
-        this.clearSelection();
+
+        // Finish this link and return to "ready to link" so the annotator can
+        // immediately start another: exit link mode (unchecks the radio + clears
+        // selection) so re-selecting a link type fires a fresh `change` and
+        // re-enables the current spans. Without this the user is stuck in link
+        // mode with a checked radio and can't start a second link.
+        this.exitLinkMode();
 
         console.log('Created link:', link);
     }
@@ -856,45 +962,119 @@ class SpanLinkManager {
         return this.escapeHtml(text.substring(0, maxLength)) + '...';
     }
 
+    /** Count of highlighted span overlays currently on the page. */
+    spanOverlayCount() {
+        return document.querySelectorAll(
+            '.span-overlay-pure, .span-overlay, .span-overlay-ai, .span-highlight').length;
+    }
+
     updateUI() {
-        // Update selected spans display
         if (this.selectedSpansDisplay) {
-            if (this.selectedSpans.length === 0) {
-                const instruction = this.isLinkMode
-                    ? '<p class="link-mode-instruction">Click on <strong>highlighted spans</strong> to select them for linking. Press <kbd>Esc</kbd> or click "Exit Link Mode" to create new spans.</p>'
-                    : '<p class="no-selection-message">Select a link type to start linking spans</p>';
-                this.selectedSpansDisplay.innerHTML = instruction;
-            } else {
-                const spansHtml = this.selectedSpans.map((span, index) => {
-                    const config = this.linkTypeConfig[this.currentLinkType] || {};
-                    let roleLabel = '';
-                    if (config.directed) {
-                        roleLabel = index === 0 ? '<span class="span-role">(source)</span>' : '<span class="span-role">(target)</span>';
-                    }
-                    const displayText = this.truncateText(span.text, 25);
-                    return `
-                        <div class="selected-span-item" data-span-id="${span.id}">
-                            <span class="selected-span-label">${this.escapeHtml(span.label)}</span>
-                            <span class="selected-span-text">"${displayText}"</span>
-                            ${roleLabel}
-                            <button type="button" class="remove-span-btn" onclick="window.spanLinkManagers['${this.schemaName}'].deselectSpan('${span.id}')">&times;</button>
-                        </div>
-                    `;
-                }).join('');
-                this.selectedSpansDisplay.innerHTML = spansHtml;
-            }
+            this.selectedSpansDisplay.innerHTML = this.renderSlotsOrGuidance();
         }
 
-        // Update create button state
+        // Create enables once every required slot is filled.
         if (this.createButton) {
-            const minSpans = 2;
-            this.createButton.disabled = !this.currentLinkType || this.selectedSpans.length < minSpans;
+            this.createButton.disabled = !this.canCreateLink();
         }
 
-        // Update hidden input with link data
         if (this.linkDataInput) {
             this.linkDataInput.value = JSON.stringify(this.links);
         }
+    }
+
+    canCreateLink() {
+        if (!this.currentLinkType) return false;
+        const config = this.linkTypeConfig[this.currentLinkType] || {};
+        if (config.directed && (config.sourceLabels.length || config.targetLabels.length)) {
+            // Need the source and at least one target (extra target slots are optional).
+            return this.selectedSpans.some(s => s.role === 'source') &&
+                   this.selectedSpans.some(s => s.role === 'target');
+        }
+        return this.selectedSpans.length >= 2;
+    }
+
+    /**
+     * Slot descriptors { role, labels, filled, head, optional } for the current
+     * link type. Directed links have one SOURCE + (maxSpans-1) TARGET slots
+     * (n-ary events); undirected links have maxSpans generic slots.
+     */
+    linkSlots() {
+        const config = this.linkTypeConfig[this.currentLinkType] || {};
+        const maxSpans = config.maxSpans || 2;
+
+        if (config.directed && (config.sourceLabels.length || config.targetLabels.length)) {
+            const slots = [{
+                role: 'source', head: 'From', labels: config.sourceLabels,
+                filled: this.selectedSpans.find(s => s.role === 'source'),
+            }];
+            const targets = this.selectedSpans.filter(s => s.role === 'target');
+            const nTargets = Math.max(1, maxSpans - 1);
+            for (let i = 0; i < nTargets; i++) {
+                slots.push({
+                    role: 'target',
+                    head: nTargets > 1 ? `To ${i + 1}` : 'To',
+                    labels: config.targetLabels,
+                    filled: targets[i],
+                    optional: i >= 1,   // first target required, rest optional
+                });
+            }
+            return slots;
+        }
+
+        // Undirected / n-ary group.
+        return Array.from({ length: maxSpans }, (_, i) => ({
+            role: null, head: `Span ${i + 1}`, labels: [],
+            filled: this.selectedSpans[i],
+            optional: i >= 2,   // first two required for a link, rest optional
+        }));
+    }
+
+    renderSlotsOrGuidance() {
+        // Not linking yet — guide the two prerequisites in order.
+        if (!this.isLinkMode || !this.currentLinkType) {
+            if (this.spanOverlayCount() === 0) {
+                return '<p class="span-link-guide"><span class="span-link-step">1</span>' +
+                    'Highlight spans first: pick a label above the transcript (e.g. ' +
+                    '<strong>question</strong> / <strong>answer</strong>) and drag across the text. ' +
+                    'Then <span class="span-link-step">2</span> choose a link type here to connect them.</p>';
+            }
+            return '<p class="span-link-guide"><span class="span-link-step">2</span>' +
+                'Choose a <strong>link type</strong> above to start connecting your highlighted spans.</p>';
+        }
+
+        // In link mode — show the slots to fill (order-independent).
+        const slots = this.linkSlots();
+        const noSpans = this.spanOverlayCount() === 0;
+        const slotsHtml = slots.map((slot) => {
+            const heading = slot.head + (slot.optional ? '<span class="span-link-slot-opt"> (optional)</span>' : '');
+            const want = slot.labels && slot.labels.length
+                ? slot.labels.map(l => `<span class="span-link-slot-type">${this.escapeHtml(l)}</span>`).join(' / ')
+                : '<span class="span-link-slot-type">any span</span>';
+            if (slot.filled) {
+                const txt = (slot.filled.text || '').trim();
+                const quoted = txt ? `<span class="selected-span-text">“${this.truncateText(txt, 22)}”</span>` : '';
+                return `<div class="span-link-slot is-filled" data-role="${slot.role || ''}">
+                        <span class="span-link-slot-head">${heading}</span>
+                        <span class="span-link-slot-fill"><span class="selected-span-label">${this.escapeHtml(slot.filled.label)}</span>
+                        ${quoted}</span>
+                        <button type="button" class="remove-span-btn" title="Remove"
+                            onclick="window.spanLinkManagers['${this.schemaName}'].deselectSpan('${slot.filled.id}')">&times;</button>
+                    </div>`;
+            }
+            return `<div class="span-link-slot is-empty" data-role="${slot.role || ''}">
+                    <span class="span-link-slot-head">${heading}</span>
+                    <span class="span-link-slot-hint">${noSpans ? 'highlight' : 'click'} a ${want} span</span>
+                </div>`;
+        }).join('');
+
+        const hint = noSpans
+            ? '<p class="span-link-guide span-link-guide-sub">No highlighted spans yet — press <kbd>Esc</kbd> to exit and highlight some first.</p>'
+            : (this.canCreateLink()
+                ? '<p class="span-link-guide span-link-guide-sub">Ready — click <strong>Create Link</strong> (or keep adding to optional slots).</p>'
+                : '<p class="span-link-guide span-link-guide-sub">Click a highlighted span to drop it into its slot (any order).</p>');
+
+        return `<div class="span-link-slots">${slotsHtml}</div>${hint}`;
     }
 
     deselectSpan(spanId) {
@@ -914,21 +1094,42 @@ class SpanLinkManager {
             return;
         }
 
-        const linksHtml = this.links.map(link => {
+        const esc = (s) => this.escapeHtml ? this.escapeHtml(s) : String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+        const linksHtml = this.links.map((link, li) => {
             const config = this.linkTypeConfig[link.link_type] || {};
-            const spanTexts = link.properties?.span_texts || link.span_ids;
-            const directionIcon = config.directed ? '→' : '↔';
+            const color = config.color || '#dc2626';
+            const directed = link.direction === 'directed' || config.directed;
+            const arrow = directed ? '→' : '↔';
+            const labels = link.properties?.span_labels || [];
+            const texts = link.properties?.span_texts || [];
+            const ids = link.span_ids || [];
+            const num = li + 1;
+
+            // One chip per linked span: role dot + label + quoted snippet.
+            const chips = ids.map((id, i) => {
+                const label = labels[i] || this.resolveSpanLabel(this.overlayById(id) || {dataset: {}}) || 'span';
+                const text = (texts[i] || '').trim();
+                const snippet = text ? `<span class="link-chip-text">“${this.truncateText(text, 26)}”</span>` : '';
+                const roleCls = directed ? (i === 0 ? 'is-source' : 'is-target') : '';
+                return `<span class="link-chip ${roleCls}">${esc(label)}${snippet}</span>`;
+            }).join(`<span class="link-arrow" aria-hidden="true">${arrow}</span>`);
 
             return `
-                <div class="link-item" data-link-id="${link.id}" style="--link-color: ${config.color || '#dc2626'}">
+                <div class="link-item" data-link-id="${esc(link.id)}" style="--link-color: ${color}"
+                     tabindex="0" role="button"
+                     aria-label="Link ${num}: ${esc(link.link_type)}. Click to locate its spans in the transcript."
+                     onclick="window.spanLinkManagers['${this.schemaName}'].flashLink('${esc(link.id)}')"
+                     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.spanLinkManagers['${this.schemaName}'].flashLink('${esc(link.id)}')}">
+                    <span class="link-num-badge" style="background:${color}">${num}</span>
                     <div class="link-info">
-                        <span class="link-type-badge" style="background-color: ${config.color || '#dc2626'}">${link.link_type}</span>
-                        <span class="link-spans">
-                            ${spanTexts.join(` <span class="link-direction">${directionIcon}</span> `)}
-                        </span>
+                        <span class="link-type-badge" style="background-color:${color}">${esc(link.link_type)} <span class="link-arrow-in-badge">${arrow}</span></span>
+                        <span class="link-spans">${chips}</span>
                     </div>
-                    <button type="button" class="delete-link-btn" onclick="window.spanLinkManagers['${this.schemaName}'].deleteLink('${link.id}')"
-                            title="Delete link">
+                    <button type="button" class="delete-link-btn"
+                            onclick="event.stopPropagation();window.spanLinkManagers['${this.schemaName}'].deleteLink('${esc(link.id)}')"
+                            title="Delete this link" aria-label="Delete link ${num}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
                              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="3 6 5 6 21 6"></polyline>
@@ -942,7 +1143,176 @@ class SpanLinkManager {
         this.linkList.innerHTML = linksHtml;
     }
 
+    /**
+     * Scroll the first span of a link into view and pulse all its spans, so the
+     * annotator can see which highlights a listed link connects.
+     */
+    flashLink(linkId) {
+        const link = this.links.find(l => l.id === linkId);
+        if (!link) return;
+        const overlays = (link.span_ids || []).map(id => this.overlayById(id)).filter(Boolean);
+        if (!overlays.length) return;
+        const color = (this.linkTypeConfig[link.link_type] || {}).color || '#f59e0b';
+        const firstSeg = overlays[0].querySelector('.span-highlight-segment') || overlays[0];
+        if (firstSeg.scrollIntoView) firstSeg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        overlays.forEach(ov => {
+            ov.querySelectorAll('.span-highlight-segment').forEach(seg => {
+                seg.style.setProperty('--link-color', color);
+                seg.classList.add('span-link-flash');
+                setTimeout(() => seg.classList.remove('span-link-flash'), 1400);
+            });
+        });
+        // Also emphasize the connector briefly.
+        if (this.simpleArcSvg) {
+            this.simpleArcSvg.classList.add('span-link-arcs-emphasis');
+            setTimeout(() => this.simpleArcSvg.classList.remove('span-link-arcs-emphasis'), 1400);
+        }
+    }
+
+    // ---- Simple connector arcs for instance_display / bubble layouts --------
+
+    ensureSimpleArcSvg() {
+        if (!this.arcHost) return null;
+        const SVGNS = 'http://www.w3.org/2000/svg';
+        let svg = this.arcHost.querySelector(':scope > svg.span-link-simple-arcs');
+        if (!svg) {
+            svg = document.createElementNS(SVGNS, 'svg');
+            svg.setAttribute('class', 'span-link-simple-arcs');
+            svg.style.cssText =
+                'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:6;';
+            this.arcHost.appendChild(svg);
+        }
+        this.simpleArcSvg = svg;
+        return svg;
+    }
+
+    overlayById(id) {
+        return document.querySelector(
+            `.span-overlay-pure[data-annotation-id="${CSS.escape(id)}"],` +
+            `.span-overlay[data-annotation-id="${CSS.escape(id)}"],` +
+            `.span-overlay-ai[data-annotation-id="${CSS.escape(id)}"],` +
+            `.span-highlight[data-annotation-id="${CSS.escape(id)}"]`);
+    }
+
+    /**
+     * A span overlay's own box is 0×0 — its geometry lives in the
+     * ``.span-highlight-segment`` children (same reason ``getSpanPositions``
+     * reads segments). Return the segment-union rect relative to ``arcHost``,
+     * or null if the span isn't currently laid out.
+     */
+    spanRectRel(id) {
+        const overlay = this.overlayById(id);
+        if (!overlay) return null;
+        const hostRect = this.arcHost.getBoundingClientRect();
+        const segs = overlay.querySelectorAll('.span-highlight-segment');
+        let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+        segs.forEach(seg => {
+            const sr = seg.getBoundingClientRect();
+            if (sr.width > 0 && sr.height > 0) {
+                l = Math.min(l, sr.left); t = Math.min(t, sr.top);
+                r = Math.max(r, sr.right); b = Math.max(b, sr.bottom);
+            }
+        });
+        if (l === Infinity) {
+            const or = overlay.getBoundingClientRect();
+            if (or.width === 0 && or.height === 0) return null;
+            l = or.left; t = or.top; r = or.right; b = or.bottom;
+        }
+        return { x: l - hostRect.left, y: t - hostRect.top, w: r - l, h: b - t };
+    }
+
+    renderSimpleConnectors() {
+        const svg = this.ensureSimpleArcSvg();
+        if (!svg) return;
+        svg.innerHTML =
+            '<defs><marker id="ln-arrow" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">' +
+            '<polygon points="0 0, 10 4, 0 8" fill="context-stroke"></polygon></marker></defs>';
+
+        if (!this.links.length) return;
+        const midX = this.arcHost.getBoundingClientRect().width / 2;
+
+        this.links.forEach((link, li) => {
+            const color = (this.linkTypeConfig[link.link_type] || {}).color || '#dc2626';
+            const directed = link.direction === 'directed';
+            const ids = link.span_ids || [];
+            const num = li + 1;
+            const a = this.spanRectRel(ids[0]);
+            if (a) this.drawSpanBadge(svg, a, midX, num, color);
+            if (!a) return;
+            for (let i = 1; i < ids.length; i++) {
+                const b = this.spanRectRel(ids[i]);
+                if (!b) continue;
+                this.drawConnector(svg, a, b, color, directed, midX);
+                this.drawSpanBadge(svg, b, midX, num, color);
+            }
+        });
+    }
+
+    /**
+     * Route the connector vertically *between* the two spans, bulging toward the
+     * pane's horizontal center. Staying inside the [sy, ty] band avoids the
+     * scroll-pane clipping an "above the top span" hump would suffer, and the
+     * bulge stays within host width so ``overflow-x:hidden`` doesn't cut it.
+     */
+    drawConnector(svg, a, b, color, directed, midX) {
+        const SVGNS = 'http://www.w3.org/2000/svg';
+        // Anchor on the edge of each span that faces the pane center.
+        const anchor = (r) => {
+            const cx = r.x + r.w / 2;
+            const x = cx <= midX ? r.x + r.w : r.x;   // right edge if left of center, else left edge
+            return { x, y: r.y + r.h / 2, side: cx <= midX ? 1 : -1 };
+        };
+        const s = anchor(a), t = anchor(b);
+        // Bulge control x: push toward center, a little past it, clamped in-bounds.
+        const bulge = Math.min(60, 24 + Math.abs(t.y - s.y) / 6);
+        const cxS = Math.max(6, Math.min(midX * 2 - 6, s.x + s.side * bulge));
+        const cxT = Math.max(6, Math.min(midX * 2 - 6, t.x + t.side * bulge));
+        const path = document.createElementNS(SVGNS, 'path');
+        path.setAttribute('d', `M ${s.x} ${s.y} C ${cxS} ${s.y}, ${cxT} ${t.y}, ${t.x} ${t.y}`);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', color);
+        path.setAttribute('stroke-width', '2');
+        path.setAttribute('stroke-linecap', 'round');
+        // Keep the connector semi-transparent so it reads as an overlay and does
+        // not obscure the transcript text it crosses.
+        path.setAttribute('opacity', '0.45');
+        if (directed) path.setAttribute('marker-end', 'url(#ln-arrow)');
+        svg.appendChild(path);
+    }
+
+    /**
+     * A numbered chip pinned to a linked span, on its center-facing edge. This
+     * is the scroll-proof identity marker: even when a link's partner span is
+     * scrolled out of view, the badge shows this span belongs to link #N.
+     */
+    drawSpanBadge(svg, r, midX, num, color) {
+        const SVGNS = 'http://www.w3.org/2000/svg';
+        const cx = r.x + r.w / 2;
+        const bx = cx <= midX ? r.x + r.w + 9 : r.x - 9;
+        const by = r.y + r.h / 2;
+        const g = document.createElementNS(SVGNS, 'g');
+        g.setAttribute('class', 'span-link-badge');
+        const circ = document.createElementNS(SVGNS, 'circle');
+        circ.setAttribute('cx', bx); circ.setAttribute('cy', by); circ.setAttribute('r', '8');
+        circ.setAttribute('fill', color);
+        circ.setAttribute('stroke', '#fff'); circ.setAttribute('stroke-width', '1.5');
+        const txt = document.createElementNS(SVGNS, 'text');
+        txt.setAttribute('x', bx); txt.setAttribute('y', by + 0.5);
+        txt.setAttribute('text-anchor', 'middle');
+        txt.setAttribute('dominant-baseline', 'central');
+        txt.setAttribute('font-size', '10'); txt.setAttribute('font-weight', '700');
+        txt.setAttribute('fill', '#fff');
+        txt.textContent = String(num);
+        g.appendChild(circ); g.appendChild(txt);
+        svg.appendChild(g);
+    }
+
     renderArcs() {
+        if (this.simpleArcs) {
+            if (this.showArcsEnabled === false) return;
+            this.renderSimpleConnectors();
+            return;
+        }
         console.log('[SpanLinkManager] renderArcs() called');
         console.log('[SpanLinkManager] arcsContainer exists:', !!this.arcsContainer);
         console.log('[SpanLinkManager] arcSpacer exists:', !!this.arcSpacer);
@@ -1244,9 +1614,14 @@ class SpanLinkManager {
     }
 
     toggleArcsVisibility(visible) {
+        this.showArcsEnabled = visible;
         if (this.arcsContainer) {
             this.arcsContainer.style.display = visible ? 'block' : 'none';
         }
+        if (this.simpleArcSvg) {
+            this.simpleArcSvg.style.display = visible ? '' : 'none';
+        }
+        if (this.simpleArcs && visible) this.renderSimpleConnectors();
     }
 }
 
