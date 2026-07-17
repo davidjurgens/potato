@@ -1344,6 +1344,21 @@ class AdminDashboard:
                     "in_progress_count": in_progress,
                 }
 
+            # Active crowd-provider info (generalized platforms beyond
+            # prolific/mturk report through this block)
+            provider_info = {}
+            try:
+                from potato.crowdsourcing import get_crowd_provider
+                provider = get_crowd_provider()
+                if provider is not None:
+                    provider_info = {
+                        "name": provider.name,
+                        "platform_label": provider.platform_label(),
+                    }
+                    provider_info.update(provider.admin_summary())
+            except Exception as e:
+                self.logger.debug(f"Could not collect crowd provider summary: {e}")
+
             return {
                 "summary": {
                     "total_workers": len(all_workers),
@@ -1353,6 +1368,7 @@ class AdminDashboard:
                     "prolific_studies": len(prolific_study_ids),
                     "mturk_hits": len(mturk_hit_ids),
                 },
+                "provider": provider_info,
                 "prolific": {
                     "stats": calc_stats(prolific_workers),
                     "study_ids": list(prolific_study_ids),

@@ -626,6 +626,52 @@ class TestCustomURLArgument:
         # Should be logged in (not seeing login form)
         assert "workerId" not in response.text or "rating" in response.text.lower()
 
+    def test_turk_submit_url_normalized_on_done_page(self, mturk_server):
+        """A bare-origin turkSubmitTo must gain /mturk/externalSubmit on the done page.
+
+        MTurk sends turkSubmitTo as an origin (https://workersandbox.mturk.com);
+        the ExternalQuestion submit endpoint is /mturk/externalSubmit on that host.
+        """
+        server, test_dir = mturk_server
+        session = requests.Session()
+
+        response = session.get(
+            f"{server.base_url}/",
+            params={
+                "workerId": "AWORKERSUBMIT1",
+                "assignmentId": "assignment789",
+                "hitId": "hit789",
+                "turkSubmitTo": "https://workersandbox.mturk.com",
+            },
+            allow_redirects=True,
+            timeout=5,
+        )
+        assert response.status_code == 200
+
+        # Complete the single assigned item so the user reaches the DONE phase
+        response = session.post(
+            f"{server.base_url}/updateinstance",
+            json={
+                "instance_id": "item_1",
+                "annotations": {"rating:good": "true"},
+                "span_annotations": [],
+            },
+            timeout=5,
+        )
+        assert response.status_code == 200
+        response = session.post(
+            f"{server.base_url}/annotate",
+            json={"action": "next_instance", "instance_id": "item_1"},
+            allow_redirects=True,
+            timeout=5,
+        )
+        assert response.status_code == 200
+
+        response = session.get(f"{server.base_url}/done", allow_redirects=True, timeout=5)
+        assert response.status_code == 200
+        assert "https://workersandbox.mturk.com/mturk/externalSubmit" in response.text
+        assert 'action="https://workersandbox.mturk.com"' not in response.text
+
 
 class TestProlificCompletionFlow:
     """Tests for the complete Prolific annotation flow."""

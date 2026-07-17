@@ -1156,6 +1156,26 @@ def init_prolific_study(config: dict) -> None:
         logger.info(f"Initialized Prolific study: {study_id}")
         logger.info(f"Study info: {PROLIFIC_STUDY_INSTANCE.get_basic_study_info()}")
 
+        # Auto pause/resume polling is opt-in: it makes recurring Prolific API
+        # calls, so existing token-configured deployments must not start polling
+        # just because they upgraded.
+        if prolific_settings.get('workload_checker', False):
+            # With webhooks delivering submission changes in real time, the
+            # poller only reconciles missed events — slow it down.
+            webhooks_enabled = (((config.get('crowdsourcing') or {}).get('prolific') or {})
+                                .get('webhooks') or {}).get('enabled', False)
+            if webhooks_enabled:
+                PROLIFIC_STUDY_INSTANCE.checker_period = max(
+                    PROLIFIC_STUDY_INSTANCE.checker_period, 600)
+            PROLIFIC_STUDY_INSTANCE.start_workload_monitor()
+            import atexit
+
+            def cleanup_prolific_monitor():
+                study = get_prolific_study()
+                if study:
+                    study.stop_workload_monitor()
+            atexit.register(cleanup_prolific_monitor)
+
     except Exception as e:
         logger.error(f"Failed to initialize Prolific study: {e}")
         PROLIFIC_STUDY_INSTANCE = None
@@ -1288,6 +1308,8 @@ def load_all_data(config: dict):
     load_training_data(config)
     init_prolific_study(config)
     init_mturk_hit(config)
+    from potato.crowdsourcing import init_crowd_provider
+    init_crowd_provider(config)
 
     logger.debug(f"STATES: {get_user_state_manager().phase_type_to_name_to_page}")
 

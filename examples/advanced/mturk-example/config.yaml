@@ -1,5 +1,10 @@
 # Amazon Mechanical Turk Example Configuration
 #
+# NOTE: MTurk closed to new requesters on 2026-07-30 and is in maintenance mode.
+# This example keeps working for existing requester accounts. For new projects,
+# see examples/crowdsourcing/prolific-basic/ and
+# docs/deployment/crowdsourcing-platforms.md for alternatives.
+#
 # This example shows how to configure Potato for deployment on Amazon Mechanical Turk.
 # Workers will be automatically logged in using their MTurk workerId and can submit
 # their HIT directly from the completion page.

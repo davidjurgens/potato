@@ -425,6 +425,18 @@ class QualityControlManager:
 
         return response_data
 
+    def is_user_blocked(self, user_id: str) -> bool:
+        """True when the user has failed enough attention checks to be blocked.
+
+        Used by the completion flow to serve a failure/screen-out completion
+        code instead of the success code.
+        """
+        if not self.qc_config.attention_checks_enabled:
+            return False
+        with self._lock:
+            failures = len([r for r in self.attention_results.get(user_id, []) if not r.passed])
+        return failures >= self.qc_config.attention_block_threshold
+
     def get_attention_check_stats(self, user_id: str) -> Dict[str, Any]:
         """Get attention check statistics for a user."""
         with self._lock:

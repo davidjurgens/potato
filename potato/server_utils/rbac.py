@@ -37,6 +37,7 @@ class Permission:
 
     VIEW_ADMIN_DASHBOARD = "view_admin_dashboard"
     MANAGE_ASSIGNMENT = "manage_assignment"
+    MANAGE_CROWDSOURCING = "manage_crowdsourcing"
     ADJUDICATE = "adjudicate"
     EXPORT_DATA = "export_data"
     ANNOTATE = "annotate"
@@ -45,6 +46,7 @@ class Permission:
         {
             VIEW_ADMIN_DASHBOARD,
             MANAGE_ASSIGNMENT,
+            MANAGE_CROWDSOURCING,
             ADJUDICATE,
             EXPORT_DATA,
             ANNOTATE,

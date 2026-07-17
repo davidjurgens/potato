@@ -54,6 +54,8 @@
         .platform-btn-prolific:hover { background: #4959bd; color: white; }
         .platform-btn-mturk { background: #ff9900; color: #111; }
         .platform-btn-mturk:hover { background: #e68a00; color: #111; }
+        .platform-btn-generic { background: var(--primary, #6e56cf); color: white; }
+        .platform-btn-generic:hover { filter: brightness(0.92); color: white; }
     </style>
 </head>
 <body class="potato-page-center">
@@ -68,6 +70,8 @@
             {% if completion_code %}Your responses have been recorded.{% endif %}
         </p>
 
+        {% set has_platform_action = action and action.kind in ['redirect', 'post_form'] %}
+        {% if completion_code or has_platform_action %}
         {% if completion_code %}
         <div class="mb-3">
             <div class="code-box" id="completion-code" onclick="copyCode()" title="Click to copy">
@@ -77,8 +81,22 @@
                 <i class="fas fa-copy me-1"></i> Click to copy your completion code
             </p>
         </div>
+        {% endif %}
 
-        {% if mturk_submit_url and mturk_assignment_id %}
+        {% if action and action.kind == 'post_form' %}
+        <form id="mturk-form" action="{{ action.form_action }}" method="POST">
+            {% for field_name, field_value in action.form_fields.items() %}
+            <input type="hidden" name="{{ field_name }}" value="{{ field_value }}">
+            {% endfor %}
+            <button type="submit" class="platform-btn platform-btn-{{ 'mturk' if action.platform_label == 'MTurk' else 'generic' }}">
+                <i class="fas fa-external-link-alt me-2"></i> Submit HIT to {{ action.platform_label }}
+            </button>
+        </form>
+        {% elif action and action.kind == 'redirect' %}
+        <a href="{{ action.redirect_url }}" class="platform-btn platform-btn-{{ 'prolific' if action.platform_label == 'Prolific' else 'generic' }}">
+            <i class="fas fa-external-link-alt me-2"></i> Return to {{ action.platform_label }}
+        </a>
+        {% elif not action and mturk_submit_url and mturk_assignment_id %}
         <form id="mturk-form" action="{{ mturk_submit_url }}" method="POST">
             <input type="hidden" name="assignmentId" value="{{ mturk_assignment_id }}">
             {% if completion_code %}
@@ -88,20 +106,20 @@
                 <i class="fas fa-external-link-alt me-2"></i> Submit HIT to MTurk
             </button>
         </form>
-        {% elif prolific_redirect_url %}
+        {% elif not action and prolific_redirect_url %}
         <a href="{{ prolific_redirect_url }}" class="platform-btn platform-btn-prolific">
             <i class="fas fa-external-link-alt me-2"></i> Return to Prolific
         </a>
         {% else %}
         <div class="potato-alert potato-alert-info" style="text-align: left;">
             <i class="fas fa-info-circle me-2"></i>
-            Copy the code above and paste it in your crowdsourcing platform to receive credit.
+            {% if action and action.message %}{{ action.message }}{% else %}Copy the code above and paste it in your crowdsourcing platform to receive credit.{% endif %}
         </div>
         {% endif %}
         {% else %}
         <div class="potato-alert potato-alert-success" style="text-align: left;">
             <i class="fas fa-check me-2"></i>
-            Your annotations have been saved. You may close this window.
+            {% if action and action.message %}{{ action.message }}{% else %}Your annotations have been saved. You may close this window.{% endif %}
         </div>
         {% endif %}
 

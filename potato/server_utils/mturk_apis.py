@@ -471,6 +471,12 @@ def init_mturk_hit(config):
         logger.debug("MTurk API not enabled in config")
         return None
 
+    logger.warning(
+        "Amazon Mechanical Turk closed to new customers on 2026-07-30 and is in "
+        "maintenance mode. Existing requester accounts keep working, but consider "
+        "migrating to another platform (see docs/deployment/crowdsourcing-platforms.md)."
+    )
+
     config_file_path = mturk_config.get('config_file_path')
     if not config_file_path:
         logger.warning("MTurk enabled but no config_file_path specified")

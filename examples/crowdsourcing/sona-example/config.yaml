@@ -1,0 +1,74 @@
+# SONA Systems Example Configuration
+#
+# Recruit from a university participant pool with automatic credit granting.
+# See docs/deployment/sona_integration.md for the full guide.
+#
+# In SONA, create a web study with this study URL (SONA substitutes the
+# per-participant code for %SURVEY_CODE%):
+#   https://your-server.com/?sona_code=%SURVEY_CODE%
+#
+# On completion, Potato grants credit server-side via SONA's WebstudyCredit
+# API; if that fails, the done page falls back to the client-side credit link.
+#
+# To test locally, run from the repo root:
+#   python potato/flask_server.py start examples/crowdsourcing/sona-example/config.yaml -p 8000
+#
+# Then simulate a participant arrival:
+#   http://localhost:8000/?sona_code=TESTCODE1
+# (the credit call will fail against the placeholder hostname; the done page
+# then shows the client-side credit link, which is the expected fallback)
+
+port: 9005
+
+annotation_task_name: SONA Annotation Task
+task_description: "Classify the sentiment of short text snippets. This study takes about 5 minutes."
+
+login:
+  type: url_direct
+  url_argument: sona_code
+
+crowdsourcing:
+  provider: sona
+  sona:
+    # Copy these three values from your SONA study information page
+    # (the completion URL shown there contains experiment_id and credit_token)
+    hostname: yourdept.sona-systems.com
+    experiment_id: 123
+    credit_token: replace-with-your-credit-token
+
+hide_navbar: true
+jumping_to_id_disabled: true
+
+assignment_strategy: random
+max_annotations_per_user: 5
+num_annotators_per_item: 3
+
+task_dir: .
+output_annotation_dir: annotation_output/sona-example/
+output_annotation_format: json
+
+data_files:
+  - data/example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the sentiment expressed in this text?"
+    labels:
+      - name: positive
+        tooltip: "The text expresses positive feelings or opinions"
+      - name: neutral
+        tooltip: "The text is neutral or factual without clear sentiment"
+      - name: negative
+        tooltip: "The text expresses negative feelings or opinions"
+    sequential_key_binding: true
+
+site_dir: default

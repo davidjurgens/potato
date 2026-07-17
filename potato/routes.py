@@ -390,34 +390,29 @@ def home():
 
     # Check if user has an active session
     if 'username' not in session:
-        # Check for URL-direct login (used by Prolific, MTurk, etc.)
+        # Check for crowd-provider login (Prolific, MTurk, generic panels, etc.)
         login_config = config.get('login', {})
         login_type = login_config.get('type', 'standard')
 
-        if login_type in ['url_direct', 'prolific']:
-            # Get the URL argument name (default to PROLIFIC_PID for backwards compatibility)
-            url_argument = login_config.get('url_argument', 'PROLIFIC_PID')
-            username = request.args.get(url_argument)
+        from potato.crowdsourcing import get_crowd_provider
+        provider = get_crowd_provider()
+        if provider is None and login_type in ['url_direct', 'prolific']:
+            # Server started via a path that skipped init (e.g. some tests):
+            # resolve the provider on first use.
+            from potato.crowdsourcing import init_crowd_provider
+            provider = init_crowd_provider(config)
 
-            # Also capture SESSION_ID and STUDY_ID if provided (for Prolific tracking)
-            prolific_session_id = request.args.get('SESSION_ID')
-            prolific_study_id = request.args.get('STUDY_ID')
+        if provider is not None:
+            # Handle platform preview mode (e.g. MTurk worker hasn't accepted the HIT)
+            if provider.is_preview(request.args):
+                logger.info("Crowd platform preview mode detected - showing preview page")
+                return provider.preview_response()
 
-            # Capture MTurk-specific parameters
-            mturk_assignment_id = request.args.get('assignmentId')
-            mturk_hit_id = request.args.get('hitId')
-            mturk_submit_to = request.args.get('turkSubmitTo')
-
-            # Handle MTurk preview mode (worker hasn't accepted the HIT yet)
-            if mturk_assignment_id == 'ASSIGNMENT_ID_NOT_AVAILABLE':
-                logger.info("MTurk preview mode detected - showing preview page")
-                return render_template("mturk_preview.html",
-                                      title=config.get("annotation_task_name", "Task Preview"),
-                                      task_description=config.get("task_description", ""),
-                                      annotation_task_name=config.get("annotation_task_name", "Annotation Task"))
-
-            if username:
-                logger.info(f"URL-direct login: user={username}, session_id={prolific_session_id}, study_id={prolific_study_id}")
+            identity = provider.extract_identity(request.args)
+            if identity is not None:
+                username = identity.worker_id
+                logger.info(f"URL-direct login: user={username}, "
+                            f"session_id={identity.session_id}, study_id={identity.study_id}")
 
                 # Auto-register and login the user
                 user_authenticator = UserAuthenticator.get_instance()
@@ -425,27 +420,31 @@ def home():
                 # Add user if not exists (passwordless for URL-direct)
                 if not user_authenticator.is_valid_username(username):
                     result = user_authenticator.add_user(username, None,
-                                                         prolific_session_id=prolific_session_id,
-                                                         prolific_study_id=prolific_study_id)
+                                                         prolific_session_id=identity.session_id,
+                                                         prolific_study_id=identity.study_id)
                     logger.debug(f"Auto-registered URL-direct user {username}: {result}")
 
                 # Set session
                 session['username'] = username
                 session.permanent = True
 
-                # Store Prolific IDs in session for later use
-                if prolific_session_id:
-                    session['prolific_session_id'] = prolific_session_id
-                if prolific_study_id:
-                    session['prolific_study_id'] = prolific_study_id
-
-                # Store MTurk IDs in session for completion flow
-                if mturk_assignment_id:
-                    session['mturk_assignment_id'] = mturk_assignment_id
-                if mturk_hit_id:
-                    session['mturk_hit_id'] = mturk_hit_id
-                if mturk_submit_to:
-                    session['mturk_submit_to'] = mturk_submit_to
+                # Generalized crowd keys plus the historical prolific_*/mturk_*
+                # keys, which admin.py and older templates still read.
+                session['crowd_provider'] = provider.name
+                if identity.session_id:
+                    session['crowd_session_id'] = identity.session_id
+                    session['prolific_session_id'] = identity.session_id
+                if identity.study_id:
+                    session['crowd_study_id'] = identity.study_id
+                    session['prolific_study_id'] = identity.study_id
+                if identity.extra:
+                    session['crowd_extra'] = dict(identity.extra)
+                if identity.extra.get('assignmentId'):
+                    session['mturk_assignment_id'] = identity.extra['assignmentId']
+                if identity.extra.get('hitId'):
+                    session['mturk_hit_id'] = identity.extra['hitId']
+                if identity.extra.get('turkSubmitTo'):
+                    session['mturk_submit_to'] = identity.extra['turkSubmitTo']
 
                 # Initialize user state if needed
                 if not get_user_state_manager().has_user(username):
@@ -457,6 +456,19 @@ def home():
                 user_state = usm.get_user_state(username)
 
                 if user_state:
+                    # Record platform metadata with the user state so annotation
+                    # output can be joined with the platform's submission records
+                    if not hasattr(user_state, 'crowd_metadata') or user_state.crowd_metadata is None:
+                        user_state.crowd_metadata = {}
+                    user_state.crowd_metadata['provider'] = provider.name
+                    user_state.crowd_metadata['worker_id'] = username
+                    if identity.session_id:
+                        user_state.crowd_metadata['session_id'] = identity.session_id
+                    if identity.study_id:
+                        user_state.crowd_metadata['study_id'] = identity.study_id
+                    for extra_key, extra_value in identity.extra.items():
+                        user_state.crowd_metadata[extra_key] = extra_value
+
                     # Set user to the first phase if they're in LOGIN
                     # Use advance_phase() which properly looks up the first page
                     # for the phase (fixes issue #113: page was None for phased workflows)
@@ -469,24 +481,18 @@ def home():
                         logger.debug(f"Assigning instances to URL-direct user {username}")
                         get_item_state_manager().assign_instances_to_user(user_state)
 
-                    # Track with Prolific API if configured
-                    prolific_study = get_prolific_study()
-                    if prolific_study and prolific_session_id:
-                        try:
-                            prolific_study.add_new_user({
-                                'PROLIFIC_PID': username,
-                                'SESSION_ID': prolific_session_id
-                            })
-                            logger.debug(f"Tracked user {username} with Prolific API")
-                        except Exception as e:
-                            logger.warning(f"Failed to track user with Prolific API: {e}")
+                    # Platform-side arrival tracking (e.g. Prolific API session tracking)
+                    try:
+                        provider.on_arrival(identity)
+                    except Exception as e:
+                        logger.warning(f"Crowd provider arrival tracking failed: {e}")
 
                 # Redirect to home to process the now-logged-in user
                 return redirect(url_for("home"))
 
             else:
-                # URL-direct login configured but no username in URL
-                # Show error or redirect to a waiting page
+                # URL-direct login configured but no participant ID in URL
+                url_argument = provider.id_param()
                 logger.warning(f"URL-direct login configured but '{url_argument}' not found in URL")
                 return render_template("error.html",
                                       message=f"Missing required URL parameter: {url_argument}. "
@@ -5310,29 +5316,74 @@ def done():
     # Get completion code from config
     completion_code = config.get("completion_code", "")
 
-    # Build Prolific redirect URL if completion code is set
-    prolific_redirect_url = None
     login_config = config.get('login', {})
     login_type = login_config.get('type', 'standard')
 
-    if completion_code and login_type in ['url_direct', 'prolific']:
-        # Build the Prolific completion URL (only if using Prolific-style URL argument)
-        url_argument = login_config.get('url_argument', 'PROLIFIC_PID')
-        if url_argument in ['PROLIFIC_PID', 'prolific_pid']:
-            # Format: https://app.prolific.com/submissions/complete?cc=YOUR_CODE
-            prolific_redirect_url = f"https://app.prolific.com/submissions/complete?cc={completion_code}"
+    from potato.crowdsourcing import CompletionOutcome, ParticipantIdentity, get_crowd_provider
+    provider = get_crowd_provider()
+    if provider is None and login_type in ['url_direct', 'prolific']:
+        from potato.crowdsourcing import init_crowd_provider
+        provider = init_crowd_provider(config)
 
-    # Get MTurk submission parameters from session
-    mturk_submit_url = session.get('mturk_submit_to')
-    mturk_assignment_id = session.get('mturk_assignment_id')
-
-    # Check for auto-redirect setting
+    # Legacy template variables are still passed alongside `action` so that
+    # customized done.html templates keep working for one release.
+    action = None
+    prolific_redirect_url = None
+    mturk_submit_url = None
+    mturk_assignment_id = None
     auto_redirect = config.get('auto_redirect_on_completion', False)
     auto_redirect_delay = config.get('auto_redirect_delay', 5000)  # milliseconds
+
+    if provider is not None:
+        extra = dict(session.get('crowd_extra') or {})
+        if session.get('mturk_assignment_id'):
+            extra.setdefault('assignmentId', session['mturk_assignment_id'])
+        if session.get('mturk_submit_to'):
+            extra.setdefault('turkSubmitTo', session['mturk_submit_to'])
+        identity = ParticipantIdentity(
+            worker_id=username,
+            session_id=session.get('crowd_session_id') or session.get('prolific_session_id'),
+            study_id=session.get('crowd_study_id') or session.get('prolific_study_id'),
+            extra=extra,
+        )
+
+        # Participants blocked by attention checks get the provider's
+        # failure/screen-out completion code instead of the success code
+        outcome = CompletionOutcome.COMPLETED
+        try:
+            from potato.quality_control import get_quality_control_manager
+            qc_manager = get_quality_control_manager()
+            if qc_manager is not None and qc_manager.is_user_blocked(username):
+                outcome = CompletionOutcome.FAILED_CHECKS
+        except Exception as e:
+            logger.debug(f"Could not evaluate quality-control block state: {e}")
+
+        # Flush the user's state to disk BEFORE rendering any completion
+        # action: an auto-redirect must never race the final save.
+        try:
+            get_user_state_manager().save_user_state(user_state)
+        except Exception as e:
+            logger.warning(f"Could not flush user state before completion redirect: {e}")
+
+        try:
+            provider.on_completion(identity, outcome)
+        except Exception as e:
+            logger.warning(f"Crowd provider completion callback failed: {e}")
+
+        action = provider.completion_action(identity, outcome)
+        completion_code = action.code or completion_code
+        if action.kind == 'redirect':
+            prolific_redirect_url = action.redirect_url
+            auto_redirect = action.auto_redirect
+            auto_redirect_delay = action.auto_redirect_delay
+        elif action.kind == 'post_form':
+            mturk_submit_url = action.form_action
+            mturk_assignment_id = action.form_fields.get('assignmentId')
 
     # Show the completion page
     return render_template("done.html",
                           title=config.get("annotation_task_name", "Annotation Platform"),
+                          action=action,
                           completion_code=completion_code,
                           prolific_redirect_url=prolific_redirect_url,
                           mturk_submit_url=mturk_submit_url,
@@ -7608,6 +7659,22 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/chat/config", "chat_config", chat_config, methods=["GET"])
 
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
+
+    # Register crowd-platform admin API blueprint if not already registered
+    if 'crowd_admin' not in app.blueprints:
+        try:
+            from potato.crowdsourcing.admin_api import crowd_admin_bp
+            app.register_blueprint(crowd_admin_bp)
+        except ImportError:
+            pass
+
+    # Register Prolific webhook receiver (HMAC-authenticated, no session)
+    if 'crowd_webhooks' not in app.blueprints:
+        try:
+            from potato.crowdsourcing.webhooks import crowd_webhooks_bp
+            app.register_blueprint(crowd_webhooks_bp)
+        except ImportError:
+            pass
 
     # Register Solo Mode blueprint if not already registered
     if 'solo_mode' not in app.blueprints:

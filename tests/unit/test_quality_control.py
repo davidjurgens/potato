@@ -171,6 +171,23 @@ class TestAttentionChecks:
         for i in range(1, 6):
             assert f"attn_00{i}" in manager_with_attention.attention_expected
 
+    def test_is_user_blocked(self, manager_with_attention):
+        """is_user_blocked flips once failures reach block_threshold (4)."""
+        manager = manager_with_attention
+        assert manager.is_user_blocked("worker") is False
+
+        # Fail four distinct attention checks
+        for i in range(1, 5):
+            manager.validate_attention_response(
+                "worker", f"attn_00{i}", {"sentiment": "wrong_answer"})
+        assert manager.is_user_blocked("worker") is True
+        # Unknown users are never blocked
+        assert manager.is_user_blocked("someone_else") is False
+
+    def test_is_user_blocked_disabled_when_no_attention_checks(self):
+        manager = QualityControlManager({}, "/tmp")
+        assert manager.is_user_blocked("anyone") is False
+
     def test_is_attention_check(self, manager_with_attention):
         """Test attention check identification."""
         assert manager_with_attention.is_attention_check("attn_001")

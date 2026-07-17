@@ -329,6 +329,12 @@
           <div id="crowdsourcingDetails">
             <!-- Platform-specific data will be loaded here -->
           </div>
+
+          <!-- Prolific Study Management (Tier-3 API) -->
+          <div id="crowdStudyPanel" style="margin-top: 1rem;">
+            <!-- Study lifecycle + submissions review, shown when a Prolific
+                 API token and study_id are configured -->
+          </div>
         </div>
 
         <!-- Embedding Visualization Tab -->
@@ -1243,6 +1249,149 @@
         } catch (error) {
           console.error("Error loading crowdsourcing data:", error);
           showError(L.admin_err_crowdsourcing || "Failed to load crowdsourcing data");
+        }
+        loadCrowdStudyPanel();
+      }
+
+      // --- Prolific study management (Tier-3 API) ---
+      async function crowdApiPost(endpoint, body) {
+        return makeApiRequest(endpoint, {
+          method: "POST",
+          body: JSON.stringify(body || {}),
+        });
+      }
+
+      async function loadCrowdStudyPanel() {
+        const panel = document.getElementById("crowdStudyPanel");
+        if (!panel) return;
+        try {
+          const status = await makeApiRequest("/admin/api/crowd/status");
+          if (!status.api_configured || !status.study_id) {
+            panel.innerHTML = "";
+            return;
+          }
+          const study = await makeApiRequest(
+            `/admin/api/crowd/study?study_id=${encodeURIComponent(status.study_id)}`);
+          const submissions = await makeApiRequest(
+            `/admin/api/crowd/study/${encodeURIComponent(status.study_id)}/submissions`);
+          renderCrowdStudyPanel(status.study_id, study, submissions.results || []);
+        } catch (error) {
+          console.error("Error loading crowd study panel:", error);
+          panel.innerHTML = `<div class="question-card"><div class="error-message">
+            Prolific study panel unavailable: ${error.message}</div></div>`;
+        }
+      }
+
+      function renderCrowdStudyPanel(studyId, study, submissions) {
+        const panel = document.getElementById("crowdStudyPanel");
+        const awaiting = submissions.filter((s) => s.status === "AWAITING REVIEW");
+        const submissionRows = submissions.slice(0, 50).map((s) => `
+          <tr>
+            <td>${s.participant_id || ""}</td>
+            <td>${s.status || ""}</td>
+            <td>${s.started_at ? s.started_at.substring(0, 16) : ""}</td>
+            <td>
+              ${s.status === "AWAITING REVIEW" ? `
+                <button class="shadcn-button" onclick="crowdApprove('${s.id}')">Approve</button>
+                <button class="shadcn-button" onclick="crowdReject('${s.id}')">Reject</button>
+              ` : ""}
+            </td>
+          </tr>`).join("");
+
+        panel.innerHTML = `
+          <div class="question-card">
+            <h3>Prolific Study: ${study.name || studyId}</h3>
+            <p>
+              Status: <strong>${study.status}</strong> ·
+              Places: ${study.places_taken || 0}/${study.total_available_places || 0} ·
+              Reward: ${study.reward != null ? study.reward : "?"}
+            </p>
+            <div class="table-controls">
+              <button class="shadcn-button shadcn-button-primary" onclick="crowdStudyAction('publish')">Publish</button>
+              <button class="shadcn-button" onclick="crowdStudyAction('pause')">Pause</button>
+              <button class="shadcn-button" onclick="crowdStudyAction('start')">Start</button>
+              <button class="shadcn-button" onclick="crowdStudyAction('stop')">Stop</button>
+              <button class="shadcn-button" onclick="crowdAddPlaces()">Add places…</button>
+              <button class="shadcn-button" onclick="crowdAutoScale()">Auto-scale places</button>
+              ${awaiting.length ? `<button class="shadcn-button shadcn-button-primary"
+                 onclick="crowdBulkApprove(${JSON.stringify(awaiting.map((s) => s.id)).replace(/"/g, "&quot;")})">
+                 Approve all awaiting (${awaiting.length})</button>` : ""}
+            </div>
+            <table class="shadcn-table">
+              <thead><tr><th>Participant</th><th>Status</th><th>Started</th><th>Actions</th></tr></thead>
+              <tbody>${submissionRows ||
+                '<tr><td colspan="4">No submissions yet.</td></tr>'}</tbody>
+            </table>
+          </div>`;
+        panel.dataset.studyId = studyId;
+      }
+
+      async function crowdStudyAction(action) {
+        const studyId = document.getElementById("crowdStudyPanel").dataset.studyId;
+        try {
+          await crowdApiPost(`/admin/api/crowd/study/${encodeURIComponent(studyId)}/${action}`);
+          loadCrowdStudyPanel();
+        } catch (error) {
+          showError(`Study ${action} failed: ${error.message}`);
+        }
+      }
+
+      async function crowdAddPlaces() {
+        const studyId = document.getElementById("crowdStudyPanel").dataset.studyId;
+        const places = parseInt(prompt("New total_available_places (can only increase):"), 10);
+        if (!places) return;
+        try {
+          await crowdApiPost(`/admin/api/crowd/study/${encodeURIComponent(studyId)}/places`,
+                             { total_available_places: places });
+          loadCrowdStudyPanel();
+        } catch (error) {
+          showError(`Increasing places failed: ${error.message}`);
+        }
+      }
+
+      async function crowdAutoScale() {
+        const studyId = document.getElementById("crowdStudyPanel").dataset.studyId;
+        try {
+          const result = await crowdApiPost(
+            `/admin/api/crowd/study/${encodeURIComponent(studyId)}/auto_scale`, {});
+          alert(`Auto-scaled to ${result.target_places} places ` +
+                `(${result.remaining_annotation_slots} annotation slots remaining).`);
+          loadCrowdStudyPanel();
+        } catch (error) {
+          showError(`Auto-scale failed: ${error.message}`);
+        }
+      }
+
+      async function crowdApprove(submissionId) {
+        try {
+          await crowdApiPost(`/admin/api/crowd/submissions/${encodeURIComponent(submissionId)}/approve`);
+          loadCrowdStudyPanel();
+        } catch (error) {
+          showError(`Approve failed: ${error.message}`);
+        }
+      }
+
+      async function crowdReject(submissionId) {
+        const message = prompt(
+          "Rejection message (Prolific requires at least 100 characters):");
+        if (!message) return;
+        try {
+          await crowdApiPost(`/admin/api/crowd/submissions/${encodeURIComponent(submissionId)}/reject`,
+                             { message: message, rejection_category: "OTHER" });
+          loadCrowdStudyPanel();
+        } catch (error) {
+          showError(`Reject failed: ${error.message}`);
+        }
+      }
+
+      async function crowdBulkApprove(submissionIds) {
+        const studyId = document.getElementById("crowdStudyPanel").dataset.studyId;
+        try {
+          await crowdApiPost(`/admin/api/crowd/study/${encodeURIComponent(studyId)}/bulk_approve`,
+                             { submission_ids: submissionIds });
+          loadCrowdStudyPanel();
+        } catch (error) {
+          showError(`Bulk approve failed: ${error.message}`);
         }
       }
 

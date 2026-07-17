@@ -235,10 +235,13 @@ KNOWN_CONFIG_KEYS = {
     "default_video_fps": None,
 
     # === External integrations ===
+    # Crowd-provider selection + per-provider sub-blocks (validated by the
+    # provider registry in potato/crowdsourcing/registry.py at init time).
+    "crowdsourcing": None,
     "mturk": None,
     "prolific": {
         "config_file_path", "token", "study_id",
-        "max_concurrent_sessions", "workload_checker_period",
+        "max_concurrent_sessions", "workload_checker", "workload_checker_period",
         "completion_code", "sandbox_mode",
     },
     "webhooks": {"enabled", "endpoints"},
@@ -4391,6 +4394,14 @@ def init_config(args):
                 config_data['task_dir'] = temp_config_data['task_dir']
         else:
             config_data = load_and_validate_config(config_file, project_dir)
+
+        # config is updated in place and survives re-initialization (tests run
+        # several projects in one process). Project-scoped integration blocks
+        # must not leak from a previous project: a stale `crowdsourcing` block
+        # would select the wrong crowd provider for this one.
+        for project_scoped_key in ('crowdsourcing', 'prolific', 'mturk'):
+            if project_scoped_key not in config_data:
+                config.pop(project_scoped_key, None)
 
         config.update(config_data)
 

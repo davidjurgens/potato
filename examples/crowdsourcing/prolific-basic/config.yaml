@@ -1,0 +1,96 @@
+# Prolific Example Configuration
+#
+# Deploy a Potato task on Prolific using URL-direct login and a completion code.
+# See docs/deployment/prolific_integration.md for the full guide.
+#
+# On Prolific, set the external study URL to:
+#   https://your-server.com/?PROLIFIC_PID={{%PROLIFIC_PID%}}&STUDY_ID={{%STUDY_ID%}}&SESSION_ID={{%SESSION_ID%}}
+# and select "I'll use URL parameters" for recording Prolific IDs.
+#
+# To test locally, run from the repo root:
+#   python potato/flask_server.py start examples/crowdsourcing/prolific-basic/config.yaml -p 8000
+#
+# Then simulate a participant arrival:
+#   http://localhost:8000/?PROLIFIC_PID=TEST123&STUDY_ID=study1&SESSION_ID=session1
+
+port: 9002
+
+# Task identification
+annotation_task_name: Prolific Annotation Task
+task_description: "Classify the sentiment of short text snippets. This task takes about 5 minutes to complete."
+
+# Prolific login settings - participants are logged in from the PROLIFIC_PID URL parameter
+login:
+  type: url_direct
+  url_argument: PROLIFIC_PID
+
+# Completion code: must match a completion code configured on your Prolific study.
+# The done page shows this code with a "Return to Prolific" button linking to
+# https://app.prolific.com/submissions/complete?cc=<code>
+completion_code: "C1ABCDEF"
+
+# Automatically redirect participants back to Prolific after 5 seconds (optional)
+auto_redirect_on_completion: true
+auto_redirect_delay: 5000
+
+# Hide navigation to keep participants on task
+hide_navbar: true
+jumping_to_id_disabled: true
+
+# Crowdsourcing assignment settings
+assignment_strategy: random
+max_annotations_per_user: 5
+num_annotators_per_item: 3
+
+# Task directories
+task_dir: .
+output_annotation_dir: annotation_output/prolific-basic/
+output_annotation_format: json
+
+# Data files
+data_files:
+  - data/prolific-example.json
+
+# Item properties
+item_properties:
+  id_key: id
+  text_key: text
+
+# User configuration (all users allowed for URL-direct login)
+user_config:
+  allow_all_users: true
+  users: []
+
+# Annotation scheme - simple sentiment classification
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the sentiment expressed in this text?"
+    labels:
+      - name: positive
+        tooltip: "The text expresses positive feelings or opinions"
+      - name: neutral
+        tooltip: "The text is neutral or factual without clear sentiment"
+      - name: negative
+        tooltip: "The text expresses negative feelings or opinions"
+    sequential_key_binding: true
+
+# Use default templates
+site_dir: default
+
+# Optional: Prolific API integration for submission monitoring, assignment
+# reclaim, and automatic workload management. Uncomment and create the config
+# file (keep the token out of version control):
+#
+# login:
+#   type: prolific          # instead of url_direct
+#   url_argument: PROLIFIC_PID
+# prolific:
+#   config_file_path: configs/prolific_config.yaml
+#
+# configs/prolific_config.yaml should contain:
+#   token: "your-prolific-api-token"
+#   study_id: "your-study-id"
+#   workload_checker: true          # opt-in auto pause/resume
+#   max_concurrent_sessions: 30
+#   workload_checker_period: 300

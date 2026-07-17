@@ -1,0 +1,68 @@
+# Microworkers Example Configuration
+#
+# External campaign with VCODE completion verification. Potato generates a
+# deterministic per-worker VCODE (HMAC over worker + campaign IDs); workers
+# paste it into the Microworkers task window, and you can re-verify submitted
+# codes offline against the same secret.
+#
+# Campaign URL template on Microworkers:
+#   https://your-server.com/?mw_id={{MW_ID}}&campaign_id={{CAMP_ID}}&slot_id={{SLOT_ID}}
+#
+# Quality on volume crowds is MTurk-like: pair with attention checks and
+# gold standards (see docs/workflow/quality_control.md).
+#
+# To test locally, run from the repo root:
+#   python potato/flask_server.py start examples/crowdsourcing/microworkers-example/config.yaml -p 8000
+#
+# Then simulate a worker arrival:
+#   http://localhost:8000/?mw_id=WORKER1&campaign_id=CAMP1&slot_id=SLOT1
+
+port: 9007
+
+annotation_task_name: Microworkers Annotation Task
+task_description: "Classify the sentiment of short text snippets."
+
+login:
+  type: url_direct
+  url_argument: mw_id
+
+crowdsourcing:
+  provider: microworkers
+  microworkers:
+    vcode_secret: "replace-with-a-private-secret"
+    vcode_prefix: "mw-"
+    vcode_length: 12
+
+hide_navbar: true
+jumping_to_id_disabled: true
+
+assignment_strategy: random
+max_annotations_per_user: 5
+num_annotators_per_item: 3
+
+task_dir: .
+output_annotation_dir: annotation_output/microworkers-example/
+output_annotation_format: json
+
+data_files:
+  - data/example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the sentiment expressed in this text?"
+    labels:
+      - name: positive
+      - name: neutral
+      - name: negative
+    sequential_key_binding: true
+
+site_dir: default

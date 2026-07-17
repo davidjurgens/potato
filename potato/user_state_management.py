@@ -1444,6 +1444,9 @@ class UserState:
         # Save keyword highlight state for randomization consistency
         d['instance_id_to_keyword_highlight_state'] = self.instance_id_to_keyword_highlight_state
 
+        # Save crowdsourcing platform metadata (provider, study/session IDs)
+        d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
+
         return d
 
     def save(self, user_dir: str) -> None:
@@ -1574,6 +1577,9 @@ class UserState:
                     event_id: EventAnnotation.from_dict(event_data)
                     for event_id, event_data in events_dict.items()
                 }
+
+        # Restore crowdsourcing platform metadata if present
+        user_state.crowd_metadata = j.get('crowd_metadata', {}) or {}
 
         return user_state
 
@@ -1852,6 +1858,11 @@ class InMemoryUserState(UserState):
 
         # How many items a user can be assigned
         self.max_assignments = max_assignments
+
+        # Crowdsourcing platform metadata captured at arrival (provider name,
+        # study/session IDs) so annotation output can be joined with the
+        # platform's submission records.
+        self.crowd_metadata = {}
 
         # Caches the ai hints
         self.ai_hints = defaultdict(dict)
@@ -2825,6 +2836,9 @@ class InMemoryUserState(UserState):
                 event_id: event.to_dict() for event_id, event in events.items()
             }
 
+        # Save crowdsourcing platform metadata (provider, study/session IDs)
+        d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
+
         return d
 
     def save(self, user_dir: str) -> None:
@@ -2958,6 +2972,9 @@ class InMemoryUserState(UserState):
                     event_id: EventAnnotation.from_dict(event_data)
                     for event_id, event_data in events_dict.items()
                 }
+
+        # Restore crowdsourcing platform metadata if present
+        user_state.crowd_metadata = j.get('crowd_metadata', {}) or {}
 
         try:
             user_state.prune_missing_assigned_instances()
