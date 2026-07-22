@@ -45,6 +45,11 @@
              class="shadcn-button shadcn-button-outline"
              title="Semantic search & dynamic slices over items">Catalog</a>
           {% endif %}
+          {% if publish_enabled %}
+          <a href="{{ url_for('publish.publish_page') }}"
+             class="shadcn-button shadcn-button-outline"
+             title="Package & publish this dataset to HuggingFace, Zenodo, or a downloadable archive">Publish Dataset</a>
+          {% endif %}
           {% if arena_enabled %}
           <a href="{{ url_for('arena.arena_page') }}"
              class="shadcn-button shadcn-button-outline"

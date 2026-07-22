@@ -3568,6 +3568,20 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
             flask_app.register_blueprint(curation_bp)
         logger.info("Registered semantic-curation (catalog) blueprint")
 
+    # Dataset publishing (HuggingFace / Zenodo / local archive). Always on for
+    # admins — packaging a dataset needs no per-project config, and the manager
+    # only does work when the wizard is used.
+    try:
+        from potato.publish.manager import get_publish_manager, init_publish_manager
+        from potato.publish.routes import publish_bp
+        if get_publish_manager() is None:
+            init_publish_manager(config)
+        if "publish" not in flask_app.blueprints:
+            flask_app.register_blueprint(publish_bp)
+        logger.info("Registered dataset-publishing blueprint")
+    except Exception as e:
+        logger.warning("Could not register dataset-publishing blueprint: %s", e)
+
     # Multi-model arena: fan a prompt out to N providers side by side.
     if config.get("arena", {}).get("enabled", False):
         from potato.arena import init_arena_manager, get_arena_manager

@@ -14,18 +14,7 @@ import sys
 from potato.paper.collect import collect_project
 from potato.paper.latex import render_report
 from potato.paper.metrics import compute_metrics
-
-
-def anonymize(project):
-    """Replace annotator names with A1..An (stable by sorted order)."""
-    mapping = {name: f"A{i + 1}"
-               for i, name in enumerate(sorted(set(project.annotators)))}
-    for record in project.records:
-        record.annotator = mapping[record.annotator]
-    project.annotators = sorted(mapping.values())
-    project.timings = {mapping[k]: v for k, v in project.timings.items()
-                       if k in mapping}
-    return project
+from potato.paper.report import anonymize
 
 
 def main(argv=None):

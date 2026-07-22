@@ -61,6 +61,12 @@ KNOWN_CONFIG_KEYS = {
     "task_description": None,
     "annotation_task_description": None,
 
+    # === Dataset publishing (HuggingFace / Zenodo / archive) ===
+    # Descriptive metadata for the auto-generated dataset card / Zenodo deposit,
+    # and feature/runtime options. Both optional; publishing works with neither.
+    "dataset_metadata": None,
+    "publish": None,
+
     # === Data sources ===
     "data_directory": None,
     "data_directory_encoding": None,

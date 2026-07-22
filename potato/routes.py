@@ -5515,6 +5515,8 @@ def admin():
         "automation_enabled": config.get("automation", {}).get("enabled", False),
         "curation_enabled": config.get("curation", {}).get("enabled", False),
         "arena_enabled": config.get("arena", {}).get("enabled", False),
+        # Publishing is always available to admins (no per-project config needed).
+        "publish_enabled": True,
     }
 
     return render_template("admin.html", **context)
@@ -7467,6 +7469,20 @@ def configure_routes(flask_app, app_config):
         app.secret_key = secrets.token_hex(32)
 
     app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 7))
+
+    # Dataset publishing blueprint. Registered here (not only in configure_app) so
+    # it exists on both the live server and the in-process test harness, which build
+    # the app through configure_routes but not configure_app.
+    try:
+        from potato.publish.manager import (get_publish_manager,
+                                             init_publish_manager)
+        from potato.publish.routes import publish_bp
+        if get_publish_manager() is None:
+            init_publish_manager(config)
+        if "publish" not in app.blueprints:
+            app.register_blueprint(publish_bp)
+    except Exception as e:
+        logger.warning("Could not register dataset-publishing blueprint: %s", e)
 
     # Register all routes with the flask app instance
     app.add_url_rule("/media/<path:filepath>", "serve_media", serve_media)

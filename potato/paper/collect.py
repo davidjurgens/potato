@@ -65,6 +65,17 @@ def _truthy(value: Any) -> bool:
     return bool(value)
 
 
+def _is_bool_flag(value: Any) -> bool:
+    """True when the stored value is a boolean selection flag, not a label.
+
+    Radio/likert/select checkboxes persist as name=<label>, value="true"; a
+    likert *scale value* like "3" is not a flag and is used as the label itself.
+    """
+    if isinstance(value, bool):
+        return True
+    return isinstance(value, str) and value.strip().lower() in ("true", "false")
+
+
 def _extract_records(username: str, state: Dict[str, Any],
                      scheme_types: Dict[str, str]) -> List[LabelRecord]:
     records = []
@@ -87,8 +98,20 @@ def _extract_records(username: str, state: Dict[str, Any],
             else:
                 if value is None or value == "":
                     continue
+                # Single-choice schemes (radio/likert/select) collected through
+                # the UI store the *selected option in `name`* with value "true"
+                # (a boolean flag). Older/synthetic data stores the label as the
+                # value directly. Use the option name when the value is just a
+                # flag, so real UI data yields the chosen label rather than
+                # collapsing every annotation to "true".
+                if _is_bool_flag(value):
+                    if not _truthy(value):
+                        continue
+                    label = str(name) if name not in (None, "") else str(value)
+                else:
+                    label = str(value)
                 records.append(LabelRecord(username, str(instance_id),
-                                           schema, str(value)))
+                                           schema, label))
     return records
 
 

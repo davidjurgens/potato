@@ -110,6 +110,10 @@ setup(
         "viz": _VIZ_DEPS,
         "export": _EXPORT_DEPS,
         "huggingface": _HF_DEPS,
+        # Dataset publishing: HuggingFace push + parquet output. Zenodo and the
+        # local archive need only `requests` (a core dependency), so no extra
+        # deps beyond these.
+        "publish": _HF_DEPS + _EXPORT_DEPS,
         "auth": _AUTH_DEPS,
         "langchain": _LANGCHAIN_DEPS,
         "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS,

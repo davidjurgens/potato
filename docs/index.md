@@ -174,6 +174,7 @@ Role-based guides that walk you through Potato for your specific use case:
 
 - [Data Format](configuration/data_format.md) - Input and output data formats
 - [Export Formats](data-export/export_formats.md) - Export to COCO, YOLO, CoNLL, and more
+- [Publishing Datasets](data-export/publishing_datasets.md) - One-click publish to HuggingFace, Zenodo (DOI), or a documented archive with an auto-generated dataset card
 - [HuggingFace Hub Export](data-export/huggingface_export.md) - Push annotations to HuggingFace Hub
 - [HuggingFace Datasets Integration](data-export/datasets_integration.md) - Load annotations as DatasetDict or DataFrame
 - [Remote Data Sources](configuration/remote_data_sources.md) - Load data from S3, Google Drive, Dropbox, URLs, and databases

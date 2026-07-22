@@ -103,6 +103,51 @@ class TestCollect:
         project = collect_project(config_path)
         assert project.records == []
 
+    def test_radio_ui_format_uses_selected_label_not_flag(self):
+        """Real UI data stores radio as name=<label>, value="true".
+
+        The selected label must come from `name`; using the "true" flag as the
+        value would collapse every radio annotation to a single value, wiping out
+        the distribution and any agreement signal (the schema type most projects
+        use). See potato/paper/collect.py::_is_bool_flag.
+        """
+        import json
+        import yaml
+        test_dir = create_test_directory("paper_collect_radio_ui")
+        os.makedirs(os.path.join(test_dir, "data"), exist_ok=True)
+        with open(os.path.join(test_dir, "data", "items.json"), "w") as f:
+            for k in range(3):
+                f.write(json.dumps({"id": f"i{k}", "text": f"t{k}"}) + "\n")
+        config = {
+            "annotation_task_name": "Radio UI",
+            "output_annotation_dir": "out/",
+            "data_files": ["data/items.json"],
+            "annotation_schemes": [
+                {"annotation_type": "radio", "name": "sentiment",
+                 "description": "d", "labels": ["Pos", "Neg"]}],
+        }
+        config_path = os.path.join(test_dir, "config.yaml")
+        with open(config_path, "w") as f:
+            yaml.dump(config, f)
+        # Store exactly how the live server persists radio selections.
+        for user, picks in {"u1": {"i0": "Pos", "i1": "Neg"},
+                            "u2": {"i0": "Pos", "i1": "Pos"}}.items():
+            user_dir = os.path.join(test_dir, "out", user)
+            os.makedirs(user_dir, exist_ok=True)
+            state = {"user_id": user, "instance_id_to_label_to_value": {
+                iid: [[{"schema": "sentiment", "name": label}, "true"]]
+                for iid, label in picks.items()}}
+            with open(os.path.join(user_dir, "user_state.json"), "w") as f:
+                json.dump(state, f)
+
+        metrics = compute_metrics(collect_project(config_path))
+        scheme = metrics["schemes"][0]
+        # Distribution is over the chosen labels, not the "true" flag.
+        assert scheme["distribution"] == {"Pos": 3, "Neg": 1}
+        assert "true" not in scheme["distribution"]
+        # Agreement is computable because there are two distinct label values.
+        assert scheme["alpha"] is not None
+
 
 class TestMetrics:
     def test_full_metrics(self):
