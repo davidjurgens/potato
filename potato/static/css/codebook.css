@@ -368,6 +368,105 @@
     border-color: var(--cb-accent-press);
 }
 
+/* Rich-field detail editor — inline per-code panel (definition /
+   clarification / examples / exclusion rules), same token system. */
+.cb-node-row {
+    flex-wrap: wrap;
+}
+
+.cb-detail-toggle {
+    margin-left: auto;
+    flex: 0 0 auto;
+    border: 1px solid var(--cb-line);
+    background: var(--cb-surface);
+    color: var(--cb-ink-soft);
+    font-size: 0.72rem;
+    font-weight: 600;
+    min-height: 26px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+.cb-detail-toggle:hover {
+    background: var(--cb-surface-2);
+    color: var(--cb-ink);
+}
+
+.cb-detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-2);
+    margin: 0 0 var(--cb-space-3)
+        calc(var(--cb-space-2)
+             + min(var(--cb-depth, 0), 6) * var(--cb-space-4));
+    padding: var(--cb-space-3);
+    background: var(--cb-surface-2);
+    border: 1px solid var(--cb-line);
+    border-radius: var(--cb-radius);
+}
+
+.cb-detail-textarea {
+    width: 100%;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.cb-ex-group, .cb-rule-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-1);
+}
+
+.cb-ex-row {
+    display: flex;
+    gap: var(--cb-space-1);
+}
+
+.cb-ex-row .cb-ex-text { flex: 1; }
+.cb-ex-row .cb-ex-why { flex: 1; }
+
+.cb-rule-row {
+    display: flex;
+    gap: var(--cb-space-1);
+}
+
+.cb-rule-row .cb-rule-text { flex: 1; }
+
+.cb-ex-remove, .cb-rule-remove {
+    min-height: 30px;
+    padding: 4px 10px;
+    font-size: 0.76rem;
+}
+
+.cb-ex-add, .cb-rule-add {
+    align-self: flex-start;
+    min-height: 28px;
+    padding: 4px 10px;
+    font-size: 0.74rem;
+}
+
+.cb-detail-actions {
+    display: flex;
+    gap: var(--cb-space-2);
+    margin-top: var(--cb-space-1);
+}
+
+.cb-detail-status {
+    font-size: 0.78rem;
+    font-style: italic;
+    color: var(--cb-ink-soft);
+    min-height: 1.1em;
+}
+
+.cb-detail-history {
+    border-top: 1px solid var(--cb-line);
+    padding-top: var(--cb-space-2);
+    max-height: 30vh;
+    overflow-y: auto;
+}
+
 /* In-vivo composer — a small popover anchored to the text selection.
    Same token system as the tray so the two never drift. */
 .cb-invivo {

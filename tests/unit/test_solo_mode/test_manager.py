@@ -1685,3 +1685,73 @@ class TestSoloModeManagerRefinementLoop:
         result = mgr.trigger_refinement_cycle()
         assert result['success'] is True
         assert 'No confusion patterns' in result.get('message', '')
+
+
+class TestGetPromptFeedback:
+    """manager.get_prompt_feedback: wiring for the "Get Feedback" button —
+    purely advisory, resolves an endpoint and delegates to
+    prompt_feedback.get_prompt_feedback."""
+
+    def test_no_prompt_available(self):
+        mgr = _make_manager()
+        mgr._llm_labeling_thread = MagicMock()
+        result = mgr.get_prompt_feedback()
+        assert result['feedback'] == []
+        assert 'reason' in result
+
+    def test_no_endpoint_configured(self):
+        mgr = _make_manager()
+        mgr.create_prompt_version("Label this text.", created_by='test')
+        thread = MagicMock()
+        thread._get_summary_endpoint.return_value = None
+        mgr._llm_labeling_thread = thread
+        result = mgr.get_prompt_feedback()
+        assert result['feedback'] == []
+        assert result['reason'] == 'no revision/labeling model configured'
+
+    def test_delegates_to_prompt_feedback_module(self):
+        mgr = _make_manager()
+        mgr.create_prompt_version("Label this text.", created_by='test')
+        thread = MagicMock()
+        thread._get_summary_endpoint.return_value = MagicMock()
+        mgr._llm_labeling_thread = thread
+
+        with patch(
+            'potato.solo_mode.prompt_feedback.get_prompt_feedback',
+            return_value=[{'issue': 'x', 'suggestion': 'y',
+                           'severity': 'low'}],
+        ) as mock_feedback:
+            result = mgr.get_prompt_feedback()
+
+        assert result['feedback'] == [
+            {'issue': 'x', 'suggestion': 'y', 'severity': 'low'}]
+        assert mock_feedback.call_args[0][0] == "Label this text."
+
+
+class TestSuggestCodebookEditsFromNotes:
+    """manager.suggest_codebook_edits_from_notes: wiring for the tray's
+    "Suggest edits from notes" button."""
+
+    def test_no_endpoint_configured(self):
+        mgr = _make_manager()
+        thread = MagicMock()
+        thread._get_summary_endpoint.return_value = None
+        mgr._llm_labeling_thread = thread
+        result = mgr.suggest_codebook_edits_from_notes()
+        assert result['proposals'] == []
+        assert result['reason'] == 'no revision/labeling model configured'
+
+    def test_delegates_to_notes_feedback_module(self):
+        mgr = _make_manager()
+        thread = MagicMock()
+        thread._get_summary_endpoint.return_value = MagicMock()
+        mgr._llm_labeling_thread = thread
+
+        with patch(
+            'potato.solo_mode.notes_feedback.suggest_from_notes',
+            return_value=[{'id': 'p1'}],
+        ) as mock_suggest:
+            result = mgr.suggest_codebook_edits_from_notes()
+
+        assert result['proposals'] == [{'id': 'p1'}]
+        assert mock_suggest.called

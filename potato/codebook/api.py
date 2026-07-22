@@ -413,6 +413,35 @@ def admin_run_review():
     return jsonify(summary), code
 
 
+@codebook_bp.route("/admin/suggest-from-notes", methods=["POST"])
+def admin_suggest_from_notes():
+    """On-demand: analyze accumulated human rationale notes (left during
+    validation / disagreement resolution) and stage any resulting
+    codebook-edit proposals for human review. Nothing changes until an
+    admin confirms — same propose/confirm flow as any other model edit.
+    Admin/adjudicator only (mirrors admin_run_review)."""
+    td, project, _user, err = _admin_ctx()
+    if err:
+        return err
+    try:
+        from potato.solo_mode import get_solo_mode_manager
+        manager = get_solo_mode_manager()
+    except Exception:
+        manager = None
+    if manager is None:
+        return jsonify({
+            "error": "Suggesting edits from notes requires a labeling "
+                     "model. Enable solo mode to use this action.",
+        }), 503
+    data = request.get_json(silent=True) or {}
+    since = data.get("since") or 0.0
+    result = manager.suggest_codebook_edits_from_notes(since=since)
+    code = 200
+    if result.get("reason") and not result.get("proposals"):
+        code = 503
+    return jsonify(result), code
+
+
 @codebook_bp.route("/proposals", methods=["POST"])
 @codebook_view
 def submit_proposal(ctx):
@@ -425,7 +454,7 @@ def submit_proposal(ctx):
     payload = data.get("payload") or {}
     actor_kind = (data.get("actor_kind") or "model").strip()
     if op not in ("merge", "split", "rename", "recolor", "move",
-                  "delete"):
+                  "delete", "update_fields"):
         return jsonify({"error": f"unsupported op {op!r}"}), 400
     if actor_kind != "model" and not _can_mutate(ctx, need_open=True):
         return jsonify({
@@ -480,6 +509,11 @@ def _apply_proposed(td, project, op, payload, actor):
         return delete_code(
             td, payload["code_id"], project=project,
             actor=actor, actor_kind="model")
+    if op == "update_fields":
+        return update_code_fields(
+            td, payload["code_id"],
+            details=_rich_details(payload),
+            project=project, actor=actor, actor_kind="model")
     raise CodebookError(f"unsupported op {op!r}")
 
 

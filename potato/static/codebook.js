@@ -48,25 +48,37 @@
                 revision: data.revision, labels: data.labels,
                 tree: data.tree, schemes: data.schemes,
                 mode: data.mode, can_add: data.can_add,
+                can_edit: data.can_edit,
             }));
         } catch (e) { /* sessionStorage full/disabled — fall back to net */ }
     }
 
     // ---- tray rendering --------------------------------------------------
 
-    function renderTree(nodes) {
+    function renderTree(nodes, canEdit) {
         if (!nodes || !nodes.length) return "";
         return nodes.map(function (n) {
             var dot = n.color
                 ? '<span class="cb-dot" style="background:'
                   + esc(n.color) + '"></span>'
                 : "";
-            return '<li class="cb-node">'
+            var editBtn = canEdit
+                ? '<button type="button" class="cb-detail-toggle" '
+                  + 'data-id="' + esc(n.id) + '" '
+                  + 'aria-label="Edit ' + esc(n.name) + '" '
+                  + 'aria-expanded="false">Edit</button>'
+                : "";
+            return '<li class="cb-node" data-id="' + esc(n.id) + '">'
                 + '<div class="cb-node-row">' + dot
-                + '<span class="cb-name">' + esc(n.name) + "</span></div>"
+                + '<span class="cb-name">' + esc(n.name) + "</span>"
+                + editBtn + "</div>"
+                + (canEdit
+                    ? '<div class="cb-detail" id="cb-detail-'
+                      + esc(n.id) + '" hidden></div>'
+                    : "")
                 + (n.children && n.children.length
                     ? '<ul class="cb-children">'
-                      + renderTree(n.children) + "</ul>"
+                      + renderTree(n.children, canEdit) + "</ul>"
                     : "")
                 + "</li>";
         }).join("");
@@ -81,8 +93,10 @@
         var box = el("cb-tree");
         if (box) {
             var tree = (data && data.tree) || [];
+            var canEdit = !!(data && data.can_edit);
             box.innerHTML = tree.length
-                ? '<ul class="cb-root">' + renderTree(tree) + "</ul>"
+                ? '<ul class="cb-root">' + renderTree(tree, canEdit)
+                  + "</ul>"
                 : '<div class="cb-empty">No codes yet.</div>';
         }
         var composer = el("cb-composer");
@@ -318,9 +332,11 @@
             var sub = added.length
                 ? esc(added.join(", "))
                 : "codebook changed";
-            var btn = it.index == null ? ""
-                : '<button type="button" class="cb-go" data-idx="'
-                  + it.index + '">Go</button>';
+            var btn = (it.index == null && !it.instance_id) ? ""
+                : '<button type="button" class="cb-go"'
+                  + (it.index == null ? ""
+                      : ' data-idx="' + it.index + '"')
+                  + ' data-iid="' + esc(it.instance_id) + '">Go</button>';
             return '<li class="cb-wl-item">'
                 + '<div class="cb-wl-id">' + esc(it.instance_id)
                 + "</div>"
@@ -333,6 +349,15 @@
                 if (!isNaN(idx)
                         && typeof navigateToInstance === "function") {
                     navigateToInstance(idx);
+                    return;
+                }
+                // Solo mode has no AJAX navigateToInstance — fall back to
+                // a full-page jump by instance id.
+                var iid = b.getAttribute("data-iid");
+                var base = window.config && window.config.solo_annotate_url;
+                if (iid && base) {
+                    window.location.href = base + "?instance_id="
+                        + encodeURIComponent(iid);
                 }
             });
         });
@@ -479,6 +504,13 @@
             return "Move " + q(codeName(pay.code_id));
         case "delete":
             return "Delete " + q(codeName(pay.code_id));
+        case "update_fields":
+            var fields = Object.keys(pay).filter(function (k) {
+                return k !== "code_id" && k !== "rationale";
+            });
+            return "Update " + q(codeName(pay.code_id)) + " ("
+                + esc(fields.join(", ")) + ")"
+                + (pay.rationale ? " — " + esc(pay.rationale) : "");
         default:
             return esc(p.op);
         }
@@ -678,6 +710,306 @@
                 el("cb-split-annotator").value = "";
                 afterAdminOp();
             });
+        });
+        var notesBtn = el("cb-notes-suggest-btn");
+        if (notesBtn) notesBtn.addEventListener("click", function () {
+            postAdmin("/suggest-from-notes", {}, function (body) {
+                var n = (body && body.proposals && body.proposals.length)
+                    || 0;
+                afterAdminOp(n
+                    ? n + " new proposal" + (n > 1 ? "s" : "")
+                      + " from notes."
+                    : "No new proposals from recent notes.");
+            });
+        });
+    }
+
+    // ---- rich-field detail editor (definition/clarification/examples) ---
+    // Backend already supports this (PATCH /api/codebook/<id> with any of
+    // RICH_FIELDS); this section is the missing frontend for it. One
+    // inline panel per code, built on demand from GET /api/codebook/<id>.
+
+    var RICH_TEXT_FIELDS = [
+        { key: "definition", label: "Definition" },
+        { key: "clarification", label: "Include" },
+        { key: "negative_clarification", label: "Exclude" },
+    ];
+
+    function escAttr(s) {
+        return esc(s).replace(/"/g, "&quot;");
+    }
+
+    function exampleRowHtml(kind, idx, ex) {
+        ex = ex || {};
+        return '<div class="cb-ex-row" data-idx="' + idx + '">'
+            + '<input type="text" class="cb-admin-input cb-ex-text" '
+            + 'data-kind="' + kind + '" placeholder="Example text" '
+            + 'value="' + escAttr(ex.text) + '" />'
+            + '<input type="text" class="cb-admin-input cb-ex-why" '
+            + 'data-kind="' + kind + '" placeholder="Why (optional)" '
+            + 'value="' + escAttr(ex.why) + '" />'
+            + '<button type="button" class="cb-iv-cancel cb-ex-remove" '
+            + '>Remove</button>'
+            + "</div>";
+    }
+
+    function renderExampleList(kind, label, items) {
+        items = items && items.length ? items : [{}];
+        return '<div class="cb-ex-group" data-kind="' + kind + '">'
+            + '<div class="cb-admin-label">' + esc(label) + "</div>"
+            + '<div class="cb-ex-rows">'
+            + items.map(function (ex, i) {
+                return exampleRowHtml(kind, i, ex);
+            }).join("")
+            + "</div>"
+            + '<button type="button" class="cb-go cb-ex-add" '
+            + 'data-kind="' + kind + '">+ Add example</button>'
+            + "</div>";
+    }
+
+    function ruleRowHtml(idx, rule) {
+        return '<div class="cb-rule-row" data-idx="' + idx + '">'
+            + '<input type="text" class="cb-admin-input cb-rule-text" '
+            + 'placeholder="Do NOT apply when…" '
+            + 'value="' + escAttr(rule) + '" />'
+            + '<button type="button" class="cb-iv-cancel cb-rule-remove"'
+            + '>Remove</button>'
+            + "</div>";
+    }
+
+    function renderRuleList(items) {
+        items = items && items.length ? items : [""];
+        return '<div class="cb-rule-group">'
+            + '<div class="cb-admin-label">Exclusion rules</div>'
+            + '<div class="cb-rule-rows">'
+            + items.map(function (r, i) {
+                return ruleRowHtml(i, r);
+            }).join("")
+            + "</div>"
+            + '<button type="button" class="cb-go cb-rule-add"'
+            + '>+ Add rule</button>'
+            + "</div>";
+    }
+
+    function renderDetailForm(container, code) {
+        var html = "";
+        RICH_TEXT_FIELDS.forEach(function (f) {
+            html += '<label class="cb-admin-label" for="cb-fld-'
+                + esc(code.id) + "-" + f.key + '">' + f.label + "</label>"
+                + '<textarea class="cb-admin-input cb-detail-textarea" '
+                + 'id="cb-fld-' + esc(code.id) + "-" + f.key + '" '
+                + 'data-field="' + f.key + '" rows="2">'
+                + esc(code[f.key] || "") + "</textarea>";
+        });
+        html += renderExampleList(
+            "positive_examples", "Positive examples",
+            code.positive_examples || []);
+        html += renderExampleList(
+            "negative_examples",
+            "Negative examples (looks similar, but is NOT)",
+            code.negative_examples || []);
+        html += renderRuleList(code.exclusion_rules || []);
+        html += '<div class="cb-detail-actions">'
+            + '<button type="button" class="cb-primary cb-detail-save">'
+            + "Save</button>"
+            + '<button type="button" class="cb-iv-cancel cb-detail-hist">'
+            + "History</button>"
+            + "</div>"
+            + '<div class="cb-detail-status" aria-live="polite"></div>'
+            + '<div class="cb-detail-history" hidden></div>';
+        container.innerHTML = html;
+    }
+
+    function readDetailForm(container) {
+        var payload = {};
+        RICH_TEXT_FIELDS.forEach(function (f) {
+            var t = container.querySelector(
+                'textarea[data-field="' + f.key + '"]');
+            payload[f.key] = t ? t.value.trim() : "";
+        });
+        ["positive_examples", "negative_examples"].forEach(function (kind) {
+            var group = container.querySelector(
+                '.cb-ex-group[data-kind="' + kind + '"]');
+            var rows = group
+                ? group.querySelectorAll(".cb-ex-row") : [];
+            var out = [];
+            rows.forEach(function (row) {
+                var text = row.querySelector(".cb-ex-text").value.trim();
+                var why = row.querySelector(".cb-ex-why").value.trim();
+                if (text) out.push({ text: text, why: why });
+            });
+            payload[kind] = out;
+        });
+        var rules = [];
+        container.querySelectorAll(".cb-rule-text").forEach(function (i) {
+            var v = i.value.trim();
+            if (v) rules.push(v);
+        });
+        payload.exclusion_rules = rules;
+        return payload;
+    }
+
+    function detailStatus(container, msg) {
+        var s = container.querySelector(".cb-detail-status");
+        if (s) s.textContent = msg || "";
+    }
+
+    function openDetail(id, panel, toggleBtn) {
+        panel.innerHTML = '<div class="cb-empty">Loading…</div>';
+        panel.hidden = false;
+        if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "true");
+        fetch(API + "/" + encodeURIComponent(id))
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                if (!d || !d.code) {
+                    panel.innerHTML =
+                        '<div class="cb-error">Could not load code.'
+                        + "</div>";
+                    return;
+                }
+                renderDetailForm(panel, d.code);
+            })
+            .catch(function () {
+                panel.innerHTML =
+                    '<div class="cb-error">Could not load code.</div>';
+            });
+    }
+
+    function closeDetail(panel, toggleBtn) {
+        panel.hidden = true;
+        panel.innerHTML = "";
+        if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "false");
+    }
+
+    function saveDetail(id, panel) {
+        var btn = panel.querySelector(".cb-detail-save");
+        var payload = readDetailForm(panel);
+        if (btn) btn.disabled = true;
+        detailStatus(panel, "Saving…");
+        fetch(API + "/" + encodeURIComponent(id), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        }).then(function (r) {
+            return r.json().then(function (b) {
+                return { ok: r.ok, body: b };
+            });
+        }).then(function (res) {
+            if (btn) btn.disabled = false;
+            if (!res.ok) {
+                detailStatus(panel, (res.body && res.body.error)
+                    || "Could not save.");
+                return;
+            }
+            detailStatus(panel, "Saved.");
+            if (res.body && res.body.code) {
+                renderDetailForm(panel, res.body.code);
+                detailStatus(panel, "Saved.");
+            }
+            refreshProvenance();
+        }).catch(function () {
+            if (btn) btn.disabled = false;
+            detailStatus(panel, "Could not save.");
+        });
+    }
+
+    function renderHistory(box, rows) {
+        rows = rows || [];
+        if (!rows.length) {
+            box.innerHTML = '<div class="cb-empty">No history yet.</div>';
+            return;
+        }
+        box.innerHTML = '<ul class="cb-changes-list">'
+            + rows.slice().reverse().map(function (c) {
+                var from = c.old_value == null ? "" : esc(c.old_value);
+                var to = c.new_value == null ? "" : (" → "
+                    + esc(c.new_value));
+                return '<li class="cb-chg-item"><span class="cb-chg-op">'
+                    + esc(c.op) + "</span> " + from + to
+                    + ' <span class="cb-chg-by">' + esc(c.actor)
+                    + "</span></li>";
+            }).join("") + "</ul>";
+    }
+
+    function toggleHistory(id, panel) {
+        var box = panel.querySelector(".cb-detail-history");
+        if (!box) return;
+        if (!box.hidden) { box.hidden = true; return; }
+        box.hidden = false;
+        box.innerHTML = '<div class="cb-empty">Loading…</div>';
+        fetch(API + "/" + encodeURIComponent(id) + "/history")
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) { renderHistory(box, d && d.history); })
+            .catch(function () {
+                box.innerHTML =
+                    '<div class="cb-error">Could not load history.'
+                    + "</div>";
+            });
+    }
+
+    function wireDetailEditor() {
+        var tree = el("cb-tree");
+        if (!tree) return;
+        tree.addEventListener("click", function (e) {
+            var t = e.target;
+            var toggle = t.closest(".cb-detail-toggle");
+            if (toggle) {
+                var id = toggle.getAttribute("data-id");
+                var panel = el("cb-detail-" + id);
+                if (!panel) return;
+                if (panel.hidden) openDetail(id, panel, toggle);
+                else closeDetail(panel, toggle);
+                return;
+            }
+            var save = t.closest(".cb-detail-save");
+            if (save) {
+                var li = t.closest(".cb-node");
+                var pnl = li && li.querySelector(".cb-detail");
+                if (li && pnl) saveDetail(li.getAttribute("data-id"), pnl);
+                return;
+            }
+            var hist = t.closest(".cb-detail-hist");
+            if (hist) {
+                var li2 = t.closest(".cb-node");
+                var pnl2 = li2 && li2.querySelector(".cb-detail");
+                if (li2 && pnl2) {
+                    toggleHistory(li2.getAttribute("data-id"), pnl2);
+                }
+                return;
+            }
+            var addEx = t.closest(".cb-ex-add");
+            if (addEx) {
+                var group = addEx.closest(".cb-ex-group");
+                var rows = group && group.querySelector(".cb-ex-rows");
+                if (rows) {
+                    var idx = rows.children.length;
+                    rows.insertAdjacentHTML("beforeend",
+                        exampleRowHtml(addEx.getAttribute("data-kind"),
+                            idx, {}));
+                }
+                return;
+            }
+            var rmEx = t.closest(".cb-ex-remove");
+            if (rmEx) {
+                var row = rmEx.closest(".cb-ex-row");
+                if (row) row.remove();
+                return;
+            }
+            var addRule = t.closest(".cb-rule-add");
+            if (addRule) {
+                var rrows = addRule.parentElement.querySelector(
+                    ".cb-rule-rows");
+                if (rrows) {
+                    rrows.insertAdjacentHTML(
+                        "beforeend", ruleRowHtml(rrows.children.length, ""));
+                }
+                return;
+            }
+            var rmRule = t.closest(".cb-rule-remove");
+            if (rmRule) {
+                var rrow = rmRule.closest(".cb-rule-row");
+                if (rrow) rrow.remove();
+            }
         });
     }
 
@@ -1101,6 +1433,7 @@
         // scheme exists (wire() runs only when the codebook is enabled).
         document.addEventListener("keydown", onGlobalKeydown);
         wireAdmin();
+        wireDetailEditor();
 
         var add = el("cb-add-btn");
         if (add) add.addEventListener("click", addCode);

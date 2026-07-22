@@ -174,6 +174,22 @@ class ConfusionAnalysisConfig:
 
 
 @dataclass
+class DistillConfig:
+    """Codebook -> prompt "distill" rendering options.
+
+    Controls how the structured codebook (definition/clarification/
+    examples/exclusion_rules) is rendered into the ``## Codebook`` prompt
+    section (see potato/codebook/prompt.py). These are defaults; the
+    annotate-screen prompt-preview panel can override them for the
+    current session without touching the config file.
+    """
+    show_examples: bool = True         # include worked positive/negative examples
+    max_examples: int = 5              # cap examples rendered per code (each of pos/neg)
+    include_rationale: bool = True     # include the "— why" after each example
+    summarize_above_tokens: int = 400  # summarize a code's prose fields above this length
+
+
+@dataclass
 class RefinementLoopConfig:
     """Configuration for the iterative guideline refinement loop."""
     enabled: bool = True
@@ -309,6 +325,9 @@ class SoloModeConfig:
 
     # Iterative guideline refinement loop
     refinement_loop: RefinementLoopConfig = field(default_factory=RefinementLoopConfig)
+
+    # Codebook -> prompt distill rendering options
+    distill: DistillConfig = field(default_factory=DistillConfig)
 
     # Output directory for Solo Mode state
     state_dir: Optional[str] = None
@@ -548,6 +567,15 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         auto_suggest_guidelines=ca_data.get('auto_suggest_guidelines', False),
     )
 
+    # Parse distill (codebook -> prompt rendering) config
+    d_data = sm.get('distill', {})
+    distill = DistillConfig(
+        show_examples=d_data.get('show_examples', True),
+        max_examples=d_data.get('max_examples', 5),
+        include_rationale=d_data.get('include_rationale', True),
+        summarize_above_tokens=d_data.get('summarize_above_tokens', 400),
+    )
+
     # Determine state directory
     state_dir = sm.get('state_dir')
     if not state_dir:
@@ -570,5 +598,6 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         confidence_routing=confidence_routing,
         confusion_analysis=confusion_analysis,
         refinement_loop=refinement_loop,
+        distill=distill,
         state_dir=state_dir,
     )

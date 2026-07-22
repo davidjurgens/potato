@@ -121,7 +121,7 @@
     <!-- Universal Memos sidebar styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/memos.css') }}?v=2">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}?v=2">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=11">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=12">
 
     <!-- jQuery (required for span annotation) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
@@ -682,6 +682,12 @@
                 <button type="button" id="cb-split-btn"
                         class="cb-primary">Split</button>
             </div>
+            <div class="cb-admin-group">
+                <span class="cb-admin-label">
+                    Suggest edits from annotator notes</span>
+                <button type="button" id="cb-notes-suggest-btn"
+                        class="cb-primary">Suggest edits from notes</button>
+            </div>
             <div id="cb-admin-error" class="cb-error" hidden
                  role="alert" tabindex="-1"></div>
             <div id="cb-admin-status" class="cb-admin-status"
@@ -712,7 +718,7 @@
             <div id="cb-mode-hint" class="cb-mode-hint"></div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='codebook.js') }}?v=11"></script>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=13"></script>
     {% endif %}
 </body>
 </html>

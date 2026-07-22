@@ -154,6 +154,126 @@ class TestPromptRendering:
         assert has_rich_detail(td, "p") is True
 
 
+class TestDistillOptions:
+    """Codebook -> prompt distill Options: show_examples / max_examples /
+    include_rationale, all defaulting to today's always-show behavior."""
+
+    def test_defaults_match_previous_always_show_behavior(self, td):
+        create_code(td, project="p", name="riot", created_by="u",
+                    details=RICH)
+        assert render_codebook_section(td, "p") == \
+            render_codebook_section(td, "p", options={})
+
+    def test_show_examples_false_omits_examples_but_keeps_prose(self, td):
+        from potato.codebook.prompt import RenderOptions
+
+        create_code(td, project="p", name="riot", created_by="u",
+                    details=RICH)
+        out = render_codebook_section(
+            td, "p", options=RenderOptions(show_examples=False))
+        assert "Definition: a violent public disturbance" in out
+        assert "Example" not in out
+
+    def test_include_rationale_false_drops_why_suffix(self, td):
+        from potato.codebook.prompt import RenderOptions
+
+        create_code(td, project="p", name="riot", created_by="u",
+                    details=RICH)
+        out = render_codebook_section(
+            td, "p", options=RenderOptions(include_rationale=False))
+        assert '✓ Example: "protesters smashed shop windows"' in out
+        assert "shows violence" not in out
+
+    def test_max_examples_caps_rendered_count(self, td):
+        from potato.codebook.prompt import RenderOptions
+
+        details = dict(RICH, positive_examples=[
+            {"text": "a", "why": ""}, {"text": "b", "why": ""},
+            {"text": "c", "why": ""},
+        ])
+        create_code(td, project="p", name="riot", created_by="u",
+                    details=details)
+        out = render_codebook_section(
+            td, "p", options=RenderOptions(max_examples=1))
+        assert out.count("✓ Example:") == 1
+
+    def test_dict_and_distill_config_both_accepted(self, td):
+        from potato.solo_mode.config import DistillConfig
+
+        create_code(td, project="p", name="riot", created_by="u",
+                    details=RICH)
+        via_dict = render_codebook_section(
+            td, "p", options={"show_examples": False})
+        via_config = render_codebook_section(
+            td, "p", options=DistillConfig(show_examples=False))
+        assert via_dict == via_config
+        assert "Example" not in via_dict
+
+
+class TestSummarization:
+    def test_summarizes_only_when_over_threshold(self, td):
+        from potato.codebook.prompt import RenderOptions
+
+        long_def = " ".join(["word"] * 50)
+        create_code(td, project="p", name="riot", created_by="u",
+                    details={"definition": long_def})
+
+        calls = []
+
+        def fake_summarize(code_id, field, text):
+            calls.append((code_id, field))
+            return "short summary"
+
+        out = render_codebook_section(
+            td, "p", options=RenderOptions(summarize_above_tokens=5),
+            summarize=fake_summarize)
+        assert "Definition: short summary" in out
+        assert len(calls) == 1
+
+        # Below threshold -> summarizer is never invoked, full text kept.
+        calls.clear()
+        out2 = render_codebook_section(
+            td, "p", options=RenderOptions(summarize_above_tokens=500),
+            summarize=fake_summarize)
+        assert long_def in out2
+        assert calls == []
+
+    def test_summarizer_module_caches_by_content_hash(self, td):
+        from potato.codebook.summarizer import make_summarizer
+        from potato.codebook import summary_cache
+
+        calls = []
+
+        class FakeEndpoint:
+            def query(self, prompt):
+                calls.append(prompt)
+                return {"summary": "compressed"}
+
+        summarize = make_summarizer(td, FakeEndpoint())
+        text = "some long instruction text"
+        first = summarize("c1", "definition", text)
+        second = summarize("c1", "definition", text)
+        assert first == second == "compressed"
+        assert len(calls) == 1  # second call hit the cache
+
+        import hashlib
+        cached = summary_cache.get_cached(
+            td, "c1", "definition",
+            hashlib.sha256(text.encode()).hexdigest())
+        assert cached == "compressed"
+
+    def test_summarizer_falls_back_to_full_text_on_failure(self, td):
+        from potato.codebook.summarizer import make_summarizer
+
+        class BrokenEndpoint:
+            def query(self, prompt):
+                raise RuntimeError("boom")
+
+        summarize = make_summarizer(td, BrokenEndpoint())
+        text = "original text"
+        assert summarize("c1", "definition", text) == text
+
+
 class TestYamlSeeding:
     def test_bridge_seeds_rich_fields_and_renders_onto_scheme(self, td):
         cfg = {
@@ -206,6 +326,70 @@ class TestSoloLabelerInjection:
             prompt_getter=lambda: "label this",
             result_callback=lambda r: None)
         assert thread._codebook_section() == ""
+
+    def test_summary_endpoint_never_touched_when_nothing_is_over_threshold(
+        self, td,
+    ):
+        """Regression: building the summary endpoint used to happen
+        unconditionally on every prompt build (default
+        summarize_above_tokens=400 > 0), which for Ollama does a blocking
+        health-check in the constructor — hanging the synchronous
+        /llm-suggestion request path even though nothing here needed
+        summarizing. It must now stay lazy: no field exceeds the
+        threshold, so the endpoint is never resolved at all."""
+        from potato.solo_mode.llm_labeler import LLMLabelingThread
+
+        create_code(td, project="P", name="riot", created_by="u",
+                    details=RICH)  # RICH's fields are short prose
+        cfg = {"task_dir": td, "annotation_task_name": "P"}
+        thread = LLMLabelingThread(
+            config=cfg, solo_config=None,
+            prompt_getter=lambda: "label this",
+            result_callback=lambda r: None)
+
+        def boom():
+            raise AssertionError(
+                "endpoint should not be resolved when nothing needs "
+                "summarizing")
+        thread._get_summary_endpoint = boom
+
+        section = thread._codebook_section()
+        assert "### riot" in section
+
+    def test_summary_endpoint_failure_is_not_retried_every_call(self, td):
+        """Once every candidate model has failed to construct, later
+        prompt builds in the same thread must not re-attempt the
+        (potentially blocking) connection again."""
+        from potato.solo_mode.config import ModelConfig
+        from potato.solo_mode.llm_labeler import LLMLabelingThread
+
+        long_def = " ".join(["word"] * 500)  # over the 400-token default
+        create_code(td, project="P", name="riot", created_by="u",
+                    details={"definition": long_def})
+        cfg = {"task_dir": td, "annotation_task_name": "P"}
+
+        class FakeSoloConfig:
+            revision_models = [ModelConfig(endpoint_type="ollama",
+                                            model="unreachable")]
+            labeling_models = []
+
+        thread = LLMLabelingThread(
+            config=cfg, solo_config=FakeSoloConfig(),
+            prompt_getter=lambda: "label this",
+            result_callback=lambda r: None)
+
+        calls = []
+
+        def failing_create(model_config):
+            calls.append(model_config)
+            raise RuntimeError("connection refused")
+        thread.create_endpoint_from_model_config = failing_create
+
+        thread._codebook_section()
+        thread._codebook_section()
+        thread._codebook_section()
+
+        assert len(calls) == 1  # tried once, then cached as failed
 
 
 def _make_legacy_code(td, project, name, *, pos=None, pos_why=None,

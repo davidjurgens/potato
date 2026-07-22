@@ -335,10 +335,21 @@ def annotate():
     if not manager.get_current_prompt_text():
         return redirect(url_for('solo_mode.setup'))
 
-    # Reaching the annotate screen means parallel annotation has begun. Coming
-    # straight from edge-case validation leaves the workflow in PROMPT_VALIDATION,
-    # which makes the phase stepper highlight "Prompt" instead of "Annotation".
-    # Move it forward so the stepper reflects where the user actually is.
+    # Reaching the annotate screen means parallel annotation has begun.
+    # Two ways in leave the phase behind PARALLEL_ANNOTATION: coming
+    # straight from edge-case validation (PROMPT_VALIDATION), or using
+    # edge_cases.html's "Start Annotation" skip link when there were no
+    # edge cases to label (leaves the phase at EDGE_CASE_LABELING, since
+    # that phase can't jump directly to PARALLEL_ANNOTATION). Either way,
+    # walk forward through the legitimate transition chain so the phase
+    # stepper reflects where the user actually is instead of getting
+    # stuck showing "Edge Cases"/"Prompt" while the annotate screen is
+    # what's on screen.
+    if manager.get_current_phase() == SoloPhase.EDGE_CASE_LABELING:
+        try:
+            manager.advance_to_phase(SoloPhase.PROMPT_VALIDATION)
+        except ValueError:
+            pass
     if manager.get_current_phase() == SoloPhase.PROMPT_VALIDATION:
         try:
             manager.advance_to_phase(SoloPhase.PARALLEL_ANNOTATION)
@@ -364,8 +375,12 @@ def annotate():
 
         return jsonify({'error': 'Missing instance_id or annotation'}), 400
 
-    # Get next instance ID
-    instance_id = manager.get_next_instance_for_human(user_id)
+    # Get next instance ID — or a specific one requested via ?instance_id=,
+    # which is how the codebook tray's review-worklist "Go" button jumps
+    # to a particular stale instance (solo mode has no AJAX instance
+    # navigation, so that's a full-page link to this same route).
+    requested_id = request.args.get('instance_id')
+    instance_id = requested_id or manager.get_next_instance_for_human(user_id)
 
     # Get available labels (needed for all render paths)
     labels = manager.get_available_labels()
@@ -473,6 +488,45 @@ def prompt_preview():
     return jsonify(preview)
 
 
+@solo_mode_bp.route('/api/distill-options', methods=['GET', 'POST'])
+@login_required
+@solo_mode_required
+def distill_options():
+    """GET the effective codebook->prompt distill options (YAML defaults
+    merged with any live override); POST a partial override for the
+    current session. Backs the Options control next to the "Prompt the
+    LLM sees" panel."""
+    from .distill_options import effective_options, save_override
+
+    manager = get_solo_mode_manager()
+
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        state_dir = manager.config.state_dir
+        if not state_dir:
+            return jsonify({'error': 'Solo mode has no state_dir configured'}), 400
+        merged = save_override(state_dir, data)
+        return jsonify({'options': {**effective_options(manager.config), **merged}})
+
+    return jsonify({'options': effective_options(manager.config)})
+
+
+@solo_mode_bp.route('/api/prompt-feedback', methods=['GET'])
+@login_required
+@solo_mode_required
+def prompt_feedback():
+    """LLM-generated targeted feedback on the current prompt (advisory
+    only — never edits anything). Backs the "Get Feedback" button next
+    to the "Prompt the LLM sees" panel."""
+    manager = get_solo_mode_manager()
+    instance_id = request.args.get('instance_id')
+    result = manager.get_prompt_feedback(instance_id)
+    code = 200
+    if result.get('reason') and not result.get('feedback'):
+        code = 503
+    return jsonify(result), code
+
+
 @solo_mode_bp.route('/disagreements', methods=['GET', 'POST'])
 @login_required
 @solo_mode_required
@@ -510,7 +564,8 @@ def disagreements():
                     actual_label = pred.get('label', resolution)
 
             manager.resolve_disagreement(
-                instance_id, schema_name, actual_label, resolved_by='human'
+                instance_id, schema_name, actual_label, resolved_by='human',
+                notes=notes
             )
 
             # Check for more disagreements

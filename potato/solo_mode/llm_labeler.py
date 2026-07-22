@@ -113,6 +113,9 @@ class LLMLabelingThread(threading.Thread):
         # AI endpoint (lazy init)
         self._endpoint = None
         self._uncertainty_estimator = None
+        self._summary_endpoint = None
+        self._summary_endpoint_failed = False
+        self._summarizer_fn = None
 
     def _get_endpoint(self) -> Optional[Any]:
         """Get or create the labeling AI endpoint."""
@@ -545,12 +548,73 @@ Respond with JSON:
         so it can never break labeling."""
         try:
             from potato.codebook.prompt import render_codebook_section
+            from potato.solo_mode.distill_options import effective_options
             task_dir = self.config.get('task_dir', '.')
             project = self.config.get('annotation_task_name') or 'default'
-            section = render_codebook_section(task_dir, project)
+            options = effective_options(self.solo_config)
+            summarize = None
+            if options.get('summarize_above_tokens', 0) > 0:
+                # Lazy: only resolves (and potentially connects to) the
+                # summary endpoint the first time a field actually exceeds
+                # the threshold, so a codebook with nothing to summarize
+                # never pays for endpoint construction. See _summarize_field.
+                summarize = self._summarize_field
+            section = render_codebook_section(
+                task_dir, project, options=options, summarize=summarize)
             return (section + "\n\n") if section else ""
         except Exception:
             return ""
+
+    def _summarize_field(self, code_id, field: str, text: str) -> str:
+        """``summarize`` callback for render_from_codebook — called only
+        when a field's length exceeds the configured threshold. Resolves
+        the summary endpoint lazily (on first actual need) rather than on
+        every prompt build, and never retries a model that has already
+        failed to connect this session (see _get_summary_endpoint)."""
+        endpoint = self._get_summary_endpoint()
+        if endpoint is None:
+            return text
+        if self._summarizer_fn is None:
+            from potato.codebook.summarizer import make_summarizer
+            task_dir = self.config.get('task_dir', '.')
+            self._summarizer_fn = make_summarizer(task_dir, endpoint)
+        return self._summarizer_fn(code_id, field, text)
+
+    def _get_summary_endpoint(self) -> Optional[Any]:
+        """Endpoint used for length-k codebook summarization — the
+        revision model (falls back to the labeling model), same source
+        `guideline_updater._get_revision_endpoint` uses. Best-effort and
+        cached: a failure here just means summarization is skipped and
+        the full instruction text is rendered instead.
+
+        Caches BOTH success and failure. Endpoint construction can be a
+        blocking network call (e.g. Ollama's client health-checks the
+        host in its constructor), so once every candidate model has
+        failed we stop retrying for the rest of this thread's life —
+        otherwise every single prompt build (including the synchronous
+        on-demand /llm-suggestion request) would re-pay that blocking
+        cost forever whenever no revision model is reachable."""
+        if self._summary_endpoint is not None:
+            return self._summary_endpoint
+        if self._summary_endpoint_failed:
+            return None
+        try:
+            models = (self.solo_config.revision_models
+                      or self.solo_config.labeling_models)
+            for model_config in models:
+                try:
+                    endpoint = self.create_endpoint_from_model_config(
+                        model_config)
+                    if endpoint:
+                        self._summary_endpoint = endpoint
+                        return endpoint
+                except Exception:
+                    continue
+        except Exception:
+            logger.debug("could not create summarization endpoint",
+                         exc_info=True)
+        self._summary_endpoint_failed = True
+        return None
 
     def _rag_active(self) -> bool:
         """True if any per-instance RAG path is enabled (guideline injection

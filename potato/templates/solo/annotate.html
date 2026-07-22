@@ -194,6 +194,63 @@
         color: var(--muted-foreground, #71717a);
     }
 
+    /* ── Distill Options (codebook -> prompt rendering knobs) ───── */
+    .prompt-peek-options {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-md, 1rem);
+        margin: 0 0 var(--space-sm, 0.5rem);
+        padding: var(--space-sm, 0.5rem) var(--space-md, 1rem);
+        background: var(--muted, #f4f4f5);
+        border-radius: var(--radius, 0.5rem);
+        font-size: var(--text-xs, 0.75rem);
+        color: var(--foreground, #09090b);
+    }
+
+    .prompt-peek-options label {
+        display: flex;
+        align-items: center;
+        gap: var(--space-xs, 0.25rem);
+        white-space: nowrap;
+    }
+
+    .prompt-peek-options input[type="number"] {
+        width: 3.5rem;
+        font: inherit;
+        padding: 2px 4px;
+    }
+
+    /* ── Get Feedback panel (LLM critique of the prompt) ─────────── */
+    .prompt-peek-feedback {
+        margin-top: var(--space-sm, 0.5rem);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm, 0.5rem);
+    }
+
+    .feedback-item {
+        padding: var(--space-sm, 0.5rem) var(--space-md, 1rem);
+        border: 1px solid var(--border, #e4e4e7);
+        border-left-width: 3px;
+        border-radius: var(--radius, 0.5rem);
+        font-size: var(--text-xs, 0.75rem);
+    }
+
+    .feedback-item[data-severity="high"] { border-left-color: #dc2626; }
+    .feedback-item[data-severity="medium"] { border-left-color: #d97706; }
+    .feedback-item[data-severity="low"] { border-left-color: #71717a; }
+
+    .feedback-item .feedback-issue {
+        font-weight: 600;
+        color: var(--foreground, #09090b);
+    }
+
+    .feedback-item .feedback-suggestion {
+        margin-top: 2px;
+        color: var(--muted-foreground, #71717a);
+    }
+
     /* ── LLM "thinking" placeholder (on-demand suggestion) ──────── */
     .llm-thinking {
         color: var(--muted-foreground, #71717a);
@@ -342,13 +399,39 @@
                 <div class="prompt-peek-toolbar">
                     <button type="button" class="btn btn-secondary"
                             id="prompt-peek-refresh">Refresh</button>
+                    <button type="button" class="btn btn-secondary"
+                            id="prompt-peek-options-toggle">Options</button>
+                    <button type="button" class="btn btn-secondary"
+                            id="prompt-peek-feedback-btn">Get Feedback</button>
                     <span class="prompt-peek-hint">
                         Edit a code in the <strong>Codebook</strong> tray, then
                         refresh to see the <code>## Codebook</code> block change.
                     </span>
                 </div>
+                <div class="prompt-peek-options" id="prompt-peek-options" hidden>
+                    <label>
+                        <input type="checkbox" id="distill-show-examples" />
+                        Show examples
+                    </label>
+                    <label>
+                        Max examples
+                        <input type="number" id="distill-max-examples" min="0" max="20" />
+                    </label>
+                    <label>
+                        <input type="checkbox" id="distill-include-rationale" />
+                        Include rationale
+                    </label>
+                    <label>
+                        Summarize above (tokens)
+                        <input type="number" id="distill-summarize-above" min="0" step="50" />
+                    </label>
+                    <button type="button" class="btn btn-primary"
+                            id="distill-options-save">Save</button>
+                    <span class="prompt-peek-note" id="distill-options-status"></span>
+                </div>
                 <pre class="prompt-peek-pre" id="prompt-peek-pre">Loading&hellip;</pre>
                 <p class="prompt-peek-note" id="prompt-peek-note" hidden></p>
+                <div class="prompt-peek-feedback" id="prompt-peek-feedback" hidden></div>
             </div>
         </details>
     </section>
@@ -539,6 +622,120 @@
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => { loadedOnce = true; load(); });
         }
+
+        // ── Distill Options (show examples / max examples / rationale /
+        // summarize-above-k) ── live override for this session, read by
+        // the labeling thread's codebook renderer on every prompt build.
+        (function () {
+            const toggleBtn = document.getElementById('prompt-peek-options-toggle');
+            const panel = document.getElementById('prompt-peek-options');
+            const saveBtn = document.getElementById('distill-options-save');
+            const status = document.getElementById('distill-options-status');
+            const showEx = document.getElementById('distill-show-examples');
+            const maxEx = document.getElementById('distill-max-examples');
+            const rationale = document.getElementById('distill-include-rationale');
+            const summarizeAbove = document.getElementById('distill-summarize-above');
+            if (!toggleBtn || !panel) return;
+            const url = "{{ url_for('solo_mode.distill_options') }}";
+            let loaded = false;
+
+            function populate(o) {
+                showEx.checked = !!o.show_examples;
+                maxEx.value = o.max_examples;
+                rationale.checked = !!o.include_rationale;
+                summarizeAbove.value = o.summarize_above_tokens;
+            }
+
+            function loadOptions() {
+                fetch(url)
+                    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+                    .then(d => populate(d.options || {}))
+                    .catch(() => { status.textContent = 'Could not load options.'; });
+            }
+
+            toggleBtn.addEventListener('click', () => {
+                panel.hidden = !panel.hidden;
+                if (!panel.hidden && !loaded) { loaded = true; loadOptions(); }
+            });
+
+            if (saveBtn) {
+                saveBtn.addEventListener('click', () => {
+                    status.textContent = 'Saving…';
+                    fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            show_examples: showEx.checked,
+                            max_examples: parseInt(maxEx.value, 10) || 0,
+                            include_rationale: rationale.checked,
+                            summarize_above_tokens: parseInt(summarizeAbove.value, 10) || 0,
+                        }),
+                    })
+                        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+                        .then(d => {
+                            populate(d.options || {});
+                            status.textContent = 'Saved.';
+                            loadedOnce = true;
+                            load();  // re-fetch the prompt preview to reflect the new options
+                        })
+                        .catch(() => { status.textContent = 'Could not save.'; });
+                });
+            }
+        })();
+
+        // ── Get Feedback (LLM critique of the prompt) ─────────────────
+        // Purely advisory: never edits the prompt or codebook, just shows
+        // targeted issues/suggestions for the human to act on manually.
+        (function () {
+            const btn = document.getElementById('prompt-peek-feedback-btn');
+            const panel = document.getElementById('prompt-peek-feedback');
+            if (!btn || !panel) return;
+            const feedbackUrl = "{{ url_for('solo_mode.prompt_feedback') }}";
+
+            function renderFeedback(items) {
+                if (!items || !items.length) {
+                    panel.innerHTML = '<p class="prompt-peek-note">'
+                        + 'No notable issues found.</p>';
+                    return;
+                }
+                panel.innerHTML = items.map(it => (
+                    '<div class="feedback-item" data-severity="'
+                    + (it.severity || 'medium') + '">'
+                    + '<div class="feedback-issue">' + esc(it.issue) + '</div>'
+                    + '<div class="feedback-suggestion">' + esc(it.suggestion)
+                    + '</div></div>'
+                )).join('');
+            }
+
+            function esc(s) {
+                const d = document.createElement('div');
+                d.textContent = s == null ? '' : String(s);
+                return d.innerHTML;
+            }
+
+            btn.addEventListener('click', () => {
+                panel.hidden = false;
+                panel.innerHTML = '<p class="prompt-peek-note">Asking the model'
+                    + ' for feedback…</p>';
+                btn.disabled = true;
+                fetch(feedbackUrl + '?instance_id=' + encodeURIComponent(instanceId))
+                    .then(r => r.json().then(b => ({ ok: r.ok, body: b })))
+                    .then(res => {
+                        btn.disabled = false;
+                        if (!res.ok && res.body && res.body.reason) {
+                            panel.innerHTML = '<p class="prompt-peek-note">'
+                                + esc(res.body.reason) + '</p>';
+                            return;
+                        }
+                        renderFeedback(res.body.feedback);
+                    })
+                    .catch(() => {
+                        btn.disabled = false;
+                        panel.innerHTML = '<p class="prompt-peek-note">'
+                            + 'Could not get feedback.</p>';
+                    });
+            });
+        })();
     })();
 
     // ── On-demand LLM suggestion ─────────────────────────────────────

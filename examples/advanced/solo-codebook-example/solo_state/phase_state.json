@@ -1,0 +1,43 @@
+{
+  "current_phase": "parallel-annotation",
+  "transition_history": [
+    {
+      "from_phase": "setup",
+      "to_phase": "prompt-review",
+      "timestamp": "2026-07-22T15:34:43.820348",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "prompt-review",
+      "to_phase": "edge-case-synthesis",
+      "timestamp": "2026-07-22T15:34:54.082516",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "edge-case-synthesis",
+      "to_phase": "edge-case-labeling",
+      "timestamp": "2026-07-22T15:35:24.528814",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "edge-case-labeling",
+      "to_phase": "prompt-validation",
+      "timestamp": "2026-07-22T15:38:19.411797",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "prompt-validation",
+      "to_phase": "parallel-annotation",
+      "timestamp": "2026-07-22T15:38:19.414297",
+      "reason": "",
+      "metadata": {}
+    }
+  ],
+  "phase_data": {},
+  "started_at": "2026-07-22T15:34:43.820367",
+  "completed_at": null
+}

@@ -718,6 +718,52 @@ class SoloModeManager:
             )
         return self._guideline_updater
 
+    def get_prompt_feedback(
+        self, instance_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """LLM-generated targeted feedback on the current prompt (the
+        "Get Feedback" button) — purely advisory, applies nothing.
+        ``instance_id``, if given, renders the exact per-instance prompt
+        (via get_prompt_preview); otherwise falls back to the base
+        prompt text alone. Returns {"feedback": [...]} — never raises."""
+        from .prompt_feedback import get_prompt_feedback as _get_feedback
+
+        full_prompt = None
+        if instance_id:
+            preview = self.get_prompt_preview(instance_id)
+            full_prompt = preview and preview.get('full_prompt')
+        if not full_prompt:
+            full_prompt = self.get_current_prompt_text()
+        if not full_prompt:
+            return {"feedback": [],
+                     "reason": "No prompt available to review"}
+
+        endpoint = self.llm_labeling_thread._get_summary_endpoint()
+        if endpoint is None:
+            return {"feedback": [],
+                     "reason": "no revision/labeling model configured"}
+
+        examples = self.get_instances_for_review()
+        feedback = _get_feedback(full_prompt, endpoint, examples=examples)
+        return {"feedback": feedback}
+
+    def suggest_codebook_edits_from_notes(
+        self, since: float = 0.0
+    ) -> Dict[str, Any]:
+        """Analyze accumulated validation/disagreement notes
+        (annotation_notes.py) and stage any resulting codebook-edit
+        proposals via the existing propose/human-confirm flow. Returns
+        {"proposals": [...], "reason"?: str} — never raises."""
+        from .notes_feedback import suggest_from_notes
+        task_dir, project = self._codebook_ids()
+        endpoint = self.llm_labeling_thread._get_summary_endpoint()
+        if endpoint is None:
+            return {"proposals": [],
+                     "reason": "no revision/labeling model configured"}
+        proposals = suggest_from_notes(
+            task_dir, project, endpoint=endpoint, since=since)
+        return {"proposals": proposals}
+
     @property
     def confusion_analyzer(self):
         """Lazy-initialized confusion analyzer."""
@@ -2427,7 +2473,8 @@ class SoloModeManager:
         instance_id: str,
         schema_name: str,
         resolution_label: Any,
-        resolved_by: str
+        resolved_by: str,
+        notes: str = ""
     ) -> bool:
         """
         Resolve a human-LLM disagreement.
@@ -2437,6 +2484,8 @@ class SoloModeManager:
             schema_name: The annotation schema
             resolution_label: The final resolved label
             resolved_by: Who resolved it ('human', 'llm_revision')
+            notes: Optional human rationale for the resolution, persisted
+                for later codebook-feedback mining (see annotation_notes.py)
 
         Returns:
             True if resolution was recorded
@@ -2454,6 +2503,19 @@ class SoloModeManager:
                 f"Resolved disagreement for {instance_id}:{schema_name} "
                 f"(resolved_by={resolved_by})"
             )
+            if notes:
+                try:
+                    from potato.solo_mode import annotation_notes
+                    task_dir, project = self._codebook_ids()
+                    annotation_notes.save_note(
+                        task_dir, project=project, instance_id=instance_id,
+                        schema_name=schema_name, note=notes,
+                        source='disagreement', actor=resolved_by,
+                        label=str(resolution_label)
+                        if resolution_label is not None else None)
+                except Exception:
+                    logger.debug("could not persist disagreement note",
+                                 exc_info=True)
             return True
 
     # === Instance Selection ===
@@ -3320,6 +3382,17 @@ class SoloModeManager:
         schemes = self.app_config.get('annotation_schemes', [])
         schema_name = schemes[0].get('name', 'default') if schemes else 'default'
         self.record_human_label(instance_id, schema_name, human_label, 'validator')
+        if notes:
+            try:
+                from potato.solo_mode import annotation_notes
+                task_dir, project = self._codebook_ids()
+                annotation_notes.save_note(
+                    task_dir, project=project, instance_id=instance_id,
+                    schema_name=schema_name, note=notes, source='validation',
+                    label=str(human_label) if human_label is not None else None)
+            except Exception:
+                logger.debug("could not persist validation note",
+                             exc_info=True)
 
     def approve_llm_label(self, instance_id: str) -> None:
         """Approve an LLM label during review."""
