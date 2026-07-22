@@ -139,15 +139,30 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
     return annotations
 
 
-def load_phase_responses_from_output_dir(output_dir: str) -> list:
+def load_phase_responses_from_output_dir(
+    output_dir: str,
+    display_logic_schemes: list = None,
+    exclude_hidden: bool = True,
+) -> list:
     """
     Load phase/surveyflow responses from the Potato output directory.
 
     Reads phase_to_page_to_label_to_value from each user's user_state.json
     and flattens into a list of records.
 
+    Server-side enforcement of conditional survey logic: if
+    ``display_logic_schemes`` (the survey/phase scheme dicts, some carrying
+    ``display_logic``) is provided, each user's answers are evaluated against
+    their own responses so that answers to questions the participant never saw
+    (hidden by their condition, cross-page aware) are excluded. This keeps
+    exports honest even though the frontend preserves hidden answers in the
+    form. Pass ``exclude_hidden=False`` to keep them but tag each record with a
+    ``hidden`` boolean instead. When ``display_logic_schemes`` is ``None`` the
+    behavior is unchanged (all responses returned, no ``hidden`` field).
+
     Returns:
         List of dicts with keys: user_id, phase, page, schema, label_name, value
+        (and ``hidden`` when ``display_logic_schemes`` is provided).
     """
     responses = []
 
@@ -169,6 +184,36 @@ def load_phase_responses_from_output_dir(output_dir: str) -> list:
         user_id = user_state.get("user_id", user_dir)
         phase_data = user_state.get("phase_to_page_to_label_to_value", {})
 
+        # Compute which schemas this user's answers hide. Cross-page aware:
+        # all phases are merged into one annotation context so a poststudy
+        # question can depend on a prestudy answer.
+        hidden_schemas = set()
+        if display_logic_schemes:
+            from potato.server_utils.display_logic import (
+                flatten_phase_annotations,
+                compute_hidden_schemas,
+            )
+            flat = {}
+            for _phase, _pages in phase_data.items():
+                flat.update(flatten_phase_annotations(_pages))
+            hidden_schemas = compute_hidden_schemas(display_logic_schemes, flat)
+
+        def _emit(phase, page, schema, label_name, value):
+            if display_logic_schemes:
+                is_hidden = schema in hidden_schemas
+                if is_hidden and exclude_hidden:
+                    return
+                responses.append({
+                    "user_id": user_id, "phase": phase, "page": page,
+                    "schema": schema, "label_name": label_name,
+                    "value": value, "hidden": is_hidden,
+                })
+            else:
+                responses.append({
+                    "user_id": user_id, "phase": phase, "page": page,
+                    "schema": schema, "label_name": label_name, "value": value,
+                })
+
         for phase, pages in phase_data.items():
             for page, label_values in pages.items():
                 # label_values is a list of [[{schema, name}, value], ...]
@@ -181,24 +226,10 @@ def load_phase_responses_from_output_dir(output_dir: str) -> list:
                                 label_name = label_obj.get("name", "")
                             else:
                                 schema, label_name = str(label_obj), ""
-                            responses.append({
-                                "user_id": user_id,
-                                "phase": phase,
-                                "page": page,
-                                "schema": schema,
-                                "label_name": label_name,
-                                "value": value,
-                            })
+                            _emit(phase, page, schema, label_name, value)
                 elif isinstance(label_values, dict):
                     for label_obj, value in label_values.items():
-                        responses.append({
-                            "user_id": user_id,
-                            "phase": phase,
-                            "page": page,
-                            "schema": str(label_obj),
-                            "label_name": "",
-                            "value": value,
-                        })
+                        _emit(phase, page, str(label_obj), "", value)
 
     return responses
 

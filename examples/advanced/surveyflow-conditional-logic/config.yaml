@@ -1,0 +1,55 @@
+annotation_task_name: SurveyFlow Conditional Logic
+task_dir: .
+output_annotation_dir: annotation_output/surveyflow-conditional-logic/
+output_annotation_format: jsonl
+annotation_codebook_url: ''
+
+# Include survey/phase responses in exports. With conditional questions this
+# also enables server-side exclusion of answers to questions a participant never
+# saw (set exclude_hidden_survey_answers: false to keep them, tagged `hidden`).
+export_include_phase_data: true
+
+data_files:
+- data/data.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+# Phases: a consent gate, a prestudy survey that uses conditional display_logic,
+# the annotation task, and a poststudy survey that also branches. The prestudy
+# and poststudy JSON questions carry `display_logic` blocks — the same grammar
+# used by the main annotation schemes (see docs/configuration/conditional_logic.md),
+# referencing sibling questions by `name`. Conditions are scoped to a single
+# survey page.
+phases:
+  order:
+  - consent
+  - prestudy
+  - annotation
+  - poststudy
+  consent:
+    type: consent
+    file: surveys/consent.json
+  prestudy:
+    type: prestudy
+    file: surveys/prestudy.json
+  poststudy:
+    type: poststudy
+    file: surveys/poststudy.json
+
+annotation_schemes:
+- annotation_type: radio
+  name: sentiment
+  description: What is the overall sentiment of this text?
+  labels:
+  - positive
+  - neutral
+  - negative
+  label_requirement:
+    required: true
+  sequential_key_binding: true

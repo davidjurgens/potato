@@ -1,0 +1,37 @@
+[
+    {
+        "id": "overall_rating",
+        "name": "overall_rating",
+        "annotation_type": "radio",
+        "description": "How would you rate this annotation task overall?",
+        "labels": ["Excellent", "Good", "Fair", "Poor"],
+        "label_requirement": {"required": true}
+    },
+    {
+        "id": "low_rating_reason",
+        "name": "low_rating_reason",
+        "annotation_type": "text",
+        "description": "We're sorry to hear that. What could we improve?",
+        "textarea": {"on": true, "rows": 3},
+        "label_requirement": {"required": true},
+        "display_logic": {
+            "show_when": [
+                {"schema": "overall_rating", "operator": "equals", "value": ["Fair", "Poor"]}
+            ],
+            "logic": "any"
+        }
+    },
+    {
+        "id": "experience_match",
+        "name": "experience_match",
+        "annotation_type": "radio",
+        "description": "You told us you had prior annotation experience. Did this task match what you expected?",
+        "labels": ["Yes, about the same", "No, it was different"],
+        "label_requirement": {"required": true},
+        "display_logic": {
+            "show_when": [
+                {"schema": "prior_experience", "operator": "equals", "value": "Yes"}
+            ]
+        }
+    }
+]

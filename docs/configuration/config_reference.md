@@ -172,7 +172,8 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `completion_code` |  |  |  |
 | `allow_phase_back_navigation` |  |  |  |
 | `require_fully_annotated` |  | boolean |  |
-| `export_include_phase_data` |  |  |  |
+| `export_include_phase_data` |  | boolean | Include survey/phase responses in exports |
+| `exclude_hidden_survey_answers` |  | boolean | Drop answers to conditionally-hidden survey questions from exports (default `true`) |
 | `export_annotation_format` |  |  |  |
 | `auto_export_interval` |  |  |  |
 

@@ -730,3 +730,96 @@ def get_display_logic_dependencies(
     """
     validator = DisplayLogicValidator(annotation_schemes)
     return validator.dependency_graph
+
+
+def flatten_phase_annotations(pages: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Flatten a phase's stored answers into the ``{schema: comparable_value}`` shape
+    that :func:`DisplayLogicEvaluator.evaluate_visibility` expects.
+
+    Mirrors the client-side ``transformRawAnnotations`` in ``display-logic.js`` so
+    server-side visibility matches what the participant actually saw. Accepts the
+    two on-disk shapes for ``phase_to_page_to_label_to_value[phase]``:
+
+    - list form:  ``{page: [[{"schema": s, "name": l}, value], ...]}``
+    - dict form:  ``{page: {label_obj_or_str: value}}``
+
+    Answers from every page of the phase are merged (a phase is a single logical
+    survey for conditional purposes). Selected labels (value truthy/"true")
+    collapse to the label name (or a list for multiselect); scalar values pass
+    through.
+
+    Args:
+        pages: The ``{page: answers}`` mapping for one phase.
+
+    Returns:
+        ``{schema_name: comparable_value}``
+    """
+    # schema -> list of (label_name, value)
+    by_schema: Dict[str, List[Tuple[str, Any]]] = {}
+
+    def _record(schema: str, label_name: str, value: Any) -> None:
+        if not schema:
+            return
+        by_schema.setdefault(schema, []).append((label_name or "", value))
+
+    for _page, label_values in (pages or {}).items():
+        if isinstance(label_values, list):
+            for entry in label_values:
+                if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                    label_obj, value = entry
+                    if isinstance(label_obj, dict):
+                        _record(label_obj.get("schema", ""), label_obj.get("name", ""), value)
+                    else:
+                        _record(str(label_obj), "", value)
+        elif isinstance(label_values, dict):
+            for label_obj, value in label_values.items():
+                if hasattr(label_obj, "get_schema"):
+                    _record(label_obj.get_schema(), label_obj.get_name(), value)
+                else:
+                    _record(str(label_obj), "", value)
+
+    result: Dict[str, Any] = {}
+    for schema, entries in by_schema.items():
+        selected = [ln for (ln, v) in entries if v is True or v == "true" or v == 1]
+        if len(selected) == 1:
+            result[schema] = selected[0]
+        elif len(selected) > 1:
+            result[schema] = selected
+        else:
+            scalars = [v for (_ln, v) in entries
+                       if isinstance(v, (str, int, float)) and v != "" and not isinstance(v, bool)]
+            if scalars:
+                result[schema] = scalars[-1]
+    return result
+
+
+def compute_hidden_schemas(
+    schemes: List[Dict[str, Any]],
+    annotations: Dict[str, Any],
+) -> Set[str]:
+    """
+    Return the set of schema names that are hidden by their ``display_logic`` given
+    the supplied flat ``annotations`` (``{schema: comparable_value}``).
+
+    Schemes without ``display_logic`` are always visible and never included.
+
+    Args:
+        schemes: Annotation/survey scheme dicts (may or may not have display_logic).
+        annotations: Flat ``{schema: value}`` map (see :func:`flatten_phase_annotations`).
+
+    Returns:
+        Set of hidden schema names.
+    """
+    hidden: Set[str] = set()
+    for scheme in schemes:
+        if not isinstance(scheme, dict):
+            continue
+        dl = scheme.get("display_logic")
+        if not dl:
+            continue
+        name = scheme.get("name", "")
+        is_visible, _reason = DisplayLogicEvaluator.evaluate_visibility(name, dl, annotations)
+        if not is_visible:
+            hidden.add(name)
+    return hidden

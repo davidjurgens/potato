@@ -1487,6 +1487,11 @@ def load_phase_data(config: dict) -> None:
 
     logger.debug("Loading %d phases in order: %s" % (len(phase_order), phase_order))
 
+    # Accumulate every phase's questions so display_logic references can be
+    # validated across the whole SurveyFlow (a poststudy question may condition
+    # on a prestudy answer). Validated once after all phases load.
+    _all_phase_schemes_for_dl = []
+
     for phase_name in phase_order:
         try:
             # Skip 'annotation' — it's handled by the main annotation flow,
@@ -1658,6 +1663,12 @@ def load_phase_data(config: dict) -> None:
                         if isinstance(_survey_scheme, dict):
                             _survey_scheme.setdefault("humanize_labels", False)
 
+            # Remember this phase's questions for cross-phase display_logic
+            # validation after all phases have loaded (see below).
+            for _s in phase_labeling_schemes:
+                if isinstance(_s, dict):
+                    _all_phase_schemes_for_dl.append(_s)
+
             # Use the default templates unless specified in the phase config
             # Note: Template paths are now hardcoded in front_end.py
             # Only handle custom task_layout if specified
@@ -1682,8 +1693,40 @@ def load_phase_data(config: dict) -> None:
             logger.debug(f"Registered phase {phase_name} as {phase_type} with HTML {phase_html_fname}")
 
         except Exception as e:
+            from potato.server_utils.config_module import ConfigValidationError
+            if isinstance(e, ConfigValidationError):
+                # Configuration errors (e.g. invalid display_logic on a survey
+                # question) must fail fast rather than being logged-and-skipped:
+                # silently dropping a consent/prestudy phase would let users
+                # bypass required gating.
+                raise
             logger.error(f"Failed to load phase '{phase_name}': {e}")
             continue
+
+    # Validate display_logic on SurveyFlow questions now that every phase's
+    # questions are known. This covers what the config-load validator misses
+    # (it only sees inline annotation_schemes, not questions loaded from phase
+    # JSON/instrument files): unsupported operators, references to a question
+    # that exists on no phase, and circular dependencies. References may point
+    # to a question on any phase (cross-page conditions, e.g. a poststudy
+    # question gated on a prestudy answer). A failure aborts startup rather than
+    # silently letting broken logic reach the frontend.
+    if any(s.get("display_logic") for s in _all_phase_schemes_for_dl):
+        from potato.server_utils.config_module import (
+            validate_display_logic_references,
+            ConfigValidationError,
+        )
+        try:
+            validate_display_logic_references(_all_phase_schemes_for_dl)
+        except ConfigValidationError as dl_err:
+            raise ConfigValidationError(
+                f"Invalid SurveyFlow display_logic: {dl_err}"
+            )
+
+    # Stash SurveyFlow question schemes so downstream consumers (e.g. auto-export
+    # server-side hidden-answer exclusion) can reach display_logic definitions,
+    # which otherwise live only in external phase files, not in config.
+    config['_surveyflow_schemes'] = _all_phase_schemes_for_dl
 
     user_state_manager = get_user_state_manager()
     logger.debug(f"[PHASE LOAD] phase_type_to_name_to_page: {user_state_manager.phase_type_to_name_to_page}")
@@ -2107,6 +2150,35 @@ def get_current_page_html(config, username):
                     options = input_field.find_all("option", {"value": value})
                     if options:
                         options[0]["selected"] = "selected"
+
+    # Cross-page conditional display_logic: expose answers from OTHER phase
+    # pages so a question can be shown/hidden based on an answer given on an
+    # earlier SurveyFlow page (e.g. a poststudy question gated on a prestudy
+    # answer). Built in the same nested {schema: {label: value}} shape as the
+    # client's currentAnnotations so display-logic.js can reuse one transform.
+    # The current page is excluded here — its answers already flow through the
+    # normal currentAnnotations pipeline and must win over prior answers.
+    prior_raw = {}
+    for other_phase, pages_dict in user_state.phase_to_page_to_label_to_value.items():
+        for other_page, labels_dict in pages_dict.items():
+            if other_phase == phase and other_page == page:
+                continue
+            for label_obj, value in labels_dict.items():
+                try:
+                    schema = label_obj.get_schema()
+                    label = label_obj.get_name()
+                except AttributeError:
+                    continue
+                prior_raw.setdefault(schema, {})[label] = value
+
+    if prior_raw:
+        # Escape "<" so an answer containing "</script>" cannot break out of the
+        # inline script (BeautifulSoup does not entity-escape script contents).
+        safe_json = easy_json(prior_raw).replace("<", "\\u003c")
+        script_tag = soup.new_tag("script")
+        script_tag.string = "window.priorPhaseAnswersRaw = " + safe_json + ";"
+        target = soup.body if soup.body else soup
+        target.append(script_tag)
 
     return str(soup)
 

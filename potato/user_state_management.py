@@ -1031,7 +1031,25 @@ class UserStateManager:
         if not annotations:
             return
 
-        phase_responses = load_phase_responses_from_output_dir(output_dir) if self.config.get("export_include_phase_data", False) else []
+        # Server-side conditional-logic enforcement: when SurveyFlow questions
+        # use display_logic, exclude answers to questions a participant never
+        # saw (hidden by their own answers). Only engages when display_logic is
+        # actually present, so exports are unchanged for everyone else. Opt out
+        # with ``exclude_hidden_survey_answers: false``.
+        surveyflow_schemes = self.config.get("_surveyflow_schemes") or []
+        has_display_logic = any(
+            isinstance(s, dict) and s.get("display_logic") for s in surveyflow_schemes
+        )
+        dl_schemes = (
+            surveyflow_schemes
+            if has_display_logic and self.config.get("exclude_hidden_survey_answers", True)
+            else None
+        )
+        phase_responses = (
+            load_phase_responses_from_output_dir(output_dir, display_logic_schemes=dl_schemes)
+            if self.config.get("export_include_phase_data", False)
+            else []
+        )
 
         context = ExportContext(
             config=self.config,

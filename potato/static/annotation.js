@@ -473,6 +473,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
         setLoading(false);
         setupInputEventListeners();
+        // Initialize display logic so SurveyFlow phase questions (consent,
+        // prestudy, poststudy) can conditionally show/hide based on earlier
+        // answers on the same page. The engine is generic — it scans the DOM
+        // for [data-display-logic-target="true"] — but was previously only
+        // started on annotation pages, leaving it inert on survey phases.
+        if (typeof initDisplayLogic === 'function') {
+            initDisplayLogic();
+        }
+        // Run AFTER initDisplayLogic so hidden required questions are already
+        // excluded from the required-field check.
         validateRequiredFields();
         return;
     }
@@ -1848,6 +1858,34 @@ async function navigateToInstance(instanceIndex) {
     }
 }
 
+// Determine whether a schema/question is currently hidden by display_logic.
+// Hidden questions must be excluded from required-field validation so they
+// never block navigation. Used by both annotation schemes and SurveyFlow
+// phase questions (consent/prestudy/poststudy), which share this pipeline.
+function isSchemaHiddenByDisplayLogic(schemaName, form) {
+    // Authoritative source: the display-logic manager, once initialized.
+    // isSchemaVisible() returns true for schemas with no display_logic rule,
+    // so unconditional questions are never treated as hidden.
+    if (typeof displayLogicManager !== 'undefined' && displayLogicManager) {
+        if (!displayLogicManager.isSchemaVisible(schemaName)) {
+            return true;
+        }
+    }
+    // Fallback DOM check: covers the brief window before the manager finishes
+    // initializing, or pages where it is not present. A collapsed container
+    // carries the .display-logic-hidden class.
+    let el = form;
+    if (!el) {
+        const sel = '[data-schema-name="' +
+            ((window.CSS && CSS.escape) ? CSS.escape(schemaName) : schemaName) + '"]';
+        el = document.querySelector(sel);
+    }
+    if (el && el.closest && el.closest('.display-logic-hidden')) {
+        return true;
+    }
+    return false;
+}
+
 function validateRequiredFields(options) {
     // If user has already attempted forward validation, always show errors
     // so they get real-time feedback as they fill in fields
@@ -1867,6 +1905,9 @@ function validateRequiredFields(options) {
         const form = input.closest('.annotation-form');
         const schemaName = form ? (form.getAttribute('data-schema-name') || form.id) : null;
         if (!schemaName) return;
+        // Skip questions hidden by display_logic — a hidden required question
+        // must not block navigation or be flagged as unfilled.
+        if (isSchemaHiddenByDisplayLogic(schemaName, form)) return;
         if (!formGroups[schemaName]) {
             formGroups[schemaName] = { form: form, radios: {}, others: [] };
         }
