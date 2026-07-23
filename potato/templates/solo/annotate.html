@@ -47,6 +47,32 @@
         padding: 0 var(--space-xs, 0.25rem);
     }
 
+    .llm-suggestion-pending .suggestion-label {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm, 0.5rem);
+        color: var(--foreground, #09090b);
+    }
+
+    .llm-pending-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid var(--border, #e4e4e7);
+        border-top-color: var(--primary, #6e56cf);
+        border-radius: 50%;
+        display: inline-block;
+        flex: none;
+        animation: llm-spin 0.7s linear infinite;
+    }
+
+    @keyframes llm-spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .llm-suggestion-pending.pending-failed .llm-pending-spinner {
+        display: none;
+    }
+
     .confidence-label {
         font-size: var(--text-xs, 0.75rem);
         color: var(--muted-foreground, #71717a);
@@ -104,20 +130,32 @@
     <div class="annotate-header">
         <h1>Annotate</h1>
         {% if stats %}
-            {% set total = stats.human_labeled + stats.remaining %}
+            {# Denominator is the full dataset size (stable). The old formula
+               human_labeled + remaining collapsed to 0 once the background LLM
+               had pre-labeled everything (remaining counts items unlabeled by
+               human OR LLM), producing "Instance 1 of 0". #}
             <span class="annotate-counter" aria-live="polite">
-                Instance {{ stats.human_labeled + 1 }} of {{ total }}
+                Instance {{ stats.human_labeled + 1 }} of {{ stats.total }}
             </span>
         {% endif %}
     </div>
 
-    <form method="POST" action="{{ url_for('solo_mode.annotate') }}" id="annotate-form">
+    {% set atype = annotation_type or 'radio' %}
+    <form method="POST" action="{{ url_for('solo_mode.annotate') }}" id="annotate-form"
+          data-annotation-type="{{ atype }}">
         <input type="hidden" name="instance_id" value="{{ instance.id }}">
         <input type="hidden" name="annotation" id="selected-label" value="">
 
+        {% if atype == 'span' %}
+        <div class="instance-text" id="instance-text" style="position: relative;">
+            <div id="text-content" data-original-text="{{ instance.text }}"
+                 style="position: relative; z-index: 1; white-space: pre-wrap;">{{ instance.text }}<div id="span-overlays" style="position: absolute; top:0; left:0; right:0; bottom:0; pointer-events: none; z-index: 2;"></div></div>
+        </div>
+        {% else %}
         <div class="instance-text" id="instance-text">
             {{ instance.text }}
         </div>
+        {% endif %}
 
         {% if llm_prediction %}
         {% set conf = (llm_prediction.confidence * 100)|int %}
@@ -161,11 +199,50 @@
                 </div>
             </div>
         </div>
+        {% else %}
+        {# No LLM prediction for this instance yet. The background labeler may
+           still be working (LLMs can be slow); show a live indicator and poll
+           for the suggestion instead of leaving the row silently empty. #}
+        <div class="llm-suggestion-row llm-suggestion-pending" id="llm-pending"
+             data-instance-id="{{ instance.id }}" role="status" aria-live="polite">
+            <div class="suggestion-label">
+                <span class="llm-pending-spinner" aria-hidden="true"></span>
+                <span id="llm-pending-text">The LLM is still labeling this item&hellip; its suggestion will appear here in a moment.</span>
+            </div>
+        </div>
         {% endif %}
 
+        {% if atype in ('text', 'textbox') %}
         <fieldset style="border: none; padding: 0; margin: 0;">
             <legend class="form-help" style="margin-bottom: var(--space-sm, 0.5rem);">
-                Pick a label (use number keys, or click)
+                Type your answer
+            </legend>
+            <textarea id="textbox-input" class="prompt-editor" rows="3"
+                      style="width: 100%; box-sizing: border-box;"
+                      placeholder="Enter your annotation&hellip;">{{ (llm_prediction.human_label if llm_prediction and llm_prediction.human_label) or '' }}</textarea>
+        </fieldset>
+        {% elif atype == 'span' %}
+        <fieldset style="border: none; padding: 0; margin: 0;">
+            <legend class="form-help" style="margin-bottom: var(--space-sm, 0.5rem);">
+                Pick a label, then highlight the matching text above. Repeat for each span.
+            </legend>
+            <div class="label-buttons" role="group" aria-label="Span labels">
+                {% for label in labels %}
+                <button type="button" class="label-btn" data-label="{{ label }}" aria-pressed="false">
+                    {% if loop.index <= 9 %}<span class="label-key" aria-hidden="true">{{ loop.index }}</span>{% endif %}
+                    <span>{{ label }}</span>
+                </button>
+                {% endfor %}
+            </div>
+            <div style="margin-top: var(--space-sm, 0.5rem); display: flex; gap: var(--space-sm, 0.5rem); align-items: center;">
+                <button type="button" id="clear-spans-btn" class="btn btn-secondary">Clear spans</button>
+                <span id="span-count" class="form-help"></span>
+            </div>
+        </fieldset>
+        {% else %}
+        <fieldset style="border: none; padding: 0; margin: 0;">
+            <legend class="form-help" style="margin-bottom: var(--space-sm, 0.5rem);">
+                {% if atype == 'multiselect' %}Select all that apply (click to toggle){% else %}Pick a label (use number keys, or click){% endif %}
             </legend>
             <div class="label-buttons" role="group" aria-label="Annotation labels">
                 {% for label in labels %}
@@ -181,6 +258,7 @@
                 {% endfor %}
             </div>
         </fieldset>
+        {% endif %}
 
         <div class="solo-nav">
             <span></span>
@@ -278,25 +356,79 @@
 {% endblock %}
 
 {% block extra_js %}
+{% if annotation_type == 'span' %}
+<link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}">
+<script src="{{ url_for('static', filename='span-core.js') }}?v=15"></script>
+{% endif %}
 <script>
     const labels = {{ labels|tojson|safe }};
     const submitBtn = document.getElementById('submit-btn');
     const submitLabel = document.getElementById('submit-label');
     const selectedInput = document.getElementById('selected-label');
     const form = document.getElementById('annotate-form');
+    const atype = (form && form.dataset.annotationType) || 'radio';
+    const acceptBtn = document.getElementById('accept-llm-btn');
+    const textboxInput = document.getElementById('textbox-input');
+
+    function enableSubmit(labelText) {
+        if (!submitBtn) return;
+        submitBtn.disabled = false;
+        if (submitLabel) submitLabel.textContent = labelText ? `Submit: ${labelText}` : 'Submit';
+    }
+    function disableSubmit() {
+        if (!submitBtn) return;
+        submitBtn.disabled = true;
+        if (submitLabel) submitLabel.textContent = 'Submit';
+    }
+
+    // Multiselect: collect all toggled buttons into a JSON array (empty => "").
+    function syncMultiselect() {
+        const chosen = [...document.querySelectorAll('.label-btn.selected')].map(b => b.dataset.label);
+        if (selectedInput) selectedInput.value = chosen.length ? JSON.stringify(chosen) : '';
+        if (chosen.length) enableSubmit(chosen.join(', ')); else disableSubmit();
+    }
 
     function selectLabel(label) {
         if (!label) return;
+        if (atype === 'span') {
+            // Single-select the active span label; the next text highlight uses it.
+            document.querySelectorAll('.label-btn').forEach(b => {
+                const on = b.dataset.label === label;
+                b.classList.toggle('selected', on);
+                b.setAttribute('aria-pressed', String(on));
+            });
+            window.__activeSpanLabel = label;
+            return;
+        }
+        if (atype === 'multiselect') {
+            const btn = [...document.querySelectorAll('.label-btn')].find(b => b.dataset.label === label);
+            if (btn) {
+                const on = !btn.classList.contains('selected');
+                btn.classList.toggle('selected', on);
+                btn.setAttribute('aria-pressed', String(on));
+            }
+            syncMultiselect();
+            return;
+        }
+        // radio / likert: single select
         document.querySelectorAll('.label-btn').forEach(b => {
             const isMatch = b.dataset.label === label;
             b.classList.toggle('selected', isMatch);
             b.setAttribute('aria-pressed', String(isMatch));
         });
         if (selectedInput) selectedInput.value = label;
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            if (submitLabel) submitLabel.textContent = `Submit: ${label}`;
-        }
+        enableSubmit(label);
+    }
+
+    // Textbox: the textarea drives the hidden annotation field.
+    if ((atype === 'text' || atype === 'textbox') && textboxInput) {
+        const syncTextbox = () => {
+            const v = textboxInput.value.trim();
+            if (selectedInput) selectedInput.value = v;
+            if (v) enableSubmit(); else disableSubmit();
+        };
+        textboxInput.addEventListener('input', syncTextbox);
+        syncTextbox();  // handle a server-restored value
     }
 
     // Label button clicks (delegated)
@@ -304,12 +436,118 @@
         btn.addEventListener('click', () => selectLabel(btn.dataset.label));
     });
 
-    // One-click accept LLM suggestion
-    const acceptBtn = document.getElementById('accept-llm-btn');
+    // One-click accept LLM suggestion (type-aware)
     if (acceptBtn) {
         acceptBtn.addEventListener('click', () => {
-            selectLabel(acceptBtn.dataset.llmLabel);
+            const llm = acceptBtn.dataset.llmLabel;
+            if ((atype === 'text' || atype === 'textbox') && textboxInput) {
+                textboxInput.value = llm;
+                textboxInput.dispatchEvent(new Event('input'));
+            } else if (atype === 'multiselect') {
+                let llmLabels = [llm];
+                try { const p = JSON.parse(llm); if (Array.isArray(p)) llmLabels = p; } catch (e) {}
+                document.querySelectorAll('.label-btn').forEach(b => {
+                    const on = llmLabels.includes(b.dataset.label);
+                    b.classList.toggle('selected', on);
+                    b.setAttribute('aria-pressed', String(on));
+                });
+                syncMultiselect();
+            } else if (atype === 'span') {
+                // Accept the LLM's spans as the human annotation.
+                if (window.__soloSpans) {
+                    try { const s = JSON.parse(llm); if (Array.isArray(s)) window.__soloSpans.set(s); }
+                    catch (e) {}
+                }
+            } else {
+                selectLabel(llm);
+            }
             form && form.requestSubmit && form.requestSubmit();
+        });
+    }
+
+    // Multiselect: the LLM suggestion is a JSON array. Render a readable badge
+    // and mark every suggested button (the server-side single-label check can't).
+    if (atype === 'multiselect' && acceptBtn) {
+        let llmLabels = [];
+        try { const p = JSON.parse(acceptBtn.dataset.llmLabel); if (Array.isArray(p)) llmLabels = p; }
+        catch (e) { llmLabels = [acceptBtn.dataset.llmLabel]; }
+        const badge = document.querySelector('.suggested-badge');
+        if (badge && llmLabels.length) badge.textContent = llmLabels.join(', ');
+        document.querySelectorAll('.label-btn').forEach(b => {
+            if (llmLabels.includes(b.dataset.label)) b.classList.add('suggested');
+        });
+    }
+
+    // ---- Span annotation controller ----
+    // Reuses UnifiedPositioningStrategy (from span-core.js) for offset + pixel
+    // math only; renders its own lightweight highlights and serializes spans to
+    // the hidden annotation field as a JSON array of {start,end,text,label}.
+    if (atype === 'span' && typeof UnifiedPositioningStrategy !== 'undefined') {
+        const textEl = document.getElementById('text-content');
+        const overlays = document.getElementById('span-overlays');
+        const spanCountEl = document.getElementById('span-count');
+        const clearBtn = document.getElementById('clear-spans-btn');
+        let spans = [];  // {start, end, text, label}
+        const strat = new UnifiedPositioningStrategy(textEl);
+
+        function renderSpans() {
+            if (overlays) overlays.innerHTML = '';
+            spans.forEach(sp => {
+                const positions = strat.getPositionsFromOffsets(sp.start, sp.end);
+                if (!positions) return;
+                positions.forEach(pos => {
+                    const seg = document.createElement('div');
+                    seg.style.position = 'absolute';
+                    seg.style.left = (pos.x - 2) + 'px';
+                    seg.style.top = (pos.y - 1) + 'px';
+                    seg.style.width = (pos.width + 4) + 'px';
+                    seg.style.height = (pos.height + 2) + 'px';
+                    seg.style.background = 'rgba(110, 86, 207, 0.25)';
+                    seg.style.border = '1px solid rgba(110, 86, 207, 0.7)';
+                    seg.style.borderRadius = '3px';
+                    seg.style.pointerEvents = 'none';
+                    if (overlays) overlays.appendChild(seg);
+                });
+            });
+            if (selectedInput) selectedInput.value = spans.length ? JSON.stringify(spans) : '';
+            if (spanCountEl) spanCountEl.textContent =
+                spans.length ? (spans.length + ' span' + (spans.length === 1 ? '' : 's') + ' marked') : 'No spans yet';
+            if (spans.length) enableSubmit(); else disableSubmit();
+        }
+
+        function addSpanFromSelection() {
+            const sel = window.getSelection();
+            if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+            if (!window.__activeSpanLabel) return;  // pick a label first
+            if (!textEl.contains(sel.anchorNode) || !textEl.contains(sel.focusNode)) return;
+            const off = strat.getOffsetsFromSelection(sel);
+            if (!off || off.start >= off.end) { sel.removeAllRanges(); return; }
+            const text = sel.toString();  // DOM-accurate selected text
+            spans.push({ start: off.start, end: off.end, text: text, label: window.__activeSpanLabel });
+            sel.removeAllRanges();
+            renderSpans();
+        }
+
+        // Expose a setter for the Accept-LLM path.
+        window.__soloSpans = { get: () => spans, set: (s) => { spans = Array.isArray(s) ? s : []; renderSpans(); } };
+
+        strat.initialize().then(() => {
+            textEl.addEventListener('mouseup', () => setTimeout(addSpanFromSelection, 0));
+            if (clearBtn) clearBtn.addEventListener('click', () => { spans = []; renderSpans(); });
+            renderSpans();
+        });
+    }
+
+    // Guard against accidental double-submit: once the form starts submitting,
+    // disable the submit + accept buttons so a second click/Enter/Accept can't
+    // POST the same instance twice (which would double-count agreement metrics).
+    let submitting = false;
+    if (form) {
+        form.addEventListener('submit', (e) => {
+            if (submitting) { e.preventDefault(); return; }
+            submitting = true;
+            if (submitBtn) submitBtn.disabled = true;
+            if (acceptBtn) acceptBtn.disabled = true;
         });
     }
 
@@ -333,5 +571,51 @@
             }
         }
     });
+
+    // If the LLM hasn't labeled this instance yet, poll for its prediction and
+    // reload once it's ready so the server renders the full suggestion card.
+    // Never reload after the user has picked a label — that would discard it.
+    const pendingEl = document.getElementById('llm-pending');
+    if (pendingEl) {
+        const iid = pendingEl.dataset.instanceId;
+        const textEl = document.getElementById('llm-pending-text');
+        let attempts = 0;
+        const maxAttempts = 24; // ~60s at 2.5s intervals
+        const poll = async () => {
+            // User already decided — stop waiting on the LLM.
+            if (selectedInput && selectedInput.value) return;
+            attempts++;
+            try {
+                const [predResp, statResp] = await Promise.all([
+                    fetch('/solo/api/predictions', { headers: { Accept: 'application/json' } }),
+                    fetch('/solo/api/status', { headers: { Accept: 'application/json' } })
+                ]);
+                if (predResp.ok) {
+                    const data = await predResp.json();
+                    if (data.predictions && data.predictions[iid]) {
+                        if (selectedInput && selectedInput.value) return; // re-check after await
+                        window.location.reload();
+                        return;
+                    }
+                }
+                let running = true;
+                if (statResp.ok) {
+                    const s = await statResp.json();
+                    running = !!(s.llm_stats && s.llm_stats.is_running);
+                }
+                // Give up if the labeler has stopped, or after the time budget.
+                if ((!running && attempts >= 2) || attempts >= maxAttempts) {
+                    pendingEl.classList.add('pending-failed');
+                    if (textEl) textEl.textContent =
+                        'No LLM suggestion for this item yet — go ahead and label it yourself.';
+                    return;
+                }
+            } catch (err) {
+                console.warn('LLM prediction poll failed', err);
+            }
+            setTimeout(poll, 2500);
+        };
+        setTimeout(poll, 2500);
+    }
 </script>
 {% endblock %}

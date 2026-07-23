@@ -572,5 +572,91 @@ class TestEdgeCaseRuleIntegration:
         assert 'success' in data or 'error' in data
 
 
+class TestReviewPhaseWiring:
+    """End-to-end wiring of the PERIODIC_REVIEW and RULE_REVIEW phases through
+    the real HTTP routes (these phases were previously unreachable)."""
+
+    def _reset_to_parallel(self, manager):
+        from potato.solo_mode.phase_controller import SoloPhase
+        # The manager singleton is shared across the module's tests; clear the
+        # review-relevant state so each case starts from a known baseline
+        # (prior tests populate human_labeled_ids, which would otherwise exclude
+        # our injected instances from the review pool).
+        manager.predictions.clear()
+        manager.human_labeled_ids.clear()
+        manager.disagreement_ids.clear()
+        manager.validation_tracker.reset_periodic_review_counter()
+        manager.advance_to_phase(SoloPhase.PROMPT_REVIEW, force=True)
+        manager.advance_to_phase(SoloPhase.PARALLEL_ANNOTATION, force=True)
+
+    def test_annotate_post_enters_periodic_review(
+        self, solo_integration_server, manager, authed_session
+    ):
+        from potato.solo_mode.phase_controller import SoloPhase
+
+        self._reset_to_parallel(manager)
+        # Low-confidence, un-human-labeled predictions => review-eligible items.
+        for i in range(5):
+            iid = f"int_{i:03d}"
+            manager.set_llm_prediction(iid, 'sentiment',
+                                       _make_prediction(iid, 'positive', confidence=0.2))
+        # Make a review due.
+        manager.validation_tracker.periodic_review_interval = 3
+        for i in range(3):
+            manager.validation_tracker.record_llm_label(f"int_{i:03d}")
+
+        # Annotate a different instance; the POST should divert to review.
+        resp = authed_session.post(
+            f"{solo_integration_server.base_url}/solo/annotate",
+            data={"instance_id": "int_010", "annotation": "positive"},
+            allow_redirects=False,
+        )
+        assert resp.status_code in (301, 302)
+        assert "/solo/review" in resp.headers.get("Location", "")
+        assert manager.get_current_phase() == SoloPhase.PERIODIC_REVIEW
+
+    def test_review_completion_returns_to_active_annotation(
+        self, solo_integration_server, manager, authed_session
+    ):
+        from potato.solo_mode.phase_controller import SoloPhase
+
+        # Enter periodic review with one review item, then consume it.
+        self._reset_to_parallel(manager)
+        manager.set_llm_prediction("int_007", 'sentiment',
+                                   _make_prediction("int_007", 'positive', confidence=0.2))
+        manager.validation_tracker.periodic_review_interval = 1
+        manager.validation_tracker.record_llm_label("int_007")
+        assert manager.check_and_enter_periodic_review() is True
+        assert manager.get_current_phase() == SoloPhase.PERIODIC_REVIEW
+
+        # Mark the review item as handled so no items remain, then load review.
+        manager.human_labeled_ids.add("int_007")
+        resp = authed_session.get(
+            f"{solo_integration_server.base_url}/solo/review",
+            allow_redirects=False,
+        )
+        assert resp.status_code in (301, 302)
+        assert "/solo/annotate" in resp.headers.get("Location", "")
+        assert manager.get_current_phase() == SoloPhase.ACTIVE_ANNOTATION
+
+    def test_annotate_post_enters_rule_review_when_categories_pending(
+        self, solo_integration_server, manager, authed_session
+    ):
+        from unittest.mock import MagicMock, patch
+        from potato.solo_mode.phase_controller import SoloPhase
+
+        self._reset_to_parallel(manager)
+        with patch.object(manager.edge_case_rule_manager,
+                          'get_pending_categories', return_value=[MagicMock()]):
+            resp = authed_session.post(
+                f"{solo_integration_server.base_url}/solo/annotate",
+                data={"instance_id": "int_012", "annotation": "positive"},
+                allow_redirects=False,
+            )
+            assert resp.status_code in (301, 302)
+            assert "/solo/rule" in resp.headers.get("Location", "")
+            assert manager.get_current_phase() == SoloPhase.RULE_REVIEW
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

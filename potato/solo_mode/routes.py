@@ -254,7 +254,11 @@ def edge_cases():
                 manager.advance_to_phase(SoloPhase.PROMPT_VALIDATION)
                 return redirect(url_for('solo_mode.prompt_editor'))
 
-            return jsonify({'success': True, 'remaining': len(unlabeled)})
+            # The edge-cases form is a native (non-AJAX) POST, so redirect back
+            # to the page to render the next unlabeled case. Returning JSON here
+            # left the user staring at raw {"success": ...} text with no way
+            # forward through the UI.
+            return redirect(url_for('solo_mode.edge_cases'))
 
         return jsonify({'error': 'Missing case_id or label'}), 400
 
@@ -316,6 +320,15 @@ def annotate():
                 # Redirect to disagreement resolution
                 session['disagreement_instance'] = instance_id
                 return redirect(url_for('solo_mode.disagreements'))
+
+            # Periodic review of low-confidence LLM labels (due every
+            # periodic_review_interval fresh LLM labels).
+            if manager.check_and_enter_periodic_review():
+                return redirect(url_for('solo_mode.review'))
+
+            # Review of newly-clustered edge-case rule categories.
+            if manager.check_and_enter_rule_review():
+                return redirect(url_for('solo_mode.rule_review'))
 
             # Get next instance
             return redirect(url_for('solo_mode.annotate'))
@@ -382,6 +395,7 @@ def annotate():
         instance_id=instance_id,
         llm_prediction=llm_prediction,
         labels=labels,
+        annotation_type=manager.get_annotation_type(),
         phase=manager.get_current_phase().name.lower(),
         stats=manager.get_annotation_stats(),
     )
@@ -491,8 +505,16 @@ def review():
     instances = manager.get_instances_for_review()
 
     if not instances:
-        # Reset review counter and return to annotation
+        # Reset review counter and return to annotation.
         manager.validation_tracker.reset_periodic_review_counter()
+        if manager.get_current_phase() == SoloPhase.PERIODIC_REVIEW:
+            try:
+                manager.advance_to_phase(
+                    SoloPhase.ACTIVE_ANNOTATION,
+                    reason="Periodic review complete",
+                )
+            except ValueError:
+                pass
         return redirect(url_for('solo_mode.annotate'))
 
     # Get available labels
@@ -539,10 +561,19 @@ def validation():
 
     # Get validation samples
     samples = manager.get_validation_samples()
-    current_sample = samples[0] if samples else None
 
     # Get progress
     progress = manager.get_validation_progress()
+
+    # Nothing left to validate (e.g. the human already labeled every instance,
+    # so there are no LLM-only samples): complete the workflow instead of
+    # dead-ending on an empty "Validation Complete" page with no way forward.
+    if (not samples and progress.get('remaining', 0) == 0
+            and manager.get_current_phase() == SoloPhase.FINAL_VALIDATION):
+        manager.advance_to_phase(SoloPhase.COMPLETED)
+        return redirect(url_for('solo_mode.status'))
+
+    current_sample = samples[0] if samples else None
 
     # Get available labels
     labels = manager.get_available_labels()
@@ -602,6 +633,18 @@ def rule_review():
     approved = ecr.get_approved_categories()
     rejected = ecr.get_rejected_categories()
     stats = ecr.get_stats()
+
+    # Nothing left to review — don't strand the user on an empty page in the
+    # RULE_REVIEW phase; hand back to active annotation.
+    if not pending and manager.get_current_phase() == SoloPhase.RULE_REVIEW:
+        try:
+            manager.advance_to_phase(
+                SoloPhase.ACTIVE_ANNOTATION,
+                reason="No rule categories pending",
+            )
+        except ValueError:
+            pass
+        return redirect(url_for('solo_mode.annotate'))
 
     # Build category details with member rules
     categories_with_rules = []

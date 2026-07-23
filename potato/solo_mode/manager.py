@@ -223,6 +223,12 @@ class SoloModeManager:
         # Reannotation tracking (persisted across restarts)
         self._reannotation_counts: Dict[str, int] = {}
 
+        # Background-labeling error tracking (surfaced on the dashboard so a
+        # misconfigured/unreachable endpoint is visible instead of looking like
+        # "Running / 0 errors" forever).
+        self._labeling_error_count: int = 0
+        self._last_labeling_error: Optional[str] = None
+
         # Per-prompt-version agreement tracking
         # Tracks agreement separately for each prompt version so we can
         # measure whether a refinement actually improved accuracy
@@ -240,6 +246,20 @@ class SoloModeManager:
 
         # State persistence
         self._state_file = 'solo_mode_state.json'
+
+        # Solo mode operates on a single annotation scheme throughout (labeling,
+        # recording, agreement, prediction all key off schemes[0]). Warn loudly
+        # if the config defines more than one so the admin knows the extras are
+        # ignored rather than silently getting mislabeled data.
+        _schemes = app_config.get('annotation_schemes', []) if app_config else []
+        if len(_schemes) > 1:
+            _first = _schemes[0].get('name', '?')
+            _ignored = [s.get('name', '?') for s in _schemes[1:]]
+            logger.warning(
+                "Solo Mode supports a single annotation scheme; using '%s' and "
+                "ignoring %s. Annotations for the ignored scheme(s) will not be "
+                "collected.", _first, _ignored
+            )
 
         logger.info(f"SoloModeManager initialized (enabled={config.enabled})")
 
@@ -578,6 +598,9 @@ class SoloModeManager:
             reasoning=result.reasoning,
         )
         self.set_llm_prediction(result.instance_id, result.schema_name, prediction)
+        # Advance the periodic-review counter so a review becomes due after
+        # `periodic_review_interval` fresh LLM labels.
+        self.validation_tracker.record_llm_label(result.instance_id)
         llm_count = len(self.llm_labeled_ids)
         if llm_count % 10 == 0:
             logger.info(
@@ -1690,6 +1713,15 @@ class SoloModeManager:
             )
             if phase in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
                 self.start_background_labeling()
+            elif phase in (SoloPhase.EDGE_CASE_LABELING, SoloPhase.PROMPT_VALIDATION):
+                # Warm up predictions early: the annotator spends 30-60s on edge
+                # cases, so pre-labeling the real dataset now means the first
+                # instances they see in PARALLEL_ANNOTATION already have LLM
+                # suggestions instead of a cold-start wait. The prompt is stable
+                # by this point; any later prompt change triggers re-annotation.
+                # start_background_labeling() is idempotent, so the subsequent
+                # PARALLEL_ANNOTATION call is a harmless no-op.
+                self.start_background_labeling()
         else:
             logger.warning(
                 f"[Phase Transition] FAILED: {old_phase.name} -> {phase.name}"
@@ -1916,6 +1948,12 @@ class SoloModeManager:
             if prediction is None:
                 return None
 
+            # Detect a re-submission of the same (instance, schema): the
+            # prediction already carries a human_label. Double-submits (double
+            # click, Accept+Enter, back-button resubmit) must NOT double-count
+            # agreement metrics or the confusion matrix.
+            already_counted = prediction.human_label is not None
+
             prediction.human_label = label
             agrees = self._check_agreement(
                 prediction.predicted_label,
@@ -1923,32 +1961,40 @@ class SoloModeManager:
                 schema_name
             )
             prediction.agrees_with_human = agrees
-
-            # Update agreement metrics
-            self.agreement_metrics.total_compared += 1
-            if agrees:
-                self.agreement_metrics.agreements += 1
-            else:
-                self.agreement_metrics.disagreements += 1
-                self.disagreement_ids.add(instance_id)
-            self.agreement_metrics.update_rate()
-
-            # Track per-prompt-version agreement
             pv = prediction.prompt_version
-            if pv not in self._per_version_agreement:
-                self._per_version_agreement[pv] = {'compared': 0, 'agreements': 0}
-            self._per_version_agreement[pv]['compared'] += 1
-            if agrees:
-                self._per_version_agreement[pv]['agreements'] += 1
 
-            # Feed the validation tracker for confusion matrix / pattern analysis
-            self.validation_tracker.record_comparison(
-                instance_id=instance_id,
-                human_label=label,
-                llm_label=prediction.predicted_label,
-                schema_name=schema_name,
-                agrees=agrees,
-            )
+            if not already_counted:
+                # Update agreement metrics (once per instance/schema)
+                self.agreement_metrics.total_compared += 1
+                if agrees:
+                    self.agreement_metrics.agreements += 1
+                else:
+                    self.agreement_metrics.disagreements += 1
+                    self.disagreement_ids.add(instance_id)
+                self.agreement_metrics.update_rate()
+
+                # Track per-prompt-version agreement
+                if pv not in self._per_version_agreement:
+                    self._per_version_agreement[pv] = {'compared': 0, 'agreements': 0}
+                self._per_version_agreement[pv]['compared'] += 1
+                if agrees:
+                    self._per_version_agreement[pv]['agreements'] += 1
+
+                # Feed the validation tracker for confusion matrix / pattern analysis
+                self.validation_tracker.record_comparison(
+                    instance_id=instance_id,
+                    human_label=label,
+                    llm_label=prediction.predicted_label,
+                    schema_name=schema_name,
+                    agrees=agrees,
+                )
+            else:
+                # Re-label of an already-counted instance: keep the disagreement
+                # set consistent with the newest label without double-counting.
+                if agrees:
+                    self.disagreement_ids.discard(instance_id)
+                else:
+                    self.disagreement_ids.add(instance_id)
 
             human_count = len(self.human_labeled_ids)
             pv_stats = self._per_version_agreement.get(pv, {})
@@ -1994,10 +2040,13 @@ class SoloModeManager:
                 return str(llm_label) == str(human_label)
 
         elif annotation_type == 'multiselect':
-            # Jaccard similarity for multiselect
+            # Jaccard similarity for multiselect. Labels can arrive as a JSON
+            # array string (from the solo UI), a comma string, a list, or a
+            # single value; normalize to a set so we never treat a string as a
+            # set of characters.
             threshold = self.config.thresholds.multiselect_jaccard_threshold
-            llm_set = set(llm_label) if isinstance(llm_label, (list, set)) else {llm_label}
-            human_set = set(human_label) if isinstance(human_label, (list, set)) else {human_label}
+            llm_set = self._to_label_set(llm_label)
+            human_set = self._to_label_set(human_label)
 
             if not llm_set and not human_set:
                 return True
@@ -2007,20 +2056,102 @@ class SoloModeManager:
             jaccard = intersection / union if union > 0 else 0
             return jaccard >= threshold
 
-        elif annotation_type == 'textbox':
-            # For now, exact match; could use embedding similarity
+        elif annotation_type in ('text', 'textbox'):
+            # Free-text: normalized exact match. (The registry type is 'text';
+            # 'textbox' kept as an alias.)
             return str(llm_label).strip().lower() == str(human_label).strip().lower()
 
         elif annotation_type == 'span':
-            # Token overlap for spans
+            # Character-overlap agreement for spans (same label). Labels are JSON
+            # arrays of {start, end, label}. Agree if the same-label overlap
+            # covers at least span_overlap_threshold of the human span length.
             threshold = self.config.thresholds.span_overlap_threshold
-            # Simplified: check if spans overlap sufficiently
-            # Full implementation would compare token ranges
-            return str(llm_label) == str(human_label)
+            return self._spans_agree(human_label, llm_label, threshold)
 
         else:
             # Default to exact match
             return str(llm_label) == str(human_label)
+
+    @staticmethod
+    def _to_label_set(label: Any) -> set:
+        """Normalize a multiselect label into a set of label strings.
+
+        Accepts a list/set, a JSON array string (``["a","b"]``), a
+        comma-separated string, or a single value. Never iterates a plain
+        string into a set of characters.
+        """
+        if label is None:
+            return set()
+        if isinstance(label, (list, set, tuple)):
+            return {str(x) for x in label}
+        if isinstance(label, str):
+            s = label.strip()
+            if not s:
+                return set()
+            if s.startswith('[') and s.endswith(']'):
+                try:
+                    import json as _json
+                    parsed = _json.loads(s)
+                    if isinstance(parsed, list):
+                        return {str(x) for x in parsed}
+                except (ValueError, TypeError):
+                    pass
+            if ',' in s:
+                return {p.strip() for p in s.split(',') if p.strip()}
+            return {s}
+        return {str(label)}
+
+    @staticmethod
+    def _parse_spans(label: Any) -> List[Dict[str, Any]]:
+        """Parse a span annotation (JSON array string or list) into a list of
+        {start, end, label} dicts. Invalid input -> []."""
+        if isinstance(label, list):
+            raw = label
+        elif isinstance(label, str):
+            s = label.strip()
+            if not s:
+                return []
+            try:
+                raw = json.loads(s)
+            except (ValueError, TypeError):
+                return []
+        else:
+            return []
+        out = []
+        if isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, dict) and 'start' in item and 'end' in item:
+                    try:
+                        out.append({
+                            'start': int(item['start']),
+                            'end': int(item['end']),
+                            'label': str(item.get('label', '')),
+                        })
+                    except (ValueError, TypeError):
+                        continue
+        return out
+
+    def _spans_agree(self, human_label: Any, llm_label: Any,
+                     threshold: float) -> bool:
+        """Char-overlap agreement between two span sets (matched by label)."""
+        hs = self._parse_spans(human_label)
+        ls = self._parse_spans(llm_label)
+        if not hs and not ls:
+            return True
+        if not hs or not ls:
+            return False
+        total_human = sum(max(0, s['end'] - s['start']) for s in hs)
+        if total_human == 0:
+            return False
+        overlap = 0
+        for h in hs:
+            for l in ls:
+                if h['label'] != l['label']:
+                    continue
+                o = min(h['end'], l['end']) - max(h['start'], l['start'])
+                if o > 0:
+                    overlap += o
+        return (overlap / total_human) >= threshold
 
     def _get_annotation_type(self, schema_name: str) -> str:
         """Get the annotation type for a schema."""
@@ -2313,17 +2444,101 @@ class SoloModeManager:
             if current_phase.value >= SoloPhase.AUTONOMOUS_LABELING.value:
                 return False
 
-            # Advance phase atomically
-            return self.phase_controller.transition_to(
-                SoloPhase.AUTONOMOUS_LABELING,
-                reason="Agreement threshold reached"
-            )
+            # Advance atomically. The phase graph forbids a direct
+            # PARALLEL_ANNOTATION -> AUTONOMOUS_LABELING jump; it must pass
+            # through ACTIVE_ANNOTATION first. Walk the valid path, and never let
+            # a phase-graph error bubble up as a 500 on the annotate page.
+            try:
+                if current_phase == SoloPhase.PARALLEL_ANNOTATION:
+                    if not self.phase_controller.transition_to(
+                        SoloPhase.ACTIVE_ANNOTATION,
+                        reason="Agreement threshold reached"
+                    ):
+                        return False
+                return self.phase_controller.transition_to(
+                    SoloPhase.AUTONOMOUS_LABELING,
+                    reason="Agreement threshold reached"
+                )
+            except ValueError as e:
+                logger.warning(
+                    f"Could not advance to autonomous labeling: {e}"
+                )
+                return False
 
     def should_trigger_periodic_review(self) -> bool:
         """Check if periodic review should be triggered."""
         with self._lock:
             interval = self.config.thresholds.periodic_review_interval
             return len(self.llm_labeled_ids) % interval == 0
+
+    def _enter_review_phase(self, target_phase: SoloPhase, reason: str) -> bool:
+        """Transition into a review phase, stepping through ACTIVE_ANNOTATION
+        first if we're still in PARALLEL_ANNOTATION (the phase graph only allows
+        PERIODIC_REVIEW / RULE_REVIEW from ACTIVE_ANNOTATION). Never lets a
+        phase-graph error bubble up to the annotate route. Returns True on
+        success."""
+        phase = self.phase_controller.get_current_phase()
+        try:
+            if phase == SoloPhase.PARALLEL_ANNOTATION:
+                if not self.phase_controller.transition_to(
+                    SoloPhase.ACTIVE_ANNOTATION,
+                    reason="Begin active annotation",
+                ):
+                    return False
+            return self.phase_controller.transition_to(target_phase, reason=reason)
+        except ValueError as e:
+            logger.warning(f"Could not enter {target_phase.to_str()}: {e}")
+            return False
+
+    def check_and_enter_periodic_review(self) -> bool:
+        """If a periodic review is due and there are low-confidence LLM labels to
+        review, enter PERIODIC_REVIEW. Returns True if the phase changed (the
+        caller should then redirect to the review page).
+
+        Only fires from the annotation phases; the review page resets the counter
+        and returns to ACTIVE_ANNOTATION when done.
+        """
+        phase = self.phase_controller.get_current_phase()
+        if phase not in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
+            return False
+        if not self.validation_tracker.should_trigger_periodic_review():
+            return False
+        if not self.get_instances_for_review():
+            # Due, but nothing low-confidence to review right now — skip this
+            # cycle so the counter doesn't stay stuck above the interval.
+            self.validation_tracker.reset_periodic_review_counter()
+            return False
+        entered = self._enter_review_phase(
+            SoloPhase.PERIODIC_REVIEW, "Periodic review due"
+        )
+        if entered:
+            logger.info("[Phase] Entering PERIODIC_REVIEW")
+        return entered
+
+    def check_and_enter_rule_review(self) -> bool:
+        """If edge-case rules have been clustered into pending categories, enter
+        RULE_REVIEW so the human can approve/reject them. Returns True if the
+        phase changed (the caller should redirect to the rule-review page)."""
+        phase = self.phase_controller.get_current_phase()
+        if phase not in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
+            return False
+        if not self.config.edge_case_rules.enabled:
+            return False
+        try:
+            pending = self.edge_case_rule_manager.get_pending_categories()
+        except Exception:
+            return False
+        if not pending:
+            return False
+        entered = self._enter_review_phase(
+            SoloPhase.RULE_REVIEW, "Edge-case rules ready for review"
+        )
+        if entered:
+            logger.info(
+                "[Phase] Entering RULE_REVIEW (%d pending categories)",
+                len(pending),
+            )
+        return entered
 
     # === Background Labeling ===
 
@@ -2429,7 +2644,12 @@ class SoloModeManager:
                 labeled_count = self._label_batch(batch_size)
 
                 if labeled_count == 0:
-                    # No more instances to label
+                    # No more instances to label. If we're in autonomous
+                    # labeling, the LLM has finished the dataset — advance to
+                    # final validation so the human can spot-check a sample and
+                    # the workflow can reach COMPLETED (without this, the run
+                    # dead-ends in AUTONOMOUS_LABELING forever).
+                    self._maybe_advance_autonomous_to_validation()
                     time.sleep(30)
                 else:
                     logger.info(f"Labeled {labeled_count} instances in background")
@@ -2441,6 +2661,37 @@ class SoloModeManager:
 
             # Wait before next batch
             self._stop_labeling.wait(5)
+
+    def _maybe_advance_autonomous_to_validation(self) -> None:
+        """Advance AUTONOMOUS_LABELING -> FINAL_VALIDATION once the LLM has
+        labeled everything it can.
+
+        Nothing else in the workflow performs this transition, so without it a
+        run that reaches autonomous labeling can never reach final validation or
+        COMPLETED. Called from the background loop when a labeling pass finds no
+        remaining work.
+        """
+        with self._lock:
+            if self.phase_controller.get_current_phase() != SoloPhase.AUTONOMOUS_LABELING:
+                return
+            # Only advance when the whole dataset is accounted for.
+            total = self._get_total_instance_count()
+            covered = len(self.llm_labeled_ids | self.human_labeled_ids)
+            if total > 0 and covered < total:
+                return
+        # Transition outside the manager lock (phase_controller has its own lock).
+        try:
+            if self.phase_controller.transition_to(
+                SoloPhase.FINAL_VALIDATION,
+                reason="Autonomous labeling complete",
+            ):
+                logger.info(
+                    "[Phase Transition] AUTONOMOUS_LABELING -> FINAL_VALIDATION "
+                    "(autonomous labeling complete)"
+                )
+                self._save_state()
+        except ValueError as e:
+            logger.warning(f"Could not advance to final validation: {e}")
 
     def _label_batch(self, batch_size: int) -> int:
         """Label a batch of instances. Returns number labeled.
@@ -2491,6 +2742,9 @@ class SoloModeManager:
                 if result.accepted and result.labeling_result:
                     self._handle_labeling_result(result.labeling_result)
                     labeled += 1
+                elif result.labeling_result and result.labeling_result.error:
+                    self._labeling_error_count += 1
+                    self._last_labeling_error = result.labeling_result.error
         else:
             for inst in remaining:
                 result = self.llm_labeling_thread._label_instance(
@@ -2499,6 +2753,9 @@ class SoloModeManager:
                 if result and not result.error:
                     self._handle_labeling_result(result)
                     labeled += 1
+                elif result and result.error:
+                    self._labeling_error_count += 1
+                    self._last_labeling_error = result.error
         return labeled
 
     def _get_instances_for_labeling(self, batch_size: int) -> List[Dict[str, Any]]:
@@ -2787,17 +3044,38 @@ class SoloModeManager:
         except Exception:
             return 0
 
+    def get_annotation_type(self) -> str:
+        """Annotation type of the (single) scheme solo mode operates on."""
+        schemes = self.app_config.get('annotation_schemes', [])
+        return schemes[0].get('annotation_type', 'radio') if schemes else 'radio'
+
     def get_available_labels(self) -> List[str]:
-        """Get available labels from annotation schemes."""
+        """Get available labels from the (first) annotation scheme.
+
+        Solo mode keys off schemes[0] everywhere (labeling, recording, agreement,
+        prediction). Flattening labels from every scheme let the annotate UI show
+        options that are never actually recorded/predicted, so a pick from a
+        second scheme was stored as a first-scheme annotation. Return only the
+        first scheme's labels so the UI matches what is processed.
+        """
         labels = []
         schemes = self.app_config.get('annotation_schemes', [])
-        for scheme in schemes:
-            scheme_labels = scheme.get('labels', [])
-            for label in scheme_labels:
+        if not schemes:
+            return labels
+        scheme = schemes[0]
+        raw_labels = scheme.get('labels', [])
+        if raw_labels:
+            for label in raw_labels:
                 if isinstance(label, str):
                     labels.append(label)
                 elif isinstance(label, dict):
                     labels.append(label.get('name', str(label)))
+        elif scheme.get('annotation_type') == 'likert' and scheme.get('size'):
+            # Likert scales are defined by size + min_label/max_label, not an
+            # explicit label list. Derive numeric scale points (1..size) so the
+            # annotate UI renders buttons and the likert_tolerance agreement
+            # check gets int-parseable values.
+            labels = [str(i) for i in range(1, int(scheme['size']) + 1)]
         return labels
 
     def check_for_disagreement(self, instance_id: str, human_label: Any) -> bool:
@@ -2859,10 +3137,15 @@ class SoloModeManager:
     def get_llm_labeling_stats(self) -> Dict[str, Any]:
         """Get LLM labeling statistics."""
         with self._lock:
+            total = self._get_total_instance_count()
+            # Instances the LLM still has to label = total minus those it has
+            # already labeled (a meaningful "queue", not a hardcoded 0).
+            queue_size = max(0, total - len(self.llm_labeled_ids))
             stats = {
                 'labeled_count': len(self.llm_labeled_ids),
-                'queue_size': 0,  # Placeholder
-                'error_count': 0,  # Placeholder
+                'queue_size': queue_size,
+                'error_count': self._labeling_error_count,
+                'last_error': self._last_labeling_error,
                 'is_paused': self.is_background_labeling_paused(),
                 'is_running': (
                     self.is_background_labeling_running()
