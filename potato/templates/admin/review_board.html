@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Review Board · {{ annotation_task_name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  .rb-lede { color: var(--muted-foreground); font-size: 0.9375rem; max-width: 72ch;
+             line-height: 1.6; margin: 0 0 1.25rem; }
+  .rb-board { display: grid; grid-template-columns: repeat(5, minmax(190px, 1fr));
+              gap: 0.75rem; align-items: start; overflow-x: auto; }
+  .rb-col { background: var(--muted); border-radius: var(--radius); padding: 0.6rem; }
+  .rb-col-head { display: flex; justify-content: space-between; align-items: baseline;
+                 margin-bottom: 0.5rem; }
+  .rb-col-title { font-weight: 700; font-size: 0.82rem; text-transform: uppercase;
+                  letter-spacing: 0.04em; }
+  .rb-count { font-size: 0.75rem; color: var(--muted-foreground); }
+  .rb-card { background: var(--background); border: 1px solid var(--border);
+             border-radius: var(--radius); padding: 0.5rem 0.6rem; margin-bottom: 0.5rem;
+             font-size: 0.82rem; }
+  .rb-card .rb-id { font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+                    font-size: 0.72rem; color: var(--muted-foreground);
+                    word-break: break-all; }
+  .rb-card .rb-preview { margin: 0.25rem 0; line-height: 1.35; }
+  .rb-meta { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;
+             margin: 0.3rem 0; }
+  .rb-pill { font-size: 0.68rem; background: var(--muted); border-radius: 999px;
+             padding: 0.05rem 0.5rem; font-weight: 600; }
+  .rb-pill.rb-prio { background: hsl(40 85% 90%); color: hsl(28 60% 28%); }
+  .rb-actions { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.35rem; }
+  .rb-btn { font: inherit; font-size: 0.7rem; border: 1px solid var(--border);
+            border-radius: var(--radius); background: var(--background);
+            color: var(--foreground); padding: 0.15rem 0.45rem; cursor: pointer; }
+  .rb-btn:hover { background: var(--muted); }
+  .rb-assign { font: inherit; font-size: 0.72rem; border: 1px solid var(--border);
+               border-radius: var(--radius); padding: 0.12rem 0.3rem;
+               background: var(--background); color: var(--foreground); }
+  .rb-empty { color: var(--muted-foreground); font-style: italic; font-size: 0.8rem; }
+  .rb-status { font-size: 0.85rem; min-height: 1.2em; margin-bottom: 0.6rem; }
+  .rb-status.err { color: hsl(0 65% 45%); }
+  .rb-adj-link { font-size: 0.72rem; }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <h1>Review Board</h1>
+  <p class="rb-lede">
+    Route instances through the review workflow: <strong>pending → in review →
+    needs second → adjudication → done</strong>. Assign reviewers, bump
+    priorities, and hand disagreements to the
+    <a href="/adjudicate">adjudication UI</a>. Routing rules in
+    <code>review_workflow.routing</code> pre-sort new items.
+  </p>
+  <div class="rb-status" id="rb-status" role="status" aria-live="polite"></div>
+  <div class="rb-board" id="rb-board"></div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var STATES = {{ states | tojson }};
+  var REVIEWERS = {{ reviewers | tojson }};
+  var LABELS = {pending: 'Pending', in_review: 'In review',
+                needs_second: 'Needs second', adjudication: 'Adjudication',
+                done: 'Done'};
+
+  function el(tag, attrs, text) {
+    var e = document.createElement(tag);
+    for (var k in (attrs || {})) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function api(path, body) {
+    return fetch(path, body ? {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    } : undefined).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  function setStatus(msg, isErr) {
+    var s = document.getElementById('rb-status');
+    s.className = 'rb-status' + (isErr ? ' err' : '');
+    s.textContent = msg || '';
+  }
+
+  function card(item) {
+    var c = el('div', {'class': 'rb-card', 'data-instance-id': item.instance_id});
+    c.appendChild(el('div', {'class': 'rb-id'}, item.instance_id));
+    if (item.preview) c.appendChild(el('div', {'class': 'rb-preview'}, item.preview));
+
+    var meta = el('div', {'class': 'rb-meta'});
+    if (item.priority) meta.appendChild(
+      el('span', {'class': 'rb-pill rb-prio'}, 'p' + item.priority));
+    var sel = el('select', {'class': 'rb-assign', title: 'Assignee',
+                            'aria-label': 'Assignee for ' + item.instance_id});
+    sel.appendChild(el('option', {value: ''}, 'unassigned'));
+    var opts = REVIEWERS.slice();
+    if (item.assignee && opts.indexOf(item.assignee) === -1) opts.push(item.assignee);
+    opts.forEach(function (r) {
+      var o = el('option', {value: r}, r);
+      if (r === item.assignee) o.setAttribute('selected', 'selected');
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', function () {
+      api('/admin/api/review/assign',
+          {instance_id: item.instance_id, assignee: sel.value || null})
+        .then(load).catch(function (e) { setStatus('Assign failed: ' + e, true); });
+    });
+    meta.appendChild(sel);
+    if (item.state === 'adjudication') {
+      var a = el('a', {'class': 'rb-adj-link',
+                       href: '/adjudicate?instance=' +
+                             encodeURIComponent(item.instance_id)}, 'open ↗');
+      meta.appendChild(a);
+    }
+    c.appendChild(meta);
+
+    var actions = el('div', {'class': 'rb-actions'});
+    var idx = STATES.indexOf(item.state);
+    STATES.forEach(function (s, i) {
+      if (s === item.state) return;
+      // Show the neighbours plus done — keeps the card compact.
+      if (Math.abs(i - idx) > 1 && s !== 'done') return;
+      var b = el('button', {'class': 'rb-btn', type: 'button'},
+                 (i > idx ? '→ ' : '← ') + LABELS[s]);
+      b.addEventListener('click', function () {
+        api('/admin/api/review/move', {instance_id: item.instance_id, state: s})
+          .then(load).catch(function (e) { setStatus('Move failed: ' + e, true); });
+      });
+      actions.appendChild(b);
+    });
+    c.appendChild(actions);
+    return c;
+  }
+
+  function load() {
+    api('/admin/api/review/board').then(function (data) {
+      setStatus('');
+      var boardEl = document.getElementById('rb-board');
+      boardEl.innerHTML = '';
+      STATES.forEach(function (state) {
+        var items = (data.board[state] || []);
+        var col = el('div', {'class': 'rb-col', 'data-state': state});
+        var head = el('div', {'class': 'rb-col-head'});
+        head.appendChild(el('span', {'class': 'rb-col-title'}, LABELS[state] || state));
+        head.appendChild(el('span', {'class': 'rb-count'}, String(items.length)));
+        col.appendChild(head);
+        if (!items.length) col.appendChild(el('div', {'class': 'rb-empty'}, 'empty'));
+        items.forEach(function (item) { col.appendChild(card(item)); });
+        boardEl.appendChild(col);
+      });
+    }).catch(function (e) { setStatus('Failed to load board: ' + e, true); });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+port: 8000
+annotation_task_name: "Psychometrics — Sarcasm with Error Bars"
+task_dir: .
+output_annotation_dir: annotation_output/psychometrics/
+output_annotation_format: jsonl
+annotation_codebook_url: ''
+data_files:
+- data/sarcasm.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: radio
+  name: sarcasm
+  description: Is this message sarcastic or sincere?
+  labels:
+  - Sarcastic
+  - Sincere
+  sequential_key_binding: true
+
+# ---------------------------------------------------------------------------
+# Psychometrics: measurement-grade annotation. A live item-response-theory
+# model (multiclass GLAD — no gold labels, no LLM) jointly estimates each
+# annotator's ability and each item's difficulty from agreement patterns,
+# refit in milliseconds as labels stream in.
+#
+#   Dashboard (admin; --debug passes):  /psychometrics/dashboard
+#   Enriched export (labels + error bars): /psychometrics/api/export
+#   Pre-study power analysis:
+#     python -m potato.psychometrics.design --items 30 --accuracy 0.8 \
+#         --classes 2 --target-ci 0.15 --cost 0.08
+#
+# With `assignment_strategy: psychometric`, items are routed to whichever
+# annotator's judgment carries the most information, and items past the
+# confidence threshold stop consuming annotation budget. Until
+# min_observations labels exist, assignment falls back to random so the
+# model gets the annotator overlap it needs (the dashboard shows a
+# warming-up meter during this phase).
+# ---------------------------------------------------------------------------
+assignment_strategy: psychometric
+num_annotators_per_item: 4
+
+psychometrics:
+  enabled: true
+  schema: sarcasm
+  refit_interval: 5          # refit after this many new labels
+  min_observations: 20       # cold-start gate before adaptive routing kicks in
+  min_annotators_per_item: 2 # never early-stop an item with fewer annotators
+  confidence_threshold: 0.95 # posterior at which an item counts as resolved
+  cost_per_judgment: 0.08    # optional; turns saved judgments into dollars
+
+site_dir: default

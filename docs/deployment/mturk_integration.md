@@ -1,5 +1,17 @@
 # Amazon Mechanical Turk Integration Guide
 
+!!! warning "MTurk is closed to new customers (July 30, 2026)"
+    Amazon Mechanical Turk **closed to new requesters on July 30, 2026** and is in
+    maintenance mode: existing requester accounts continue to work, but AWS is not
+    adding features and has announced no timeline for the service beyond that.
+    Potato's MTurk integration is **maintained but frozen** — it will keep working
+    for existing requesters, and no new MTurk features will be added.
+
+    If you are starting a new project, use [Prolific](prolific_integration.md) or
+    another platform from the [crowdsourcing platform guide](crowdsourcing-platforms.md).
+    CloudResearch is also sunsetting its MTurk Toolkit (end of 2026) in favor of
+    [Connect](crowdsourcing-platforms.md#cloudresearch-connect).
+
 This guide provides comprehensive instructions for deploying Potato annotation tasks on Amazon Mechanical Turk (MTurk).
 
 ## Table of Contents

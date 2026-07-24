@@ -1,0 +1,64 @@
+# Expert Invite Links Example
+#
+# Annotation by hired experts (Upwork, Fiverr, Toptal, direct contracts).
+# Each expert gets a personal tokenized link; unknown tokens are rejected.
+# See docs/deployment/expert_annotators.md for the full guide.
+#
+# To test locally, run from the repo root:
+#   python potato/flask_server.py start examples/crowdsourcing/expert-invites-example/config.yaml -p 8000
+#
+# Valid invite link:    http://localhost:8000/?invite=demo-token-alice
+# Rejected (unknown):   http://localhost:8000/?invite=forged-token
+
+port: 9006
+
+annotation_task_name: Expert Annotation Task
+task_description: "Expert review of short text snippets."
+
+login:
+  type: url_direct
+  url_argument: invite
+
+crowdsourcing:
+  provider: expert
+  expert:
+    invites:
+      demo-token-alice: "expert-alice"
+      demo-token-bob: "expert-bob"
+    # For real deployments keep tokens in an untracked file instead:
+    # invites_file: configs/expert_invites.yaml
+    completion:
+      message: "Thank you! Your work has been recorded. You can invoice per your contract."
+
+hide_navbar: true
+
+assignment_strategy: random
+max_annotations_per_user: 8
+num_annotators_per_item: 2
+
+task_dir: .
+output_annotation_dir: annotation_output/expert-invites-example/
+output_annotation_format: json
+
+data_files:
+  - data/example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the sentiment expressed in this text?"
+    labels:
+      - name: positive
+      - name: neutral
+      - name: negative
+    sequential_key_binding: true
+
+site_dir: default

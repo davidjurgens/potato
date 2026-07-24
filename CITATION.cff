@@ -1,0 +1,62 @@
+cff-version: 1.2.0
+message: "If you use Potato in your research, please cite the Potato 2.0 paper (ACL 2026)."
+title: "Potato: The Portable Annotation Tool"
+type: software
+url: "https://github.com/davidjurgens/potato"
+repository-code: "https://github.com/davidjurgens/potato"
+license: GPL-3.0-or-later
+authors:
+  - family-names: Jurgens
+    given-names: David
+  - family-names: Chen
+    given-names: Michael
+  - family-names: Iyer
+    given-names: Lina
+preferred-citation:
+  type: conference-paper
+  title: "Potato 2.0: A Comprehensive Annotation Platform with AI-in-the-Loop Support"
+  authors:
+    - family-names: Jurgens
+      given-names: David
+    - family-names: Chen
+      given-names: Michael
+    - family-names: Iyer
+      given-names: Lina
+  collection-title: "Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations)"
+  conference:
+    name: "64th Annual Meeting of the Association for Computational Linguistics"
+  publisher:
+    name: "Association for Computational Linguistics"
+  month: 7
+  year: 2026
+  start: 374
+  end: 386
+  isbn: "979-8-89176-392-0"
+  url: "https://aclanthology.org/2026.acl-demo.37/"
+references:
+  - type: conference-paper
+    title: "POTATO: The Portable Text Annotation Tool"
+    authors:
+      - family-names: Pei
+        given-names: Jiaxin
+      - family-names: Ananthasubramaniam
+        given-names: Aparna
+      - family-names: Wang
+        given-names: Xingyao
+      - family-names: Zhou
+        given-names: Naitian
+      - family-names: Dedeloudis
+        given-names: Apostolos
+      - family-names: Sargent
+        given-names: Jackson
+      - family-names: Jurgens
+        given-names: David
+    collection-title: "Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing: System Demonstrations"
+    publisher:
+      name: "Association for Computational Linguistics"
+    month: 12
+    year: 2022
+    start: 327
+    end: 337
+    doi: "10.18653/v1/2022.emnlp-demos.33"
+    url: "https://aclanthology.org/2022.emnlp-demos.33/"

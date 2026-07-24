@@ -243,6 +243,7 @@ def _register_builtin_schemas():
     from .tree_annotation import generate_tree_annotation_layout
     from .triage import generate_triage_layout
     from .event_annotation import generate_event_annotation_layout
+    from .multi_document_event import generate_multi_document_event_layout
     from .tiered_annotation import generate_tiered_annotation_layout
     from .bws import generate_bws_layout
     from .soft_label import generate_soft_label_layout
@@ -264,6 +265,8 @@ def _register_builtin_schemas():
     from .process_reward import generate_process_reward_layout
     from .failure_attribution import generate_failure_attribution_layout
     from .tool_call_review import generate_tool_call_review_layout
+    from .consensus_tracking import generate_consensus_tracking_layout
+    from .context_attribution import generate_context_attribution_layout
     from .agent_scorecard import generate_agent_scorecard_layout
     from .handoff_review import generate_handoff_review_layout
     from .agent_interaction_graph import generate_agent_interaction_graph_layout
@@ -439,6 +442,14 @@ def _register_builtin_schemas():
             description="N-ary event annotation with triggers and typed arguments"
         ),
         SchemaDefinition(
+            name="multi_document_event",
+            generator=generate_multi_document_event_layout,
+            required_fields=["name", "description", "slots"],
+            optional_fields=["allow_annotator_create", "template_name"],
+            supports_keybindings=False,
+            description="Cross-document event annotation: template slots filled with evidence from many documents"
+        ),
+        SchemaDefinition(
             name="tiered_annotation",
             generator=generate_tiered_annotation_layout,
             required_fields=["name", "description", "tiers", "source_field"],
@@ -597,6 +608,22 @@ def _register_builtin_schemas():
             optional_fields=["steps_key", "verdict_options"],
             supports_keybindings=False,
             description="Per-tool-call correctness review (right tool / args / ordering)"
+        ),
+        SchemaDefinition(
+            name="consensus_tracking",
+            generator=generate_consensus_tracking_layout,
+            required_fields=["name", "description"],
+            optional_fields=["turns_key", "acts", "linked_acts", "hint"],
+            supports_keybindings=False,
+            description="Tag discussion acts per turn (proposal/agreement/disagreement/decision/concession) with cross-turn links to referenced proposals"
+        ),
+        SchemaDefinition(
+            name="context_attribution",
+            generator=generate_context_attribution_layout,
+            required_fields=["name", "description"],
+            optional_fields=["turns_key", "acts", "linked_acts", "hint"],
+            supports_keybindings=False,
+            description="Tag how each turn uses earlier context (used correctly / hallucinated / ignored) with links to the source turn"
         ),
         SchemaDefinition(
             name="agent_scorecard",

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boundary Lab — {{ task_name }}</title>
+<style>
+    :root {
+        --ink: #26233d;
+        --ink-soft: #6d6a85;
+        --ink-faint: #a5a2bd;
+        --line: #e8e6f5;
+        --accent: #4f46a5;
+        --accent-deep: #38306b;
+        --hold: #16803c;
+        --hold-bg: #dcf5e2;
+        --flip: #b45309;
+        --flip-bg: #fff1e4;
+        --bad: #b91c1c;
+        --bad-bg: #ffe1e1;
+        --paper: #faf9ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background: #f5f4fb;
+    }
+    header {
+        background: linear-gradient(120deg, var(--accent-deep), var(--accent));
+        color: #fff;
+        padding: 26px 32px 22px;
+    }
+    header h1 { margin: 0; font-size: 1.45rem; letter-spacing: 0.01em; }
+    header .sub { margin-top: 5px; color: rgba(255,255,255,0.82); font-size: 0.92rem; }
+    header .task { font-weight: 600; color: #ffe27a; }
+    main { max-width: 1080px; margin: 0 auto; padding: 26px 24px 60px; }
+    .row-actions { display: flex; align-items: center; gap: 12px; margin: 4px 0 18px; }
+    .export-btn {
+        background: var(--accent); color: #fff; border: none; border-radius: 9px;
+        padding: 9px 18px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+        text-decoration: none; display: inline-block;
+    }
+    .export-btn:hover { background: var(--accent-deep); }
+    .export-btn:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 2px; }
+    .muted { color: var(--ink-faint); font-size: 0.83rem; }
+
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+    .tile {
+        background: #fff; border: 1px solid var(--line); border-radius: 12px;
+        padding: 14px 16px 12px;
+    }
+    .tile .num { font-size: 1.7rem; font-weight: 700; line-height: 1.15; }
+    .tile .lbl { color: var(--ink-soft); font-size: 0.82rem; margin-top: 2px; }
+    .tile.hi .num { color: var(--accent); }
+
+    section { margin-top: 30px; }
+    section h2 { font-size: 1.05rem; margin: 0 0 4px; }
+    section .desc { color: var(--ink-soft); font-size: 0.86rem; margin: 0 0 14px; }
+
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+
+    .barrow { display: flex; align-items: center; gap: 12px; margin: 9px 0; }
+    .barrow .name { width: 130px; font-size: 0.88rem; font-weight: 600; text-align: right; }
+    .barrow .track { flex: 1; height: 14px; background: var(--paper); border-radius: 999px; overflow: hidden; }
+    .barrow .fill { height: 100%; background: linear-gradient(90deg, #f6b26b, #e07a2f); border-radius: 999px; }
+    .barrow .val { width: 130px; font-size: 0.82rem; color: var(--ink-soft); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th { text-align: left; color: var(--ink-soft); font-weight: 600; font-size: 0.8rem;
+         border-bottom: 1px solid var(--line); padding: 6px 10px; }
+    td { padding: 8px 10px; border-bottom: 1px solid #f3f2fa; }
+    tr:last-child td { border-bottom: none; }
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
+    .pill.good { background: var(--hold-bg); color: var(--hold); }
+    .pill.warn { background: var(--flip-bg); color: var(--flip); }
+    .pill.bad  { background: var(--bad-bg); color: var(--bad); }
+    .pill.na   { background: var(--paper); color: var(--ink-faint); }
+
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+    .pair {
+        background: #fff; border: 1px solid var(--line); border-radius: 12px;
+        padding: 14px 16px; font-size: 0.88rem;
+    }
+    .pair .texts { line-height: 1.5; }
+    .pair del { background: var(--bad-bg); color: var(--bad); border-radius: 3px; padding: 0 1px;
+                text-decoration: line-through; text-decoration-thickness: 1px; }
+    .pair ins { background: var(--hold-bg); color: var(--hold); border-radius: 3px; padding: 0 1px;
+                text-decoration: none; }
+    .pair .labels { margin-top: 10px; font-size: 0.82rem; color: var(--ink-soft); }
+    .pair .labels .arrow { color: var(--ink-faint); padding: 0 4px; }
+    .pair .labels strong { color: var(--ink); }
+    .pair .rationale {
+        margin-top: 8px; padding: 7px 10px; background: var(--paper);
+        border-left: 3px solid var(--accent); border-radius: 0 7px 7px 0;
+        font-style: italic; color: var(--ink-soft); font-size: 0.83rem;
+    }
+    .pair .meta { margin-top: 8px; font-size: 0.75rem; color: var(--ink-faint); }
+
+    .empty {
+        text-align: center; color: var(--ink-soft); padding: 40px 20px;
+        background: #fff; border: 1px dashed var(--line); border-radius: 12px;
+    }
+    .error-box {
+        background: var(--bad-bg); color: var(--bad); border-radius: 10px;
+        padding: 14px 18px; margin-top: 20px;
+    }
+    .card.scrollable { overflow-x: auto; }
+    @media (max-width: 560px) {
+        .barrow { flex-wrap: wrap; }
+        .barrow .name { width: auto; text-align: left; }
+        .barrow .val { width: auto; }
+        .row-actions { flex-wrap: wrap; }
+    }
+</style>
+</head>
+<body>
+<header>
+    <h1>&#9889; Boundary Lab</h1>
+    <div class="sub">Decision boundaries, contrast sets, and invariance quality control
+        for <span class="task">{{ task_name }}</span></div>
+</header>
+<main>
+    <div class="row-actions">
+        <a class="export-btn" href="/boundary/api/export" download>Download contrast set (JSONL)</a>
+        <span class="muted">Every answered probe is a labeled (original, counterfactual) pair.</span>
+    </div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <section>
+        <h2>Boundary sensitivity by label</h2>
+        <p class="desc">Of the minimal edits intended to cross each label&rsquo;s boundary, the share
+            annotators confirmed as flips. High values mean the label sits on a knife&rsquo;s edge;
+            low values mean it is robust to small perturbations.</p>
+        <div class="card" id="sensitivity"></div>
+    </section>
+
+    <section>
+        <h2>Annotator invariance consistency</h2>
+        <p class="desc">Paraphrase probes should never flip a label. Annotators who flip on
+            paraphrases are answering inconsistently &mdash; an attention signal collected without
+            planting a single fake gold item.</p>
+        <div class="card scrollable" id="annotators"></div>
+    </section>
+
+    <section>
+        <h2>Where labels flip</h2>
+        <p class="desc">The most recent confirmed flips: the exact edit that crossed the boundary,
+            and the annotator&rsquo;s rationale for why.</p>
+        <div class="gallery" id="gallery"></div>
+    </section>
+
+    <div class="error-box" id="error" style="display:none"></div>
+</main>
+
+<script>
+(function () {
+    'use strict';
+
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    function diffWords(a, b) {
+        var aw = a.split(/(\s+)/), bw = b.split(/(\s+)/);
+        var n = aw.length, m = bw.length, dp = [];
+        for (var i = 0; i <= n; i++) dp.push(new Array(m + 1).fill(0));
+        for (i = n - 1; i >= 0; i--)
+            for (var j = m - 1; j >= 0; j--)
+                dp[i][j] = aw[i] === bw[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
+        var out = [], x = 0, y = 0, delBuf = [], insBuf = [];
+        function flush(buf, tag) {
+            var s = buf.join('');
+            if (!s) return;
+            out.push(s.trim() === '' ? esc(s) : '<' + tag + '>' + esc(s) + '</' + tag + '>');
+        }
+        while (x < n && y < m) {
+            if (aw[x] === bw[y]) {
+                flush(delBuf, 'del'); delBuf = [];
+                flush(insBuf, 'ins'); insBuf = [];
+                out.push(esc(aw[x])); x++; y++;
+            } else if (dp[x+1][y] >= dp[x][y+1]) delBuf.push(aw[x++]);
+            else insBuf.push(bw[y++]);
+        }
+        while (x < n) delBuf.push(aw[x++]);
+        while (y < m) insBuf.push(bw[y++]);
+        flush(delBuf, 'del'); flush(insBuf, 'ins');
+        return out.join('');
+    }
+
+    function pct(v) { return v == null ? '—' : Math.round(v * 100) + '%'; }
+
+    function tile(num, label, hi) {
+        return '<div class="tile' + (hi ? ' hi' : '') + '"><div class="num">' + num +
+               '</div><div class="lbl">' + label + '</div></div>';
+    }
+
+    function renderTiles(t) {
+        document.getElementById('tiles').innerHTML =
+            tile(t.contrast_pairs, 'contrast pairs collected', true) +
+            tile(t.instances_probed, 'instances probed') +
+            tile(t.flips, 'boundary flips found') +
+            tile(t.rationales, 'flip rationales') +
+            tile(t.annotators, 'annotators');
+    }
+
+    function renderSensitivity(sens) {
+        var host = document.getElementById('sensitivity');
+        var labels = Object.keys(sens);
+        if (!labels.length) {
+            host.innerHTML = '<div class="muted">No flip probes answered yet.</div>';
+            return;
+        }
+        labels.sort(function (a, b) { return sens[b].flip_rate - sens[a].flip_rate; });
+        host.innerHTML = labels.map(function (name) {
+            var s = sens[name];
+            return '<div class="barrow">' +
+                '<div class="name">' + esc(name) + '</div>' +
+                '<div class="track"><div class="fill" style="width:' +
+                    Math.round(s.flip_rate * 100) + '%"></div></div>' +
+                '<div class="val">' + pct(s.flip_rate) + ' flip rate (' +
+                    s.flips + ' of ' + (s.flips + s.holds) + ')</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    function consistencyPill(v) {
+        if (v == null) return '<span class="pill na">no data</span>';
+        var cls = v >= 0.85 ? 'good' : (v >= 0.6 ? 'warn' : 'bad');
+        return '<span class="pill ' + cls + '">' + pct(v) + '</span>';
+    }
+
+    function renderAnnotators(annos) {
+        var host = document.getElementById('annotators');
+        var names = Object.keys(annos);
+        if (!names.length) {
+            host.innerHTML = '<div class="muted">No probe responses yet.</div>';
+            return;
+        }
+        var rows = names.map(function (name) {
+            var a = annos[name];
+            return '<tr><td>' + esc(name) + '</td>' +
+                '<td>' + a.answered + '</td>' +
+                '<td>' + a.flips + '</td>' +
+                '<td>' + consistencyPill(a.invariance_consistency) + '</td></tr>';
+        }).join('');
+        host.innerHTML = '<table><thead><tr><th>Annotator</th><th>Probes answered</th>' +
+            '<th>Flips reported</th><th>Invariance consistency</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table>';
+    }
+
+    function renderGallery(gallery) {
+        var host = document.getElementById('gallery');
+        if (!gallery.length) {
+            host.innerHTML = '<div class="empty" style="grid-column:1/-1">No boundary flips yet.' +
+                ' Flips appear here the moment an annotator confirms one.</div>';
+            return;
+        }
+        host.innerHTML = gallery.map(function (g) {
+            return '<div class="pair">' +
+                '<div class="texts">' + diffWords(g.original_text, g.counterfactual_text) + '</div>' +
+                '<div class="labels"><strong>' + esc(g.original_label) + '</strong>' +
+                '<span class="arrow">&rarr;</span><strong>' + esc(g.new_label) + '</strong></div>' +
+                (g.rationale ? '<div class="rationale">&ldquo;' + esc(g.rationale) + '&rdquo;</div>' : '') +
+                '<div class="meta">' + esc(g.annotator) + ' &middot; instance ' + esc(g.instance_id) +
+                (g.edit_hint ? ' &middot; ' + esc(g.edit_hint) : '') + '</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    fetch('/boundary/api/stats')
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function (data) {
+            renderTiles(data.totals);
+            renderSensitivity(data.label_sensitivity);
+            renderAnnotators(data.annotators);
+            renderGallery(data.gallery);
+        })
+        .catch(function (err) {
+            var box = document.getElementById('error');
+            box.style.display = 'block';
+            box.textContent = 'Could not load stats (' + err.message +
+                '). Admin access is required — run with --debug or supply the admin API key.';
+        });
+})();
+</script>
+</body>
+</html>

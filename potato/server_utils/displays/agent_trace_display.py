@@ -44,6 +44,7 @@ class AgentTraceDisplay(BaseDisplay):
         "compact": False,
         "speaker_key": "speaker",
         "text_key": "text",
+        "show_run_tree": True,
     }
     description = "Agent trace display with step cards and type badges"
     supports_span_target = False  # Per-step IDs don't follow .text-content wrapper contract
@@ -66,6 +67,15 @@ class AgentTraceDisplay(BaseDisplay):
         field_key = html.escape(field_config.get("key", ""), quote=True)
         is_span_target = field_config.get("span_target", False)
 
+        # Turn-level annotation schemes bound to this field (injected by
+        # InstanceDisplayRenderer via the internal _turn_schemes key)
+        turn_schemes = field_config.get("_turn_schemes") or []
+
+        # Sub-agent run tree (injected via the internal _run_tree key from
+        # the item's run_tree field, produced by trace converters)
+        run_tree = field_config.get("_run_tree") or []
+        show_run_tree = options.get("show_run_tree", True) and bool(run_tree)
+
         # Normalize data to steps
         steps = self._normalize_steps(data, speaker_key, text_key)
 
@@ -73,7 +83,7 @@ class AgentTraceDisplay(BaseDisplay):
             return '<div class="agent-trace-placeholder">No trace steps found</div>'
 
         # Build CSS for step type colors
-        css = self._build_css(colors, compact)
+        css = self._build_css(colors, compact, show_run_tree)
 
         # Build summary header
         summary_html = ""
@@ -145,8 +155,19 @@ class AgentTraceDisplay(BaseDisplay):
                     f'</div>'
                 )
 
+            # Turn-level annotation slot (proxy widgets; real state lives in
+            # the scheme's hidden anchor input — see turn_annotations.py)
+            slot_html = ""
+            if turn_schemes:
+                from ..turn_annotations import render_turn_slot
+                slot_html = render_turn_slot(turn_schemes, step, i, field_key)
+
+            run_id_attr = ""
+            if step.get("run_id"):
+                run_id_attr = f' data-run-id="{html.escape(str(step["run_id"]), quote=True)}"'
+
             card_html = f'''
-            <div class="{' '.join(card_classes)}" data-step-index="{i}" data-step-type="{safe_step_type}">
+            <div class="{' '.join(card_classes)}" data-step-index="{i}" data-step-type="{safe_step_type}"{run_id_attr}>
                 <div class="step-header">
                     <span class="step-badge badge-{safe_step_type}">{badge_label}</span>
                     {step_num_html}
@@ -155,6 +176,7 @@ class AgentTraceDisplay(BaseDisplay):
                 <div class="step-body">
                     {text_html}
                     {screenshot_html}
+                    {slot_html}
                 </div>
             </div>
             '''
@@ -166,15 +188,91 @@ class AgentTraceDisplay(BaseDisplay):
         if is_span_target:
             container_classes.append("span-target-agent-trace")
 
+        # Sub-agent run tree sidebar (collapsible; clicking a node filters
+        # the step list to that run's turns — see run-tree.js)
+        tree_html = ""
+        if show_run_tree:
+            container_classes.append("has-run-tree")
+            tree_html = self._build_run_tree(run_tree)
+
         return f'''
         <style>{css}</style>
         <div class="{' '.join(container_classes)}" data-field-key="{field_key}">
             {summary_html}
-            <div class="agent-trace-steps">
-                {all_steps_html}
+            <div class="agent-trace-body">
+                {tree_html}
+                <div class="agent-trace-steps">
+                    {all_steps_html}
+                </div>
             </div>
         </div>
         '''
+
+    def _build_run_tree(self, run_tree: List[Dict[str, Any]]) -> str:
+        """Render the run hierarchy as a collapsible tree sidebar.
+
+        Each node button carries its own id plus its descendants' ids
+        (data-run-desc) so run-tree.js can filter steps to a whole subtree
+        without walking the tree client-side.
+        """
+        nodes = [n for n in run_tree if isinstance(n, dict) and n.get("id")]
+        if not nodes:
+            return ""
+        by_id = {str(n["id"]): n for n in nodes}
+        children: Dict[str, List[Dict[str, Any]]] = {}
+        roots: List[Dict[str, Any]] = []
+        for n in nodes:
+            parent = n.get("parent_id")
+            if parent is not None and str(parent) in by_id:
+                children.setdefault(str(parent), []).append(n)
+            else:
+                roots.append(n)
+
+        def descendants(node_id: str) -> List[str]:
+            out = []
+            for child in children.get(node_id, []):
+                cid = str(child["id"])
+                out.append(cid)
+                out.extend(descendants(cid))
+            return out
+
+        def render_node(n: Dict[str, Any]) -> str:
+            nid = str(n["id"])
+            esc_id = html.escape(nid, quote=True)
+            desc = html.escape(",".join(descendants(nid)), quote=True)
+            name = html.escape(str(n.get("name", "") or n.get("run_type", "run")))
+            run_type = html.escape(str(n.get("run_type", "chain")), quote=True)
+            status = str(n.get("status") or "")
+            status_html = ""
+            if status:
+                status_class = "rt-status-error" if status == "error" else "rt-status-ok"
+                status_html = f'<span class="rt-status {status_class}" title="{html.escape(status, quote=True)}"></span>'
+            turn_range = n.get("turn_range")
+            range_html = ""
+            if isinstance(turn_range, (list, tuple)) and len(turn_range) == 2:
+                lo, hi = turn_range
+                label = f"step {lo}" if lo == hi else f"steps {lo}–{hi}"
+                range_html = f'<span class="rt-range">{html.escape(label)}</span>'
+            kids = children.get(nid, [])
+            kids_html = ""
+            if kids:
+                kids_html = "<ul class='rt-children'>" + "".join(
+                    f"<li>{render_node(k)}</li>" for k in kids) + "</ul>"
+            return (
+                f'<button type="button" class="rt-node" data-run-id="{esc_id}"'
+                f' data-run-desc="{desc}" aria-pressed="false">'
+                f'<span class="rt-type rt-type-{run_type}">{run_type}</span>'
+                f'<span class="rt-name">{name}</span>{status_html}{range_html}'
+                f'</button>{kids_html}'
+            )
+
+        items = "".join(f"<li>{render_node(r)}</li>" for r in roots)
+        return (
+            '<nav class="run-tree" aria-label="Sub-agent run tree">'
+            '<div class="rt-title">Run tree</div>'
+            f'<ul class="rt-root">{items}</ul>'
+            '</nav>'
+        )
 
     def _normalize_steps(self, data: Any, speaker_key: str, text_key: str) -> List[Dict[str, str]]:
         """Normalize various trace data formats to a list of step dicts.
@@ -215,8 +313,13 @@ class AgentTraceDisplay(BaseDisplay):
         </div>
         '''
 
-    def _build_css(self, colors: Dict[str, str], compact: bool) -> str:
-        """Build CSS for step type colors and layout."""
+    def _build_css(self, colors: Dict[str, str], compact: bool,
+                   show_run_tree: bool = False) -> str:
+        """Build CSS for step type colors and layout.
+
+        Run-tree rules are only emitted when a sub-agent tree is present, so a
+        trace without a tree carries no run-tree markup at all.
+        """
         thought_color = colors.get("thought", DEFAULT_STEP_COLORS["thought"])
         action_color = colors.get("action", DEFAULT_STEP_COLORS["action"])
         obs_color = colors.get("observation", DEFAULT_STEP_COLORS["observation"])
@@ -226,7 +329,7 @@ class AgentTraceDisplay(BaseDisplay):
         padding = "8px 12px" if compact else "12px 16px"
         margin = "4px 0" if compact else "8px 0"
 
-        return f'''
+        base_css = f'''
         .agent-trace-display {{ font-family: inherit; }}
         .agent-trace-summary {{
             display: flex; align-items: center; gap: 8px;
@@ -270,6 +373,48 @@ class AgentTraceDisplay(BaseDisplay):
         .step-collapsible summary {{
             cursor: pointer; color: #666; font-size: 0.9em; padding: 4px 0;
         }}
+        .agent-trace-body {{ display: block; }}
+        '''
+
+        if not show_run_tree:
+            return base_css
+
+        return base_css + '''
+        .has-run-tree .agent-trace-body {
+            display: flex; gap: 12px; align-items: flex-start;
+        }
+        .has-run-tree .agent-trace-steps { flex: 1; min-width: 0; }
+        .run-tree {
+            flex: 0 0 220px; max-width: 260px; position: sticky; top: 8px;
+            border: 1px solid #e0e0e0; border-radius: 6px;
+            padding: 8px; background: #fafafa; font-size: 0.85em;
+            max-height: 70vh; overflow-y: auto;
+        }
+        .rt-title { font-weight: 600; margin-bottom: 6px; color: #555; }
+        .run-tree ul { list-style: none; margin: 0; padding: 0; }
+        .run-tree .rt-children { padding-left: 14px; border-left: 1px dotted #ccc; margin-left: 6px; }
+        .rt-node {
+            display: flex; align-items: center; gap: 6px; width: 100%;
+            text-align: left; background: none; border: none; cursor: pointer;
+            padding: 3px 6px; margin: 1px 0; border-radius: 4px; font: inherit;
+        }
+        .rt-node:hover { background: #eef2f7; }
+        .rt-node.rt-active { background: #e3f2fd; outline: 1px solid #90caf9; }
+        .rt-type {
+            font-size: 0.72em; font-weight: 600; padding: 1px 5px;
+            border-radius: 8px; text-transform: uppercase; flex-shrink: 0;
+        }
+        .rt-type-chain { background: rgba(96,125,139,0.18); color: #455a64; }
+        .rt-type-llm { background: rgba(33,150,243,0.18); color: #1565c0; }
+        .rt-type-tool { background: rgba(255,152,0,0.22); color: #b26a00; }
+        .rt-type-retriever { background: rgba(76,175,80,0.18); color: #2e7d32; }
+        .rt-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rt-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .rt-status-ok { background: #4CAF50; }
+        .rt-status-error { background: #f44336; }
+        .rt-range { margin-left: auto; color: #999; font-size: 0.78em; flex-shrink: 0; }
+        .agent-trace-step.rt-dim { opacity: 0.25; }
+        .agent-trace-step.rt-focus { outline: 2px solid #90caf9; }
         '''
 
     def get_css_classes(self, field_config: Dict[str, Any]) -> List[str]:

@@ -637,6 +637,68 @@ def create_audio_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
     return config_file, data_file
 
 
+def create_video_annotation_config(test_dir: str, **kwargs) -> Tuple[str, str]:
+    """
+    Create a test configuration with video (temporal segment) annotation support.
+
+    Mirrors create_audio_annotation_config. The Flask test server serves the
+    local test clip from the /test-video/ route (see FlaskTestServer).
+
+    Args:
+        test_dir: Directory to create the config in
+        **kwargs: Additional config options
+            - use_local_video: If True (default), use the local test clip.
+            - with_prompt: If True, add a real transcript/prompt to the item text
+                           (text_key stays audio/video url unless prompt_as_text set).
+
+    Returns:
+        Tuple of (config_file_path, data_file_path)
+    """
+    use_local_video = kwargs.pop('use_local_video', True)
+
+    if use_local_video:
+        # WebM (VP9/Opus): plays in Playwright's bundled Chromium, which lacks H.264.
+        video_url = "/test-video/test_video_6s.webm"
+    else:
+        video_url = "https://www.w3schools.com/html/mov_bbb.mp4"
+
+    test_data = [
+        {"id": "video_001", "video_url": video_url},
+        {"id": "video_002", "video_url": video_url},
+        {"id": "video_003", "video_url": video_url},
+    ]
+
+    data_file = create_test_data_file(test_dir, test_data, filename="video_data.jsonl")
+
+    annotation_schemes = [
+        {
+            "annotation_type": "video_annotation",
+            "name": "video_segmentation",
+            "description": "Segment the video by content type",
+            "mode": "segment",
+            "labels": [
+                {"name": "intro", "color": "#4ECDC4", "key_value": "1"},
+                {"name": "main", "color": "#FF6B6B", "key_value": "2"},
+                {"name": "outro", "color": "#95A5A6", "key_value": "3"},
+            ],
+            "timeline_height": 70,
+            "overview_height": 40,
+            "zoom_enabled": True,
+            "playback_rate_control": True,
+        }
+    ]
+
+    config_file = create_test_config(
+        test_dir,
+        annotation_schemes,
+        data_files=[data_file],
+        item_properties={"id_key": "id", "text_key": "video_url"},
+        **kwargs
+    )
+
+    return config_file, data_file
+
+
 # ==================== Selenium Wait Helpers ====================
 
 def wait_for_audio_ready(driver, timeout: int = 10) -> bool:

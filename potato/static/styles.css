@@ -3917,6 +3917,25 @@ body > .container-fluid {
   font-size: var(--text-sm);
 }
 
+/* "Compact view" link to the card-stack interface (/pocket); hidden until
+   device-routing.js confirms the task is pocket-capable. */
+.potato-navbar .compact-view-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.1);
+  color: var(--light-color);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+.potato-navbar .compact-view-link:hover {
+  background: rgba(255,255,255,0.22);
+  color: var(--light-color);
+}
+.potato-navbar .compact-view-link[hidden] { display: none; }
+
 .potato-navbar .user-pill .username {
   font-weight: 500;
 }

@@ -1,6 +1,6 @@
 # Potato vs. Other Annotation Tools
 
-Potato is a flexible, open-source annotation platform built for NLP and ML researchers. This page compares Potato's capabilities with popular alternatives across text, image, audio, video, and multimodal annotation. Last updated: February 2026.
+Potato is a flexible, open-source annotation platform built for NLP and ML researchers. This page compares Potato's capabilities with popular alternatives across text, image, audio, video, and multimodal annotation. Last updated: July 2026.
 
 ## At a Glance
 
@@ -37,6 +37,9 @@ Potato is a flexible, open-source annotation platform built for NLP and ML resea
 | Gold standard items | Yes | Enterprise | - | - | - | - | - | - |
 | Behavioral tracking | Yes | - | - | - | - | - | - | - |
 | Multi-phase workflows | Yes | - | - | - | - | - | - | - |
+| Role-based access control (RBAC) | Yes | Enterprise | Yes | - | - | - | - | - |
+| Per-cohort schema assignment | Yes | Enterprise | - | - | - | - | - | - |
+| Handles 50k+ items | Yes | Yes | Yes | Yes | Yes | - | - | Yes |
 | Crowdsourcing (MTurk, Prolific) | Yes | - | - | - | - | - | - | - |
 | Keyboard shortcuts | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | YAML configuration (no code) | Yes | XML templates | - | Python | Java config | Config files | GUI | - |

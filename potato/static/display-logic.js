@@ -150,50 +150,68 @@ class DisplayLogicManager {
      * @returns {Object} Current annotations keyed by schema name
      */
     getCurrentAnnotations() {
-        // Try to get from global currentAnnotations (set by annotation.js)
+        // Cross-page conditions: answers from earlier SurveyFlow phases are
+        // injected by the server as window.priorPhaseAnswersRaw in the SAME
+        // nested {schema: {label: value}} shape as currentAnnotations. They form
+        // the base layer; answers on the CURRENT page override them.
+        let result = {};
+        if (typeof window !== 'undefined' && window.priorPhaseAnswersRaw) {
+            result = this.transformRawAnnotations(window.priorPhaseAnswersRaw);
+        }
+
+        // Current-page answers (set by annotation.js)
         if (typeof currentAnnotations !== 'undefined' && currentAnnotations) {
-            // Transform from {schema: {label: value}} to {schema: value}
-            const result = {};
-
-            for (const [schema, labels] of Object.entries(currentAnnotations)) {
-                // For radio/select: single value
-                // For multiselect: array of selected values
-                // For text/slider: direct value
-
-                if (labels && typeof labels === 'object') {
-                    // Check if it's a radio (single selection)
-                    const selectedLabels = [];
-                    let textValue = null;
-
-                    for (const [label, value] of Object.entries(labels)) {
-                        if (value === true || value === 'true' || value === 1) {
-                            selectedLabels.push(label);
-                        } else if (typeof value === 'string' || typeof value === 'number') {
-                            // Text or numeric value
-                            textValue = value;
-                        }
-                    }
-
-                    if (selectedLabels.length === 1) {
-                        // Single selection (radio)
-                        result[schema] = selectedLabels[0];
-                    } else if (selectedLabels.length > 1) {
-                        // Multiple selections (multiselect)
-                        result[schema] = selectedLabels;
-                    } else if (textValue !== null) {
-                        // Text/numeric input
-                        result[schema] = textValue;
-                    }
-                } else if (labels !== null && labels !== undefined) {
-                    result[schema] = labels;
-                }
-            }
-
+            Object.assign(result, this.transformRawAnnotations(currentAnnotations));
             return result;
         }
 
-        // Fallback: scan DOM for current values
-        return this.getAnnotationsFromDOM();
+        // Fallback: scan DOM for current-page values, still layered over prior answers
+        Object.assign(result, this.getAnnotationsFromDOM());
+        return result;
+    }
+
+    /**
+     * Transform a raw annotations object from the {schema: {label: value}} shape
+     * used by currentAnnotations into the flat {schema: comparableValue} shape
+     * that condition evaluation expects (radio/select/text -> scalar,
+     * multiselect -> array of selected labels).
+     *
+     * @param {Object} raw - Annotations keyed by schema then label
+     * @returns {Object} Flattened annotations keyed by schema
+     */
+    transformRawAnnotations(raw) {
+        const result = {};
+        if (!raw || typeof raw !== 'object') {
+            return result;
+        }
+
+        for (const [schema, labels] of Object.entries(raw)) {
+            if (labels && typeof labels === 'object') {
+                const selectedLabels = [];
+                let textValue = null;
+
+                for (const [label, value] of Object.entries(labels)) {
+                    if (value === true || value === 'true' || value === 1) {
+                        selectedLabels.push(label);
+                    } else if (typeof value === 'string' || typeof value === 'number') {
+                        // Text or numeric value
+                        textValue = value;
+                    }
+                }
+
+                if (selectedLabels.length === 1) {
+                    result[schema] = selectedLabels[0];
+                } else if (selectedLabels.length > 1) {
+                    result[schema] = selectedLabels;
+                } else if (textValue !== null) {
+                    result[schema] = textValue;
+                }
+            } else if (labels !== null && labels !== undefined) {
+                result[schema] = labels;
+            }
+        }
+
+        return result;
     }
 
     /**

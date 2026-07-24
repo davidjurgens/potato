@@ -844,139 +844,50 @@ class AudioAnnotationManager {
     }
 
     /**
-     * Set up click-and-drag selection on the waveform
+     * Set up right-click-drag selection on both the zoomview and overview.
+     *
+     * - Zoomview: precise selection within the visible window, with edge
+     *   auto-scroll so a drag can extend past the visible edge.
+     * - Overview: coarse selection across the whole clip, so any part of the
+     *   audio is annotatable without first zooming to it.
+     *
+     * Left-click stays with Peaks.js for seeking / navigation on both views.
+     * Uses the shared attachPeaksRangeSelection helper (peaks-range-select.js).
      */
     _setupDragSelection() {
-        if (!this.waveformEl || !this.peaks) return;
+        if (!this.peaks) return;
+        if (typeof window.attachPeaksRangeSelection !== 'function') {
+            console.warn('peaks-range-select.js not loaded; drag selection unavailable');
+            return;
+        }
 
-        let isDragging = false;
-        let dragStartTime = null;
-        let dragPreviewSegment = null;
+        // Clean up any prior attachments (e.g. after reload)
+        if (this._rangeSelectDetach) {
+            this._rangeSelectDetach.forEach((fn) => { try { fn(); } catch (e) {} });
+        }
+        this._rangeSelectDetach = [];
 
-        const getTimeFromMouseEvent = (event) => {
-            const view = this.peaks.views.getView('zoomview');
-            if (!view) return null;
-
-            const rect = this.waveformEl.getBoundingClientRect();
-            const x = event.clientX - rect.left;
-            const duration = this.peaks.player.getDuration();
-
-            // Get the visible time range from the view
-            const startTime = view.getStartTime();
-            const endTime = view.getEndTime();
-            const visibleDuration = endTime - startTime;
-
-            // Calculate time based on x position within the visible range
-            const time = startTime + (x / rect.width) * visibleDuration;
-            return Math.max(0, Math.min(time, duration));
+        const onCreate = (start, end) => {
+            audioDebugLog('Creating segment from right-click drag', { start, end });
+            this.createSegment(start, end);
         };
 
-        const createPreviewSegment = (startTime, endTime) => {
-            // Remove existing preview
-            if (dragPreviewSegment) {
-                try {
-                    this.peaks.segments.removeById(dragPreviewSegment.id);
-                } catch (e) {}
-            }
-
-            // Create a preview segment with a distinct style
-            const start = Math.min(startTime, endTime);
-            const end = Math.max(startTime, endTime);
-
-            if (end - start < 0.01) return null; // Too small to show
-
-            dragPreviewSegment = this.peaks.segments.add({
-                id: 'drag-preview-' + Date.now(),
-                startTime: start,
-                endTime: end,
-                color: 'rgba(100, 100, 255, 0.3)',
-                editable: false
-            });
-
-            return dragPreviewSegment;
-        };
-
-        const removePreviewSegment = () => {
-            if (dragPreviewSegment) {
-                try {
-                    this.peaks.segments.removeById(dragPreviewSegment.id);
-                } catch (e) {}
-                dragPreviewSegment = null;
-            }
-        };
-
-        // Mouse down handler for starting drag-to-annotate
-        // RIGHT-CLICK (button 2) is used for span creation
-        // LEFT-CLICK (button 0) is left for Peaks.js navigation/seeking
-        const handleMouseDown = (event) => {
-            // Only handle right-click for span creation
-            if (event.button !== 2) return;
-
-            // Get the time at the click position
-            const clickTime = getTimeFromMouseEvent(event);
-            if (clickTime === null) return;
-
-            audioDebugLog('Right-click drag start for annotation', { clickTime });
-
-            isDragging = true;
-            dragStartTime = clickTime;
-
-            // Prevent context menu and default behavior
-            event.preventDefault();
-            event.stopPropagation();
-        };
-
-        // Prevent context menu on the waveform (since we use right-click for annotation)
-        this.waveformEl.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-            return false;
-        });
-
-        // Register mousedown handler
-        this.waveformEl.addEventListener('mousedown', handleMouseDown);
-
-        // Mouse move handler - update preview (only when right-click dragging)
-        const handleMouseMove = (event) => {
-            if (!isDragging || dragStartTime === null) return;
-
-            const currentTime = getTimeFromMouseEvent(event);
-            if (currentTime === null) return;
-
-            createPreviewSegment(dragStartTime, currentTime);
-        };
-
-        this.waveformEl.addEventListener('mousemove', handleMouseMove);
-
-        // Mouse up - finish drag and create segment
-        const finishDrag = (event) => {
-            if (!isDragging || dragStartTime === null) return;
-
-            const endTime = getTimeFromMouseEvent(event);
-            removePreviewSegment();
-
-            if (endTime !== null) {
-                const start = Math.min(dragStartTime, endTime);
-                const end = Math.max(dragStartTime, endTime);
-
-                // Only create segment if it's at least 0.1 seconds
-                if (end - start >= 0.1) {
-                    audioDebugLog('Creating segment from right-click drag', { start, end });
-                    this.createSegment(start, end);
-                }
-            }
-
-            isDragging = false;
-            dragStartTime = null;
-        };
-
-        this.waveformEl.addEventListener('mouseup', finishDrag);
-
-        // Also handle mouse leaving the waveform area
-        this.waveformEl.addEventListener('mouseleave', (event) => {
-            if (isDragging) {
-                finishDrag(event);
-            }
-        });
+        if (this.waveformEl) {
+            this._rangeSelectDetach.push(
+                window.attachPeaksRangeSelection(this.peaks, this.waveformEl, 'zoomview', {
+                    onCreate,
+                    edgeScroll: true,
+                })
+            );
+        }
+        if (this.overviewEl) {
+            this._rangeSelectDetach.push(
+                window.attachPeaksRangeSelection(this.peaks, this.overviewEl, 'overview', {
+                    onCreate,
+                    fullDuration: true,
+                })
+            );
+        }
     }
 
     /**
@@ -1159,7 +1070,9 @@ class AudioAnnotationManager {
         if (!this.peaks) return;
         const view = this.peaks.views.getView('zoomview');
         if (view) {
-            view.setZoom({ scale: 'auto' });
+            // Halve the current samples-per-pixel to show more detail. (Do NOT
+            // reset to 'auto' first — that jumps to the whole clip and makes
+            // "zoom in" widen the view from the initial state.)
             const currentZoom = view.getZoom();
             view.setZoom({ scale: Math.max(256, currentZoom / 2) });
             // Update spectrogram to match
@@ -1760,6 +1673,12 @@ class AudioAnnotationManager {
     destroy() {
         // Remove keyboard listener
         document.removeEventListener('keydown', this._handleKeydown);
+
+        // Detach range-selection (zoomview + overview) window listeners
+        if (this._rangeSelectDetach) {
+            this._rangeSelectDetach.forEach((fn) => { try { fn(); } catch (e) {} });
+            this._rangeSelectDetach = [];
+        }
 
         // Destroy Peaks.js
         if (this.peaks) {

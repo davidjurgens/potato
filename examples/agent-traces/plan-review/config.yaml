@@ -1,0 +1,100 @@
+# Plan-Quality Review Recipe (pre-execution)
+#
+# Review an agent's PLAN before it executes: rubric-score the plan, flag
+# risky steps per-turn, and edit the plan steps directly to produce corrected
+# training data. Composes existing schemas — no custom code:
+#
+#   - agent_trace display filtered to the plan steps
+#   - rubric_eval for plan quality dimensions
+#   - turn-level multiselect (risk flags) on plan steps
+#   - trajectory_edit for inline step correction (SFT/DPO export)
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/plan-review/config.yaml -p 8000
+
+annotation_task_name: "Agent Plan Review"
+
+data_files:
+  - data/plans.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task Given to the Agent"
+
+    - key: steps
+      type: agent_trace
+      label: "Proposed Plan (not yet executed)"
+      display_options:
+        show_step_numbers: true
+        show_summary: false
+
+annotation_schemes:
+  # Plan quality rubric
+  - annotation_type: rubric_eval
+    name: plan_quality
+    description: "Score the plan before execution"
+    scale_points: 5
+    criteria:
+      - name: completeness
+        description: "Does the plan cover everything the task requires?"
+      - name: ordering
+        description: "Are the steps in a workable order (dependencies respected)?"
+      - name: efficiency
+        description: "Is this close to the minimal set of steps?"
+      - name: safety
+        description: "Does the plan avoid destructive or irreversible actions without checks?"
+
+  # Per-step risk flags (turn-level binding)
+  - annotation_type: multiselect
+    name: step_risks
+    description: "Risks in this step"
+    labels:
+      - irreversible
+      - needs_permission
+      - underspecified
+      - wrong_dependency_order
+      - unnecessary
+    turn_level: true
+    turn_binding:
+      field: steps
+
+  # Verdict
+  - annotation_type: radio
+    name: plan_verdict
+    description: "Should this plan be approved for execution?"
+    labels:
+      - name: approve
+        tooltip: "Execute as-is"
+      - name: approve_with_edits
+        tooltip: "Execute after applying the corrections below"
+      - name: reject
+        tooltip: "Plan needs rework before execution"
+    sequential_key_binding: true
+
+  # Inline plan correction (exports SFT/DPO pairs)
+  - annotation_type: trajectory_edit
+    name: corrected_plan
+    description: "Fix any wrong plan steps"
+    steps_key: steps
+    step_text_key: text
+    editable_fields:
+      - text
+    show_diff: true
+    allow_reset: true
+
+user_config:
+  allow_all_users: true

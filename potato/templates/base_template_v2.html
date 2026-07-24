@@ -16,10 +16,19 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=4">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}">
+
+    <!-- Turn-Level Annotation Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='turn-annotations.css') }}?v=1">
+
+    <!-- Multi-Agent Discussion Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='multi-agent-discussion.css') }}?v=1">
+
+    <!-- Audio Dialogue (podcast turn annotation) Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='audio-dialogue.css') }}?v=3">
 
     {% set frontend_assets = frontend_assets | default({}) %}
 
@@ -30,22 +39,27 @@
 
     <!-- Audio Annotation Styles -->
     {% if frontend_assets.audio_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}?v=4">
     {% endif %}
 
     <!-- Video Annotation Styles -->
     {% if frontend_assets.video_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='video-annotation.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='video-annotation.css') }}?v=3">
     {% endif %}
 
     <!-- Span Link Styles -->
     {% if frontend_assets.span_link | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='span-link-styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='span-link-styles.css') }}?v=5">
     {% endif %}
 
     <!-- Event Annotation Styles -->
     {% if frontend_assets.event_annotation | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='event-annotation.css') }}">
+    {% endif %}
+
+    <!-- Multi-Document Event Annotation Styles -->
+    {% if frontend_assets.multi_document_event | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='multi-document-event.css') }}?v=2">
     {% endif %}
 
     <!-- Spreadsheet Display Styles -->
@@ -223,6 +237,10 @@
                     <i class="fas fa-book-open"></i> {{ ui_lang.codebook }}
                 </a>
                 {% endif %}
+                <a id="compact-view-link" class="compact-view-link" href="/pocket" hidden
+                   title="Card-stack interface: one item per card, one click per label">
+                    {{ ui_lang.compact_view|default('Compact view') }}
+                </a>
                 <div class="user-pill">
                     <span class="username" id="username-display">{{username}}</span>
                     <a href="/logout" class="logout-btn">{{ ui_lang.logout }}</a>
@@ -273,17 +291,35 @@
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
                         {% elif has_video_annotation | default(false) %}
-                        <h5 class="mb-3">{{ ui_lang.video_to_annotate|default('Video to Annotate:') }}</h5>
-                        <!-- For video annotation, keep the text-content element accessible for JS but visually hidden -->
-                        <div id="instance-text" class="instance-text-container" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);">
+                        {% if instance_text_is_media_path | default(false) %}
+                        <!-- Item text is just the media path: hide it (the video player is the content).
+                             Keep the node in the DOM so the JS media-URL fallback can still read it. -->
+                        <div id="instance-text" style="display: none;">
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
+                        {% else %}
+                        <!-- Item text is a real prompt/transcript: show it in a readable box above the player. -->
+                        <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
+                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
+                                <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;"></div>
+                            </div>
+                        </div>
+                        {% endif %}
                         {% elif has_audio_annotation | default(false) %}
-                        <h5 class="mb-3">{{ ui_lang.audio_to_annotate|default('Audio to Annotate:') }}</h5>
-                        <!-- For audio annotation, keep the text-content element accessible for JS but visually hidden -->
-                        <div id="instance-text" class="instance-text-container" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);">
+                        {% if instance_text_is_media_path | default(false) %}
+                        <!-- Item text is just the media path: hide it (the waveform player is the content).
+                             Keep the node in the DOM so the JS media-URL fallback can still read it. -->
+                        <div id="instance-text" style="display: none;">
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
+                        {% else %}
+                        <!-- Item text is a real prompt/transcript: show it in a readable box above the player. -->
+                        <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
+                            <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
+                                <div id="span-overlays" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 2;"></div>
+                            </div>
+                        </div>
+                        {% endif %}
                         {% elif has_image_annotation | default(false) %}
                         <!-- For image annotation, hide this section - the image is loaded directly into the annotation canvas -->
                         <!-- Store the image URL in a hidden element for JavaScript to access -->
@@ -450,6 +486,7 @@
             api_key: "test_api_key",
             username: {{ username | tojson }},
             url_prefix: {{ url_prefix | default('') | tojson }},
+            review_mode: {{ review_mode | default({}) | tojson }},
             ui_config: {}
         };
 
@@ -595,15 +632,55 @@
 
     <!-- Load annotation JavaScript -->
     <script src="{{ url_for('static', filename='interaction_tracker.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='span-core.js') }}?v=11"></script>
+    <script src="{{ url_for('static', filename='span-core.js') }}?v=15"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=1"></script>
     <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->
-    <script src="{{ url_for('static', filename='display-logic.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='display-logic.js') }}?v=2"></script>
     <!-- Instance display manager (for new instance_display configuration) -->
     {% if has_instance_display | default(false) %}
-    <script src="{{ url_for('static', filename='instance-display.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='instance-display.js') }}?v=3"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=23"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=25"></script>
+    <!-- Shared geometry for the bottom-anchored floating widgets below; must
+         load before them. Unconditional: tiny, and several may be enabled at
+         once (see the combined showcase example). -->
+    <script src="{{ url_for('static', filename='floating-panel-utils.js') }}?v=4"></script>
+    <!-- Boundary Lab: counterfactual boundary probing (conditional) -->
+    {% if boundary_enabled | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/boundary.css') }}?v=3">
+    <script type="text/javascript">
+        window.boundaryConfig = {{ boundary_client_config | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='boundary-probe.js') }}?v=4"></script>
+    {% endif %}
+    <!-- Device routing: send phones/tablets to /pocket when the task supports
+         it; warn them when it doesn't. Unconditional — the "not mobile
+         friendly" warning must work even when Pocket Mode is off. -->
+    <script src="{{ url_for('static', filename='device-routing.js') }}?v=2"></script>
+    <!-- Truth Serum: surprisingly-popular prediction widget (conditional) -->
+    {% if truth_serum_enabled | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/truth-serum.css') }}?v=1">
+    <script type="text/javascript">
+        window.truthSerumConfig = {{ truth_serum_client_config | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='truth-serum.js') }}?v=2"></script>
+    {% endif %}
+    <!-- Think-Aloud: voice rationales + rule-based label phrases (conditional) -->
+    {% if thinkaloud_enabled | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/thinkaloud.css') }}?v=1">
+    <script type="text/javascript">
+        window.thinkAloudConfig = {{ thinkaloud_client_config | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='thinkaloud.js') }}?v=2"></script>
+    {% endif %}
+    <!-- Turn-level annotation module (per-turn schema binding) -->
+    <script src="{{ url_for('static', filename='turn-annotations.js') }}?v=1"></script>
+    <!-- Multi-agent discussion display (agent filtering) -->
+    <script src="{{ url_for('static', filename='multi-agent-discussion.js') }}?v=1"></script>
+    <!-- Audio dialogue display (podcast transport, per-turn play, speaker assignment) -->
+    <script src="{{ url_for('static', filename='audio-dialogue.js') }}?v=3"></script>
+    <!-- Sub-agent run-tree sidebar (agent_trace display) -->
+    <script src="{{ url_for('static', filename='run-tree.js') }}?v=1"></script>
 
     <!-- Fabric.js for image annotation (loaded from CDN) -->
     {% if frontend_assets.image_annotation | default(false) %}
@@ -621,24 +698,31 @@
     <!-- Peaks.js for audio/video annotation (stored locally for reliability) -->
     {% if (frontend_assets.audio_annotation | default(false)) or (frontend_assets.video_annotation | default(false)) %}
     <script src="{{ url_for('static', filename='peaks.min.js') }}"></script>
+    <!-- Shared right-click-drag range selection + edge auto-scroll for Peaks views -->
+    <script src="{{ url_for('static', filename='peaks-range-select.js') }}?v=2"></script>
     {% endif %}
     <!-- Audio annotation manager -->
     {% if frontend_assets.audio_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=4"></script>
     {% endif %}
     <!-- Video annotation manager -->
     {% if frontend_assets.video_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=10"></script>
+    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=16"></script>
     {% endif %}
 
     <!-- Span link manager -->
     {% if frontend_assets.span_link | default(false) %}
-    <script src="{{ url_for('static', filename='span-link-manager.js') }}?v=7"></script>
+    <script src="{{ url_for('static', filename='span-link-manager.js') }}?v=16"></script>
     {% endif %}
 
     <!-- Event annotation manager -->
     {% if frontend_assets.event_annotation | default(false) %}
     <script src="{{ url_for('static', filename='event-annotation.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- Multi-document event annotation manager -->
+    {% if frontend_assets.multi_document_event | default(false) %}
+    <script src="{{ url_for('static', filename='multi-document-event.js') }}?v=4"></script>
     {% endif %}
 
     <!-- Entity linking for knowledge bases (Wikidata, UMLS) -->
@@ -672,7 +756,7 @@
 
     <!-- Tiered annotation manager (ELAN-style hierarchical annotation) -->
     {% if frontend_assets.tiered_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=2"></script>
     {% endif %}
 
     <!-- Document bounding box annotation -->
@@ -683,6 +767,12 @@
     <!-- PDF bounding box annotation -->
     {% if frontend_assets.pdf_bbox | default(false) %}
     <script src="{{ url_for('static', filename='pdf-bbox.js') }}?v=3"></script>
+    {% endif %}
+
+    <!-- PDF multi-page anchor + cross-page linking -->
+    {% if frontend_assets.pdf_link | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='pdf-link-mode.css') }}?v=1">
+    <script src="{{ url_for('static', filename='pdf-link-mode.js') }}?v=4"></script>
     {% endif %}
 
     {% if agent_proxy_enabled | default(false) %}

@@ -17,6 +17,9 @@ from potato.curation.config import CurationConfig
 from potato.curation.embeddings import Embedder
 from potato.curation.index import EmbeddingIndex
 from potato.curation.slices import Slice, SliceStore, resolve_slice
+from potato.curation.topics import (
+    DEFAULT_ASSIGN_THRESHOLD, TopicStore, assign_instance, topics_from_clusters,
+)
 
 logger = logging.getLogger("potato.curation")
 
@@ -29,6 +32,7 @@ class CurationManager:
         self.index = EmbeddingIndex()
         base = self._resolve_base_dir(config)
         self.slices = SliceStore(base)
+        self.topics = TopicStore(base)
         self.embed_on_ingest = self.settings.embed_on_ingest
         logger.info("CurationManager initialized (model=%s, embed_on_ingest=%s)",
                     self.settings.model_name, self.embed_on_ingest)
@@ -60,7 +64,15 @@ class CurationManager:
         text = text if text is not None else self._item_text(instance_id)
         if not text:
             return
-        self.index.add(instance_id, self.embedder.embed(text))
+        vec = self.embedder.embed(text)
+        self.index.add(instance_id, vec)
+        # Keep topics fresh: auto-assign newly ingested traces to the nearest
+        # persisted topic (no-op when no topics exist / none clear threshold).
+        try:
+            assign_instance(instance_id, vec, self.topics,
+                            threshold=DEFAULT_ASSIGN_THRESHOLD)
+        except Exception:  # pragma: no cover - assignment must never break ingest
+            logger.exception("topic auto-assign failed for %s", instance_id)
 
     def build_index(self, max_items: Optional[int] = None) -> int:
         """Embed all current ItemStateManager items. Returns count indexed."""
@@ -128,6 +140,21 @@ class CurationManager:
         return discover_failure_modes(
             self.index, self._item_text, k=k, llm=llm,
             max_examples=max_examples, instance_ids=instance_ids)
+
+    def refresh_topics(self, k: int = 6, instance_ids: Optional[List[str]] = None,
+                       use_llm: bool = True, refreshed_at: str = ""):
+        """Re-discover clusters and persist them as topics (D2 Topics).
+
+        Replaces previously *discovered* topics (manual topics are kept) so
+        the topic set tracks the current trace distribution. Returns the
+        persisted topics, largest first.
+        """
+        clusters = self.discover_failure_modes(
+            k=k, instance_ids=instance_ids, use_llm=use_llm)
+        topics = topics_from_clusters(clusters, self.index.get,
+                                      refreshed_at=refreshed_at)
+        self.topics.replace_discovered(topics)
+        return self.topics.list()
 
 
 # ----- singleton -----

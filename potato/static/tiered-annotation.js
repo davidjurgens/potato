@@ -857,6 +857,17 @@ class TieredAnnotationManager {
      * Update zoomed view rendering
      */
     _updateZoomedView() {
+        // Clamp the zoom window to the clip length so short clips aren't stuck
+        // at a fixed 10s scale (which would leave most of the panel empty).
+        const duration = this.mediaMetadata.duration || 0;
+        if (duration > 0 && this.zoomedViewDuration > duration) {
+            this.zoomedViewDuration = duration;
+        }
+        const maxStart = Math.max(0, duration - this.zoomedViewDuration);
+        if (this.zoomedViewStart > maxStart) {
+            this.zoomedViewStart = maxStart;
+        }
+
         if (this.zoomedTimelineView) {
             this.zoomedTimelineView.render();
         }
@@ -2167,6 +2178,11 @@ class ZoomedTimelineView {
         this.hoveredHandle = null;
         this.HANDLE_WIDTH = 10;
 
+        // Edge auto-scroll state (pan the zoom window when a drag reaches the edge)
+        this.autoScrollRaf = null;
+        this.lastMouseX = null;
+        this.EDGE_ZONE = 40;
+
         this._resizeCanvas();
         this._setupEventListeners();
     }
@@ -2192,6 +2208,14 @@ class ZoomedTimelineView {
             this.canvas.style.cursor = 'crosshair';
         });
         this.canvas.addEventListener('dblclick', (e) => this._handleDoubleClick(e));
+
+        // Finish a drag even if the mouse is released outside the canvas (common
+        // when dragging to the edge for auto-scroll).
+        window.addEventListener('mouseup', (e) => {
+            if (this.dragState || this.manager.isDragging) {
+                this._handleMouseUp(e);
+            }
+        });
     }
 
     /**
@@ -2299,8 +2323,14 @@ class ZoomedTimelineView {
     _handleMouseMove(e) {
         const x = e.offsetX;
         const y = e.offsetY;
+        this.lastMouseX = x;
 
         if (this.dragState) {
+            // Resizing/creating near an edge pans the zoom window so the drag
+            // can cross the visible boundary.
+            if (this.dragState.type === 'resize-start' || this.dragState.type === 'resize-end') {
+                this._scheduleAutoScroll();
+            }
             const deltaX = x - this.dragState.startX;
             const deltaTime = (deltaX / this.canvas.width) * this.manager.zoomedViewDuration * 1000;
             const ann = this.dragState.annotation;
@@ -2336,6 +2366,7 @@ class ZoomedTimelineView {
 
         if (this.manager.isDragging) {
             this.manager.selectionEnd = this._xToTime(x);
+            this._scheduleAutoScroll();
             this.render();
             return;
         }
@@ -2351,7 +2382,82 @@ class ZoomedTimelineView {
         this.render();
     }
 
+    /**
+     * Schedule an edge auto-scroll frame if a drag is active. Self-cancels
+     * when the pointer is not in an edge zone or the drag ends.
+     */
+    _scheduleAutoScroll() {
+        if (this.autoScrollRaf !== null) return;
+        this.autoScrollRaf = requestAnimationFrame(() => {
+            this.autoScrollRaf = null;
+            this._autoScrollTick();
+        });
+    }
+
+    _stopAutoScroll() {
+        if (this.autoScrollRaf !== null) {
+            cancelAnimationFrame(this.autoScrollRaf);
+            this.autoScrollRaf = null;
+        }
+    }
+
+    _autoScrollTick() {
+        const isCreating = this.manager.isDragging;
+        const isResizing = this.dragState &&
+            (this.dragState.type === 'resize-start' || this.dragState.type === 'resize-end');
+        if ((!isCreating && !isResizing) || this.lastMouseX == null) return;
+
+        const duration = this.manager.mediaMetadata.duration || 0;
+        if (!duration) return;
+
+        const w = this.canvas.width;
+        const edge = this.EDGE_ZONE;
+        let dir = 0;
+        let depth = 0;
+        if (this.lastMouseX < edge) {
+            dir = -1;
+            depth = (edge - this.lastMouseX) / edge;
+        } else if (this.lastMouseX > w - edge) {
+            dir = 1;
+            depth = (this.lastMouseX - (w - edge)) / edge;
+        }
+        if (dir === 0) return; // pointer left the edge zone; loop pauses
+
+        const viewDur = this.manager.zoomedViewDuration;
+        const maxStart = Math.max(0, duration - viewDur);
+        const step = dir * Math.min(1, depth) * viewDur * 0.03;
+        const newStart = Math.max(0, Math.min(maxStart, this.manager.zoomedViewStart + step));
+        if (newStart !== this.manager.zoomedViewStart) {
+            this.manager.zoomedViewStart = newStart;
+            this.manager._updateZoomedView();
+            this.manager._updateZoomedSlider();
+        }
+
+        // Extend the active drag to the pointer's absolute time in the new window.
+        const t = this._xToTime(this.lastMouseX); // seconds
+        if (isCreating) {
+            this.manager.selectionEnd = t;
+            this.render();
+        } else if (isResizing) {
+            const ann = this.dragState.annotation;
+            const tMs = t * 1000;
+            if (this.dragState.type === 'resize-start') {
+                ann.start_time = Math.max(0, Math.min(tMs, this.dragState.origEnd - 50));
+            } else {
+                const maxTime = duration * 1000;
+                ann.end_time = Math.min(maxTime, Math.max(tMs, this.dragState.origStart + 50));
+            }
+            this.render();
+            if (this.manager.tierViews[this.dragState.tier]) {
+                this.manager.tierViews[this.dragState.tier].render();
+            }
+        }
+
+        this._scheduleAutoScroll();
+    }
+
     _handleMouseUp(e) {
+        this._stopAutoScroll();
         if (this.dragState) {
             this.manager._saveData();
             this.manager._renderAnnotationList();
@@ -2363,7 +2469,9 @@ class ZoomedTimelineView {
 
         if (this.manager.isDragging) {
             this.manager.isDragging = false;
-            const x = e.offsetX;
+            // A mouseup outside the canvas has no meaningful offsetX; fall back
+            // to the last tracked pointer position within the canvas.
+            const x = (e && e.target === this.canvas) ? e.offsetX : this.lastMouseX;
             const endTime = this._xToTime(x);
             const startTime = this.manager.selectionStart;
 

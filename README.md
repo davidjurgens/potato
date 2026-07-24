@@ -4,7 +4,8 @@
 [![Technical Reference](https://img.shields.io/badge/reference-readthedocs-blue)](https://potatoannotator.readthedocs.io/)
 [![PyPI](https://img.shields.io/pypi/v/potato-annotation)](https://pypi.org/project/potato-annotation/)
 [![License](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
-[![Paper](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
+[![Paper (Potato 2.0)](https://img.shields.io/badge/paper-ACL%202026-red)](https://aclanthology.org/2026.acl-demo.37/)
+[![Paper (Potato 1.0)](https://img.shields.io/badge/paper-EMNLP%202022-orange)](https://aclanthology.org/2022.emnlp-demos.33/)
 [![Live Demo](https://img.shields.io/badge/demo-HuggingFace%20Spaces-yellow)](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)
 [![Website](https://img.shields.io/badge/website-potatoannotator.com-brightgreen)](https://www.potatoannotator.com)
 
@@ -33,6 +34,38 @@ python potato/flask_server.py start examples/classification/single-choice/config
 ```
 
 Open [http://localhost:8000](http://localhost:8000) and start annotating. Browse the [`examples/`](examples/) directory for ready-to-use templates.
+
+---
+
+## ⚡ Boundary Lab: Annotate the Boundary, Not the Point
+
+Every annotation tool collects point labels: item X gets label Y. **Potato is the first
+annotation tool that captures decision boundaries.** The moment an annotator commits a
+label, Potato generates minimal counterfactual edits of the text and asks — one click
+per probe — *"Would your label survive this change?"*
+
+```yaml
+boundary_probing:
+  enabled: true
+  sources: [precomputed, llm, rules]   # curated probes, LLM-generated, or offline rules
+```
+
+Ordinary annotation then yields three things no label export can give you:
+
+| You get | Why it matters |
+|---------|----------------|
+| **Contrast sets, for free** | Every answered probe is a labeled (original, counterfactual) pair — the counterfactually-augmented data shown to improve model robustness ([Gardner et al. 2020](https://aclanthology.org/2020.findings-emnlp.117/), [Kaushik et al. 2020](https://openreview.net/forum?id=Sklgs0NFvr)), normally built as an expensive separate effort |
+| **Boundary rationales** | When a label flips, annotators say what crossed the line — pinpointing exactly where your codebook is ambiguous |
+| **Invisible quality control** | Paraphrase probes should never flip a label; annotators who flip on them are flagged — attention checks without planting a single fake gold item |
+
+A live dashboard (`/boundary/dashboard`) shows per-label boundary sensitivity, per-annotator
+consistency, and a gallery of the exact edits where labels flip. Try it:
+
+```bash
+python potato/flask_server.py start examples/advanced/boundary-probing/config.yaml -p 8000 --debug
+```
+
+See the [Boundary Lab documentation](docs/advanced/boundary_lab.md).
 
 ---
 
@@ -164,6 +197,10 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | Inter-annotator agreement | Krippendorff's alpha (general) and Cohen's kappa (step-level agent evaluation) |
 | Training phase | Practice annotations with feedback before the real task |
 | Behavioral tracking | Timing, click patterns, and annotation change history |
+| **Boundary probing** | Counterfactual probes map each annotator's decision boundary; paraphrase-invariance flags inconsistency ([docs](docs/advanced/boundary_lab.md)) |
+| **Truth Serum** | Surprisingly-popular scoring (Prelec et al., Nature 2017): gold-free verdicts that beat majority vote on hard items, plus annotator calibration ([docs](docs/advanced/truth_serum.md)) |
+| **Paper Mode** | `python -m potato.paper config.yaml` emits a compilable LaTeX dataset report — methods paragraphs, booktabs tables, IAA, limitations — ready to cut-paste ([docs](docs/advanced/paper_mode.md)) |
+| **Think-Aloud Mode** | Speak while you annotate: fully-local speech-to-text, verbatim rationale streams, labels committed by voice via rule-based phrase detection — no LLM ([docs](docs/advanced/think_aloud.md)) |
 
 ### Annotation Workflows
 
@@ -174,6 +211,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | **Solo mode** | Human-LLM collaboration with progressive automation ([docs](docs/solo-mode/solo_mode.md)) |
 | **Crowdsourcing** | Prolific and MTurk integration with platform-specific auth ([docs](docs/deployment/crowdsourcing.md)) |
 | **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/annotation-types/triage.md)) |
+| **Pocket Mode** | Annotate from your phone: installable PWA with a card-stack UI, one-tap labeling, and offline annotation that syncs on reconnect ([docs](docs/advanced/pocket_mode.md)) |
 
 ### Continuous Evaluation Loop
 
@@ -306,11 +344,48 @@ Potato is free software, licensed under the [GNU General Public License v3.0 or 
 
 ## Citation
 
+If you use Potato in your research, please cite the **Potato 2.0** paper ([ACL 2026 System Demonstrations](https://aclanthology.org/2026.acl-demo.37/)):
+
 ```bibtex
-@inproceedings{jurgens2026potato,
-  title={POTATO 2.0: A Comprehensive Annotation Platform\\with Support for AI-in-the-Loop and Agentic Systems},
-  author={Jurgens, David and Chen, Michael and Iyer, Lina},
-  booktitle={Proceedings of the The 64th Annual Meeting of the Association for Computational Linguistics: System Demonstrations},
-  year={2026}
+@inproceedings{jurgens-etal-2026-potato,
+    title = "Potato 2.0: A Comprehensive Annotation Platform with {AI}-in-the-Loop Support",
+    author = "Jurgens, David  and
+      Chen, Michael  and
+      Iyer, Lina",
+    editor = "Durrett, Greg  and
+      Jian, Ping",
+    booktitle = "Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations)",
+    month = jul,
+    year = "2026",
+    address = "San Diego, California, United States",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2026.acl-demo.37/",
+    pages = "374--386",
+    ISBN = "979-8-89176-392-0",
+}
+```
+
+To reference the original Potato release, cite the **Potato 1.0** paper ([EMNLP 2022 System Demonstrations](https://aclanthology.org/2022.emnlp-demos.33/)):
+
+```bibtex
+@inproceedings{pei-etal-2022-potato,
+    title = "{POTATO}: The Portable Text Annotation Tool",
+    author = "Pei, Jiaxin  and
+      Ananthasubramaniam, Aparna  and
+      Wang, Xingyao  and
+      Zhou, Naitian  and
+      Dedeloudis, Apostolos  and
+      Sargent, Jackson  and
+      Jurgens, David",
+    editor = "Che, Wanxiang  and
+      Shutova, Ekaterina",
+    booktitle = "Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing: System Demonstrations",
+    month = dec,
+    year = "2022",
+    address = "Abu Dhabi, UAE",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2022.emnlp-demos.33/",
+    doi = "10.18653/v1/2022.emnlp-demos.33",
+    pages = "327--337",
 }
 ```

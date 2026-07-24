@@ -312,6 +312,65 @@ Add optional text input to any question:
 }
 ```
 
+## Conditional Questions (Display Logic)
+
+Survey questions can be shown or hidden based on earlier answers, so you can build
+adaptive surveys without splitting the workflow into extra phases — reveal a follow-up
+only when it is relevant, show a free-text box when "Other" is picked, or ask for an
+explanation only on a low rating.
+
+Add a `display_logic` block to any survey question. Because survey questions go through
+the same schema pipeline as annotation schemes, they reference other questions by their
+**`name`** (not `id`):
+
+```json
+[
+  {
+    "name": "prior_experience",
+    "annotation_type": "radio",
+    "description": "Have you previously worked on a text-annotation task?",
+    "labels": ["Yes", "No"],
+    "label_requirement": {"required": true}
+  },
+  {
+    "name": "experience_details",
+    "annotation_type": "text",
+    "description": "Please briefly describe your previous annotation experience.",
+    "label_requirement": {"required": true},
+    "display_logic": {
+      "show_when": [
+        {"schema": "prior_experience", "operator": "equals", "value": "Yes"}
+      ]
+    }
+  }
+]
+```
+
+`experience_details` stays hidden — and is excluded from required-field validation, so it
+never blocks the **Continue** button — until the participant answers "Yes".
+
+Key behaviors specific to SurveyFlow:
+
+- **Cross-page conditions.** A poststudy question can condition on a prestudy answer;
+  references resolve against questions on **any** phase. Earlier-phase answers are injected
+  into each page so the condition is evaluated on load.
+- **Startup validation.** Invalid survey `display_logic` (unknown operator, a reference to a
+  question that exists on no phase, or a circular dependency) fails fast when the server starts.
+- **Server-side enforcement.** With `export_include_phase_data: true`, Potato re-evaluates
+  each participant's answers server-side and excludes answers to questions they never actually
+  saw. Opt out with `exclude_hidden_survey_answers: false` (answers are kept, tagged `hidden`).
+- **JSON/instrument questions only.** An `instructions` phase pointing at a raw `.html` file
+  bypasses the schema pipeline, so `display_logic` does not apply there.
+
+The full operator reference (`equals`, `contains`, `matches`, numeric/range, emptiness, text
+length), `all`/`any` logic, and troubleshooting are documented in
+[Conditional Logic](../configuration/conditional_logic.md). A runnable example lives at
+`examples/advanced/surveyflow-conditional-logic/`:
+
+```bash
+python potato/flask_server.py start examples/advanced/surveyflow-conditional-logic/config.yaml -p 8000
+```
+
 ## Page Headers
 
 Customize the header text displayed on each survey page:
@@ -372,6 +431,7 @@ ui_configuration:
 
 ## Related Documentation
 
+- [Conditional Logic](../configuration/conditional_logic.md) - Show/hide survey questions based on prior answers
 - [Training Phase](training_phase.md) - Configure qualification training with feedback
 - [Category-Based Assignment](../advanced/category_assignment.md) - Assign tasks based on training performance
 - [Configuration](../configuration/configuration.md) - Full configuration reference

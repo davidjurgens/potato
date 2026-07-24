@@ -55,21 +55,32 @@ def _seed_from_yaml(
 def apply_codebook_to_schemes(config: Dict[str, Any]) -> None:
     """Mutate ``config['annotation_schemes']`` in place: for every
     scheme with ``codebook: true``, point ``labels`` at the codebook
-    (seeding it from the scheme's YAML labels on first run)."""
+    (seeding it from every codebook-backed scheme's YAML labels on first
+    run)."""
     schemes = config.get("annotation_schemes") or []
     task_dir = config.get("task_dir", ".")
     project = _project_of(config)
 
-    for scheme in schemes:
-        if not isinstance(scheme, dict) or not scheme.get("codebook"):
-            continue
+    codebook_schemes = [s for s in schemes
+                        if isinstance(s, dict) and s.get("codebook")]
+    if not codebook_schemes:
+        return
 
-        cb = Codebook.load(task_dir, project)
-        if cb.is_empty():
+    # Seed from EVERY codebook-backed scheme, not just whichever comes first.
+    # They share one codebook, so once the first scheme seeded it the
+    # `is_empty()` gate closed and every later scheme's own labels were
+    # dropped on the floor -- a label declared only on a later scheme never
+    # entered the codebook and so rendered nowhere at all. Still gated on
+    # `is_empty()`: seeding is a first-run bootstrap, and re-seeding a
+    # curated codebook would resurrect codes the researcher deleted.
+    cb = Codebook.load(task_dir, project)
+    if cb.is_empty():
+        for scheme in codebook_schemes:
             _seed_from_yaml(task_dir, project, scheme.get("labels"))
-            cb = Codebook.load(task_dir, project)
+        cb = Codebook.load(task_dir, project)
 
-        names = cb.labels()
+    names = cb.labels()
+    for scheme in codebook_schemes:
         if names:
             scheme["labels"] = names
             logger.info(

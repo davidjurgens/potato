@@ -343,6 +343,7 @@ def _register_builtin_displays():
     from .spreadsheet_display import SpreadsheetDisplay
     from .code_display import CodeDisplay
     from .conversation_tree_display import ConversationTreeDisplay
+    from .multi_agent_discussion_display import MultiAgentDiscussionDisplay
     from .agent_trace_display import AgentTraceDisplay
     from .eval_trace_display import EvalTraceDisplay
     from .gallery_display import GalleryDisplay
@@ -351,6 +352,8 @@ def _register_builtin_displays():
     from .live_agent_display import LiveAgentDisplay
     from .coding_trace_display import CodingTraceDisplay
     from .live_coding_agent_display import LiveCodingAgentDisplay
+    from .cot_trace_display import CotTraceDisplay
+    from .audio_dialogue_display import AudioDialogueDisplay
 
     displays = [
         DisplayDefinition(
@@ -428,6 +431,38 @@ def _register_builtin_displays():
             },
             supports_span_target=True,
             description="Dialogue/conversation turns display"
+        ),
+        DisplayDefinition(
+            name="audio_dialogue",
+            renderer=AudioDialogueDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "audio_key": "audio",
+                "turns_key": "turns",
+                "speaker_key": "speaker",
+                "text_key": "text",
+                "speakers": [],
+                "allow_speaker_assignment": "auto",
+                "scroll_height": "480px",
+                "show_timestamps": True,
+                "playback_rates": [1, 1.25, 1.5, 2],
+            },
+            supports_span_target=True,
+            description="Podcast / interview dialogue: speaker bubbles, per-turn audio playback, ratings, spans, cross-turn linking",
+        ),
+        DisplayDefinition(
+            name="multi_agent_discussion",
+            renderer=MultiAgentDiscussionDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "show_turn_numbers": False,
+                "show_legend": True,
+                "show_addressees": True,
+                "thread_replies": True,
+                "collapse_environment": False,
+            },
+            supports_span_target=True,
+            description="Multi-agent discussion with agent legend, colors, addressees, and filtering"
         ),
         DisplayDefinition(
             name="pairwise",
@@ -537,6 +572,21 @@ def _register_builtin_displays():
             description="Agent trace display with step cards and type badges"
         ),
         DisplayDefinition(
+            name="cot_trace",
+            renderer=CotTraceDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "show_step_numbers": True,
+                "show_types": True,
+                "show_rail": True,
+                "collapse_long_steps": True,
+                "clamp_lines": 12,
+                "compact": False,
+            },
+            supports_span_target=False,
+            description="Long chain-of-thought trace: vertical step cards with a sticky progress rail for process-reward verification",
+        ),
+        DisplayDefinition(
             name="eval_trace",
             renderer=EvalTraceDisplay(),
             required_fields=["key"],
@@ -548,7 +598,9 @@ def _register_builtin_displays():
                 "link_steps": True,
                 "compact": False,
             },
-            supports_span_target=False,
+            # Matches EvalTraceDisplay.supports_span_target: the three-pane block
+            # is span-annotatable (offset-based highlight across panes).
+            supports_span_target=True,
             description="Three-pane agent trace eval: reasoning, function calls, and final answer side-by-side"
         ),
         DisplayDefinition(

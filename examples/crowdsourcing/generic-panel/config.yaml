@@ -1,0 +1,76 @@
+# Generic Panel Provider Example
+#
+# Connect Potato to any crowdsourcing/survey panel that (a) passes a
+# participant ID as a URL parameter and (b) accepts a completion code and/or a
+# return redirect — e.g. Besample, Positly, User Interviews, Testable Minds,
+# or Cint. No platform-specific code needed: everything is configured below.
+#
+# See docs/deployment/crowdsourcing-platforms.md for a survey of platforms.
+#
+# To test locally, run from the repo root:
+#   python potato/flask_server.py start examples/crowdsourcing/generic-panel/config.yaml -p 8000
+#
+# Then simulate a participant arrival:
+#   http://localhost:8000/?response_id=TEST123&batch=b1
+
+port: 9003
+
+annotation_task_name: Panel Annotation Task
+task_description: "Classify the sentiment of short text snippets."
+
+# The login block controls participant auto-login from the URL
+login:
+  type: url_direct
+  url_argument: response_id      # must match crowdsourcing.<provider>.id_param
+
+# The crowdsourcing block selects and configures the platform provider
+crowdsourcing:
+  provider: generic
+  generic:
+    platform_label: "Example Panel"   # shown on the done-page return button
+    id_param: response_id             # URL parameter carrying the participant ID
+    capture_params: [batch]           # additional URL params to capture
+    completion:
+      code: "PANEL-COMPLETE-01"
+      # Return link template. Available placeholders:
+      #   {code} {worker_id} {session_id} {study_id} and any capture_params name
+      redirect_url: "https://panel.example.com/complete?rid={worker_id}&code={code}"
+      # failed_code: "PANEL-FAILED-01"  # shown instead when a participant is blocked
+      # auto_redirect: true             # redirect automatically instead of waiting for a click
+
+hide_navbar: true
+jumping_to_id_disabled: true
+
+assignment_strategy: random
+max_annotations_per_user: 5
+num_annotators_per_item: 3
+
+task_dir: .
+output_annotation_dir: annotation_output/generic-panel/
+output_annotation_format: json
+
+data_files:
+  - data/panel-example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the sentiment expressed in this text?"
+    labels:
+      - name: positive
+        tooltip: "The text expresses positive feelings or opinions"
+      - name: neutral
+        tooltip: "The text is neutral or factual without clear sentiment"
+      - name: negative
+        tooltip: "The text expresses negative feelings or opinions"
+    sequential_key_binding: true
+
+site_dir: default

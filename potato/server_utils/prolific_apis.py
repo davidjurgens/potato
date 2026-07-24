@@ -16,15 +16,18 @@ Key API Endpoints Used:
 - GET /studies/{id}/submissions/ - Get recent submissions for a study
 - POST /studies/{id}/transition/ - Change study status (START/PAUSE)
 
-For more information, see: https://docs.prolific.com/reference/
+For more information, see: https://docs.prolific.com/api-reference
 """
 import os.path
 import pandas as pd
 import requests
 from collections import OrderedDict, defaultdict
+import threading
 import time
 import json
 import logging
+
+logger = logging.getLogger(__name__)
 
 # The base wrapper of prolific apis
 class ProlificBase(object):
@@ -324,13 +327,18 @@ class ProlificStudy(ProlificBase):
         self.submission_info_path = os.path.join(saving_dir, 'submissions.json')
         self.sessions = OrderedDict()
         self.user2session = {}
-        #self.user_status_dict = {'RESERVED':set(), 'AWAITING REVIEW':set(), 'RETURNED':set(), 'TIMED-OUT':set(), 'ACTIVE': set(), 'APPROVED':set(), 'REJECTED':set()}
+        # Must exist before the first update_submission_status() call: add_new_user
+        # and get_concurrent_sessions_count read it on the login path.
+        self.user_status_dict = defaultdict(set)
         self.study_status = None
         self.status_path = None
         self.max_concurrent_sessions = max_concurrent_sessions # How many users can work on the study at the same time
         self.checker_period = workload_checker_period
         self.workload_checker_remaining_time = workload_checker_period
         self.workload_checker_on = False
+        self._monitor_thread = None
+        self._monitor_stop = threading.Event()
+        self._paused_by_monitor = False
 
     def get_basic_study_info(self):
         """
@@ -365,6 +373,9 @@ class ProlificStudy(ProlificBase):
         - 'TIMED-OUT': Participants who timed out
         """
         submission_data = self.get_submissions_from_study()
+        if submission_data is None:
+            logger.warning("Could not fetch submissions for study %s; keeping previous status data", self.study_id)
+            return
         with open(self.submission_info_path, "wt") as f:
             for v in submission_data:
                 f.writelines(json.dumps(v) + "\n")
@@ -446,42 +457,78 @@ class ProlificStudy(ProlificBase):
         """
         return len(self.user_status_dict['ACTIVE'])
 
+    def check_workload_once(self):
+        """
+        Poll submissions once and pause/resume the study based on load.
+
+        - Pauses the study when active participants reach max_concurrent_sessions.
+        - Resumes the study when the count drops below 20% of the maximum,
+          but only if this monitor was the one that paused it (a study paused
+          manually by the researcher is never restarted).
+
+        Returns:
+            str or None: 'paused'/'resumed' if a transition was made, else None
+        """
+        self.update_submission_status()
+        active = self.get_concurrent_sessions_count()
+        if active >= self.max_concurrent_sessions:
+            if not self._paused_by_monitor and self.get_study_status() == 'ACTIVE':
+                logger.info("Workload monitor: %d active >= max %d, pausing study %s",
+                            active, self.max_concurrent_sessions, self.study_id)
+                self.pause_study()
+                self._paused_by_monitor = True
+                return 'paused'
+        elif self._paused_by_monitor and active < 0.2 * self.max_concurrent_sessions:
+            logger.info("Workload monitor: %d active < 20%% of max %d, resuming study %s",
+                        active, self.max_concurrent_sessions, self.study_id)
+            self.start_study()
+            self._paused_by_monitor = False
+            return 'resumed'
+        return None
+
+    def start_workload_monitor(self):
+        """
+        Start the background workload monitoring thread.
+
+        Polls every checker_period seconds via check_workload_once(). Idempotent:
+        calling while a monitor is already running has no effect. Use
+        stop_workload_monitor() to terminate.
+        """
+        if self._monitor_thread is not None and self._monitor_thread.is_alive():
+            logger.warning("Prolific workload monitor is already running")
+            return
+        self._monitor_stop.clear()
+        self._monitor_thread = threading.Thread(
+            target=self._monitor_loop,
+            name="ProlificWorkloadMonitor",
+            daemon=True,
+        )
+        self._monitor_thread.start()
+        self.workload_checker_on = True
+        logger.info("Prolific workload monitor started (poll interval: %ss, max concurrent: %s)",
+                    self.checker_period, self.max_concurrent_sessions)
+
+    def stop_workload_monitor(self):
+        """Stop the workload monitoring thread gracefully (safe if never started)."""
+        self._monitor_stop.set()
+        if self._monitor_thread is not None and self._monitor_thread.is_alive():
+            self._monitor_thread.join(timeout=5.0)
+            if self._monitor_thread.is_alive():
+                logger.warning("Prolific workload monitor did not stop gracefully")
+        self._monitor_thread = None
+        self.workload_checker_on = False
+
+    def _monitor_loop(self):
+        while not self._monitor_stop.wait(self.checker_period):
+            try:
+                self.check_workload_once()
+            except Exception as e:
+                logger.warning("Prolific workload check failed: %s", e)
+
     def workload_checker(self):
-        """
-        Monitor study workload and automatically manage study status.
-
-        Periodically checks the number of active participants and automatically:
-        - Pauses the study if too many participants are active
-        - Resumes the study when active participants drop below threshold
-
-        The threshold is 20% of max_concurrent_sessions. The checker runs
-        continuously with the specified checker_period interval.
-
-        This method runs in an infinite loop and should be called in a separate
-        thread to avoid blocking the main application.
-        """
-        if self.workload_checker_on:
-            print('Workload checker already in process, time remaining: %s seconds' % self.workload_checker_remaining_time)
-            return None
-        else:
-            print('Workload checker started, checking every %s seconds'%self.checker_period)
-            while True:
-                self.workload_checker_remaining_time = self.checker_period
-                self.workload_checker_on = True
-                print(f"\rChecking workload in: {self.checker_period} seconds")
-                #time.sleep(self.checker_period)
-                for i in range(self.checker_period, 0, -1):
-                    #print(f"\rChecking workload in: {i}s", end='', flush=True)
-                    self.workload_checker_remaining_time -= 1
-                    time.sleep(1)
-                self.update_submission_status()
-                if self.get_concurrent_sessions_count() < 0.2 * self.max_concurrent_sessions:
-                    self.workload_checker_on = False
-                    print('current workload: ', self.get_concurrent_sessions_count(), ', resuming study %s'%self.study_id)
-                    self.start_study()
-                    return None
-                else:
-                    print('current workload: ', self.get_concurrent_sessions_count(), ', starting another workload checker')
+        """Deprecated: use start_workload_monitor(). Kept for backwards compatibility."""
+        logger.warning("workload_checker() is deprecated; use start_workload_monitor()")
+        self.start_workload_monitor()
 
     def update_session_status(self, sess_id):
         """
@@ -503,7 +550,17 @@ class ProlificStudy(ProlificBase):
 
         Args:
             user (dict): User data containing 'SESSION_ID' and 'PROLIFIC_PID'
+
+        Returns:
+            str or None: The submission status, or None if it could not be fetched
         """
-        status = self.get_submission_from_id(user['SESSION_ID'])['status']
-        self.sessions[user['SESSION_ID']] = {'username':user['PROLIFIC_PID'], 'status':status}
-        self.session_status_dict[status].append(user['SESSION_ID'])
+        submission = self.get_submission_from_id(user['SESSION_ID'])
+        if not submission:
+            logger.warning("Could not fetch Prolific submission %s for participant %s",
+                           user.get('SESSION_ID'), user.get('PROLIFIC_PID'))
+            return None
+        status = submission['status']
+        self.sessions[user['SESSION_ID']] = {'username': user['PROLIFIC_PID'], 'status': status}
+        self.user2session[user['PROLIFIC_PID']] = user['SESSION_ID']
+        self.user_status_dict[status].add(user['PROLIFIC_PID'])
+        return status

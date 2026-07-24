@@ -1,0 +1,241 @@
+/* Multi-Document Event Annotation form styling */
+
+.mde-container {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #fff;
+  font-size: 14px;
+}
+
+.mde-header {
+  margin-bottom: 10px;
+}
+
+.mde-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.mde-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.mde-section-label {
+  font-weight: 600;
+  color: #334155;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mde-create-btn {
+  border: 1px solid #2563eb;
+  color: #2563eb;
+  background: #fff;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.mde-create-btn:hover {
+  background: #eff6ff;
+}
+
+.mde-empty {
+  color: #94a3b8;
+  font-style: italic;
+  margin: 4px 0;
+}
+
+.mde-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.mde-event-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+.mde-event-row.mde-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.mde-event-open {
+  flex: 1;
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-weight: 600;
+  color: #1e293b;
+  padding: 0;
+}
+.mde-event-open:hover {
+  color: #2563eb;
+}
+
+.mde-event-meta {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.mde-event-del {
+  border: none;
+  background: none;
+  color: #cbd5e1;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.mde-event-del:hover {
+  color: #dc2626;
+}
+
+.mde-editor {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+}
+
+.mde-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 10px;
+}
+
+.mde-editor-title {
+  font-weight: 700;
+  color: #1e293b;
+  flex: 1;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 14px;
+  background: #f8fafc;
+}
+.mde-editor-title:focus {
+  outline: none;
+  border-color: #2563eb;
+  background: #fff;
+}
+
+.mde-membership {
+  font-size: 12px;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.mde-slot {
+  margin-bottom: 10px;
+}
+
+.mde-slot-label {
+  display: block;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 3px;
+}
+
+.mde-slot-row {
+  display: flex;
+  gap: 6px;
+}
+
+.mde-slot-input {
+  flex: 1;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 14px;
+}
+.mde-slot-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.mde-cite-btn {
+  border: 1px solid #16a34a;
+  color: #16a34a;
+  background: #fff;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mde-cite-btn:hover {
+  background: #f0fdf4;
+}
+
+.mde-cite-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.mde-cite {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  padding: 2px 0;
+  color: #475569;
+}
+
+.mde-cite-doc {
+  font-weight: 600;
+  color: #0891b2;
+}
+.mde-cite-text {
+  flex: 1;
+  color: #334155;
+}
+.mde-cite-del {
+  border: none;
+  background: none;
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.mde-cite-del:hover {
+  color: #dc2626;
+}
+
+.mde-cite-hint {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #fef9c3;
+  border: 1px solid #fde047;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #713f12;
+}
+.mde-cite-hint button {
+  margin-left: 8px;
+  border: 1px solid #a16207;
+  background: #fff;
+  border-radius: 5px;
+  padding: 1px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}

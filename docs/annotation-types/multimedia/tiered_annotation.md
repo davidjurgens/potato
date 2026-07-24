@@ -227,7 +227,13 @@ The annotation interface displays:
 
 1. Select the target tier from the dropdown
 2. Select a label from the label buttons
-3. Click and drag on the tier's timeline to create the annotation
+3. Click and drag to create the annotation — on either the full-duration tier rows
+   (coarse) or the zoomed detail canvas (precise)
+
+On the zoomed detail canvas, if a create or resize drag reaches the left/right edge,
+the zoom window **auto-scrolls** so the annotation can extend past the visible window
+in a single gesture. The zoom window also adapts to short clips instead of staying
+fixed at 10 seconds.
 
 For dependent tiers:
 - You must first create a parent annotation

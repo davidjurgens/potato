@@ -338,6 +338,26 @@ The timeline uses Peaks.js to display:
 - Current playback position
 - Selection markers for segment start/end
 
+Below the zoomed timeline is an **overview** bar showing the whole clip.
+
+### Creating Segments by Dragging
+
+In addition to the `[` / `]` / `+ Segment` buttons and keyboard shortcuts, you can
+draw segments directly on the timeline:
+
+- **Timeline (zoomed view)** — **right-click and drag** to draw a segment. If the
+  drag reaches an edge, the view **auto-scrolls** so the segment can extend past the
+  visible window in one gesture.
+- **Overview** — **right-click and drag** to draw a coarse segment anywhere across
+  the whole video, even outside the current zoom window.
+
+**Left-click** still seeks the playhead, and Peaks' native drag/resize still edits
+existing segment markers.
+
+> **Note:** The timeline requires the video to have a decodable audio track for the
+> waveform. If Peaks.js can't initialize, the player still works and segments can be
+> created with the buttons/keyboard.
+
 ### Annotation List
 
 A scrollable list showing all annotations:

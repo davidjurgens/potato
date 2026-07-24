@@ -18,9 +18,35 @@ Usage:
 import asyncio
 import logging
 import os
+import re
 from typing import Optional, Dict, Any, Tuple
 
 logger = logging.getLogger(__name__)
+
+# Matches a leading URI scheme like "https://", "http://", "about:", "file:".
+_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*:")
+
+
+def normalize_url(url: str) -> str:
+    """Return a URL Playwright can navigate to.
+
+    Users (and agents) routinely supply a bare host like ``google.com`` or
+    ``www.wikipedia.org``. Playwright's ``page.goto`` rejects those with
+    "Cannot navigate to invalid URL" because they lack a scheme. Prepend
+    ``https://`` when no scheme is present. Whitespace is stripped; empty
+    input is returned unchanged so callers can validate it.
+    """
+    if not url:
+        return url
+    url = url.strip()
+    if not url:
+        return url
+    # Protocol-relative ("//example.com") → https.
+    if url.startswith("//"):
+        return "https:" + url
+    if _SCHEME_RE.match(url):
+        return url
+    return "https://" + url
 
 
 class PlaywrightSession:
@@ -83,6 +109,8 @@ class PlaywrightSession:
             )
 
             self.page = await self.context.new_page()
+
+            url = normalize_url(url)
 
             # Remove the navigator.webdriver flag that headless Chromium sets.
             # This is the single most common bot-detection signal.
@@ -160,6 +188,7 @@ class PlaywrightSession:
         """Navigate to a new URL."""
         if not self.page:
             return False
+        url = normalize_url(url)
         try:
             await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
             return True

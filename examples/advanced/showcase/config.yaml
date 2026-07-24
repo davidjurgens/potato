@@ -1,0 +1,75 @@
+port: 8000
+annotation_task_name: "Potato Showcase — Politeness"
+task_dir: .
+output_annotation_dir: annotation_output/showcase/
+output_annotation_format: jsonl
+annotation_codebook_url: ''
+data_files:
+- data/politeness.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: radio
+  name: politeness
+  description: How polite is this workplace message?
+  labels:
+  - Polite
+  - Neutral
+  - Impolite
+  sequential_key_binding: true
+
+# ---------------------------------------------------------------------------
+# All four flagship features on one task. On the annotation page:
+#   bottom-right  — Boundary Lab counterfactual probes
+#   bottom-left   — Truth Serum peer-prediction slider
+#   bottom-center — Think-Aloud mic pill (say "I label this polite")
+# On a phone: visit /pocket for the card-stack mobile surface (offline-capable).
+# Afterwards:  python -m potato.paper examples/advanced/showcase/config.yaml
+# emits a cut-paste LaTeX report over the collected annotations.
+#
+# Dashboards (admin; --debug passes automatically):
+#   /boundary/dashboard   /truth_serum/dashboard   /thinkaloud/review
+# ---------------------------------------------------------------------------
+
+# Boundary Lab: probe each label with minimal counterfactual edits. This data
+# ships handcrafted counterfactuals, so it runs fully offline; `rules` fills
+# any gaps deterministically.
+boundary_probing:
+  enabled: true
+  schema: politeness
+  probes_per_item: 3
+  include_invariance: true
+  sources:
+  - precomputed
+  - rules
+  rationale_on_flip: true
+
+# Truth Serum: one micro-question after each label — "what percentage of other
+# annotators will choose the same label as you?" (surprisingly-popular scoring).
+truth_serum:
+  enabled: true
+  schema: politeness
+  min_annotators: 3
+
+# Think-Aloud: speak freely while annotating; commit labels with a set phrasing
+# ("I label this polite"). STT runs locally via faster-whisper when installed
+# (`pip install faster-whisper`); `auto` degrades gracefully without it.
+thinkaloud:
+  enabled: true
+  schema: politeness
+  stt: auto
+  model: tiny.en
+  chunk_seconds: 6
+  require_spoken_label: false   # voice OR click both work in the combined demo
+
+# Pocket Mode: mobile card-stack surface at /pocket (installable PWA, offline
+# save queue). Radio tasks are pocket-capable.
+pocket:
+  enabled: true
+  batch_size: 25
+site_dir: default

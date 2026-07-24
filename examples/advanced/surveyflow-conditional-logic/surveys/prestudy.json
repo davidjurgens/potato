@@ -1,0 +1,44 @@
+[
+    {
+        "id": "prior_experience",
+        "name": "prior_experience",
+        "annotation_type": "radio",
+        "description": "Have you previously worked on a text-annotation task?",
+        "labels": ["Yes", "No"],
+        "label_requirement": {"required": true}
+    },
+    {
+        "id": "experience_details",
+        "name": "experience_details",
+        "annotation_type": "text",
+        "description": "Please briefly describe your previous annotation experience.",
+        "textarea": {"on": true, "rows": 3},
+        "label_requirement": {"required": true},
+        "display_logic": {
+            "show_when": [
+                {"schema": "prior_experience", "operator": "equals", "value": "Yes"}
+            ],
+            "logic": "all"
+        }
+    },
+    {
+        "id": "referral_source",
+        "name": "referral_source",
+        "annotation_type": "radio",
+        "description": "How did you hear about this study?",
+        "labels": ["Social media", "A colleague", "Other"],
+        "label_requirement": {"required": true}
+    },
+    {
+        "id": "referral_other",
+        "name": "referral_other",
+        "annotation_type": "text",
+        "description": "Please specify how you heard about the study.",
+        "label_requirement": {"required": true},
+        "display_logic": {
+            "show_when": [
+                {"schema": "referral_source", "operator": "equals", "value": "Other"}
+            ]
+        }
+    }
+]

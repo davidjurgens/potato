@@ -1,0 +1,83 @@
+# Sub-Agent Run-Tree Example
+#
+# Traces from orchestrator-style agents (LangChain/LangSmith run trees,
+# OTel span hierarchies, potato_trace SDK) preserve their nested run
+# hierarchy in a `run_tree` field. The agent_trace display renders it as a
+# collapsible sidebar: clicking a run filters the step list to the turns
+# that run (and its sub-runs) produced, and scrolls to the first one.
+#
+# Turn-level schemes can bind to specific sub-agent runs with
+# `turn_binding.runs` (see delegation_quality below).
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/sub-agent-tree/config.yaml -p 8000
+
+annotation_task_name: "Sub-Agent Run Tree"
+
+data_files:
+  - data/tree-traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: conversation
+      type: agent_trace
+      label: "Agent Trace"
+      display_options:
+        show_step_numbers: true
+        show_summary: true
+        show_run_tree: true      # default when the item has a run_tree
+
+annotation_schemes:
+  # Per-turn errors across the whole trace
+  - annotation_type: multiselect
+    name: step_errors
+    description: "Errors in this step"
+    labels:
+      - wrong_tool
+      - hallucination
+      - redundant_call
+    turn_level: true
+    turn_binding:
+      field: conversation
+      step_types: [action, thought]
+
+  # Rate delegation quality only on the researcher sub-agent's turns
+  - annotation_type: likert
+    name: delegation_quality
+    description: "Sub-agent delegation quality"
+    min_label: "Poor"
+    max_label: "Excellent"
+    size: 5
+    turn_level: true
+    turn_binding:
+      field: conversation
+      runs: [run-researcher, run-writer, run-booker]
+
+  # Whole-trace verdicts
+  - annotation_type: radio
+    name: orchestration_verdict
+    description: "Was the sub-agent orchestration effective?"
+    labels:
+      - effective
+      - wasteful
+      - failed
+    sequential_key_binding: true
+
+user_config:
+  allow_all_users: true

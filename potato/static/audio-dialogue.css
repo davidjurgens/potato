@@ -1,0 +1,367 @@
+/*
+ * Audio Dialogue display styles (podcast / interview turn annotation).
+ *
+ * Speaker identity: --ad-color / --ad-on (contrast text) custom properties are
+ * set per turn by the server and updated live by audio-dialogue.js on speaker
+ * assignment. Mutable chrome (avatar initial, speaker name, timestamp, play
+ * glyph) is CSS pseudo-content from data-* attributes so assignment never
+ * mutates .text-content and span offsets stay stable. Potato is light-only.
+ */
+
+.audio-dialogue {
+    font-family: inherit;
+    --ad-radius: 12px;
+}
+
+/* ---- Sticky transport bar (OUTSIDE .text-content) --------------------- */
+.ad-audiobar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    background: var(--card, #fff);
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(24, 24, 27, 0.06);
+}
+
+.ad-transport {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--ring, #6e56cf);
+    color: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    transition: background 0.15s ease, transform 0.08s ease;
+}
+
+.ad-transport:hover { background: color-mix(in srgb, var(--ring, #6e56cf) 85%, #000); }
+.ad-transport:active { transform: scale(0.94); }
+.ad-transport:focus-visible { outline: 2px solid var(--ring, #6e56cf); outline-offset: 2px; }
+
+.ad-playpause::before { content: "\25B6"; margin-left: 2px; }
+.ad-playpause.ad-is-playing::before { content: "\23F8"; margin-left: 0; }
+.ad-stop {
+    width: 30px;
+    height: 30px;
+    background: var(--secondary, #f4f4f5);
+    color: var(--foreground, #3f3f46);
+}
+.ad-stop:hover { background: var(--muted, #e4e4e7); }
+.ad-stop::before { content: "\25A0"; font-size: 11px; }
+
+.ad-scrubwrap { flex: 1; display: flex; align-items: center; min-width: 60px; }
+.ad-scrub {
+    width: 100%;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--muted, #e4e4e7);
+    border-radius: 999px;
+    cursor: pointer;
+    accent-color: var(--ring, #6e56cf);
+}
+.ad-scrub::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--ring, #6e56cf);
+    cursor: pointer;
+    border: 2px solid var(--card, #fff);
+    box-shadow: 0 1px 2px rgba(24, 24, 27, 0.25);
+}
+.ad-scrub::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--ring, #6e56cf); cursor: pointer; border: 2px solid var(--card, #fff);
+}
+
+.ad-clock {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.78em;
+    color: var(--muted-foreground, #71717a);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.ad-clock .ad-cur { color: var(--foreground, #27272a); font-weight: 600; }
+
+.ad-rate-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72em;
+    color: var(--muted-foreground, #71717a);
+    white-space: nowrap;
+}
+.ad-rate {
+    font-size: inherit;
+    padding: 2px 4px;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: 6px;
+    background: var(--card, #fff);
+    color: var(--foreground, #27272a);
+    cursor: pointer;
+}
+
+/* ---- Speaker legend --------------------------------------------------- */
+.ad-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.ad-legend-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 8px;
+    font-size: 0.8em;
+    border: 1.5px solid var(--ad-color, #d4d4d8);
+    border-radius: 999px;
+    background: var(--card, #fff);
+    color: var(--foreground, #27272a);
+}
+.ad-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+/* ---- Scroll pane ------------------------------------------------------ */
+.ad-scroll {
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 6px 10px 10px;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: 10px;
+    background:
+        linear-gradient(var(--card, #fff), var(--card, #fff)) padding-box,
+        var(--muted, #fafafa);
+    scroll-behavior: smooth;
+}
+.ad-scroll::-webkit-scrollbar { width: 10px; }
+.ad-scroll::-webkit-scrollbar-thumb {
+    background: var(--border, #d4d4d8); border-radius: 999px; border: 3px solid var(--card, #fff);
+}
+
+.ad-text-content { display: flex; flex-direction: column; }
+
+/* ---- Turn bubble ------------------------------------------------------ */
+.ad-turn {
+    position: relative;
+    max-width: 82%;
+    margin: 8px 0;
+    padding: 8px 12px 10px;
+    border-radius: var(--ad-radius);
+    background: color-mix(in srgb, var(--ad-color, #9ca3af) 8%, var(--card, #fff));
+    border: 1px solid color-mix(in srgb, var(--ad-color, #9ca3af) 22%, var(--card, #fff));
+    transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.ad-side-left {
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+}
+.ad-side-right {
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+    background: color-mix(in srgb, var(--ad-color, #9ca3af) 12%, var(--card, #fff));
+}
+
+.ad-turn.ad-unassigned {
+    border-style: dashed;
+    background: repeating-linear-gradient(
+        45deg,
+        color-mix(in srgb, var(--ad-color, #9ca3af) 6%, var(--card, #fff)),
+        color-mix(in srgb, var(--ad-color, #9ca3af) 6%, var(--card, #fff)) 8px,
+        color-mix(in srgb, var(--ad-color, #9ca3af) 11%, var(--card, #fff)) 8px,
+        color-mix(in srgb, var(--ad-color, #9ca3af) 11%, var(--card, #fff)) 16px
+    );
+}
+
+/* Active turn during playback */
+.ad-turn.ad-active {
+    border-color: var(--ad-color, #6e56cf);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ad-color, #6e56cf) 45%, transparent);
+}
+
+.ad-turn-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+
+/* Play glyph — pseudo-content, no text node (keeps offsets pure). */
+.ad-play {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--ad-color, #6e56cf);
+    color: var(--ad-on, #fff);
+    cursor: pointer;
+    font-size: 10px;
+    line-height: 1;
+    transition: transform 0.08s ease, filter 0.15s ease;
+}
+.ad-play::before { content: "\25B6"; margin-left: 1px; }
+.ad-play.ad-is-playing::before { content: "\23F8"; margin-left: 0; }
+.ad-play:hover { filter: brightness(1.08); transform: scale(1.06); }
+.ad-play:active { transform: scale(0.92); }
+.ad-play:focus-visible { outline: 2px solid var(--ad-color, #6e56cf); outline-offset: 2px; }
+
+/* Avatar — initial via pseudo-content. */
+.ad-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--ad-color, #9ca3af);
+    color: var(--ad-on, #fff);
+    font-size: 0.72em;
+    font-weight: 700;
+}
+.ad-avatar::before { content: attr(data-initial); }
+
+.ad-speaker-name {
+    font-weight: 600;
+    font-size: 0.9em;
+    color: var(--foreground, #27272a);
+}
+.ad-speaker-name::before { content: attr(data-name); }
+.ad-unassigned .ad-speaker-name { color: var(--muted-foreground, #71717a); font-style: italic; }
+
+.ad-time {
+    margin-left: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.72em;
+    color: var(--muted-foreground, #71717a);
+    font-variant-numeric: tabular-nums;
+}
+.ad-time::before { content: attr(data-time); }
+
+/* Annotatable turn text — the ONLY meaningful text in the offset space. */
+.ad-text {
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.55;
+    color: var(--foreground, #27272a);
+}
+
+/* Speaker button — click the avatar+name to open the assignment menu. Wraps
+ * the pseudo-content avatar/name, so it adds no text to the offset space. */
+.ad-speaker-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 6px 2px 2px;
+    margin: -2px 0;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+}
+.ad-speaker-btn:hover { background: color-mix(in srgb, var(--ad-color, #9ca3af) 12%, var(--card, #fff)); border-color: color-mix(in srgb, var(--ad-color, #9ca3af) 30%, var(--border, #e4e4e7)); }
+.ad-speaker-btn:focus-visible { outline: 2px solid var(--ring, #6e56cf); outline-offset: 1px; }
+.ad-speaker-caret {
+    width: 0; height: 0; margin-left: 1px;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 4px solid var(--muted-foreground, #a1a1aa);
+    opacity: 0.7;
+}
+.ad-unassigned .ad-speaker-btn {
+    border-color: color-mix(in srgb, var(--ad-color, #9ca3af) 45%, var(--border, #e4e4e7));
+    border-style: dashed;
+}
+
+/* Popover assignment menu — position:fixed at the document level (outside
+ * .text-content) so its item text never affects span offsets, even when the
+ * annotator adds new speakers. */
+.ad-speaker-menu {
+    position: fixed;
+    z-index: 50;
+    min-width: 180px;
+    max-width: 260px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 5px;
+    background: var(--card, #fff);
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(24, 24, 27, 0.16);
+}
+.ad-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 7px 9px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--foreground, #27272a);
+    font-size: 0.88em;
+    text-align: left;
+    cursor: pointer;
+}
+.ad-menu-item:hover, .ad-menu-item:focus-visible {
+    background: var(--secondary, #f4f4f5);
+    outline: none;
+}
+.ad-menu-item.is-current { font-weight: 600; }
+.ad-menu-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    font-size: 0.7em;
+    font-weight: 700;
+}
+.ad-menu-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-menu-check { color: var(--ring, #6e56cf); font-weight: 700; }
+.ad-menu-sep { height: 1px; margin: 4px 6px; background: var(--border, #e4e4e7); }
+.ad-menu-unassign { color: var(--muted-foreground, #71717a); }
+.ad-menu-add { color: var(--ring, #6e56cf); font-weight: 600; }
+
+/* Turn-level annotation slot sits below the text (proxy widgets). */
+.ad-turn .turn-anno-slot {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px dashed color-mix(in srgb, var(--ad-color, #9ca3af) 30%, var(--border, #e4e4e7));
+}
+
+.ad-placeholder {
+    color: var(--muted-foreground, #71717a);
+    font-style: italic;
+    padding: 12px;
+}
+
+/* Narrow screens: bubbles go full width, transport wraps. */
+@media (max-width: 640px) {
+    .ad-turn { max-width: 100%; }
+    .ad-audiobar { flex-wrap: wrap; }
+    .ad-scrubwrap { order: 5; flex-basis: 100%; }
+}

@@ -325,6 +325,7 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "video_annotation": ("video-annotation-container",),
     "span_link": ("span-link-container",),
     "event_annotation": ("event-annotation-container",),
+    "multi_document_event": ('data-annotation-type="multi_document_event"', "mde-container"),
     "coreference": ('data-annotation-type="coreference"', "coref-chain-panel"),
     "conversation_tree": ("conv-tree",),
     "tracking": ("tracking-panel", "tracking-overlay", "tracking-controls-group"),
@@ -332,6 +333,7 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "tiered_annotation": ("tiered-annotation-container",),
     "document_bbox": ("document-bbox-mode", "document-bbox-container", "document-bbox-canvas"),
     "pdf_bbox": ("pdf-bbox-mode", "pdf-bbox-container", "pdf-bbox-canvas"),
+    "pdf_link": ("pdf-link-mode",),
     "web_agent_viewer": ('class="web-agent-viewer"', 'class="live-agent-viewer"'),
     "web_agent_playback": ('data-auto-playback="true"',),
     "web_agent_recorder": ("web-agent-recorder",),
@@ -466,7 +468,17 @@ def load_instance_data(config: dict):
         _load_from_data_sources(config, ism, id_key, text_key)
         return
 
-    data_files = config.get("data_files", [])
+    data_files = list(config.get("data_files", []))
+    seen_data_files = {
+        _data_file_entry_identity(data_file_entry, config.get("task_dir", "."))
+        for data_file_entry in data_files
+    }
+    for data_file_entry in _batch_assignment_data_file_entries(config):
+        key = _data_file_entry_identity(data_file_entry, config.get("task_dir", "."))
+        if key not in seen_data_files:
+            data_files.append(data_file_entry)
+            seen_data_files.add(key)
+
     if not data_files:
         # No data_files, might use data_directory which is handled elsewhere
         logger.debug("No data_files configured, skipping file-based loading")
@@ -705,6 +717,48 @@ def load_instance_data(config: dict):
     _render_displayed_text(text_key)
 
 
+def _data_file_entry_identity(data_file_entry, task_dir: str = ".") -> str:
+    if isinstance(data_file_entry, dict):
+        data_file_entry = data_file_entry.get("path", "")
+    path = str(data_file_entry)
+    if path and not os.path.isabs(path):
+        path = os.path.join(task_dir, path)
+    return os.path.normcase(os.path.abspath(os.path.normpath(path)))
+
+
+def _batch_assignment_data_file_entries(config: dict) -> list:
+    batch_config = config.get("batch_assignment")
+    if not isinstance(batch_config, dict):
+        return []
+
+    entries = []
+    for group in batch_config.get("groups") or []:
+        if not isinstance(group, dict):
+            continue
+        data_file = group.get(
+            "data_file",
+            group.get("input_data_file", group.get("input_file")),
+        )
+        if data_file:
+            entries.append(_resolve_batch_assignment_data_file_entry(config, data_file))
+    return entries
+
+
+def _resolve_batch_assignment_data_file_entry(config: dict, data_file_entry):
+    task_dir = config.get("task_dir", ".")
+
+    if isinstance(data_file_entry, dict):
+        resolved_entry = dict(data_file_entry)
+        path = resolved_entry.get("path")
+        if isinstance(path, str) and path and not os.path.isabs(path):
+            resolved_entry["path"] = os.path.normpath(os.path.join(task_dir, path))
+        return resolved_entry
+
+    if isinstance(data_file_entry, str) and data_file_entry and not os.path.isabs(data_file_entry):
+        return os.path.normpath(os.path.join(task_dir, data_file_entry))
+    return data_file_entry
+
+
 def _default_max_annotations_per_user(config: dict, ism) -> int:
     """
     Resolve the default per-user annotation quota.
@@ -813,6 +867,7 @@ def load_user_data(config: dict):
     # adjudication build_queue() (and other code that relies on
     # ism.instance_annotators) works with pre-loaded annotation data.
     ism = get_item_state_manager()
+    user_id_to_instance_ids = {}
     for user_id in usm.get_user_ids():
         user_state = usm.get_user_state(user_id)
         if user_state:
@@ -822,6 +877,19 @@ def load_user_data(config: dict):
             for instance_id in user_state.instance_id_to_span_to_value:
                 if instance_id in ism.instance_id_to_instance:
                     ism.register_annotator(instance_id, user_id)
+            # Collect assigned + annotated items so auto-batch cohort pins can be
+            # reconstructed below (they are otherwise in-memory only and reset on
+            # every restart).
+            user_id_to_instance_ids[user_id] = (
+                set(user_state.get_assigned_instance_ids())
+                | set(user_state.get_annotated_instance_ids())
+            )
+
+    # Restore auto-assigned batch cohort pins from persisted assignments so that
+    # returning users stay in their original group and new users keep balancing
+    # against accurate per-group counts after a restart. No-op unless
+    # batch_assignment.auto_assign_annotators is enabled.
+    ism.rebuild_auto_batch_pins_from_users(user_id_to_instance_ids)
 
     logger.info("Loaded user data for %d users" % len(usm.get_user_ids()))
 
@@ -1088,6 +1156,26 @@ def init_prolific_study(config: dict) -> None:
         logger.info(f"Initialized Prolific study: {study_id}")
         logger.info(f"Study info: {PROLIFIC_STUDY_INSTANCE.get_basic_study_info()}")
 
+        # Auto pause/resume polling is opt-in: it makes recurring Prolific API
+        # calls, so existing token-configured deployments must not start polling
+        # just because they upgraded.
+        if prolific_settings.get('workload_checker', False):
+            # With webhooks delivering submission changes in real time, the
+            # poller only reconciles missed events — slow it down.
+            webhooks_enabled = (((config.get('crowdsourcing') or {}).get('prolific') or {})
+                                .get('webhooks') or {}).get('enabled', False)
+            if webhooks_enabled:
+                PROLIFIC_STUDY_INSTANCE.checker_period = max(
+                    PROLIFIC_STUDY_INSTANCE.checker_period, 600)
+            PROLIFIC_STUDY_INSTANCE.start_workload_monitor()
+            import atexit
+
+            def cleanup_prolific_monitor():
+                study = get_prolific_study()
+                if study:
+                    study.stop_workload_monitor()
+            atexit.register(cleanup_prolific_monitor)
+
     except Exception as e:
         logger.error(f"Failed to initialize Prolific study: {e}")
         PROLIFIC_STUDY_INSTANCE = None
@@ -1166,10 +1254,45 @@ def _prefill_diversity_embeddings(dm, config: dict) -> None:
         )
 
 
+def apply_cot_segmentation_to_all(config: dict) -> None:
+    """Segment long CoT reasoning on every loaded item, per the ``cot_segmentation``
+    config block. No-op when the block is absent. The ``llm`` strategy reuses the
+    configured AI/judge endpoint; any endpoint error falls back to heuristics.
+    """
+    seg_config = config.get("cot_segmentation")
+    if not seg_config or not isinstance(seg_config, dict):
+        return
+
+    from potato.server_utils.cot_segmentation import apply_cot_segmentation
+
+    endpoint = None
+    if seg_config.get("strategy") == "llm":
+        try:
+            from potato.ai.ai_endpoint import AIEndpointFactory
+            endpoint = AIEndpointFactory.create_endpoint(config)
+        except Exception as exc:  # noqa: BLE001 - heuristic fallback on any error
+            logger.warning("cot_segmentation 'llm' endpoint unavailable, using heuristics: %s", exc)
+
+    count = 0
+    for item in get_item_state_manager().items():
+        data = item.get_data()
+        if isinstance(data, dict):
+            before = data.get(seg_config.get("target_key", "cot_steps"))
+            apply_cot_segmentation(data, seg_config, endpoint=endpoint)
+            if data.get(seg_config.get("target_key", "cot_steps")) is not before:
+                count += 1
+    logger.info("CoT segmentation applied to %d items (strategy=%s)",
+                count, seg_config.get("strategy", "auto"))
+
+
 def load_all_data(config: dict):
     '''Loads instance and annotation data from the files specified in the config.'''
     load_annotation_schematic_data(config)
     load_instance_data(config)
+    # Segment long chain-of-thought reasoning into per-step lists (feeds the
+    # cot_trace display + process_reward schema). Must run after items load so
+    # every static item is segmented before assignment/rendering.
+    apply_cot_segmentation_to_all(config)
     # Stamp per-item annotator caps for the overlap sample (must run before
     # user_data so that initial assignments see the heterogeneous caps).
     try:
@@ -1185,6 +1308,8 @@ def load_all_data(config: dict):
     load_training_data(config)
     init_prolific_study(config)
     init_mturk_hit(config)
+    from potato.crowdsourcing import init_crowd_provider
+    init_crowd_provider(config)
 
     logger.debug(f"STATES: {get_user_state_manager().phase_type_to_name_to_page}")
 
@@ -1362,6 +1487,11 @@ def load_phase_data(config: dict) -> None:
 
     logger.debug("Loading %d phases in order: %s" % (len(phase_order), phase_order))
 
+    # Accumulate every phase's questions so display_logic references can be
+    # validated across the whole SurveyFlow (a poststudy question may condition
+    # on a prestudy answer). Validated once after all phases load.
+    _all_phase_schemes_for_dl = []
+
     for phase_name in phase_order:
         try:
             # Skip 'annotation' — it's handled by the main annotation flow,
@@ -1533,6 +1663,12 @@ def load_phase_data(config: dict) -> None:
                         if isinstance(_survey_scheme, dict):
                             _survey_scheme.setdefault("humanize_labels", False)
 
+            # Remember this phase's questions for cross-phase display_logic
+            # validation after all phases have loaded (see below).
+            for _s in phase_labeling_schemes:
+                if isinstance(_s, dict):
+                    _all_phase_schemes_for_dl.append(_s)
+
             # Use the default templates unless specified in the phase config
             # Note: Template paths are now hardcoded in front_end.py
             # Only handle custom task_layout if specified
@@ -1557,8 +1693,40 @@ def load_phase_data(config: dict) -> None:
             logger.debug(f"Registered phase {phase_name} as {phase_type} with HTML {phase_html_fname}")
 
         except Exception as e:
+            from potato.server_utils.config_module import ConfigValidationError
+            if isinstance(e, ConfigValidationError):
+                # Configuration errors (e.g. invalid display_logic on a survey
+                # question) must fail fast rather than being logged-and-skipped:
+                # silently dropping a consent/prestudy phase would let users
+                # bypass required gating.
+                raise
             logger.error(f"Failed to load phase '{phase_name}': {e}")
             continue
+
+    # Validate display_logic on SurveyFlow questions now that every phase's
+    # questions are known. This covers what the config-load validator misses
+    # (it only sees inline annotation_schemes, not questions loaded from phase
+    # JSON/instrument files): unsupported operators, references to a question
+    # that exists on no phase, and circular dependencies. References may point
+    # to a question on any phase (cross-page conditions, e.g. a poststudy
+    # question gated on a prestudy answer). A failure aborts startup rather than
+    # silently letting broken logic reach the frontend.
+    if any(s.get("display_logic") for s in _all_phase_schemes_for_dl):
+        from potato.server_utils.config_module import (
+            validate_display_logic_references,
+            ConfigValidationError,
+        )
+        try:
+            validate_display_logic_references(_all_phase_schemes_for_dl)
+        except ConfigValidationError as dl_err:
+            raise ConfigValidationError(
+                f"Invalid SurveyFlow display_logic: {dl_err}"
+            )
+
+    # Stash SurveyFlow question schemes so downstream consumers (e.g. auto-export
+    # server-side hidden-answer exclusion) can reach display_logic definitions,
+    # which otherwise live only in external phase files, not in config.
+    config['_surveyflow_schemes'] = _all_phase_schemes_for_dl
 
     user_state_manager = get_user_state_manager()
     logger.debug(f"[PHASE LOAD] phase_type_to_name_to_page: {user_state_manager.phase_type_to_name_to_page}")
@@ -1641,6 +1809,75 @@ def get_abs_or_rel_path(fname: str, config: dict) -> str:
             logger.error(f"File not found: {fname2}")
         raise FileNotFoundError("File not found: %s" % fname2)
     return fname2
+
+#: Annotation schemes whose item "text" is often just a media file path/URL.
+_TEMPORAL_MEDIA_TYPES = frozenset({
+    "audio_annotation",
+    "video_annotation",
+    "tiered_annotation",
+    "temporal_grounding",
+    "speech_transcript",
+})
+
+#: File extensions that mark a string as a media path even without a slash.
+_MEDIA_PATH_EXTENSIONS = (
+    ".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac",
+    ".mp4", ".webm", ".mov", ".avi", ".mkv",
+)
+
+
+def _looks_like_media_path(value):
+    """Heuristic: does this string look like a bare media path/URL (not prose)?
+
+    A genuine prompt/transcript contains whitespace; a path does not. We treat a
+    whitespace-free string as a path when it is a URL, contains a path separator,
+    or ends in a known media extension.
+    """
+    if not isinstance(value, str):
+        return False
+    s = value.strip()
+    if not s or any(c.isspace() for c in s):
+        return False
+    lowered = s.lower()
+    if lowered.startswith(("http://", "https://", "//", "/")):
+        return True
+    if "/" in s or "\\" in s:
+        return True
+    return lowered.endswith(_MEDIA_PATH_EXTENSIONS)
+
+
+def _compute_instance_text_is_media_path(annotation_schemes, item_data, displayed_text):
+    """Whether the instance-text header is just the media path (so it can be hidden).
+
+    True when a temporal-media scheme is present AND the displayed text is either
+    equal to that scheme's media source field value or otherwise looks like a bare
+    media path/URL. Returns False when the item carries a real prompt/transcript.
+    """
+    media_scheme = next(
+        (s for s in (annotation_schemes or [])
+         if s.get("annotation_type") in _TEMPORAL_MEDIA_TYPES),
+        None,
+    )
+    if media_scheme is None:
+        return False
+
+    display = displayed_text.strip() if isinstance(displayed_text, str) else ""
+    if not display:
+        # No visible text at all — nothing to show, treat as "hide".
+        return True
+
+    source_field = (
+        media_scheme.get("source_field")
+        or media_scheme.get("video_key")
+        or media_scheme.get("audio_key")
+    )
+    if source_field and isinstance(item_data, dict):
+        source_value = str(item_data.get(source_field, "") or "").strip()
+        if source_value and display == source_value:
+            return True
+
+    return _looks_like_media_path(display)
+
 
 def get_displayed_text(text):
     """Render the text to display to the user in the annotation interface.
@@ -1914,6 +2151,35 @@ def get_current_page_html(config, username):
                     if options:
                         options[0]["selected"] = "selected"
 
+    # Cross-page conditional display_logic: expose answers from OTHER phase
+    # pages so a question can be shown/hidden based on an answer given on an
+    # earlier SurveyFlow page (e.g. a poststudy question gated on a prestudy
+    # answer). Built in the same nested {schema: {label: value}} shape as the
+    # client's currentAnnotations so display-logic.js can reuse one transform.
+    # The current page is excluded here — its answers already flow through the
+    # normal currentAnnotations pipeline and must win over prior answers.
+    prior_raw = {}
+    for other_phase, pages_dict in user_state.phase_to_page_to_label_to_value.items():
+        for other_page, labels_dict in pages_dict.items():
+            if other_phase == phase and other_page == page:
+                continue
+            for label_obj, value in labels_dict.items():
+                try:
+                    schema = label_obj.get_schema()
+                    label = label_obj.get_name()
+                except AttributeError:
+                    continue
+                prior_raw.setdefault(schema, {})[label] = value
+
+    if prior_raw:
+        # Escape "<" so an answer containing "</script>" cannot break out of the
+        # inline script (BeautifulSoup does not entity-escape script contents).
+        safe_json = easy_json(prior_raw).replace("<", "\\u003c")
+        script_tag = soup.new_tag("script")
+        script_tag.string = "window.priorPhaseAnswersRaw = " + safe_json + ";"
+        target = soup.body if soup.body else soup
+        target.append(script_tag)
+
     return str(soup)
 
 def _sanitize_codebook_url(url: str) -> str:
@@ -2132,8 +2398,19 @@ def render_page_with_annotations(username: str):
     # print(all_statistics)
 
     # Set the html file as surveyflow pages when the instance is a not an
-    # annotation page (survey pages, prestudy pass or fail page)
+    # annotation page (survey pages, prestudy pass or fail page).
+    # When the user's cohort binds its own annotation schemes, serve that
+    # cohort's pre-generated site file; otherwise fall back to the default.
     html_file = config["site_file"]
+    cohort_site_files = config.get("cohort_site_files") or {}
+    if cohort_site_files:
+        try:
+            from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+            _cohort = get_cohort_scheme_resolver().get_cohort_for_user(username)
+            if _cohort and _cohort in cohort_site_files:
+                html_file = cohort_site_files[_cohort]
+        except Exception as e:
+            logger.debug(f"Cohort site-file selection skipped: {e}")
 
     var_elems_html = "".join(
         map(lambda item : (
@@ -2188,17 +2465,24 @@ def render_page_with_annotations(username: str):
 
     # Get UI configuration from config
     ui_config = config.get("ui", {})
-    annotation_schemes = config.get("annotation_schemes", [])
+    # Resolve the schemes for this user's cohort (falls back to the global
+    # annotation_schemes when per-cohort schemas are not configured).
+    try:
+        from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+        annotation_schemes = get_cohort_scheme_resolver().get_schemes_for_user(username)
+    except Exception:
+        annotation_schemes = config.get("annotation_schemes", [])
 
     # Add layout configuration to ui_config for JavaScript access
     if config.get("layout"):
         ui_config = dict(ui_config)  # Make a copy to avoid modifying the original
         ui_config["layout"] = config["layout"]
 
-    # Detect if any annotation scheme is video_annotation type
+    # Detect if any annotation scheme is video_annotation type (or tiered_annotation with video media)
     # This is used to customize the display (show "Video to Annotate:" instead of "Text to Annotate:")
     has_video_annotation = any(
         scheme.get("annotation_type") == "video_annotation"
+        or (scheme.get("annotation_type") == "tiered_annotation" and scheme.get("media_type") == "video")
         for scheme in annotation_schemes
     )
 
@@ -2217,6 +2501,14 @@ def render_page_with_annotations(username: str):
         for scheme in annotation_schemes
     )
 
+    # For temporal media schemes the item's "text" is often just the media file
+    # path/URL. When that is the case we hide the redundant header (the player IS
+    # the content); but if the item has a genuine prompt/transcript we still show
+    # it. See base_template_v2.html instance-display branches.
+    instance_text_is_media_path = _compute_instance_text_is_media_path(
+        annotation_schemes, item_data, original_plain_text
+    )
+
     # Initialize display_html before it's referenced by _detect_frontend_assets_for_page
     display_html = ""
 
@@ -2230,6 +2522,45 @@ def render_page_with_annotations(username: str):
 
     # Check if chat support is enabled (for conditional loading of llm-chat-sidebar assets)
     chat_enabled = config.get("chat_support", {}).get("enabled", False)
+
+    # Boundary Lab (counterfactual boundary probing): conditional assets + JS config
+    boundary_client_config = None
+    boundary_block = config.get("boundary_probing", {})
+    if boundary_block.get("enabled", False):
+        from potato.boundary import get_boundary_manager
+        boundary_manager = get_boundary_manager()
+        if boundary_manager and boundary_manager.boundary_config.schema:
+            bc = boundary_manager.boundary_config
+            boundary_client_config = {
+                "schema": bc.schema,
+                "debounce_ms": bc.debounce_ms,
+                "rationale_on_flip": bc.rationale_on_flip,
+            }
+    boundary_enabled = boundary_client_config is not None
+    # Truth Serum (surprisingly-popular scoring): conditional assets + JS config
+    truth_serum_client_config = None
+    if config.get("truth_serum", {}).get("enabled", False):
+        from potato.truth_serum import get_truth_serum_manager
+        ts_manager = get_truth_serum_manager()
+        if ts_manager and ts_manager.ts_config.schema:
+            truth_serum_client_config = {
+                "schema": ts_manager.ts_config.schema,
+                "question": ts_manager.ts_config.question,
+            }
+    truth_serum_enabled = truth_serum_client_config is not None
+    # Think-Aloud (voice rationales): conditional assets + JS config
+    thinkaloud_client_config = None
+    if config.get("thinkaloud", {}).get("enabled", False):
+        from potato.thinkaloud import get_thinkaloud_manager
+        ta_manager = get_thinkaloud_manager()
+        if ta_manager and ta_manager.ta_config.schema:
+            ta = ta_manager.ta_config
+            thinkaloud_client_config = {
+                "schema": ta.schema,
+                "chunk_seconds": ta.chunk_seconds,
+                "require_spoken_label": ta.require_spoken_label,
+            }
+    thinkaloud_enabled = thinkaloud_client_config is not None
 
     # Check if live agent is enabled (for conditional loading of live-agent assets)
     live_agent_enabled = bool(config.get("live_agent"))
@@ -2292,6 +2623,7 @@ def render_page_with_annotations(username: str):
         has_video_annotation=has_video_annotation,
         has_audio_annotation=has_audio_annotation,
         has_image_annotation=has_image_annotation,
+        instance_text_is_media_path=instance_text_is_media_path,
         ai_enabled=ai_enabled,
         # Pre-annotation data for model predictions
         pre_annotations=pre_annotation_data,
@@ -2312,6 +2644,15 @@ def render_page_with_annotations(username: str):
         agent_proxy_enabled=agent_proxy_enabled,
         # Chat support (for conditional loading of llm-chat-sidebar assets)
         chat_enabled=chat_enabled,
+        # Boundary Lab (counterfactual boundary probing)
+        boundary_enabled=boundary_enabled,
+        boundary_client_config=boundary_client_config,
+        # Truth Serum (surprisingly-popular scoring)
+        truth_serum_enabled=truth_serum_enabled,
+        truth_serum_client_config=truth_serum_client_config,
+        # Think-Aloud (voice rationales, rule-based label phrases)
+        thinkaloud_enabled=thinkaloud_enabled,
+        thinkaloud_client_config=thinkaloud_client_config,
         # Live agent (for conditional loading of live-agent assets)
         live_agent_enabled=live_agent_enabled,
         # Annotation instructions (collapsible banner)
@@ -2332,6 +2673,8 @@ def render_page_with_annotations(username: str):
         can_go_back=get_user_state_manager().can_user_go_back(username),
         # Hide jump-to-ID navigation controls when disabled
         jumping_to_id_disabled=config.get("jumping_to_id_disabled", False),
+        # Hotkey review mode (auto-advance when all required schemas complete)
+        review_mode=config.get("review_mode", {}) or {},
         # ai=ai_hints,
         **kwargs
     )
@@ -3297,6 +3640,20 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
             flask_app.register_blueprint(curation_bp)
         logger.info("Registered semantic-curation (catalog) blueprint")
 
+    # Dataset publishing (HuggingFace / Zenodo / local archive). Always on for
+    # admins — packaging a dataset needs no per-project config, and the manager
+    # only does work when the wizard is used.
+    try:
+        from potato.publish.manager import get_publish_manager, init_publish_manager
+        from potato.publish.routes import publish_bp
+        if get_publish_manager() is None:
+            init_publish_manager(config)
+        if "publish" not in flask_app.blueprints:
+            flask_app.register_blueprint(publish_bp)
+        logger.info("Registered dataset-publishing blueprint")
+    except Exception as e:
+        logger.warning("Could not register dataset-publishing blueprint: %s", e)
+
     # Multi-model arena: fan a prompt out to N providers side by side.
     if config.get("arena", {}).get("enabled", False):
         from potato.arena import init_arena_manager, get_arena_manager
@@ -3306,6 +3663,38 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         if "arena" not in flask_app.blueprints:
             flask_app.register_blueprint(arena_bp)
         logger.info("Registered model-arena blueprint")
+
+    # Multi-document event annotation: cross-document event registry (import-light,
+    # safe at boot) + optional corpus map (ML, lazy). The event registry powers the
+    # multi_document_event schema; the corpus map adds the 2D navigation surface.
+    if config.get("event_template", {}).get("enabled", False) or config.get("corpus_map", {}).get("enabled", False):
+        from potato.event_registry import (
+            init_event_registry_manager,
+            get_event_registry_manager,
+        )
+        from potato.event_registry.routes import event_registry_bp
+        if get_event_registry_manager() is None:
+            init_event_registry_manager(config)
+        if "event_registry" not in flask_app.blueprints:
+            flask_app.register_blueprint(event_registry_bp)
+        logger.info("Registered cross-document event-registry blueprint")
+
+    # Corpus map: 2D cluster-map navigation surface for multi-document tasks.
+    # The heavy embed/cluster/UMAP build runs lazily in a background thread so it
+    # never blocks boot; the annotator page polls /corpus/api/build_status.
+    if config.get("corpus_map", {}).get("enabled", False):
+        from potato.corpus_map import init_corpus_map_manager, get_corpus_map_manager
+        from potato.corpus_map.routes import corpus_map_bp
+        if get_corpus_map_manager() is None:
+            init_corpus_map_manager(config)
+        if "corpus_map" not in flask_app.blueprints:
+            flask_app.register_blueprint(corpus_map_bp)
+        _cm = get_corpus_map_manager()
+        if _cm and _cm.build_on_start and not _cm.is_built():
+            import threading as _threading
+            _threading.Thread(target=lambda: _cm.build(force=False), daemon=True).start()
+            logger.info("Corpus map build started in background")
+        logger.info("Registered corpus-map blueprint")
 
 # Function to create and initialize the Flask application
 def create_app(config_file=None):
@@ -3367,57 +3756,14 @@ def create_app(config_file=None):
         """Inject debug settings and common config values into all templates."""
         from potato.logging_config import is_ui_debug_enabled, is_server_debug_enabled
 
-        # Build ui_lang dict with defaults, overridden by config
-        ui_lang_defaults = {
-            # Navigation & controls
-            'next_button': 'Next',
-            'previous_button': 'Previous',
-            'submit_button': 'Submit',
-            'go_button': 'Go',
-            'retry_button': 'Retry',
-            'logout': 'Logout',
-            'jump_prev_unannotated': 'Previous unannotated',
-            'jump_next_unannotated': 'Next unannotated',
-            # Status indicators
-            'labeled_badge': 'Labeled',
-            'in_progress_badge': 'In Progress',
-            'not_labeled_badge': 'Not labeled',
-            'progress_label': 'Progress',
-            'loading': 'Loading annotation interface...',
-            'error_heading': 'Error',
-            # Annotation interface
-            'adjudicate': 'Adjudicate',
-            'codebook': 'Codebook',
-            'instructions_heading': 'Instructions',
-            'text_to_annotate': 'Text to Annotate:',
-            'video_to_annotate': 'Video to Annotate:',
-            'audio_to_annotate': 'Audio to Annotate:',
-            # Login / registration page
-            'login_title': 'Annotation Platform',
-            'login_subtitle_password': 'Sign in to continue',
-            'login_subtitle_username': 'Enter your username to continue',
-            'sign_in_tab': 'Sign In',
-            'register_tab': 'Register',
-            'username_label': 'Username',
-            'password_label': 'Password',
-            'sign_in_button': 'Sign In',
-            'continue_button': 'Continue',
-            'register_button': 'Register',
-            'forgot_password': 'Forgot Password?',
-            'username_placeholder': 'Enter your username',
-            'choose_username_placeholder': 'Choose a username',
-            'create_password_placeholder': 'Create a password',
-            'sign_in_with': 'Sign in with',
-            'or_divider': 'or',
-            # Footer
-            'powered_by': 'Powered by',
-            'cite_us': 'Cite Us',
-            # Language / direction
-            'html_lang': 'en',
-            'html_dir': 'ltr',
-        }
-        ui_lang_config = config.get('ui_language', {})
-        ui_lang = {**ui_lang_defaults, **ui_lang_config}
+        # ui_lang_defaults is the shared English source of truth (single
+        # definition in server_utils/i18n.py); the whitelist and catalog
+        # key-filter derive from it.
+        from potato.server_utils.i18n import UI_LANG_DEFAULTS as ui_lang_defaults
+        # Resolve ui_lang from English defaults + an optional bundled language
+        # catalog (e.g. ui_language: es) + optional inline per-key overrides.
+        from potato.server_utils.i18n import resolve_ui_language
+        ui_lang = resolve_ui_language(config.get('ui_language'), ui_lang_defaults)
 
         # Load project-level base CSS if configured
         from potato.server_utils.front_end import load_project_base_css_html, resolve_header_logo_src
@@ -3615,6 +3961,12 @@ def _initialize_from_config(config_file):
     if config.get("adjudication", {}).get("enabled", False):
         init_adjudication_manager(config)
 
+    # Initialize RBAC + per-cohort schema resolver (always; cheap and lazy-safe)
+    from potato.server_utils.rbac import init_rbac_manager
+    from potato.server_utils.cohort_schemes import init_cohort_scheme_resolver
+    init_rbac_manager(config)
+    init_cohort_scheme_resolver(config)
+
     # Initialize knowledge base manager
     init_kb_manager(config)
 
@@ -3640,6 +3992,43 @@ def _initialize_from_config(config_file):
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
 
+    # Initialize Boundary Lab if enabled (parity with run_server()).
+    if config.get("boundary_probing", {}).get("enabled", False):
+        logger.info("Initializing Boundary Lab...")
+        from potato.boundary import init_boundary_manager
+        init_boundary_manager(config)
+        logger.info("Boundary Lab initialized successfully")
+    # Initialize Truth Serum if enabled (parity with run_server()).
+    if config.get("truth_serum", {}).get("enabled", False):
+        logger.info("Initializing Truth Serum...")
+        from potato.truth_serum import init_truth_serum_manager
+        init_truth_serum_manager(config)
+        logger.info("Truth Serum initialized successfully")
+    # Initialize Think-Aloud if enabled (parity with run_server()).
+    if config.get("thinkaloud", {}).get("enabled", False):
+        logger.info("Initializing Think-Aloud...")
+        from potato.thinkaloud import init_thinkaloud_manager
+        init_thinkaloud_manager(config)
+        logger.info("Think-Aloud initialized successfully")
+    # Initialize Pocket Mode if enabled (parity with run_server()).
+    if config.get("pocket", {}).get("enabled", False):
+        logger.info("Initializing Pocket Mode...")
+        from potato.pocket.routes import init_pocket
+        init_pocket(config)
+        logger.info("Pocket Mode initialized successfully")
+    # Initialize Psychometrics if enabled (parity with run_server()).
+    if config.get("psychometrics", {}).get("enabled", False):
+        logger.info("Initializing Psychometrics...")
+        from potato.psychometrics import init_psychometrics_manager
+        init_psychometrics_manager(config)
+        logger.info("Psychometrics initialized successfully")
+    # Initialize Multiplayer Rooms if enabled (parity with run_server()).
+    if config.get("rooms", {}).get("enabled", False):
+        logger.info("Initializing Multiplayer Rooms...")
+        from potato.rooms import init_rooms_manager
+        init_rooms_manager(config)
+        logger.info("Multiplayer Rooms initialized successfully")
+
     # Initialize Judge Calibration if enabled (parity with run_server()).
     if config.get("judge_calibration", {}).get("enabled", False):
         logger.info("Initializing Judge Calibration...")
@@ -3662,6 +4051,22 @@ def _initialize_from_config(config_file):
         init_cases_from_config(config)
     except Exception as e:
         logger.warning(f"Cases auto-detect skipped: {e}")
+
+    # Group traces into sessions by session_id/thread_id (no-op unless
+    # sessions enabled).
+    try:
+        from potato.sessions import init_sessions_from_config
+        init_sessions_from_config(config)
+    except Exception as e:
+        logger.warning(f"Sessions auto-detect skipped: {e}")
+
+    # Enroll instances into the review workflow board (no-op unless
+    # review_workflow enabled).
+    try:
+        from potato.review_workflow import init_review_workflow_from_config
+        init_review_workflow_from_config(config)
+    except Exception as e:
+        logger.warning(f"Review workflow init skipped: {e}")
 
     # Build the universal search index (no-op if search disabled).
     try:
@@ -3846,6 +4251,43 @@ def run_server(args):
         init_qda_mode_manager(config)
         logger.info("QDA Mode initialized successfully")
 
+    # Initialize Boundary Lab if enabled
+    if config.get("boundary_probing", {}).get("enabled", False):
+        logger.info("Initializing Boundary Lab...")
+        from potato.boundary import init_boundary_manager
+        init_boundary_manager(config)
+        logger.info("Boundary Lab initialized successfully")
+    # Initialize Truth Serum if enabled
+    if config.get("truth_serum", {}).get("enabled", False):
+        logger.info("Initializing Truth Serum...")
+        from potato.truth_serum import init_truth_serum_manager
+        init_truth_serum_manager(config)
+        logger.info("Truth Serum initialized successfully")
+    # Initialize Think-Aloud if enabled
+    if config.get("thinkaloud", {}).get("enabled", False):
+        logger.info("Initializing Think-Aloud...")
+        from potato.thinkaloud import init_thinkaloud_manager
+        init_thinkaloud_manager(config)
+        logger.info("Think-Aloud initialized successfully")
+    # Initialize Pocket Mode if enabled
+    if config.get("pocket", {}).get("enabled", False):
+        logger.info("Initializing Pocket Mode...")
+        from potato.pocket.routes import init_pocket
+        init_pocket(config)
+        logger.info("Pocket Mode initialized successfully")
+    # Initialize Psychometrics if enabled
+    if config.get("psychometrics", {}).get("enabled", False):
+        logger.info("Initializing Psychometrics...")
+        from potato.psychometrics import init_psychometrics_manager
+        init_psychometrics_manager(config)
+        logger.info("Psychometrics initialized successfully")
+    # Initialize Multiplayer Rooms if enabled
+    if config.get("rooms", {}).get("enabled", False):
+        logger.info("Initializing Multiplayer Rooms...")
+        from potato.rooms import init_rooms_manager
+        init_rooms_manager(config)
+        logger.info("Multiplayer Rooms initialized successfully")
+
     # Initialize Judge Calibration if enabled
     if config.get("judge_calibration", {}).get("enabled", False):
         logger.info("Initializing Judge Calibration...")
@@ -3868,6 +4310,22 @@ def run_server(args):
         init_cases_from_config(config)
     except Exception as e:
         logger.warning(f"Cases auto-detect skipped: {e}")
+
+    # Group traces into sessions by session_id/thread_id (no-op unless
+    # sessions enabled).
+    try:
+        from potato.sessions import init_sessions_from_config
+        init_sessions_from_config(config)
+    except Exception as e:
+        logger.warning(f"Sessions auto-detect skipped: {e}")
+
+    # Enroll instances into the review workflow board (no-op unless
+    # review_workflow enabled).
+    try:
+        from potato.review_workflow import init_review_workflow_from_config
+        init_review_workflow_from_config(config)
+    except Exception as e:
+        logger.warning(f"Review workflow init skipped: {e}")
 
     # Build the universal search index (no-op if search disabled).
     try:
@@ -3948,6 +4406,12 @@ def run_server(args):
     if config.get('adjudication', {}).get('enabled', False):
         init_adjudication_manager(config)
         logger.info("Adjudication manager initialized")
+
+    # Initialize RBAC + per-cohort schema resolver (always; cheap and lazy-safe)
+    from potato.server_utils.rbac import init_rbac_manager
+    from potato.server_utils.cohort_schemes import init_cohort_scheme_resolver
+    init_rbac_manager(config)
+    init_cohort_scheme_resolver(config)
 
     # Initialize MACE competence estimation if configured
     if config.get('mace', {}).get('enabled', False):

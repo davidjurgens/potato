@@ -68,6 +68,10 @@ class DialogueDisplay(BaseDisplay):
         field_key = html.escape(field_config.get("key", ""), quote=True)
         is_span_target = field_config.get("span_target", False)
 
+        # Turn-level annotation schemes bound to this field (injected by
+        # InstanceDisplayRenderer via the internal _turn_schemes key)
+        turn_schemes = field_config.get("_turn_schemes") or []
+
         # Determine which speakers get per-turn ratings
         rated_speakers = set()
         rating_schemes = []
@@ -136,12 +140,20 @@ class DialogueDisplay(BaseDisplay):
                         ))
                     rating_html = f'<div class="per-turn-rating-group">{"".join(parts)}</div>'
 
+            # Turn-level annotation slot (proxy widgets; real state lives in
+            # the scheme's hidden anchor input — see turn_annotations.py)
+            slot_html = ""
+            if turn_schemes:
+                from ..turn_annotations import render_turn_slot
+                slot_html = render_turn_slot(turn_schemes, turn, i, field_key)
+
             turn_html = f'''
             <div class="{' '.join(turn_classes)}" data-speaker-index="{speaker_index}">
                 {turn_number_html}
                 {speaker_html}
                 <span class="dialogue-text" {text_id} {span_attrs}>{escaped_text}</span>
                 {rating_html}
+                {slot_html}
             </div>
             '''
             turn_html_list.append(turn_html)
@@ -289,7 +301,14 @@ class DialogueDisplay(BaseDisplay):
                 elif isinstance(item, dict):
                     speaker = item.get(speaker_key, "")
                     text = item.get(text_key, str(item))
-                    turns.append({"speaker": speaker, "text": text})
+                    turn = {"speaker": speaker, "text": text}
+                    # Pass through identity keys (turn-level bindings +
+                    # multi-agent displays consume these)
+                    from ._trace_normalize import PASSTHROUGH_KEYS
+                    for key in PASSTHROUGH_KEYS:
+                        if key in item and item[key] not in (None, ""):
+                            turn[key] = item[key]
+                    turns.append(turn)
                 else:
                     turns.append({"speaker": "", "text": str(item)})
 

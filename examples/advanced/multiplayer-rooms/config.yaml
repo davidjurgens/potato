@@ -1,0 +1,51 @@
+port: 8000
+annotation_task_name: "Multiplayer Rooms — Norming Sarcasm Together"
+task_dir: .
+output_annotation_dir: annotation_output/multiplayer-rooms/
+output_annotation_format: jsonl
+annotation_codebook_url: ''
+data_files:
+- data/norming.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: radio
+  name: sarcasm
+  description: Is this message sarcastic or sincere?
+  labels:
+  - Sarcastic
+  - Sincere
+  sequential_key_binding: true
+
+# ---------------------------------------------------------------------------
+# Multiplayer Rooms: label together, live. Open /rooms after logging in.
+#
+#   Norming room — everyone votes blind on the same item, the host reveals,
+#     the group discusses, anyone may change their vote (changes are logged
+#     as conformity data), and a live agreement meter shows blind α vs
+#     after-discussion α — how much the session actually helped.
+#   Huddle — walks the items your team currently disagrees on, with the
+#     original annotations shown as context.
+#   Shadow — trainees watch the host annotate in real time, including the
+#     text the host highlights.
+#
+# Every room writes an append-only event log to
+# <output_annotation_dir>/rooms/room-<CODE>.jsonl (rooms survive restarts),
+# and final votes persist into each member's regular annotation state.
+#
+# Try it: start the server, register two users in two browser windows,
+# create a room as one, join by clicking it in the lobby as the other.
+# ---------------------------------------------------------------------------
+rooms:
+  enabled: true
+  who_can_create: any     # or "admin" to restrict room creation
+  persist_votes: true     # final votes count as real annotations
+  poll_interval_ms: 1500
+  max_members: 12
+
+site_dir: default

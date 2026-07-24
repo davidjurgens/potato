@@ -1,0 +1,59 @@
+port: 9101
+annotation_task_name: Per-Cohort Schemas Example
+task_dir: .
+output_annotation_dir: annotation_output/per-cohort-schemas/
+output_annotation_format: tsv
+alert_time_each_instance: 10000000
+random_seed: 1234
+data_files:
+- data/items.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+# --- Batch cohorts -----------------------------------------------------
+# alice is in cohortA and only sees the `sentiment` question.
+# bob is in cohortB and sees `sentiment` + `topic`.
+# Anyone else falls back to the global annotation_schemes (all three).
+assignment_strategy: batch
+batch_assignment:
+  groups:
+    - name: cohortA
+      annotators: [alice]
+      instances: ["1", "2", "3"]
+      schemes: minimal
+    - name: cohortB
+      annotators: [bob]
+      instances: ["4", "5", "6"]
+      schemes: [sentiment, topic]
+
+# Reusable named scheme set referenced by cohortA above.
+scheme_sets:
+  minimal: [sentiment]
+
+# --- Role-based access control ----------------------------------------
+# carol can reach the admin dashboard without the shared API key.
+# The shared admin_api_key still works as a superuser bypass.
+rbac:
+  enabled: true
+  user_role_assignments:
+    carol: admin
+
+# --- Global schemes (default / fallback) ------------------------------
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: Overall sentiment of the text
+    labels: [positive, neutral, negative]
+  - annotation_type: radio
+    name: topic
+    description: What is the text mainly about?
+    labels: [product_quality, shipping, pricing, support]
+  - annotation_type: text
+    name: notes
+    description: Optional free-text notes

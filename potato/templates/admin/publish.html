@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Publish Dataset</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  /* Publish wizard. Inherits the Potato admin design system (.dashboard,
+     .dashboard-card, design tokens); only local layout/typography here. */
+  .pub-lede { color: var(--muted-foreground); font-size: 0.9375rem;
+              margin: 0 0 1.75rem; max-width: 72ch; line-height: 1.6; }
+  .pub-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;
+              align-items: start; }
+  @media (max-width: 860px) { .pub-grid { grid-template-columns: 1fr; } }
+  .pub-form { display: grid; gap: 0.75rem; }
+  .pub-form label { font-size: 0.8125rem; font-weight: 600; color: var(--heading-color);
+                    display: block; margin-bottom: 0.2rem; }
+  .pub-form input[type=text], .pub-form input[type=number],
+  .pub-form select, .pub-form textarea {
+            width: 100%; padding: 0.45rem 0.55rem; border: 1px solid var(--input, var(--border));
+            border-radius: var(--radius); font: inherit; background: var(--background);
+            color: var(--foreground); transition: border-color 0.15s ease,
+            box-shadow 0.15s ease; }
+  /* Match the design system's focus affordance (ring token) instead of relying
+     on the UA outline, which the base inputs suppress. */
+  .pub-form input:focus-visible, .pub-form select:focus-visible,
+  .pub-form textarea:focus-visible {
+            outline: none; border-color: var(--ring, var(--primary));
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring, var(--primary)) 35%, transparent); }
+  .pub-form textarea#md-citation { font-family: ui-monospace, SFMono-Regular, Menlo,
+            monospace; font-size: 0.8rem; }
+  .pub-check { display: flex; gap: 0.5rem; align-items: flex-start; font-weight: 400;
+               font-size: 0.85rem; margin: 0.15rem 0; line-height: 1.4; cursor: pointer; }
+  .pub-check input { margin-top: 0.15rem; accent-color: var(--primary); }
+  .pub-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  @media (max-width: 480px) { .pub-row { grid-template-columns: 1fr; } }
+  .pub-targets { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+  /* Real <button>s: native keyboard focus + activation. role=radio + aria-checked
+     give the group correct semantics for assistive tech. */
+  .pub-target { flex: 1 1 140px; border: 1px solid var(--border); border-radius: var(--radius);
+                padding: 0.75rem; cursor: pointer; display: grid; gap: 0.2rem;
+                text-align: left; background: var(--card, var(--background));
+                color: var(--foreground); font: inherit;
+                transition: border-color 0.15s ease, box-shadow 0.15s ease,
+                background-color 0.15s ease; }
+  .pub-target:hover { border-color: var(--primary); }
+  .pub-target:focus-visible { outline: none; border-color: var(--ring, var(--primary));
+                box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring, var(--primary)) 40%, transparent); }
+  .pub-target[aria-checked=true] { border-color: var(--primary);
+                box-shadow: inset 0 0 0 1px var(--primary);
+                background: color-mix(in srgb, var(--primary) 6%, var(--background)); }
+  .pub-target .t-name { font-weight: 700; }
+  .pub-target .t-desc { font-size: 0.75rem; color: var(--muted-foreground);
+                line-height: 1.35; }
+  .pub-actions { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.5rem;
+                 flex-wrap: wrap; }
+  .pub-status { font-size: 0.85rem; min-height: 1.2em; }
+  .pub-status.ok { color: hsl(142 55% 30%); }
+  .pub-status.err { color: var(--destructive, hsl(0 65% 45%)); }
+  .pub-status.run { color: hsl(28 80% 34%); font-weight: 600; }
+  .pub-preview { border: 1px solid var(--border); border-radius: var(--radius);
+                 background: var(--muted); padding: 1rem; max-height: 60vh;
+                 overflow: auto; white-space: pre-wrap; word-break: break-word;
+                 font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                 font-size: 0.78rem; line-height: 1.5; color: var(--foreground); }
+  .pub-preview.empty { color: var(--muted-foreground); font-style: italic;
+                 font-family: inherit; }
+  .pub-splits { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0 0 0.85rem; }
+  .pub-split { border: 1px solid var(--border); border-radius: var(--radius);
+               padding: 0.35rem 0.7rem; font-size: 0.8rem; color: var(--muted-foreground); }
+  .pub-split b { font-variant-numeric: tabular-nums; color: var(--heading-color);
+                 font-weight: 700; }
+  .hidden { display: none !important; }
+  /* The [hidden] attribute must win over .pub-form's explicit display:grid,
+     otherwise the credential blocks stay visible when hidden. */
+  [hidden] { display: none !important; }
+  .pub-hint { font-size: 0.75rem; color: var(--muted-foreground); margin: 0.1rem 0 0;
+              line-height: 1.4; }
+  /* Status greens/ambers are dark for light-mode contrast; lift them in dark mode
+     so they stay legible. (Error uses the themed --destructive token.) */
+  @media (prefers-color-scheme: dark) {
+    .pub-status.ok { color: hsl(142 50% 62%); }
+    .pub-status.run { color: hsl(35 85% 62%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pub-target, .pub-form input, .pub-form select, .pub-form textarea {
+      transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="dashboard">
+  <header class="dashboard-header">
+    <h1>Publish Dataset</h1>
+    <a href="{{ url_for('admin') }}" class="shadcn-button shadcn-button-outline">&larr; Back to admin</a>
+  </header>
+
+  <p class="pub-lede">
+    Package this project's annotations into a well-documented, reusable dataset and
+    publish it to the HuggingFace Hub, deposit it on Zenodo for a citable DOI, or
+    download a self-contained archive. A rich README (dataset card) with label
+    distributions and inter-annotator agreement is generated automatically — the same
+    numbers you get from Paper Mode.
+  </p>
+
+  <div class="pub-grid">
+    <!-- ---------------- configuration ---------------- -->
+    <div>
+      <div class="dashboard-card">
+        <h3>1 · Target</h3>
+        <div class="pub-targets" id="targets" role="radiogroup" aria-label="Publishing target">
+          <button type="button" class="pub-target" data-target="archive"
+                  role="radio" aria-checked="true">
+            <span class="t-name">Local archive</span>
+            <span class="t-desc">Download a .zip — no account needed</span>
+          </button>
+          <button type="button" class="pub-target" data-target="huggingface"
+                  role="radio" aria-checked="false">
+            <span class="t-name">HuggingFace</span>
+            <span class="t-desc">Push as a loadable Dataset</span>
+          </button>
+          <button type="button" class="pub-target" data-target="zenodo"
+                  role="radio" aria-checked="false">
+            <span class="t-name">Zenodo</span>
+            <span class="t-desc">Deposit &amp; mint a DOI</span>
+          </button>
+        </div>
+
+        <div class="pub-form" id="cred-huggingface" hidden>
+          <div>
+            <label>Repository ID</label>
+            <input type="text" id="hf-repo" placeholder="your-org/dataset-name">
+          </div>
+          <div class="pub-row">
+            <div>
+              <label>Access token</label>
+              <input type="text" id="hf-token" placeholder="hf_… (or HF_TOKEN env)">
+            </div>
+            <div>
+              <label>Visibility</label>
+              <select id="hf-private"><option value="false">Public</option>
+                <option value="true">Private</option></select>
+            </div>
+          </div>
+          <p class="pub-hint">The token is used only for this upload and never stored.</p>
+        </div>
+
+        <div class="pub-form" id="cred-zenodo" hidden>
+          <div>
+            <label>Zenodo token</label>
+            <input type="text" id="zen-token" placeholder="… (or ZENODO_TOKEN env)">
+          </div>
+          <div class="pub-row">
+            <div>
+              <label>Environment</label>
+              <select id="zen-sandbox"><option value="true">Sandbox (test)</option>
+                <option value="false">Production</option></select>
+            </div>
+            <div>
+              <label>Action</label>
+              <select id="zen-publish"><option value="false">Draft only</option>
+                <option value="true">Publish (mint DOI)</option></select>
+            </div>
+          </div>
+          <p class="pub-hint">Draft deposits can be reviewed on Zenodo before publishing.</p>
+        </div>
+      </div>
+
+      <div class="dashboard-card">
+        <h3>2 · Preprocessing</h3>
+        <div class="pub-form">
+          <label class="pub-check"><input type="checkbox" id="opt-anonymize" checked>
+            Anonymize annotators (A1, A2 …) &amp; strip internal fields</label>
+          <label class="pub-check"><input type="checkbox" id="opt-annotations" checked>
+            Include raw per-annotator split</label>
+          <label class="pub-check"><input type="checkbox" id="opt-gold" checked>
+            Include aggregated gold split</label>
+          <div class="pub-row">
+            <div>
+              <label>Aggregation</label>
+              <select id="opt-aggregation">
+                <option value="majority">Majority vote</option>
+                <option value="mean">Mean (numeric)</option>
+                <option value="none">None</option>
+              </select>
+            </div>
+            <div>
+              <label>Min annotators / item</label>
+              <input type="number" id="opt-minann" value="1" min="1">
+            </div>
+          </div>
+          <label class="pub-check"><input type="checkbox" id="opt-spans" checked>
+            Include spans split</label>
+          <label class="pub-check"><input type="checkbox" id="opt-items" checked>
+            Include source items split</label>
+          <label class="pub-check"><input type="checkbox" id="opt-phase">
+            Include survey / phase responses (may contain PII)</label>
+          <label class="pub-check"><input type="checkbox" id="opt-scrub">
+            Scrub emails / phone numbers from item text</label>
+          <label class="pub-check"><input type="checkbox" id="opt-media">
+            Bundle referenced media files</label>
+          <div class="pub-row">
+            <div>
+              <label>Train/val/test split</label>
+              <select id="opt-splits">
+                <option value="">No — one combined split</option>
+                <option value="80/10/10">80 / 10 / 10</option>
+                <option value="70/15/15">70 / 15 / 15</option>
+                <option value="90/10">90 / 10 (train/test)</option>
+              </select>
+            </div>
+            <div>
+              <label>Data format</label>
+              <select id="opt-format">
+                <option value="jsonl">JSONL</option>
+                <option value="csv">CSV</option>
+                <option value="parquet">Parquet</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dashboard-card">
+        <h3>3 · Metadata</h3>
+        <div class="pub-form">
+          <div><label>Title</label><input type="text" id="md-title"></div>
+          <div><label>Description</label><textarea id="md-desc" rows="2"></textarea></div>
+          <div class="pub-row">
+            <div>
+              <label>License</label>
+              <select id="md-license">
+                <option value="">— none —</option>
+                <option value="cc-by-4.0">CC-BY-4.0</option>
+                <option value="cc-by-sa-4.0">CC-BY-SA-4.0</option>
+                <option value="cc0-1.0">CC0-1.0</option>
+                <option value="mit">MIT</option>
+                <option value="apache-2.0">Apache-2.0</option>
+                <option value="odc-by">ODC-BY</option>
+              </select>
+            </div>
+            <div><label>Version</label><input type="text" id="md-version" value="1.0.0"></div>
+          </div>
+          <div><label>Authors (one per line: Name; Affiliation; ORCID)</label>
+            <textarea id="md-authors" rows="2"></textarea></div>
+          <div><label>Keywords (comma-separated)</label><input type="text" id="md-keywords"></div>
+          <div><label>Citation (BibTeX)</label><textarea id="md-citation" rows="3"></textarea></div>
+        </div>
+      </div>
+
+      <div class="pub-actions">
+        <button type="button" class="shadcn-button shadcn-button-outline" id="btn-preview">Preview README</button>
+        <button type="button" class="shadcn-button shadcn-button-primary" id="btn-publish">Publish</button>
+        <span class="pub-status" id="status" role="status" aria-live="polite"></span>
+      </div>
+    </div>
+
+    <!-- ---------------- preview / result ---------------- -->
+    <div>
+      <div class="dashboard-card">
+        <h3>Preview</h3>
+        <div class="pub-splits" id="splits"></div>
+        <div class="pub-preview empty" id="preview">Click “Preview README” to render the dataset card and split counts.</div>
+      </div>
+      <div class="dashboard-card hidden" id="result-card">
+        <h3>Result</h3>
+        <div id="result" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEFAULTS = {{ defaults|tojson }};
+let currentTarget = DEFAULTS.default_target || "archive";
+let pollTimer = null;
+
+function prefill() {
+  const m = DEFAULTS.metadata || {};
+  document.getElementById("md-title").value = m.pretty_name || "";
+  document.getElementById("md-desc").value = m.description || "";
+  document.getElementById("md-license").value = m.license || "";
+  document.getElementById("md-version").value = m.version || "1.0.0";
+  document.getElementById("md-keywords").value = (m.keywords || []).join(", ");
+  document.getElementById("md-citation").value = m.citation || "";
+  document.getElementById("md-authors").value = (m.authors || [])
+    .map(a => [a.name, a.affiliation, a.orcid].filter(Boolean).join("; ")).join("\n");
+  selectTarget(currentTarget);
+}
+
+function selectTarget(t) {
+  currentTarget = t;
+  document.querySelectorAll(".pub-target").forEach(el =>
+    el.setAttribute("aria-checked", el.dataset.target === t ? "true" : "false"));
+  document.getElementById("cred-huggingface").hidden = (t !== "huggingface");
+  document.getElementById("cred-zenodo").hidden = (t !== "zenodo");
+}
+
+document.querySelectorAll(".pub-target").forEach(el =>
+  el.addEventListener("click", () => selectTarget(el.dataset.target)));
+
+function splitsSpec() {
+  const v = document.getElementById("opt-splits").value;
+  if (!v) return null;
+  const parts = v.split("/").map(Number);
+  if (parts.length === 3) return {train: parts[0], validation: parts[1], test: parts[2]};
+  if (parts.length === 2) return {train: parts[0], test: parts[1]};
+  return null;
+}
+
+function gatherOptions() {
+  return {
+    anonymize: document.getElementById("opt-anonymize").checked,
+    include_annotations: document.getElementById("opt-annotations").checked,
+    include_gold: document.getElementById("opt-gold").checked,
+    include_spans: document.getElementById("opt-spans").checked,
+    include_items: document.getElementById("opt-items").checked,
+    include_phase_responses: document.getElementById("opt-phase").checked,
+    scrub_pii: document.getElementById("opt-scrub").checked,
+    bundle_media: document.getElementById("opt-media").checked,
+    aggregation: document.getElementById("opt-aggregation").value,
+    min_annotators: parseInt(document.getElementById("opt-minann").value || "1", 10),
+    splits: splitsSpec(),
+    data_format: document.getElementById("opt-format").value,
+  };
+}
+
+function gatherMetadata() {
+  const authors = document.getElementById("md-authors").value.split("\n")
+    .map(l => l.trim()).filter(Boolean).map(l => {
+      const [name, affiliation, orcid] = l.split(";").map(s => (s || "").trim());
+      return {name, affiliation, orcid};
+    });
+  const kw = document.getElementById("md-keywords").value.split(",")
+    .map(s => s.trim()).filter(Boolean);
+  return {
+    pretty_name: document.getElementById("md-title").value,
+    description: document.getElementById("md-desc").value,
+    license: document.getElementById("md-license").value,
+    version: document.getElementById("md-version").value,
+    keywords: kw,
+    authors: authors,
+    citation: document.getElementById("md-citation").value,
+  };
+}
+
+function gatherCredentials() {
+  if (currentTarget === "huggingface") return {
+    repo_id: document.getElementById("hf-repo").value,
+    token: document.getElementById("hf-token").value,
+    private: document.getElementById("hf-private").value === "true",
+  };
+  if (currentTarget === "zenodo") return {
+    token: document.getElementById("zen-token").value,
+    sandbox: document.getElementById("zen-sandbox").value === "true",
+    publish: document.getElementById("zen-publish").value === "true",
+  };
+  return {archive_format: "zip"};
+}
+
+function setStatus(msg, cls) {
+  const el = document.getElementById("status");
+  el.textContent = msg; el.className = "pub-status " + (cls || "");
+}
+
+function payload() {
+  return {target: currentTarget, options: gatherOptions(),
+          metadata: gatherMetadata(), credentials: gatherCredentials()};
+}
+
+async function preview() {
+  const btn = document.getElementById("btn-preview");
+  btn.disabled = true;
+  setStatus("Building preview…", "run");
+  try {
+    const r = await fetch("/admin/publish/api/preview", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload())});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "Preview failed");
+    const pre = document.getElementById("preview");
+    pre.textContent = data.card_markdown;
+    pre.classList.remove("empty");
+    const splits = document.getElementById("splits");
+    splits.innerHTML = "";
+    for (const [name, n] of Object.entries(data.splits || {})) {
+      const d = document.createElement("div");
+      d.className = "pub-split";
+      d.innerHTML = `${name}: <b>${n.toLocaleString()}</b>`;
+      splits.appendChild(d);
+    }
+    setStatus((data.warnings || []).length
+      ? "Preview ready · " + data.warnings.join(" ") : "Preview ready", "ok");
+  } catch (e) {
+    setStatus(e.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function publish() {
+  setStatus("Starting…", "run");
+  document.getElementById("btn-publish").disabled = true;
+  try {
+    const r = await fetch("/admin/publish/api/start", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload())});
+    const data = await r.json();
+    if (!data.started) throw new Error(data.error || "Could not start");
+    poll();
+  } catch (e) {
+    setStatus(e.message, "err");
+    document.getElementById("btn-publish").disabled = false;
+  }
+}
+
+function renderResult(status) {
+  const card = document.getElementById("result-card");
+  const box = document.getElementById("result");
+  card.classList.remove("hidden");
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  card.scrollIntoView({behavior: reduce ? "auto" : "smooth", block: "nearest"});
+  const res = status.result || {};
+  if (status.state === "error") {
+    box.innerHTML = `<p class="pub-status err">${(status.errors || []).join(" ") || "Failed"}</p>`;
+    return;
+  }
+  if (res.download_url) {
+    box.innerHTML = `<p>Archive ready: <b>${res.archive_name}</b></p>
+      <a class="shadcn-button shadcn-button-primary" href="${res.download_url}">Download archive</a>`;
+  } else if (res.url && res.doi) {
+    box.innerHTML = `<p>Deposited on Zenodo. DOI: <b>${res.doi}</b></p>
+      <a class="shadcn-button shadcn-button-primary" href="${res.url}" target="_blank" rel="noopener">Open on Zenodo</a>`;
+  } else if (res.deposition_id) {
+    box.innerHTML = `<p>Draft deposition <b>#${res.deposition_id}</b> created on Zenodo.</p>
+      <a class="shadcn-button shadcn-button-primary" href="${res.draft_url}" target="_blank" rel="noopener">Review draft</a>`;
+  } else if (res.url) {
+    box.innerHTML = `<p>Pushed to the Hub.</p>
+      <a class="shadcn-button shadcn-button-primary" href="${res.url}" target="_blank" rel="noopener">Open dataset</a>`;
+  } else {
+    box.textContent = JSON.stringify(res, null, 2);
+  }
+}
+
+async function poll() {
+  const r = await fetch("/admin/publish/api/status");
+  const status = await r.json();
+  if (status.state === "running") {
+    setStatus("Working: " + (status.step || "…"), "run");
+    pollTimer = setTimeout(poll, 1200);
+    return;
+  }
+  document.getElementById("btn-publish").disabled = false;
+  if (status.state === "success") {
+    setStatus("Done" + ((status.warnings || []).length
+      ? " · " + status.warnings.join(" ") : ""), "ok");
+  } else {
+    setStatus("Failed", "err");
+  }
+  renderResult(status);
+}
+
+document.getElementById("btn-preview").addEventListener("click", preview);
+document.getElementById("btn-publish").addEventListener("click", publish);
+prefill();
+</script>
+</body>
+</html>

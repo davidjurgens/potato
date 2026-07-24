@@ -597,9 +597,14 @@
             });
         });
 
-        // Label button selection
+        // Label button selection (single-select default). Multiselect forms
+        // manage their own toggle + list state in the page script, so defer to
+        // them here to avoid double-handling each click.
         document.querySelectorAll('.label-btn').forEach(btn => {
             btn.addEventListener('click', () => {
+                const form = btn.closest('form');
+                const at = form && form.dataset.annotationType;
+                if (at === 'multiselect' || at === 'span') return;
                 btn.parentElement.querySelectorAll('.label-btn').forEach(b => {
                     b.classList.remove('selected');
                     b.setAttribute('aria-pressed', 'false');

@@ -208,6 +208,37 @@
                 // Rating values keyed by schema: {schemaName: {turnIndex: value}}
                 const ratingValuesBySchema = {};
 
+                // Seed from server-restored hidden values BEFORE wiring events
+                // (persistence contract: the server sets value + data-server-set
+                // via BeautifulSoup; without this seed, navigate-away-and-back
+                // loses the visual selection state).
+                const seedFromInput = (schemaName, input) => {
+                    if (!input || input.getAttribute('data-server-set') !== 'true') return;
+                    const raw = input.getAttribute('value') || input.value;
+                    if (!raw) return;
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && typeof parsed === 'object') {
+                            ratingValuesBySchema[schemaName] = parsed;
+                        }
+                    } catch (e) {
+                        console.warn('[InstanceDisplay] Could not parse per-turn ratings for', schemaName, e);
+                    }
+                };
+                Object.entries(hiddenInputs).forEach(([schemaName, input]) => seedFromInput(schemaName, input));
+                if (singleHiddenInput) seedFromInput('', singleHiddenInput);
+
+                // Paint restored visual state (fill-up-to per turn + schema)
+                Object.entries(ratingValuesBySchema).forEach(([schema, schemaValues]) => {
+                    Object.entries(schemaValues).forEach(([turn, value]) => {
+                        const selector = `.ptr-value[data-turn="${turn}"][data-schema="${schema}"]`;
+                        container.querySelectorAll(selector).forEach(v => {
+                            const vVal = parseInt(v.dataset.value, 10);
+                            v.classList.toggle('ptr-selected', vVal <= value);
+                        });
+                    });
+                });
+
                 // Handle click on rating values
                 container.querySelectorAll('.ptr-value').forEach(el => {
                     el.addEventListener('click', (e) => {

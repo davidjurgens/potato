@@ -1,0 +1,146 @@
+/*
+ * Multi-Agent Discussion display styles.
+ * Agent identity: --agent-color custom property set per turn/chip by the
+ * server (deterministic hash-based palette, multi_agent_discussion_display.py).
+ */
+
+.multi-agent-discussion {
+    font-family: inherit;
+}
+
+/* Legend / filter */
+.mad-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+    background: var(--muted, #f8f9fa);
+    border-radius: 8px;
+}
+
+.mad-legend-label {
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--muted-foreground, #52525b);
+    margin-right: 2px;
+}
+
+.mad-legend-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 4px;
+    font-size: 0.85em;
+    border: 1.5px solid var(--agent-color, #d4d4d8);
+    border-radius: 999px;
+    background: var(--card, #fff);
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+/* Deselected filter: dimmed but still readable enough to identify the agent. */
+.mad-legend-chip[aria-pressed="false"] {
+    opacity: 0.55;
+    border-style: dashed;
+}
+
+.mad-legend-chip:focus-visible {
+    outline: 2px solid var(--agent-color, #6e56cf);
+    outline-offset: 1px;
+}
+
+.mad-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 0.75em;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+/* Turns */
+.mad-turn {
+    position: relative;
+    margin: 8px 0;
+    padding: 8px 12px;
+    border-left: 4px solid var(--agent-color, #9ca3af);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--agent-color, #9ca3af) 6%, var(--card, #fff));
+}
+
+.mad-turn.mad-hidden {
+    display: none;
+}
+
+.mad-turn.mad-reply {
+    margin-left: 28px;
+}
+
+.mad-reply-connector {
+    position: absolute;
+    left: -20px;
+    top: 16px;
+    width: 14px;
+    height: 2px;
+    background: var(--agent-color, #9ca3af);
+    opacity: 0.5;
+}
+
+.mad-turn-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+}
+
+.mad-speaker {
+    font-weight: 600;
+    color: var(--foreground, #27272a);
+}
+
+.mad-role {
+    font-size: 0.75em;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--agent-color, #9ca3af) 15%, var(--card, #fff));
+    color: var(--foreground, #3f3f46);
+}
+
+.mad-addressee {
+    font-size: 0.8em;
+    color: var(--muted-foreground, #71717a);
+    padding: 1px 8px;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: 999px;
+}
+
+.mad-turn-number {
+    font-size: 0.8em;
+    color: var(--muted-foreground, #a1a1aa);
+}
+
+.mad-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+}
+
+.mad-env-collapsible summary {
+    cursor: pointer;
+    color: var(--muted-foreground, #71717a);
+    font-size: 0.9em;
+    padding: 2px 0;
+}
+
+.mad-placeholder {
+    color: var(--muted-foreground, #71717a);
+    font-style: italic;
+    padding: 12px;
+}

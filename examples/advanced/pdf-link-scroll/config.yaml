@@ -1,0 +1,77 @@
+# PDF Cross-Page Linking — CONTINUOUS SCROLL view
+#
+# All pages are stacked in one scrollable container, so anchors on any page are
+# on-screen together and cross-page links are drawn as one continuous arc.
+# Best for short-to-medium documents.
+#
+# Compare with the paginated variant: examples/advanced/pdf-link-paginated/
+#
+# Run from the repo root:
+#   python potato/flask_server.py start examples/advanced/pdf-link-scroll/config.yaml -p 8000
+
+annotation_task_name: "PDF Linking — Scroll View"
+
+task_dir: .
+
+data_files:
+  - data/documents.json
+
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+media_directory: media
+
+item_properties:
+  id_key: id
+  text_key: title
+
+instance_display:
+  fields:
+    - key: pdf
+      type: pdf
+      label: "Document"
+      display_options:
+        annotation_mode: link
+        view_mode: scroll          # <-- all pages stacked; arcs drawn across the scroll
+        max_height: 760
+        zoom: page-width
+        enable_text_anchors: true
+        enable_region_anchors: true
+        anchor_schema: pdf_anchors
+        link_schema: pdf_links
+        # Optional OCR for scanned/image-only PDFs (off by default; needs tesseract):
+        # ocr: auto
+        anchor_labels:
+          - name: claim
+            color: "#dc2626"
+          - name: figure
+            color: "#2563eb"
+          - name: citation
+            color: "#059669"
+        link_types:
+          - name: refers_to
+            directed: true
+            color: "#dc2626"
+            allowed_source_labels: [claim]
+            allowed_target_labels: [figure]
+          - name: same_as
+            directed: false
+            color: "#7c3aed"
+          - name: supports
+            directed: true
+            color: "#059669"
+
+annotation_schemes:
+  - annotation_type: radio
+    name: doc_quality
+    description: "Overall, are this document's cross-references internally consistent?"
+    horizontal: true
+    labels:
+      - name: consistent
+      - name: inconsistent
+      - name: unsure
+
+user_config:
+  allow_all_users: true
+
+alert_time_each_instance: 100000000

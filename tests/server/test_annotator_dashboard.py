@@ -123,3 +123,97 @@ class TestDashboardEnabled:
         # No action/mutation affordances leak through the read-only API.
         assert "set_instances" not in body
         assert "reclaim" not in body
+
+
+class TestDashboardLocalization:
+    """The progress dashboard renders bundled-language UI strings + direction."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def flask_server(self, request):
+        with TestConfigManager(
+            "annot_dash_es",
+            SCHEMES,
+            num_items=4,
+            additional_config={
+                "annotator_dashboard": {"enabled": True},
+                # Bare language-code string resolves to the bundled es catalog.
+                "ui_language": "es",
+            },
+        ) as tc:
+            server = FlaskTestServer(port=9165, config_file=tc.config_path)
+            if not server.start():
+                pytest.fail("Failed to start Flask server")
+            yield server
+            server.stop()
+
+    def test_page_renders_spanish_strings(self, flask_server):
+        s = _auth(flask_server.base_url, "sofia")
+        r = s.get(f"{flask_server.base_url}/progress")
+        assert r.status_code == 200
+        # Spanish subtitle + stat label present; English original absent.
+        assert "Tu progreso de anotación" in r.text
+        assert "Your annotation progress" not in r.text
+        # <html lang="es"> drives the document language.
+        assert 'lang="es"' in r.text
+
+    def test_js_ui_lang_injected(self, flask_server):
+        s = _auth(flask_server.base_url, "sofia2")
+        r = s.get(f"{flask_server.base_url}/progress")
+        # window.UI_LANG carries the translated caption templates for the JS.
+        assert "window.UI_LANG" in r.text
+        assert "elementos asignados completados" in r.text
+
+
+class TestDashboardRtl:
+    """Arabic sets dir=rtl via the existing html_dir mechanism."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def flask_server(self, request):
+        with TestConfigManager(
+            "annot_dash_ar",
+            SCHEMES,
+            num_items=4,
+            additional_config={
+                "annotator_dashboard": {"enabled": True},
+                "ui_language": "ar",
+            },
+        ) as tc:
+            server = FlaskTestServer(port=9166, config_file=tc.config_path)
+            if not server.start():
+                pytest.fail("Failed to start Flask server")
+            yield server
+            server.stop()
+
+    def test_page_is_rtl(self, flask_server):
+        s = _auth(flask_server.base_url, "layla")
+        r = s.get(f"{flask_server.base_url}/progress")
+        assert r.status_code == 200
+        assert 'dir="rtl"' in r.text
+        assert 'lang="ar"' in r.text
+
+
+class TestDashboardUnknownLanguageFallsBackToEnglish:
+    """An unknown code must not 500 — it degrades to English."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def flask_server(self, request):
+        with TestConfigManager(
+            "annot_dash_bad_lang",
+            SCHEMES,
+            num_items=4,
+            additional_config={
+                "annotator_dashboard": {"enabled": True},
+                "ui_language": "zz",
+            },
+        ) as tc:
+            server = FlaskTestServer(port=9167, config_file=tc.config_path)
+            if not server.start():
+                pytest.fail("Failed to start Flask server")
+            yield server
+            server.stop()
+
+    def test_falls_back_to_english(self, flask_server):
+        s = _auth(flask_server.base_url, "erin")
+        r = s.get(f"{flask_server.base_url}/progress")
+        assert r.status_code == 200
+        assert "Your annotation progress" in r.text

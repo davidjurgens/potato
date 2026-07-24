@@ -1,0 +1,16 @@
+[
+    {
+        "id": "consent_info",
+        "name": "consent_info",
+        "annotation_type": "pure_display",
+        "description": "<h3>Conditional SurveyFlow Demo</h3><p>This demo shows how SurveyFlow questions (consent, prestudy, poststudy) can be shown or hidden based on earlier answers, using the same <code>display_logic</code> grammar as the main annotation schemes.</p><p>Click <strong>I agree</strong> to continue.</p>"
+    },
+    {
+        "id": "consent_agree",
+        "name": "consent_agree",
+        "annotation_type": "radio",
+        "description": "I understand this is a demo and agree to proceed.",
+        "labels": ["I agree", "I disagree"],
+        "label_requirement": {"required_label": ["I agree"]}
+    }
+]

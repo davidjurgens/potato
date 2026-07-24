@@ -79,8 +79,14 @@
     <div class="solo-nav">
         <a href="{{ url_for('solo_mode.setup') }}" class="btn btn-secondary">&larr; Back to Setup</a>
         <div>
+            {% if phase == 'prompt_validation' %}
+            {# Edge cases already labeled; the only forward path is annotation.
+               Showing "Generate Edge Cases" here dead-ends on an empty page. #}
+            <button type="button" class="btn btn-primary" onclick="skipToAnnotation()">Start Annotation &rarr;</button>
+            {% else %}
             <button type="button" class="btn btn-secondary" onclick="skipToAnnotation()">Skip Edge Cases</button>
             <button type="button" class="btn btn-primary" onclick="advancePhase()">Generate Edge Cases &rarr;</button>
+            {% endif %}
         </div>
     </div>
 </form>

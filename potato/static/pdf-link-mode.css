@@ -1,0 +1,176 @@
+/* PDF Link Mode — multi-page anchors + cross-page links */
+
+.pdf-link-mode {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    background: #f8f9fb;
+    overflow: hidden;
+}
+
+/* Toolbar */
+.pdf-link-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: #fff;
+    border-bottom: 1px solid #e4e7ec;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+.pdf-tb-group { display: flex; align-items: center; gap: 6px; }
+.pdf-tb-link-group { margin-left: auto; }
+.pdf-tb-text { font-size: 13px; color: #475467; font-weight: 500; }
+.pdf-tb-hint { font-size: 12px; color: #98a2b3; font-style: italic; }
+.pdf-tb-label-select, .pdf-tb-linktype-select {
+    padding: 4px 8px; border: 1px solid #d0d5dd; border-radius: 6px;
+    font-size: 13px; background: #fff;
+}
+.pdf-tb-btn {
+    padding: 5px 12px; border: 1px solid #d0d5dd; border-radius: 6px;
+    background: #fff; color: #344054; font-size: 13px; cursor: pointer;
+    transition: background .12s, border-color .12s, box-shadow .12s;
+}
+.pdf-tb-btn:hover { background: #f2f4f7; }
+.pdf-tb-btn.active {
+    background: #eef2ff; border-color: #6366f1; color: #4338ca;
+    box-shadow: 0 0 0 1px #6366f1 inset;
+}
+.pdf-tb-create { border-color: #12b76a; color: #027a48; }
+.pdf-tb-create:hover { background: #ecfdf3; }
+.pdf-tb-selcount { font-size: 12px; color: #6366f1; min-width: 70px; }
+
+/* Body layout: sidebar + scroll stack */
+.pdf-link-body { display: flex; min-height: 0; flex: 1; }
+.pdf-thumbnail-sidebar {
+    width: 148px; flex: 0 0 148px; overflow-y: auto;
+    background: #f2f4f7; border-right: 1px solid #e4e7ec; padding: 8px;
+}
+.pdf-thumb {
+    position: relative; margin-bottom: 8px; cursor: pointer;
+    border: 2px solid transparent; border-radius: 6px; overflow: hidden;
+    background: #fff; box-shadow: 0 1px 2px rgba(16,24,40,.06);
+}
+.pdf-thumb canvas { display: block; width: 100%; height: auto; }
+.pdf-thumb.active { border-color: #6366f1; }
+.pdf-thumb.has-anchor::after {
+    content: ''; position: absolute; top: 4px; right: 4px;
+    width: 8px; height: 8px; border-radius: 50%; background: #f79009;
+}
+.pdf-thumb-num {
+    position: absolute; bottom: 2px; left: 4px; font-size: 11px; color: #667085;
+    background: rgba(255,255,255,.8); padding: 0 4px; border-radius: 3px;
+}
+
+.pdf-pages-scroll {
+    position: relative; flex: 1; overflow: auto; padding: 16px;
+}
+.pdf-pages-stack { position: relative; z-index: 1; }
+
+/* Per-page container */
+.pdf-page-container {
+    margin: 0 auto 20px auto;
+    width: fit-content;
+    box-shadow: 0 2px 8px rgba(16,24,40,.12);
+    background: #fff;
+    border-radius: 4px;
+}
+.pdf-page-number {
+    font-size: 11px; color: #98a2b3; padding: 4px 8px; text-align: center;
+    letter-spacing: .04em; text-transform: uppercase;
+}
+.pdf-page-inner { position: relative; }
+.pdf-page-canvas { display: block; }
+
+/* Text layer: selectable, transparent text over the canvas */
+.pdf-text-layer {
+    position: absolute; top: 0; left: 0; overflow: hidden;
+    line-height: 1; z-index: 2;
+}
+.pdf-text-layer span {
+    position: absolute; white-space: pre; color: transparent;
+    transform-origin: 0 0; cursor: text; user-select: text;
+}
+.pdf-text-layer ::selection { background: rgba(99,102,241,.35); }
+/* OCR-derived words: each word is its own positioned, selectable box */
+.pdf-ocr-word {
+    display: inline-block; overflow: hidden; line-height: 1;
+    white-space: nowrap;
+}
+
+/* Region draw layer sits above text only when armed */
+.pdf-region-layer {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 3; pointer-events: none;
+}
+.pdf-link-mode.region-arm-active .pdf-region-layer {
+    pointer-events: auto; cursor: crosshair;
+}
+.pdf-region-rubber {
+    position: absolute; border: 2px dashed #6366f1;
+    background: rgba(99,102,241,.08); pointer-events: none;
+}
+
+/* Anchor overlay */
+.pdf-anchor-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 4; pointer-events: none;
+}
+.pdf-anchor {
+    position: absolute; border: 2px solid #0066cc; border-radius: 3px;
+    box-sizing: border-box; pointer-events: auto;
+}
+.pdf-anchor-text { border-style: solid; }
+.pdf-anchor-region { border-style: solid; }
+.pdf-link-mode.link-mode-active .pdf-anchor { cursor: pointer; }
+.pdf-anchor.selected {
+    box-shadow: 0 0 0 3px rgba(99,102,241,.5); outline: 2px solid #6366f1;
+}
+.pdf-anchor.pinned { box-shadow: 0 0 0 3px rgba(247,144,9,.5); }
+.pdf-anchor-label {
+    position: absolute; top: -16px; left: -2px; font-size: 10px; line-height: 14px;
+    color: #fff; padding: 0 5px; border-radius: 3px 3px 0 0; white-space: nowrap;
+    pointer-events: none; font-weight: 600;
+}
+.pdf-anchor-del {
+    position: absolute; top: -16px; right: -2px; width: 15px; height: 15px;
+    line-height: 13px; font-size: 12px; padding: 0; border: none; cursor: pointer;
+    color: #fff; background: rgba(220,53,69,.9); border-radius: 0 3px 0 0;
+    display: none;
+}
+.pdf-anchor:hover .pdf-anchor-del { display: block; }
+
+/* Link arc overlay spans the whole stack */
+.pdf-link-overlay {
+    position: absolute; top: 16px; left: 16px; z-index: 6;
+    pointer-events: none; overflow: visible;
+}
+.pdf-link-overlay .pdf-arc { pointer-events: stroke; }
+.pdf-arc-label {
+    font-size: 11px; font-weight: 600; pointer-events: none;
+    dominant-baseline: middle;
+}
+
+/* Loading / error / flash */
+.pdf-loading {
+    display: flex; align-items: center; gap: 8px; padding: 16px;
+    color: #667085; font-size: 14px;
+}
+.pdf-loading-spinner {
+    width: 16px; height: 16px; border: 2px solid #d0d5dd;
+    border-top-color: #6366f1; border-radius: 50%;
+    animation: pdf-link-spin .8s linear infinite;
+}
+@keyframes pdf-link-spin { to { transform: rotate(360deg); } }
+.pdf-error { padding: 16px; color: #b42318; font-size: 14px; }
+.pdf-link-flash {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: #b42318; color: #fff; padding: 8px 14px; border-radius: 6px;
+    font-size: 13px; opacity: 0; transition: opacity .18s; pointer-events: none;
+    z-index: 10;
+}
+.pdf-link-flash.show { opacity: 1; }

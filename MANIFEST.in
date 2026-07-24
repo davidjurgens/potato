@@ -5,4 +5,5 @@ include potato/templates/signup.html
 include potato/templates/error.html
 recursive-include potato/base_html/ *
 recursive-include potato/static/ *
+recursive-include potato/i18n/ *.yaml
 global-exclude .DS_Store

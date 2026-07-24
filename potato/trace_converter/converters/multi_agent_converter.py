@@ -91,17 +91,22 @@ class MultiAgentConverter(BaseTraceConverter):
             if thought:
                 conversation.append({
                     "speaker": f"{agent_name} (Thought)",
-                    "text": thought
+                    "text": thought,
+                    "agent_id": agent_name,
+                    "step_type": "thought",
                 })
             if action:
                 conversation.append({
                     "speaker": f"{agent_name} (Action)",
-                    "text": action
+                    "text": action,
+                    "agent_id": agent_name,
+                    "step_type": "action",
                 })
             if result:
                 conversation.append({
                     "speaker": "Environment",
-                    "text": result
+                    "text": result,
+                    "step_type": "observation",
                 })
 
         # Build metadata
@@ -124,12 +129,19 @@ class MultiAgentConverter(BaseTraceConverter):
             a.get("role", "") for a in agents if isinstance(a, dict) and a.get("role")
         )
 
+        # Standardized agent roster for multi-agent displays/analytics
+        agents_roster = [
+            {"id": a.get("role", ""), "role": a.get("role", ""), "goal": a.get("goal", "")}
+            for a in agents if isinstance(a, dict) and a.get("role")
+        ]
+
         return CanonicalTrace(
             id=trace_id,
             task_description=task,
             conversation=conversation,
             agent_name=agent_names or "CrewAI",
             metadata_table=metadata_table,
+            extra_fields={"agents": agents_roster} if agents_roster else {},
         )
 
     def _convert_autogen(self, item: dict, index: int) -> CanonicalTrace:
@@ -160,7 +172,11 @@ class MultiAgentConverter(BaseTraceConverter):
                 speaker = sender
 
             text = content if isinstance(content, str) else str(content)
-            conversation.append({"speaker": speaker, "text": text})
+            turn = {"speaker": speaker, "text": text, "agent_id": sender}
+            # Preserve who the message is directed at (agent-to-agent edge)
+            if receiver:
+                turn["addressee"] = receiver
+            conversation.append(turn)
 
             if not task and ("user" in sender_lower or "proxy" in sender_lower):
                 task = text
@@ -173,12 +189,15 @@ class MultiAgentConverter(BaseTraceConverter):
         for agent in sorted(agents_seen):
             metadata_table.append({"Property": "Participant", "Value": agent})
 
+        agents_roster = [{"id": a, "role": a} for a in sorted(agents_seen)]
+
         return CanonicalTrace(
             id=trace_id,
             task_description=task,
             conversation=conversation,
             agent_name=", ".join(sorted(agents_seen)),
             metadata_table=metadata_table,
+            extra_fields={"agents": agents_roster} if agents_roster else {},
         )
 
     def _convert_langgraph(self, item: dict, index: int) -> CanonicalTrace:
@@ -208,25 +227,31 @@ class MultiAgentConverter(BaseTraceConverter):
                     text = input_text if isinstance(input_text, str) else str(input_text)
                     if not task:
                         task = text
-                    conversation.append({
-                        "speaker": node or "Chain",
-                        "text": text
-                    })
+                    turn = {"speaker": node or "Chain", "text": text}
+                    if node:
+                        turn["agent_id"] = node
+                    conversation.append(turn)
                 if output_text and event_type == "on_chain_end":
                     text = output_text if isinstance(output_text, str) else str(output_text)
-                    conversation.append({
-                        "speaker": node or "Chain",
-                        "text": text
-                    })
+                    turn = {"speaker": node or "Chain", "text": text}
+                    if node:
+                        turn["agent_id"] = node
+                    conversation.append(turn)
 
             elif event_type == "on_tool_start":
                 tool = event_data.get("tool", event_data.get("name", ""))
                 tool_input = event_data.get("input", "")
                 text = f"{tool}({tool_input})" if tool else str(tool_input)
-                conversation.append({
+                turn = {
                     "speaker": f"{node} (Action)" if node else "Agent (Action)",
-                    "text": text
-                })
+                    "text": text,
+                    "step_type": "action",
+                }
+                if node:
+                    turn["agent_id"] = node
+                if tool:
+                    turn["tool"] = tool
+                conversation.append(turn)
 
             elif event_type == "on_tool_end":
                 output = event_data.get("output", "")
@@ -240,10 +265,10 @@ class MultiAgentConverter(BaseTraceConverter):
                 if event_type == "on_llm_end":
                     output = event_data.get("output", event_data.get("text", ""))
                     if output:
-                        conversation.append({
-                            "speaker": node or "Agent",
-                            "text": str(output)
-                        })
+                        turn = {"speaker": node or "Agent", "text": str(output)}
+                        if node:
+                            turn["agent_id"] = node
+                        conversation.append(turn)
 
         metadata_table = [
             {"Property": "Framework", "Value": "LangGraph"},
@@ -253,12 +278,15 @@ class MultiAgentConverter(BaseTraceConverter):
         for node_name in sorted(nodes_seen):
             metadata_table.append({"Property": "Node", "Value": node_name})
 
+        agents_roster = [{"id": n, "role": n} for n in sorted(nodes_seen)]
+
         return CanonicalTrace(
             id=trace_id,
             task_description=task,
             conversation=conversation,
             agent_name="LangGraph",
             metadata_table=metadata_table,
+            extra_fields={"agents": agents_roster} if agents_roster else {},
         )
 
     def _convert_generic(self, item: dict, index: int) -> CanonicalTrace:

@@ -119,14 +119,47 @@ class UnifiedPositioningStrategy {
         });
     }
 
+    // Non-transcript descendants whose text must NOT count toward span offsets.
+    // Kept in sync with the three collectTextNodes walks so the offset space,
+    // getCanonicalText(), and the bounds check all agree on one basis.
+    static shouldSkipForOffsets(node) {
+        return node.id === 'span-overlays' ||
+            node.classList.contains('span-overlays-field') ||
+            node.classList.contains('span-link-simple-arcs') ||
+            node.classList.contains('span-link-arcs-layer') ||
+            node.classList.contains('turn-anno-slot') ||
+            node.hasAttribute('data-span-offset-skip') ||
+            node.nodeName === 'svg' ||
+            node.namespaceURI === 'http://www.w3.org/2000/svg';
+    }
+
     getCanonicalText() {
         if (this.container.hasAttribute('data-original-text')) {
             const originalText = this.container.getAttribute('data-original-text');
             const cleanText = originalText.replace(/<[^>]*>/g, '').trim();
             return this.normalizeText(cleanText);
         }
-        const textContent = this.container.textContent || '';
-        return this.normalizeText(textContent);
+        // No data-original-text (dialogue / audio_dialogue / MAD span targets):
+        // fall back to DOM text, collected with the SAME skip rules the offset
+        // walk uses so canonical text and offsets share one basis.
+        //
+        // Deliberately NOT normalized: getOffsetsFromSelection() sums raw
+        // node.textContent.length, so the offset space includes the whitespace
+        // between bubble elements. Collapsing it here would make this text
+        // shorter than the offsets it is indexed by — slicing it would return
+        // text shifted by the whitespace preceding the span, and the bounds
+        // check in createSpanWithAlgorithm() would reject spans near the end.
+        let textContent = '';
+        const collect = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                textContent += node.textContent;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                if (UnifiedPositioningStrategy.shouldSkipForOffsets(node)) return;
+                for (const child of node.childNodes) collect(child);
+            }
+        };
+        collect(this.container);
+        return textContent;
     }
 
     normalizeText(text) {
@@ -197,8 +230,12 @@ class UnifiedPositioningStrategy {
                 });
                 cumulativeOffset += node.textContent.length;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
-                // Skip overlay containers - their label/button text must not affect offset calculations
-                if (node.id === 'span-overlays' || node.classList.contains('span-overlays-field')) {
+                // Skip non-transcript overlays whose own text must NOT count toward
+                // character offsets (span overlay containers, the span-link arc SVG
+                // with its numbered <text> badges, and the per-turn rating slots that
+                // turn-annotations.js writes dynamic text into). Shared predicate so
+                // every walk + getCanonicalText() agree on one offset basis.
+                if (UnifiedPositioningStrategy.shouldSkipForOffsets(node)) {
                     return;
                 }
                 for (const child of node.childNodes) {
@@ -347,8 +384,12 @@ class UnifiedPositioningStrategy {
                 });
                 cumulativeOffset += node.textContent.length;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
-                // Skip overlay containers - their label/button text must not affect offset calculations
-                if (node.id === 'span-overlays' || node.classList.contains('span-overlays-field')) {
+                // Skip non-transcript overlays whose own text must NOT count toward
+                // character offsets (span overlay containers, the span-link arc SVG
+                // with its numbered <text> badges, and the per-turn rating slots that
+                // turn-annotations.js writes dynamic text into). Shared predicate so
+                // every walk + getCanonicalText() agree on one offset basis.
+                if (UnifiedPositioningStrategy.shouldSkipForOffsets(node)) {
                     return;
                 }
                 for (const child of node.childNodes) {
@@ -435,8 +476,12 @@ class UnifiedPositioningStrategy {
                 });
                 cumulativeOffset += node.textContent.length;
             } else if (node.nodeType === Node.ELEMENT_NODE) {
-                // Skip overlay containers - their label/button text must not affect offset calculations
-                if (node.id === 'span-overlays' || node.classList.contains('span-overlays-field')) {
+                // Skip non-transcript overlays whose own text must NOT count toward
+                // character offsets (span overlay containers, the span-link arc SVG
+                // with its numbered <text> badges, and the per-turn rating slots that
+                // turn-annotations.js writes dynamic text into). Shared predicate so
+                // every walk + getCanonicalText() agree on one offset basis.
+                if (UnifiedPositioningStrategy.shouldSkipForOffsets(node)) {
                     return;
                 }
                 for (const child of node.childNodes) {

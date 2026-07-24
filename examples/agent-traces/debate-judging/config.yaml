@@ -1,0 +1,111 @@
+# Debate Judging Recipe
+#
+# Judge structured debates between agents: pick the winner, score each side
+# on a rubric, rate argument strength per turn, and tag the debate structure.
+# Composes existing schemas — no custom code:
+#
+#   - multi_agent_discussion display (agent colors, addressees, threading)
+#   - radio winner verdict + rubric_eval per-side scoring
+#   - turn-level likert (argument strength) bound to the debater agents only
+#   - consensus_tracking with debate-specific acts
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/debate-judging/config.yaml -p 8000
+
+annotation_task_name: "Debate Judging"
+
+data_files:
+  - data/debates.json
+
+item_properties:
+  id_key: id
+  text_key: motion
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: motion
+      type: text
+      label: "Motion"
+
+    - key: conversation
+      type: multi_agent_discussion
+      label: "Debate"
+      display_options:
+        show_turn_numbers: true
+        show_legend: true
+        show_addressees: true
+        thread_replies: true
+
+annotation_schemes:
+  # Winner verdict
+  - annotation_type: radio
+    name: winner
+    description: "Which side won the debate?"
+    labels:
+      - name: pro
+        tooltip: "Pro made the stronger case"
+      - name: con
+        tooltip: "Con made the stronger case"
+      - name: draw
+        tooltip: "Neither side prevailed"
+    sequential_key_binding: true
+
+  # Per-side rubric
+  - annotation_type: rubric_eval
+    name: pro_rubric
+    description: "Score the PRO side"
+    scale_points: 5
+    criteria:
+      - name: evidence
+        description: "Quality and relevance of cited evidence"
+      - name: rebuttal
+        description: "How well did they engage the other side's arguments?"
+      - name: consistency
+        description: "Internal consistency of their position"
+
+  - annotation_type: rubric_eval
+    name: con_rubric
+    description: "Score the CON side"
+    scale_points: 5
+    criteria:
+      - name: evidence
+        description: "Quality and relevance of cited evidence"
+      - name: rebuttal
+        description: "How well did they engage the other side's arguments?"
+      - name: consistency
+        description: "Internal consistency of their position"
+
+  # Per-turn argument strength on the debaters only (turn-level binding)
+  - annotation_type: likert
+    name: argument_strength
+    description: "Argument strength"
+    min_label: "Weak"
+    max_label: "Compelling"
+    size: 5
+    turn_level: true
+    turn_binding:
+      field: conversation
+      agents: [pro, con]
+
+  # Debate structure with debate-specific acts
+  - annotation_type: consensus_tracking
+    name: debate_moves
+    description: "Tag the debate structure"
+    turns_key: conversation
+    acts: [claim, rebuttal, concession, ruling]
+    linked_acts: [rebuttal, concession]
+
+  - annotation_type: text
+    name: judge_notes
+    description: "Judge's notes"
+
+user_config:
+  allow_all_users: true

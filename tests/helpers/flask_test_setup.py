@@ -45,6 +45,11 @@ def clear_all_global_state():
         ("potato.qda_mode", "clear_qda_mode_manager"),
         ("potato.solo_mode", "clear_solo_mode_manager"),
         ("potato.search", "clear_search"),
+        # RBAC + per-cohort schema resolver: their lazy singletons would
+        # otherwise carry a prior in-process server's (possibly no-cohort /
+        # no-rbac) config into the next server.
+        ("potato.server_utils.rbac", "clear_rbac_manager"),
+        ("potato.server_utils.cohort_schemes", "clear_cohort_scheme_resolver"),
     ):
         try:
             import importlib
@@ -605,6 +610,75 @@ class FlaskTestServer:
                         import traceback
                         traceback.print_exc()
 
+                # Reset + (re)initialize Boundary Lab manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale probes.
+                try:
+                    from potato.boundary import init_boundary_manager, clear_boundary_manager
+                    clear_boundary_manager()
+                    if config.get('boundary_probing', {}).get('enabled', False):
+                        init_boundary_manager(config)
+                        print("[DEBUG] Boundary Lab manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Boundary Lab manager: {e}")
+                # Reset + (re)initialize Truth Serum manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale predictions.
+                try:
+                    from potato.truth_serum import init_truth_serum_manager, clear_truth_serum_manager
+                    clear_truth_serum_manager()
+                    if config.get('truth_serum', {}).get('enabled', False):
+                        init_truth_serum_manager(config)
+                        print("[DEBUG] Truth Serum manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Truth Serum manager: {e}")
+                # Reset + (re)initialize Think-Aloud manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale transcripts.
+                try:
+                    from potato.thinkaloud import init_thinkaloud_manager, clear_thinkaloud_manager
+                    clear_thinkaloud_manager()
+                    if config.get('thinkaloud', {}).get('enabled', False):
+                        init_thinkaloud_manager(config)
+                        print("[DEBUG] Think-Aloud manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Think-Aloud manager: {e}")
+                # Reset + (re)initialize Psychometrics manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale model fits.
+                try:
+                    from potato.psychometrics import init_psychometrics_manager, clear_psychometrics_manager
+                    clear_psychometrics_manager()
+                    if config.get('psychometrics', {}).get('enabled', False):
+                        init_psychometrics_manager(config)
+                        print("[DEBUG] Psychometrics manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Psychometrics manager: {e}")
+                # Reset + (re)initialize Rooms manager. The clear runs
+                # unconditionally so a leaked singleton from a prior in-process
+                # test server cannot serve stale rooms.
+                try:
+                    from potato.rooms import init_rooms_manager, clear_rooms_manager
+                    clear_rooms_manager()
+                    if config.get('rooms', {}).get('enabled', False):
+                        init_rooms_manager(config)
+                        print("[DEBUG] Rooms manager initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Rooms manager: {e}")
+                # Reset + (re)initialize Pocket Mode config holder. The clear
+                # runs unconditionally so a leaked config from a prior
+                # in-process test server cannot enable /pocket unexpectedly.
+                try:
+                    from potato.pocket.routes import init_pocket, clear_pocket
+                    from potato.pocket.devices import clear_device_tracker
+                    clear_pocket()
+                    clear_device_tracker()  # lazy singleton pins output dir
+                    if config.get('pocket', {}).get('enabled', False):
+                        init_pocket(config)
+                        print("[DEBUG] Pocket Mode initialized successfully")
+                except Exception as e:
+                    print(f"[DEBUG] Error initializing Pocket Mode: {e}")
+
                 # Reset + (re)initialize QDA Mode manager. The clear runs
                 # unconditionally so a leaked singleton from a prior in-process
                 # test server cannot make a QDA-disabled server report enabled.
@@ -662,6 +736,21 @@ class FlaskTestServer:
                     init_cases_from_config(config)
                 except Exception as e:
                     print(f"[DEBUG] Cases auto-detect skipped: {e}")
+
+                # Group traces into sessions (no-op unless sessions enabled).
+                try:
+                    from potato.sessions import init_sessions_from_config
+                    init_sessions_from_config(config)
+                except Exception as e:
+                    print(f"[DEBUG] Sessions auto-detect skipped: {e}")
+
+                # Enroll instances onto the review board (no-op unless
+                # review_workflow enabled).
+                try:
+                    from potato.review_workflow import init_review_workflow_from_config
+                    init_review_workflow_from_config(config)
+                except Exception as e:
+                    print(f"[DEBUG] Review workflow init skipped: {e}")
 
                 # Build the universal search index (no-op if disabled)
                 try:
@@ -727,22 +816,10 @@ class FlaskTestServer:
                 @app.context_processor
                 def inject_template_context():
                     from potato.logging_config import is_ui_debug_enabled, is_server_debug_enabled
-                    ui_lang_defaults = {
-                        'next_button': 'Next',
-                        'previous_button': 'Previous',
-                        'labeled_badge': 'Labeled',
-                        'not_labeled_badge': 'Not labeled',
-                        'submit_button': 'Submit',
-                        'progress_label': 'Progress',
-                        'go_button': 'Go',
-                        'logout': 'Logout',
-                        'loading': 'Loading annotation interface...',
-                        'error_heading': 'Error',
-                        'retry_button': 'Retry',
-                        'adjudicate': 'Adjudicate',
-                    }
-                    ui_lang_config = config.get('ui_language', {})
-                    ui_lang = {**ui_lang_defaults, **ui_lang_config}
+                    # Use the same shared English defaults as production so the
+                    # test harness renders the full ui_lang key set.
+                    from potato.server_utils.i18n import UI_LANG_DEFAULTS, resolve_ui_language
+                    ui_lang = resolve_ui_language(config.get('ui_language'), UI_LANG_DEFAULTS)
                     return {
                         'ui_debug': is_ui_debug_enabled(),
                         'server_debug': is_server_debug_enabled(),
@@ -843,6 +920,27 @@ class FlaskTestServer:
                     except ImportError:
                         pass
 
+                # Register cross-document event-registry / corpus-map blueprints
+                if (config.get("event_template", {}).get("enabled", False)
+                        or config.get("corpus_map", {}).get("enabled", False)):
+                    from potato.event_registry import (
+                        init_event_registry_manager, clear_event_registry_manager,
+                    )
+                    from potato.event_registry.routes import event_registry_bp
+                    clear_event_registry_manager()
+                    init_event_registry_manager(config)
+                    if 'event_registry' not in app.blueprints:
+                        app.register_blueprint(event_registry_bp)
+                if config.get("corpus_map", {}).get("enabled", False):
+                    from potato.corpus_map import (
+                        init_corpus_map_manager, clear_corpus_map_manager,
+                    )
+                    from potato.corpus_map.routes import corpus_map_bp
+                    clear_corpus_map_manager()
+                    init_corpus_map_manager(config)
+                    if 'corpus_map' not in app.blueprints:
+                        app.register_blueprint(corpus_map_bp)
+
                 # Initialize OAuth with Flask app if using OAuth authentication
                 auth_method = config.get("authentication", {}).get("method", "in_memory")
                 if auth_method == "oauth":
@@ -857,6 +955,12 @@ class FlaskTestServer:
                 @app.route('/test-audio/<path:filename>')
                 def serve_test_audio(filename):
                     """Serve test audio files from the tests/data directory."""
+                    from flask import send_from_directory
+                    return send_from_directory(test_data_dir, filename)
+
+                @app.route('/test-video/<path:filename>')
+                def serve_test_video(filename):
+                    """Serve test video files from the tests/data directory."""
                     from flask import send_from_directory
                     return send_from_directory(test_data_dir, filename)
 

@@ -39,6 +39,8 @@ from .trajectory_edit import generate_trajectory_edit_layout
 from .process_reward import generate_process_reward_layout
 from .failure_attribution import generate_failure_attribution_layout
 from .tool_call_review import generate_tool_call_review_layout
+from .consensus_tracking import generate_consensus_tracking_layout
+from .context_attribution import generate_context_attribution_layout
 from .agent_scorecard import generate_agent_scorecard_layout
 from .handoff_review import generate_handoff_review_layout
 from .agent_interaction_graph import generate_agent_interaction_graph_layout

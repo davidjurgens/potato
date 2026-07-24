@@ -37,6 +37,16 @@ except ImportError:
     PDFPLUMBER_AVAILABLE = False
     pdfplumber = None
 
+# OCR is optional and OFF by default: it rasterizes each page and runs Tesseract,
+# which is much slower to initialize/run than text extraction. It is only useful
+# for scanned / image-only PDFs that have no embedded text layer.
+try:
+    import pytesseract  # Python wrapper around the tesseract binary
+    PYTESSERACT_AVAILABLE = True
+except ImportError:
+    PYTESSERACT_AVAILABLE = False
+    pytesseract = None
+
 
 class PDFHandler(BaseFormatHandler):
     """
@@ -62,6 +72,12 @@ class PDFHandler(BaseFormatHandler):
             "extract_tables": False,
             "x_tolerance": 3,  # Horizontal tolerance for word grouping
             "y_tolerance": 3,  # Vertical tolerance for line grouping
+            # OCR (opt-in, slow): False (never), True (always), or "auto"
+            # (only pages whose embedded text extraction is empty -- i.e.
+            # scanned pages). Requires pytesseract + the tesseract binary.
+            "ocr": False,
+            "ocr_dpi": 200,    # rasterization DPI for OCR (higher = slower/sharper)
+            "ocr_lang": "eng",
         }
 
     def extract(
@@ -178,11 +194,163 @@ class PDFHandler(BaseFormatHandler):
             Tuple of (text, html, coordinate_mappings)
         """
         extraction_mode = opts.get("extraction_mode", "text")
+        ocr = opts.get("ocr", False)
 
         if extraction_mode == "layout":
             return self._extract_page_layout(page, page_num, opts, base_offset)
-        else:
-            return self._extract_page_text(page, page_num, opts, base_offset)
+
+        if ocr is True:
+            return self._extract_page_ocr(page, page_num, opts, base_offset)
+
+        text_result = self._extract_page_text(page, page_num, opts, base_offset)
+        # "auto": only fall back to OCR when the embedded text layer is empty
+        # (a scanned/image-only page), so text-based PDFs stay fast.
+        if ocr == "auto" and not (text_result[0] or "").strip():
+            return self._extract_page_ocr(page, page_num, opts, base_offset)
+        return text_result
+
+    def _extract_page_ocr(
+        self,
+        page,
+        page_num: int,
+        opts: Dict[str, Any],
+        base_offset: int
+    ) -> tuple:
+        """
+        Extract text from a page image using Tesseract OCR.
+
+        Rasterizes the page and runs word-level OCR, emitting the SAME output
+        shape as ``_extract_page_text`` (``<span class="pdf-word" data-start
+        data-end>`` HTML + char->PDFCoordinate bbox mappings in PDF points), so
+        downstream code (span offsets, coordinate mapping) is unchanged. This is
+        the path that lets text anchors work on scanned/image-only PDFs.
+        """
+        words = self._ocr_words(page, opts)
+
+        text_parts = []
+        html_parts = [f'<div class="pdf-page pdf-page-ocr" data-page="{page_num}">']
+        coords = []
+        current_offset = base_offset
+        prev_line = None
+
+        for w in words:
+            if prev_line is not None and w["line"] != prev_line:
+                text_parts.append("\n")
+                html_parts.append("<br>")
+                current_offset += 1
+            elif prev_line is not None:
+                text_parts.append(" ")
+                html_parts.append(" ")
+                current_offset += 1
+            prev_line = w["line"]
+
+            start = current_offset
+            end = start + len(w["text"])
+            text_parts.append(w["text"])
+            html_parts.append(
+                f'<span class="pdf-word" data-start="{start}" data-end="{end}">'
+                f'{html.escape(w["text"])}</span>'
+            )
+            coords.append({"start": start, "end": end, "bbox": list(w["bbox"])})
+            current_offset = end
+
+        html_parts.append("</div>")
+        return "".join(text_parts), "\n".join(html_parts), coords
+
+    def _ocr_words(self, page, opts: Dict[str, Any]) -> List[Dict]:
+        """
+        Run Tesseract OCR on a rasterized page and return word records.
+
+        Each record is ``{"text": str, "bbox": [x0, top, x1, bottom] (PDF
+        points), "line": (block, par, line)}``. Shared by ``_extract_page_ocr``
+        (server-side HTML/coords) and ``extract_words_by_page`` (client text
+        layer for scanned PDFs).
+        """
+        if not PYTESSERACT_AVAILABLE:
+            raise ImportError(
+                "OCR requested but pytesseract is not installed. "
+                "Install with: pip install pytesseract (and the tesseract binary)."
+            )
+        dpi = opts.get("ocr_dpi", 200)
+        lang = opts.get("ocr_lang", "eng")
+        scale = dpi / 72.0  # image pixels per PDF point
+
+        pil_image = page.to_image(resolution=dpi).original
+        data = pytesseract.image_to_data(
+            pil_image, lang=lang, output_type=pytesseract.Output.DICT
+        )
+        n = len(data.get("text", []))
+        words = []
+        for i in range(n):
+            word_text = (data["text"][i] or "").strip()
+            if not word_text:
+                continue
+            words.append({
+                "text": word_text,
+                "bbox": [
+                    data["left"][i] / scale,
+                    data["top"][i] / scale,
+                    (data["left"][i] + data["width"][i]) / scale,
+                    (data["top"][i] + data["height"][i]) / scale,
+                ],
+                "line": (data.get("block_num", [0] * n)[i],
+                         data.get("par_num", [0] * n)[i],
+                         data.get("line_num", [0] * n)[i]),
+            })
+        return words
+
+    def extract_words_by_page(
+        self,
+        file_path: str,
+        options: Optional[Dict[str, Any]] = None
+    ) -> Dict[int, List[Dict[str, Any]]]:
+        """
+        Return per-page words with PER-PAGE char offsets and PDF-point boxes.
+
+        Shape: ``{page_num: [{"text", "start", "end", "bbox": [x0,top,x1,bottom]}]}``.
+        Used to build a selectable text layer client-side for scanned/image-only
+        PDFs (where PDF.js ``getTextContent`` is empty). Honors the ``ocr`` option:
+        ``False`` uses the embedded text layer, ``True`` always OCRs, ``"auto"``
+        OCRs only pages whose embedded text extraction is empty.
+        """
+        if not PDFPLUMBER_AVAILABLE:
+            raise ImportError("pdfplumber is required for PDF word extraction")
+
+        opts = self.merge_options(options)
+        ocr = opts.get("ocr", False)
+        x_tol = opts.get("x_tolerance", 3)
+        y_tol = opts.get("y_tolerance", 3)
+
+        def _page_words(page):
+            """Return [{text, bbox:[x0,top,x1,bottom]}] for a page."""
+            if ocr is True:
+                return [{"text": w["text"], "bbox": w["bbox"]}
+                        for w in self._ocr_words(page, opts)]
+            words = page.extract_words(x_tolerance=x_tol, y_tolerance=y_tol)
+            if not words and ocr == "auto":
+                return [{"text": w["text"], "bbox": w["bbox"]}
+                        for w in self._ocr_words(page, opts)]
+            return [{"text": w["text"],
+                     "bbox": [float(w["x0"]), float(w["top"]),
+                              float(w["x1"]), float(w["bottom"])]}
+                    for w in words]
+
+        result: Dict[int, List[Dict[str, Any]]] = {}
+        with pdfplumber.open(file_path) as pdf:
+            max_pages = opts.get("max_pages") or len(pdf.pages)
+            for page_num, page in enumerate(pdf.pages[:max_pages], start=1):
+                offset = 0
+                page_words = []
+                for w in _page_words(page):
+                    start = offset
+                    end = start + len(w["text"])
+                    page_words.append({
+                        "text": w["text"], "start": start, "end": end,
+                        "bbox": [float(b) for b in w["bbox"]],
+                    })
+                    offset = end + 1  # +1 for inter-word whitespace
+                result[page_num] = page_words
+        return result
 
     def _extract_page_text(
         self,

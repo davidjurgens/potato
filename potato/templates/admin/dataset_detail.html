@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -29,32 +29,32 @@
 </head>
 <body>
 <main class="dashboard" role="main">
-  <a class="dd-back" href="{{ url_for('datasets.admin') }}">&larr; Datasets &amp; Experiments</a>
+  <a class="dd-back" href="{{ url_for('datasets.admin') }}">&larr; {{ ui_lang.dsdetail_back_link|default('Datasets & Experiments') }}</a>
   <h1>{{ dataset.name }}</h1>
   {% if dataset.description %}<p class="dd-desc">{{ dataset.description }}</p>{% endif %}
 
   <div class="dd-actions" style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;margin-bottom:1.5rem;">
     <a class="shadcn-button shadcn-button-outline"
        href="{{ url_for('datasets.api_export_dataset', name=dataset.name) }}?format=sft"
-       title="Download SFT fine-tuning data (prompt/completion)">Export SFT</a>
+       title="{{ ui_lang.dsdetail_export_sft_title|default('Download SFT fine-tuning data (prompt/completion)') }}">{{ ui_lang.dsdetail_export_sft|default('Export SFT') }}</a>
     <a class="shadcn-button shadcn-button-outline"
        href="{{ url_for('datasets.api_export_dataset', name=dataset.name) }}?format=dpo"
-       title="Download DPO preference data (prompt/chosen/rejected)">Export DPO</a>
+       title="{{ ui_lang.dsdetail_export_dpo_title|default('Download DPO preference data (prompt/chosen/rejected)') }}">{{ ui_lang.dsdetail_export_dpo|default('Export DPO') }}</a>
     <button class="shadcn-button shadcn-button-outline" id="import-btn"
-            title="Add the live task's loaded instances as examples">Import loaded instances</button>
+            title="{{ ui_lang.dsdetail_import_instances_title|default("Add the live task's loaded instances as examples") }}">{{ ui_lang.dsdetail_import_instances|default('Import loaded instances') }}</button>
     <button class="shadcn-button shadcn-button-outline" id="import-traces-btn"
-            title="Add only runtime-ingested traces (webhook / Langfuse) as examples">Import ingested traces</button>
+            title="{{ ui_lang.dsdetail_import_traces_title|default('Add only runtime-ingested traces (webhook / Langfuse) as examples') }}">{{ ui_lang.dsdetail_import_traces|default('Import ingested traces') }}</button>
     <label style="display:inline-flex;align-items:center;gap:0.35rem;font-size:0.8125rem;">
       <input type="checkbox" id="include-ann">
-      include human annotations as references</label>
+      {{ ui_lang.dsdetail_include_annotations|default('include human annotations as references') }}</label>
     <span class="dd-empty" id="import-status" role="status" aria-live="polite"></span>
   </div>
 
   <section class="dashboard-card dd-card" aria-labelledby="ver-h">
-    <h2 id="ver-h">Versions</h2>
+    <h2 id="ver-h">{{ ui_lang.dsdetail_versions_heading|default('Versions') }}</h2>
     {% if dataset.versions %}
     <table class="dd-table">
-      <thead><tr><th scope="col">Version</th><th scope="col">Examples</th><th scope="col">Note</th><th scope="col">Created</th><th scope="col">Tags</th></tr></thead>
+      <thead><tr><th scope="col">{{ ui_lang.dsdetail_col_version|default('Version') }}</th><th scope="col">{{ ui_lang.dsdetail_col_examples|default('Examples') }}</th><th scope="col">{{ ui_lang.dsdetail_col_note|default('Note') }}</th><th scope="col">{{ ui_lang.dsdetail_col_created|default('Created') }}</th><th scope="col">{{ ui_lang.dsdetail_col_tags|default('Tags') }}</th></tr></thead>
       <tbody>
         {% for v in dataset.versions %}
         <tr>
@@ -65,22 +65,22 @@
           <td>
             {% for t in v.tags %}<span class="dd-tag">{{ t }}</span> {% endfor %}
             <form class="dd-tag-form" data-version="{{ v.version_id }}">
-              <input type="text" placeholder="tag…" aria-label="Tag {{ v.version_id }}">
-              <button type="submit">Tag</button>
+              <input type="text" placeholder="{{ ui_lang.dsdetail_tag_placeholder|default('tag…') }}" aria-label="{{ ui_lang.dsdetail_tag_input_label|default('Tag') }} {{ v.version_id }}">
+              <button type="submit">{{ ui_lang.dsdetail_tag_button|default('Tag') }}</button>
             </form>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-    {% else %}<p class="dd-empty">No versions yet.</p>{% endif %}
+    {% else %}<p class="dd-empty">{{ ui_lang.dsdetail_no_versions|default('No versions yet.') }}</p>{% endif %}
   </section>
 
   <section class="dashboard-card dd-card" aria-labelledby="ex-h">
-    <h2 id="ex-h">Examples <span class="dd-empty" style="font-weight:400;">(latest version, showing up to 50)</span></h2>
+    <h2 id="ex-h">{{ ui_lang.dsdetail_examples_heading|default('Examples') }} <span class="dd-empty" style="font-weight:400;">{{ ui_lang.dsdetail_examples_subtitle|default('(latest version, showing up to 50)') }}</span></h2>
     {% if examples %}
     <table class="dd-table">
-      <thead><tr><th scope="col">ID</th><th scope="col">Inputs</th><th scope="col">Reference</th><th scope="col">Split</th></tr></thead>
+      <thead><tr><th scope="col">{{ ui_lang.dsdetail_col_id|default('ID') }}</th><th scope="col">{{ ui_lang.dsdetail_col_inputs|default('Inputs') }}</th><th scope="col">{{ ui_lang.dsdetail_col_reference|default('Reference') }}</th><th scope="col">{{ ui_lang.dsdetail_col_split|default('Split') }}</th></tr></thead>
       <tbody>
         {% for e in examples[:50] %}
         <tr>
@@ -92,14 +92,14 @@
         {% endfor %}
       </tbody>
     </table>
-    {% else %}<p class="dd-empty">No examples in the latest version.</p>{% endif %}
+    {% else %}<p class="dd-empty">{{ ui_lang.dsdetail_no_examples|default('No examples in the latest version.') }}</p>{% endif %}
   </section>
 
   <section class="dashboard-card dd-card" aria-labelledby="exp-h">
-    <h2 id="exp-h">Experiments on this dataset</h2>
+    <h2 id="exp-h">{{ ui_lang.dsdetail_experiments_heading|default('Experiments on this dataset') }}</h2>
     {% if experiments %}
     <table class="dd-table">
-      <thead><tr><th scope="col">Experiment</th><th scope="col">Version</th><th scope="col">Examples</th><th scope="col">Scores</th></tr></thead>
+      <thead><tr><th scope="col">{{ ui_lang.dsdetail_col_experiment|default('Experiment') }}</th><th scope="col">{{ ui_lang.dsdetail_col_version|default('Version') }}</th><th scope="col">{{ ui_lang.dsdetail_col_examples|default('Examples') }}</th><th scope="col">{{ ui_lang.dsdetail_col_scores|default('Scores') }}</th></tr></thead>
       <tbody>
         {% for x in experiments %}
         <tr>
@@ -111,23 +111,25 @@
         {% endfor %}
       </tbody>
     </table>
-    {% else %}<p class="dd-empty">No experiments run on this dataset yet.</p>{% endif %}
+    {% else %}<p class="dd-empty">{{ ui_lang.dsdetail_no_experiments|default('No experiments run on this dataset yet.') }}</p>{% endif %}
   </section>
 </main>
 
+<script>window.UI_LANG = {{ ui_lang|tojson }};</script>
 <script>
+var L = window.UI_LANG || {};
 async function runImport(url, btn) {
   const status = document.getElementById("import-status");
   const include = document.getElementById("include-ann").checked;
-  btn.disabled = true; status.textContent = "Importing…";
+  btn.disabled = true; status.textContent = (L.dsdetail_status_importing || "Importing…");
   const r = await fetch(url, {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({include_annotations: include}),
   });
   const data = await r.json().catch(() => ({}));
   btn.disabled = false;
-  if (r.ok) { status.textContent = "Imported " + (data.example_count || 0) + " example(s)."; setTimeout(() => location.reload(), 700); }
-  else { status.textContent = data.error || "Import failed."; }
+  if (r.ok) { status.textContent = (L.dsdetail_status_imported || "Imported ") + (data.example_count || 0) + (L.dsdetail_status_imported_suffix || " example(s)."); setTimeout(() => location.reload(), 700); }
+  else { status.textContent = data.error || (L.dsdetail_status_import_failed || "Import failed."); }
 }
 
 const importBtn = document.getElementById("import-btn");

@@ -17,6 +17,7 @@ Usage:
 
 import html as html_module
 import logging
+import os
 from typing import Dict, Any, List, Optional
 
 from .displays import display_registry
@@ -48,6 +49,13 @@ class InstanceDisplayRenderer:
         self.display_config = config.get("instance_display", {})
         self.fields = self.display_config.get("fields", [])
         self.layout = self.display_config.get("layout", {})
+
+        # Turn-level annotation schemes (turn_level: true) attach inline
+        # widgets to turns of turn-capable displays. Resolved here (the one
+        # place with access to the full config) and injected into field
+        # configs via the internal "_turn_schemes" key at render time.
+        from .turn_annotations import get_turn_level_schemes
+        self.turn_level_schemes = get_turn_level_schemes(config)
 
         # Extract span targets — query the registry instead of a hardcoded list
         self.span_targets = [
@@ -199,6 +207,9 @@ class InstanceDisplayRenderer:
         if field_type in format_display_types and isinstance(data, str):
             data = self._process_format_file(data, field_type, field)
 
+        field = self._with_turn_schemes(field)
+        field = self._with_run_tree(field, instance_data)
+
         try:
             rendered = display_registry.render(field_type, field, data)
 
@@ -214,6 +225,40 @@ class InstanceDisplayRenderer:
         except ValueError as e:
             logger.error(f"Error rendering field '{key}': {e}")
             return f'<div class="display-error">Error rendering field "{key}": {e}</div>'
+
+    def _with_turn_schemes(self, field: Dict[str, Any]) -> Dict[str, Any]:
+        """Return a field config copy carrying its bound turn-level schemes.
+
+        Uses the internal "_turn_schemes" key (never user-configurable) so
+        turn-capable displays can render per-turn annotation slots. Fields
+        with no bound schemes are returned unchanged.
+        """
+        if not self.turn_level_schemes:
+            return field
+        from .turn_annotations import schemes_for_field
+        bound = schemes_for_field(self.turn_level_schemes, field.get("key", ""))
+        if not bound:
+            return field
+        field = dict(field)
+        field["_turn_schemes"] = bound
+        return field
+
+    def _with_run_tree(self, field: Dict[str, Any], instance_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Return a field config copy carrying the item's run tree.
+
+        The run tree (sub-agent hierarchy, ``extra_fields["run_tree"]`` from
+        trace converters) lives at item level, but displays only see their
+        own field's data — inject it via the internal "_run_tree" key for
+        the trace displays that render it as a sidebar.
+        """
+        if field.get("type") != "agent_trace":
+            return field
+        run_tree = instance_data.get("run_tree")
+        if not isinstance(run_tree, list) or not run_tree:
+            return field
+        field = dict(field)
+        field["_run_tree"] = run_tree
+        return field
 
     def _wrap_resizable(self, inner_html: str, field: Dict[str, Any]) -> str:
         """
@@ -270,6 +315,26 @@ class InstanceDisplayRenderer:
         display_options = field.get("display_options", {})
 
         if display_type == "pdf":
+            # Link mode renders the visual PDF client-side (PDF.js). For scanned /
+            # image-only PDFs the client text layer is empty, so when OCR is
+            # enabled we extract per-page words server-side and hand them to the
+            # client to build a selectable text layer. The original path/URL is
+            # kept as source_path so PDF.js still renders the page image.
+            if display_options.get("annotation_mode") == "link" and display_options.get("ocr"):
+                local_path = self._resolve_local_pdf_path(file_path)
+                try:
+                    from potato.format_handlers.pdf_handler import PDFHandler
+                    ocr_pages = PDFHandler().extract_words_by_page(local_path, {
+                        "ocr": display_options.get("ocr"),
+                        "ocr_dpi": display_options.get("ocr_dpi", 200),
+                        "ocr_lang": display_options.get("ocr_lang", "eng"),
+                        "max_pages": display_options.get("max_pages"),
+                    })
+                    return {"source_path": file_path, "ocr_pages": ocr_pages}
+                except Exception as e:
+                    logger.warning(f"PDF OCR word extraction failed for {file_path}: {e}")
+                    return file_path
+
             # By default, PDFs use client-side rendering (return path as-is)
             # If server_extract is set, use the format handler
             if not display_options.get("server_extract", False):
@@ -297,6 +362,25 @@ class InstanceDisplayRenderer:
         except Exception as e:
             logger.warning(f"Format handler extraction failed for {file_path}: {e}")
             return file_path
+
+    def _resolve_local_pdf_path(self, value: str) -> str:
+        """
+        Map a PDF field value to a local filesystem path for server-side OCR.
+
+        Client-facing values are usually ``/media/<file>`` URLs (served from
+        ``<task_dir>/<media_directory>/``); OCR needs the file on disk. Absolute
+        or already-local paths are returned as-is (resolved against task_dir).
+        """
+        if not isinstance(value, str) or value.startswith(("http://", "https://")):
+            return value
+        task_dir = self.config.get("task_dir", ".")
+        if value.startswith("/media/"):
+            media_dir = self.config.get("media_directory", "media")
+            base = media_dir if os.path.isabs(media_dir) else os.path.join(task_dir, media_dir)
+            return os.path.join(base, value[len("/media/"):])
+        if os.path.isabs(value):
+            return value
+        return os.path.join(task_dir, value)
 
     def get_template_variables(self, instance_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -352,7 +436,11 @@ class InstanceDisplayRenderer:
             result["display_raw"][key] = data
 
             try:
-                result["display_fields"][key] = display_registry.render(field_type, field, data)
+                result["display_fields"][key] = display_registry.render(
+                    field_type,
+                    self._with_run_tree(self._with_turn_schemes(field),
+                                        instance_data),
+                    data)
             except ValueError as e:
                 logger.error(f"Error rendering field '{key}': {e}")
                 result["display_fields"][key] = f'<div class="display-error">Error: {e}</div>'

@@ -78,8 +78,11 @@ def test_plugin_gates_build_on_threshold(pytester):
             potato_eval.log_feedback("correct", 0.0)  # wrong
     """)
     # Test itself passes, but the threshold gate should fail the run.
-    result = pytester.runpytest("-p", "potato.testing.pytest_plugin",
-                                "--potato-threshold", "correct=0.8")
+    # The plugin auto-loads via its pytest11 entry point (name "potato_eval"),
+    # so passing "-p potato.testing.pytest_plugin" would register the same
+    # module under a second name and raise a pluggy ValueError. Rely on the
+    # entry point instead.
+    result = pytester.runpytest("--potato-threshold", "correct=0.8")
     assert result.ret != 0
     result.stdout.fnmatch_lines(["*THRESHOLD FAILED: correct*"])
 
@@ -91,6 +94,5 @@ def test_plugin_passes_when_threshold_met(pytester):
         def test_ok(potato_eval):
             potato_eval.log_feedback("correct", 1.0)
     """)
-    result = pytester.runpytest("-p", "potato.testing.pytest_plugin",
-                                "--potato-threshold", "correct=0.8")
+    result = pytester.runpytest("--potato-threshold", "correct=0.8")
     assert result.ret == 0

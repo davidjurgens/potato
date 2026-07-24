@@ -153,7 +153,35 @@ class OTELConverter(BaseTraceConverter):
         if root_span:
             task_description = root_span.get("name", "")
 
-        for span in spans:
+        # Preserve the span hierarchy as a run tree (sub-agent view); each
+        # conversation turn is tagged with the span that produced it.
+        run_tree = []
+        span_ids = {span.get("span_id", span.get("spanId", "")) for span in spans}
+        for i, span in enumerate(spans):
+            span_id = str(span.get("span_id", span.get("spanId", "")) or f"span-{i}")
+            parent = span.get("parent_span_id", span.get("parentSpanId", "")) or None
+            attrs = span.get("attributes", {})
+            run_type = "chain"
+            if attrs.get("tool.name") or attrs.get("tool.parameters") or attrs.get("tool.input"):
+                run_type = "tool"
+            elif any(k.startswith(("gen_ai.", "llm.")) for k in attrs):
+                run_type = "llm"
+            status = span.get("status")
+            if isinstance(status, dict):
+                status = {1: "success", 2: "error"}.get(status.get("code"))
+            run_tree.append({
+                "id": span_id,
+                # Orphan parents (span outside this export) become roots
+                "parent_id": parent if parent in span_ids else None,
+                "name": span.get("name", "") or run_type,
+                "run_type": run_type,
+                "status": status,
+                "turn_range": None,
+            })
+
+        for i, span in enumerate(spans):
+            span_run_id = run_tree[i]["id"]
+            turn_start = len(conversation)
             attrs = span.get("attributes", {})
             span_name = span.get("name", "")
 
@@ -182,17 +210,19 @@ class OTELConverter(BaseTraceConverter):
                     except (ValueError, TypeError):
                         pass
 
-            # Build conversation turns
+            # Build conversation turns (tagged with the producing span)
             if prompt:
                 conversation.append({
                     "speaker": "User",
-                    "text": str(prompt)
+                    "text": str(prompt),
+                    "run_id": span_run_id
                 })
 
             if completion:
                 conversation.append({
                     "speaker": "Agent",
-                    "text": str(completion)
+                    "text": str(completion),
+                    "run_id": span_run_id
                 })
 
             # Tool spans (OpenInference uses tool.parameters / output.value)
@@ -204,12 +234,14 @@ class OTELConverter(BaseTraceConverter):
                 if tool_input:
                     conversation.append({
                         "speaker": "Agent (Action)",
-                        "text": f"{tool_name or span_name}({tool_input})" if tool_name or span_name else str(tool_input)
+                        "text": f"{tool_name or span_name}({tool_input})" if tool_name or span_name else str(tool_input),
+                        "run_id": span_run_id
                     })
                 if tool_output:
                     conversation.append({
                         "speaker": "Environment",
-                        "text": str(tool_output)
+                        "text": str(tool_output),
+                        "run_id": span_run_id
                     })
 
             # If span has no GenAI attributes but has a meaningful name,
@@ -220,8 +252,12 @@ class OTELConverter(BaseTraceConverter):
                     if duration:
                         conversation.append({
                             "speaker": f"System ({span_name})",
-                            "text": f"Duration: {duration}"
+                            "text": f"Duration: {duration}",
+                            "run_id": span_run_id
                         })
+
+            if len(conversation) > turn_start:
+                run_tree[i]["turn_range"] = [turn_start, len(conversation) - 1]
 
         # Build metadata table
         metadata_table = [
@@ -232,12 +268,18 @@ class OTELConverter(BaseTraceConverter):
         if total_tokens:
             metadata_table.append({"Property": "Total Tokens", "Value": str(total_tokens)})
 
+        # Only carry a run tree when there is real hierarchy to show
+        extra_fields = {}
+        if len(run_tree) > 1 and any(n["parent_id"] for n in run_tree):
+            extra_fields["run_tree"] = run_tree
+
         return CanonicalTrace(
             id=trace_id,
             task_description=task_description or f"OTEL Trace {trace_id[:16]}",
             conversation=conversation,
             agent_name=model,
             metadata_table=metadata_table,
+            extra_fields=extra_fields,
         )
 
     def _get_start_time(self, span: dict) -> int:

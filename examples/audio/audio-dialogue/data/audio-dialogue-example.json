@@ -1,0 +1,33 @@
+[
+  {
+    "id": "ep_001",
+    "title": "Episode 1 — Latency in Real-Time Systems (diarized)",
+    "conversation": {
+      "audio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+      "turns": [
+        {"turn_id": "t0", "speaker": "host", "start": 0.0, "end": 6.5, "text": "Welcome back to the show. Today we are digging into latency in real-time systems."},
+        {"turn_id": "t1", "speaker": "host", "start": 6.5, "end": 12.0, "text": "So let me start with the obvious question: why does latency matter so much here?"},
+        {"turn_id": "t2", "speaker": "guest", "start": 12.0, "end": 21.0, "text": "Great question. In a real-time system the deadline is part of correctness. A late answer is a wrong answer, even if the value is right."},
+        {"turn_id": "t3", "speaker": "host", "start": 21.0, "end": 26.0, "text": "That is a strong claim. Does that mean throughput barely matters?"},
+        {"turn_id": "t4", "speaker": "guest", "start": 26.0, "end": 35.5, "text": "Not at all. Throughput still matters, but you optimize the tail. The ninety-ninth percentile is what wakes you up at night, not the average."},
+        {"turn_id": "t5", "speaker": "host", "start": 35.5, "end": 40.0, "text": "How do you actually measure that tail in production?"},
+        {"turn_id": "t6", "speaker": "guest", "start": 40.0, "end": 49.0, "text": "You histogram everything and you never trust an average. We sample per request and keep the full distribution so we can see the outliers."}
+      ]
+    }
+  },
+  {
+    "id": "ep_002",
+    "title": "Episode 2 — Roundtable (undiarized — assign the speakers)",
+    "conversation": {
+      "audio": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+      "turns": [
+        {"turn_id": "t0", "start": 0.0, "end": 5.0, "text": "Alright, let's open the roundtable. First topic: is remote work here to stay?"},
+        {"turn_id": "t1", "start": 5.0, "end": 12.0, "text": "I think it is. The genie is out of the bottle and teams have proven they can ship."},
+        {"turn_id": "t2", "start": 12.0, "end": 19.0, "text": "But do we lose the hallway conversations that spark the best ideas?"},
+        {"turn_id": "t3", "start": 19.0, "end": 27.0, "text": "You replace them with intentional design. Async docs beat a hallway you happened to walk down."},
+        {"turn_id": "t4", "start": 27.0, "end": 33.0, "text": "So your answer is yes, remote stays, as long as the culture is deliberate?"},
+        {"turn_id": "t5", "start": 33.0, "end": 40.0, "text": "Exactly. Deliberate beats accidental, every single time."}
+      ]
+    }
+  }
+]

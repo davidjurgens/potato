@@ -125,20 +125,66 @@ batch_assignment:
       instances: ["r2_item_001", "r2_item_002"]
 ```
 
-For long batches, move the instance list into a separate data file. The file can
-use the same local formats supported by `data_files` (`json`, `jsonl`, `csv`,
-`tsv`, or `parquet`) and IDs are read using `item_properties.id_key`:
+For long batches, move the instance list into a separate data file. If the
+batch file is already a full Potato input data file, use `data_file`: Potato
+will load the items and use the same file to define the group order. This lets
+one config point each annotator cohort at a specific input file:
 
 ```yaml
 assignment_strategy: batch
 num_annotators_per_item: 4
+data_files: []
 
 batch_assignment:
   groups:
     - name: round1_batch_a
       annotators: ["u1", "u2", "u3", "u4"]
-      instances_file: batches/round1_batch_a.csv
+      data_file: batches/round1_batch_a.csv
+    - name: round1_batch_b
+      annotators: ["u5", "u6", "u7", "u8"]
+      data_file: batches/round1_batch_b.csv
 ```
+
+If the file contains only IDs and the items are loaded through top-level
+`data_files`, use `instances_file` instead. `data_file` and `instances_file`
+support the same local formats as `data_files` (`json`, `jsonl`, `csv`, `tsv`,
+or `parquet`) and IDs are read using `item_properties.id_key`.
+
+When annotator IDs are not known ahead of time, such as a fresh Prolific launch,
+enable automatic cohort assignment. Potato assigns each first-arriving user to
+the least-filled batch group and keeps that user in the same group for the rest
+of the study. Group size defaults to
+`num_annotators_per_item`/`max_annotations_per_item`, or you can set
+`max_annotators` per group:
+
+```yaml
+assignment_strategy: batch
+num_annotators_per_item: 4
+data_files: []
+
+batch_assignment:
+  auto_assign_annotators: true
+  groups:
+    - name: batch_a
+      data_file: batches/batch_a.csv
+    - name: batch_b
+      data_file: batches/batch_b.csv
+    - name: batch_c
+      data_file: batches/batch_c.csv
+      max_annotators: 6
+```
+
+Cohort assignments **persist across server restarts**. The user→group mapping is
+reconstructed on startup from each user's saved assignments, so restarting the
+server (deploy, crash, reboot) keeps returning users in their original group and
+lets new users keep balancing against accurate per-group counts. No extra state
+file is written — the mapping is derived from the annotations already on disk.
+
+For this to work, each auto-assigned group's items must be **disjoint** (an item
+should belong to only one batch). If an item appears in more than one group, or a
+user's saved items span multiple groups, Potato logs a warning and attributes the
+user to the group holding the majority of their items (ties break toward the
+first-listed group).
 
 Items can also define their allowed annotators directly. This is useful when
 round-2 data is generated from round-1 annotations:
@@ -420,6 +466,9 @@ See [Admin Dashboard](../administration/admin_dashboard.md) for more details.
 
 ## Related Documentation
 
+- [Per-Cohort Schemas](per_cohort_schemas.md) - Bind different annotation schemes to the cohorts defined here
+- [Roles & Permissions (RBAC)](../auth-users/roles_and_permissions.md) - Control who can annotate, adjudicate, export, and administer
+- [Scaling & Large Datasets](../deployment/scaling.md) - Shard large datasets across cohorts; indexing and memory notes
 - [Diversity Ordering](../workflow/diversity_ordering.md) - Embedding-based diverse item presentation
 - [Active Learning Guide](../ai-intelligence/active_learning_guide.md) - ML-based assignment prioritization
 - [Quality Control](../workflow/quality_control.md) - Attention checks and gold standards

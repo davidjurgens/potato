@@ -1,0 +1,72 @@
+# Memory / Context-Use Annotation Recipe
+#
+# Annotate how an agent USED its available context: did it draw on earlier
+# information correctly, hallucinate context that was never established, or
+# ignore context it should have used? Uses the context_attribution schema
+# (turn tagging + click-to-link the source turn) plus a whole-trace memory
+# score.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/context-attribution/config.yaml -p 8000
+
+annotation_task_name: "Agent Context-Use Annotation"
+
+data_files:
+  - data/context-traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: conversation
+      type: dialogue
+      label: "Conversation"
+      display_options:
+        show_turn_numbers: true
+        alternating_shading: true
+
+annotation_schemes:
+  # Per-turn context attribution with links to source turns
+  - annotation_type: context_attribution
+    name: memory_use
+    description: "How did the agent use its context?"
+    turns_key: conversation
+
+  # Whole-trace memory assessment
+  - annotation_type: likert
+    name: memory_quality
+    description: "Overall, how well did the agent track the conversation state?"
+    min_label: "Lost the thread"
+    max_label: "Perfect recall"
+    size: 5
+
+  - annotation_type: radio
+    name: worst_failure
+    description: "Most serious context failure in this trace"
+    labels:
+      - name: none
+        tooltip: "No context failures"
+      - name: forgot_constraint
+        tooltip: "Ignored a constraint the user stated earlier"
+      - name: invented_detail
+        tooltip: "Referenced information never provided"
+      - name: stale_state
+        tooltip: "Used outdated information after it was corrected"
+    sequential_key_binding: true
+
+user_config:
+  allow_all_users: true

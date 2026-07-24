@@ -250,8 +250,25 @@ def get_admin_api_key():
     return _get_admin_api_key(config)
 
 def validate_admin_api_key(provided_key: str) -> bool:
-    """Validate an admin API key. See potato.server_utils.admin_key for details."""
-    return _validate_admin_api_key(provided_key, config)
+    """Authorize an admin request.
+
+    Backward compatible: a valid shared admin API key (or debug mode) always
+    passes. Additionally, a logged-in user holding the RBAC
+    ``view_admin_dashboard`` permission is authorized without the key, so
+    role-based admins can use the admin endpoints. This single wrapper routes
+    every inline admin guard in this module through RBAC without touching each
+    call site.
+    """
+    if _validate_admin_api_key(provided_key, config):
+        return True
+    # Consult RBAC for the current logged-in user, when in a request context.
+    try:
+        from potato.server_utils.rbac import get_rbac_manager, Permission
+        return get_rbac_manager().check(
+            Permission.VIEW_ADMIN_DASHBOARD, request, session
+        )
+    except Exception:
+        return False
 
 
 # -------------------------------------------------------------------
@@ -373,34 +390,29 @@ def home():
 
     # Check if user has an active session
     if 'username' not in session:
-        # Check for URL-direct login (used by Prolific, MTurk, etc.)
+        # Check for crowd-provider login (Prolific, MTurk, generic panels, etc.)
         login_config = config.get('login', {})
         login_type = login_config.get('type', 'standard')
 
-        if login_type in ['url_direct', 'prolific']:
-            # Get the URL argument name (default to PROLIFIC_PID for backwards compatibility)
-            url_argument = login_config.get('url_argument', 'PROLIFIC_PID')
-            username = request.args.get(url_argument)
+        from potato.crowdsourcing import get_crowd_provider
+        provider = get_crowd_provider()
+        if provider is None and login_type in ['url_direct', 'prolific']:
+            # Server started via a path that skipped init (e.g. some tests):
+            # resolve the provider on first use.
+            from potato.crowdsourcing import init_crowd_provider
+            provider = init_crowd_provider(config)
 
-            # Also capture SESSION_ID and STUDY_ID if provided (for Prolific tracking)
-            prolific_session_id = request.args.get('SESSION_ID')
-            prolific_study_id = request.args.get('STUDY_ID')
+        if provider is not None:
+            # Handle platform preview mode (e.g. MTurk worker hasn't accepted the HIT)
+            if provider.is_preview(request.args):
+                logger.info("Crowd platform preview mode detected - showing preview page")
+                return provider.preview_response()
 
-            # Capture MTurk-specific parameters
-            mturk_assignment_id = request.args.get('assignmentId')
-            mturk_hit_id = request.args.get('hitId')
-            mturk_submit_to = request.args.get('turkSubmitTo')
-
-            # Handle MTurk preview mode (worker hasn't accepted the HIT yet)
-            if mturk_assignment_id == 'ASSIGNMENT_ID_NOT_AVAILABLE':
-                logger.info("MTurk preview mode detected - showing preview page")
-                return render_template("mturk_preview.html",
-                                      title=config.get("annotation_task_name", "Task Preview"),
-                                      task_description=config.get("task_description", ""),
-                                      annotation_task_name=config.get("annotation_task_name", "Annotation Task"))
-
-            if username:
-                logger.info(f"URL-direct login: user={username}, session_id={prolific_session_id}, study_id={prolific_study_id}")
+            identity = provider.extract_identity(request.args)
+            if identity is not None:
+                username = identity.worker_id
+                logger.info(f"URL-direct login: user={username}, "
+                            f"session_id={identity.session_id}, study_id={identity.study_id}")
 
                 # Auto-register and login the user
                 user_authenticator = UserAuthenticator.get_instance()
@@ -408,27 +420,31 @@ def home():
                 # Add user if not exists (passwordless for URL-direct)
                 if not user_authenticator.is_valid_username(username):
                     result = user_authenticator.add_user(username, None,
-                                                         prolific_session_id=prolific_session_id,
-                                                         prolific_study_id=prolific_study_id)
+                                                         prolific_session_id=identity.session_id,
+                                                         prolific_study_id=identity.study_id)
                     logger.debug(f"Auto-registered URL-direct user {username}: {result}")
 
                 # Set session
                 session['username'] = username
                 session.permanent = True
 
-                # Store Prolific IDs in session for later use
-                if prolific_session_id:
-                    session['prolific_session_id'] = prolific_session_id
-                if prolific_study_id:
-                    session['prolific_study_id'] = prolific_study_id
-
-                # Store MTurk IDs in session for completion flow
-                if mturk_assignment_id:
-                    session['mturk_assignment_id'] = mturk_assignment_id
-                if mturk_hit_id:
-                    session['mturk_hit_id'] = mturk_hit_id
-                if mturk_submit_to:
-                    session['mturk_submit_to'] = mturk_submit_to
+                # Generalized crowd keys plus the historical prolific_*/mturk_*
+                # keys, which admin.py and older templates still read.
+                session['crowd_provider'] = provider.name
+                if identity.session_id:
+                    session['crowd_session_id'] = identity.session_id
+                    session['prolific_session_id'] = identity.session_id
+                if identity.study_id:
+                    session['crowd_study_id'] = identity.study_id
+                    session['prolific_study_id'] = identity.study_id
+                if identity.extra:
+                    session['crowd_extra'] = dict(identity.extra)
+                if identity.extra.get('assignmentId'):
+                    session['mturk_assignment_id'] = identity.extra['assignmentId']
+                if identity.extra.get('hitId'):
+                    session['mturk_hit_id'] = identity.extra['hitId']
+                if identity.extra.get('turkSubmitTo'):
+                    session['mturk_submit_to'] = identity.extra['turkSubmitTo']
 
                 # Initialize user state if needed
                 if not get_user_state_manager().has_user(username):
@@ -440,6 +456,19 @@ def home():
                 user_state = usm.get_user_state(username)
 
                 if user_state:
+                    # Record platform metadata with the user state so annotation
+                    # output can be joined with the platform's submission records
+                    if not hasattr(user_state, 'crowd_metadata') or user_state.crowd_metadata is None:
+                        user_state.crowd_metadata = {}
+                    user_state.crowd_metadata['provider'] = provider.name
+                    user_state.crowd_metadata['worker_id'] = username
+                    if identity.session_id:
+                        user_state.crowd_metadata['session_id'] = identity.session_id
+                    if identity.study_id:
+                        user_state.crowd_metadata['study_id'] = identity.study_id
+                    for extra_key, extra_value in identity.extra.items():
+                        user_state.crowd_metadata[extra_key] = extra_value
+
                     # Set user to the first phase if they're in LOGIN
                     # Use advance_phase() which properly looks up the first page
                     # for the phase (fixes issue #113: page was None for phased workflows)
@@ -452,24 +481,18 @@ def home():
                         logger.debug(f"Assigning instances to URL-direct user {username}")
                         get_item_state_manager().assign_instances_to_user(user_state)
 
-                    # Track with Prolific API if configured
-                    prolific_study = get_prolific_study()
-                    if prolific_study and prolific_session_id:
-                        try:
-                            prolific_study.add_new_user({
-                                'PROLIFIC_PID': username,
-                                'SESSION_ID': prolific_session_id
-                            })
-                            logger.debug(f"Tracked user {username} with Prolific API")
-                        except Exception as e:
-                            logger.warning(f"Failed to track user with Prolific API: {e}")
+                    # Platform-side arrival tracking (e.g. Prolific API session tracking)
+                    try:
+                        provider.on_arrival(identity)
+                    except Exception as e:
+                        logger.warning(f"Crowd provider arrival tracking failed: {e}")
 
                 # Redirect to home to process the now-logged-in user
                 return redirect(url_for("home"))
 
             else:
-                # URL-direct login configured but no username in URL
-                # Show error or redirect to a waiting page
+                # URL-direct login configured but no participant ID in URL
+                url_argument = provider.id_param()
                 logger.warning(f"URL-direct login configured but '{url_argument}' not found in URL")
                 return render_template("error.html",
                                       message=f"Missing required URL parameter: {url_argument}. "
@@ -811,6 +834,9 @@ def oauth_callback(provider):
                              require_password=config.get("require_password", True),
                              oauth_providers=authenticator.get_login_providers())
 
+    # SSO claims captured for RBAC sso_role_mapping (e.g. "org:acme").
+    sso_claims = [f"provider:{provider}"]
+
     # Check GitHub org restriction (requires API call)
     allowed_org = oauth_backend.get_allowed_org(provider)
     if allowed_org and provider == "github":
@@ -818,6 +844,7 @@ def oauth_callback(provider):
             orgs_resp = client.get("user/orgs", token=token)
             orgs = orgs_resp.json()
             user_orgs = [o.get("login", "").lower() for o in orgs]
+            sso_claims.extend(f"org:{o}" for o in user_orgs if o)
             if allowed_org.lower() not in user_orgs:
                 reason = (
                     f"Access restricted to members of the '{allowed_org}' "
@@ -866,6 +893,7 @@ def oauth_callback(provider):
     # Create Flask session
     session.clear()
     session['username'] = user_id
+    session['sso_claims'] = sso_claims
     session.permanent = True
     logger.info("OAuth login successful: provider=%s, user=%s", provider, user_id)
 
@@ -1776,6 +1804,28 @@ def annotate():
         # so POST data is preserved for phase processing
         return home()
 
+    # Device routing: phones/tablets get the touch surface (/pocket) when the
+    # task supports it; either way, record the device class so admins can see
+    # who annotates from mobile. ?desktop=1 is the sticky opt-out ("Desktop
+    # site"); opening /pocket clears it again. Tracking/redirect failures must
+    # never take down the annotation page.
+    if request.method == "GET":
+        try:
+            from potato.pocket.devices import get_device_tracker, is_touch_device
+            from potato.pocket.routes import pocket_routing_state
+
+            user_agent = request.headers.get("User-Agent", "")
+            get_device_tracker().record(username, user_agent, "annotate")
+            if request.args.get("desktop") == "1":
+                session["force_desktop"] = True
+            if (is_touch_device(user_agent)
+                    and not session.get("force_desktop")
+                    and pocket_routing_state()["available"]):
+                logger.info(f"Touch device detected for {username}; routing to /pocket")
+                return redirect("/pocket")
+        except Exception:
+            logger.debug("Device routing check failed", exc_info=True)
+
     # If the user hasn't yet been assigned anything to annotate, do so now
     if not user_state.has_assignments():
         logger.debug(f"User {username} has no assignments, assigning instances")
@@ -2027,6 +2077,69 @@ def get_ai_suggestion():
         return jsonify({"error": res})
     else:
         return jsonify(res)
+
+
+# Per-(instance, schema) cache of LLM step pre-labels so repeated clicks on the
+# "AI pre-label" button don't re-query the model. Keyed by (instance_id, schema).
+_PRM_PRELABEL_CACHE: dict = {}
+
+
+@app.route('/api/prm/prelabel', methods=['GET'])
+def prm_prelabel():
+    """Return LLM-suggested per-step process rewards for one process_reward schema.
+
+    Query params: ``instance_id`` and ``schema`` (the process_reward scheme
+    name). Response: ``{"steps": [{index, reward, reasoning, confidence}],
+    "cached": bool}``. The human verifies each suggestion in the UI.
+    """
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    instance_id = request.args.get('instance_id')
+    schema_name = request.args.get('schema')
+    if not instance_id or not schema_name:
+        return jsonify({"error": "instance_id and schema are required"}), 400
+
+    # Resolve the process_reward scheme by name.
+    scheme = None
+    for s in config.get("annotation_schemes", []):
+        if s.get("name") == schema_name:
+            scheme = s
+            break
+    if scheme is None or scheme.get("annotation_type") != "process_reward":
+        return jsonify({"error": f"No process_reward schema named '{schema_name}'"}), 404
+    if not scheme.get("ai_prelabel"):
+        return jsonify({"error": "AI pre-labeling is not enabled for this schema"}), 400
+
+    ism = get_item_state_manager()
+    if not ism.has_item(str(instance_id)):
+        return jsonify({"error": f"Unknown instance '{instance_id}'"}), 404
+    item = ism.get_item(str(instance_id))
+    data = item.get_data()
+    steps_key = scheme.get("steps_key", "steps")
+    steps = data.get(steps_key) if isinstance(data, dict) else None
+    if not isinstance(steps, list) or not steps:
+        return jsonify({"steps": [], "error": f"No steps found under '{steps_key}'"}), 200
+
+    cache_key = (str(instance_id), schema_name)
+    cached = _PRM_PRELABEL_CACHE.get(cache_key)
+    if cached is not None:
+        return jsonify({"steps": cached, "cached": True})
+
+    try:
+        from potato.ai.judge import JudgeService
+        suggestions = JudgeService(config).judge_steps(str(instance_id), scheme, steps)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("PRM prelabel failed for %s/%s: %s", instance_id, schema_name, exc)
+        return jsonify({"error": "AI pre-labeling failed"}), 500
+
+    if suggestions is None:
+        return jsonify({
+            "error": "AI judge unavailable — check ai_support / judge_alignment config"
+        }), 503
+
+    _PRM_PRELABEL_CACHE[cache_key] = suggestions
+    return jsonify({"steps": suggestions, "cached": False})
 
 
 @app.route('/api/option_highlights/<int:annotation_id>', methods=['GET'])
@@ -2913,6 +3026,31 @@ def admin_api_agreement():
     if isinstance(result, tuple):
         return jsonify(result[0]), result[1]
     return jsonify(result)
+
+
+@app.route("/admin/api/agent_rollup", methods=["GET"])
+def admin_api_agent_rollup():
+    """
+    Per-agent aggregation of turn-level annotations across the dataset.
+
+    For every turn-level scheme (``turn_level: true``), rolls up annotated
+    turns by the ``agent_id`` snapshot stored with each value: counts,
+    numeric means (likert/slider/number), and categorical value counts
+    (radio/multiselect/select). Admin-only endpoint requiring API key.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.server_utils.turn_annotations import compute_agent_rollup
+        report = compute_agent_rollup(
+            get_item_state_manager(), get_user_state_manager(), config,
+        )
+    except Exception as exc:
+        logger.exception("Failed to compute agent rollup")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(report)
 
 
 @app.route("/admin/iaa", methods=["GET"])
@@ -4390,6 +4528,12 @@ def get_span_data(instance_id):
             if kb_label:
                 span_entry['kb_label'] = kb_label
 
+        # Include format-specific coordinates (PDF page/bbox/anchor_kind) so the
+        # client can rebuild PDF anchors (text highlights + region boxes) on load.
+        format_coords = span.get_format_coords() if hasattr(span, 'get_format_coords') else getattr(span, 'format_coords', None)
+        if format_coords:
+            span_entry['format_coords'] = format_coords
+
         span_data.append(span_entry)
 
     response_data = {
@@ -4519,7 +4663,14 @@ def update_instance():
             # radio options or unchecked checkboxes persist as stale data.
             _exclusive_types = {'radio', 'multiselect'}
             _schema_type_cache = {}
-            for scheme in config.get('annotation_schemes', []):
+            # Resolve the user's cohort schemes so exclusive-label clearing keys
+            # off the schemes this user actually sees (falls back to global).
+            try:
+                from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+                _user_schemes = get_cohort_scheme_resolver().get_schemes_for_user(username)
+            except Exception:
+                _user_schemes = config.get('annotation_schemes', [])
+            for scheme in _user_schemes:
                 _schema_type_cache[scheme.get('name')] = scheme.get('annotation_type')
 
             # Collect which schemas appear in the incoming annotations
@@ -4590,9 +4741,16 @@ def update_instance():
             span_annotations = request.json.get("span_annotations", [])
             for span_data in span_annotations:
                 if isinstance(span_data, dict) and "schema" in span_data:
-                    # Use provided ID or generate deterministic one to preserve span identity
+                    # Format-specific coordinates (PDF page/bbox, spreadsheet cell,
+                    # etc). Previously dropped here, so PDF anchor geometry never
+                    # persisted. anchor_kind/page are folded into the deterministic
+                    # ID so a text span and a region anchor at the same char offsets
+                    # (start==end==0 for regions) don't collide.
+                    fc = span_data.get("format_coords") or {}
                     span_id = span_data.get("id") or span_data.get("span_id") or \
-                              f"{span_data['schema']}_{span_data['name']}_{span_data['start']}_{span_data['end']}"
+                              (f"{span_data['schema']}_{span_data['name']}_"
+                               f"{fc.get('anchor_kind', '')}_{fc.get('page', '')}_"
+                               f"{span_data['start']}_{span_data['end']}")
 
                     span = SpanAnnotation(
                         span_data["schema"],
@@ -4601,7 +4759,8 @@ def update_instance():
                         int(span_data["start"]),
                         int(span_data["end"]),
                         id=span_id,
-                        target_field=span_data.get("target_field")
+                        target_field=span_data.get("target_field"),
+                        format_coords=span_data.get("format_coords"),
                     )
                     value = span_data.get("value")
 
@@ -4639,6 +4798,24 @@ def update_instance():
                         # Update annotation
                         user_state.add_span_annotation(instance_id, span, value)
                         logger.debug(f"Added span annotation: {span_data}")
+                    else:
+                        # value is None -> delete this span BY ID. PDF region
+                        # anchors are zero-length (start==end==0), so matching on
+                        # schema/name/offsets (as the nested-annotations path does)
+                        # would delete the wrong anchor. Match on the exact id and
+                        # cascade orphaned links/events, mirroring that path.
+                        spans_by_id = user_state.instance_id_to_span_to_value.get(instance_id, {})
+                        to_delete = [s for s in spans_by_id.keys() if s.get_id() == span_id]
+                        for s in to_delete:
+                            del user_state.instance_id_to_span_to_value[instance_id][s]
+                            if instance_id in user_state.instance_id_to_link_to_value:
+                                orphaned = [
+                                    lid for lid, link in user_state.instance_id_to_link_to_value[instance_id].items()
+                                    if span_id in link.get_span_ids()
+                                ]
+                                for lid in orphaned:
+                                    del user_state.instance_id_to_link_to_value[instance_id][lid]
+                            logger.debug(f"Deleted span annotation by id: {span_id}")
 
             # Handle link annotations from frontend format
             link_annotations = request.json.get("link_annotations", [])
@@ -5139,29 +5316,74 @@ def done():
     # Get completion code from config
     completion_code = config.get("completion_code", "")
 
-    # Build Prolific redirect URL if completion code is set
-    prolific_redirect_url = None
     login_config = config.get('login', {})
     login_type = login_config.get('type', 'standard')
 
-    if completion_code and login_type in ['url_direct', 'prolific']:
-        # Build the Prolific completion URL (only if using Prolific-style URL argument)
-        url_argument = login_config.get('url_argument', 'PROLIFIC_PID')
-        if url_argument in ['PROLIFIC_PID', 'prolific_pid']:
-            # Format: https://app.prolific.com/submissions/complete?cc=YOUR_CODE
-            prolific_redirect_url = f"https://app.prolific.com/submissions/complete?cc={completion_code}"
+    from potato.crowdsourcing import CompletionOutcome, ParticipantIdentity, get_crowd_provider
+    provider = get_crowd_provider()
+    if provider is None and login_type in ['url_direct', 'prolific']:
+        from potato.crowdsourcing import init_crowd_provider
+        provider = init_crowd_provider(config)
 
-    # Get MTurk submission parameters from session
-    mturk_submit_url = session.get('mturk_submit_to')
-    mturk_assignment_id = session.get('mturk_assignment_id')
-
-    # Check for auto-redirect setting
+    # Legacy template variables are still passed alongside `action` so that
+    # customized done.html templates keep working for one release.
+    action = None
+    prolific_redirect_url = None
+    mturk_submit_url = None
+    mturk_assignment_id = None
     auto_redirect = config.get('auto_redirect_on_completion', False)
     auto_redirect_delay = config.get('auto_redirect_delay', 5000)  # milliseconds
+
+    if provider is not None:
+        extra = dict(session.get('crowd_extra') or {})
+        if session.get('mturk_assignment_id'):
+            extra.setdefault('assignmentId', session['mturk_assignment_id'])
+        if session.get('mturk_submit_to'):
+            extra.setdefault('turkSubmitTo', session['mturk_submit_to'])
+        identity = ParticipantIdentity(
+            worker_id=username,
+            session_id=session.get('crowd_session_id') or session.get('prolific_session_id'),
+            study_id=session.get('crowd_study_id') or session.get('prolific_study_id'),
+            extra=extra,
+        )
+
+        # Participants blocked by attention checks get the provider's
+        # failure/screen-out completion code instead of the success code
+        outcome = CompletionOutcome.COMPLETED
+        try:
+            from potato.quality_control import get_quality_control_manager
+            qc_manager = get_quality_control_manager()
+            if qc_manager is not None and qc_manager.is_user_blocked(username):
+                outcome = CompletionOutcome.FAILED_CHECKS
+        except Exception as e:
+            logger.debug(f"Could not evaluate quality-control block state: {e}")
+
+        # Flush the user's state to disk BEFORE rendering any completion
+        # action: an auto-redirect must never race the final save.
+        try:
+            get_user_state_manager().save_user_state(user_state)
+        except Exception as e:
+            logger.warning(f"Could not flush user state before completion redirect: {e}")
+
+        try:
+            provider.on_completion(identity, outcome)
+        except Exception as e:
+            logger.warning(f"Crowd provider completion callback failed: {e}")
+
+        action = provider.completion_action(identity, outcome)
+        completion_code = action.code or completion_code
+        if action.kind == 'redirect':
+            prolific_redirect_url = action.redirect_url
+            auto_redirect = action.auto_redirect
+            auto_redirect_delay = action.auto_redirect_delay
+        elif action.kind == 'post_form':
+            mturk_submit_url = action.form_action
+            mturk_assignment_id = action.form_fields.get('assignmentId')
 
     # Show the completion page
     return render_template("done.html",
                           title=config.get("annotation_task_name", "Annotation Platform"),
+                          action=action,
                           completion_code=completion_code,
                           prolific_redirect_url=prolific_redirect_url,
                           mturk_submit_url=mturk_submit_url,
@@ -5293,6 +5515,8 @@ def admin():
         "automation_enabled": config.get("automation", {}).get("enabled", False),
         "curation_enabled": config.get("curation", {}).get("enabled", False),
         "arena_enabled": config.get("arena", {}).get("enabled", False),
+        # Publishing is always available to admins (no per-project config needed).
+        "publish_enabled": True,
     }
 
     return render_template("admin.html", **context)
@@ -7037,15 +7261,23 @@ def ai_assistant():
         logger.debug("[AI Assistant] Failed to parse annotation ID")
         return jsonify({"html": "", "error": None})
 
+    username = session['username']
+    # annotation_id is positional within the schemes this user sees, so resolve
+    # against the user's cohort schemes (falls back to the global list).
+    try:
+        from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+        _user_schemes = get_cohort_scheme_resolver().get_schemes_for_user(username)
+    except Exception:
+        _user_schemes = config.get("annotation_schemes", [])
+
     # Check if annotation_id is valid
-    if annotation_id < 0 or annotation_id >= len(config.get("annotation_schemes", [])):
+    if annotation_id < 0 or annotation_id >= len(_user_schemes):
         logger.debug(f"[AI Assistant] annotation_id {annotation_id} out of range")
         return jsonify({"html": "", "error": None})
 
-    username = session['username']
     user_state = get_user_state(username)
     instance = user_state.get_current_instance_index()
-    annotation_type = config["annotation_schemes"][annotation_id]["annotation_type"]
+    annotation_type = _user_schemes[annotation_id]["annotation_type"]
 
     result = generate_ai_help_html(instance, annotation_id, annotation_type)
     logger.debug(f"[AI Assistant] Result for instance={instance}, annotation_id={annotation_id}, type={annotation_type}: '{result[:100] if result else 'empty'}...'")
@@ -7238,6 +7470,20 @@ def configure_routes(flask_app, app_config):
 
     app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 7))
 
+    # Dataset publishing blueprint. Registered here (not only in configure_app) so
+    # it exists on both the live server and the in-process test harness, which build
+    # the app through configure_routes but not configure_app.
+    try:
+        from potato.publish.manager import (get_publish_manager,
+                                             init_publish_manager)
+        from potato.publish.routes import publish_bp
+        if get_publish_manager() is None:
+            init_publish_manager(config)
+        if "publish" not in app.blueprints:
+            app.register_blueprint(publish_bp)
+    except Exception as e:
+        logger.warning("Could not register dataset-publishing blueprint: %s", e)
+
     # Register all routes with the flask app instance
     app.add_url_rule("/media/<path:filepath>", "serve_media", serve_media)
     app.add_url_rule(
@@ -7268,6 +7514,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/progress/api/summary", "annotator_progress_summary", annotator_progress_summary, methods=["GET"])
 
     app.add_url_rule("/api/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
+    app.add_url_rule("/api/prm/prelabel", "prm_prelabel", prm_prelabel, methods=["GET"])
 
     # Option highlighting API routes
     app.add_url_rule("/api/option_highlights/config", "get_option_highlighting_config", get_option_highlighting_config, methods=["GET"])
@@ -7335,6 +7582,7 @@ def configure_routes(flask_app, app_config):
     # by configure_routes). Audit: diff of @app.route paths vs add_url_rule paths.
     app.add_url_rule("/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
     app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
+    app.add_url_rule("/admin/api/agent_rollup", "admin_api_agent_rollup", admin_api_agent_rollup, methods=["GET"])
     app.add_url_rule("/admin/annotation-integrity", "admin_annotation_integrity", admin_annotation_integrity, methods=["GET"])
     app.add_url_rule("/admin/api/perspectivist", "admin_perspectivist_export", admin_perspectivist_export, methods=["GET"])
     app.add_url_rule("/admin/api/induce-metrics", "admin_induce_metrics", admin_induce_metrics, methods=["GET"])
@@ -7428,6 +7676,22 @@ def configure_routes(flask_app, app_config):
 
     app.add_url_rule("/shutdown", "shutdown", shutdown, methods=["POST"])
 
+    # Register crowd-platform admin API blueprint if not already registered
+    if 'crowd_admin' not in app.blueprints:
+        try:
+            from potato.crowdsourcing.admin_api import crowd_admin_bp
+            app.register_blueprint(crowd_admin_bp)
+        except ImportError:
+            pass
+
+    # Register Prolific webhook receiver (HMAC-authenticated, no session)
+    if 'crowd_webhooks' not in app.blueprints:
+        try:
+            from potato.crowdsourcing.webhooks import crowd_webhooks_bp
+            app.register_blueprint(crowd_webhooks_bp)
+        except ImportError:
+            pass
+
     # Register Solo Mode blueprint if not already registered
     if 'solo_mode' not in app.blueprints:
         try:
@@ -7485,11 +7749,82 @@ def configure_routes(flask_app, app_config):
         except ImportError:
             pass
 
+    # Register Sessions blueprint (session-level scoring) if not already registered
+    if 'sessions' not in app.blueprints:
+        try:
+            from potato.sessions.api import sessions_bp
+            app.register_blueprint(sessions_bp)
+        except ImportError:
+            pass
+
+    # Register Review Workflow blueprint (reviewer routing + kanban) if not
+    # already registered
+    if 'review_workflow' not in app.blueprints:
+        try:
+            from potato.review_workflow import review_bp
+            app.register_blueprint(review_bp)
+        except ImportError:
+            pass
+
     # Register Judge Calibration blueprint if not already registered
     if 'judge_calibration' not in app.blueprints:
         try:
             from potato.judge_calibration.routes import judge_calibration_bp
             app.register_blueprint(judge_calibration_bp)
+        except ImportError:
+            pass
+
+    # Register Boundary Lab blueprint (counterfactual boundary probing) if not
+    # already registered
+    if 'boundary' not in app.blueprints:
+        try:
+            from potato.boundary.routes import boundary_bp
+            app.register_blueprint(boundary_bp)
+        except ImportError:
+            pass
+
+    # Register Truth Serum blueprint (surprisingly-popular scoring) if not
+    # already registered
+    if 'truth_serum' not in app.blueprints:
+        try:
+            from potato.truth_serum.routes import truth_serum_bp
+            app.register_blueprint(truth_serum_bp)
+        except ImportError:
+            pass
+
+    # Register Think-Aloud blueprint (voice rationales, rule-based labels) if
+    # not already registered
+    if 'thinkaloud' not in app.blueprints:
+        try:
+            from potato.thinkaloud.routes import thinkaloud_bp
+            app.register_blueprint(thinkaloud_bp)
+        except ImportError:
+            pass
+
+    # Register Pocket Mode blueprint (mobile-first annotation PWA) if not
+    # already registered
+    if 'pocket' not in app.blueprints:
+        try:
+            from potato.pocket.routes import pocket_bp
+            app.register_blueprint(pocket_bp)
+        except ImportError:
+            pass
+
+    # Register Psychometrics blueprint (live IRT: labels with error bars,
+    # adaptive routing, study designer) if not already registered
+    if 'psychometrics' not in app.blueprints:
+        try:
+            from potato.psychometrics.routes import psychometrics_bp
+            app.register_blueprint(psychometrics_bp)
+        except ImportError:
+            pass
+
+    # Register Multiplayer Rooms blueprint (norming sessions, adjudication
+    # huddles, shadowing) if not already registered
+    if 'rooms' not in app.blueprints:
+        try:
+            from potato.rooms.routes import rooms_bp
+            app.register_blueprint(rooms_bp)
         except ImportError:
             pass
 
@@ -7511,10 +7846,22 @@ def _check_adjudicator_auth():
     if not adj_mgr or not adj_mgr.adj_config.enabled:
         return False, username, (jsonify({"error": "Adjudication not enabled"}), 404)
 
-    if not adj_mgr.is_adjudicator(username):
+    if not _is_authorized_adjudicator(username, adj_mgr):
         return False, username, (jsonify({"error": "Not authorized as adjudicator"}), 403)
 
     return True, username, None
+
+
+def _is_authorized_adjudicator(username, adj_mgr):
+    """True if the user may adjudicate: legacy allow-list OR RBAC permission.
+
+    Keeps ``adjudicator_users`` working while letting role-based adjudicators
+    (and the shared-key superuser) through.
+    """
+    if adj_mgr and adj_mgr.is_adjudicator(username):
+        return True
+    from potato.server_utils.rbac import get_rbac_manager, Permission
+    return get_rbac_manager().check(Permission.ADJUDICATE, request, session)
 
 
 @app.route('/adjudicate', methods=['GET'])
@@ -7528,11 +7875,14 @@ def adjudicate():
     if not adj_mgr or not adj_mgr.adj_config.enabled:
         return redirect(url_for('home'))
 
-    if not adj_mgr.is_adjudicator(username):
+    if not _is_authorized_adjudicator(username, adj_mgr):
         return redirect(url_for('home'))
 
-    # Get annotation schemes for form rendering
-    annotation_schemes = config.get('annotation_schemes', [])
+    # Get annotation schemes for form rendering. Adjudicators review every
+    # cohort, so they see the union of all cohort scheme sets (falls back to the
+    # global annotation_schemes when per-cohort schemas are not configured).
+    from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
+    annotation_schemes = get_cohort_scheme_resolver().union_of_all_schemes()
 
     return render_template(
         'adjudication.html',

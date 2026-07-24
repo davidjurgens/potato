@@ -245,6 +245,15 @@
     overflow: hidden;
 }
 
+/* Affordance hints on the overview / zoomview labels.
+   #6b7280 keeps a WCAG-AA (>=4.5:1) contrast on the light background. */
+.overview-hint,
+.zoomview-hint {
+    font-style: italic;
+    color: var(--muted-foreground, #6b7280);
+    font-weight: 400;
+}
+
 /* ==================== Segment List ==================== */
 
 .segment-list-container {
@@ -389,7 +398,7 @@
 /* ==================== Empty State ==================== */
 
 .segment-list:empty::before {
-    content: 'No segments yet. Double-click on the waveform or use [ and ] keys to create segments.';
+    content: 'No segments yet. Right-click and drag on the waveform, or use the [ and ] keys, to create segments.';
     display: block;
     text-align: center;
     padding: 2rem;

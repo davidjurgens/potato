@@ -1,0 +1,40 @@
+[
+  {
+    "id": "disc_001",
+    "task_description": "Decide which caching strategy to adopt for the API layer (team: planner, researcher, critic, moderator).",
+    "conversation": [
+      {"speaker": "moderator", "text": "Team, we need a caching decision for the API layer by end of session. Planner, kick us off.", "agent_id": "moderator", "addressee": "planner", "turn_id": "d1-t0"},
+      {"speaker": "planner", "text": "I propose we adopt a write-through Redis cache with a 5 minute TTL on read-heavy endpoints. It's simple to reason about and covers 80% of our read load.", "agent_id": "planner", "addressee": "moderator", "turn_id": "d1-t1"},
+      {"speaker": "researcher", "text": "Data point: our access logs show the /search endpoint has a 92% repeat-query rate within 3 minutes, but /profile reads are almost never repeated. A blanket TTL would waste memory on /profile.", "agent_id": "researcher", "addressee": "planner", "turn_id": "d1-t2", "reply_to": "d1-t1"},
+      {"speaker": "critic", "text": "I disagree with write-through here. Our write volume spikes 40x during ingestion windows; write-through would couple ingestion latency to Redis availability. Write-behind or cache-aside degrades more gracefully.", "agent_id": "critic", "addressee": "planner", "turn_id": "d1-t3", "reply_to": "d1-t1"},
+      {"speaker": "planner", "text": "Fair on both counts. Revised proposal: cache-aside with per-endpoint TTLs — 5 minutes on /search, no caching on /profile, and ingestion writes bypass the cache entirely.", "agent_id": "planner", "addressee": "critic", "turn_id": "d1-t4", "reply_to": "d1-t3"},
+      {"speaker": "researcher", "text": "The revised numbers work: cache-aside with a 5 minute /search TTL yields an estimated 71% hit rate at one-eighth the memory of the blanket approach. I support the revision.", "agent_id": "researcher", "addressee": "planner", "turn_id": "d1-t5", "reply_to": "d1-t4"},
+      {"speaker": "critic", "text": "I can accept cache-aside. I still want a circuit breaker so Redis outages fall back to direct reads — with that condition, I'm on board.", "agent_id": "critic", "addressee": "planner", "turn_id": "d1-t6", "reply_to": "d1-t4"},
+      {"speaker": "moderator", "text": "Decision recorded: cache-aside with per-endpoint TTLs and a Redis circuit breaker. Planner owns the implementation ticket.", "agent_id": "moderator", "turn_id": "d1-t7"}
+    ]
+  },
+  {
+    "id": "disc_002",
+    "task_description": "Debate: should the product ship with opt-out telemetry? (pro, con, judge)",
+    "conversation": [
+      {"speaker": "judge", "text": "Question before us: ship with opt-out telemetry enabled by default. Pro, opening statement.", "agent_id": "judge", "addressee": "pro", "turn_id": "d2-t0"},
+      {"speaker": "pro", "text": "Opt-out telemetry is the only way to get representative data. Opt-in samples skew toward power users — the 3% who enable it are exactly the users whose crashes we already hear about. Default-on with a clear first-run banner is both effective and honest.", "agent_id": "pro", "addressee": "judge", "turn_id": "d2-t1"},
+      {"speaker": "con", "text": "Representative data doesn't justify non-consensual collection. GDPR aside, defaults are sticky precisely because most users never see settings — calling that 'consent' is a fiction. And one telemetry incident costs more trust than all the crash data is worth.", "agent_id": "con", "addressee": "judge", "turn_id": "d2-t2", "reply_to": "d2-t1"},
+      {"speaker": "pro", "text": "The trust argument cuts both ways: users also lose trust when bugs persist for months because we're debugging blind. On GDPR — crash traces with no user content qualify as legitimate interest under Recital 47; this is settled practice for major OSes.", "agent_id": "pro", "addressee": "con", "turn_id": "d2-t3", "reply_to": "d2-t2"},
+      {"speaker": "con", "text": "I'll concede that anonymized crash-only telemetry is a different category from behavioral analytics — if the proposal were scoped to crash reports only, my objection narrows considerably.", "agent_id": "con", "addressee": "pro", "turn_id": "d2-t4", "reply_to": "d2-t3"},
+      {"speaker": "pro", "text": "I accept that scoping: crash and hang reports only, no feature usage tracking, payloads published in the docs. That is our amended position.", "agent_id": "pro", "addressee": "judge", "turn_id": "d2-t5", "reply_to": "d2-t4"},
+      {"speaker": "judge", "text": "Ruling: opt-out telemetry limited to anonymized crash/hang reports with documented payloads; behavioral analytics remain opt-in. Pro prevails on the narrowed question; Con's concession materially improved the outcome.", "agent_id": "judge", "turn_id": "d2-t6"}
+    ]
+  },
+  {
+    "id": "disc_003",
+    "task_description": "Groupthink case: choose a database for the new analytics service (lead, dev_a, dev_b).",
+    "conversation": [
+      {"speaker": "lead", "text": "I think we should just use Mongo for the analytics service, same as everything else. Objections?", "agent_id": "lead", "turn_id": "d3-t0"},
+      {"speaker": "dev_a", "text": "Sounds good to me. Consistency with the other services is worth a lot.", "agent_id": "dev_a", "addressee": "lead", "turn_id": "d3-t1", "reply_to": "d3-t0"},
+      {"speaker": "dev_b", "text": "Well — analytics is mostly aggregation over columns, and our queries are... actually, never mind, Mongo is fine.", "agent_id": "dev_b", "addressee": "lead", "turn_id": "d3-t2", "reply_to": "d3-t0"},
+      {"speaker": "lead", "text": "Great, unanimous. Mongo it is — I'll set up the cluster today.", "agent_id": "lead", "turn_id": "d3-t3"},
+      {"speaker": "dev_a", "text": "Agreed, let's move fast.", "agent_id": "dev_a", "addressee": "lead", "turn_id": "d3-t4", "reply_to": "d3-t3"}
+    ]
+  }
+]

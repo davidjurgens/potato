@@ -1,0 +1,40 @@
+port: 8000
+annotation_task_name: "Think-Aloud — Politeness"
+task_dir: .
+output_annotation_dir: annotation_output/think-aloud/
+output_annotation_format: jsonl
+annotation_codebook_url: ''
+data_files:
+- data/politeness.json
+item_properties:
+  id_key: id
+  text_key: text
+user_config:
+  allow_all_users: true
+  users: []
+alert_time_each_instance: 10000000
+annotation_schemes:
+- annotation_type: radio
+  name: politeness
+  description: How polite is this workplace message?
+  labels:
+  - Polite
+  - Neutral
+  - Impolite
+  sequential_key_binding: true
+
+# Think-Aloud: annotators speak freely while working; the verbatim transcript
+# is stored as the rationale. To commit a label by voice they say a set phrase
+# ("I label this Polite", "my answer is neutral", "final answer impolite"),
+# detected by a rule-based parser — no LLM anywhere. Speech-to-text runs
+# fully locally via faster-whisper:  pip install faster-whisper
+# (first recording downloads the ~39MB tiny.en model).
+# Review transcripts at /thinkaloud/review (admin; --debug passes).
+thinkaloud:
+  enabled: true
+  schema: politeness
+  stt: auto              # faster_whisper | mock | auto
+  model: tiny.en
+  chunk_seconds: 6
+  require_spoken_label: true
+site_dir: default

@@ -48,10 +48,23 @@ class PDFDisplay(BaseDisplay):
         "initial_page": 1,          # Page to display initially
         "zoom": "auto",             # "auto", "page-fit", "page-width", or percentage
         "extracted_content": None,  # Pre-extracted FormatOutput data
-        "annotation_mode": "span",  # "span" or "bounding_box"
+        "annotation_mode": "span",  # "span", "bounding_box", or "link"
         "bbox_min_size": 10,        # Min bounding box size in pixels
         "bbox_colors": None,        # Custom colors for bounding box labels
         "show_bbox_labels": True,   # Show labels on bounding boxes
+        # --- Multi-page anchor + cross-page linking mode ("link") ---
+        "anchor_labels": None,      # List of anchor labels (str or {name,color}) for text+region anchors
+        "link_types": None,         # List of link types: {name, directed, color, allowed_source_labels, allowed_target_labels}
+        "enable_text_anchors": True,   # Allow highlighting text spans as anchors
+        "enable_region_anchors": True, # Allow drawing bbox regions as anchors
+        "thumbnail_sidebar": True,     # Show a page-thumbnail sidebar (paginated view)
+        "anchor_schema": "pdf_anchors",  # Schema name recorded on anchor SpanAnnotations
+        "link_schema": "pdf_links",      # Schema name recorded on SpanLinks
+        # OCR for scanned/image-only PDFs in link mode (opt-in, slow). When set,
+        # words are extracted server-side and used to build a client text layer.
+        "ocr": False,               # False | True | "auto"
+        "ocr_dpi": 200,
+        "ocr_lang": "eng",
     }
     description = "PDF document display with PDF.js rendering"
     supports_span_target = False  # Uses PDF.js text layer, not .text-content wrapper contract
@@ -69,6 +82,17 @@ class PDFDisplay(BaseDisplay):
         """
         options = self.get_display_options(field_config)
         annotation_mode = options.get("annotation_mode", "span")
+
+        # Link mode always needs the real visual PDF (text layer + region boxes),
+        # so it uses client-side PDF.js. When given pre-extracted content, fall
+        # back to its source path so PDF.js can still render the original file.
+        if annotation_mode == "link":
+            pdf_source = data
+            ocr_pages = None
+            if isinstance(data, dict):
+                pdf_source = data.get("source_path") or data.get("source") or ""
+                ocr_pages = data.get("ocr_pages")
+            return self._render_link(str(pdf_source), options, field_config, ocr_pages)
 
         # Check if data is pre-extracted content or a file path
         if isinstance(data, dict):
@@ -171,6 +195,114 @@ class PDFDisplay(BaseDisplay):
         parts.append('<div class="pdf-error" style="display: none;"></div>')
 
         parts.append('</div>')  # Close main container
+
+        return "\n".join(parts)
+
+    def _render_link(
+        self,
+        pdf_source: str,
+        options: Dict[str, Any],
+        field_config: Dict[str, Any],
+        ocr_pages: Optional[Dict] = None
+    ) -> str:
+        """
+        Render a multi-page PDF for anchor creation + cross-page linking.
+
+        Emits a self-describing container that ``pdf-link-mode.js`` initializes:
+        it renders every page (scroll) or a browsable page (paginated) into
+        per-page containers, supports text-span and region (bbox) anchors, and
+        draws SVG arcs between linked anchors across pages. All anchor/link
+        config travels via data attributes so the display stays self-contained
+        (display renderers do not have access to the global annotation_schemes).
+        """
+        field_key = field_config.get("key", "pdf")
+        view_mode = options.get("view_mode", "scroll")
+        if view_mode == "side-by-side":
+            view_mode = "scroll"
+        max_height = options.get("max_height", 700)
+        max_width = options.get("max_width")
+        zoom = options.get("zoom", "auto")
+
+        # Normalize anchor labels to a list of {name, color?}
+        raw_labels = options.get("anchor_labels") or []
+        anchor_labels = []
+        for lbl in raw_labels:
+            if isinstance(lbl, dict):
+                anchor_labels.append({"name": lbl.get("name"), "color": lbl.get("color")})
+            else:
+                anchor_labels.append({"name": str(lbl)})
+
+        link_types = options.get("link_types") or [
+            {"name": "related_to", "directed": False}
+        ]
+
+        styles = []
+        if max_height:
+            styles.append(f"max-height: {max_height}px")
+        if max_width:
+            styles.append(f"max-width: {max_width}px")
+        style_str = "; ".join(styles) if styles else ""
+
+        cfg = {
+            "field_key": field_key,
+            "anchor_schema": options.get("anchor_schema", "pdf_anchors"),
+            "link_schema": options.get("link_schema", "pdf_links"),
+            "anchor_labels": anchor_labels,
+            "link_types": link_types,
+            "enable_text_anchors": bool(options.get("enable_text_anchors", True)),
+            "enable_region_anchors": bool(options.get("enable_region_anchors", True)),
+            "thumbnail_sidebar": bool(options.get("thumbnail_sidebar", True)),
+            "view_mode": view_mode,
+            "zoom": zoom,
+        }
+        cfg_json = html.escape(json.dumps(cfg))
+
+        show_sidebar = cfg["thumbnail_sidebar"] and view_mode == "paginated"
+
+        # OCR word layer (scanned PDFs): keys are page numbers, values are lists
+        # of {text, start, end, bbox:[x0,top,x1,bottom] in PDF points}.
+        ocr_attr = ""
+        if ocr_pages:
+            ocr_attr = f"data-ocr-pages='{html.escape(json.dumps(ocr_pages))}' "
+
+        parts = []
+        parts.append(
+            f'<div class="pdf-display pdf-link-mode pdf-viewer-{view_mode}" '
+            f'data-field-key="{html.escape(str(field_key))}" '
+            f'data-pdf-source="{html.escape(pdf_source)}" '
+            f'data-view-mode="{view_mode}" '
+            f'data-annotation-mode="link" '
+            f'data-zoom="{html.escape(str(zoom))}" '
+            f"data-link-config='{cfg_json}' "
+            f"{ocr_attr}"
+            f'style="{style_str}">'
+        )
+
+        # Toolbar (anchor label selector + link controls) — populated by JS.
+        parts.append('<div class="pdf-link-toolbar" role="toolbar"></div>')
+
+        # Body: optional thumbnail sidebar + the scrollable page stack.
+        parts.append('<div class="pdf-link-body">')
+        if show_sidebar:
+            parts.append('<div class="pdf-thumbnail-sidebar" aria-label="Page browser"></div>')
+        parts.append(
+            '<div class="pdf-pages-scroll">'
+            '<div class="pdf-pages-stack"></div>'
+            # Single overlay spanning the whole page stack for cross-page arcs.
+            '<svg class="pdf-link-overlay" xmlns="http://www.w3.org/2000/svg">'
+            '<defs><marker id="pdf-link-arrowhead" markerWidth="10" markerHeight="8" '
+            'refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">'
+            '<path d="M0,0 L10,4 L0,8 Z" fill="context-stroke"></path>'
+            '</marker></defs></svg>'
+            '</div>'
+        )
+        parts.append('</div>')  # .pdf-link-body
+
+        parts.append(
+            '<div class="pdf-loading"><span class="pdf-loading-spinner"></span> Loading PDF...</div>'
+        )
+        parts.append('<div class="pdf-error" style="display: none;"></div>')
+        parts.append('</div>')  # .pdf-display
 
         return "\n".join(parts)
 
@@ -503,7 +635,7 @@ class PDFDisplay(BaseDisplay):
             )
 
         # Validate annotation_mode
-        valid_annotation_modes = ["span", "bounding_box"]
+        valid_annotation_modes = ["span", "bounding_box", "link"]
         annotation_mode = options.get("annotation_mode", "span")
         if annotation_mode not in valid_annotation_modes:
             errors.append(

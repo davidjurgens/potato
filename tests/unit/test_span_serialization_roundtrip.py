@@ -230,6 +230,66 @@ def test_span_link_round_trip(temp_user_dir):
     assert restored == link
 
 
+def test_pdf_anchors_and_cross_page_links_round_trip(temp_user_dir):
+    """Multi-page PDF span linking: text spans and region (bbox) anchors are
+    unified SpanAnnotation objects carrying geometry in format_coords, and a
+    SpanLink references them by opaque id across pages.
+
+    This documents the on-disk contract the PDF anchor UI relies on:
+      * a region anchor is a zero-length span (start==end==0) with
+        format_coords.anchor_kind == 'region' + page + normalized bbox
+      * a text anchor has a real char range + a union bbox for highlight render
+      * links reference both kinds identically, and stash anchor_pages so the
+        arc overlay can decide cross-page co-visibility without re-reading anchors
+    """
+    user = InMemoryUserState("u")
+    user.current_phase_and_page = (UserPhase.ANNOTATION, None)
+
+    text_anchor = SpanAnnotation(
+        "pdf_anchors", "claim", "claim", 40, 62,
+        id="anchor_text_1", target_field="document",
+        format_coords={
+            "format": "pdf", "anchor_kind": "text",
+            "page": 1, "start": 40, "end": 62,
+            "bbox": [0.10, 0.22, 0.55, 0.06],
+        },
+    )
+    region_anchor = SpanAnnotation(
+        "pdf_anchors", "figure", "figure", 0, 0,
+        id="anchor_region_1", target_field="document",
+        format_coords={
+            "format": "pdf", "anchor_kind": "region",
+            "page": 3, "bbox": [0.12, 0.30, 0.40, 0.22],
+        },
+    )
+    user.add_span_annotation("i1", text_anchor, "claim")
+    user.add_span_annotation("i1", region_anchor, "figure")
+
+    link = SpanLink(
+        schema="pdf_links", link_type="refers_to",
+        span_ids=["anchor_text_1", "anchor_region_1"],
+        direction="directed", id="link_pdf_1",
+        properties={"anchor_pages": [1, 3], "anchor_kinds": ["text", "region"]},
+    )
+    user.add_link_annotation("i1", link)
+    user.save(temp_user_dir)
+
+    loaded = InMemoryUserState.load(temp_user_dir)
+    spans = loaded.get_span_annotations("i1")
+    by_id = {s.get_id(): s for s in spans}
+    assert by_id["anchor_text_1"].get_format_coords()["anchor_kind"] == "text"
+    assert by_id["anchor_text_1"].get_format_coords()["page"] == 1
+    assert by_id["anchor_region_1"].get_format_coords()["anchor_kind"] == "region"
+    assert by_id["anchor_region_1"].get_format_coords()["bbox"] == [0.12, 0.30, 0.40, 0.22]
+    # region anchor is degenerate on the text axis but must still round-trip
+    assert by_id["anchor_region_1"].get_start() == by_id["anchor_region_1"].get_end() == 0
+
+    links = loaded.get_link_annotations("i1")
+    restored = links["link_pdf_1"]
+    assert restored.span_ids == ["anchor_text_1", "anchor_region_1"]
+    assert restored.properties["anchor_pages"] == [1, 3]
+
+
 def test_event_annotation_round_trip(temp_user_dir):
     """Newer design: N-ary event annotations (EventAnnotation)."""
     user = InMemoryUserState("u")

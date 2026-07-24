@@ -1031,7 +1031,25 @@ class UserStateManager:
         if not annotations:
             return
 
-        phase_responses = load_phase_responses_from_output_dir(output_dir) if self.config.get("export_include_phase_data", False) else []
+        # Server-side conditional-logic enforcement: when SurveyFlow questions
+        # use display_logic, exclude answers to questions a participant never
+        # saw (hidden by their own answers). Only engages when display_logic is
+        # actually present, so exports are unchanged for everyone else. Opt out
+        # with ``exclude_hidden_survey_answers: false``.
+        surveyflow_schemes = self.config.get("_surveyflow_schemes") or []
+        has_display_logic = any(
+            isinstance(s, dict) and s.get("display_logic") for s in surveyflow_schemes
+        )
+        dl_schemes = (
+            surveyflow_schemes
+            if has_display_logic and self.config.get("exclude_hidden_survey_answers", True)
+            else None
+        )
+        phase_responses = (
+            load_phase_responses_from_output_dir(output_dir, display_logic_schemes=dl_schemes)
+            if self.config.get("export_include_phase_data", False)
+            else []
+        )
 
         context = ExportContext(
             config=self.config,
@@ -1444,6 +1462,9 @@ class UserState:
         # Save keyword highlight state for randomization consistency
         d['instance_id_to_keyword_highlight_state'] = self.instance_id_to_keyword_highlight_state
 
+        # Save crowdsourcing platform metadata (provider, study/session IDs)
+        d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
+
         return d
 
     def save(self, user_dir: str) -> None:
@@ -1575,6 +1596,9 @@ class UserState:
                     for event_id, event_data in events_dict.items()
                 }
 
+        # Restore crowdsourcing platform metadata if present
+        user_state.crowd_metadata = j.get('crowd_metadata', {}) or {}
+
         return user_state
 
     def add_annotation(self, instance_id, annotation):
@@ -1629,8 +1653,20 @@ class UserState:
         return suspicious_analysis['suspicious_actions']
 
     def get_performance_metrics(self) -> Dict[str, Any]:
-        """Get current performance metrics."""
-        return self.performance_metrics.copy()
+        """Get current performance metrics (JSON-safe).
+
+        ``fastest_action_time_ms`` starts as ``float('inf')`` as a min() sentinel
+        until the first action. Non-finite floats serialize to the non-standard
+        JSON tokens ``Infinity``/``NaN``, which strict clients (e.g. requests'
+        simplejson) reject — so coerce any non-finite value to None here. This
+        matches the inf->None convention already used in admin.py.
+        """
+        import math
+        metrics = self.performance_metrics.copy()
+        for key, value in metrics.items():
+            if isinstance(value, float) and not math.isfinite(value):
+                metrics[key] = None
+        return metrics
 
     def start_session(self, session_id: str) -> None:
         """Start a new annotation session."""
@@ -1840,6 +1876,11 @@ class InMemoryUserState(UserState):
 
         # How many items a user can be assigned
         self.max_assignments = max_assignments
+
+        # Crowdsourcing platform metadata captured at arrival (provider name,
+        # study/session IDs) so annotation output can be joined with the
+        # platform's submission records.
+        self.crowd_metadata = {}
 
         # Caches the ai hints
         self.ai_hints = defaultdict(dict)
@@ -2813,6 +2854,9 @@ class InMemoryUserState(UserState):
                 event_id: event.to_dict() for event_id, event in events.items()
             }
 
+        # Save crowdsourcing platform metadata (provider, study/session IDs)
+        d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
+
         return d
 
     def save(self, user_dir: str) -> None:
@@ -2946,6 +2990,9 @@ class InMemoryUserState(UserState):
                     event_id: EventAnnotation.from_dict(event_data)
                     for event_id, event_data in events_dict.items()
                 }
+
+        # Restore crowdsourcing platform metadata if present
+        user_state.crowd_metadata = j.get('crowd_metadata', {}) or {}
 
         try:
             user_state.prune_missing_assigned_instances()

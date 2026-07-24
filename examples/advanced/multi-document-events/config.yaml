@@ -1,0 +1,76 @@
+# Multi-Document Event Annotation Example
+#
+# Annotators read a corpus of disaster news reports (each document is its own
+# instance) and build cross-document EVENTS: a single event (e.g. "2011 Central
+# Thailand Floods") aggregates evidence drawn from many documents into template
+# slots (event type, who was affected, what was damaged, where, when).
+#
+# Run:
+#   python potato/flask_server.py start examples/advanced/multi-document-events/config.yaml -p 8000
+#
+# Phase 0 (this config) works with plain Next/Previous navigation. Enable the
+# `corpus_map` block below to add the 2D cluster-map navigation surface (requires
+# sentence-transformers + scikit-learn + umap-learn).
+
+annotation_task_name: "Cross-Document Disaster Events"
+task_dir: .
+
+data_files:
+  - data/disasters.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+
+# Show each document's text as a span target so evidence can be cited by
+# selecting text in the reading pane.
+instance_display:
+  fields:
+    - key: text
+      type: text
+      label: "Document"
+      span_target: true
+
+# Cross-document event registry: admin defines the template slots; annotators
+# create events (or work from the seeded one) and fill slots with evidence.
+event_template:
+  enabled: true
+  name: disaster_event
+  allow_annotator_create: true
+  seed_events: data/seed_events.json
+  slots:
+    - { name: event_type,   description: "Kind of disaster (flood, earthquake, wildfire, hurricane)", type: text }
+    - { name: who_affected, description: "People/communities affected", type: text }
+    - { name: what_damaged, description: "Property, infrastructure, or economy damaged", type: text }
+    - { name: where,        description: "Location of the event", type: text }
+    - { name: when,         description: "When the event occurred", type: text }
+
+annotation_schemes:
+  - annotation_type: multi_document_event
+    name: events
+    description: "Group documents into disaster events and fill each slot with evidence"
+    slots:
+      - { name: event_type,   description: "Kind of disaster", type: text }
+      - { name: who_affected, description: "People/communities affected", type: text }
+      - { name: what_damaged, description: "Property, infrastructure, or economy damaged", type: text }
+      - { name: where,        description: "Location of the event", type: text }
+      - { name: when,         description: "When the event occurred", type: text }
+    allow_annotator_create: true
+
+# 2D corpus map (Phase 2+). Disabled by default so the example runs without the
+# ML stack installed. Flip `enabled: true` to embed + cluster + project the
+# corpus and expose the annotator-facing map at /corpus/map.
+corpus_map:
+  enabled: true
+  build_on_start: true
+  embedding_model: all-MiniLM-L6-v2
+  clustering: { num_clusters: auto, items_per_cluster: 6 }
+  umap: { n_neighbors: 10, min_dist: 0.1, metric: cosine }
+  knn: { k: 5 }
+  cluster_labeling: { enabled: true, use_llm: false }
+
+output_annotation_dir: annotation_output
+output_annotation_format: json

@@ -1,0 +1,79 @@
+[
+  {
+    "id": "trace-a1",
+    "session_id": "session-alpha",
+    "user_tier": "pro",
+    "task_description": "User asks the support agent why their deploy is failing.",
+    "conversation": [
+      {"speaker": "User", "text": "My deploy keeps failing with a timeout after 30 seconds. Can you help?"},
+      {"speaker": "Assistant", "text": "Let me check your recent deploy logs."},
+      {"speaker": "Agent (Action)", "text": "fetch_logs(service=\"deploy\", limit=50)"},
+      {"speaker": "Environment", "text": "Log excerpt: healthcheck timeout at /ready after 30s, container still booting."},
+      {"speaker": "Assistant", "text": "Your container takes longer than 30s to boot, so the readiness probe times out. You can raise the healthcheck timeout or speed up boot. Want the config snippet?"}
+    ]
+  },
+  {
+    "id": "trace-a2",
+    "session_id": "session-alpha",
+    "user_tier": "pro",
+    "task_description": "Same user returns: the suggested fix did not work.",
+    "conversation": [
+      {"speaker": "User", "text": "I raised the timeout to 120s like you said, but it still fails."},
+      {"speaker": "Assistant", "text": "Let me look at the new logs after your change."},
+      {"speaker": "Agent (Action)", "text": "fetch_logs(service=\"deploy\", limit=50)"},
+      {"speaker": "Environment", "text": "Log excerpt: OOMKilled during boot, memory limit 256Mi exceeded."},
+      {"speaker": "Assistant", "text": "The timeout was a symptom — the container is being OOM-killed at boot. Raise the memory limit to at least 512Mi and the original 30s timeout will likely be fine."}
+    ]
+  },
+  {
+    "id": "trace-a3",
+    "session_id": "session-alpha",
+    "user_tier": "pro",
+    "task_description": "Third contact in the same session: confirming the fix.",
+    "conversation": [
+      {"speaker": "User", "text": "512Mi did it — deploy is green. Anything I should monitor?"},
+      {"speaker": "Assistant", "text": "Great. Watch peak boot memory for a week; if it trends above 400Mi, bump the limit again before it recurs. I can set an alert for you."},
+      {"speaker": "User", "text": "Yes please."},
+      {"speaker": "Agent (Action)", "text": "create_alert(metric=\"boot_memory_peak\", threshold=\"400Mi\")"},
+      {"speaker": "Environment", "text": "Alert created: boot_memory_peak > 400Mi."},
+      {"speaker": "Assistant", "text": "Done — you'll get an alert if boot memory exceeds 400Mi."}
+    ]
+  },
+  {
+    "id": "trace-b1",
+    "session_id": "session-beta",
+    "user_tier": "free",
+    "task_description": "User asks how to export their annotation data.",
+    "conversation": [
+      {"speaker": "User", "text": "How do I export my annotations as CSV?"},
+      {"speaker": "Assistant", "text": "You can set output_annotation_format to csv in your config file, then restart the server."},
+      {"speaker": "User", "text": "Where do the files end up?"},
+      {"speaker": "Assistant", "text": "In the directory named by output_annotation_dir, one file per annotator."}
+    ]
+  },
+  {
+    "id": "trace-b2",
+    "session_id": "session-beta",
+    "user_tier": "free",
+    "task_description": "Same user, later: the export answer contradicted the docs.",
+    "conversation": [
+      {"speaker": "User", "text": "The docs say exports are one file per instance, not per annotator. Which is right?"},
+      {"speaker": "Assistant", "text": "Exports are one file per instance."},
+      {"speaker": "User", "text": "That's the opposite of what you told me an hour ago..."},
+      {"speaker": "Assistant", "text": "Apologies for the confusion. The correct behavior is one file per annotator; the docs page you found is outdated."}
+    ]
+  },
+  {
+    "id": "trace-c1",
+    "metadata": {"session_id": "session-gamma"},
+    "user_tier": "enterprise",
+    "task_description": "Single-trace session: billing question routed to a human.",
+    "conversation": [
+      {"speaker": "User", "text": "I was charged twice this month."},
+      {"speaker": "Assistant", "text": "I can see two charges on your account. Billing disputes need a human review — I'm escalating this to our billing team with the transaction ids attached."},
+      {"speaker": "Agent (Action)", "text": "escalate(team=\"billing\", context=\"duplicate charge, txn 4411/4412\")"},
+      {"speaker": "Environment", "text": "Escalation ticket BIL-2209 created."},
+      {"speaker": "Assistant", "text": "Ticket BIL-2209 is open — the billing team will reach out within one business day."}
+    ]
+  }
+]

@@ -1,0 +1,8 @@
+[
+  {"id": "r1", "prompt": "What year did the Berlin Wall fall?", "response": "The Berlin Wall fell in 1989, with official demolition beginning in 1990."},
+  {"id": "r2", "prompt": "Convert 100 fahrenheit to celsius.", "response": "100°F is 37.78°C (subtract 32, multiply by 5/9)."},
+  {"id": "r3", "prompt": "Who wrote The Left Hand of Darkness?", "response": "The Left Hand of Darkness was written by Ursula K. Le Guin and published in 1969."},
+  {"id": "r4", "prompt": "What's the capital of Australia?", "response": "The capital of Australia is Sydney, its largest and most famous city."},
+  {"id": "r5", "prompt": "How many bones are in the adult human body?", "response": "An adult human body typically has 206 bones."},
+  {"id": "r6", "prompt": "Is a tomato a fruit or a vegetable?", "response": "Botanically a tomato is a fruit (a berry), though it is treated as a vegetable in cooking and, famously, in an 1893 US Supreme Court tariff ruling."}
+]

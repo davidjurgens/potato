@@ -1,0 +1,122 @@
+# Audio Dialogue — SPoRC ingestion example (REAL episode)
+#
+# This is a REAL episode from the Structured Podcast Research Corpus
+# (SPoRC, https://huggingface.co/datasets/blitt/SPoRC): the actual recorded
+# audio plus SPoRC's own diarized transcript and timings, unmodified. The
+# `turns` list is exactly SPoRC's speaker-turn rows (JSONL / camelCase form):
+#
+#   {turnText, speaker: ["SPEAKER_NN"], startTime, endTime, duration,
+#    mp3url, turnCount, inferredSpeakerRole: host|guest|neither,
+#    inferredSpeakerName}
+#
+# potato/server_utils/transcript_ingest.py normalizes these (both the camelCase
+# JSONL fields above and the snake_case parquet fields turn_text/start_time/…):
+#   * turnText / startTime / endTime are recognized,
+#   * `speaker` (a list) is unwrapped,
+#   * the audio source falls back to mp3url,
+#   * with speaker_key=inferredSpeakerName, host/guest turns get real names
+#     while `neither` / NO_INFERRED_SPEAKER rows become undiarized so the
+#     annotator can assign (or add) a speaker.
+#
+# NOTE: SPoRC diarization is coarse — real turns can be multi-minute monologues
+# and include sub-second boundary fragments. That is the authentic data. The
+# `conversation` value is a bare list of real SPoRC turn rows, and the audio
+# streams directly from each row's real remote `mp3url` (a podcast CDN);
+# per-turn playback uses HTTP Range so only the needed bytes are fetched. These
+# are third-party URLs, so they can rate-limit or eventually go offline. To pull
+# other episodes: SPoRC is gated — accept its terms, then use
+# huggingface_hub/datasets with a token (e.g. speakerTurnDataSample.jsonl.gz) and
+# drop an episode's rows in as the `conversation` list.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/audio/audio-dialogue-sporc/config.yaml -p 8000
+
+annotation_task_name: "SPoRC Podcast Dialogue"
+
+task_dir: .
+data_files:
+  - data/sporc-sample.json
+
+output_annotation_dir: annotation_output/audio-dialogue-sporc/
+output_annotation_format: json
+
+item_properties:
+  id_key: id
+  text_key: title
+
+user_config:
+  allow_all_users: true
+  users: []
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+  fields:
+    - key: title
+      type: text
+      label: "Episode"
+
+    - key: conversation
+      type: audio_dialogue
+      label: "Transcript (SPoRC turns)"
+      span_target: true
+      display_options:
+        # SPoRC field mapping: use the inferred human name as the speaker;
+        # turnText/startTime/endTime and mp3url are picked up automatically.
+        speaker_key: inferredSpeakerName
+        scroll_height: 460px
+        show_timestamps: true
+        speakers:
+          - id: "Harold Prestonbach"
+            name: "Harold Prestonbach"
+            color: "#7c3aed"
+            side: left
+          - id: "Kristen Dowd"
+            name: "Kristen Dowd"
+            color: "#059669"
+            side: right
+
+annotation_schemes:
+  - annotation_type: radio
+    name: turn_category
+    description: "Category of this turn"
+    labels:
+      - claim
+      - question
+      - answer
+      - ad_read
+      - aside
+    turn_level: true
+    turn_binding:
+      field: conversation
+
+  - annotation_type: span
+    name: highlights
+    description: "Highlight questions and answers"
+    target_field: conversation
+    labels:
+      - name: question
+        key_value: "q"
+      - name: answer
+        key_value: "a"
+
+  - annotation_type: span_link
+    name: qa_links
+    description: "Link each answer to the question it answers"
+    span_schema: highlights
+    link_types:
+      - name: answers
+        directed: true
+        allowed_source_labels: [answer]
+        allowed_target_labels: [question]
+        color: "#2563eb"
+
+  - annotation_type: likert
+    name: overall_quality
+    description: "Overall conversation quality"
+    min_label: "Poor"
+    max_label: "Excellent"
+    size: 5
+
+site_dir: default

@@ -44,6 +44,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Conditional Logic](configuration/conditional_logic.md) - Show/hide questions based on prior answers
 - [Image Annotation](annotation-types/multimedia/image_annotation.md) - Bounding boxes, polygons, and landmarks
 - [Audio Annotation](annotation-types/multimedia/audio_annotation.md) - Audio segmentation with waveform visualization
+- [Audio Dialogue](annotation-types/multimedia/audio_dialogue.md) - Podcast/interview turn annotation: speaker bubbles, per-turn audio playback, ratings, spans, and cross-turn linking
 - [Video Annotation](annotation-types/multimedia/video_annotation.md) - Frame-by-frame video labeling
 - [Tiered Annotation](annotation-types/multimedia/tiered_annotation.md) - ELAN-style hierarchical multi-tier annotation
 - [Triage](annotation-types/triage.md) - Rapid accept/reject/skip data curation interface
@@ -78,10 +79,19 @@ Role-based guides that walk you through Potato for your specific use case:
 
 - [Annotation Navigation](workflow/annotation_navigation.md) - Navigation tools and status indicators
 - [Task Assignment](advanced/task_assignment.md) - Assignment strategies and configuration
+- [Per-Cohort Schemas](advanced/per_cohort_schemas.md) - Show different annotation schemes to different annotator cohorts
 - [Heterogeneous Coverage](advanced/heterogeneous_coverage.md) - Single-annotator default with a multi-annotator overlap sample, adaptive boost, per-annotator quotas, and full IAA reporting
 - [Diversity Ordering](workflow/diversity_ordering.md) - Embedding-based clustering for diverse item presentation
+- [Multi-Document Event Annotation](advanced/multi_document_events.md) - Cross-document events with a 2D corpus map, cluster browser, KNN, and evidence-cited template slots
 - [Training Phase](workflow/training_phase.md) - Annotator training and qualification
 - [Quality Control](workflow/quality_control.md) - Attention checks and gold standards
+- **[Boundary Lab](advanced/boundary_lab.md)** - Counterfactual boundary probing: collect contrast sets during ordinary annotation, capture boundary rationales, and get paraphrase-invariance quality control
+- **[Truth Serum](advanced/truth_serum.md)** - Surprisingly-popular scoring: gold-free item verdicts that beat majority vote, plus annotator calibration
+- **[Paper Mode](advanced/paper_mode.md)** - One command generates a cut-paste LaTeX dataset report: description, distributions, annotator table, IAA, limitations
+- **[Think-Aloud Mode](advanced/think_aloud.md)** - Voice rationales with fully-local STT and rule-based spoken-label commitment; verbatim reasoning streams, no LLM
+- **[Pocket Mode](advanced/pocket_mode.md)** - Mobile-first card-stack annotation PWA: thumb-zone labels, swipe navigation, offline queue with auto-sync
+- **[Psychometrics](advanced/psychometrics.md)** - Labels with error bars: live IRT (ability + difficulty, no gold, no LLM), information-gain adaptive routing, codebook-bug detection, and pre-study power analysis
+- **[Multiplayer Rooms](advanced/multiplayer_rooms.md)** - Live group annotation: blind-vote norming sessions with a real-time agreement meter and conformity logging, adjudication huddles, and expert shadowing
 - [Adjudication](administration/adjudication.md) - Multi-annotator disagreement resolution
 - [MACE](advanced/mace.md) - Multi-Annotator Competence Estimation via variational inference
 - [Iterative BWS](annotation-types/comparison/iterative_bws.md) - Adaptive Best-Worst Scaling for fine-grained ordinal rankings
@@ -98,7 +108,14 @@ Role-based guides that walk you through Potato for your specific use case:
 ## Agent Evaluation
 
 - **[Coding Agent Annotation](agent-evaluation/coding_agent_annotation.md)** - Evaluate agentic coding systems (Claude Code, SWE-Agent, Aider) with diff rendering, PRM annotation, and code review
+- **[CoT Process Reward (LLM pre-label + verify)](agent-evaluation/process_reward_cot.md)** - Segment a long chain-of-thought into steps, have an LLM pre-label each step's reward, and have a human verify — fast PRM data collection
 - [Agent Traces](agent-evaluation/agent_traces.md) - Evaluate AI agent traces and trajectories
+- [Turn-Level Annotation](agent-evaluation/turn_level_annotation.md) - Bind any rating/tagging/comment schema per-turn with declarative filters (by speaker, agent, step type, tool)
+- [Multi-Agent Discussion](agent-evaluation/multi_agent_discussion.md) - Annotate agent-to-agent discussions/debates with agent identity, addressees, reply threading, and consensus tracking
+- [Agent Task Recipes](agent-evaluation/agent_task_recipes.md) - Ready-to-run configs: debate judging, plan review, negotiation, safety escalation, context-use annotation
+- [Session-Level Scoring](agent-evaluation/session_level_scoring.md) - Group traces by session_id/thread_id and score whole sessions on a dedicated queue page
+- [Sub-Agent Run Tree](agent-evaluation/run_tree.md) - Interactive run-hierarchy sidebar for orchestrator traces; bind per-turn schemes to specific sub-agent runs
+- [Reviewer Routing + Kanban](agent-evaluation/review_workflow.md) - Route instances to reviewers with first-match rules; track review states on a kanban board with adjudication handoff
 - [Three-Pane Trace Eval](agent-evaluation/eval_trace.md) - Reasoning | function calls | final answer side-by-side, for continuous evaluation
 - [Trajectory Correction](agent-evaluation/trajectory_correction.md) - Edit traces into SFT/DPO training data
 - [Datasets & Experiments](agent-evaluation/datasets_and_experiments.md) - Versioned eval datasets + experiment runs that score outputs over time
@@ -108,6 +125,7 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Semantic Curation](agent-evaluation/semantic_curation.md) - embedding search + dynamic slices to find traces by similarity and curate them into datasets
 - [LLM-Judge ↔ Human Alignment](agent-evaluation/judge_alignment.md) - Measure & calibrate an LLM judge against human gold (Cohen's κ)
 - [Signal-Based Triage Queue](agent-evaluation/triage_queue.md) - Prioritize the queue by a quality signal (errors / low score first)
+- [Hotkey Review Mode](guides/hotkey_review_mode.md) - Keyboard-driven review queue with auto-advance on completion
 - [Live Agent Interaction](agent-evaluation/live_agent.md) - Observe and interact with a live AI agent in real time
 - [Model Arena](agent-evaluation/model_arena.md) - Compare N models side by side on one prompt; pick the best, build a win-rate leaderboard (provider-agnostic)
 - [Web Agent Annotation](agent-evaluation/web_agent_annotation.md) - Review and create web agent browsing traces
@@ -134,6 +152,7 @@ Role-based guides that walk you through Potato for your specific use case:
 ## Authentication & User Management
 
 - [Users & Collaboration](auth-users/user_and_collaboration.md) - User registration, access control, and collaboration
+- [Roles & Permissions (RBAC)](auth-users/roles_and_permissions.md) - Role-based access control: role→permission mapping, per-user and SSO role assignment
 - [Password Management](auth-users/password_management.md) - Password security, reset flows, database backend, and shared credentials
 - [Passwordless Login](auth-users/passwordless_login.md) - Authentication without passwords
 - [SSO & OAuth Authentication](auth-users/sso_authentication.md) - Google, GitHub, and institutional SSO login
@@ -145,6 +164,7 @@ Role-based guides that walk you through Potato for your specific use case:
 
 ## Administration
 
+- [Scaling & Large Datasets](deployment/scaling.md) - How Potato handles big datasets, indexing, memory, and bulk exports
 - [Admin Dashboard](administration/admin_dashboard.md) - Monitoring and management
 - [Annotator Progress Dashboard](administration/annotator_dashboard.md) - Opt-in, read-only progress view for annotators
 - [Behavioral Tracking](advanced/behavioral_tracking.md) - User behavior analytics
@@ -154,6 +174,7 @@ Role-based guides that walk you through Potato for your specific use case:
 
 - [Data Format](configuration/data_format.md) - Input and output data formats
 - [Export Formats](data-export/export_formats.md) - Export to COCO, YOLO, CoNLL, and more
+- [Publishing Datasets](data-export/publishing_datasets.md) - One-click publish to HuggingFace, Zenodo (DOI), or a documented archive with an auto-generated dataset card
 - [HuggingFace Hub Export](data-export/huggingface_export.md) - Push annotations to HuggingFace Hub
 - [HuggingFace Datasets Integration](data-export/datasets_integration.md) - Load annotations as DatasetDict or DataFrame
 - [Remote Data Sources](configuration/remote_data_sources.md) - Load data from S3, Google Drive, Dropbox, URLs, and databases
@@ -187,6 +208,7 @@ Role-based guides that walk you through Potato for your specific use case:
 
 ## Release Notes
 
+- [v2.7.0](releasenotes/v2.7.0.md) - Seven New Ways to Annotate (Psychometrics, Multiplayer Rooms, Boundary Lab, Truth Serum, Think-Aloud, Paper Mode, Pocket Mode)
 - [v2.6.1](releasenotes/v2.6.1.md) - Agentic Evaluation Suite (evaluators, datasets/experiments, automation, CI gating, tracing SDK, curation, arena)
 - [v2.6.0](releasenotes/v2.6.0.md) - QDA Mode, LLM-as-Judge Calibration & Trajectory Editing
 - [v2.4.4](releasenotes/v2.4.4.md) - Span Annotation Fixes & UX Improvements
@@ -281,3 +303,29 @@ See the [examples](https://github.com/davidjurgens/potato/tree/main/examples) di
 - `advanced/` - Advanced features (conditional logic, quality control, etc.)
 - `agent-traces/` - Agent trace evaluation examples (RAG, GUI agents, comparisons)
 - `custom-layouts/` - Sophisticated custom layout examples
+
+---
+
+## Citation
+
+If you use Potato in your research, please cite the **Potato 2.0** paper
+([ACL 2026 System Demonstrations](https://aclanthology.org/2026.acl-demo.37/)):
+
+```bibtex
+@inproceedings{jurgens-etal-2026-potato,
+    title = "Potato 2.0: A Comprehensive Annotation Platform with {AI}-in-the-Loop Support",
+    author = "Jurgens, David  and Chen, Michael  and Iyer, Lina",
+    booktitle = "Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations)",
+    month = jul,
+    year = "2026",
+    address = "San Diego, California, United States",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2026.acl-demo.37/",
+    pages = "374--386",
+}
+```
+
+The original Potato release is described in the **Potato 1.0** paper
+([EMNLP 2022 System Demonstrations](https://aclanthology.org/2022.emnlp-demos.33/),
+Pei et al., 2022). See the [README](https://github.com/davidjurgens/potato#citation)
+for both BibTeX entries.

@@ -116,6 +116,16 @@ The `bbox` field contains normalized coordinates `[x, y, width, height]` where
 all values are 0-1 relative to page dimensions. The optional `bbox_pixels`
 field contains the original pixel coordinates.
 
+### PDF Cross-Page Linking
+
+To highlight text spans and draw region boxes on a multi-page PDF and **link
+them across pages** (text↔text, text↔region, region↔region), use
+`annotation_mode: link`. See
+[Multi-Page PDF Anchors & Cross-Page Linking](text/pdf_cross_page_linking.md)
+for the full guide, and the runnable examples at
+`examples/advanced/pdf-link-scroll/` (all pages stacked) and
+`examples/advanced/pdf-link-paginated/` (page browser + pin-navigate).
+
 ### Word Documents (DOCX)
 
 Display and annotate Word documents:

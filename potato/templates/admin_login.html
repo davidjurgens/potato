@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -117,7 +117,7 @@
 <body>
     <div class="admin-login-container">
         <div class="admin-login-card">
-            <h1 class="admin-login-title"><span aria-hidden="true">🔐</span> Admin Access Required</h1>
+            <h1 class="admin-login-title"><span aria-hidden="true">🔐</span> {{ ui_lang.admin_login_title|default('Admin Access') }}</h1>
             <p class="admin-login-description">
                 This area requires administrator privileges. Enter your API key to access the admin dashboard.
             </p>
@@ -127,12 +127,12 @@
             </p>
 
             <form class="admin-login-form" id="adminLoginForm">
-                <label class="sr-only" for="apiKey">Admin API key</label>
+                <label class="sr-only" for="apiKey">{{ ui_lang.admin_login_key_label|default('Admin API key') }}</label>
                 <input
                     type="password"
                     id="apiKey"
                     name="apiKey"
-                    placeholder="Admin API key"
+                    placeholder="{{ ui_lang.admin_login_key_placeholder|default('Admin API key') }}"
                     class="admin-login-input"
                     aria-describedby="apiKeyHint"
                     autocomplete="current-password"
@@ -142,7 +142,7 @@
                     The key is stored in <code>admin_api_key.txt</code> in your task directory.
                 </p>
                 <button type="submit" class="admin-login-button" id="adminLoginSubmit">
-                    Access dashboard
+                    {{ ui_lang.admin_login_submit|default('Access Dashboard') }}
                 </button>
             </form>
 

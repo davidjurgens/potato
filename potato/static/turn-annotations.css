@@ -1,0 +1,149 @@
+/*
+ * Turn-Level Annotation widgets (see turn-annotations.js).
+ * Slot proxies rendered inside dialogue turns / agent-trace step cards,
+ * plus the compact form-area anchor block.
+ */
+
+.turn-anno-slot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.03);
+    font-size: 0.85em;
+}
+
+.turn-anno-widget {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.ta-widget-label {
+    color: var(--muted-foreground, #71717a);
+    font-size: 0.9em;
+    margin-right: 2px;
+}
+
+.ta-chips {
+    display: inline-flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.ta-chip {
+    padding: 2px 9px;
+    font-size: 0.9em;
+    border: 1px solid var(--border, #d4d4d8);
+    border-radius: 999px;
+    background: var(--card, #fff);
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.ta-chip:hover {
+    background: var(--secondary, #f4f4f5);
+}
+
+.ta-chip:focus-visible {
+    outline: 2px solid var(--ring, #6e56cf);
+    outline-offset: 1px;
+}
+
+.ta-chip.ta-selected {
+    background: var(--ring, #6e56cf);
+    border-color: var(--ring, #6e56cf);
+    color: #fff;
+    font-weight: 600;
+}
+
+/* Likert fill-up-to styling: filled steps are lighter, exact pick is solid */
+.ta-chip.ta-likert.ta-selected {
+    background: color-mix(in srgb, var(--ring, #6e56cf) 35%, #fff);
+    border-color: var(--ring, #6e56cf);
+    color: #333;
+    font-weight: 500;
+}
+
+.ta-chip.ta-likert.ta-selected.ta-exact {
+    background: var(--ring, #6e56cf);
+    color: #fff;
+    font-weight: 600;
+}
+
+.ta-scale-label {
+    color: var(--muted-foreground, #71717a);
+    font-size: 0.85em;
+}
+
+.ta-range {
+    width: 110px;
+    vertical-align: middle;
+}
+
+.ta-range-value {
+    min-width: 2em;
+    color: var(--muted-foreground, #52525b);
+    font-variant-numeric: tabular-nums;
+}
+
+.ta-select {
+    padding: 1px 4px;
+    font-size: 0.9em;
+    border: 1px solid var(--border, #d4d4d8);
+    border-radius: 4px;
+}
+
+.ta-text {
+    flex: 1 1 140px;
+    min-width: 120px;
+    padding: 2px 6px;
+    font-size: 0.9em;
+    border: 1px solid var(--border, #d4d4d8);
+    border-radius: 4px;
+    resize: vertical;
+}
+
+.ta-number {
+    width: 70px;
+    padding: 2px 6px;
+    font-size: 0.9em;
+    border: 1px solid var(--border, #d4d4d8);
+    border-radius: 4px;
+}
+
+.ta-drawer-toggle {
+    padding: 1px 8px;
+    font-size: 0.8em;
+    border: 1px dashed var(--border, #d4d4d8);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted-foreground, #71717a);
+    cursor: pointer;
+}
+
+.ta-drawer-toggle[aria-expanded="true"] {
+    border-style: solid;
+    color: var(--ring, #6e56cf);
+}
+
+.ta-drawer {
+    flex-basis: 100%;
+}
+
+/* Form-area anchor block */
+.turn-level-anchor .ta-anchor-note {
+    color: var(--muted-foreground, #71717a);
+    font-size: 0.9em;
+    font-style: italic;
+}
+
+.turn-level-anchor .ta-progress {
+    font-style: normal;
+    font-weight: 600;
+    margin-left: 4px;
+}

@@ -140,6 +140,13 @@ nav:
     - Deployment:
         - Usage: deployment/usage.md
         - Crowdsourcing: deployment/crowdsourcing.md
+        - Choosing a Platform: deployment/crowdsourcing-platforms.md
+        - Prolific Integration: deployment/prolific_integration.md
+        - Prolific Webhooks: deployment/prolific_webhooks.md
+        - Connect Integration: deployment/connect_integration.md
+        - SONA Integration: deployment/sona_integration.md
+        - Expert Annotators: deployment/expert_annotators.md
+        - Longitudinal Studies: deployment/longitudinal-studies.md
         - MTurk Integration: deployment/mturk_integration.md
         - Open Sourcing: deployment/open-sourcing.md
     - API Reference:

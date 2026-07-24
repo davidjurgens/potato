@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Annotation integrity</title>
+<title>{{ ui_lang.integrity_page_title|default('Annotation integrity') }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=3">
 <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
 <style>
@@ -23,28 +23,25 @@
 </head>
 <body>
 <main class="dashboard" role="main">
-  <h1>Annotation integrity</h1>
+  <h1>{{ ui_lang.integrity_heading|default('Annotation integrity') }}</h1>
   <p class="ai-lede">
-    Flags annotators who likely echoed an LLM or answered with little effort —
-    <strong>without ground truth</strong>. <em>Correlated Agreement</em> (CA) is each
-    annotator's same-item minus cross-item agreement with peers (low ⇒ random/low
-    effort). When reference LLM labels are available, <em>LLM alignment</em> with low
-    <em>residual</em> (independent agreement on items where they diverge from the LLM)
-    is the covert-LLM tell. Treat as triage signals to review, not proof.
+    {{ ui_lang.integrity_lede|default('Flags annotators who likely echoed an LLM or answered with little effort —') }}
+    <strong>{{ ui_lang.integrity_lede_without_ground_truth|default('without ground truth') }}</strong>. <em>{{ ui_lang.integrity_correlated_agreement|default('Correlated Agreement') }}</em> (CA) {{ ui_lang.integrity_lede_ca_desc|default("is each annotator's same-item minus cross-item agreement with peers (low ⇒ random/low effort). When reference LLM labels are available,") }} <em>{{ ui_lang.integrity_llm_alignment|default('LLM alignment') }}</em> {{ ui_lang.integrity_lede_with_low|default('with low') }}
+    <em>{{ ui_lang.integrity_residual|default('residual') }}</em> {{ ui_lang.integrity_lede_residual_desc|default('(independent agreement on items where they diverge from the LLM) is the covert-LLM tell. Treat as triage signals to review, not proof.') }}
   </p>
 
   {% if not reports %}
-  <p class="ai-empty">No annotations to analyze yet.</p>
+  <p class="ai-empty">{{ ui_lang.integrity_no_annotations|default('No annotations to analyze yet.') }}</p>
   {% else %}
   <table class="ai-table">
     <thead><tr>
-      <th scope="col">Annotator</th>
-      <th scope="col">Items</th>
-      <th scope="col">Suspicion</th>
-      <th scope="col">CA score</th>
-      <th scope="col">LLM alignment</th>
-      <th scope="col">Residual</th>
-      <th scope="col">Flags</th>
+      <th scope="col">{{ ui_lang.integrity_col_annotator|default('Annotator') }}</th>
+      <th scope="col">{{ ui_lang.integrity_col_items|default('Items') }}</th>
+      <th scope="col">{{ ui_lang.integrity_col_suspicion|default('Suspicion') }}</th>
+      <th scope="col">{{ ui_lang.integrity_col_ca_score|default('CA score') }}</th>
+      <th scope="col">{{ ui_lang.integrity_col_llm_alignment|default('LLM alignment') }}</th>
+      <th scope="col">{{ ui_lang.integrity_col_residual|default('Residual') }}</th>
+      <th scope="col">{{ ui_lang.integrity_col_flags|default('Flags') }}</th>
     </tr></thead>
     <tbody>
       {% for r in reports %}
@@ -65,9 +62,9 @@
     </tbody>
   </table>
   <p class="ai-note">
-    {{ n_annotators }} annotator(s).
-    {% if used_llm_labels %}Reference LLM labels were available (LLM-echo signal active).
-    {% else %}No reference LLM labels — Correlated-Agreement signal only; run the judge to enable LLM-echo detection.{% endif %}
+    {{ n_annotators }} {{ ui_lang.integrity_annotators_suffix|default('annotator(s).') }}
+    {% if used_llm_labels %}{{ ui_lang.integrity_llm_labels_available|default('Reference LLM labels were available (LLM-echo signal active).') }}
+    {% else %}{{ ui_lang.integrity_no_llm_labels|default('No reference LLM labels — Correlated-Agreement signal only; run the judge to enable LLM-echo detection.') }}{% endif %}
   </p>
   {% endif %}
 </main>

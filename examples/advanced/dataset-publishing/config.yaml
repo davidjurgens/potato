@@ -1,0 +1,89 @@
+###############################################################################
+# Dataset Publishing example
+#
+# Demonstrates packaging a finished annotation project for release. Start the
+# server, open /admin, and click "Publish Dataset" to:
+#   - preview the auto-generated README (dataset card) with label distributions
+#     and inter-annotator agreement,
+#   - download a self-contained .zip archive (data + README + LICENSE + a
+#     cut-paste LaTeX dataset report), or
+#   - push to the HuggingFace Hub / deposit on Zenodo (needs a token).
+#
+# This example ships small pre-populated seed annotations (two annotators) so the
+# card is populated immediately — no need to annotate first.
+#
+#   python potato/flask_server.py start \
+#       examples/advanced/dataset-publishing/config.yaml -p 8000
+###############################################################################
+
+port: 8000
+annotation_task_name: Movie Review Sentiment
+annotation_task_description: >
+  Short movie-review sentences labeled for overall sentiment, with toxic spans
+  highlighted. A small pilot used to demonstrate Potato's dataset publishing.
+
+task_dir: .
+# Seed annotations ship under seed_annotations/ (a normal, non-ignored dir) so the
+# dataset card is populated out of the box; the repo gitignores every
+# examples/**/annotation_output/, which would otherwise strip the demo data.
+output_annotation_dir: seed_annotations/
+data_files:
+  - data/reviews.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: Overall sentiment of the review
+    labels:
+      - positive
+      - negative
+      - neutral
+    sequential_key_binding: true
+
+  - annotation_type: multiselect
+    name: aspects
+    description: Which aspects does the review mention?
+    labels:
+      - acting
+      - plot
+      - visuals
+      - music
+
+# Descriptive metadata for the generated dataset card and Zenodo deposit. Every
+# field is optional; the admin can also fill/override these in the Publish wizard.
+dataset_metadata:
+  pretty_name: Movie Review Sentiment (Pilot)
+  license: cc-by-4.0
+  version: 1.0.0
+  language:
+    - en
+  keywords:
+    - sentiment-analysis
+    - movie-reviews
+    - annotation
+  authors:
+    - name: Ada Lovelace
+      affiliation: University of Example
+      orcid: 0000-0002-1825-0097
+  citation: |
+    @misc{movie_review_sentiment_2026,
+      title  = {Movie Review Sentiment (Pilot)},
+      author = {Lovelace, Ada},
+      year   = {2026},
+      note   = {Annotated with Potato}
+    }
+
+# Publishing options (optional). These become the wizard's defaults.
+publish:
+  default_target: archive
+  options:
+    anonymize: true
+    aggregation: majority

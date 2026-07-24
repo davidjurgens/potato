@@ -141,6 +141,13 @@ class VideoAnnotationManager {
         this._updateTimeDisplay();
         this._updateFrameDisplay();
 
+        // Peaks.js's UMD bundle exports lowercase 'peaks'; alias to uppercase
+        // 'Peaks' if needed (matches audio-annotation.js). Do this here so the
+        // check below is robust regardless of script load order.
+        if (typeof Peaks === 'undefined' && typeof peaks !== 'undefined') {
+            window.Peaks = peaks;
+        }
+
         // Check if Peaks.js is available
         if (typeof Peaks === 'undefined') {
             console.warn('[VideoAnnotation] Peaks.js not available - video will play without timeline visualization');
@@ -168,11 +175,15 @@ class VideoAnnotationManager {
             logger: console.error.bind(console),
             zoomLevels: [256, 512, 1024, 2048, 4096],
             ...waveformSource,
-            segments: {
+            // segments must be an array (empty initially, added later); the
+            // marker/overlay styling goes under segmentOptions (matching audio).
+            segments: [],
+            segmentOptions: {
                 markers: true,
                 overlay: true,
                 startMarkerColor: '#4a90d9',
-                endMarkerColor: '#4a90d9'
+                endMarkerColor: '#4a90d9',
+                waveformColor: 'rgba(74, 144, 217, 0.4)'
             },
             zoomview: {
                 container: this.zoomviewEl,
@@ -200,6 +211,9 @@ class VideoAnnotationManager {
             // Set up Peaks.js-specific event listeners
             this._setupPeaksEventListeners();
 
+            // Right-click-drag range selection on the timeline + overview
+            this._setupDragSelection();
+
             // Load existing annotations if any
             this._loadExistingAnnotations();
 
@@ -214,6 +228,9 @@ class VideoAnnotationManager {
             if (this.zoomviewEl) this.zoomviewEl.style.display = 'none';
             if (this.overviewEl) this.overviewEl.style.display = 'none';
             console.warn('[VideoAnnotation] Waveform visualization unavailable. Video playback still works.');
+            // Still restore existing annotations even without a working timeline —
+            // otherwise navigating away and back loses saved segments.
+            this._loadExistingAnnotations();
         }
     }
 
@@ -296,23 +313,24 @@ class VideoAnnotationManager {
         const player = this.peaks.player;
         const view = this.peaks.views.getView('zoomview');
 
-        // Playback events
-        player.on('player.playing', () => {
+        // Playback events — subscribe on the Peaks instance (this.peaks.on),
+        // not this.peaks.player, which has no .on() in this Peaks build.
+        this.peaks.on('player.playing', () => {
             this.isPlaying = true;
             this._updatePlayButton();
         });
 
-        player.on('player.pause', () => {
+        this.peaks.on('player.pause', () => {
             this.isPlaying = false;
             this._updatePlayButton();
         });
 
-        player.on('player.ended', () => {
+        this.peaks.on('player.ended', () => {
             this.isPlaying = false;
             this._updatePlayButton();
         });
 
-        player.on('player.timeupdate', (time) => {
+        this.peaks.on('player.timeupdate', (time) => {
             this._updateTimeDisplay(time);
             this._updateFrameDisplay();
         });
@@ -327,8 +345,9 @@ class VideoAnnotationManager {
             this._selectAnnotation(event.point.id);
         });
 
-        // Double-click to create segment at position
-        if (view) {
+        // Double-click to create segment at position (optional; some Peaks
+        // builds don't expose view-level events, so guard against it).
+        if (view && typeof view.on === 'function') {
             view.on('dblclick', (event) => {
                 const time = event.time;
                 if (this.config.mode === 'segment' || this.config.mode === 'combined') {
@@ -337,6 +356,56 @@ class VideoAnnotationManager {
                     this.createSegment(time, endTime);
                 }
             });
+        }
+    }
+
+    /**
+     * Set up right-click-drag range selection on the zoomview and overview.
+     *
+     * - Zoomview: precise selection within the visible window, with edge
+     *   auto-scroll so a drag can extend past the visible edge.
+     * - Overview: coarse selection across the whole clip.
+     *
+     * Left-click stays with Peaks.js for seeking; Peaks' native segment
+     * drag/resize continues to edit existing segments. Uses the shared
+     * attachPeaksRangeSelection helper (peaks-range-select.js).
+     */
+    _setupDragSelection() {
+        if (!this.peaks) return;
+        if (typeof window.attachPeaksRangeSelection !== 'function') {
+            console.warn('peaks-range-select.js not loaded; drag selection unavailable');
+            return;
+        }
+        if (this.config.mode && this.config.mode !== 'segment' && this.config.mode !== 'combined') {
+            // Only segment/combined modes create time ranges by dragging
+            return;
+        }
+
+        if (this._rangeSelectDetach) {
+            this._rangeSelectDetach.forEach((fn) => { try { fn(); } catch (e) {} });
+        }
+        this._rangeSelectDetach = [];
+
+        const onCreate = (start, end) => {
+            videoDebugLog('Creating segment from right-click drag', { start, end });
+            this.createSegment(start, end);
+        };
+
+        if (this.zoomviewEl) {
+            this._rangeSelectDetach.push(
+                window.attachPeaksRangeSelection(this.peaks, this.zoomviewEl, 'zoomview', {
+                    onCreate,
+                    edgeScroll: true,
+                })
+            );
+        }
+        if (this.overviewEl) {
+            this._rangeSelectDetach.push(
+                window.attachPeaksRangeSelection(this.peaks, this.overviewEl, 'overview', {
+                    onCreate,
+                    fullDuration: true,
+                })
+            );
         }
     }
 
@@ -1340,6 +1409,12 @@ class VideoAnnotationManager {
     destroy() {
         document.removeEventListener('keydown', this._handleKeydown, true);
         this.videoEl.removeEventListener('timeupdate', this._onVideoTimeUpdate);
+
+        // Detach range-selection (zoomview + overview) window listeners
+        if (this._rangeSelectDetach) {
+            this._rangeSelectDetach.forEach((fn) => { try { fn(); } catch (e) {} });
+            this._rangeSelectDetach = [];
+        }
 
         if (this.peaks) {
             this.peaks.destroy();

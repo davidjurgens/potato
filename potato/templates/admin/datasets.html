@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Datasets &amp; Experiments</title>
+<title>{{ ui_lang.datasets_page_title|default('Datasets & Experiments') }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
 <style>
@@ -72,47 +72,44 @@
 </head>
 <body>
 <main class="dashboard" role="main">
-  <h1>Datasets &amp; Experiments</h1>
+  <h1>{{ ui_lang.datasets_heading|default('Datasets & Experiments') }}</h1>
   <p class="de-lede">
-    Versioned collections of evaluation examples and the experiment runs scored
-    against them. Curate examples from traces or annotations, pin a version with
-    a tag, then run evaluators (trajectory match, tool-use, LLM-judge, …)
-    and compare results over time. Storage backend:
+    {{ ui_lang.datasets_lede|default('Versioned collections of evaluation examples and the experiment runs scored against them. Curate examples from traces or annotations, pin a version with a tag, then run evaluators (trajectory match, tool-use, LLM-judge, …) and compare results over time. Storage backend:') }}
     <span class="de-storage-pill">{{ storage }}</span>
   </p>
 
   <!-- Eval status & assignment control (Phase 2.5) -->
   <section class="dashboard-card" aria-labelledby="eval-status-h" style="margin-bottom:1.25rem;">
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
-      <h2 id="eval-status-h" style="margin:0 0 0.75rem;font-size:1.125rem;">Annotation process</h2>
+      <h2 id="eval-status-h" style="margin:0 0 0.75rem;font-size:1.125rem;">{{ ui_lang.datasets_annotation_process|default('Annotation process') }}</h2>
       <div class="de-actions" style="margin-bottom:0.5rem;">
         <span class="de-status" id="assign-state" role="status" aria-live="polite"></span>
         <button class="shadcn-button shadcn-button-outline" id="assign-toggle" disabled>…</button>
       </div>
     </div>
     <div class="de-statgrid" id="eval-stats" aria-live="polite">
-      <span class="de-empty">Loading status…</span>
+      <span class="de-empty">{{ ui_lang.datasets_loading_status|default('Loading status…') }}</span>
     </div>
   </section>
 
   <div class="de-cols">
     <!-- Create dataset -->
     <section class="dashboard-card" aria-labelledby="create-h">
-      <h2 id="create-h" style="margin-top:0;font-size:1.125rem;">New dataset</h2>
+      <h2 id="create-h" style="margin-top:0;font-size:1.125rem;">{{ ui_lang.datasets_new_dataset|default('New dataset') }}</h2>
       <form class="de-form" id="create-form">
         <div>
-          <label for="ds-name">Name</label>
+          <label for="ds-name">{{ ui_lang.datasets_name_label|default('Name') }}</label>
           <input type="text" id="ds-name" name="name" required
                  pattern="[A-Za-z0-9_\-]+" placeholder="agent-eval-v1"
                  aria-describedby="ds-name-hint">
-          <small id="ds-name-hint" class="de-empty">Letters, numbers, hyphens, underscores.</small>
+          <small id="ds-name-hint" class="de-empty">{{ ui_lang.datasets_name_hint|default('Letters, numbers, hyphens, underscores.') }}</small>
         </div>
         <div>
-          <label for="ds-desc">Description</label>
-          <input type="text" id="ds-desc" name="description" placeholder="Optional">
+          <label for="ds-desc">{{ ui_lang.datasets_description_label|default('Description') }}</label>
+          <input type="text" id="ds-desc" name="description" placeholder="{{ ui_lang.datasets_optional_placeholder|default('Optional') }}">
         </div>
         <div class="de-actions">
-          <button type="submit" class="shadcn-button shadcn-button-primary">Create dataset</button>
+          <button type="submit" class="shadcn-button shadcn-button-primary">{{ ui_lang.datasets_create_dataset_btn|default('Create dataset') }}</button>
           <span class="de-status" id="create-status" role="status" aria-live="polite"></span>
         </div>
       </form>
@@ -120,20 +117,20 @@
 
     <!-- Run experiment -->
     <section class="dashboard-card" aria-labelledby="run-h">
-      <h2 id="run-h" style="margin-top:0;font-size:1.125rem;">Run experiment</h2>
+      <h2 id="run-h" style="margin-top:0;font-size:1.125rem;">{{ ui_lang.datasets_run_experiment|default('Run experiment') }}</h2>
       <form class="de-form" id="run-form">
         <div>
-          <label for="run-dataset">Dataset</label>
+          <label for="run-dataset">{{ ui_lang.datasets_dataset_label|default('Dataset') }}</label>
           <select id="run-dataset" name="dataset" required>
-            <option value="" disabled selected>Select a dataset…</option>
+            <option value="" disabled selected>{{ ui_lang.datasets_select_dataset|default('Select a dataset…') }}</option>
             {% for d in datasets %}
             <option value="{{ d.name }}">{{ d.name }}</option>
             {% endfor %}
           </select>
         </div>
         <div>
-          <label>Evaluators</label>
-          <div class="de-eval-list" role="group" aria-label="Evaluators">
+          <label>{{ ui_lang.datasets_evaluators_label|default('Evaluators') }}</label>
+          <div class="de-eval-list" role="group" aria-label="{{ ui_lang.datasets_evaluators_label|default('Evaluators') }}">
             {% for ev in evaluators %}
             <label><input type="checkbox" name="evaluator" value="{{ ev.name }}">
               <span><strong>{{ ev.name }}</strong><br>
@@ -141,11 +138,10 @@
             {% endfor %}
           </div>
           <small class="de-empty" style="display:block;margin-top:0.35rem;">
-            LLM-judge evaluators call your configured AI endpoint and may take a
-            while on large datasets.</small>
+            {{ ui_lang.datasets_llm_judge_note|default('LLM-judge evaluators call your configured AI endpoint and may take a while on large datasets.') }}</small>
         </div>
         <div class="de-actions">
-          <button type="submit" class="shadcn-button shadcn-button-primary" id="run-btn">Run</button>
+          <button type="submit" class="shadcn-button shadcn-button-primary" id="run-btn">{{ ui_lang.datasets_run_btn|default('Run') }}</button>
           <span class="de-status" id="run-status" role="status" aria-live="polite"></span>
         </div>
       </form>
@@ -154,7 +150,7 @@
 
   <!-- Datasets list -->
   <div class="de-section-head">
-    <h2>Datasets <span class="de-empty" style="font-weight:400;">({{ datasets|length }})</span></h2>
+    <h2>{{ ui_lang.datasets_datasets_heading|default('Datasets') }} <span class="de-empty" style="font-weight:400;">({{ datasets|length }})</span></h2>
   </div>
   {% if datasets %}
   <div class="de-grid">
@@ -163,9 +159,9 @@
       <h3><a href="{{ url_for('datasets.view_dataset', name=d.name) }}">{{ d.name }}</a></h3>
       {% if d.description %}<p class="de-empty" style="margin:0;font-size:0.8125rem;">{{ d.description }}</p>{% endif %}
       <div class="de-ds-meta">
-        <span><span class="n">{{ d.versions|length }}</span> version{{ '' if d.versions|length == 1 else 's' }}</span>
+        <span><span class="n">{{ d.versions|length }}</span> {{ ui_lang.datasets_versions_label|default('version(s)') if d.versions|length != 1 else ui_lang.datasets_version_label|default('version') }}</span>
         {% if d.latest_version %}
-        <span><span class="n">{{ d.latest_version.example_count }}</span> example{{ '' if d.latest_version.example_count == 1 else 's' }}</span>
+        <span><span class="n">{{ d.latest_version.example_count }}</span> {{ ui_lang.datasets_examples_label|default('example(s)') if d.latest_version.example_count != 1 else ui_lang.datasets_example_label|default('example') }}</span>
         {% endif %}
       </div>
       {% set tags = [] %}
@@ -175,32 +171,32 @@
     {% endfor %}
   </div>
   {% else %}
-  <p class="de-empty">No datasets yet. Create one above to get started.</p>
+  <p class="de-empty">{{ ui_lang.datasets_no_datasets|default('No datasets yet. Create one above to get started.') }}</p>
   {% endif %}
 
   <!-- Experiments list -->
   <div class="de-section-head">
-    <h2>Experiments <span class="de-empty" style="font-weight:400;">({{ experiments|length }})</span></h2>
-    <button class="shadcn-button shadcn-button-outline" id="compare-btn" disabled>Compare selected</button>
+    <h2>{{ ui_lang.datasets_experiments_heading|default('Experiments') }} <span class="de-empty" style="font-weight:400;">({{ experiments|length }})</span></h2>
+    <button class="shadcn-button shadcn-button-outline" id="compare-btn" disabled>{{ ui_lang.datasets_compare_selected|default('Compare selected') }}</button>
   </div>
   {% if experiments %}
   <div class="tq-table-wrap" style="overflow-x:auto;">
     <table class="de-table">
       <thead>
         <tr>
-          <th scope="col"><span class="de-empty">cmp</span></th>
-          <th scope="col">Experiment</th>
-          <th scope="col">Dataset</th>
-          <th scope="col">Version</th>
-          <th scope="col">Examples</th>
-          <th scope="col">Scores</th>
-          <th scope="col">Created</th>
+          <th scope="col"><span class="de-empty">{{ ui_lang.datasets_col_cmp|default('cmp') }}</span></th>
+          <th scope="col">{{ ui_lang.datasets_col_experiment|default('Experiment') }}</th>
+          <th scope="col">{{ ui_lang.datasets_col_dataset|default('Dataset') }}</th>
+          <th scope="col">{{ ui_lang.datasets_col_version|default('Version') }}</th>
+          <th scope="col">{{ ui_lang.datasets_col_examples|default('Examples') }}</th>
+          <th scope="col">{{ ui_lang.datasets_col_scores|default('Scores') }}</th>
+          <th scope="col">{{ ui_lang.datasets_col_created|default('Created') }}</th>
         </tr>
       </thead>
       <tbody>
         {% for e in experiments %}
         <tr>
-          <td><input type="checkbox" class="exp-check" value="{{ e.id }}" aria-label="Select {{ e.id }}"></td>
+          <td><input type="checkbox" class="exp-check" value="{{ e.id }}" aria-label="{{ ui_lang.datasets_select_label|default('Select') }} {{ e.id }}"></td>
           <td><a href="{{ url_for('datasets.api_get_experiment', experiment_id=e.id) }}">{{ e.name or e.id }}</a></td>
           <td>{{ e.dataset_name }}</td>
           <td><code>{{ e.dataset_version }}</code></td>
@@ -217,12 +213,14 @@
     </table>
   </div>
   {% else %}
-  <p class="de-empty">No experiments yet. Select a dataset and evaluators above, then Run.</p>
+  <p class="de-empty">{{ ui_lang.datasets_no_experiments|default('No experiments yet. Select a dataset and evaluators above, then Run.') }}</p>
   {% endif %}
 </main>
 
+<script>window.UI_LANG = {{ ui_lang|tojson }};</script>
 <script>
 (function () {
+  var L = window.UI_LANG || {};
   function apiKey() {
     // Admin key is held in the session cookie server-side; header optional.
     return null;
@@ -243,12 +241,12 @@
     e.preventDefault();
     const status = document.getElementById("create-status");
     status.className = "de-status";
-    status.textContent = "Creating…";
+    status.textContent = (L.datasets_creating || "Creating…");
     const name = document.getElementById("ds-name").value.trim();
     const description = document.getElementById("ds-desc").value.trim();
     const res = await post("{{ url_for('datasets.api_create_dataset') }}", {name, description});
-    if (res.ok) { status.className = "de-status ok"; status.textContent = "Created."; setTimeout(() => location.reload(), 600); }
-    else { status.className = "de-status err"; status.textContent = res.data.error || "Failed."; }
+    if (res.ok) { status.className = "de-status ok"; status.textContent = (L.datasets_created || "Created."); setTimeout(() => location.reload(), 600); }
+    else { status.className = "de-status err"; status.textContent = res.data.error || (L.datasets_failed || "Failed."); }
   });
 
   // Run experiment
@@ -260,13 +258,13 @@
     const dataset = document.getElementById("run-dataset").value;
     const evaluators = [...document.querySelectorAll('input[name=evaluator]:checked')].map(c => ({name: c.value}));
     if (!dataset || evaluators.length === 0) {
-      status.className = "de-status err"; status.textContent = "Pick a dataset and ≥1 evaluator."; return;
+      status.className = "de-status err"; status.textContent = (L.datasets_pick_dataset_evaluator || "Pick a dataset and ≥1 evaluator."); return;
     }
-    btn.disabled = true; status.className = "de-status"; status.textContent = "Running…";
+    btn.disabled = true; status.className = "de-status"; status.textContent = (L.datasets_running || "Running…");
     const res = await post("{{ url_for('datasets.api_run_experiment') }}", {dataset, evaluators});
     btn.disabled = false;
-    if (res.ok) { status.className = "de-status ok"; status.textContent = "Done."; setTimeout(() => location.reload(), 600); }
-    else { status.className = "de-status err"; status.textContent = res.data.error || "Failed."; }
+    if (res.ok) { status.className = "de-status ok"; status.textContent = (L.datasets_done || "Done."); setTimeout(() => location.reload(), 600); }
+    else { status.className = "de-status err"; status.textContent = res.data.error || (L.datasets_failed || "Failed."); }
   });
 
   // Eval status panel + assignment pause/resume control
@@ -278,20 +276,20 @@
   function renderStatus(d) {
     const i = d.instances || {};
     const cells = [
-      ["Instances", i.total], ["Annotated", i.annotated],
-      ["≥2 annotators", i.multi_annotated], ["Remaining", i.remaining],
-      ["Ingested traces", i.ingested], ["Annotators", d.users],
-      ["Datasets", (d.datasets || {}).count], ["Experiments", (d.experiments || {}).count],
+      [(L.datasets_stat_instances || "Instances"), i.total], [(L.datasets_stat_annotated || "Annotated"), i.annotated],
+      [(L.datasets_stat_multi_annotated || "≥2 annotators"), i.multi_annotated], [(L.datasets_stat_remaining || "Remaining"), i.remaining],
+      [(L.datasets_stat_ingested || "Ingested traces"), i.ingested], [(L.datasets_stat_annotators || "Annotators"), d.users],
+      [(L.datasets_stat_datasets || "Datasets"), (d.datasets || {}).count], [(L.datasets_stat_experiments || "Experiments"), (d.experiments || {}).count],
     ];
     statsEl.innerHTML = cells.map(([label, v]) =>
       `<div class="de-stat"><span class="label">${label}</span><span class="value">${v == null ? "—" : v}</span></div>`
     ).join("");
     paused = !!d.assignment_paused;
-    assignState.textContent = paused ? "Assignment paused" : "Assignment active";
+    assignState.textContent = paused ? (L.datasets_assignment_paused || "Assignment paused") : (L.datasets_assignment_active || "Assignment active");
     // Neutral when active; amber only for the paused warning state (reserve
     // green for "best/success" meaning used elsewhere).
     assignState.className = "de-status" + (paused ? " paused" : "");
-    assignToggle.textContent = paused ? "Resume assignment" : "Pause assignment";
+    assignToggle.textContent = paused ? (L.datasets_resume_assignment || "Resume assignment") : (L.datasets_pause_assignment || "Pause assignment");
     assignToggle.disabled = false;
   }
 
@@ -299,8 +297,8 @@
     try {
       const r = await fetch("{{ url_for('eval_admin.status') }}");
       if (r.ok) renderStatus(await r.json());
-      else statsEl.innerHTML = '<span class="de-empty">Status unavailable.</span>';
-    } catch (e) { statsEl.innerHTML = '<span class="de-empty">Status unavailable.</span>'; }
+      else statsEl.innerHTML = '<span class="de-empty">' + (L.datasets_status_unavailable || "Status unavailable.") + '</span>';
+    } catch (e) { statsEl.innerHTML = '<span class="de-empty">' + (L.datasets_status_unavailable || "Status unavailable.") + '</span>'; }
   }
 
   assignToggle.addEventListener("click", async () => {

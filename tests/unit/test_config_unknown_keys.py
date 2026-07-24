@@ -235,3 +235,53 @@ class TestValidateUnknownKeys:
         assert len(caplog.records) == 1
         assert "solo_mode.refinement_loop.eval_temperatuer" in caplog.records[0].message
         assert "eval_temperature" in caplog.records[0].message
+
+
+class TestUiLanguageValidation:
+    """ui_language accepts a bundled code, the legacy dict, or _base+overrides.
+
+    validate_ui_language_config warns (never raises) on unresolvable codes; the
+    dict/inline forms flow through validate_unknown_keys unchanged.
+    """
+
+    def test_bundled_code_string_no_warning(self, caplog):
+        from potato.server_utils.config_module import validate_ui_language_config
+        with caplog.at_level(logging.WARNING):
+            validate_ui_language_config({"ui_language": "es"})
+        assert len(caplog.records) == 0
+
+    def test_unknown_code_string_warns(self, caplog):
+        from potato.server_utils.config_module import validate_ui_language_config
+        with caplog.at_level(logging.WARNING):
+            validate_ui_language_config({"ui_language": "zz"})
+        assert any("zz" in r.message for r in caplog.records)
+
+    def test_base_plus_override_no_warning(self, caplog):
+        from potato.server_utils.config_module import validate_ui_language_config
+        with caplog.at_level(logging.WARNING):
+            validate_ui_language_config(
+                {"ui_language": {"_base": "es", "next_button": "x"}}
+            )
+        assert len(caplog.records) == 0
+
+    def test_unknown_base_warns(self, caplog):
+        from potato.server_utils.config_module import validate_ui_language_config
+        with caplog.at_level(logging.WARNING):
+            validate_ui_language_config({"ui_language": {"_base": "zz"}})
+        assert any("zz" in r.message for r in caplog.records)
+
+    def test_legacy_inline_dict_no_warning(self, caplog):
+        from potato.server_utils.config_module import validate_ui_language_config
+        with caplog.at_level(logging.WARNING):
+            validate_ui_language_config({"ui_language": {"next_button": "Weiter"}})
+        assert len(caplog.records) == 0
+
+    def test_bundled_code_and_base_are_known_keys(self):
+        # _base is whitelisted so the dict form doesn't trip unknown-key warnings.
+        assert "_base" in KNOWN_CONFIG_KEYS["ui_language"]
+
+    def test_string_ui_language_no_unknown_key_warning(self, caplog):
+        # A bare-string ui_language must not be recursed into as a dict.
+        with caplog.at_level(logging.WARNING):
+            validate_unknown_keys({"ui_language": "es"})
+        assert len(caplog.records) == 0

@@ -18,6 +18,60 @@ from .base import BaseExporter, ExportContext, ExportResult
 logger = logging.getLogger(__name__)
 
 
+def _prm_step_record(step: Any, i: int) -> Dict[str, Any]:
+    """Normalize one stored PRM step into an export record.
+
+    Always emits ``index``/``reward``; passes through the AI-verification
+    metadata (``source``/``verified``/``ai_reward``/``confidence``) when present
+    so training pipelines can keep or drop unverified / AI-authored labels.
+    """
+    if not isinstance(step, dict):
+        return {"index": i, "reward": 0}
+    rec: Dict[str, Any] = {
+        "index": step.get("index", i),
+        "reward": step.get("reward", 0),
+    }
+    for key in ("source", "verified", "ai_reward", "confidence"):
+        if key in step and step[key] is not None:
+            rec[key] = step[key]
+    return rec
+
+
+def prm_blob_to_step_labels(label_val: Any) -> Dict[int, Any]:
+    """Adapt a stored process_reward blob to a ``{step_index: reward}`` map.
+
+    ``potato.step_agreement`` keys on integer ``step_index`` and expects a
+    ``{step_index: label}`` shape; the process_reward schema instead stores
+    ``{"steps": [{"index", "reward", ...}], "mode"}``. This bridges the two so
+    PRM annotations feed step-level agreement (Krippendorff α / Cohen κ).
+    Returns ``{}`` for anything unparseable.
+    """
+    parsed = label_val
+    if isinstance(label_val, str):
+        try:
+            parsed = json.loads(label_val)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    if not isinstance(parsed, dict):
+        return {}
+    steps = parsed.get("steps")
+    if not isinstance(steps, list):
+        return {}
+    out: Dict[int, Any] = {}
+    for i, s in enumerate(steps):
+        if not isinstance(s, dict):
+            continue
+        idx = s.get("index", i)
+        reward = s.get("reward")
+        if reward is None:
+            continue
+        try:
+            out[int(idx)] = reward
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 class CodingEvalExporter(BaseExporter):
     """Export coding agent annotations for ML training pipelines."""
 
@@ -112,12 +166,20 @@ class CodingEvalExporter(BaseExporter):
                         "instance_id": instance_id,
                         "annotator": ann.get("user_id", ""),
                         "steps": [
-                            {"index": s.get("index", i), "reward": s.get("reward", 0)}
-                            for i, s in enumerate(steps)
+                            _prm_step_record(s, i) for i, s in enumerate(steps)
                         ],
                     }
                     if "mode" in parsed:
                         record["mode"] = parsed["mode"]
+                    # Surface whether the run used LLM pre-labeling that a human
+                    # verified, so downstream training can filter to
+                    # human-confirmed rows.
+                    if any(isinstance(s, dict) and s.get("source") == "ai" for s in steps):
+                        record["ai_prelabeled"] = True
+                    if any(isinstance(s, dict) and "verified" in s for s in steps):
+                        record["all_verified"] = all(
+                            (not isinstance(s, dict)) or s.get("verified", True) for s in steps
+                        )
 
                     f.write(json.dumps(record, ensure_ascii=False) + "\n")
                     count += 1

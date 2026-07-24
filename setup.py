@@ -38,9 +38,13 @@ _CORE_DEPS = [
 
 # Optional dependency groups for specific features.
 # Install with: pip install potato-annotation[ai,formats]
+# All AI SDKs are imported lazily (see potato/ai/ai_endpoint.py's lazy
+# endpoint registry), so none of these are needed for basic server startup.
 _AI_DEPS = [
     "ollama>=0.6.0",
     "openai>=1.0.0",
+    "anthropic>=0.30.0",
+    "google-genai>=1.0.0",
 ]
 _FORMAT_DEPS = [
     "pdfplumber>=0.10.0",
@@ -69,7 +73,7 @@ _LANGCHAIN_DEPS = [
 
 setup(
     name="potato-annotation",
-    version='2.6.2',
+    version='2.7.0',
     author="Potato Development Team",
     author_email="jurgens@umich.edu",
     description="A flexible, stand-alone, web-based platform for text annotation tasks",
@@ -106,6 +110,10 @@ setup(
         "viz": _VIZ_DEPS,
         "export": _EXPORT_DEPS,
         "huggingface": _HF_DEPS,
+        # Dataset publishing: HuggingFace push + parquet output. Zenodo and the
+        # local archive need only `requests` (a core dependency), so no extra
+        # deps beyond these.
+        "publish": _HF_DEPS + _EXPORT_DEPS,
         "auth": _AUTH_DEPS,
         "langchain": _LANGCHAIN_DEPS,
         "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS,
@@ -129,6 +137,7 @@ setup(
         # only invite drift as new static/ folders are added.
         "potato": [
             "templates/*.html",
+            "i18n/*.yaml",
         ],
     },
 )

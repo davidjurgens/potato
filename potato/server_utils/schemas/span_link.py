@@ -138,11 +138,13 @@ def _generate_span_link_layout_internal(annotation_scheme, horizontal=False):
             </div>
         </div>
 
-        <!-- Selected Spans Display -->
+        <!-- Selected Spans Display (populated by span-link-manager.js) -->
         <div class="span-link-selection">
-            <label class="span-link-section-label">Selected Spans:</label>
-            <div class="span-link-selected-spans" id="{escape_html_content(scheme_name)}_selected_spans">
-                <p class="no-selection-message">Click on highlighted spans to select them for linking</p>
+            <label class="span-link-section-label">Link builder:</label>
+            <div class="span-link-selected-spans" id="{escape_html_content(scheme_name)}_selected_spans"
+                 role="status" aria-live="polite">
+                <p class="span-link-guide"><span class="span-link-step">1</span>Highlight spans first, then
+                <span class="span-link-step">2</span>choose a link type to connect them.</p>
             </div>
         </div>
 
@@ -158,8 +160,8 @@ def _generate_span_link_layout_internal(annotation_scheme, horizontal=False):
                 Create Link
             </button>
             <button type="button" class="span-link-clear-btn" id="{escape_html_content(scheme_name)}_clear_selection"
-                    title="Exit link mode to create new span annotations (Esc)">
-                Exit Link Mode
+                    title="Stop linking and go back to highlighting spans (Esc)">
+                Cancel
             </button>
         </div>
 

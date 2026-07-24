@@ -28,6 +28,12 @@
      * Initialize the adjudication interface
      */
     function init() {
+        // Deep link: /adjudicate?instance=<id> pre-selects that item
+        // (used by the judge-alignment dashboard's open-in-adjudication links)
+        try {
+            var wanted = new URLSearchParams(window.location.search).get('instance');
+            if (wanted) currentItemId = wanted;
+        } catch (e) { /* older browsers: ignore */ }
         loadQueue(currentFilter === 'all' ? null : currentFilter);
         bindNavigation();
         bindFilters();

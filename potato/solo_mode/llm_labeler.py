@@ -306,6 +306,17 @@ class LLMLabelingThread(threading.Thread):
 
             # Build labeling prompt
             labels = self._extract_labels(schema_info)
+            is_multiselect = schema_info.get('annotation_type') == 'multiselect'
+            is_span = schema_info.get('annotation_type') == 'span'
+            if is_multiselect:
+                label_hint = "comma-separated list of ALL applicable labels"
+            elif is_span:
+                label_hint = ('JSON array of objects like '
+                              '[{"text": "<exact substring copied from the text>", '
+                              '"label": "<one of the available labels>"}] '
+                              'for every span to mark; use [] if nothing applies')
+            else:
+                label_hint = "your label"
 
             # Check if edge case rule extraction is enabled
             ecr_config = getattr(self.solo_config, 'edge_case_rules', None)
@@ -340,7 +351,7 @@ Available labels: {labels}
 
 Respond with JSON. If you are uncertain about the label (confidence below 75), also identify a generalizable edge case rule that describes when this type of ambiguity occurs:
 {{
-    "label": "<your label or -1 if unclassifiable>",
+    "label": "<{label_hint}, or -1 if unclassifiable>",
     "confidence": <0-100>,
     "reasoning": "<brief explanation>",
     "is_edge_case": <true if this is an ambiguous/edge case, false otherwise>,
@@ -357,7 +368,7 @@ Available labels: {labels}
 
 Respond with JSON:
 {{
-    "label": "<your label>",
+    "label": "<{label_hint}>",
     "confidence": <0-100>,
     "reasoning": "<brief explanation>"
 }}
@@ -387,7 +398,63 @@ Respond with JSON:
 
             # Validate label
             valid_labels = self._get_valid_labels(schema_info)
-            if valid_labels and label not in valid_labels:
+            if is_span:
+                # The model returns [{"text","label"}]; locate each snippet's
+                # char offsets in the source text and store as a JSON array of
+                # {start, end, text, label} (the human span format).
+                try:
+                    raw = label if isinstance(label, list) else json.loads(str(label))
+                except (ValueError, TypeError):
+                    raw = []
+                spans_out = []
+                if isinstance(raw, list):
+                    for sp in raw:
+                        if not isinstance(sp, dict):
+                            continue
+                        snippet = str(sp.get('text', '')).strip()
+                        lbl = str(sp.get('label', ''))
+                        if not snippet:
+                            continue
+                        idx = text.find(snippet)
+                        if idx < 0:
+                            continue
+                        if valid_labels and lbl not in valid_labels:
+                            m = self._fuzzy_match_label(lbl, valid_labels)
+                            lbl = m if m else lbl
+                        spans_out.append({
+                            'start': idx, 'end': idx + len(snippet),
+                            'text': snippet, 'label': lbl,
+                        })
+                label = json.dumps(spans_out)
+            elif is_multiselect:
+                # The model may return one or more labels (comma/JSON). Validate
+                # each against the label set and store as a JSON array string so
+                # it matches the human multiselect format and the agreement
+                # check's set parsing.
+                if isinstance(label, list):
+                    parts = [str(p) for p in label]
+                else:
+                    parts = [p.strip() for p in re.split(r'[;,]', str(label)) if p.strip()]
+                matched = []
+                for p in parts:
+                    if valid_labels and p not in valid_labels:
+                        m = self._fuzzy_match_label(p, valid_labels)
+                        if m:
+                            matched.append(m)
+                    elif p:
+                        matched.append(p)
+                # de-duplicate, preserve order
+                seen = set()
+                matched = [x for x in matched if not (x in seen or seen.add(x))]
+                if not matched:
+                    return LabelingResult(
+                        instance_id=instance_id, schema_name=schema_name,
+                        label=None, confidence=0, uncertainty=1, reasoning="",
+                        prompt_version=0, model_name=getattr(endpoint, 'model', ''),
+                        error="No valid labels returned",
+                    )
+                label = json.dumps(matched)
+            elif valid_labels and label not in valid_labels:
                 label = self._fuzzy_match_label(label, valid_labels)
                 if label is None:
                     return LabelingResult(
@@ -478,15 +545,17 @@ Respond with JSON:
             )
 
     def _extract_labels(self, schema_info: Dict[str, Any]) -> str:
-        """Extract label names from schema."""
-        labels = schema_info.get('labels', [])
-        label_names = []
-        for label in labels:
-            if isinstance(label, str):
-                label_names.append(label)
-            elif isinstance(label, dict):
-                label_names.append(label.get('name', str(label)))
-        return ', '.join(label_names)
+        """Extract label names from schema (for the prompt)."""
+        labels = self._get_valid_labels(schema_info)
+        # For a likert scale, hint the endpoints so the model knows the direction.
+        if (not schema_info.get('labels')
+                and schema_info.get('annotation_type') == 'likert'
+                and schema_info.get('size')):
+            lo = schema_info.get('min_label', '')
+            hi = schema_info.get('max_label', '')
+            hint = f" (1 = {lo}, {schema_info['size']} = {hi})" if (lo or hi) else ""
+            return ', '.join(labels) + hint
+        return ', '.join(labels)
 
     def _get_valid_labels(self, schema_info: Dict[str, Any]) -> List[str]:
         """Get valid label list from schema."""
@@ -497,6 +566,12 @@ Respond with JSON:
                 valid.append(label)
             elif isinstance(label, dict):
                 valid.append(label.get('name', str(label)))
+        # Likert scales carry size + min/max labels rather than a label list;
+        # derive numeric scale points so the model has valid options to choose.
+        if (not valid
+                and schema_info.get('annotation_type') == 'likert'
+                and schema_info.get('size')):
+            valid = [str(i) for i in range(1, int(schema_info['size']) + 1)]
         return valid
 
     def _fuzzy_match_label(self, label, valid: List[str]) -> Optional[str]:

@@ -1,0 +1,88 @@
+# Session-Level Scoring Example
+#
+# Groups traces that share a session_id into *sessions* and scores whole
+# sessions on the /sessions page — "did this multi-trace interaction
+# resolve the user's problem?" — the Langfuse/LangSmith session-annotation
+# workflow.
+#
+# Schemes marked `session_level: true` do NOT appear on the per-trace
+# annotation form; they are answered once per session at /sessions (each
+# annotator independently; the page shows cross-annotator aggregates).
+# Regular schemes (trace_quality below) still work per trace on /annotate.
+#
+# Run from repository root:
+#   python potato/flask_server.py start examples/agent-traces/session-scoring/config.yaml -p 8000
+# then log in and open http://localhost:8000/sessions
+
+annotation_task_name: "Session-Level Scoring"
+
+data_files:
+  - data/session-traces.json
+
+item_properties:
+  id_key: id
+  text_key: task_description
+
+task_dir: .
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+# Group traces into sessions by their session key. `key` is optional —
+# by default session_id, thread_id, then conversation_id are scanned
+# (top-level or under metadata). `attributes` lifts item fields onto
+# the session record.
+sessions:
+  enabled: true
+  attributes: [user_tier]
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+
+  fields:
+    - key: task_description
+      type: text
+      label: "Task"
+
+    - key: conversation
+      type: dialogue
+      label: "Trace"
+
+annotation_schemes:
+  # --- Session-level (scored on /sessions) -------------------------------
+  - annotation_type: likert
+    name: session_resolution
+    description: "Did the session resolve the user's problem?"
+    min_label: "Not at all"
+    max_label: "Fully resolved"
+    size: 5
+    session_level: true
+
+  - annotation_type: multiselect
+    name: session_issues
+    description: "Session-wide issues"
+    labels:
+      - lost_context_between_traces
+      - repeated_work
+      - contradictory_answers
+      - unnecessary_escalation
+    session_level: true
+
+  - annotation_type: text
+    name: session_notes
+    description: "Session notes"
+    session_level: true
+
+  # --- Per-trace (scored on /annotate as usual) --------------------------
+  - annotation_type: radio
+    name: trace_quality
+    description: "Quality of this individual trace"
+    labels:
+      - good
+      - acceptable
+      - poor
+    sequential_key_binding: true
+
+user_config:
+  allow_all_users: true

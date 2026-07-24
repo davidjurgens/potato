@@ -66,6 +66,26 @@ PERSISTENCE_TEST_MAP = {
     # Agent-evaluation schemas — Selenium persistence tests to be created
     "process_reward": "tests/selenium/test_process_reward_ui.py",
     "code_review": "tests/selenium/test_code_review_ui.py",
+    # M-series multi-agent + multimodal schemas (each has a dedicated UI test)
+    "agent_interaction_graph": "tests/selenium/test_agent_interaction_graph_ui.py",
+    "agent_scorecard": "tests/selenium/test_agent_scorecard_ui.py",
+    "emergent_behavior": "tests/selenium/test_emergent_behavior_ui.py",
+    "failure_attribution": "tests/selenium/test_failure_attribution_ui.py",
+    "gui_trajectory": "tests/selenium/test_gui_trajectory_ui.py",
+    "handoff_review": "tests/selenium/test_handoff_review_ui.py",
+    "multimodal_reasoning": "tests/selenium/test_multimodal_reasoning_ui.py",
+    "speech_transcript": "tests/selenium/test_speech_transcript_ui.py",
+    "table_grid": "tests/selenium/test_table_grid_ui.py",
+    "temporal_grounding": "tests/selenium/test_temporal_grounding_ui.py",
+    "tool_call_review": "tests/selenium/test_tool_call_review_ui.py",
+    "tool_contention": "tests/selenium/test_tool_contention_ui.py",
+    "voice_interaction": "tests/selenium/test_voice_interaction_ui.py",
+    # Multi-document event schema (hidden-input JSON persistence)
+    "multi_document_event": "tests/selenium/test_multi_document_event_ui.py",
+    # Agent-eval turn/session schemas (hidden-input JSON persistence; each
+    # reads the server-restored hidden value before wiring events)
+    "consensus_tracking": "tests/selenium/test_consensus_tracking_ui.py",
+    "context_attribution": "tests/selenium/test_context_attribution_ui.py",
 }
 
 # Types that are exempt from the file-existence check because their
@@ -79,6 +99,9 @@ EXEMPT_FROM_FILE_CHECK = {
     "vas", "extractive_qa", "rubric_eval", "text_edit", "error_span",
     "card_sort", "conjoint", "trajectory_eval", "trajectory_edit",
     "process_reward", "code_review",
+    # Selenium persistence tests still to be written (hidden-input JSON
+    # persistence contract is unit-covered in the meantime):
+    "multi_document_event", "consensus_tracking", "context_attribution",
 }
 
 
