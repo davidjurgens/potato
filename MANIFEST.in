@@ -1,8 +1,4 @@
-include potato/templates/congrats.html
-include potato/templates/home.html
-include potato/templates/id_login_home.html
-include potato/templates/signup.html
-include potato/templates/error.html
+graft potato/templates
 recursive-include potato/base_html/ *
 recursive-include potato/static/ *
 recursive-include potato/i18n/ *.yaml
