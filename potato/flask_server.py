@@ -100,6 +100,7 @@ from potato.server_utils.prolific_apis import ProlificStudy
 from potato.server_utils.mturk_apis import init_mturk_hit, get_mturk_hit
 from potato.server_utils.json import easy_json
 from potato.server_utils.instance_display import InstanceDisplayRenderer, get_instance_display_renderer
+from potato.server_utils.transcripts.binding import enrich_record as enrich_transcript_record
 
 # This allows us to create an AI endpoint for the system to interact with as needed (if configured)
 from potato.ai.ai_endpoint import get_ai_endpoint
@@ -2605,8 +2606,12 @@ def render_page_with_annotations(username: str):
         instance_obj=item,
         # Full record dict so schemas like process_reward / trajectory_eval
         # can bind to structured fields (e.g. structured_turns) via the
-        # [data-instance-json] element.
-        instance_record=item.get_data(),
+        # [data-instance-json] element. Transcript-consuming schemes also get a
+        # normalized "_transcripts" index attached here, so they accept every
+        # format the audio_dialogue display does (see transcripts/binding.py).
+        instance_record=enrich_transcript_record(
+            item.get_data(), config, base_dir=config.get("task_dir")
+        ),
         instance_id=instance_id,
         instance_index=user_state.get_current_instance_index(),
         finished=get_user_state(username).get_annotation_count(),
@@ -4562,6 +4567,13 @@ def main():
 
     This function initializes the application, loads data, and runs the server.
     """
+    # ``transcripts`` is dispatched before the server's own argument parsing.
+    # It takes input paths rather than a config file and has its own flags, so
+    # routing it through the server parser would mean bending both.
+    if len(sys.argv) > 1 and sys.argv[1] == 'transcripts':
+        from potato.transcript_cli import main as transcripts_main
+        sys.exit(transcripts_main(sys.argv[2:]))
+
     # Parse command line arguments
     args = arguments()
 

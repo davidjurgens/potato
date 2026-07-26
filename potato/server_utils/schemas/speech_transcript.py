@@ -78,8 +78,20 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
             return {{}};
         }}
 
+        function normalized() {{
+            // Server-side transcript index (see transcripts/binding.py). Present
+            // whenever the record held a recognizable transcript in any format:
+            // SRT, WebVTT, Whisper/WhisperX, a cloud ASR response, TextGrid, ...
+            var d = instanceData();
+            var idx = d._transcripts && d._transcripts[CONFIG.segments_key];
+            return (idx && Array.isArray(idx.turns) && idx.turns.length) ? idx : null;
+        }}
+
         function getSegments() {{
-            var s = instanceData()[CONFIG.segments_key];
+            // Prefer the normalized turns; fall back to reading the raw field,
+            // which keeps hand-built {{start, end, speaker, text}} rows working.
+            var norm = normalized();
+            var s = norm ? norm.turns : instanceData()[CONFIG.segments_key];
             if (!Array.isArray(s)) return [];
             return s.map(function(x, i) {{
                 x = (x && typeof x === 'object') ? x : {{text: String(x)}};
@@ -103,7 +115,10 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
             if (!list) return;
 
             var audWrap = document.getElementById(SCHEMA + '-audio');
-            var src = d[CONFIG.audio_key];
+            var norm = normalized();
+            // A transcript can name its own media (an EAF media descriptor, a
+            // SPoRC mp3_url), so fall back to that when no audio field is set.
+            var src = d[CONFIG.audio_key] || (norm && norm.audio) || '';
             audWrap.innerHTML = src ? '<audio controls preload="metadata" src="' + esc(src) + '" style="width:100%"></audio>' : '';
 
             if (!segs.length) {{ list.innerHTML = ''; if (empty) empty.style.display = ''; return; }}

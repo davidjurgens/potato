@@ -14,6 +14,7 @@ nav:
         - Crowdsourcing Guide: guides/crowdsourcing-guide.md
         - Agent Evaluation Guide: guides/agent-evaluation-guide.md
         - AI-Assisted Annotation: guides/ai-assisted-annotation-guide.md
+        - Working with Transcripts: guides/working_with_transcripts.md
     - Configuration:
         - Overview: configuration/configuration.md
         - Data Format: configuration/data_format.md
@@ -49,8 +50,10 @@ nav:
         - Multimedia:
             - Image Annotation: annotation-types/multimedia/image_annotation.md
             - Audio Annotation: annotation-types/multimedia/audio_annotation.md
+            - Audio Dialogue: annotation-types/multimedia/audio_dialogue.md
             - Video Annotation: annotation-types/multimedia/video_annotation.md
             - Tiered Annotation: annotation-types/multimedia/tiered_annotation.md
+            - Transcript Formats: annotation-types/multimedia/transcript_formats.md
         - Measurement:
             - Visual Analog Scale: annotation-types/measurement/vas.md
             - Range Slider: annotation-types/measurement/range_slider.md
@@ -152,6 +155,8 @@ nav:
     - API Reference:
         - API Reference: api-reference/api_reference.md
     - Release Notes:
+        - v2.7.1: releasenotes/v2.7.1.md
+        - v2.7.0: releasenotes/v2.7.0.md
         - v2.6.2: releasenotes/v2.6.2.md
         - v2.6.1: releasenotes/v2.6.1.md
         - v2.6.0: releasenotes/v2.6.0.md

@@ -62,6 +62,10 @@ class AudioDialogueDisplay(BaseDisplay):
         "text_key": "text",
         "speakers": [],            # roster: [{id, name, color, side}]
         "allow_speaker_assignment": "auto",  # "auto" | True | False
+        # Sidecar transcripts: "auto" reads the field as a file path when it
+        # looks like one (a short single line ending in .srt/.vtt/.json/...),
+        # otherwise treats it as inline content. "true"/"false" force either.
+        "transcript_is_path": "auto",
         "scroll_height": "480px",
         "show_timestamps": True,
         "playback_rates": [1, 1.25, 1.5, 2],
@@ -69,11 +73,30 @@ class AudioDialogueDisplay(BaseDisplay):
     description = "Podcast / interview dialogue: speaker bubbles, per-turn audio playback, ratings, spans"
     supports_span_target = True
 
+    # -- helpers ------------------------------------------------------------
+
+    @staticmethod
+    def _transcript_base_dir() -> Optional[str]:
+        """Directory that sidecar transcript paths resolve against.
+
+        This is the task dir, which config loading has already resolved to an
+        absolute path. Returning ``None`` (no config loaded, e.g. a unit test
+        rendering the display directly) disables sidecar loading entirely, so
+        field values are always treated as inline content.
+        """
+        try:
+            from ..config_module import config
+
+            task_dir = config.get("task_dir")
+        except Exception:
+            return None
+        return task_dir if isinstance(task_dir, str) and task_dir else None
+
     # -- render -------------------------------------------------------------
 
     def render(self, field_config: Dict[str, Any], data: Any) -> str:
         options = self.get_display_options(field_config)
-        from ..transcript_ingest import normalize_transcript
+        from ..transcripts import normalize_transcript
 
         norm = normalize_transcript(
             data,
@@ -81,6 +104,8 @@ class AudioDialogueDisplay(BaseDisplay):
             turns_key=options.get("turns_key", "turns"),
             speaker_key=options.get("speaker_key", "speaker"),
             text_key=options.get("text_key", "text"),
+            base_dir=self._transcript_base_dir(),
+            is_path=str(options.get("transcript_is_path", "auto")),
         )
         audio = norm.get("audio")
         turns = norm.get("turns") or []

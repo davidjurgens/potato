@@ -1,0 +1,52 @@
+File type = "ooTextFile"
+Object class = "TextGrid"
+
+xmin = 0
+xmax = 32
+tiers? <exists>
+size = 2
+item []:
+    item [1]:
+        class = "IntervalTier"
+        name = "fieldworker"
+        xmin = 0
+        xmax = 32
+        intervals: size = 4
+        intervals [1]:
+            xmin = 0
+            xmax = 4.8
+            text = "Could you say that word again, slowly?"
+        intervals [2]:
+            xmin = 4.8
+            xmax = 11.2
+            text = ""
+        intervals [3]:
+            xmin = 11.2
+            xmax = 16.4
+            text = "And is that the same word you'd use for the young ones?"
+        intervals [4]:
+            xmin = 16.4
+            xmax = 32
+            text = ""
+    item [2]:
+        class = "IntervalTier"
+        name = "speaker"
+        xmin = 0
+        xmax = 32
+        intervals: size = 4
+        intervals [1]:
+            xmin = 0
+            xmax = 4.8
+            text = ""
+        intervals [2]:
+            xmin = 4.8
+            xmax = 11.2
+            text = "Yes. It is the one my grandmother used, not the one on the radio."
+        intervals [3]:
+            xmin = 11.2
+            xmax = 16.4
+            text = ""
+        intervals [4]:
+            xmin = 16.4
+            xmax = 24.6
+            text = "No, for the young ones there is a different word entirely."

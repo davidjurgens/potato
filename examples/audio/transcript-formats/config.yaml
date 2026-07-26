@@ -1,0 +1,119 @@
+# Transcript Formats Example
+#
+# One task, six instances, six different transcript formats — SubRip, WebVTT,
+# Whisper JSON, YouTube json3, Praat TextGrid, and a Deepgram response. All of
+# them render identically as speaker bubbles, because Potato normalizes every
+# supported format to the same turn model before display.
+#
+# The point of the example is the `transcript` value in data/transcripts.json:
+#
+#     "conversation": {
+#       "audio": "https://.../episode.mp3",
+#       "transcript": "data/sources/talk_01.srt"
+#     }
+#
+# That is a *path to a sidecar file*, not inlined transcript text. Potato reads
+# it relative to task_dir (through the same path-security check as every other
+# configured path) and detects the format from the content. So the usual layout —
+# media files next to their .srt or .json — works without a preprocessing step.
+#
+# To go the other way and build a data file from a folder of ASR output:
+#
+#     potato transcripts ./whisper_out --media-dir ./audio -o data/items.json
+#     potato transcripts ./whisper_out --dry-run     # what did it detect?
+#
+# See docs/annotation-types/multimedia/transcript_formats.md for the full format
+# reference, and docs/guides/working_with_transcripts.md for the walkthrough.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/audio/transcript-formats/config.yaml -p 8000
+# Debug straight to annotation:
+#   python potato/flask_server.py start examples/audio/transcript-formats/config.yaml -p 8000 --debug --debug-phase annotation
+
+annotation_task_name: "Transcript Formats"
+
+task_dir: .
+data_files:
+  - data/transcripts.json
+
+output_annotation_dir: annotation_output/transcript-formats/
+output_annotation_format: json
+
+item_properties:
+  id_key: id
+  text_key: title
+
+user_config:
+  allow_all_users: true
+  users: []
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 16px
+  fields:
+    - key: title
+      type: text
+      label: "Format"
+
+    - key: source_format
+      type: text
+      label: "Where this came from"
+
+    - key: conversation
+      type: audio_dialogue
+      label: "Transcript"
+      span_target: true
+      display_options:
+        audio_key: audio
+        scroll_height: 420px
+        show_timestamps: true
+        # "auto" reads the field as a sidecar path when it looks like one.
+        # Set "false" if your data genuinely holds one-line inline transcripts
+        # that happen to end in something like ".txt".
+        transcript_is_path: auto
+        # No fixed roster: these files use different speaker conventions
+        # (Host/Guest, Interviewer/Participant, speaker_0/speaker_1, tier names),
+        # so speakers get deterministic colors and alternating sides instead.
+        allow_speaker_assignment: auto
+
+annotation_schemes:
+  # Whether the transcript survived ingestion intact — the judgement you
+  # actually want a human to make before trusting a corpus.
+  - annotation_type: radio
+    name: ingestion_quality
+    description: "Did this transcript come through correctly?"
+    labels:
+      - name: "clean"
+        tooltip: "Timings, speakers, and text all look right"
+      - name: "timing_off"
+        tooltip: "Turns are misaligned with the audio"
+      - name: "speakers_wrong"
+        tooltip: "Turns are attributed to the wrong speaker, or not attributed"
+      - name: "text_garbled"
+        tooltip: "Text is missing, truncated, or mangled"
+
+  # Per-turn labelling, bound to every turn of the conversation field.
+  - annotation_type: radio
+    name: turn_type
+    description: "What is this turn doing?"
+    labels:
+      - question
+      - answer
+      - aside
+    turn_level: true
+    turn_binding:
+      field: conversation
+
+  # Spans work over normalized turns regardless of the source format.
+  - annotation_type: span
+    name: highlights
+    description: "Highlight anything an annotator would need to check against the audio"
+    target_field: conversation
+    labels:
+      - name: unclear
+        key_value: "u"
+      - name: likely_asr_error
+        key_value: "e"
+
+site_dir: default

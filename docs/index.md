@@ -47,6 +47,8 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Audio Dialogue](annotation-types/multimedia/audio_dialogue.md) - Podcast/interview turn annotation: speaker bubbles, per-turn audio playback, ratings, spans, and cross-turn linking
 - [Video Annotation](annotation-types/multimedia/video_annotation.md) - Frame-by-frame video labeling
 - [Tiered Annotation](annotation-types/multimedia/tiered_annotation.md) - ELAN-style hierarchical multi-tier annotation
+- [Transcript Formats](annotation-types/multimedia/transcript_formats.md) - Whisper, subtitles, cloud ASR, TextGrid, and EAF: what Potato reads and how
+- [Working with Transcripts](guides/working_with_transcripts.md) - From Whisper output or YouTube subtitles to a running annotation task
 - [Triage](annotation-types/triage.md) - Rapid accept/reject/skip data curation interface
 - [Entity Linking](annotation-types/text/entity_linking.md) - Link spans to external knowledge bases (Wikidata, UMLS)
 - [Coreference Annotation](annotation-types/text/coreference_annotation.md) - Group mentions of the same entity
@@ -208,6 +210,7 @@ Role-based guides that walk you through Potato for your specific use case:
 
 ## Release Notes
 
+- [v2.7.1](releasenotes/v2.7.1.md) - Transcripts In, Without the Reformatting (21 input formats, sidecar files, `potato transcripts` CLI)
 - [v2.7.0](releasenotes/v2.7.0.md) - Seven New Ways to Annotate (Psychometrics, Multiplayer Rooms, Boundary Lab, Truth Serum, Think-Aloud, Paper Mode, Pocket Mode)
 - [v2.6.1](releasenotes/v2.6.1.md) - Agentic Evaluation Suite (evaluators, datasets/experiments, automation, CI gating, tracing SDK, curation, arena)
 - [v2.6.0](releasenotes/v2.6.0.md) - QDA Mode, LLM-as-Judge Calibration & Trajectory Editing

@@ -570,8 +570,34 @@ For maximum compatibility, use:
 - **Video codec**: H.264
 - **Audio codec**: AAC
 
+## Annotating video with a transcript
+
+Video temporal annotation works on the timeline. If your video also has subtitles
+or a transcript — downloaded captions, or ASR run over the audio track — you can
+annotate the speech alongside it.
+
+Potato reads WebVTT, SubRip, SubStation Alpha, TTML, and YouTube's `json3` /
+`srv1`-`srv3` caption formats, plus ASR output from Whisper and the major cloud
+providers. Subtitles pulled with `yt-dlp` work directly:
+
+```bash
+yt-dlp --write-auto-subs --sub-langs en --sub-format vtt --skip-download <URL>
+potato transcripts ./captions --media-url-prefix https://cdn.example.org/video \
+  -o data/clips.json
+```
+
+A caveat worth knowing before you design a scheme: auto-generated captions have
+no punctuation and no speaker labels, and their cue boundaries fall wherever the
+caption window filled up rather than at sentence ends. Sentence-level annotation
+over auto-captions is guesswork.
+
+See [Working with Transcripts](../../guides/working_with_transcripts.md) and
+[Transcript Format Support](transcript_formats.md).
+
 ## See Also
 
 - [Audio Annotation](audio_annotation.md) - Similar annotation for audio files
+- [Working with Transcripts](../../guides/working_with_transcripts.md) - Subtitles and ASR output
+- [Transcript Format Support](transcript_formats.md) - Every supported transcript format
 - [Schemas and Templates](../schemas_and_templates.md) - All annotation types
 - [Keyboard Shortcuts](../../administration/productivity.md#keyboard-shortcuts) - Productivity features

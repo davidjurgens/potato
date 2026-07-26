@@ -624,8 +624,8 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
             '<input type="submit" value="go">', '<input type="submit" value="go" hidden>'
         )
         html_template = html_template.replace(
-            '<input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required>',
-            '<input type="number" name="go_to" id="go_to" value="" onfocusin="user_input()" onfocusout="user_input_leave()" max={{total_count}} min=0 required hidden>',
+            '<input type="number" name="go_to" id="go_to" value="" max={{total_count}} min=0 required>',
+            '<input type="number" name="go_to" id="go_to" value="" max={{total_count}} min=0 required hidden>',
         )
 
     if hide_navbar:

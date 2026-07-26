@@ -297,3 +297,26 @@ See `examples/audio/audio-annotation/config.yaml` for a complete working example
 1. Check browser audio permissions
 2. Verify audio format is supported (MP3, WAV, OGG)
 3. Check for CORS issues if audio is hosted externally
+
+## Already have a transcript?
+
+This page covers segmenting a waveform from scratch. If you have ASR output or
+subtitle files for your audio, you probably want a transcript-driven display
+instead — the turns are already segmented, so annotators label speech rather than
+re-drawing boundaries by hand.
+
+Potato reads Whisper, WhisperX, and whisper.cpp JSON, SubRip, WebVTT, SubStation
+Alpha, TTML, YouTube captions, AWS Transcribe, Deepgram, AssemblyAI, Rev.ai, CTM,
+Praat TextGrid, and ELAN EAF — either inlined in your data file or read from a
+sidecar next to the media.
+
+```bash
+potato transcripts ./whisper_out --media-dir ./audio -o data/interviews.json
+```
+
+- [Working with Transcripts](../../guides/working_with_transcripts.md) — running Whisper or pulling YouTube subtitles, then annotating the result
+- [Transcript Format Support](transcript_formats.md) — every supported format and how it is detected
+- [Audio Dialogue](audio_dialogue.md) — speaker bubbles with per-turn playback
+
+Waveform segmentation and transcript annotation combine: keep this schema for
+marking acoustic events, and add an `audio_dialogue` display for the speech.

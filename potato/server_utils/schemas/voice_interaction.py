@@ -97,9 +97,21 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
             return {{}};
         }}
 
-        function getTurns() {{
+        function normalized() {{
+            // Server-side transcript index (see transcripts/binding.py). Present
+            // whenever the record held a recognizable transcript in any format:
+            // SRT, WebVTT, Whisper/WhisperX, a cloud ASR response, TextGrid, ...
             var d = instanceData();
-            var t = d[CONFIG.turns_key];
+            var idx = d._transcripts && d._transcripts[CONFIG.turns_key];
+            return (idx && Array.isArray(idx.turns) && idx.turns.length) ? idx : null;
+        }}
+
+        function getTurns() {{
+            // Prefer the normalized turns; fall back to the raw field so
+            // hand-built turn lists keep working unchanged.
+            var d = instanceData();
+            var norm = normalized();
+            var t = norm ? norm.turns : d[CONFIG.turns_key];
             if (!Array.isArray(t)) return [];
             return t.map(function(x, i) {{
                 x = (x && typeof x === 'object') ? x : {{}};
@@ -143,7 +155,10 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
 
             // Audio player (optional).
             var audWrap = document.getElementById(SCHEMA + '-audio');
-            var src = d[CONFIG.audio_key];
+            var normAudio = normalized();
+            // A transcript can name its own media (an EAF media descriptor, a
+            // SPoRC mp3_url), so fall back to that when no audio field is set.
+            var src = d[CONFIG.audio_key] || (normAudio && normAudio.audio) || '';
             audWrap.innerHTML = src ? '<audio controls preload="metadata" src="' + esc(src) + '" style="width:100%"></audio>' : '';
 
             // Dual-track timeline.

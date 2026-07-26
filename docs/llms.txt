@@ -34,4 +34,6 @@ Code: https://github.com/davidjurgens/potato · Paper: EMNLP 2022 (System Demons
 - [Schema Gallery](https://potatoannotator.readthedocs.io/en/latest/annotation-types/schemas_and_templates/): all 20+ annotation types
 - [Configuration Reference](https://potatoannotator.readthedocs.io/en/latest/configuration/config_reference/): every config option
 - [Quality Control](https://potatoannotator.readthedocs.io/en/latest/workflow/quality_control/): IAA, gold standards, attention checks
+- [Working with Transcripts](https://potatoannotator.readthedocs.io/en/latest/guides/working_with_transcripts/): annotate Whisper output and YouTube subtitles
+- [Transcript Formats](https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedia/transcript_formats/): Whisper, WhisperX, SRT/VTT/ASS/TTML, YouTube captions, AWS/Deepgram/AssemblyAI/Rev.ai, CTM, TextGrid, EAF
 - [Crowdsourcing](https://potatoannotator.readthedocs.io/en/latest/deployment/crowdsourcing/): MTurk & Prolific integration

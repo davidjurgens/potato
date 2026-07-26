@@ -50,7 +50,7 @@ action, so annotators aren't limited to a fixed roster.
 ### Accepted transcript shapes
 
 The transcript is normalized on render by
-`potato/server_utils/transcript_ingest.py`, so `turns` may instead be supplied as:
+`potato/server_utils/transcripts/`, so `turns` may instead be supplied as:
 
 | Shape | How it's recognized | Speaker |
 |-------|---------------------|---------|
@@ -60,6 +60,30 @@ The transcript is normalized on render by
 | **WebVTT** | a string starting with `WEBVTT` | `<v Name>` tag or `Name:` prefix, else none |
 | **SRT** | a SubRip string | `Name:` prefix, else none |
 | **SPoRC** | speaker-turn rows (`turn_text`, `start_time`, `end_time`, `speaker` list) | `inferred_speaker_name` / `inferred_speaker_role` (`neither`→undiarized) |
+
+…plus SubStation Alpha, TTML/DFXP, YouTube `json3` and `srv1`/`srv2`/`srv3`,
+whisper.cpp JSON, Whisper TSV, AWS Transcribe, Deepgram, AssemblyAI, Rev.ai,
+NIST CTM, Praat TextGrid, and ELAN EAF. See
+[Transcript Format Support](transcript_formats.md) for the full table, detection
+rules, and what is *not* supported.
+
+### Sidecar files
+
+The field value may be a **path** to a transcript file rather than the transcript
+itself — the usual layout, where media sits next to its `.srt` or `.json`:
+
+```json
+{"id": "int_001",
+ "conversation": {"audio": "media/int_001.mp3",
+                  "transcript": "media/int_001.srt"}}
+```
+
+Paths resolve relative to `task_dir` through the standard path-security check.
+Set `transcript_is_path: false` in `display_options` if your data genuinely holds
+one-line inline transcripts that look like filenames.
+
+To build a data file from a folder of ASR output, see
+[`potato transcripts`](transcript_formats.md#building-a-data-file-potato-transcripts).
 
 **SPoRC** ([Structured Podcast Research Corpus](https://huggingface.co/datasets/blitt/SPoRC))
 turn rows ingest directly, in both the JSONL (camelCase: `turnText`/`startTime`/
