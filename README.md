@@ -37,38 +37,6 @@ Open [http://localhost:8000](http://localhost:8000) and start annotating. Browse
 
 ---
 
-## ⚡ Boundary Lab: Annotate the Boundary, Not the Point
-
-Every annotation tool collects point labels: item X gets label Y. **Potato is the first
-annotation tool that captures decision boundaries.** The moment an annotator commits a
-label, Potato generates minimal counterfactual edits of the text and asks — one click
-per probe — *"Would your label survive this change?"*
-
-```yaml
-boundary_probing:
-  enabled: true
-  sources: [precomputed, llm, rules]   # curated probes, LLM-generated, or offline rules
-```
-
-Ordinary annotation then yields three things no label export can give you:
-
-| You get | Why it matters |
-|---------|----------------|
-| **Contrast sets, for free** | Every answered probe is a labeled (original, counterfactual) pair — the counterfactually-augmented data shown to improve model robustness ([Gardner et al. 2020](https://aclanthology.org/2020.findings-emnlp.117/), [Kaushik et al. 2020](https://openreview.net/forum?id=Sklgs0NFvr)), normally built as an expensive separate effort |
-| **Boundary rationales** | When a label flips, annotators say what crossed the line — pinpointing exactly where your codebook is ambiguous |
-| **Invisible quality control** | Paraphrase probes should never flip a label; annotators who flip on them are flagged — attention checks without planting a single fake gold item |
-
-A live dashboard (`/boundary/dashboard`) shows per-label boundary sensitivity, per-annotator
-consistency, and a gallery of the exact edits where labels flip. Try it:
-
-```bash
-python potato/flask_server.py start examples/advanced/boundary-probing/config.yaml -p 8000 --debug
-```
-
-See the [Boundary Lab documentation](docs/advanced/boundary_lab.md).
-
----
-
 ## What Can You Annotate?
 
 Potato handles the full spectrum of annotation tasks — from traditional NLP labeling to evaluating the latest AI agent systems, to interpretive qualitative analysis.
@@ -83,7 +51,7 @@ The tables below are a **representative sample, not a complete list.** Schemes a
 | **Agent Traces** | Step-by-step evaluation of LLM agents, tool calls, ReAct chains, and multi-agent systems ([docs](docs/agent-evaluation/agent_traces.md)) |
 | **Web Agents** | Screenshot-based review with SVG click/scroll overlays, or live browsing with automatic trace recording ([docs](docs/agent-evaluation/web_agent_annotation.md)) |
 | **RAG Pipelines** | Retrieval relevance, answer faithfulness, citation accuracy, hallucination detection |
-| **Audio** | Waveform visualization, segment labeling, ELAN-style tiered annotation ([docs](docs/annotation-types/multimedia/audio_annotation.md)) |
+| **Audio** | Waveform visualization, segment labeling, ELAN-style tiered annotation, and 21 transcript/subtitle formats read directly — Whisper, cloud ASR, SRT/VTT, YouTube captions, TextGrid/EAF ([docs](docs/annotation-types/multimedia/audio_annotation.md), [transcripts](docs/guides/working_with_transcripts.md)) |
 | **Video** | Frame-by-frame labeling, temporal segments, playback sync ([docs](docs/annotation-types/multimedia/video_annotation.md)) |
 | **Images** | Bounding boxes, polygons, landmarks, classification ([docs](docs/annotation-types/multimedia/image_annotation.md)) |
 | **Dialogue** | Turn-level annotation, conversation trees, interactive chat evaluation |
@@ -225,6 +193,38 @@ Close the loop from production traces to graded, regression-gated evaluation:
 | **Evaluate** | [Programmatic evaluators](docs/agent-evaluation/evaluators.md) (trajectory match, tool-use, LLM-judge, heuristics) + a side-by-side [model arena](docs/agent-evaluation/model_arena.md) |
 | **Gate** | [Run evals in pytest](docs/agent-evaluation/ci_evaluation.md) and fail CI on score-threshold regressions |
 | **Calibrate** | [LLM-judge ↔ human alignment](docs/agent-evaluation/judge_alignment.md) with auto-calibration from human corrections; judges categorical, span, and free-text outputs |
+
+---
+
+## Boundary Lab: Annotate the Boundary, Not the Point
+
+Every annotation tool collects point labels: item X gets label Y. **Potato is the first
+annotation tool that captures decision boundaries.** The moment an annotator commits a
+label, Potato generates minimal counterfactual edits of the text and asks — one click
+per probe — *"Would your label survive this change?"*
+
+```yaml
+boundary_probing:
+  enabled: true
+  sources: [precomputed, llm, rules]   # curated probes, LLM-generated, or offline rules
+```
+
+Ordinary annotation then yields three things no label export can give you:
+
+| You get | Why it matters |
+|---------|----------------|
+| **Contrast sets, for free** | Every answered probe is a labeled (original, counterfactual) pair — the counterfactually-augmented data shown to improve model robustness ([Gardner et al. 2020](https://aclanthology.org/2020.findings-emnlp.117/), [Kaushik et al. 2020](https://openreview.net/forum?id=Sklgs0NFvr)), normally built as an expensive separate effort |
+| **Boundary rationales** | When a label flips, annotators say what crossed the line — pinpointing exactly where your codebook is ambiguous |
+| **Invisible quality control** | Paraphrase probes should never flip a label; annotators who flip on them are flagged — attention checks without planting a single fake gold item |
+
+A live dashboard (`/boundary/dashboard`) shows per-label boundary sensitivity, per-annotator
+consistency, and a gallery of the exact edits where labels flip. Try it:
+
+```bash
+python potato/flask_server.py start examples/advanced/boundary-probing/config.yaml -p 8000 --debug
+```
+
+See the [Boundary Lab documentation](docs/advanced/boundary_lab.md).
 
 ---
 
