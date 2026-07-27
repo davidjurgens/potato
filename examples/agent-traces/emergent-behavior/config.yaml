@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Cross-lane emergent-behavior tagging (M7)
 # Mark the set of turns (across agents) that participate in each collective behavior.
 # Run: python potato/flask_server.py start examples/agent-traces/emergent-behavior/config.yaml -p 8000

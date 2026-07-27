@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # SDK Capture — receive traces from the potato_trace SDK
 #
 # Runs a Potato server with trace ingestion enabled. Point the potato_trace SDK

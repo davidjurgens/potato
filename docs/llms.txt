@@ -11,6 +11,16 @@
 Website: https://www.potatoannotator.com · Docs: https://potatoannotator.readthedocs.io ·
 Code: https://github.com/davidjurgens/potato · Paper: EMNLP 2022 (System Demonstrations).
 
+## Machine-readable specs
+
+Generated from the running code, not maintained by hand. Prefer these over prose
+when writing a config or calling the API.
+
+- [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json): every valid config.yaml key, all 56 annotation types and 23 display types; validates a config before the server runs
+- [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json): all 390 HTTP paths, with auth (`x-potato-auth`) and config gating (`x-potato-requires-config`) per operation
+- [How to use both](https://potatoannotator.readthedocs.io/en/latest/api-reference/machine_readable/): editor setup, CI validation, jq recipes
+- [Full documentation in one file](https://potatoannotator.readthedocs.io/en/latest/llms-full.txt): every page inlined (~1.4 MB)
+
 ## Start here
 
 - [What is Potato / FAQ](https://potatoannotator.readthedocs.io/en/latest/faq/): direct answers to common questions

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # LLM-Judge ↔ Human Alignment
 #
 # Humans label each item (correct / incorrect). An LLM judge labels the same

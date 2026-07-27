@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Tool / resource-contention timeline (M8)
 # Per-agent lanes of concurrent tool calls; flag shared-resource contentions.
 # Run: python potato/flask_server.py start examples/agent-traces/tool-contention/config.yaml -p 8000

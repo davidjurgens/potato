@@ -11,12 +11,15 @@ nav:
         - Getting Started: guides/getting-started.md
         - Administrator Guide: guides/admin-guide.md
         - Developer Guide: guides/developer-guide.md
+        - Testing: guides/testing.md
         - Crowdsourcing Guide: guides/crowdsourcing-guide.md
         - Agent Evaluation Guide: guides/agent-evaluation-guide.md
         - AI-Assisted Annotation: guides/ai-assisted-annotation-guide.md
         - Working with Transcripts: guides/working_with_transcripts.md
+        - Hotkey Review Mode: guides/hotkey_review_mode.md
     - Configuration:
         - Overview: configuration/configuration.md
+        - Configuration Reference: configuration/config_reference.md
         - Data Format: configuration/data_format.md
         - Data Directory: configuration/data_directory.md
         - Remote Data Sources: configuration/remote_data_sources.md
@@ -47,6 +50,7 @@ nav:
             - Error Span: annotation-types/text/error_span.md
             - Text Edit: annotation-types/text/text_edit.md
             - Event Annotation: annotation-types/text/event_annotation.md
+            - PDF Cross-Page Linking: annotation-types/text/pdf_cross_page_linking.md
         - Multimedia:
             - Image Annotation: annotation-types/multimedia/image_annotation.md
             - Audio Annotation: annotation-types/multimedia/audio_annotation.md
@@ -96,10 +100,18 @@ nav:
         - Persona Simulation (multi-turn): agent-evaluation/persona_simulation.md
         - Triage Queue: agent-evaluation/triage_queue.md
         - Live Agent Interaction: agent-evaluation/live_agent.md
+        - Agent Task Recipes: agent-evaluation/agent_task_recipes.md
+        - Turn-Level Annotation: agent-evaluation/turn_level_annotation.md
+        - Multi-Agent Discussion: agent-evaluation/multi_agent_discussion.md
+        - Process Reward (CoT): agent-evaluation/process_reward_cot.md
+        - Session-Level Scoring: agent-evaluation/session_level_scoring.md
+        - Run Tree: agent-evaluation/run_tree.md
+        - Review Workflow: agent-evaluation/review_workflow.md
     - Solo Mode:
         - Solo Mode: solo-mode/solo_mode.md
         - Advanced Features: solo-mode/solo_mode_advanced.md
         - Developer Guide: solo-mode/solo_mode_developer_guide.md
+        - Refinement Pipeline: solo_mode_refinement.md
     - AI & Intelligence:
         - AI Support: ai-intelligence/ai_support.md
         - Visual AI Support: ai-intelligence/visual_ai_support.md
@@ -109,6 +121,8 @@ nav:
         - Active Learning Guide: ai-intelligence/active_learning_guide.md
         - Active Learning Strategies: ai-intelligence/active_learning_strategies.md
         - ICL Labeling: ai-intelligence/icl_labeling.md
+        - HuggingFace Models: ai-intelligence/huggingface_models.md
+        - Judge Calibration: ai-intelligence/judge_calibration.md
     - Advanced Features:
         - MACE: advanced/mace.md
         - Embedding Visualization: advanced/embedding_visualization.md
@@ -116,13 +130,30 @@ nav:
         - Category-Based Assignment: advanced/category_assignment.md
         - Task Assignment: advanced/task_assignment.md
         - Behavioral Tracking: advanced/behavioral_tracking.md
+        - Qualitative Data Analysis (QDA): advanced/qda.md
+        - Codebook: advanced/codebook.md
+        - Memos: advanced/memos.md
+        - Cases: advanced/cases.md
+        - Search: advanced/search.md
+        - Psychometrics: advanced/psychometrics.md
+        - Multi-Document Events: advanced/multi_document_events.md
+        - Multiplayer Rooms: advanced/multiplayer_rooms.md
+        - Per-Cohort Schemas: advanced/per_cohort_schemas.md
+        - Heterogeneous Coverage: advanced/heterogeneous_coverage.md
+        - Paper Mode: advanced/paper_mode.md
+        - Pocket Mode: advanced/pocket_mode.md
+        - Think Aloud: advanced/think_aloud.md
+        - Truth Serum: advanced/truth_serum.md
+        - Boundary Lab: advanced/boundary_lab.md
     - Authentication & Users:
         - User and Collaboration: auth-users/user_and_collaboration.md
+        - Roles and Permissions: auth-users/roles_and_permissions.md
         - Password Management: auth-users/password_management.md
         - Passwordless Login: auth-users/passwordless_login.md
         - SSO & OAuth: auth-users/sso_authentication.md
     - Administration:
         - Admin Dashboard: administration/admin_dashboard.md
+        - Annotator Dashboard: administration/annotator_dashboard.md
         - Adjudication: administration/adjudication.md
         - Annotation History: administration/annotation_history.md
         - Productivity: administration/productivity.md
@@ -131,6 +162,8 @@ nav:
         - HuggingFace Export: data-export/huggingface_export.md
         - HuggingFace Datasets: data-export/datasets_integration.md
         - HuggingFace Spaces: data-export/huggingface_spaces.md
+        - Potato on HuggingFace: data-export/potato_on_huggingface.md
+        - Publishing Datasets: data-export/publishing_datasets.md
     - Tools:
         - Preview CLI: tools/preview_cli.md
         - Migration CLI: tools/migration_cli.md
@@ -152,8 +185,11 @@ nav:
         - Longitudinal Studies: deployment/longitudinal-studies.md
         - MTurk Integration: deployment/mturk_integration.md
         - Open Sourcing: deployment/open-sourcing.md
+        - Reverse Proxy: deployment/reverse-proxy.md
+        - Scaling: deployment/scaling.md
     - API Reference:
         - API Reference: api-reference/api_reference.md
+        - Machine-Readable Specs: api-reference/machine_readable.md
     - Release Notes:
         - v2.7.1: releasenotes/v2.7.1.md
         - v2.7.0: releasenotes/v2.7.0.md

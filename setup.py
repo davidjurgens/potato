@@ -138,6 +138,10 @@ setup(
         "potato": [
             "templates/*.html",
             "i18n/*.yaml",
+            # Generated config JSON Schema. Shipped so editors and tooling can
+            # resolve it offline from an installed wheel, without reaching the
+            # docs site. Regenerate: python scripts/generate_config_schema.py
+            "schemas/*.json",
         ],
     },
 )

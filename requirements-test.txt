@@ -7,3 +7,9 @@ pytest-cov>=4.0.0
 webdriver-manager>=3.8.0
 responses>=0.23.0
 pytest-playwright>=0.4.0
+pytest-timeout>=2.1.0
+
+# Validating the generated specs (tests/unit/test_config_schema_drift.py,
+# tests/unit/test_openapi_drift.py). Both tests skip if these are absent.
+jsonschema>=4.0.0
+openapi-spec-validator>=0.7.0

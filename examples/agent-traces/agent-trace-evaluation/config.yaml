@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Agent Trace Evaluation Example
 #
 # This example demonstrates comprehensive evaluation of AI agent traces

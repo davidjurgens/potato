@@ -309,6 +309,24 @@ Potato has two complementary doc sites: **[potatoannotator.com/docs](https://www
 | Export Formats | [docs/data-export/export_formats.md](docs/data-export/export_formats.md) |
 | Full Documentation Index | [docs/index.md](docs/index.md) |
 
+### For coding agents
+
+If you point Claude Code, Codex, or Cursor at Potato, give it these generated,
+machine-checkable specs rather than prose — they are built from the running code,
+so they cannot drift from it.
+
+| Artifact | What it gives you |
+|----------|-------------------|
+| [`llms.txt`](https://potatoannotator.readthedocs.io/en/latest/llms.txt) | Curated index of the docs ([llms.txt standard](https://llmstxt.org)) |
+| [`llms-full.txt`](https://potatoannotator.readthedocs.io/en/latest/llms-full.txt) | Every documentation page in one file |
+| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 154 config keys, 56 annotation types, 23 display types — validates a `config.yaml` before the server runs |
+| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 390 HTTP paths, with per-operation auth and config gating |
+
+Every config in `examples/` carries a `# yaml-language-server: $schema=…`
+modeline, so editors validate it live. See
+[Machine-Readable Specs](docs/api-reference/machine_readable.md) for editor
+setup, CI validation, and `jq` recipes.
+
 ---
 
 ## Development
@@ -325,6 +343,10 @@ pytest tests/selenium/ -v    # Browser tests
 # With coverage
 pytest --cov=potato --cov-report=html
 ```
+
+See the **[Testing guide](docs/guides/testing.md)** for which tier to write in,
+the test-file security rules, the annotation-persistence testing pattern, and
+the drift tests that keep the generated specs honest.
 
 ---
 

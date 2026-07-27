@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Per-Turn Schema Binding Example
 #
 # Demonstrates the turn-level annotation framework: ANY supported schema

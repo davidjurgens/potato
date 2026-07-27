@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Automation Loop — production→eval flywheel
 #
 # Ingested traces are matched by automation rules that route them to the

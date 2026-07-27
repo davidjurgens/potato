@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Aligned-transcript speech-error annotation (M13)
 # Tag ASR/TTS/pronunciation/disfluency errors per segment; optionally type a correction.
 # Run: python potato/flask_server.py start examples/agent-traces/speech-transcript/config.yaml -p 8000

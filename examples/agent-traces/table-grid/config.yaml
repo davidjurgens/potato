@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Table-grid structure annotation (M16)
 # Mark the cell structure of a table image: rows x cols + per-cell role (header/data/empty).
 # Per-page region bboxes (table/figure/header) are covered by image_annotation run per page;

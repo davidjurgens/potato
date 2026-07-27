@@ -1,0 +1,2393 @@
+{
+  "$id": "https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "anyOf": [
+    {
+      "required": [
+        "data_files"
+      ]
+    },
+    {
+      "required": [
+        "data_directory"
+      ]
+    },
+    {
+      "required": [
+        "data_sources"
+      ]
+    },
+    {
+      "required": [
+        "batch_assignment"
+      ]
+    }
+  ],
+  "description": "Configuration for a Potato annotation task. Generated from the live schema and display registries \u2014 see potato/server_utils/config_schema.py.",
+  "properties": {
+    "__config_file__": {},
+    "_bws_pool_items": {},
+    "active_learning": {
+      "additionalProperties": true,
+      "properties": {
+        "annotation_routing": {},
+        "bald_params": {},
+        "calibrate_probabilities": {},
+        "classifier": {},
+        "classifier_params": {},
+        "cold_start_strategy": {},
+        "confidence_method": {},
+        "database": {},
+        "enabled": {},
+        "hybrid_weights": {},
+        "icl_ensemble_params": {},
+        "llm": {},
+        "max_instances_to_reorder": {},
+        "min_annotations_per_instance": {},
+        "min_instances_for_training": {},
+        "model_persistence": {},
+        "query_strategy": {},
+        "random_sample_percent": {},
+        "resolution_strategy": {},
+        "routing_thresholds": {},
+        "schema_names": {},
+        "update_frequency": {},
+        "use_icl_ensemble": {},
+        "vectorizer": {},
+        "vectorizer_params": {}
+      },
+      "type": "object"
+    },
+    "adjudication": {
+      "additionalProperties": true,
+      "properties": {
+        "adjudicator_users": {},
+        "agreement_threshold": {},
+        "enabled": {},
+        "error_taxonomy": {},
+        "fast_decision_warning_ms": {},
+        "min_annotations": {},
+        "output_subdir": {},
+        "require_confidence": {},
+        "require_notes_on_override": {},
+        "show_agreement_scores": {},
+        "show_all_items": {},
+        "show_annotator_names": {},
+        "show_timing_data": {},
+        "similarity": {}
+      },
+      "type": "object"
+    },
+    "admin_api_key": {},
+    "agent_proxy": {},
+    "agreement_metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "min_overlap": {},
+        "refresh_interval": {}
+      },
+      "type": "object"
+    },
+    "ai_support": {
+      "additionalProperties": true,
+      "properties": {
+        "ai_config": {},
+        "ai_config_file": {},
+        "cache_config": {},
+        "enabled": {},
+        "endpoint_type": {},
+        "features": {},
+        "option_highlighting": {}
+      },
+      "type": "object"
+    },
+    "alert_time_each_instance": {
+      "type": "integer"
+    },
+    "allow_phase_back_navigation": {},
+    "analytics": {
+      "additionalProperties": true,
+      "properties": {
+        "pricing": {},
+        "thresholds": {}
+      },
+      "type": "object"
+    },
+    "annotation_codebook_url": {},
+    "annotation_instructions": {},
+    "annotation_schemes": {
+      "description": "The annotation form. Each entry renders one widget.",
+      "items": {
+        "additionalProperties": true,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "constant_sum"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "coreference"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "span_schema"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "error_span"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "error_types"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "event_annotation"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "event_types",
+                "span_schema"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "hierarchical_multiselect"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "allOf": [
+                {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "taxonomy"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "taxonomy_preset"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "image_annotation"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels",
+                "tools"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "likert"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "max_label",
+                "min_label",
+                "size"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "multi_document_event"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "slots"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "multirate"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels",
+                "options"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "multiselect"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "radio"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "ranking"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "rubric_eval"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "criteria"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "select"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "semantic_differential"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "pairs"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "slider"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "max_value",
+                "min_value",
+                "starting_value"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "soft_label"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "span"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "span_link"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "link_types",
+                "span_schema"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "tiered_annotation"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "source_field",
+                "tiers"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
+                  "const": "video"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "video_path"
+              ]
+            }
+          }
+        ],
+        "properties": {
+          "accept_key": {},
+          "accept_label": {},
+          "action_key": {},
+          "acts": {},
+          "additional_sources": {},
+          "agent_dimensions": {},
+          "agent_key": {},
+          "agents": {},
+          "allow_annotator_create": {},
+          "allow_correction": {},
+          "allow_discontinuous": {},
+          "allow_empty_groups": {},
+          "allow_html": {},
+          "allow_multiple": {},
+          "allow_neutral": {},
+          "allow_note": {},
+          "allow_reset": {},
+          "allow_singletons": {},
+          "allow_tie": {},
+          "allow_ties": {},
+          "allow_unanswerable": {},
+          "annotation_type": {
+            "description": "Annotation type, as registered in the schema registry.",
+            "oneOf": [
+              {
+                "const": "agent_interaction_graph",
+                "description": "Clickable agent-interaction graph: mark critical-path nodes + flag problematic edges"
+              },
+              {
+                "const": "agent_scorecard",
+                "description": "Per-agent + per-team scorecard with optional milestones (MultiAgentBench-style)"
+              },
+              {
+                "const": "audio_annotation",
+                "description": "Audio segmentation and annotation with waveform visualization"
+              },
+              {
+                "const": "bws",
+                "description": "Best-Worst Scaling: select the best and worst item from a set"
+              },
+              {
+                "const": "card_sort",
+                "description": "Drag-and-drop card sorting into predefined or user-created groups"
+              },
+              {
+                "const": "code_review",
+                "description": "GitHub PR-style code review with inline comments and file ratings"
+              },
+              {
+                "const": "confidence",
+                "description": "Confidence rating meta-annotation for any primary annotation"
+              },
+              {
+                "const": "conjoint",
+                "description": "Discrete choice conjoint analysis with side-by-side profile comparison"
+              },
+              {
+                "const": "consensus_tracking",
+                "description": "Tag discussion acts per turn (proposal/agreement/disagreement/decision/concession) with cross-turn links to referenced proposals"
+              },
+              {
+                "const": "constant_sum",
+                "description": "Allocate a fixed budget of points across categories"
+              },
+              {
+                "const": "context_attribution",
+                "description": "Tag how each turn uses earlier context (used correctly / hallucinated / ignored) with links to the source turn"
+              },
+              {
+                "const": "coreference",
+                "description": "Coreference chain annotation for grouping mentions of the same entity"
+              },
+              {
+                "const": "emergent_behavior",
+                "description": "Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift"
+              },
+              {
+                "const": "error_span",
+                "description": "MQM-style error span annotation with typed severity for quality evaluation"
+              },
+              {
+                "const": "event_annotation",
+                "description": "N-ary event annotation with triggers and typed arguments"
+              },
+              {
+                "const": "extractive_qa",
+                "description": "SQuAD-style extractive question answering with answer span highlighting"
+              },
+              {
+                "const": "failure_attribution",
+                "description": "Multi-agent failure attribution: responsible agent + decisive step + reason"
+              },
+              {
+                "const": "gui_trajectory",
+                "description": "Computer-use/GUI agent step review: per-step screenshot + action correctness + click grounding"
+              },
+              {
+                "const": "handoff_review",
+                "description": "Annotate agent-to-agent handoffs: inter-agent misalignment flags + quality"
+              },
+              {
+                "const": "hierarchical_multiselect",
+                "description": "Hierarchical tree-structured multi-label selection"
+              },
+              {
+                "const": "image_annotation",
+                "description": "Image annotation with bounding boxes, polygons, freeform drawing, and landmarks"
+              },
+              {
+                "const": "likert",
+                "description": "Likert scale rating"
+              },
+              {
+                "const": "multi_document_event",
+                "description": "Cross-document event annotation: template slots filled with evidence from many documents"
+              },
+              {
+                "const": "multimodal_reasoning",
+                "description": "Interleaved text/image/tool reasoning trace: per-step coherence + visual-hallucination rating"
+              },
+              {
+                "const": "multirate",
+                "description": "Rate multiple items on a scale"
+              },
+              {
+                "const": "multiselect",
+                "description": "Multiple-choice checkbox selection"
+              },
+              {
+                "const": "number",
+                "description": "Numeric input field"
+              },
+              {
+                "const": "pairwise",
+                "description": "Pairwise comparison of two items (binary selection or scale rating)"
+              },
+              {
+                "const": "process_reward",
+                "description": "Per-step process reward signals for PRM training"
+              },
+              {
+                "const": "pure_display",
+                "description": "Display-only content (instructions, headers)"
+              },
+              {
+                "const": "radio",
+                "description": "Single-choice radio button selection"
+              },
+              {
+                "const": "range_slider",
+                "description": "Dual-thumb slider for selecting an acceptable range"
+              },
+              {
+                "const": "ranking",
+                "description": "Drag-and-drop ranking of items by preference or relevance"
+              },
+              {
+                "const": "rubric_eval",
+                "description": "Multi-criteria rubric evaluation grid for LLM and text quality assessment"
+              },
+              {
+                "const": "select",
+                "description": "Dropdown selection"
+              },
+              {
+                "const": "semantic_differential",
+                "description": "Bipolar adjective scales for measuring connotative meaning"
+              },
+              {
+                "const": "slider",
+                "description": "Slider for selecting a value in a range"
+              },
+              {
+                "const": "soft_label",
+                "description": "Probability distribution across labels via constrained sliders"
+              },
+              {
+                "const": "span",
+                "description": "Text span annotation/highlighting with optional entity linking to knowledge bases"
+              },
+              {
+                "const": "span_link",
+                "description": "Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION)"
+              },
+              {
+                "const": "speech_transcript",
+                "description": "Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction"
+              },
+              {
+                "const": "table_grid",
+                "description": "Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty)"
+              },
+              {
+                "const": "temporal_grounding",
+                "description": "Video temporal grounding: mark gold event intervals with live IoU vs predicted"
+              },
+              {
+                "const": "text",
+                "description": "Free-form text input"
+              },
+              {
+                "const": "text_edit",
+                "description": "Inline text editing with diff tracking for post-editing and correction tasks"
+              },
+              {
+                "const": "tiered_annotation",
+                "description": "Hierarchical multi-tier annotation for audio/video (ELAN-style)"
+              },
+              {
+                "const": "tool_call_review",
+                "description": "Per-tool-call correctness review (right tool / args / ordering)"
+              },
+              {
+                "const": "tool_contention",
+                "description": "Tool/resource-contention timeline: per-agent lanes + shared-resource collision classification"
+              },
+              {
+                "const": "trajectory_edit",
+                "description": "Per-step trajectory correction/editing for SFT/DPO training data"
+              },
+              {
+                "const": "trajectory_eval",
+                "description": "Per-step trajectory evaluation with error taxonomy and severity scoring"
+              },
+              {
+                "const": "tree_annotation",
+                "description": "Annotation of conversation tree nodes with path selection"
+              },
+              {
+                "const": "triage",
+                "description": "Binary accept/reject triage for rapid data curation"
+              },
+              {
+                "const": "vas",
+                "description": "Continuous visual analog scale for fine-grained magnitude estimation"
+              },
+              {
+                "const": "video",
+                "description": "Video player display"
+              },
+              {
+                "const": "video_annotation",
+                "description": "Video annotation with temporal segments, frame classification, keyframes, and object tracking"
+              },
+              {
+                "const": "voice_interaction",
+                "description": "Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification"
+              }
+            ]
+          },
+          "attributes": {},
+          "audio_key": {},
+          "auto_advance": {},
+          "auto_select_children": {},
+          "auto_select_parent": {},
+          "autoplay": {},
+          "bad_text_label": {},
+          "behaviors": {},
+          "best_description": {},
+          "branch_comparison": {},
+          "calls_key": {},
+          "collapsed_tiers": {},
+          "cols_key": {},
+          "comment_categories": {},
+          "contention_labels": {},
+          "controls": {},
+          "coord_space": {},
+          "correctness_options": {},
+          "criteria": {},
+          "custom_css": {},
+          "default_cols": {},
+          "default_rows": {},
+          "description": {
+            "description": "Prompt shown to the annotator.",
+            "type": "string"
+          },
+          "display_config": {},
+          "duration": {},
+          "dynamic_options": {},
+          "dynamic_options_field": {},
+          "edit_final_answer": {},
+          "editable_fields": {},
+          "entity_linking": {},
+          "entity_types": {},
+          "error_types": {},
+          "event_types": {},
+          "events_key": {},
+          "fallback_text": {},
+          "file_rating_dimensions": {},
+          "final_answer_key": {},
+          "flags": {},
+          "frame_stepping": {},
+          "freeform_brush_size": {},
+          "freeform_simplify": {},
+          "groups": {},
+          "has_free_response": {},
+          "highlight_color": {},
+          "hint": {},
+          "horizontal": {},
+          "image_key": {},
+          "inline_with_trace": {},
+          "input_type": {},
+          "items": {},
+          "items_field": {},
+          "items_key": {},
+          "label_requirement": {},
+          "labels": {},
+          "left_label": {},
+          "link_types": {},
+          "linked_acts": {},
+          "loop": {},
+          "max": {},
+          "max_annotations": {},
+          "max_label": {},
+          "max_score": {},
+          "max_segments": {},
+          "max_selections": {},
+          "max_value": {},
+          "media_type": {},
+          "milestones": {},
+          "min": {},
+          "min_annotations": {},
+          "min_label": {},
+          "min_per_item": {},
+          "min_per_label": {},
+          "min_segments": {},
+          "min_value": {},
+          "mode": {},
+          "muted": {},
+          "name": {
+            "description": "Unique key this scheme's answers are stored under.",
+            "type": "string"
+          },
+          "node_scheme": {},
+          "option_randomization": {},
+          "options": {},
+          "overlap_labels": {},
+          "overview_height": {},
+          "pairs": {},
+          "pan_enabled": {},
+          "passage_field": {},
+          "path_selection": {},
+          "placeholder": {},
+          "playback_rate_control": {},
+          "profiles_field": {},
+          "profiles_per_set": {},
+          "quality_scale": {},
+          "question_field": {},
+          "rating_scale": {},
+          "reject_key": {},
+          "reject_label": {},
+          "require_reason_on_edit": {},
+          "resource_key": {},
+          "right_label": {},
+          "roles": {},
+          "rows": {},
+          "rows_key": {},
+          "scale": {},
+          "scale_labels": {},
+          "scale_points": {},
+          "scale_type": {},
+          "screenshot_key": {},
+          "segment_schemes": {},
+          "segments_key": {},
+          "sequential_key_binding": {},
+          "severities": {},
+          "show_diff": {},
+          "show_distribution_chart": {},
+          "show_edit_distance": {},
+          "show_labels": {},
+          "show_none_option": {},
+          "show_overall": {},
+          "show_progress": {},
+          "show_score": {},
+          "show_search": {},
+          "show_span_labels": {},
+          "show_tier_labels": {},
+          "show_timecode": {},
+          "show_value": {},
+          "show_values": {},
+          "size": {},
+          "skip_key": {},
+          "skip_label": {},
+          "slots": {},
+          "source_field": {},
+          "span_schema": {},
+          "speaker_key": {},
+          "starting_value": {},
+          "step": {},
+          "step_text_key": {},
+          "steps_key": {},
+          "target_schema": {},
+          "taxonomy": {},
+          "team_dimensions": {},
+          "template_name": {},
+          "tie_label": {},
+          "tier_height": {},
+          "tiers": {},
+          "timeline_height": {},
+          "title": {},
+          "tools": {},
+          "total": {},
+          "total_points": {},
+          "tracking_options": {},
+          "tuple_size": {},
+          "turns_key": {},
+          "type_key": {},
+          "user_speakers": {},
+          "verdict_options": {},
+          "video_as_label": {},
+          "video_fps": {},
+          "video_key": {},
+          "video_path": {},
+          "visual_display": {},
+          "worst_description": {},
+          "zoom_enabled": {}
+        },
+        "required": [
+          "annotation_type",
+          "name",
+          "description"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "annotation_task_description": {},
+    "annotation_task_name": {
+      "type": "string"
+    },
+    "annotation_ui": {
+      "additionalProperties": true,
+      "properties": {
+        "memos": {},
+        "visibility": {}
+      },
+      "type": "object"
+    },
+    "annotator_dashboard": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "show_active_annotators": {},
+        "show_personal_progress": {},
+        "show_project_progress": {}
+      },
+      "type": "object"
+    },
+    "arena": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "models": {}
+      },
+      "type": "object"
+    },
+    "assignment_strategy": {
+      "description": "How items are handed out to annotators.",
+      "enum": [
+        "random",
+        "fixed_order",
+        "active_learning",
+        "llm_confidence",
+        "max_diversity",
+        "least_annotated",
+        "category_based",
+        "diversity_clustering",
+        "batch",
+        "priority",
+        "psychometric"
+      ]
+    },
+    "attention_checks": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "failure_handling": {},
+        "frequency": {},
+        "items_file": {},
+        "min_response_time": {},
+        "probability": {}
+      },
+      "type": "object"
+    },
+    "audio_annotation": {
+      "additionalProperties": true,
+      "properties": {
+        "client_fallback_max_duration": {},
+        "waveform_cache_dir": {},
+        "waveform_cache_max_size": {},
+        "waveform_look_ahead": {}
+      },
+      "type": "object"
+    },
+    "authentication": {
+      "additionalProperties": true,
+      "properties": {
+        "allow_local_login": {},
+        "allowed_domain": {},
+        "allowed_domains": {},
+        "allowed_org": {},
+        "auto_register": {},
+        "database_url": {},
+        "method": {},
+        "providers": {},
+        "user_config_path": {},
+        "user_identity_field": {}
+      },
+      "type": "object"
+    },
+    "auto_export_interval": {},
+    "automatic_assignment": {},
+    "automation": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "rules": {}
+      },
+      "type": "object"
+    },
+    "base_css": {},
+    "base_html_template": {},
+    "batch_assignment": {
+      "additionalProperties": true,
+      "properties": {
+        "annotator_key": {},
+        "auto_assign_annotators": {},
+        "groups": {}
+      },
+      "type": "object"
+    },
+    "boundary_probing": {
+      "additionalProperties": true,
+      "properties": {
+        "ai_support": {},
+        "debounce_ms": {},
+        "enabled": {},
+        "include_invariance": {},
+        "precomputed_key": {},
+        "probes_per_item": {},
+        "rationale_on_flip": {},
+        "schema": {},
+        "sources": {}
+      },
+      "type": "object"
+    },
+    "bws_config": {
+      "additionalProperties": true,
+      "properties": {
+        "min_item_appearances": {},
+        "num_tuples": {},
+        "scoring": {},
+        "seed": {},
+        "tuple_size": {}
+      },
+      "type": "object"
+    },
+    "cases": {
+      "additionalProperties": true,
+      "properties": {
+        "attributes": {},
+        "auto_detect": {},
+        "enabled": {},
+        "key": {}
+      },
+      "type": "object"
+    },
+    "category_assignment": {
+      "additionalProperties": true,
+      "properties": {
+        "category_key": {},
+        "dynamic": {},
+        "enabled": {},
+        "fallback": {},
+        "qualification": {}
+      },
+      "type": "object"
+    },
+    "chat_support": {
+      "additionalProperties": true,
+      "properties": {
+        "ai_config": {},
+        "enabled": {},
+        "endpoint_type": {},
+        "ui": {}
+      },
+      "type": "object"
+    },
+    "codebook": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "mode": {}
+      },
+      "type": "object"
+    },
+    "codebook_invivo_key": {},
+    "codebook_mode": {},
+    "completion_code": {},
+    "config_file": {},
+    "corpus_map": {
+      "additionalProperties": true,
+      "properties": {
+        "build_on_start": {},
+        "cluster_labeling": {},
+        "clustering": {},
+        "embedding_model": {},
+        "enabled": {},
+        "knn": {},
+        "sample_size": {},
+        "umap": {}
+      },
+      "type": "object"
+    },
+    "cot_segmentation": {
+      "additionalProperties": true,
+      "properties": {
+        "llm_max_chars": {},
+        "markers": {},
+        "max_steps": {},
+        "min_step_chars": {},
+        "sentences_per_step": {},
+        "source_key": {},
+        "strategy": {},
+        "target_key": {}
+      },
+      "type": "object"
+    },
+    "crowdsourcing": {},
+    "curation": {
+      "additionalProperties": true,
+      "properties": {
+        "embed_on_ingest": {},
+        "enabled": {},
+        "model_name": {},
+        "text_key": {}
+      },
+      "type": "object"
+    },
+    "custom_footer_html": {},
+    "customjs": {
+      "type": "boolean"
+    },
+    "customjs_hostname": {},
+    "data_cache": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "max_size_mb": {},
+        "ttl_seconds": {}
+      },
+      "type": "object"
+    },
+    "data_directory": {},
+    "data_directory_encoding": {},
+    "data_files": {
+      "description": "Data files, relative to task_dir. Each entry is either a path string or a mapping carrying per-file overrides (see flask_server.py:493).",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "additionalProperties": true,
+            "properties": {
+              "format": {
+                "type": "string"
+              },
+              "id_key": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "text_key": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    },
+    "data_sources": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "type": {
+            "enum": [
+              "file",
+              "url",
+              "google_drive",
+              "dropbox",
+              "s3",
+              "huggingface",
+              "google_sheets",
+              "database"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "database": {
+      "additionalProperties": true,
+      "properties": {
+        "connection_string": {},
+        "database": {},
+        "host": {},
+        "password": {},
+        "pool_size": {},
+        "pool_timeout": {},
+        "port": {},
+        "type": {},
+        "username": {}
+      },
+      "type": "object"
+    },
+    "dataset_metadata": {},
+    "datasets": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "storage": {}
+      },
+      "type": "object"
+    },
+    "debug": {},
+    "debug_log": {},
+    "debug_phase": {},
+    "default_video_fps": {},
+    "diversity_config": {},
+    "diversity_ordering": {
+      "additionalProperties": true,
+      "properties": {
+        "auto_clusters": {},
+        "batch_size": {},
+        "cache_dir": {},
+        "enabled": {},
+        "items_per_cluster": {},
+        "model_name": {},
+        "num_clusters": {},
+        "prefill_count": {},
+        "preserve_visited": {},
+        "recluster_threshold": {},
+        "trigger_ai_prefetch": {}
+      },
+      "type": "object"
+    },
+    "embedding_visualization": {
+      "additionalProperties": true,
+      "properties": {
+        "embedding_model": {},
+        "enabled": {},
+        "image_embedding_model": {},
+        "include_all_annotated": {},
+        "label_source": {},
+        "sample_size": {},
+        "umap": {}
+      },
+      "type": "object"
+    },
+    "env_substitution": {},
+    "event_template": {
+      "additionalProperties": true,
+      "properties": {
+        "allow_annotator_create": {},
+        "enabled": {},
+        "name": {},
+        "seed_events": {},
+        "slots": {}
+      },
+      "type": "object"
+    },
+    "export_annotation_format": {},
+    "export_include_phase_data": {},
+    "format_handling": {
+      "additionalProperties": true,
+      "properties": {
+        "default_format": {},
+        "enabled": {},
+        "pdf": {},
+        "spreadsheet": {}
+      },
+      "type": "object"
+    },
+    "gold_standards": {
+      "additionalProperties": true,
+      "properties": {
+        "accuracy": {},
+        "auto_promote": {},
+        "enabled": {},
+        "frequency": {},
+        "items_file": {},
+        "mode": {}
+      },
+      "type": "object"
+    },
+    "gold_standards_file": {},
+    "header_file": {},
+    "header_logo": {},
+    "hide_navbar": {},
+    "highlight_linebreaks": {
+      "type": "boolean"
+    },
+    "horizontal_key_bindings": {},
+    "host": {},
+    "huggingface_backup": {},
+    "ibws_config": {
+      "additionalProperties": true,
+      "properties": {
+        "max_rounds": {},
+        "scoring_method": {},
+        "seed": {},
+        "tuple_size": {},
+        "tuples_per_item_per_round": {}
+      },
+      "type": "object"
+    },
+    "icl_labeling": {},
+    "instance_display": {
+      "$comment": "Display types accepting span annotation targets: audio_dialogue, code, coding_trace, dialogue, document, eval_trace, interactive_chat, multi_agent_discussion, text",
+      "additionalProperties": true,
+      "description": "How each item is rendered. Omit for plain single-field text.",
+      "properties": {
+        "fields": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "key": {
+                "description": "Field in the data file to render.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": {
+                "description": "Display type, from the display registry.",
+                "oneOf": [
+                  {
+                    "const": "agent_trace",
+                    "description": "Agent trace display with step cards and type badges"
+                  },
+                  {
+                    "const": "audio",
+                    "description": "Audio player display"
+                  },
+                  {
+                    "const": "audio_dialogue",
+                    "description": "Podcast / interview dialogue: speaker bubbles, per-turn audio playback, ratings, spans, cross-turn linking"
+                  },
+                  {
+                    "const": "code",
+                    "description": "Source code display with syntax highlighting"
+                  },
+                  {
+                    "const": "coding_trace",
+                    "description": "Coding agent trace display with diff rendering, terminal blocks, and file tree"
+                  },
+                  {
+                    "const": "conversation_tree",
+                    "description": "Conversation tree with collapsible branching nodes"
+                  },
+                  {
+                    "const": "cot_trace",
+                    "description": "Long chain-of-thought trace: vertical step cards with a sticky progress rail for process-reward verification"
+                  },
+                  {
+                    "const": "dialogue",
+                    "description": "Dialogue/conversation turns display"
+                  },
+                  {
+                    "const": "document",
+                    "description": "Document display for DOCX, Markdown, and other formats"
+                  },
+                  {
+                    "const": "eval_trace",
+                    "description": "Three-pane agent trace eval: reasoning, function calls, and final answer side-by-side"
+                  },
+                  {
+                    "const": "gallery",
+                    "description": "Scrollable image gallery with captions"
+                  },
+                  {
+                    "const": "html",
+                    "description": "HTML content display (sanitized)"
+                  },
+                  {
+                    "const": "image",
+                    "description": "Image display with optional zoom"
+                  },
+                  {
+                    "const": "interactive_chat",
+                    "description": "Interactive agent chat with post-interaction trace display"
+                  },
+                  {
+                    "const": "live_agent",
+                    "description": "Live AI agent viewer with real-time screenshots, controls, and interaction"
+                  },
+                  {
+                    "const": "live_coding_agent",
+                    "description": "Live coding agent viewer with real-time streaming and intervention controls"
+                  },
+                  {
+                    "const": "multi_agent_discussion",
+                    "description": "Multi-agent discussion with agent legend, colors, addressees, and filtering"
+                  },
+                  {
+                    "const": "pairwise",
+                    "description": "Side-by-side comparison display"
+                  },
+                  {
+                    "const": "pdf",
+                    "description": "PDF document display with PDF.js rendering"
+                  },
+                  {
+                    "const": "spreadsheet",
+                    "description": "Spreadsheet/table display with row or cell annotation"
+                  },
+                  {
+                    "const": "text",
+                    "description": "Plain text content display"
+                  },
+                  {
+                    "const": "video",
+                    "description": "Video player display"
+                  },
+                  {
+                    "const": "web_agent_trace",
+                    "description": "Web agent trace viewer with screenshots, SVG overlays, and step navigation"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "type"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "instance_reclaim": {},
+    "item_properties": {
+      "additionalProperties": true,
+      "properties": {
+        "category_key": {
+          "description": "Field used by the category_based assignment strategy.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "id_key": {
+          "description": "Field holding each item's unique id.",
+          "type": "string"
+        },
+        "kwargs": {},
+        "text_key": {
+          "description": "Field holding the text shown to annotators.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id_key",
+        "text_key"
+      ],
+      "type": "object"
+    },
+    "judge_alignment": {
+      "additionalProperties": true,
+      "properties": {
+        "ai_support": {},
+        "enabled": {},
+        "few_shot": {},
+        "inline": {},
+        "schemas": {}
+      },
+      "type": "object"
+    },
+    "judge_calibration": {
+      "additionalProperties": true,
+      "properties": {
+        "calibration": {},
+        "enabled": {},
+        "fraction": {},
+        "human": {},
+        "k_samples": {},
+        "max_items": {},
+        "models": {},
+        "output": {},
+        "prompt": {},
+        "sampling": {},
+        "schemas": {},
+        "state_dir": {}
+      },
+      "type": "object"
+    },
+    "jumping_to_id_disabled": {
+      "type": "boolean"
+    },
+    "keyword_highlight_settings": {},
+    "keyword_highlights_file": {},
+    "layout": {
+      "additionalProperties": true,
+      "properties": {
+        "breakpoints": {},
+        "grid": {},
+        "groups": {},
+        "order": {},
+        "styling": {}
+      },
+      "type": "object"
+    },
+    "list_as_text": {
+      "additionalProperties": true,
+      "properties": {
+        "alternating_shading": {},
+        "horizontal": {},
+        "text_list_prefix_type": {}
+      },
+      "type": "object"
+    },
+    "live_agent": {},
+    "live_coding_agent": {},
+    "llm_labeling": {},
+    "login": {
+      "additionalProperties": true,
+      "properties": {
+        "auto_redirect_delay": {},
+        "auto_redirect_on_completion": {},
+        "type": {},
+        "url_argument": {}
+      },
+      "type": "object"
+    },
+    "mace": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "min_annotations_per_item": {},
+        "min_items": {},
+        "num_iters": {},
+        "num_restarts": {},
+        "trigger_every_n": {}
+      },
+      "type": "object"
+    },
+    "max_annotations_per_item": {
+      "type": "integer"
+    },
+    "max_annotations_per_user": {
+      "type": "integer"
+    },
+    "max_session_seconds": {
+      "type": "integer"
+    },
+    "media_directory": {},
+    "min_annotators_per_instance": {
+      "type": "integer"
+    },
+    "mturk": {},
+    "num_annotators_per_item": {},
+    "output_annotation_dir": {
+      "type": "string"
+    },
+    "output_annotation_format": {},
+    "partial_loading": {},
+    "per_annotator_quota": {},
+    "persist_sessions": {
+      "type": "boolean"
+    },
+    "phases": {},
+    "pocket": {
+      "additionalProperties": true,
+      "properties": {
+        "auto_redirect": {},
+        "batch_size": {},
+        "enabled": {}
+      },
+      "type": "object"
+    },
+    "port": {},
+    "pre_annotation": {
+      "additionalProperties": true,
+      "properties": {
+        "agreement_metrics": {},
+        "allow_modification": {},
+        "enabled": {},
+        "field": {},
+        "highlight_low_confidence": {},
+        "predictions_file": {},
+        "show_confidence": {}
+      },
+      "type": "object"
+    },
+    "prestudy": {},
+    "prolific": {
+      "additionalProperties": true,
+      "properties": {
+        "completion_code": {},
+        "config_file_path": {},
+        "max_concurrent_sessions": {},
+        "sandbox_mode": {},
+        "study_id": {},
+        "token": {},
+        "workload_checker": {},
+        "workload_checker_period": {}
+      },
+      "type": "object"
+    },
+    "psychometrics": {
+      "additionalProperties": true,
+      "properties": {
+        "confidence_threshold": {},
+        "cost_per_judgment": {},
+        "discrimination_flag_threshold": {},
+        "enabled": {},
+        "min_annotators_per_item": {},
+        "min_observations": {},
+        "refit_interval": {},
+        "schema": {}
+      },
+      "type": "object"
+    },
+    "publish": {},
+    "qda_mode": {
+      "additionalProperties": true,
+      "properties": {
+        "codebook": {},
+        "enabled": {},
+        "memos": {}
+      },
+      "type": "object"
+    },
+    "quality_control": {},
+    "random_seed": {
+      "type": "integer"
+    },
+    "rbac": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "roles": {},
+        "sso_role_mapping": {},
+        "user_role_assignments": {}
+      },
+      "type": "object"
+    },
+    "reclaim_stale_assignments": {},
+    "require_fully_annotated": {
+      "type": "boolean"
+    },
+    "require_no_password": {
+      "type": "boolean"
+    },
+    "require_password": {
+      "type": "boolean"
+    },
+    "review_mode": {
+      "additionalProperties": true,
+      "properties": {
+        "advance_on": {},
+        "auto_advance": {},
+        "delay_ms": {},
+        "enabled": {}
+      },
+      "type": "object"
+    },
+    "review_workflow": {
+      "additionalProperties": true,
+      "properties": {
+        "auto_enroll": {},
+        "enabled": {},
+        "reviewers": {},
+        "routing": {}
+      },
+      "type": "object"
+    },
+    "rooms": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "max_members": {},
+        "persist_votes": {},
+        "poll_interval_ms": {},
+        "schema": {},
+        "who_can_create": {}
+      },
+      "type": "object"
+    },
+    "scheme_sets": {},
+    "search": {
+      "additionalProperties": true,
+      "properties": {
+        "annotator_claim": {},
+        "backend": {},
+        "enabled": {},
+        "max_instances": {}
+      },
+      "type": "object"
+    },
+    "secret_key": {},
+    "server": {
+      "additionalProperties": true,
+      "properties": {
+        "debug": {},
+        "host": {},
+        "port": {}
+      },
+      "type": "object"
+    },
+    "server_debug": {},
+    "session_lifetime_days": {},
+    "sessions": {
+      "additionalProperties": true,
+      "properties": {
+        "attributes": {},
+        "enabled": {},
+        "key": {}
+      },
+      "type": "object"
+    },
+    "site_dir": {},
+    "site_file": {},
+    "solo_mode": {
+      "additionalProperties": true,
+      "properties": {
+        "batches": {},
+        "confidence_routing": {},
+        "confusion_analysis": {},
+        "edge_case_rules": {},
+        "embedding": {},
+        "enabled": {},
+        "instance_selection": {},
+        "labeling_functions": {},
+        "labeling_models": {},
+        "prompt_optimization": {},
+        "refinement_loop": {},
+        "revision_models": {},
+        "state_dir": {},
+        "thresholds": {},
+        "uncertainty": {}
+      },
+      "type": "object"
+    },
+    "spectrogram": {},
+    "surveyflow": {},
+    "task_description": {},
+    "task_dir": {
+      "description": "Working directory for all relative paths. Paths resolving outside it are rejected by validate_path_security().",
+      "type": "string"
+    },
+    "task_layout": {},
+    "thinkaloud": {
+      "additionalProperties": true,
+      "properties": {
+        "chunk_seconds": {},
+        "enabled": {},
+        "fillers": {},
+        "language": {},
+        "model": {},
+        "require_spoken_label": {},
+        "schema": {},
+        "stems": {},
+        "stt": {}
+      },
+      "type": "object"
+    },
+    "trace_ingestion": {
+      "additionalProperties": true,
+      "properties": {
+        "api_key": {},
+        "enabled": {},
+        "notify_annotators": {},
+        "sources": {}
+      },
+      "type": "object"
+    },
+    "training": {
+      "additionalProperties": true,
+      "properties": {
+        "annotation_schemes": {},
+        "data_file": {},
+        "enabled": {},
+        "failure_action": {},
+        "feedback": {},
+        "passing_criteria": {}
+      },
+      "type": "object"
+    },
+    "triage": {
+      "additionalProperties": true,
+      "properties": {
+        "default_priority": {},
+        "enabled": {},
+        "invert_signal": {},
+        "order": {},
+        "rules": {},
+        "show_badge": {},
+        "signal_field": {}
+      },
+      "type": "object"
+    },
+    "truth_serum": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "min_annotators": {},
+        "question": {},
+        "schema": {}
+      },
+      "type": "object"
+    },
+    "ui": {},
+    "ui_config": {},
+    "ui_debug": {},
+    "ui_language": {
+      "additionalProperties": true,
+      "properties": {
+        "_base": {},
+        "adjudicate": {},
+        "admin_btn_computing": {},
+        "admin_btn_generate_scores": {},
+        "admin_btn_reload": {},
+        "admin_btn_save_changes": {},
+        "admin_err_annotators": {},
+        "admin_err_behavioral": {},
+        "admin_err_config": {},
+        "admin_err_crowdsourcing": {},
+        "admin_err_instances": {},
+        "admin_err_mace_load": {},
+        "admin_err_mace_trigger": {},
+        "admin_err_overview": {},
+        "admin_err_questions": {},
+        "admin_filter_all": {},
+        "admin_filter_completed": {},
+        "admin_filter_incomplete": {},
+        "admin_hint_unlimited": {},
+        "admin_label_assignment_strategy": {},
+        "admin_label_max_per_item": {},
+        "admin_label_max_per_user": {},
+        "admin_login_help": {},
+        "admin_login_key_label": {},
+        "admin_login_key_placeholder": {},
+        "admin_login_submit": {},
+        "admin_login_title": {},
+        "admin_mace_predicted_help": {},
+        "admin_mace_run_predictions": {},
+        "admin_mode_badge": {},
+        "admin_ok_config_saved": {},
+        "admin_opt_color_mace": {},
+        "admin_opt_color_majority": {},
+        "admin_opt_per_page": {},
+        "admin_opt_scoring_counting": {},
+        "admin_opt_strat_active_learning": {},
+        "admin_opt_strat_fixed_order": {},
+        "admin_opt_strat_least_annotated": {},
+        "admin_opt_strat_llm_confidence": {},
+        "admin_opt_strat_max_diversity": {},
+        "admin_opt_strat_random": {},
+        "admin_order_asc": {},
+        "admin_order_desc": {},
+        "admin_page_title": {},
+        "admin_section_ai_usage": {},
+        "admin_section_bws_scores": {},
+        "admin_section_competence": {},
+        "admin_section_predicted_labels": {},
+        "admin_section_quality": {},
+        "admin_section_system_config": {},
+        "admin_section_system_info": {},
+        "admin_sort_annotations": {},
+        "admin_sort_avg_time": {},
+        "admin_sort_completion": {},
+        "admin_sort_disagreement": {},
+        "admin_sort_id": {},
+        "admin_tab_annotators": {},
+        "admin_tab_behavioral": {},
+        "admin_tab_bws": {},
+        "admin_tab_configuration": {},
+        "admin_tab_crowdsourcing": {},
+        "admin_tab_datasets": {},
+        "admin_tab_embeddings": {},
+        "admin_tab_instances": {},
+        "admin_tab_mace": {},
+        "admin_tab_overview": {},
+        "admin_tab_questions": {},
+        "admin_th_ai_accept_rate": {},
+        "admin_th_ai_requests": {},
+        "admin_th_annotations": {},
+        "admin_th_annotator": {},
+        "admin_th_annotators": {},
+        "admin_th_appearances": {},
+        "admin_th_assignment_id": {},
+        "admin_th_avg_time": {},
+        "admin_th_avg_time_per_annotation": {},
+        "admin_th_avg_time_s": {},
+        "admin_th_best_count": {},
+        "admin_th_changes": {},
+        "admin_th_competence": {},
+        "admin_th_completion": {},
+        "admin_th_completion_pct": {},
+        "admin_th_disagreement": {},
+        "admin_th_instance": {},
+        "admin_th_instance_id": {},
+        "admin_th_instances": {},
+        "admin_th_interactions": {},
+        "admin_th_item_id": {},
+        "admin_th_last_activity": {},
+        "admin_th_max_instances": {},
+        "admin_th_most_frequent_label": {},
+        "admin_th_num_ai_used": {},
+        "admin_th_phase": {},
+        "admin_th_predicted_label": {},
+        "admin_th_rank": {},
+        "admin_th_reliability": {},
+        "admin_th_score": {},
+        "admin_th_session_id": {},
+        "admin_th_speed": {},
+        "admin_th_speed_per_hour": {},
+        "admin_th_status": {},
+        "admin_th_suspicion": {},
+        "admin_th_text": {},
+        "admin_th_text_preview": {},
+        "admin_th_time": {},
+        "admin_th_uncertainty": {},
+        "admin_th_user_id": {},
+        "admin_th_worker_id": {},
+        "admin_th_working_time": {},
+        "admin_th_worst_count": {},
+        "arena_empty": {},
+        "arena_enter_prompt": {},
+        "arena_error_prefix": {},
+        "arena_export": {},
+        "arena_export_title": {},
+        "arena_failed": {},
+        "arena_heading": {},
+        "arena_lb_note": {},
+        "arena_leaderboard_heading": {},
+        "arena_lede": {},
+        "arena_models_label": {},
+        "arena_ms": {},
+        "arena_no_dpo_pairs": {},
+        "arena_page_title": {},
+        "arena_pick_as_best": {},
+        "arena_picked": {},
+        "arena_prompt_heading": {},
+        "arena_prompt_placeholder": {},
+        "arena_responses_heading": {},
+        "arena_run": {},
+        "arena_running": {},
+        "arena_sent_to": {},
+        "arena_th_bt": {},
+        "arena_th_comparisons": {},
+        "arena_th_elo": {},
+        "arena_th_model": {},
+        "arena_th_win_rate": {},
+        "arena_th_wins": {},
+        "audio_to_annotate": {},
+        "automation_actions_error": {},
+        "automation_actions_ok": {},
+        "automation_actions_skipped": {},
+        "automation_activity": {},
+        "automation_col_action": {},
+        "automation_col_actions": {},
+        "automation_col_detail": {},
+        "automation_col_enabled": {},
+        "automation_col_item": {},
+        "automation_col_rule": {},
+        "automation_col_sample_rate": {},
+        "automation_col_status": {},
+        "automation_configured_rules": {},
+        "automation_heading": {},
+        "automation_items_processed": {},
+        "automation_latest": {},
+        "automation_lede_1": {},
+        "automation_lede_2": {},
+        "automation_lede_3": {},
+        "automation_no": {},
+        "automation_no_actions": {},
+        "automation_no_rules": {},
+        "automation_page_title": {},
+        "automation_recent_outcomes": {},
+        "automation_reload": {},
+        "automation_rules_fired": {},
+        "automation_snapshot_title": {},
+        "automation_yes": {},
+        "catalog_all_placeholder": {},
+        "catalog_anchor_label": {},
+        "catalog_anchor_placeholder": {},
+        "catalog_build_index": {},
+        "catalog_clusters_label": {},
+        "catalog_discover_button": {},
+        "catalog_discover_desc": {},
+        "catalog_discover_heading": {},
+        "catalog_embeddings_warn_1": {},
+        "catalog_embeddings_warn_2": {},
+        "catalog_heading": {},
+        "catalog_index_heading": {},
+        "catalog_items_indexed": {},
+        "catalog_lede_1": {},
+        "catalog_lede_2": {},
+        "catalog_lede_3": {},
+        "catalog_lede_slices": {},
+        "catalog_lede_what": {},
+        "catalog_more_traces_suffix": {},
+        "catalog_no_matches": {},
+        "catalog_no_slices": {},
+        "catalog_page_title": {},
+        "catalog_prompt_curate_prefix": {},
+        "catalog_prompt_curate_suffix": {},
+        "catalog_query_text_label": {},
+        "catalog_query_text_placeholder": {},
+        "catalog_resolve_button": {},
+        "catalog_save_slice_button": {},
+        "catalog_search_button": {},
+        "catalog_search_heading": {},
+        "catalog_slice_name_label": {},
+        "catalog_slice_query_label": {},
+        "catalog_slice_query_placeholder": {},
+        "catalog_slice_threshold_label": {},
+        "catalog_slices_heading": {},
+        "catalog_status_building": {},
+        "catalog_status_candidate_modes": {},
+        "catalog_status_clustering": {},
+        "catalog_status_curating": {},
+        "catalog_status_failed": {},
+        "catalog_status_imported_mid": {},
+        "catalog_status_imported_prefix": {},
+        "catalog_status_imported_suffix": {},
+        "catalog_status_indexed_prefix": {},
+        "catalog_status_indexed_suffix": {},
+        "catalog_status_matching_instances": {},
+        "catalog_status_name_required": {},
+        "catalog_status_results_suffix": {},
+        "catalog_status_saved": {},
+        "catalog_status_searching": {},
+        "catalog_th_actions": {},
+        "catalog_th_instance": {},
+        "catalog_th_query_anchor": {},
+        "catalog_th_similarity": {},
+        "catalog_th_slice": {},
+        "catalog_th_threshold": {},
+        "catalog_threshold_label": {},
+        "catalog_to_dataset_button": {},
+        "catalog_topk_label": {},
+        "catalog_traces_suffix": {},
+        "catalog_unlabeled": {},
+        "choose_username_placeholder": {},
+        "cite_us": {},
+        "codebook": {},
+        "continue_button": {},
+        "create_password_placeholder": {},
+        "dash_assigned_completed": {},
+        "dash_back_to_annotating": {},
+        "dash_error": {},
+        "dash_items_started_pct": {},
+        "dash_loading": {},
+        "dash_no_items_assigned": {},
+        "dash_no_items_project": {},
+        "dash_project_progress": {},
+        "dash_readonly": {},
+        "dash_stat_active_annotators": {},
+        "dash_stat_annotated": {},
+        "dash_stat_annotations": {},
+        "dash_stat_assigned": {},
+        "dash_stat_complete": {},
+        "dash_stat_items_started": {},
+        "dash_stat_total_items": {},
+        "dash_subtitle": {},
+        "dash_your_progress": {},
+        "datasets_annotation_process": {},
+        "datasets_assignment_active": {},
+        "datasets_assignment_paused": {},
+        "datasets_col_cmp": {},
+        "datasets_col_created": {},
+        "datasets_col_dataset": {},
+        "datasets_col_examples": {},
+        "datasets_col_experiment": {},
+        "datasets_col_scores": {},
+        "datasets_col_version": {},
+        "datasets_compare_selected": {},
+        "datasets_create_dataset_btn": {},
+        "datasets_created": {},
+        "datasets_creating": {},
+        "datasets_dataset_label": {},
+        "datasets_datasets_heading": {},
+        "datasets_description_label": {},
+        "datasets_done": {},
+        "datasets_evaluators_label": {},
+        "datasets_example_label": {},
+        "datasets_examples_label": {},
+        "datasets_experiments_heading": {},
+        "datasets_failed": {},
+        "datasets_heading": {},
+        "datasets_lede": {},
+        "datasets_llm_judge_note": {},
+        "datasets_loading_status": {},
+        "datasets_name_hint": {},
+        "datasets_name_label": {},
+        "datasets_new_dataset": {},
+        "datasets_no_datasets": {},
+        "datasets_no_experiments": {},
+        "datasets_optional_placeholder": {},
+        "datasets_page_title": {},
+        "datasets_pause_assignment": {},
+        "datasets_pick_dataset_evaluator": {},
+        "datasets_resume_assignment": {},
+        "datasets_run_btn": {},
+        "datasets_run_experiment": {},
+        "datasets_running": {},
+        "datasets_select_dataset": {},
+        "datasets_select_label": {},
+        "datasets_stat_annotated": {},
+        "datasets_stat_annotators": {},
+        "datasets_stat_datasets": {},
+        "datasets_stat_experiments": {},
+        "datasets_stat_ingested": {},
+        "datasets_stat_instances": {},
+        "datasets_stat_multi_annotated": {},
+        "datasets_stat_remaining": {},
+        "datasets_status_unavailable": {},
+        "datasets_version_label": {},
+        "datasets_versions_label": {},
+        "dsdetail_back_link": {},
+        "dsdetail_col_created": {},
+        "dsdetail_col_examples": {},
+        "dsdetail_col_experiment": {},
+        "dsdetail_col_id": {},
+        "dsdetail_col_inputs": {},
+        "dsdetail_col_note": {},
+        "dsdetail_col_reference": {},
+        "dsdetail_col_scores": {},
+        "dsdetail_col_split": {},
+        "dsdetail_col_tags": {},
+        "dsdetail_col_version": {},
+        "dsdetail_examples_heading": {},
+        "dsdetail_examples_subtitle": {},
+        "dsdetail_experiments_heading": {},
+        "dsdetail_export_dpo": {},
+        "dsdetail_export_dpo_title": {},
+        "dsdetail_export_sft": {},
+        "dsdetail_export_sft_title": {},
+        "dsdetail_import_instances": {},
+        "dsdetail_import_instances_title": {},
+        "dsdetail_import_traces": {},
+        "dsdetail_import_traces_title": {},
+        "dsdetail_include_annotations": {},
+        "dsdetail_no_examples": {},
+        "dsdetail_no_experiments": {},
+        "dsdetail_no_versions": {},
+        "dsdetail_status_import_failed": {},
+        "dsdetail_status_imported": {},
+        "dsdetail_status_imported_suffix": {},
+        "dsdetail_status_importing": {},
+        "dsdetail_tag_button": {},
+        "dsdetail_tag_input_label": {},
+        "dsdetail_tag_placeholder": {},
+        "dsdetail_versions_heading": {},
+        "error_heading": {},
+        "evalanalytics_alerts_heading": {},
+        "evalanalytics_col_avg_latency": {},
+        "evalanalytics_col_cost": {},
+        "evalanalytics_col_errors": {},
+        "evalanalytics_col_model": {},
+        "evalanalytics_col_tokens": {},
+        "evalanalytics_col_traces": {},
+        "evalanalytics_empty": {},
+        "evalanalytics_lede_after": {},
+        "evalanalytics_lede_before": {},
+        "evalanalytics_lede_tail": {},
+        "evalanalytics_permodel_aria": {},
+        "evalanalytics_permodel_heading": {},
+        "evalanalytics_stat_avg_latency": {},
+        "evalanalytics_stat_error_rate": {},
+        "evalanalytics_stat_p95_latency": {},
+        "evalanalytics_stat_total_cost": {},
+        "evalanalytics_stat_total_tokens": {},
+        "evalanalytics_stat_traces": {},
+        "evalanalytics_title": {},
+        "expcompare_back_link": {},
+        "expcompare_baseline": {},
+        "expcompare_ci_label": {},
+        "expcompare_col_metric": {},
+        "expcompare_empty": {},
+        "expcompare_heading": {},
+        "expcompare_lede_part1": {},
+        "expcompare_lede_part2": {},
+        "expcompare_lede_strong": {},
+        "expcompare_not_significant": {},
+        "expcompare_page_title": {},
+        "expcompare_row_examples": {},
+        "expcompare_sig_title": {},
+        "expcompare_significant": {},
+        "forgot_password": {},
+        "go_button": {},
+        "html_dir": {},
+        "html_lang": {},
+        "iaa_admin_dashboard": {},
+        "iaa_agreement": {},
+        "iaa_annotators": {},
+        "iaa_at_cap": {},
+        "iaa_band_fair": {},
+        "iaa_band_moderate": {},
+        "iaa_band_poor": {},
+        "iaa_band_strong": {},
+        "iaa_band_substantial": {},
+        "iaa_band_weak": {},
+        "iaa_empty_state": {},
+        "iaa_fully_aligned_items": {},
+        "iaa_items": {},
+        "iaa_meta_scored": {},
+        "iaa_na": {},
+        "iaa_overlap_sample": {},
+        "iaa_per_item_breakdown": {},
+        "iaa_scale_correlation_label": {},
+        "iaa_scale_correlation_note": {},
+        "iaa_scale_kappa_label": {},
+        "iaa_scale_lower_label": {},
+        "iaa_scale_lower_note": {},
+        "iaa_scale_raw_label": {},
+        "iaa_scale_raw_note": {},
+        "iaa_scale_span_label": {},
+        "iaa_scale_span_note_post": {},
+        "iaa_scale_span_note_pre": {},
+        "iaa_th_annotators": {},
+        "iaa_th_cap": {},
+        "iaa_th_instance": {},
+        "iaa_th_metric": {},
+        "iaa_th_value": {},
+        "iaa_title": {},
+        "iaa_title_overlap_sample": {},
+        "in_progress_badge": {},
+        "instructions_heading": {},
+        "integrity_annotators_suffix": {},
+        "integrity_col_annotator": {},
+        "integrity_col_ca_score": {},
+        "integrity_col_flags": {},
+        "integrity_col_items": {},
+        "integrity_col_llm_alignment": {},
+        "integrity_col_residual": {},
+        "integrity_col_suspicion": {},
+        "integrity_correlated_agreement": {},
+        "integrity_heading": {},
+        "integrity_lede": {},
+        "integrity_lede_ca_desc": {},
+        "integrity_lede_residual_desc": {},
+        "integrity_lede_with_low": {},
+        "integrity_lede_without_ground_truth": {},
+        "integrity_llm_alignment": {},
+        "integrity_llm_labels_available": {},
+        "integrity_no_annotations": {},
+        "integrity_no_llm_labels": {},
+        "integrity_page_title": {},
+        "integrity_residual": {},
+        "judge_above": {},
+        "judge_agreement": {},
+        "judge_autocalibrate": {},
+        "judge_autocalibrate_intro_1": {},
+        "judge_autocalibrate_intro_2": {},
+        "judge_autocalibrate_intro_3": {},
+        "judge_autocalibrate_intro_4": {},
+        "judge_autocalibrate_intro_5": {},
+        "judge_bias_robustness": {},
+        "judge_chars": {},
+        "judge_cohens_kappa": {},
+        "judge_col_conf": {},
+        "judge_col_human": {},
+        "judge_col_instance": {},
+        "judge_col_judge": {},
+        "judge_col_reasoning": {},
+        "judge_compared_n": {},
+        "judge_confusion_caption": {},
+        "judge_confusion_caption_2": {},
+        "judge_confusion_label": {},
+        "judge_corrected": {},
+        "judge_current_paren": {},
+        "judge_current_prompt_version": {},
+        "judge_disagreements": {},
+        "judge_empty_1": {},
+        "judge_empty_2": {},
+        "judge_empty_3": {},
+        "judge_eval_cards": {},
+        "judge_eval_cards_intro": {},
+        "judge_heading": {},
+        "judge_human_vs_judge": {},
+        "judge_intro": {},
+        "judge_length_bias": {},
+        "judge_mean_kappa": {},
+        "judge_mean_kappa_drift": {},
+        "judge_over_versions": {},
+        "judge_page_title": {},
+        "judge_predictions": {},
+        "judge_prompt_versions": {},
+        "jump_next_unannotated": {},
+        "jump_prev_unannotated": {},
+        "labeled_badge": {},
+        "loading": {},
+        "login_subtitle_password": {},
+        "login_subtitle_username": {},
+        "login_title": {},
+        "logout": {},
+        "next_button": {},
+        "not_labeled_badge": {},
+        "or_divider": {},
+        "password_label": {},
+        "powered_by": {},
+        "previous_button": {},
+        "progress_label": {},
+        "register_button": {},
+        "register_tab": {},
+        "retry_button": {},
+        "sign_in_button": {},
+        "sign_in_tab": {},
+        "sign_in_with": {},
+        "submit_button": {},
+        "text_to_annotate": {},
+        "triage_col_annotations": {},
+        "triage_col_assigned": {},
+        "triage_col_instance": {},
+        "triage_col_priority": {},
+        "triage_col_reason": {},
+        "triage_empty_queue": {},
+        "triage_flagged": {},
+        "triage_heading": {},
+        "triage_intro_before": {},
+        "triage_intro_served": {},
+        "triage_intro_signal": {},
+        "triage_items_remaining": {},
+        "triage_no": {},
+        "triage_not_enabled_after": {},
+        "triage_not_enabled_before": {},
+        "triage_not_enabled_rank": {},
+        "triage_page_title": {},
+        "triage_priority_label": {},
+        "triage_summary_aria": {},
+        "triage_table_caption": {},
+        "triage_yes": {},
+        "username_label": {},
+        "username_placeholder": {},
+        "video_to_annotate": {}
+      },
+      "type": "object"
+    },
+    "user_config": {
+      "additionalProperties": true,
+      "properties": {
+        "allow_all_users": {},
+        "users": {}
+      },
+      "type": "object"
+    },
+    "user_roles": {},
+    "verbose": {},
+    "very_verbose": {},
+    "watch_data_directory": {
+      "type": "boolean"
+    },
+    "watch_poll_interval": {},
+    "webhooks": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {},
+        "endpoints": {}
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "item_properties",
+    "task_dir",
+    "output_annotation_dir",
+    "annotation_task_name"
+  ],
+  "title": "Potato task configuration",
+  "type": "object"
+}

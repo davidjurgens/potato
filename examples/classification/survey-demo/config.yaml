@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Simple Survey Demo Configuration
 # This example demonstrates using standard survey instruments in prestudy/poststudy phases
 

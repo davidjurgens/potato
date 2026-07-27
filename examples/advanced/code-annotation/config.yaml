@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Code Review Annotation Example
 # Demonstrates annotating source code for quality review
 

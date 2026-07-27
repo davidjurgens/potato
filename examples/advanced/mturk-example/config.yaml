@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Amazon Mechanical Turk Example Configuration
 #
 # NOTE: MTurk closed to new requesters on 2026-07-30 and is in maintenance mode.

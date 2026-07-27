@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Live Agent Evaluation Example
 #
 # Annotators observe an AI agent browsing the web in real time,

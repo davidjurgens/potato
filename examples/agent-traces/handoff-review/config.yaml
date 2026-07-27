@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Handoff review (M2)
 # Each agent-to-agent handoff becomes a card; flag inter-agent misalignment + rate quality.
 # Run: python potato/flask_server.py start examples/agent-traces/handoff-review/config.yaml -p 8000

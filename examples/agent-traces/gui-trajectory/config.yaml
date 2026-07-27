@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # GUI / computer-use trajectory (M11)
 # Per-step screenshot + action; judge action correctness and click grounding.
 # Run: python potato/flask_server.py start examples/agent-traces/gui-trajectory/config.yaml -p 8000

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # PDF Cross-Page Linking — CONTINUOUS SCROLL view
 #
 # All pages are stacked in one scrollable container, so anchors on any page are

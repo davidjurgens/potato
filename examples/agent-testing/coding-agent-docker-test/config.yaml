@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Live coding-agent example via the DockerCodingAgentProxy.
 #
 # Identical to coding-agent-live-test/, but every action runs inside an

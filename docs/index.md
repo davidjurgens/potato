@@ -36,6 +36,17 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Configuration Reference](configuration/configuration.md) - Complete config options
 - [Comparison with Other Tools](comparison.md) - How Potato compares to alternatives
 
+## For Coding Agents
+
+Generated, machine-checkable specs built from the running code — prefer these
+over prose when writing a config or calling the API.
+
+- **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use all four, with editor setup and CI validation
+- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 56 annotation types and 23 display types
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 390 HTTP paths, with per-operation auth and config gating
+- [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
+- [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
+
 ## Annotation Schemas
 
 - **[Choosing the Right Annotation Type](annotation-types/choosing_annotation_types.md)** - Decision guide for selecting the best schema for your task

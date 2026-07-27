@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Format Display Verification
 # Tests rendering of new format display types: document, code, spreadsheet, PDF
 # Run: python potato/flask_server.py start examples/testing/verify-format-displays/config.yaml -p 8000

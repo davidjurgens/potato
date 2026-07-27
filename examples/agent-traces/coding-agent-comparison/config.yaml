@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Coding Agent Comparison
 #
 # Pairwise comparison of two coding agent traces on the same task.

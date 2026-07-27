@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Image Classification with VLLM Rationales
 #
 # This example demonstrates using Vision Language Models (VLLMs) like Qwen-VL

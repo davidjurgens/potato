@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Plan-Quality Review Recipe (pre-execution)
 #
 # Review an agent's PLAN before it executes: rubric-score the plan, flag

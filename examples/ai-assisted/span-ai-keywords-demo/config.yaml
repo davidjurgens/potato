@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Span Annotation with AI Keywords and Admin Highlights Demo
 #
 # This example demonstrates all three overlay systems working together:

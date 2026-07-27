@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 annotation_task_name: "Tool-Call Review"
 data_files: [data/traces.json]
 item_properties: {id_key: id, text_key: task}

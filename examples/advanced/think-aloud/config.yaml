@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 port: 8000
 annotation_task_name: "Think-Aloud — Politeness"
 task_dir: .
