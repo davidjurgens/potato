@@ -15,7 +15,7 @@ training data faster than labeling from scratch.
 Related: [Process Supervision (PRM Labeling)](process_supervision.md) ·
 [Trajectory Evaluation](trajectory_eval.md) ·
 [LLM-as-Judge Alignment](judge_alignment.md) ·
-[Judge Calibration](../ai-assisted/judge_calibration.md)
+[Judge Calibration](../ai-intelligence/judge_calibration.md)
 
 ---
 
@@ -218,4 +218,4 @@ shape that feeds step-level Krippendorff α / Cohen κ (see step agreement).
 - [Trajectory Evaluation](trajectory_eval.md) — richer per-step error taxonomies
 - [LLM-as-Judge Alignment](judge_alignment.md) — measuring human↔judge agreement
 - [Coding Agent Annotation](coding_agent_annotation.md) — PRM/DPO/SWE-bench export
-- [AI Support](../ai_support.md) — configuring LLM endpoints
+- [AI Support](../ai-intelligence/ai_support.md) — configuring LLM endpoints

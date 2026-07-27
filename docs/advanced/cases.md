@@ -56,7 +56,7 @@ not on every excerpt.
 ## Example
 
 A runnable example is in
-[`examples/advanced/cases-example/`](../../examples/advanced/cases-example/):
+[`examples/advanced/cases-example/`](https://github.com/davidjurgens/potato/tree/master/examples/advanced/cases-example/):
 
 ```bash
 python potato/flask_server.py start \

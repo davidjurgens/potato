@@ -117,7 +117,7 @@ Both values are string-encoded numbers. `range_low` is always less than or equal
 
 ## Related Documentation
 
-- [Slider](../schemas_and_templates.md#slider) — single-thumb continuous slider
+- [Slider](../schemas_and_templates.md#5-slider-slider) — single-thumb continuous slider
 - [Soft Label](soft_label.md) — probability distribution across categories
 - [Pairwise Comparison](../comparison/pairwise_annotation.md) — scale mode with single slider between two options
 - [Schema Gallery](../schemas_and_templates.md) — all annotation types with examples

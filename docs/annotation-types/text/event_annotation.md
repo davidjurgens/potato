@@ -189,6 +189,6 @@ Multiple events are stacked vertically to avoid overlap.
 
 ## Related Documentation
 
-- [Span Annotation](span_annotation.md) - Required for defining entity spans
+- [Span Annotation](../schemas_and_templates.md#4-text-span-selection-span) - Required for defining entity spans
 - [Span Link](span_linking.md) - Alternative for binary relationships
 - [Coreference Annotation](coreference_annotation.md) - For entity coreference

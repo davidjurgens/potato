@@ -239,12 +239,12 @@ Content API on `/api/codebook` (session-auth; mutations are gated by
 
 Enable it with a `codebook.distiller` block in config; QDA Mode turns the
 document on by default. See
-[`examples/advanced/codebook-document-example/`](../../examples/advanced/codebook-document-example/).
+[`examples/advanced/codebook-document-example/`](https://github.com/davidjurgens/potato/tree/master/examples/advanced/codebook-document-example/).
 
 ## Example
 
 A runnable example is in
-[`examples/advanced/codebook-example/`](../../examples/advanced/codebook-example/):
+[`examples/advanced/codebook-example/`](https://github.com/davidjurgens/potato/tree/master/examples/advanced/codebook-example/):
 
 ```bash
 python potato/flask_server.py start \

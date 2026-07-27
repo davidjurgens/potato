@@ -145,4 +145,4 @@ rows = flatten_turn_annotation("turn_errors", stored_json)
 
 - [Agent Traces](agent_traces.md)
 - [Multi-Agent Discussion](multi_agent_discussion.md)
-- [Trajectory Evaluation](trajectory_evaluation.md)
+- [Trajectory Evaluation](trajectory_eval.md)

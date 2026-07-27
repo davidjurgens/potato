@@ -11,11 +11,14 @@ Usage:
     # Writes to docs/configuration/config_reference.md
 """
 
+import re
 import sys
 import os
+import unicodedata
 
 # Add project root to path so we can import potato modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 from potato.server_utils.config_module import (
     KNOWN_CONFIG_KEYS,
@@ -24,6 +27,22 @@ from potato.server_utils.config_module import (
     _VALID_ASSIGNMENT_STRATEGIES,
 )
 from potato.server_utils.schemas.registry import schema_registry
+
+
+def slugify(text):
+    """
+    Build the same heading anchor MkDocs will.
+
+    This has to match Python-Markdown's `toc` slugify exactly, because the
+    table-of-contents links generated here point at headings MkDocs renders. An
+    ad-hoc version that only substituted separators left punctuation in place,
+    so "Qualitative Coding (QDA)" produced `#qualitative-coding-(qda)` while the
+    rendered heading id was `qualitative-coding-qda` — a link that silently
+    landed readers at the top of the page.
+    """
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^\w\s-]", "", text).strip().lower()
+    return re.sub(r"[-\s]+", "-", text)
 
 
 # Required top-level fields
@@ -49,6 +68,7 @@ CATEGORY_ORDER = [
     ("Authentication / Login", [
         "authentication", "login", "user_config",
         "require_password", "require_no_password", "secret_key",
+        "rbac", "user_roles",
     ]),
     ("Server", [
         "server", "port", "host", "customjs", "customjs_hostname",
@@ -71,6 +91,9 @@ CATEGORY_ORDER = [
         "diversity_ordering", "diversity_config", "embedding_visualization",
         "adjudication", "database", "bws_config", "ibws_config", "mace",
         "icl_labeling", "llm_labeling",
+        "psychometrics", "boundary_probing", "event_template", "corpus_map",
+        "rooms", "truth_serum", "thinkaloud", "pocket",
+        "analytics", "annotator_dashboard",
     ]),
     ("UI & Layout", [
         "ui", "ui_config", "layout", "instance_display", "format_handling",
@@ -93,6 +116,10 @@ CATEGORY_ORDER = [
     ]),
     ("External Integrations", [
         "mturk", "prolific", "webhooks", "trace_ingestion", "huggingface_backup",
+        "crowdsourcing",
+    ]),
+    ("Publishing & Export", [
+        "publish", "dataset_metadata",
     ]),
     ("Debug / Logging", [
         "debug", "debug_phase", "server_debug", "verbose", "very_verbose", "debug_log",
@@ -100,14 +127,28 @@ CATEGORY_ORDER = [
     ("Agent", [
         "live_agent", "live_coding_agent", "agent_proxy",
     ]),
+    ("Agent Evaluation Suite", [
+        "datasets", "automation", "curation", "arena",
+        "judge_alignment", "judge_calibration", "cot_segmentation",
+    ]),
+    ("Workflow & Phases", [
+        "surveyflow", "prestudy", "triage", "review_mode", "review_workflow",
+    ]),
     ("Assignment & Sessions", [
         "random_seed", "max_annotations_per_user", "max_annotations_per_item",
         "num_annotators_per_item", "min_annotators_per_instance",
         "solo_mode", "admin_api_key", "alert_time_each_instance",
         "assignment_strategy", "reclaim_stale_assignments", "instance_reclaim",
         "max_session_seconds", "env_substitution",
+        "automatic_assignment", "batch_assignment", "per_annotator_quota",
+        "scheme_sets", "sessions",
     ]),
 ]
+
+# Internal plumbing rather than user-facing configuration: set by the loader, not
+# written in a config file. Excluded from the reference and from the completeness
+# check in tests/unit/test_config_reference_completeness.py.
+INTERNAL_KEYS = {"__config_file__", "config_file", "_bws_pool_items"}
 
 
 def get_type_hint(key):
@@ -152,8 +193,10 @@ def generate_reference():
     lines.append("## Table of Contents")
     lines.append("")
     for category, _ in CATEGORY_ORDER:
-        anchor = category.lower().replace(" / ", "-").replace(" & ", "-").replace(" ", "-")
+        anchor = slugify(category)
         lines.append(f"- [{category}](#{anchor})")
+    if set(KNOWN_CONFIG_KEYS) - {k for _, keys in CATEGORY_ORDER for k in keys} - INTERNAL_KEYS:
+        lines.append("- [Other](#other)")
     lines.append("- [Annotation Types](#annotation-types)")
     lines.append("- [Label Structure](#label-structure)")
     lines.append("")
@@ -161,7 +204,7 @@ def generate_reference():
     # Config key sections
     covered_keys = set()
     for category, keys in CATEGORY_ORDER:
-        anchor = category.lower().replace(" / ", "-").replace(" & ", "-").replace(" ", "-")
+        anchor = slugify(category)
         lines.append(f"## {category}")
         lines.append("")
         lines.append("| Key | Required | Type | Sub-keys |")
@@ -175,6 +218,33 @@ def generate_reference():
             subkeys_val = KNOWN_CONFIG_KEYS[key]
             subkeys_str = format_subkeys(subkeys_val)
             lines.append(f"| `{key}` | {required} | {type_hint} | {subkeys_str} |")
+        lines.append("")
+
+    # Catch-all. CATEGORY_ORDER is hand-maintained, so a newly recognized config
+    # key belongs to no category until someone remembers to add it — and this
+    # page claims to be complete. Thirty-five keys had drifted out that way,
+    # including whole subsystems (rooms, psychometrics, rbac, crowdsourcing,
+    # publish). Emitting the remainder here means a new key is merely
+    # uncategorized rather than undocumented.
+    uncategorized = sorted(
+        set(KNOWN_CONFIG_KEYS) - covered_keys - INTERNAL_KEYS
+    )
+    if uncategorized:
+        lines.append("## Other")
+        lines.append("")
+        lines.append(
+            "Recognized keys not yet sorted into a category above. "
+            "They are valid configuration; the grouping simply has not caught up."
+        )
+        lines.append("")
+        lines.append("| Key | Required | Type | Sub-keys |")
+        lines.append("|-----|----------|------|----------|")
+        for key in uncategorized:
+            required = "Yes" if key in REQUIRED_FIELDS else ""
+            lines.append(
+                f"| `{key}` | {required} | {get_type_hint(key)} | "
+                f"{format_subkeys(KNOWN_CONFIG_KEYS[key])} |"
+            )
         lines.append("")
 
     # Annotation types section from registry

@@ -154,7 +154,7 @@ judge_calibration:
 When Potato runs as a Space, set `HF_TOKEN` as a **Space secret** (Settings → Variables and
 secrets). The same `${HF_TOKEN}` references above then resolve inside the container, so the
 AI-assisted demos work without any code change. See the
-[Spaces deployment guide](../../deployment/huggingface-spaces/deploy.md).
+[Spaces deployment guide](../data-export/huggingface_spaces.md).
 
 ---
 
@@ -174,4 +174,4 @@ AI-assisted demos work without any code change. See the
 - [AI support / hints](ai_support.md)
 - [Solo mode](../solo-mode/solo_mode.md)
 - [Judge calibration](judge_calibration.md)
-- [Deploy Potato on HuggingFace Spaces](../../deployment/huggingface-spaces/deploy.md)
+- [Deploy Potato on HuggingFace Spaces](../data-export/huggingface_spaces.md)

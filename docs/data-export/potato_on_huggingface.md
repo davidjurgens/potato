@@ -7,14 +7,14 @@ index.
 - 🥔 **Website:** [www.potatoannotator.com](https://www.potatoannotator.com)
 - 🗂️ **Collection (all demos):** [Potato Annotation Demos](https://huggingface.co/collections/Blablablab/potato-annotation-demos-6a3753d95427d61a91ecf4fd)
 - 🤗 **Live demo:** [Blablablab/agent-trace-evaluation](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)
-- 📚 **Deploy your own Space:** [deployment guide](../../deployment/huggingface-spaces/deploy.md)
+- 📚 **Deploy your own Space:** [deployment guide](huggingface_spaces.md)
 - 🤖 **Use HF models for AI features:** [Using HuggingFace Models](../ai-intelligence/huggingface_models.md)
 - 📤 **Export annotations to the Hub:** [HuggingFace Hub Export](huggingface_export.md)
 
 > The full catalog of demo Spaces is rolling out under the
 > [`Blablablab`](https://huggingface.co/Blablablab) org and grouped in a HuggingFace
-> **Collection**. Each demo is generated from a project in [`examples/`](../../examples/) via the
-> [Spaces catalog tooling](../../deployment/huggingface-spaces/deploy_spaces.md) — adding a new
+> **Collection**. Each demo is generated from a project in [`examples/`](https://github.com/davidjurgens/potato/tree/master/examples/) via the
+> [Spaces catalog tooling](huggingface_spaces.md) — adding a new
 > one is a single manifest entry.
 
 ## Running any demo
@@ -100,7 +100,7 @@ _These showcase LLM features and need an endpoint — wire to the HF Inference A
 
 ## Deploying the catalog
 
-See the [Spaces deployment runbook](../../deployment/huggingface-spaces/deploy_spaces.md):
+See the [Spaces deployment runbook](huggingface_spaces.md):
 
 ```bash
 python deployment/huggingface-spaces/build_space.py --list          # see all demos

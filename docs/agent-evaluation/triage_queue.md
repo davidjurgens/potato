@@ -106,4 +106,4 @@ clean ones still waiting.
 - [Agent Traces](agent_traces.md), [Three-Pane Trace Eval](eval_trace.md),
   [Judge ↔ Human Alignment](judge_alignment.md),
   [Trajectory Correction](trajectory_correction.md)
-- Assignment strategies are documented in [Task Assignment](../task_assignment.md).
+- Assignment strategies are documented in [Task Assignment](../advanced/task_assignment.md).

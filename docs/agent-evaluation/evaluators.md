@@ -149,7 +149,7 @@ result.metadata["path"]           # [{node, question, choice, reasoning}, ...]
 to it). The evaluator reuses the judge endpoint config (`judge_alignment.ai_support`
 or `ai_support`) and is robust to models that don't honor JSON output (it recovers
 the chosen option from the raw text). Compare with the annotation-facing
-[`rubric_eval`](../annotation-types) schema, which collects *human* multi-criteria
+[`rubric_eval`](../annotation-types/schemas_and_templates.md) schema, which collects *human* multi-criteria
 scores — the two pair naturally (judge proposes via the DAG, humans verify).
 
 ## RAG triad (reference-free)

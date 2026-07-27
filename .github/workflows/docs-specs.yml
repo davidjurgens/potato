@@ -60,6 +60,7 @@ jobs:
             tests/unit/test_config_schema_drift.py \
             tests/unit/test_openapi_drift.py \
             tests/unit/test_docs_nav_drift.py \
+            tests/unit/test_config_reference_completeness.py \
             tests/unit/test_display_registry_docs_sync.py
 
   docs:
@@ -78,8 +79,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r docs/requirements.txt
 
-      # Not --strict yet: the docs carry pre-existing broken cross-links that
-      # predate this workflow. This catches a nav entry pointing at a file that
-      # does not exist, which is a build error rather than a warning.
+      # --strict turns broken internal links into build failures. The docs
+      # reached zero warnings by fixing all 24 of them; this keeps it that way.
       - name: Build site
-        run: mkdocs build
+        run: mkdocs build --strict

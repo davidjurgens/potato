@@ -278,7 +278,7 @@ over prose when writing a config or calling the API.
 | Align/calibrate an LLM judge to human labels | [Judge Alignment](agent-evaluation/judge_alignment.md) |
 | Auto-label with LLM judges + calibrate blind | [Judge Calibration](ai-intelligence/judge_calibration.md) |
 | Use Solo Mode for collaborative annotation | [Solo Mode](solo-mode/solo_mode.md) |
-| Export annotations to Parquet | [Export Formats](data-export/export_formats.md#parquet) |
+| Export annotations to Parquet | [Export Formats](data-export/export_formats.md#parquet-parquet) |
 | Export to COCO/YOLO/CoNLL | [Export Formats](data-export/export_formats.md) |
 | Push annotations to HuggingFace Hub | [HuggingFace Export](data-export/huggingface_export.md) |
 | Deploy on HuggingFace Spaces | [HuggingFace Spaces](data-export/huggingface_spaces.md) |
