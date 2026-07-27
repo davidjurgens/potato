@@ -165,6 +165,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | Inter-annotator agreement | Krippendorff's alpha (general) and Cohen's kappa (step-level agent evaluation) |
 | Training phase | Practice annotations with feedback before the real task |
 | Behavioral tracking | Timing, click patterns, and annotation change history |
+| **Psychometrics** | Live IRT (multiclass GLAD, Whitehill et al. 2009) fit as annotations arrive: per-item label posteriors, annotator ability with standard errors, item difficulty, and discrimination flags for codebook bugs — no gold labels, no LLM ([docs](docs/advanced/psychometrics.md)) |
 | **Boundary probing** | Counterfactual probes map each annotator's decision boundary; paraphrase-invariance flags inconsistency ([docs](docs/advanced/boundary_lab.md)) |
 | **Truth Serum** | Surprisingly-popular scoring (Prelec et al., Nature 2017): gold-free verdicts that beat majority vote on hard items, plus annotator calibration ([docs](docs/advanced/truth_serum.md)) |
 | **Paper Mode** | `python -m potato.paper config.yaml` emits a compilable LaTeX dataset report — methods paragraphs, booktabs tables, IAA, limitations — ready to cut-paste ([docs](docs/advanced/paper_mode.md)) |
@@ -179,6 +180,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | **Solo mode** | Human-LLM collaboration with progressive automation ([docs](docs/solo-mode/solo_mode.md)) |
 | **Crowdsourcing** | Prolific and MTurk integration with platform-specific auth ([docs](docs/deployment/crowdsourcing.md)) |
 | **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/annotation-types/triage.md)) |
+| **Multiplayer Rooms** | Live shared sessions: norming (blind vote → reveal → discuss, with blind vs. post-discussion α), huddle (walk current disagreements together), and shadow (trainees watch the host annotate) ([docs](docs/advanced/multiplayer_rooms.md)) |
 | **Pocket Mode** | Annotate from your phone: installable PWA with a card-stack UI, one-tap labeling, and offline annotation that syncs on reconnect ([docs](docs/advanced/pocket_mode.md)) |
 
 ### Continuous Evaluation Loop
