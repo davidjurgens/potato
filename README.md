@@ -196,38 +196,6 @@ Close the loop from production traces to graded, regression-gated evaluation:
 
 ---
 
-## Boundary Lab: Annotate the Boundary, Not the Point
-
-Every annotation tool collects point labels: item X gets label Y. **Potato is the first
-annotation tool that captures decision boundaries.** The moment an annotator commits a
-label, Potato generates minimal counterfactual edits of the text and asks — one click
-per probe — *"Would your label survive this change?"*
-
-```yaml
-boundary_probing:
-  enabled: true
-  sources: [precomputed, llm, rules]   # curated probes, LLM-generated, or offline rules
-```
-
-Ordinary annotation then yields three things no label export can give you:
-
-| You get | Why it matters |
-|---------|----------------|
-| **Contrast sets, for free** | Every answered probe is a labeled (original, counterfactual) pair — the counterfactually-augmented data shown to improve model robustness ([Gardner et al. 2020](https://aclanthology.org/2020.findings-emnlp.117/), [Kaushik et al. 2020](https://openreview.net/forum?id=Sklgs0NFvr)), normally built as an expensive separate effort |
-| **Boundary rationales** | When a label flips, annotators say what crossed the line — pinpointing exactly where your codebook is ambiguous |
-| **Invisible quality control** | Paraphrase probes should never flip a label; annotators who flip on them are flagged — attention checks without planting a single fake gold item |
-
-A live dashboard (`/boundary/dashboard`) shows per-label boundary sensitivity, per-annotator
-consistency, and a gallery of the exact edits where labels flip. Try it:
-
-```bash
-python potato/flask_server.py start examples/advanced/boundary-probing/config.yaml -p 8000 --debug
-```
-
-See the [Boundary Lab documentation](docs/advanced/boundary_lab.md).
-
----
-
 ## Authentication & Deployment
 
 Potato supports multiple authentication methods, from passwordless quick-start to enterprise SSO:
