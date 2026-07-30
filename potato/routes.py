@@ -7600,6 +7600,9 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/data_sources/<source_id>/load_more", "admin_api_data_sources_load_more", admin_api_data_sources_load_more, methods=["POST"])
     app.add_url_rule("/admin/api/data_sources/<source_id>/refresh", "admin_api_data_sources_refresh", admin_api_data_sources_refresh, methods=["POST"])
     app.add_url_rule("/admin/api/cache/clear", "admin_api_cache_clear", admin_api_cache_clear, methods=["POST"])
+    app.add_url_rule("/admin/api/data_sources/live", "admin_api_live_ingestion_status", admin_api_live_ingestion_status, methods=["GET"])
+    app.add_url_rule("/admin/api/data_sources/<source_id>/live", "admin_api_live_ingestion_source_status", admin_api_live_ingestion_source_status, methods=["GET"])
+    app.add_url_rule("/admin/api/data_sources/<source_id>/live/poll", "admin_api_live_ingestion_poll", admin_api_live_ingestion_poll, methods=["POST"])
     app.add_url_rule("/admin/api/webhooks", "admin_api_webhooks", admin_api_webhooks, methods=["GET"])
     app.add_url_rule("/admin/api/webhooks/test", "admin_api_webhooks_test", admin_api_webhooks_test, methods=["POST"])
     app.add_url_rule("/admin/api/questions", "admin_api_questions", admin_api_questions, methods=["GET"])
@@ -8520,6 +8523,108 @@ def admin_api_data_sources_refresh(source_id):
         return jsonify({"error": str(e)}), 404
     except Exception as e:
         logger.error(f"Error refreshing source {source_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/admin/api/data_sources/live', methods=['GET'])
+def admin_api_live_ingestion_status():
+    """
+    Report polling status and ingestion statistics for every live source.
+
+    Returns:
+        JSON with a status object per live-ingestion worker
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.data_sources import get_data_source_manager
+
+    manager = get_data_source_manager()
+    if not manager:
+        return jsonify({"error": "Data sources not configured"}), 400
+
+    if not manager.has_live_sources():
+        return jsonify({
+            "enabled": False,
+            "message": "No live-ingestion sources configured"
+        })
+
+    return jsonify({
+        "enabled": True,
+        "sources": manager.get_live_ingestion_status(),
+    })
+
+
+@app.route('/admin/api/data_sources/<source_id>/live', methods=['GET'])
+def admin_api_live_ingestion_source_status(source_id):
+    """
+    Report polling status and statistics for one live source.
+
+    Args:
+        source_id: The source identifier
+
+    Returns:
+        JSON status for that worker
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.data_sources import get_data_source_manager
+
+    manager = get_data_source_manager()
+    if not manager:
+        return jsonify({"error": "Data sources not configured"}), 400
+
+    status = manager.get_live_ingestion_status(source_id)
+    if status is None:
+        if manager.get_source(source_id) is None:
+            return jsonify({"error": f"Unknown source: {source_id}"}), 404
+        return jsonify({
+            "error": f"Source '{source_id}' does not have live_ingestion enabled"
+        }), 400
+
+    return jsonify(status)
+
+
+@app.route('/admin/api/data_sources/<source_id>/live/poll', methods=['POST'])
+def admin_api_live_ingestion_poll(source_id):
+    """
+    Run one poll immediately, without waiting for the next interval.
+
+    Useful after a source has been repaired, or to confirm connectivity
+    without reading the log.
+
+    Args:
+        source_id: The source identifier
+
+    Returns:
+        JSON with the counts from this single poll
+    """
+    from potato.admin import admin_dashboard
+    if not admin_dashboard.check_admin_access():
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.data_sources import get_data_source_manager
+
+    manager = get_data_source_manager()
+    if not manager:
+        return jsonify({"error": "Data sources not configured"}), 400
+
+    try:
+        result = manager.poll_source_now(source_id)
+        return jsonify({
+            "status": "success",
+            "source_id": source_id,
+            **result,
+        })
+    except ValueError as e:
+        if manager.get_source(source_id) is None:
+            return jsonify({"error": f"Unknown source: {source_id}"}), 404
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Forced live poll failed for {source_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
 

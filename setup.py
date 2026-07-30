@@ -70,6 +70,12 @@ _AUTH_DEPS = [
 _LANGCHAIN_DEPS = [
     "langchain-core>=0.1.0",
 ]
+# SQL data sources, including live cursor-based ingestion. The driver is
+# separate and backend-specific: psycopg2-binary for PostgreSQL, pymysql for
+# MySQL. SQLite needs nothing beyond the standard library.
+_DB_DEPS = [
+    "sqlalchemy>=2.0",
+]
 
 setup(
     name="potato-annotation",
@@ -116,7 +122,8 @@ setup(
         "publish": _HF_DEPS + _EXPORT_DEPS,
         "auth": _AUTH_DEPS,
         "langchain": _LANGCHAIN_DEPS,
-        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS,
+        "db": _DB_DEPS,
+        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS,
     },
     include_package_data=True,
     entry_points={

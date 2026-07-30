@@ -1222,6 +1222,10 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # assignment design it would corrupt via self-selection.
     validate_search_assignment_compat(config_data)
 
+    # Fail loud if live ingestion is combined with an assignment strategy
+    # that can never serve the items it ingests.
+    validate_live_ingestion_assignment_compat(config_data)
+
     # Validate codebook_mode (and apply the crowd force-lock).
     validate_codebook_config(config_data)
 
@@ -1240,6 +1244,46 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Warn about unrecognized keys at all nesting levels
     validate_unknown_keys(config_data)
+
+
+def validate_live_ingestion_assignment_compat(config_data: Dict[str, Any]) -> None:
+    """
+    Hard-fail when live ingestion meets the BATCH assignment strategy.
+
+    BATCH only ever assigns items belonging to a pre-declared annotator/item
+    cohort (``_batch_candidate_ids_for_user``). An item ingested at runtime
+    belongs to no cohort, so it lands in the pool, appears in admin views and
+    exports, and is never offered to a single annotator. Stored but
+    unannotatable is the worst kind of failure: it looks like it worked.
+
+    This is an error rather than a warning on purpose -- the closely related
+    F-037 bug shipped precisely because the signal was a log line.
+
+    Raises:
+        ConfigValidationError: If a live source is combined with BATCH
+    """
+    live_indices = [
+        i for i, source in enumerate(config_data.get("data_sources") or [])
+        if isinstance(source, dict)
+        and isinstance(source.get("live_ingestion"), dict)
+        and source["live_ingestion"].get("enabled")
+    ]
+    if not live_indices:
+        return
+
+    strategy = config_data.get("assignment_strategy")
+    if isinstance(strategy, dict):
+        strategy = strategy.get("name")
+
+    if strategy and str(strategy).lower() == "batch":
+        raise ConfigValidationError(
+            f"assignment_strategy 'batch' is incompatible with "
+            f"data_sources[{live_indices[0]}].live_ingestion: BATCH assigns only "
+            f"items belonging to a configured annotator/item cohort, so "
+            f"live-ingested items would be stored but never assigned to any "
+            f"annotator. Use a different assignment_strategy, or disable "
+            f"live_ingestion on this source."
+        )
 
 
 # Assignment strategies whose sampling/ordering self-selection breaks.
@@ -2972,6 +3016,15 @@ def validate_data_sources_config(config_data: Dict[str, Any]) -> None:
                 f"Valid types: {', '.join(valid_types)}"
             )
 
+        # Live ingestion is cursor-based polling, which only the database
+        # source implements. Silently ignoring the block on other types would
+        # leave an admin believing polling was on when it was not.
+        if "live_ingestion" in source and source_type != "database":
+            raise ConfigValidationError(
+                f"data_sources[{i}] (type={source_type}) does not support "
+                f"'live_ingestion' (database sources only)"
+            )
+
         # Type-specific validation
         _validate_data_source_by_type(source, source_type, i)
 
@@ -3056,6 +3109,91 @@ def _validate_data_source_by_type(source: Dict, source_type: str, index: int) ->
         if not source.get("query") and not source.get("table"):
             raise ConfigValidationError(
                 f"{prefix} (type=database) requires 'query' or 'table'"
+            )
+
+        _validate_live_ingestion_config(source, index)
+
+
+def _validate_live_ingestion_config(source: Dict, index: int) -> None:
+    """
+    Validate a database source's ``live_ingestion`` block.
+
+    Runs at config load so a bad block fails fast with a pointed message.
+    Without this, ``DataSourceManager._init_sources()`` catches the error per
+    source and continues, so a misconfigured live source disappears behind a
+    single log line and polling silently never happens.
+
+    Raises:
+        ConfigValidationError: If the live_ingestion block is invalid
+    """
+    if "live_ingestion" not in source:
+        return
+
+    prefix = f"data_sources[{index}].live_ingestion"
+    block = source["live_ingestion"]
+
+    if not isinstance(block, dict):
+        raise ConfigValidationError(f"{prefix} must be a dictionary")
+
+    for flag in ("enabled", "replay_on_start"):
+        if flag in block and not isinstance(block[flag], bool):
+            raise ConfigValidationError(f"{prefix}.{flag} must be a boolean (true/false)")
+
+    if not block.get("enabled"):
+        return
+
+    # One source of truth for the key set, shared with the dataclass, so the
+    # two cannot drift apart.
+    from potato.data_sources.live_ingestion import LiveIngestionConfig
+
+    unknown = sorted(set(block) - LiveIngestionConfig.VALID_KEYS)
+    if unknown:
+        raise ConfigValidationError(
+            f"{prefix} has unrecognized key '{unknown[0]}'. "
+            f"Valid keys: {', '.join(sorted(LiveIngestionConfig.VALID_KEYS))}"
+        )
+
+    for key in ("poll_interval_seconds", "overlap_seconds", "safety_lag_seconds",
+                "backoff_initial_seconds", "backoff_max_seconds"):
+        if key in block and not isinstance(block[key], (int, float)):
+            raise ConfigValidationError(f"{prefix}.{key} must be a number")
+
+    for key in ("batch_size", "max_consecutive_failures", "stop_after_items"):
+        if key in block and not isinstance(block[key], int):
+            raise ConfigValidationError(f"{prefix}.{key} must be an integer")
+
+    try:
+        config = LiveIngestionConfig.from_dict(block)
+    except (TypeError, ValueError) as e:
+        raise ConfigValidationError(f"{prefix} is invalid: {e}") from e
+
+    errors = config.validate()
+    if errors:
+        raise ConfigValidationError(f"{prefix}.{errors[0]}")
+
+    query = source.get("query") or ""
+    if ":cursor" in query:
+        # 'col > :cursor' with a NULL bind matches zero rows, forever and
+        # silently. Refuse to start rather than look like an empty table.
+        if block.get("initial_cursor") is None:
+            raise ConfigValidationError(
+                f"data_sources[{index}] (type=database) query contains ':cursor', "
+                f"so {prefix}.initial_cursor is required -- a NULL cursor makes "
+                f"'created_at > :cursor' match zero rows forever"
+            )
+    elif not config.cursor_column:
+        raise ConfigValidationError(
+            f"{prefix} requires 'cursor_column' (or a query containing a "
+            f"':cursor' placeholder)"
+        )
+
+    identifier_re = re.compile(r'\A[\w][\w.$]*\Z', re.ASCII)
+    for key in ("cursor_column", "tiebreaker_column"):
+        value = block.get(key)
+        if value and not identifier_re.match(str(value)):
+            raise ConfigValidationError(
+                f"{prefix}.{key} '{value}' is not a valid SQL identifier "
+                f"(letters, digits, underscores and dots only)"
             )
 
 

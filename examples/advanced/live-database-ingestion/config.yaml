@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Live Database-Backed Instance Ingestion
+#
+# Rows inserted into the database AFTER the server starts become annotatable
+# without a restart. Seed the database first:
+#
+#   python examples/advanced/live-database-ingestion/seed_db.py
+#   python potato/flask_server.py start examples/advanced/live-database-ingestion/config.yaml -p 8000
+#
+# Then, while the server runs, add more rows and watch them appear:
+#
+#   python examples/advanced/live-database-ingestion/seed_db.py --add 3
+#
+# Requires SQLAlchemy: pip install 'potato-annotation[db]'
+
+task_dir: .
+port: 8000
+
+annotation_task_name: "live-database-ingestion"
+output_annotation_dir: "annotations"
+
+# data_sources replaces data_files entirely when present.
+data_sources:
+  # Always set an explicit id. The auto-generated one encodes this entry's
+  # position in the list, so reordering data_sources would point the stored
+  # cursor at a different table.
+  - id: live_instances
+    type: database
+    connection_string: "sqlite:///data/live.db"
+    query: "SELECT id, text, created_at FROM instances"
+
+    live_ingestion:
+      enabled: true
+      poll_interval_seconds: 5
+
+      # created_at is a wall-clock column, so it is best-effort: a transaction
+      # that started before a poll can commit after it with an earlier
+      # timestamp. overlap_seconds re-reads the boundary to catch those; the
+      # duplicates it produces are dropped by ID deduplication.
+      # A monotonic id column would be strictly correct and need no overlap.
+      cursor_column: created_at
+      tiebreaker_column: id
+      overlap_seconds: 2
+
+      batch_size: 100
+
+item_properties:
+  id_key: id
+  text_key: text
+
+# NOTE: assignment_strategy: batch is rejected with live_ingestion — BATCH only
+# serves items belonging to a pre-declared cohort, so live rows would be stored
+# but never assigned to anyone.
+assignment_strategy: fixed_order
+
+# max_annotations_per_user is deliberately left unset. With live ingestion on,
+# it defaults to unlimited rather than to the startup instance count, which is
+# what keeps later arrivals assignable.
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: radio
+    name: sentiment
+    description: "What is the sentiment of this message?"
+    labels:
+      - name: positive
+        key_value: p
+      - name: neutral
+        key_value: n
+      - name: negative
+        key_value: g
+
+  - annotation_type: text
+    name: notes
+    description: "Anything worth noting? (optional)"

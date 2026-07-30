@@ -27,6 +27,30 @@ class SourceType(Enum):
 
 
 @dataclass
+class LiveRow:
+    """
+    One row produced by a live-ingestion fetch.
+
+    Live ingestion is cursor-based: the worker remembers where it stopped and
+    asks only for what arrived since. That requires carrying two things the
+    plain item dictionary cannot express.
+
+    Attributes:
+        item: The annotation item dictionary, same shape ``read_items()`` yields
+        cursor_value: The RAW value of the cursor column, before any
+            JSON-friendly conversion. ``DatabaseSource._row_to_dict()`` calls
+            ``.isoformat()`` on datetimes, so by the time a value reaches
+            ``item`` the native type is gone -- and re-binding an ISO string
+            against, say, a PostgreSQL ``timestamptz`` is not reliable.
+        row_id: The stringified id_key value. Used as the tie-breaker so rows
+            that share a cursor value (identical timestamps) are not skipped.
+    """
+    item: Dict[str, Any]
+    cursor_value: Any
+    row_id: str
+
+
+@dataclass
 class SourceConfig:
     """
     Configuration for a data source.
@@ -211,6 +235,51 @@ class DataSource(ABC):
             True if read_items() supports start/count parameters
         """
         pass
+
+    def supports_live_ingestion(self) -> bool:
+        """
+        Check if this source can be polled for rows newer than a cursor.
+
+        Live ingestion lets a background worker pick up rows that appear after
+        the server started, without a restart. A source that returns True must
+        implement :meth:`read_since`.
+
+        Returns:
+            True if read_since() is implemented and configured
+        """
+        return False
+
+    def read_since(
+        self,
+        cursor: Optional[Any] = None,
+        tiebreaker: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator["LiveRow"]:
+        """
+        Read rows that sort after ``(cursor, tiebreaker)``.
+
+        This is the cursor-based counterpart to :meth:`read_items`. Unlike
+        OFFSET pagination it stays correct when rows are inserted between
+        calls, which is the whole point of live ingestion.
+
+        Args:
+            cursor: Last cursor value already ingested (None = read from the
+                beginning; implementations must omit the comparison entirely
+                rather than compare against NULL)
+            tiebreaker: Row id of the last ingested row sharing that cursor
+                value, so rows with identical cursor values are not skipped
+            limit: Maximum rows to return in this batch
+
+        Yields:
+            LiveRow instances in ascending ``(cursor, tiebreaker)`` order
+
+        Raises:
+            NotImplementedError: If the source does not support live ingestion
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support live ingestion "
+            f"(supports_live_ingestion() returns False)"
+        )
 
     def validate_config(self) -> List[str]:
         """

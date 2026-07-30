@@ -122,6 +122,15 @@ def clear_all_global_state():
     except ImportError:
         pass
 
+    # Data source manager (also stops any live ingestion poll threads, which
+    # would otherwise outlive the test and keep writing into the next one's
+    # item pool)
+    try:
+        from potato.data_sources import clear_data_source_manager
+        clear_data_source_manager()
+    except ImportError:
+        pass
+
     # MACE manager
     try:
         from potato.mace_manager import clear_mace_manager
@@ -576,6 +585,21 @@ class FlaskTestServer:
                         icl_labeler.start_background_worker()
                     except Exception as e:
                         print(f"Warning: Failed to initialize ICL labeler: {e}")
+
+                # Start live database ingestion pollers (same as
+                # flask_server.configure_app does on the real server path).
+                # Must come after load_all_data(), which creates the
+                # DataSourceManager and performs the catch-up read.
+                try:
+                    from potato.flask_server import _has_live_ingestion_source
+                    if _has_live_ingestion_source(config):
+                        from potato.data_sources import get_data_source_manager
+                        manager = get_data_source_manager()
+                        if manager is not None:
+                            started = manager.start_live_ingestion()
+                            print(f"[DEBUG] Started {started} live ingestion worker(s)")
+                except Exception as e:
+                    print(f"[DEBUG] Error starting live ingestion: {e}")
 
                 # Initialize adjudication manager if configured
                 if config.get('adjudication', {}).get('enabled', False):

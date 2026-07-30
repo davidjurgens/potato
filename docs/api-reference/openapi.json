@@ -686,6 +686,68 @@
         ]
       }
     },
+    "/admin/api/data_sources/live": {
+      "get": {
+        "operationId": "get_admin_api_live_ingestion_status",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Report polling status and ingestion statistics for every live source.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/admin/api/data_sources/{source_id}/live": {
+      "get": {
+        "operationId": "get_admin_api_live_ingestion_source_status",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Report polling status and statistics for one live source.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/admin/api/data_sources/{source_id}/live/poll": {
+      "post": {
+        "operationId": "post_admin_api_live_ingestion_poll",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Run one poll immediately, without waiting for the next interval.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/admin/api/data_sources/{source_id}/load_more": {
       "post": {
         "operationId": "post_admin_api_data_sources_load_more",

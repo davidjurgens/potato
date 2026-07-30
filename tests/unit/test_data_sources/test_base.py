@@ -3,9 +3,36 @@
 import pytest
 from potato.data_sources.base import (
     DataSource,
+    LiveRow,
     SourceConfig,
     SourceType,
 )
+
+
+class _MinimalSource(DataSource):
+    """Concrete DataSource implementing only the abstract methods."""
+
+    def get_source_id(self):
+        return self.source_id
+
+    def is_available(self):
+        return True
+
+    def read_items(self, start=0, count=None):
+        return iter(())
+
+    def get_total_count(self):
+        return 0
+
+    def supports_partial_reading(self):
+        return False
+
+
+@pytest.fixture
+def minimal_source():
+    return _MinimalSource(
+        SourceConfig.from_dict({"type": "file", "path": "test.json", "id": "s0"})
+    )
 
 
 class TestSourceType:
@@ -126,3 +153,45 @@ class TestSourceConfig:
             config_dict = {"type": type_name, **extra_config}
             config = SourceConfig.from_dict(config_dict)
             assert config.source_type == SourceType(type_name)
+
+
+class TestLiveIngestionContract:
+    """The opt-in live-ingestion capability on the DataSource base class."""
+
+    def test_supports_live_ingestion_defaults_false(self, minimal_source):
+        """A source that does nothing must not claim live support."""
+        assert minimal_source.supports_live_ingestion() is False
+
+    def test_read_since_raises_not_implemented_by_default(self, minimal_source):
+        """The default read_since must fail loudly, not return nothing.
+
+        Returning an empty iterator would look like "no new rows" forever,
+        which is exactly the kind of silent no-op this project keeps getting
+        bitten by.
+        """
+        with pytest.raises(NotImplementedError) as exc_info:
+            list(minimal_source.read_since())
+
+        message = str(exc_info.value)
+        assert "_MinimalSource" in message
+        assert "supports_live_ingestion" in message
+
+    def test_live_row_carries_raw_cursor_separately_from_item(self):
+        """LiveRow must not force the cursor through the item dict.
+
+        The item dict is JSON-ified on the way out (datetimes become ISO
+        strings); the cursor has to survive as its native type so it can be
+        re-bound against a typed column.
+        """
+        from datetime import datetime, timezone
+
+        raw = datetime(2026, 7, 29, 12, 0, tzinfo=timezone.utc)
+        row = LiveRow(
+            item={"id": "7", "text": "hi", "created_at": raw.isoformat()},
+            cursor_value=raw,
+            row_id="7",
+        )
+
+        assert row.cursor_value is raw
+        assert isinstance(row.item["created_at"], str)
+        assert row.row_id == "7"
