@@ -1411,11 +1411,16 @@ def training():
         instance_id = current_instance.get_id()
         instance_text = current_instance.get_data().get('displayed_text', current_instance.get_data().get('text', ''))
 
-        # Process the annotation
-        if request.is_json:
-            annotation_data = request.get_json()
-        else:
-            annotation_data = dict(request.form)
+        # Read the answer from STORED state, not from the form.
+        #
+        # Training answers arrive through the same /updateinstance autosave as every
+        # other phase, keyed Label(schema, label). Reading request.form instead meant
+        # grading against raw field names, and only radio and likert have a field name
+        # equal to the bare schema — every other type is named "schema:::label" and so
+        # never matched a correct_answers key, scoring the answer wrong no matter what
+        # the user picked. dict(request.form) also keeps only the first value per key,
+        # which made a multiselect impossible to grade at all.
+        annotation_data = user_state.get_training_answers()
 
         # Get correct answers for this training instance
         correct_answers = get_training_correct_answers(instance_id)
@@ -1465,24 +1470,15 @@ def training():
 
                 # Move to next training question or complete training
                 if user_state.advance_training_question():
-                    # More questions available
-                    training_state.set_feedback(True, "Correct! Moving to next question.", False)
-                    # Get next instance for display
-                    next_instance = user_state.get_current_training_instance()
-                    next_instance_text = next_instance.get_data().get('displayed_text', next_instance.get_data().get('text', ''))
-                    return render_template("training.html",
-                                         instance_text=next_instance_text,
-                                         instance_id=next_instance.get_id(),
-                                         feedback="Correct! Moving to next question.",
-                                         feedback_type="success",
-                                         show_feedback=True,
-                                         allow_retry=False,
-                                         current_question=current_question_num + 1,
-                                         total_questions=total_questions,
-                                         correct_count=training_state.get_correct_answer_count(),
-                                         mistake_count=training_state.get_total_mistakes(),
-                                         annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
-                                         username=username)
+                    # More questions available. Wipe this page's stored answers first:
+                    # every training question shares one phase page key, so otherwise
+                    # the next question inherits — and is graded against — this one's.
+                    user_state.clear_phase_page_annotations()
+                    training_state.set_feedback(
+                        True, "Correct! Moving to next question.", False, "success")
+                    # Redirect rather than render, matching consent/instructions/
+                    # poststudy (issue #124) so a refresh cannot resubmit the answer.
+                    return redirect(url_for("home"))
                 else:
                     # All questions completed
                     require_all = passing_criteria.get('require_all_correct', False)
@@ -1550,20 +1546,11 @@ def training():
                 allow_retry = training_config.get('allow_retry', True)
 
                 if allow_retry:
-                    training_state.set_feedback(True, f"Incorrect. {explanation}", True)
-                    return render_template("training.html",
-                                         instance_text=instance_text,
-                                         instance_id=instance_id,
-                                         feedback=f"Incorrect. {explanation}",
-                                         feedback_type="error",
-                                         show_feedback=True,
-                                         allow_retry=True,
-                                         current_question=current_question_num,
-                                         total_questions=total_questions,
-                                         correct_count=training_state.get_correct_answer_count(),
-                                         mistake_count=training_state.get_total_mistakes(),
-                                         annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
-                                         username=username)
+                    # Same question again; the previous answer stays on the page so the
+                    # user can see and change it.
+                    training_state.set_feedback(
+                        True, f"Incorrect. {explanation}", True, "error")
+                    return redirect(url_for("home"))
                 else:
                     # No retry allowed - check failure action
                     failure_action = training_config.get('failure_action', 'move_to_done')
@@ -1579,22 +1566,12 @@ def training():
                     else:
                         # Advance to next question even though wrong
                         if user_state.advance_training_question():
-                            next_instance = user_state.get_current_training_instance()
-                            next_instance_text = next_instance.get_data().get('displayed_text', next_instance.get_data().get('text', ''))
-                            training_state.set_feedback(True, f"Incorrect. {explanation} Moving to next question.", False)
-                            return render_template("training.html",
-                                                 instance_text=next_instance_text,
-                                                 instance_id=next_instance.get_id(),
-                                                 feedback=f"Previous answer was incorrect: {explanation}",
-                                                 feedback_type="warning",
-                                                 show_feedback=True,
-                                                 allow_retry=False,
-                                                 current_question=current_question_num + 1,
-                                                 total_questions=total_questions,
-                                                 correct_count=training_state.get_correct_answer_count(),
-                                                 mistake_count=training_state.get_total_mistakes(),
-                                                 annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
-                                                 username=username)
+                            user_state.clear_phase_page_annotations()
+                            training_state.set_feedback(
+                                True,
+                                f"Previous answer was incorrect: {explanation}",
+                                False, "warning")
+                            return redirect(url_for("home"))
                         else:
                             # No more questions - check if passed
                             min_correct = passing_criteria.get('min_correct', total_questions)
@@ -1623,81 +1600,24 @@ def training():
     else:
         logger.debug(f'GET <-- TRAINING for user {username}')
 
-        # Get the current training instance
-        current_instance = user_state.get_current_training_instance()
-        if not current_instance:
+        # Bail out clearly if there is nothing to show; get_current_page_html would
+        # otherwise render an empty question.
+        if not user_state.get_current_training_instance():
             logger.error(f'No training instance available for user {username}')
             return render_template("error.html", message="No training instance available")
 
-        instance_text = current_instance.get_data().get('displayed_text', current_instance.get_data().get('text', ''))
-
-        # Check if we should show feedback from previous attempt
-        show_feedback = training_state.show_feedback if training_state else False
-        feedback_message = training_state.feedback_message if training_state else ""
-        allow_retry = training_state.allow_retry if training_state else False
-
-        return render_template("training.html",
-                             instance_text=instance_text,
-                             instance_id=current_instance.get_id(),
-                             feedback=feedback_message,
-                             feedback_type="error" if allow_retry else "info",
-                             show_feedback=show_feedback,
-                             allow_retry=allow_retry,
-                             current_question=current_question_num,
-                             total_questions=total_questions,
-                             correct_count=training_state.get_correct_answer_count(),
-                             mistake_count=training_state.get_total_mistakes(),
-                             annotation_task_name=config.get("annotation_task_name", "Annotation Platform"),
-                             username=username)
+        # Render the generated phase page, exactly like consent/instructions/prestudy/
+        # poststudy. This is what finally puts the annotation schemes on screen: the
+        # standalone training.html carried a literal "{{ TASK_LAYOUT }}" that nothing
+        # ever substituted, so the form was always empty.
+        return get_current_page_html(config, username)
 
 
-def check_training_answer(user_answer: dict, correct_answers: dict) -> bool:
-    """
-    Check if the user's answer matches the correct answers.
+# Grading lives in server_utils/training_grading.py so the storage layer can call it
+# without importing this module (which would be circular). Re-exported here because
+# tests and older call sites import it from routes.
+from potato.server_utils.training_grading import check_training_answer  # noqa: E402,F401
 
-    Handles different annotation types:
-    - Radio/single select: string comparison
-    - Multiselect/checkbox: set comparison (order-independent)
-    - Likert/number: numeric comparison
-    - Text: exact or fuzzy string match
-
-    Args:
-        user_answer: Dictionary of user's answers by schema name
-        correct_answers: Dictionary of correct answers by schema name
-
-    Returns:
-        True if all answers are correct, False otherwise
-    """
-    for schema_name, correct_value in correct_answers.items():
-        if schema_name not in user_answer:
-            return False
-
-        user_value = user_answer[schema_name]
-
-        # Handle multiselect/checkbox (list comparison)
-        if isinstance(correct_value, list):
-            if isinstance(user_value, list):
-                if set(user_value) != set(correct_value):
-                    return False
-            elif isinstance(user_value, str):
-                # Single value submitted, check if it's the only correct answer
-                if len(correct_value) != 1 or user_value not in correct_value:
-                    return False
-            else:
-                return False
-        # Handle numeric values
-        elif isinstance(correct_value, (int, float)):
-            try:
-                if float(user_value) != float(correct_value):
-                    return False
-            except (ValueError, TypeError):
-                return False
-        # Handle string comparison (radio, text)
-        else:
-            if str(user_value).strip().lower() != str(correct_value).strip().lower():
-                return False
-
-    return True
 
 @app.route("/prestudy", methods=["GET", "POST"])
 def prestudy():
@@ -1849,7 +1769,18 @@ def annotate():
             elif request.form:
                 action = request.form.get('action')
 
-            if action == 'next_instance':
+            if action == 'next_instance' and cur_phase == UserPhase.TRAINING:
+                # In training the Next button means "grade this practice question",
+                # which advances one QUESTION, not one phase. Hand off to training()
+                # rather than skipping the whole phase.
+                #
+                # This is also what removes the need for any training-specific
+                # JavaScript: the shared Next button already flushes the debounce,
+                # awaits saveAnnotations() and only then POSTs here, so the answer is
+                # durably stored before it is read back for grading.
+                logger.debug(f"next_instance during training for {username}, grading")
+                return training()
+            elif action == 'next_instance':
                 # Treat as "submit current phase page" - advance to next phase
                 logger.info(f"Leaked next_instance from phase {cur_phase}, advancing phase")
                 get_user_state_manager().advance_phase(username)

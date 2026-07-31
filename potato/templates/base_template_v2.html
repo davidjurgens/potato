@@ -333,9 +333,13 @@
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" data-image-url="{{instance | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
                         {% else %}
-                        {% if is_annotation_page %}
-                                {% if ui_lang.text_to_annotate|default('Text to Annotate:') %}
-                                <h5 class="instance-text-heading">{{ ui_lang.text_to_annotate|default('Text to Annotate:') }}</h5>
+                        {# Training shows its practice question here too. Gated on a
+                           separate flag defaulting to is_annotation_page so every
+                           non-training render is unchanged. #}
+                        {% if show_instance_text | default(is_annotation_page) %}
+                                {% set _heading = instance_text_heading | default(ui_lang.text_to_annotate|default('Text to Annotate:')) %}
+                                {% if _heading %}
+                                <h5 class="instance-text-heading">{{ _heading }}</h5>
                                 {% endif %}
                                 <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
                                     <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
@@ -437,6 +441,29 @@
                     </script>
                     {% endif %}
 
+                    {# Training chrome: practice progress and answer feedback. Behind a
+                       default(false) flag so every other phase renders identically. #}
+                    {% if is_training_page | default(false) %}
+                    <div class="training-progress mb-3">
+                        <span class="training-progress-label">
+                            {{ ui_lang.training_question|default('Question') }}
+                            {{ training_current_question }} / {{ training_total_questions }}
+                        </span>
+                        <span class="training-progress-score">
+                            {{ ui_lang.training_correct|default('Correct') }}:
+                            {{ training_correct_count }}
+                            &middot;
+                            {{ ui_lang.training_mistakes|default('Mistakes') }}:
+                            {{ training_mistake_count }}
+                        </span>
+                    </div>
+                    {% if training_show_feedback and training_feedback %}
+                    <div class="feedback-alert feedback-{{ training_feedback_type|default('info') }}" role="alert">
+                        {{ training_feedback }}
+                    </div>
+                    {% endif %}
+                    {% endif %}
+
                     <!-- Annotation forms -->
                     <div id="annotation-forms">
                         {{ TASK_LAYOUT }}
@@ -458,7 +485,12 @@
             <div id="prev-btn-placeholder"></div>
             {% endif %}
             <button class="shadcn-button shadcn-button-primary" id="next-btn" onclick="navigateToNext()">
+                {%- if is_training_page | default(false) %}
+                {{ training_allow_retry and ui_lang.try_again|default('Try Again')
+                   or ui_lang.submit_answer|default('Submit Answer') }}<i class="fas fa-check ms-2"></i>
+                {%- else %}
                 {{ ui_lang.next_button }}<i class="fas fa-arrow-right ms-2"></i>
+                {%- endif %}
             </button>
         </div>
 

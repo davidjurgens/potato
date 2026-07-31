@@ -1797,6 +1797,7 @@
     "training": {
       "additionalProperties": true,
       "properties": {
+        "allow_retry": {},
         "annotation_schemes": {},
         "data_file": {},
         "enabled": {},

@@ -2164,6 +2164,52 @@ def go_to_id(user_id: str, instance_index: int):
     user_state = get_user_state(user_id)
     user_state.go_to_index(int(instance_index))
 
+def _training_page_context(user_state):
+    """Template context specific to a training page.
+
+    Training renders through the same generated page as every other phase, but the
+    shared template's defaults are annotation-shaped: they hide the instance text
+    outside the annotation phase, and they know nothing about practice questions.
+    This supplies the difference — the question text, the progress counters, and the
+    feedback from the last attempt (all of which TrainingState already persists).
+    """
+    training_state = user_state.get_training_state()
+    instance = user_state.get_current_training_instance()
+
+    text = ""
+    instance_id = ""
+    if instance is not None:
+        data = instance.get_data()
+        text = data.get("displayed_text") or data.get("text", "")
+        instance_id = instance.get_id()
+
+    total = len(training_state.training_instances)
+    return {
+        "is_training_page": True,
+        # The shared template hides #instance-text unless this is set; without it the
+        # practice question never appears on screen.
+        "show_instance_text": True,
+        "instance_text_heading": "Training Question",
+        "instance": text,
+        "instance_plain_text": text,
+        "instance_id": instance_id,
+        "training_current_question": min(training_state.get_current_question_index() + 1,
+                                         total) if total else 0,
+        "training_total_questions": total,
+        "training_correct_count": training_state.get_correct_answer_count(),
+        "training_mistake_count": training_state.get_total_mistakes(),
+        "training_show_feedback": training_state.show_feedback,
+        "training_feedback": training_state.feedback_message,
+        "training_feedback_type": getattr(training_state, "feedback_type", "info"),
+        "training_allow_retry": training_state.allow_retry,
+        # Practice questions are answered in order and there is nothing to go back to.
+        "can_go_back": False,
+        "jumping_to_id_disabled": True,
+        "finished": training_state.get_current_question_index(),
+        "total_count": total,
+    }
+
+
 def get_current_page_html(config, username):
     """
     Returns the HTML for the current page that the user is on.
@@ -2203,6 +2249,8 @@ def get_current_page_html(config, username):
         'can_go_back': usm.can_user_go_back(username),
         'jumping_to_id_disabled': config.get('jumping_to_id_disabled', False),
     }
+    if phase == UserPhase.TRAINING:
+        context.update(_training_page_context(user_state))
     rendered_html = render_template(html_fname, **context)
     soup = BeautifulSoup(rendered_html, "html.parser")
 

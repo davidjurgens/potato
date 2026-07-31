@@ -182,11 +182,14 @@ def _phase_labels(state, phase, schema):
 def _advance(session, server, route):
     """Move past a phase page.
 
-    The training phase only advances on a CORRECT answer, so it needs the gold value
-    posted as form data rather than an empty body.
+    The training phase only advances on a CORRECT answer, and it grades from STORED
+    annotations rather than the submitted form — so the answer has to be saved the way
+    the browser saves it (autosave to /updateinstance) before the submit is posted.
+    That is what the real Next button does: flush, save, then POST.
     """
-    data = {"veracity": "True"} if route == "training" else {}
-    return session.post(f"{server.base_url}/{route}", data=data,
+    if route == "training":
+        _save(session, server, "__phase_page__", {"veracity:True": "True"})
+    return session.post(f"{server.base_url}/{route}", data={},
                         allow_redirects=False)
 
 

@@ -134,8 +134,11 @@ KNOWN_CONFIG_KEYS = {
 
     # === Advanced features ===
     "training": {
+        # allow_retry is read at routes.py `training_config.get('allow_retry', True)`
+        # but was missing here, so every config that set it got an "unrecognized key"
+        # warning and the reader had to fall back to the default.
         "enabled", "data_file", "annotation_schemes",
-        "passing_criteria", "feedback", "failure_action",
+        "passing_criteria", "feedback", "failure_action", "allow_retry",
     },
     "active_learning": {
         "enabled", "classifier", "vectorizer",

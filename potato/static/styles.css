@@ -6698,3 +6698,53 @@ body > .container-fluid {
   color: hsl(0 84% 50%);
 }
 
+
+/* ---------------------------------------------------------------------------
+   Training phase
+   Ported from the standalone training.html, which used to be a separate page.
+   Training now renders through base_template_v2 like every other phase, so its
+   chrome lives here rather than in a template-local <style> block.
+   Feedback classes are keyed by feedback_type: success | error | warning | info.
+   --------------------------------------------------------------------------- */
+.training-progress {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    color: var(--text-muted, #6c757d);
+}
+
+.training-progress-label {
+    font-weight: 600;
+}
+
+.feedback-alert {
+    border-radius: 0.5rem;
+    border: none;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.feedback-success {
+    background-color: #d4edda;
+    color: #155724;
+    border-left: 4px solid #28a745;
+}
+
+.feedback-error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-left: 4px solid #dc3545;
+}
+
+.feedback-warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border-left: 4px solid #ffc107;
+}
+
+.feedback-info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border-left: 4px solid #17a2b8;
+}

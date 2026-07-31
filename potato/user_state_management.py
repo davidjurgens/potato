@@ -93,6 +93,9 @@ class TrainingState:
         self.training_instances = []
         self.show_feedback = False
         self.feedback_message = ""
+        self.feedback_type = "info"
+        # Drives the feedback banner's styling: success | error | warning | info.
+        self.feedback_type = "info"
         self.allow_retry = False
         self.max_mistakes = max_mistakes
         self.max_mistakes_per_question = max_mistakes_per_question
@@ -224,16 +227,19 @@ class TrainingState:
         """Set the list of training instance IDs."""
         self.training_instances = instances
 
-    def set_feedback(self, show_feedback: bool, message: str, allow_retry: bool) -> None:
+    def set_feedback(self, show_feedback: bool, message: str, allow_retry: bool,
+                     feedback_type: str = "info") -> None:
         """Set feedback state for the current question."""
         self.show_feedback = show_feedback
         self.feedback_message = message
         self.allow_retry = allow_retry
+        self.feedback_type = feedback_type
 
     def clear_feedback(self) -> None:
         """Clear feedback state."""
         self.show_feedback = False
         self.feedback_message = ""
+        self.feedback_type = "info"
         self.allow_retry = False
 
     # =========================================================================
@@ -354,6 +360,7 @@ class TrainingState:
             'current_question_index': self.current_question_index,
             'training_instances': self.training_instances,
             'show_feedback': self.show_feedback,
+            'feedback_type': self.feedback_type,
             'feedback_message': self.feedback_message,
             'allow_retry': self.allow_retry,
             'max_mistakes': self.max_mistakes,
@@ -374,6 +381,7 @@ class TrainingState:
         training_state.current_question_index = data.get('current_question_index', 0)
         training_state.training_instances = data.get('training_instances', [])
         training_state.show_feedback = data.get('show_feedback', False)
+        training_state.feedback_type = data.get('feedback_type', 'info')
         training_state.feedback_message = data.get('feedback_message', "")
         training_state.allow_retry = data.get('allow_retry', False)
         training_state.max_mistakes = data.get('max_mistakes', -1)
@@ -1728,42 +1736,74 @@ class UserState:
         return self.training_state
 
     def update_training_answer(self, instance_id: str, annotations: Dict[str, Any]) -> None:
-        """Update training answer and track attempts."""
-        # Count attempts for this question
-        attempts = 1
-        if instance_id in self.training_state.completed_questions:
-            attempts = self.training_state.completed_questions[instance_id]['attempts'] + 1
+        """Record what the user answered for a training question.
 
-        # Store the annotations in the phase-specific storage
-        if self.current_phase_and_page[0] == UserPhase.TRAINING:
-            for schema_name, label_value in annotations.items():
-                # Create a Label object for storage
-                label = Label(schema_name, schema_name)  # Using schema_name as both schema and name
-                self.phase_to_page_to_label_to_value[UserPhase.TRAINING][self.current_phase_and_page[1]][label] = label_value
+        Answer *storage* is not done here — training answers arrive through the same
+        /updateinstance autosave as every other phase, so they already sit in
+        ``phase_to_page_to_label_to_value[TRAINING][page]`` keyed
+        ``Label(schema, label)``. This only keeps a per-question copy for reporting.
+
+        (It used to write ``Label(schema, schema)`` from raw form keys — a key shape
+        unlike any other phase, which also meant a ``schema:::label`` form field was
+        stored as a schema literally named that.)
+        """
+        record = self.training_state.completed_questions.setdefault(instance_id, {})
+        record['answers'] = dict(annotations)
+
+    def get_training_answers(self) -> Dict[str, Any]:
+        """The current training page's answers, collapsed to ``{schema: value}``.
+
+        Uses the shared collapse, so a multiselect compares as the list of selected
+        labels and a radio's ``free_response`` companion does not displace the chosen
+        option — the same semantics display logic and the exporter use.
+        """
+        from potato.server_utils.answer_collapse import collapse_answers
+
+        container = self._label_container('__phase_page__', create=False)
+        if not container:
+            return {}
+
+        by_schema: Dict[str, list] = {}
+        for label, value in container.items():
+            if isinstance(label, Label):
+                by_schema.setdefault(label.get_schema(), []).append(
+                    (label.get_name(), value))
+
+        schema_types = {}
+        try:
+            from potato.server_utils.schema_exclusivity import resolve_annotation_type
+            for schema in by_schema:
+                schema_types[schema] = resolve_annotation_type(schema, self.user_id)
+        except Exception:
+            pass
+
+        return collapse_answers(by_schema, schema_types=schema_types)
+
+    def clear_phase_page_annotations(self) -> int:
+        """Drop every stored answer on the current phase page.
+
+        Every training question shares one phase *page* key, so without this the next
+        question inherits the previous one's answers and grades against them. Uses the
+        non-creating container lookup so an untouched page is not materialised.
+        """
+        container = self._label_container('__phase_page__', create=False)
+        if not container:
+            return 0
+        removed = len(container)
+        container.clear()
+        return removed
 
     def check_training_pass(self, instance_id: str, correct_answers: Dict[str, Any]) -> bool:
-        """Check if the user's answer for a specific instance is correct."""
-        # Get the user's annotations for this instance
-        user_annotations = {}
-        if self.current_phase_and_page[0] == UserPhase.TRAINING:
-            page = self.current_phase_and_page[1]
-            for label, value in self.phase_to_page_to_label_to_value[UserPhase.TRAINING][page].items():
-                user_annotations[label.get_schema()] = value
+        """Grade the current training question against its gold answers."""
+        from potato.server_utils.training_grading import check_training_answer
 
-        # Compare user annotations with correct answers
-        is_correct = True
-        for schema_name, correct_value in correct_answers.items():
-            if schema_name not in user_annotations:
-                is_correct = False
-                break
-            if user_annotations[schema_name] != correct_value:
-                is_correct = False
-                break
+        user_annotations = self.get_training_answers()
+        is_correct = check_training_answer(user_annotations, correct_answers)
 
-        # Update training state with the result
         attempts = 1
         if instance_id in self.training_state.completed_questions:
-            attempts = self.training_state.completed_questions[instance_id]['attempts'] + 1
+            attempts = self.training_state.completed_questions[instance_id].get(
+                'attempts', 0) + 1
 
         self.training_state.add_answer(instance_id, is_correct, attempts)
         return is_correct

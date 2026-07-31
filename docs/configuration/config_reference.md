@@ -126,7 +126,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 
 | Key | Required | Type | Sub-keys |
 |-----|----------|------|----------|
-| `training` |  | object | `annotation_schemes`, `data_file`, `enabled`, `failure_action`, `feedback`, `passing_criteria` |
+| `training` |  | object | `allow_retry`, `annotation_schemes`, `data_file`, `enabled`, `failure_action`, `feedback`, `passing_criteria` |
 | `active_learning` |  | object | `annotation_routing`, `bald_params`, `calibrate_probabilities`, `classifier`, `classifier_params`, `cold_start_strategy`, `confidence_method`, `database`, `enabled`, `hybrid_weights`, `icl_ensemble_params`, `llm`, `max_instances_to_reorder`, `min_annotations_per_instance`, `min_instances_for_training`, `model_persistence`, `query_strategy`, `random_sample_percent`, `resolution_strategy`, `routing_thresholds`, `schema_names`, `update_frequency`, `use_icl_ensemble`, `vectorizer`, `vectorizer_params` |
 | `category_assignment` |  | object | `category_key`, `dynamic`, `enabled`, `fallback`, `qualification` |
 | `diversity_ordering` |  | object | `auto_clusters`, `batch_size`, `cache_dir`, `enabled`, `items_per_cluster`, `model_name`, `num_clusters`, `prefill_count`, `preserve_visited`, `recluster_threshold`, `trigger_ai_prefetch` |
