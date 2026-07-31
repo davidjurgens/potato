@@ -28,6 +28,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 - [Agent Evaluation Suite](#agent-evaluation-suite)
 - [Workflow & Phases](#workflow-phases)
 - [Assignment & Sessions](#assignment-sessions)
+- [Other](#other)
 - [Annotation Types](#annotation-types)
 - [Label Structure](#label-structure)
 
@@ -281,6 +282,14 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `per_annotator_quota` |  |  |  |
 | `scheme_sets` |  |  |  |
 | `sessions` |  | object | `attributes`, `enabled`, `key` |
+
+## Other
+
+Recognized keys not yet sorted into a category above. They are valid configuration; the grouping simply has not caught up.
+
+| Key | Required | Type | Sub-keys |
+|-----|----------|------|----------|
+| `export_include_annotation_changes` |  |  |  |
 
 ## Annotation Types
 
