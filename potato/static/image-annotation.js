@@ -847,6 +847,14 @@ class ImageAnnotationManager {
      * Update the hidden input with mask data.
      */
     _updateMaskData() {
+        // Masks are persisted inside the main annotation blob (see
+        // _serializeAnnotations), which is the input the save path actually collects.
+        // Push them there whenever a stroke changes.
+        this._updateAnnotationData();
+
+        // Also mirror into the legacy mask-data-input when it is present, so a page
+        // that still has that element keeps working. It is not read back on save —
+        // nothing ever collected it — but leaving it stale would be misleading.
         const maskInputId = this.inputId.replace('input-', 'mask-input-');
         const input = document.getElementById(maskInputId);
         if (!input) return;
@@ -869,6 +877,14 @@ class ImageAnnotationManager {
      * Load existing mask data.
      */
     _loadExistingMasks() {
+        // Masks now arrive with the shapes, via _deserializeAnnotations. If that
+        // already restored some, stop — reading the legacy input here would let a
+        // browser-restored value from the PREVIOUS instance overwrite them. That
+        // input is never cleared between instances (nothing collects it, so it has no
+        // data-server-set guard), which is exactly the cross-instance leak the hidden
+        // annotation inputs are guarded against.
+        if (Object.keys(this.masks || {}).length > 0) return;
+
         const maskInputId = this.inputId.replace('input-', 'mask-input-');
         const input = document.getElementById(maskInputId);
         if (!input || !input.value) return;
@@ -1302,6 +1318,34 @@ class ImageAnnotationManager {
             }
         });
 
+        // Masks go in the SAME blob as the shapes.
+        //
+        // They used to live in a separate `mask-data-input`, which carried neither
+        // `annotation-input` nor `annotation-data-input` — no selector anywhere
+        // collected it, so it was write-only and every brush stroke was lost on the
+        // next navigation (a full page reload). Masks are not fabric objects (they
+        // render to their own canvas), so canvas.getObjects() above never sees them.
+        //
+        // The shape is the one every exporter already reads — mask_exporter and
+        // coco_exporter both want {type:"mask", label, rle:{counts, size:[h,w]}} —
+        // rather than the {label: {color, rle:[...], width, height}} the client used
+        // to write, which no exporter could consume.
+        for (const label in this.masks) {
+            const mask = this.masks[label];
+            if (!mask || !mask.data) continue;
+            const counts = this._encodeMaskRLE(mask.data);
+            if (!counts.length) continue;
+            annotations.push({
+                type: 'mask',
+                label: label,
+                color: mask.color,
+                rle: {
+                    counts: counts,
+                    size: [this.maskImgHeight, this.maskImgWidth],
+                },
+            });
+        }
+
         return JSON.stringify(annotations);
     }
 
@@ -1310,12 +1354,45 @@ class ImageAnnotationManager {
      */
     _deserializeAnnotations(json) {
         const annotations = JSON.parse(json);
+        let restoredMask = false;
 
         annotations.forEach(ann => {
+            if (ann && ann.type === 'mask') {
+                // Masks are not fabric objects — rebuild them into this.masks and
+                // repaint the mask canvas rather than handing them to the shape
+                // factory, which would silently drop them.
+                this._restoreMaskFromEntry(ann);
+                restoredMask = true;
+                return;
+            }
             this._createAnnotationObject(ann);
         });
 
+        if (restoredMask) {
+            this._renderAllMasks();
+        }
         this.canvas.renderAll();
+    }
+
+    /**
+     * Rebuild one {type:"mask", label, rle:{counts,size}} entry into this.masks.
+     */
+    _restoreMaskFromEntry(ann) {
+        const rle = ann.rle || {};
+        const counts = rle.counts || [];
+        const size = rle.size || [];
+        if (!counts.length || size.length !== 2) return;
+
+        const height = size[0];
+        const width = size[1];
+        this.masks[ann.label] = {
+            color: ann.color,
+            data: this._decodeMaskRLE(counts, width, height, ann.color),
+        };
+        // The mask canvas is sized from the image; keep the stored dimensions so a
+        // re-save round-trips the same rle.size even if nothing is redrawn.
+        this.maskImgWidth = this.maskImgWidth || width;
+        this.maskImgHeight = this.maskImgHeight || height;
     }
 
     /**
