@@ -171,6 +171,7 @@ nav:
         - Debugging Guide: tools/debugging_guide.md
     - Integrations:
         - Webhooks: integrations/webhooks.md
+        - ConvoKit: integrations/convokit.md
         - LangChain Integration: integrations/langchain_integration.md
         - Tracing SDK (potato_trace): integrations/tracing_sdk.md
     - Deployment:

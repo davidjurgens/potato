@@ -531,6 +531,66 @@ python -m potato.export --config config.yaml --format quotation_report \
 |--------|---------|-------------|
 | `include_memos` | `false` | Also append one row per [memo](../advanced/memos.md): `schema="(memo)"`, `code=<visibility>`, `text=<memo body>`, offsets from the memo anchor when span-anchored. |
 
+### ConvoKit (convokit)
+
+Writes annotations back onto the utterances and conversations they were made
+about, as [ConvoKit](../integrations/convokit.md) metadata. Requires items
+imported with `potato convokit`, whose turns carry real ConvoKit utterance ids —
+the mapping is a direct lookup, not a match by position or text.
+
+```bash
+# Overlay files that drop into an existing corpus (default)
+python -m potato.export --config config.yaml --format convokit -o out/
+
+# A complete corpus directory with the annotations merged in
+python -m potato.export --config config.yaml --format convokit \
+  --option mode=corpus -o annotated-corpus/
+```
+
+**Overlay mode** writes one `info.<field>.jsonl` per field, in exactly the shape
+`corpus.load_info()` reads:
+
+```json
+{"id": "146743638.12667.12652", "value": {"alice": ["personal_attack"]}}
+```
+
+```python
+from convokit import Corpus, download
+corpus = Corpus(filename=download("conversations-gone-awry-corpus"))
+corpus.load_info("utterance", ["potato_turn_problems"])
+```
+
+A `potato_export_manifest.json` records which object type each field targets,
+since `load_info` makes the caller name it and the filename does not encode it.
+
+**Corpus mode** writes `utterances.jsonl`, `speakers.json`, `conversations.json`,
+`corpus.json`, and `index.json`. Metadata skipped on import is not re-emitted;
+the fields involved are listed in `corpus.json` so the output is not mistaken for
+a faithful copy of the source.
+
+| Annotation | Lands on |
+|---|---|
+| Instance scheme, conversation-unit items | Conversation metadata |
+| Instance scheme, utterance-unit items | Utterance metadata |
+| `turn_level` scheme | Utterance metadata, keyed by `turn_id` |
+| Span | Utterance metadata, split onto the utterances it covers |
+
+A span crossing a comment boundary is split into one entry per utterance, each
+with offsets relative to that utterance's own text, sharing a `span_group` so the
+pieces can be recombined.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `mode` | `info` | `info` for overlay files, `corpus` for a full dump |
+| `aggregate` | `none` | `none` keeps `{user_id: value}`; `majority` or `mean` adds an aggregate and moves the per-annotator dict to `<field>_raw` |
+| `field_prefix` | `potato_` | Prefix for written fields. Underscore, not a dot — MongoDB rejects `.` in keys |
+| `include_spans` | `true` | Map span annotations onto utterances |
+| `corpus_dir` | – | Existing corpus directory, for `write_into_corpus` |
+| `write_into_corpus` | `false` | Write overlays directly into `corpus_dir` |
+
+Per-annotator data is never discarded, in any mode. Every field is accompanied by
+`<field>_n_annotators`.
+
 ## Programmatic Export
 
 Use the export registry directly in Python:
@@ -589,15 +649,16 @@ export_registry.register(MyExporter())
 
 ## Format Compatibility Matrix
 
-| Annotation Type | COCO | YOLO | Pascal VOC | CoNLL-2003 | CoNLL-U | Mask | Parquet | CSV/TSV | EAF/TextGrid | Agent Eval |
-|----------------|------|------|------------|------------|---------|------|---------|---------|--------------|------------|
-| Bounding boxes | Yes | Yes | Yes | - | - | - | Yes | Yes | - | - |
-| Polygons | Yes | - | - | - | - | Yes | Yes | - | - | - |
-| Keypoints | Yes | - | - | - | - | - | Yes | - | - | - |
-| Text spans | - | - | - | Yes | Yes | - | Yes | Yes | - | - |
-| Classifications | Partial | - | - | - | - | - | Yes | Yes | - | - |
-| Tiered segments | - | - | - | - | - | - | Yes | - | Yes | - |
-| Agent traces | - | - | - | - | - | - | Yes | - | - | Yes |
+| Annotation Type | COCO | YOLO | Pascal VOC | CoNLL-2003 | CoNLL-U | Mask | Parquet | CSV/TSV | EAF/TextGrid | Agent Eval | ConvoKit |
+|----------------|------|------|------------|------------|---------|------|---------|---------|--------------|------------|----------|
+| Bounding boxes | Yes | Yes | Yes | - | - | - | Yes | Yes | - | - | - |
+| Polygons | Yes | - | - | - | - | Yes | Yes | - | - | - | - |
+| Keypoints | Yes | - | - | - | - | - | Yes | - | - | - | - |
+| Text spans | - | - | - | Yes | Yes | - | Yes | Yes | - | - | Yes |
+| Classifications | Partial | - | - | - | - | - | Yes | Yes | - | - | Yes |
+| Tiered segments | - | - | - | - | - | - | Yes | - | Yes | - | - |
+| Agent traces | - | - | - | - | - | - | Yes | - | - | Yes | - |
+| Per-turn labels | - | - | - | - | - | - | Yes | - | - | Yes | Yes |
 
 ## Best Practices
 

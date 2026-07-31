@@ -1,0 +1,2 @@
+{"id": "b0", "conversation_id": "b0", "text": "First request.", "speaker": "alice", "meta": {"Annotations": "<##bin{0}&&@**>", "Binary": 1}, "reply-to": null, "timestamp": 10.0}
+{"id": "b1", "conversation_id": "b0", "text": "Second request.", "speaker": "bob", "meta": {"Annotations": "<##bin{1}&&@**>", "Binary": -1}, "reply-to": "b0", "timestamp": 20.0}

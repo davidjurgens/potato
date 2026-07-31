@@ -140,6 +140,8 @@ class TestBuiltinExportersRegistered:
             "csv", "tsv", "jsonl",
             # QDA-wave exporters (v2.5.0)
             "codebook", "quotation_report",
+            # ConvoKit round-trip — stdlib only, so not optional
+            "convokit",
         }
         # HuggingFace exporter is optional (depends on datasets/huggingface_hub)
         optional = {"huggingface"}

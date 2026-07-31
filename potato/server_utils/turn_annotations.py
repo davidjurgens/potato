@@ -208,8 +208,16 @@ def turn_matches_binding(turn: Dict[str, Any], index: int, binding: Dict[str, An
 
 
 def turn_id_for(turn: Dict[str, Any], index: int) -> str:
-    """Stable id for a turn: explicit turn_id/step_id if present, else t{index}."""
-    explicit = turn.get("turn_id") or turn.get("step_id")
+    """Stable id for a turn: an explicit id if the turn has one, else ``t{index}``.
+
+    ``turn_id`` and ``step_id`` are Potato's own spellings, but threaded data from
+    elsewhere — a forum export, a chat log, a ConvoKit corpus — identifies its
+    messages as ``id``. Accepting that too matters because the fallback is
+    *positional*: without it, annotations on such data are stored against
+    ``t0``/``t1``, and re-importing the source with one more reply silently
+    reassigns every one of them to a different message.
+    """
+    explicit = turn.get("turn_id") or turn.get("step_id") or turn.get("id")
     if explicit:
         return str(explicit)
     return f"t{index}"

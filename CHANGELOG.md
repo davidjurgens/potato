@@ -2,6 +2,57 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [Unreleased] - Threaded Conversations, and ConvoKit Both Ways
+
+**Threaded conversation annotation.** The `dialogue` display now renders reply
+structure: set `indent_replies: true` and nesting is derived from each turn's
+`reply_to` — nothing has to precompute it, and turn identity is read from
+`turn_id`, `step_id`, or plain `id`, so forum exports, chat logs, and mailing
+lists all work unchanged. Adds per-turn timestamps (`relative`/`absolute`/`epoch`)
+and metadata chips. A threaded conversation supports the full range of annotation
+at once on one field: whole-thread schemes, per-comment radio/likert/select/text,
+spans, and `span_link` between spans in different comments. `conversation_tree`
+gains per-node widgets keyed by node id, making a two-view task possible — a
+branching tree for structure and a flat thread for text — where both views refer
+to the same messages.
+
+**ConvoKit integration, both directions.** `potato convokit <corpus>` imports any
+[ConvoKit](https://convokit.cornell.edu/) corpus (by name, directory, or zip) at
+conversation or utterance granularity, and `--format convokit` exports annotations
+back as corpus metadata — either `info.<field>.jsonl` overlays that drop into an
+existing corpus or a full corpus dump. Each turn carries the real ConvoKit
+utterance id, so per-comment annotations round-trip by direct lookup. Reads every
+format variant in the wild, including the pre-rename `user`/`root`/`users.json`
+layout. No `convokit` dependency — the format is read and written with the
+standard library. Also `--emit-config` to draft a task from a corpus's own
+metadata, `--dry-run`, and `--list-corpora`.
+
+**Fixes**
+
+- **Dialogue span offsets were wrong.** `reconstruct_dialogue_dom_text()`
+  collapsed whitespace while the client deliberately did not, so every dialogue
+  span was sliced at a drifting offset — a few characters further off per turn,
+  which meant short conversations looked correct and long ones silently returned
+  neighbouring text. Both sides now agree byte for byte, pinned by
+  `tests/unit/test_dialogue_span_contract.py`.
+- `.per-turn-rating` was missing from the client's span-offset skip list, so the
+  legacy `per_turn_ratings` widget shifted every subsequent offset.
+- Removed a stale config warning claiming turn-level widgets break span offsets
+  on the same field. They do not, and the warning discouraged a combination —
+  rate each comment *and* highlight text in it — that is a main reason to
+  annotate conversations.
+- `potato/export/cli.py` read data files line by line only, so a JSON-array data
+  file exported with **zero items**, silently stripping every exporter of the
+  item data it needs.
+- `validate_cli` reported `FAILED — 0 error(s)` for configs that pass with
+  warnings.
+- `ConversationTreeDisplay` ignored its `display_options` block.
+
+New examples under `examples/conversation/`: `threaded-forum` (no ConvoKit),
+`convokit-awry`, `convokit-politeness` (legacy corpus format), `convokit-tree`.
+
+---
+
 ## [2.7.1] - Transcripts In, Without the Reformatting
 
 Direct support for speech that was transcribed elsewhere: **21 transcript and subtitle input formats** (up from 6) spanning ASR output (Whisper, WhisperX, whisper.cpp, Whisper TSV, AWS Transcribe, Deepgram, AssemblyAI, Rev.ai, SPoRC), subtitles and captions (SRT, WebVTT, ASS/SSA, TTML/DFXP, YouTube json3 and srv1/srv2/srv3), and forced-alignment import (CTM, Praat TextGrid, ELAN EAF — so tiered annotations now round-trip). Transcripts can live in **sidecar files** beside the media instead of being inlined into the data file, a `potato transcripts` CLI converts a directory of ASR output into a ready-to-annotate data file, and all four transcript-consuming schemas share one format vocabulary. Word-level timings and confidence are preserved. New reference and guide pages, plus a six-format example. Pure stdlib, no new dependencies, fully back-compatible. Also fixes a `user_input()` ReferenceError thrown by the instance-jump input in the base templates.

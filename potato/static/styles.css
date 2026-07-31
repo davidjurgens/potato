@@ -2228,6 +2228,133 @@ fieldset[schema] {
   .dialogue-speaker.speaker-color-5 { color: #22d3ee; }
 }
 
+/* -----------------------------------------------------------------------
+   THREADED DIALOGUE: reply indentation, timestamps, per-turn metadata chips
+
+   Every decoration below is drawn with ::before/::after `content` or with
+   padding driven by a custom property. None of it introduces a text node.
+
+   That is a hard requirement, not a stylistic preference: span offsets are
+   measured against the dialogue container's textContent, which the server
+   reproduces in reconstruct_dialogue_dom_text() (displays/base.py) to slice
+   the annotated substring. Pseudo-element content is not part of textContent,
+   so this chrome is invisible to that calculation and every existing dialogue
+   span task keeps byte-identical offsets. Do not convert any of these to real
+   elements containing text.
+   ----------------------------------------------------------------------- */
+
+.dialogue-display-content.indent-replies .dialogue-turn {
+  --turn-depth: 0;
+  margin-left: calc(var(--turn-depth) * 22px);
+  position: relative;
+}
+
+/* Vertical thread guide showing which turns share a parent. */
+.dialogue-display-content.indent-replies.show-reply-lines
+  .dialogue-turn[data-depth]:not([data-depth="0"])::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border, #e2e8f0);
+  border-radius: 1px;
+}
+
+/* Depth badge, so nesting stays legible past the indent cap. */
+.dialogue-display-content.indent-replies
+  .dialogue-turn[data-depth]:not([data-depth="0"])::after {
+  content: "↳ depth " attr(data-depth);
+  position: absolute;
+  right: 8px;
+  top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground, #94a3b8);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+/* The focus turn of an utterance-level item: everything else is context. */
+.dialogue-display-content .dialogue-turn[data-focus="true"] {
+  outline: 2px solid var(--primary, #6366f1);
+  outline-offset: 2px;
+}
+
+.dialogue-display-content .dialogue-turn:not([data-focus="true"]) {
+  /* Context turns read as secondary without becoming unreadable. */
+  opacity: 1;
+}
+
+.dialogue-display-content:has(.dialogue-turn[data-focus="true"])
+  .dialogue-turn:not([data-focus="true"]) {
+  opacity: 0.72;
+}
+
+/* Timestamp and per-turn metadata, rendered as a single chrome line. */
+.dialogue-display-content.show-timestamps .dialogue-turn[data-timestamp],
+.dialogue-display-content.show-meta-chips .dialogue-turn[data-meta-chips] {
+  padding-top: calc(var(--space-md, 12px) + 14px);
+}
+
+/* One absolutely-positioned chrome strip per turn carrying both signals.
+   The attributes live on .dialogue-text because attr() can only read the
+   attributes of the element its pseudo-element belongs to. */
+.dialogue-display-content.show-timestamps .dialogue-turn[data-timestamp] > .dialogue-text::before,
+.dialogue-display-content.show-meta-chips .dialogue-turn[data-meta-chips] > .dialogue-text::before {
+  position: absolute;
+  top: 6px;
+  left: var(--space-lg, 16px);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 90px);
+  pointer-events: none;
+}
+
+.dialogue-display-content.show-timestamps
+  .dialogue-turn[data-timestamp] > .dialogue-text::before {
+  content: attr(data-turn-timestamp);
+}
+
+.dialogue-display-content.show-meta-chips
+  .dialogue-turn[data-meta-chips] > .dialogue-text::before {
+  content: attr(data-turn-meta-chips);
+}
+
+.dialogue-display-content.show-timestamps.show-meta-chips
+  .dialogue-turn[data-timestamp][data-meta-chips] > .dialogue-text::before {
+  content: attr(data-turn-timestamp) "   ·   " attr(data-turn-meta-chips);
+}
+
+/* Highlight the parent of the hovered turn (wired in dialogue-threading.js). */
+.dialogue-display-content .dialogue-turn.thread-parent-highlight {
+  box-shadow: inset 3px 0 0 var(--primary, #6366f1);
+  background-color: rgba(99, 102, 241, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  .dialogue-display-content.indent-replies.show-reply-lines
+    .dialogue-turn[data-depth]:not([data-depth="0"])::before {
+    background: #334155;
+  }
+
+  .dialogue-display-content .dialogue-turn.thread-parent-highlight {
+    background-color: rgba(129, 140, 248, 0.12);
+  }
+}
+
+@media (max-width: 640px) {
+  /* Deep threads must not push text off a narrow screen. */
+  .dialogue-display-content.indent-replies .dialogue-turn {
+    margin-left: calc(min(var(--turn-depth), 3) * 10px);
+  }
+}
+
 /* Pairwise comparison layout */
 .pairwise-container {
   display: flex;

@@ -270,17 +270,39 @@ def load_items_from_data_files(config: dict, config_dir: str) -> dict:
             continue
 
         with open(path, "r") as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    item = json.loads(line)
-                    item_id = str(item.get(id_key, f"item_{line_num}"))
-                    items[item_id] = item
-                except json.JSONDecodeError:
-                    # Try CSV/TSV
-                    logger.debug(f"Line {line_num} in {path} is not JSON, skipping")
+            content = f.read()
+
+        # A whole-file JSON array is as legal a Potato data file as JSON Lines
+        # is — `load_instance_data` accepts both — but reading line by line
+        # yields nothing at all for a pretty-printed array, leaving
+        # ExportContext.items empty and silently stripping every exporter of the
+        # item data it needs. Try the array form first, then fall back.
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            payload = None
+
+        if isinstance(payload, list):
+            for position, item in enumerate(payload, 1):
+                if isinstance(item, dict):
+                    items[str(item.get(id_key, f"item_{position}"))] = item
+            continue
+        if isinstance(payload, dict):
+            items[str(payload.get(id_key, "item_1"))] = payload
+            continue
+
+        for line_num, line in enumerate(content.splitlines(), 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                # CSV/TSV rows and stray text land here.
+                logger.debug(f"Line {line_num} in {path} is not JSON, skipping")
+                continue
+            if isinstance(item, dict):
+                items[str(item.get(id_key, f"item_{line_num}"))] = item
 
     return items
 

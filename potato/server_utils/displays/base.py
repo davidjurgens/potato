@@ -255,6 +255,11 @@ def concatenate_dialogue_text(data: Any, speaker_key: str = "speaker", text_key:
     return "\n".join(parts)
 
 
+#: The text node the dialogue display puts between consecutive turn elements.
+#: Both sides of the span-offset contract depend on this exact character.
+TURN_SEPARATOR = "\n"
+
+
 def reconstruct_dialogue_dom_text(
     data: Any,
     speaker_key: str = "speaker",
@@ -262,15 +267,25 @@ def reconstruct_dialogue_dom_text(
     show_turn_numbers: bool = False,
 ) -> str:
     """
-    Reconstruct the whitespace-normalized DOM textContent of a dialogue display.
+    Reproduce, exactly, the ``textContent`` of a rendered dialogue span container.
 
-    When DialogueDisplay renders HTML, the browser's ``textContent`` includes
-    turn numbers, speaker prefixes, and the text of each turn — all separated
-    by whitespace that ``normalizeText()`` collapses to single spaces.
+    Span offsets are produced in the browser against the DOM, and the annotated
+    substring is sliced back out here on the server. That only yields the right
+    text if both sides agree on the *same string, character for character* — so
+    this function is one half of a contract, not a convenience.
 
-    This function reproduces that collapsed form so that span offsets produced
-    by the client (DOM-based) can be used server-side to extract the correct
-    substring.
+    The other half is ``DialogueDisplay.render()``, which emits each turn as
+    ``[i] Speaker: text`` with single spaces and no incidental indentation, and
+    separates turns with :data:`TURN_SEPARATOR`. Elements excluded from the
+    offset basis by ``shouldSkipForOffsets()`` in ``static/span-core.js``
+    (``.turn-anno-slot``, ``.per-turn-rating``, span overlays, link arcs) are
+    correspondingly absent here.
+
+    This used to collapse all whitespace with ``\\s+ -> " "`` while the client
+    deliberately did not normalize at all, so every dialogue span was sliced at
+    the wrong offset — the drift grew by a few characters per turn, which meant
+    short conversations looked fine and long ones silently returned neighbouring
+    text. ``tests/unit/test_dialogue_span_contract.py`` pins the two together.
 
     Args:
         data: Dialogue data — list of dicts, list of strings, or a string
@@ -279,7 +294,7 @@ def reconstruct_dialogue_dom_text(
         show_turn_numbers: Whether turn numbers like ``[1]`` are shown
 
     Returns:
-        Single-line text matching the browser's normalized textContent
+        The container's textContent, matching the browser byte for byte.
     """
     if isinstance(data, str):
         return data.strip()
@@ -304,11 +319,7 @@ def reconstruct_dialogue_dom_text(
 
         parts.append(" ".join(turn_parts))
 
-    # Join turns with single space (browser normalizes inter-turn whitespace)
-    import re as _re
-    joined = " ".join(parts)
-    # Final normalization: collapse any remaining multi-space to single space
-    return _re.sub(r"\s+", " ", joined).strip()
+    return TURN_SEPARATOR.join(parts)
 
 
 def render_display_container(

@@ -99,6 +99,19 @@ class TestTurnIds:
     def test_explicit_step_id(self):
         assert turn_id_for({"step_id": 12}, 0) == "12"
 
+    def test_plain_id(self):
+        """Threaded data from elsewhere identifies messages as `id`.
+
+        Without this the fallback is positional, so re-importing a thread with
+        one extra reply would silently reassign every stored annotation to a
+        different message.
+        """
+        assert turn_id_for({"id": "m3", "speaker": "a"}, 7) == "m3"
+
+    def test_potato_spellings_win_over_plain_id(self):
+        assert turn_id_for({"turn_id": "s9", "id": "m3"}, 0) == "s9"
+        assert turn_id_for({"step_id": "k2", "id": "m3"}, 0) == "k2"
+
     def test_turn_index_records(self):
         idx = build_turn_index(TURNS)
         assert [r["turn_id"] for r in idx] == ["t0", "t1", "s9", "t3"]

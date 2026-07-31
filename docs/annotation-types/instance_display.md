@@ -192,6 +192,41 @@ Or with structured data:
 {"id": "conv_001", "conversation": [{"speaker": "Alice", "text": "Hello there!"}, {"speaker": "Bob", "text": "Hi, how are you?"}]}
 ```
 
+#### Threaded conversations
+
+When each turn names the turn it replies to, `dialogue` renders the reply
+structure — nesting depth is derived from `reply_to`, so nothing has to
+precompute it:
+
+```yaml
+- key: "thread"
+  type: "dialogue"
+  label: "Discussion"
+  display_options:
+    indent_replies: true         # indent by reply depth
+    max_indent_depth: 6          # cap the visual indent
+    show_reply_lines: true       # vertical thread guides
+    show_timestamps: true        # per-turn times
+    timestamp_format: relative   # relative | absolute | epoch
+    turn_meta_fields: [score]    # per-turn metadata chips
+    meta_key: meta               # where that metadata lives
+    depth_key: depth             # explicit depth, when the data has one
+    reply_to_key: reply_to       # where the parent reference lives
+```
+
+```json
+{"id": "t1", "thread": [
+  {"id": "m1", "speaker": "ana", "text": "Anyone tried the new API?"},
+  {"id": "m2", "speaker": "ben", "text": "Yes, works fine.", "reply_to": "m1"},
+  {"id": "m3", "speaker": "cy", "text": "Not for me.", "reply_to": "m2"}
+]}
+```
+
+The indentation, timestamps, and chips are drawn as CSS pseudo-element content,
+so they do not affect span offsets. See
+[Dialogue Annotation](structured/dialogue_annotation.md) for the full guide and
+[ConvoKit](../integrations/convokit.md) for importing conversational corpora.
+
 ### Pairwise Display
 
 ```yaml

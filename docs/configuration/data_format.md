@@ -85,6 +85,41 @@ biased caused by the ordering effect. You can access the displayed content in th
 ```
 
 
+## Conversational corpora (ConvoKit)
+
+A ConvoKit corpus is converted into a Potato data file with `potato convokit`
+rather than reshaped by hand:
+
+```bash
+potato convokit conversations-gone-awry-corpus -o data/awry.jsonl
+```
+
+Each item carries the conversation's turns, with every turn's `turn_id` set to
+the real ConvoKit utterance id so annotations can be exported back onto the
+corpus:
+
+```json
+{
+  "id": "convo:146743638.12652.12652",
+  "conversation": [
+    {"turn_id": "146743638.12652.12652", "speaker": "Sirex98", "text": "...",
+     "reply_to": null, "timestamp": 1185295934.0, "depth": 0,
+     "meta": {"toxicity": 0.0}}
+  ],
+  "conversation_tree": {"id": "146743638.12652.12652", "children": []},
+  "text": "Sirex98: ...",
+  "convo_meta": {"page_title": "User talk:2005"},
+  "_convokit": {"corpus": "conversations-gone-awry-corpus", "unit": "conversation"}
+}
+```
+
+The `_convokit` block is import provenance. It is never rendered — only keys
+listed in `instance_display.fields` are — but it must survive into any data file
+you post-process, because the ConvoKit exporter uses it to map annotations back.
+
+See the [ConvoKit integration guide](../integrations/convokit.md) for
+granularity options, metadata handling, and the export path.
+
 ## File Encoding
 
 By default, all input data files are read as UTF-8. If your data uses a different encoding (e.g., `latin-1`, `shift_jis`, `gb2312`), you can specify it per-file using the dict format in `data_files`:

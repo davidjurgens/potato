@@ -56,6 +56,22 @@ python potato/flask_server.py start examples/classification/check-box/config.yam
 | `conversation-tree/` | Conversation tree structure |
 | `event-annotation/` | N-ary event annotation |
 
+### [conversation/](conversation/) - Threaded Conversations & ConvoKit
+
+Branching discussions — forum threads, talk pages, mailing lists — where a reply
+answers a specific message rather than the one above it. Nesting is derived from
+each turn's `reply_to`, so any threaded source works.
+
+| Example | Description |
+|---------|-------------|
+| `threaded-forum/` | Reply-threaded discussion with whole-thread, per-comment, span, and cross-comment link annotation |
+| `convokit-awry/` | [ConvoKit](https://convokit.cornell.edu/) Conversations Gone Awry: thread derailment plus per-comment labels |
+| `convokit-politeness/` | ConvoKit Wikipedia Politeness: utterance-level items in the legacy corpus format |
+| `convokit-tree/` | One conversation in two views — a branching tree and a flat thread |
+
+The `convokit-*` examples download their corpus on first run (`./setup_data.sh`);
+nothing large is committed. See [ConvoKit integration](../docs/integrations/convokit.md).
+
 ### [audio/](audio/) - Audio Annotation
 
 | Example | Description |

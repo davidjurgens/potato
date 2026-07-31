@@ -128,6 +128,13 @@ class UnifiedPositioningStrategy {
             node.classList.contains('span-link-simple-arcs') ||
             node.classList.contains('span-link-arcs-layer') ||
             node.classList.contains('turn-anno-slot') ||
+            // The legacy dialogue `per_turn_ratings` widget writes real text
+            // (a schema label and every scale value) inside the span container.
+            // It was never skipped, so any dialogue combining spans with
+            // per_turn_ratings measured offsets against text the server's
+            // reconstruct_dialogue_dom_text() does not produce.
+            node.classList.contains('per-turn-rating') ||
+            node.classList.contains('per-turn-rating-group') ||
             node.hasAttribute('data-span-offset-skip') ||
             node.nodeName === 'svg' ||
             node.namespaceURI === 'http://www.w3.org/2000/svg';

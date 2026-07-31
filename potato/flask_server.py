@@ -4683,6 +4683,12 @@ def main():
         from potato.transcript_cli import main as transcripts_main
         sys.exit(transcripts_main(sys.argv[2:]))
 
+    # ``convokit`` is dispatched the same way and for the same reason: it takes a
+    # corpus name or path rather than a config file.
+    if len(sys.argv) > 1 and sys.argv[1] == 'convokit':
+        from potato.convokit.cli import main as convokit_main
+        sys.exit(convokit_main(sys.argv[2:]))
+
     # Parse command line arguments
     args = arguments()
 

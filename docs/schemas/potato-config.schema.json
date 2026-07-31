@@ -1381,7 +1381,7 @@
                   },
                   {
                     "const": "dialogue",
-                    "description": "Dialogue/conversation turns display"
+                    "description": "Dialogue/conversation turns, optionally threaded by reply-to with timestamps and per-turn metadata"
                   },
                   {
                     "const": "document",

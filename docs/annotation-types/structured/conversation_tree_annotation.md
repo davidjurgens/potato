@@ -48,6 +48,69 @@ annotation_schemes:
 | `path_selection.description` | string | "Select the best response path" | Instructions for path selection |
 | `branch_comparison.enabled` | boolean | `false` | Enable branch comparison mode |
 
+### Display options
+
+Set these under `display_options` on the `conversation_tree` field:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `collapsed_depth` | `2` | Nodes at or below this depth start collapsed |
+| `node_style` | `card` | Node rendering style |
+| `show_node_ids` | `false` | Show each node's id |
+| `max_depth` | `null` | Stop rendering below this depth |
+| `show_timestamps` | `false` | Show per-node times |
+| `turn_meta_fields` | `null` | Metadata keys to surface per node |
+| `meta_key` | `meta` | Where per-node metadata lives |
+
+## Per-node annotation with turn-level schemes
+
+Any [turn-level scheme](../../agent-evaluation/turn_level_annotation.md) can bind
+to a tree, attaching a widget to each node:
+
+```yaml
+instance_display:
+  fields:
+    - key: conversation_tree
+      type: conversation_tree
+      label: "Thread structure"
+
+annotation_schemes:
+  - annotation_type: radio
+    name: branch_role
+    description: "Role"
+    labels: [opens, escalates, de_escalates, tangent]
+    turn_level: true
+    turn_binding:
+      field: conversation_tree
+```
+
+Values are stored under each node's `id`. That makes the **two-view pattern**
+work: render the same conversation as both a tree and a flat `dialogue`, give
+each view the schemes it suits, and — because a turn's `turn_id` and a node's
+`id` are the same utterance identifier — both refer to the same messages.
+
+```yaml
+    - key: conversation_tree      # structure: where the thread turns
+      type: conversation_tree
+    - key: conversation           # text: what was said, and spans
+      type: dialogue
+      span_target: true
+      display_options:
+        indent_replies: true
+```
+
+See `examples/conversation/convokit-tree/` for a worked example.
+
+!!! note "The tree is not a span target"
+    Collapsing a subtree changes the rendered text, so offsets measured against
+    it could not stay stable. Put `span_target: true` on a `dialogue` field
+    showing the same conversation instead — spans are scoped to the field, so one
+    can still cross messages.
+
+A node flagged `synthetic` — the wrapper Potato adds when a conversation has
+several roots, so it still renders as one tree — gets no annotation widgets. It
+is not a message, and a value stored against it could not be exported anywhere.
+
 ## Example Configurations
 
 ### Basic Node Rating

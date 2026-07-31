@@ -1,0 +1,4 @@
+{"id": "c0", "root": "c0", "text": "Should we rename this article?", "user": "alice", "meta": {"Binary": -1}, "reply-to": null, "timestamp": 1000.0}
+{"id": "c1", "root": "c0", "text": "I don't think the current title is common usage.", "user": "bob", "meta": {"Binary": 1}, "reply-to": "c0", "timestamp": 1200.0}
+{"id": "c2", "root": "c0", "text": "Agreed, the sources use the short form.", "user": "carol", "meta": {"Binary": 1}, "reply-to": "c0", "timestamp": 1100.0}
+{"id": "c3", "root": "c0", "text": "Fair enough, let's move it.", "user": "alice", "meta": {"Binary": 1}, "reply-to": "c1", "timestamp": 1300.0}

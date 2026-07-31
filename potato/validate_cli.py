@@ -173,11 +173,17 @@ def _format_human(report: ValidationReport) -> str:
     lines.append("")
     if report.ok and not report.unknown_keys and not report.other_warnings:
         lines.append("OK — no issues found.")
-    elif report.ok and report.unknown_keys:
-        lines.append(
-            f"OK with {len(report.unknown_keys)} unknown-key warning(s). "
-            "Re-run with --strict to fail on unknown keys."
-        )
+    elif report.ok:
+        # A valid config with warnings still exits 0, so it must not say FAILED.
+        counts = []
+        if report.unknown_keys:
+            counts.append(f"{len(report.unknown_keys)} unknown-key warning(s)")
+        if report.other_warnings:
+            counts.append(f"{len(report.other_warnings)} warning(s)")
+        summary = f"OK with {' and '.join(counts)}."
+        if report.unknown_keys:
+            summary += " Re-run with --strict to fail on unknown keys."
+        lines.append(summary)
     else:
         lines.append(f"FAILED — {len(report.errors)} error(s).")
     return "\n".join(lines)

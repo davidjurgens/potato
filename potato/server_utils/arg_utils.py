@@ -14,10 +14,11 @@ def arguments():
 
     parser.add_argument(
         "mode",
-        choices=['start', 'migrate', 'reset-password', 'codebook', 'transcripts'],
+        choices=['start', 'migrate', 'reset-password', 'codebook', 'transcripts',
+                 'convokit'],
         help=(
             "set the mode when potato is used, currently supporting: start, "
-            "migrate, reset-password, codebook, transcripts"
+            "migrate, reset-password, codebook, transcripts, convokit"
         ),
         default="start",
     )

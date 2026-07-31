@@ -75,6 +75,135 @@ list_as_text:
 | `horizontal: true` | Side-by-side layout - for pairwise comparison |
 | `alternating_shading: true` | Shades every other turn for dialogue readability |
 
+## Threaded conversations
+
+Discussions branch. A forum thread, a GitHub review, a mailing list, a Wikipedia
+talk page, a Reddit thread — in all of them a reply answers *a specific message*,
+not simply the one above it, and a flat list hides who is answering whom.
+
+Turn on `indent_replies` and the `dialogue` display renders the reply structure:
+
+```yaml
+- key: thread
+  type: dialogue
+  label: "Discussion"
+  span_target: true
+  display_options:
+    indent_replies: true
+    show_reply_lines: true
+    show_timestamps: true
+    timestamp_format: relative
+    turn_meta_fields: [score]
+```
+
+All the data needs is a way to say what each turn replies to:
+
+```json
+{"thread": [
+  {"id": "m1", "speaker": "ana", "text": "Anyone tried the new API?"},
+  {"id": "m2", "speaker": "ben", "text": "Yes, works fine.", "reply_to": "m1"},
+  {"id": "m3", "speaker": "cy",  "text": "Not for me.",      "reply_to": "m2"},
+  {"id": "m4", "speaker": "dee", "text": "Same here.",       "reply_to": "m1"}
+]}
+```
+
+Nesting depth is **derived from `reply_to`** — nothing has to precompute it. The
+identity of a turn is read from `turn_id`, `step_id`, or `id`, whichever is
+present, so data shaped for Potato's turn annotations, for its trace displays, or
+written by hand all work unchanged. A turn whose parent is missing from the
+rendered set, and a reply cycle, both resolve to depth 0 rather than failing.
+
+If your data *does* carry a depth (because it was sliced out of a larger thread
+whose parents are not present), an explicit `depth` on any turn is used as-is.
+
+### Threading options
+
+| Option | Default | Description |
+|---|---|---|
+| `indent_replies` | `false` | Indent each turn by its reply depth |
+| `max_indent_depth` | `6` | Cap the visual indent; the true depth is still reported |
+| `show_reply_lines` | `true` | Vertical thread guides between nested turns |
+| `show_timestamps` | `false` | Show each turn's time |
+| `timestamp_format` | `relative` | `relative` (`+2h` from the first turn), `absolute`, or `epoch` |
+| `turn_meta_fields` | `null` | Metadata keys to surface as per-turn chips |
+| `meta_key` | `meta` | Where per-turn metadata lives on each turn |
+| `depth_key` | `depth` | Where an explicit depth lives, if any |
+| `reply_to_key` | `reply_to` | Where the parent reference lives |
+
+The last three exist so a source that calls its metadata `attributes` or its
+parent link `in_reply_to` works without being renamed first.
+
+### Annotating a threaded conversation
+
+A thread supports the full range of annotation at once, on the same field:
+
+```yaml
+annotation_schemes:
+  # the whole thread
+  - annotation_type: radio
+    name: outcome
+    description: "How does this thread resolve?"
+    labels: [consensus, unresolved, escalated]
+
+  # one label per comment
+  - annotation_type: radio
+    name: comment_type
+    description: "Type"
+    labels: [proposal, objection, support, question]
+    turn_level: true
+    turn_binding: {field: thread}
+
+  # one rating per comment
+  - annotation_type: likert
+    name: persuasiveness
+    description: "Persuasiveness"
+    size: 5
+    turn_level: true
+    turn_binding: {field: thread}
+
+  # a note per comment, tucked into a drawer
+  - annotation_type: text
+    name: comment_note
+    description: "Note"
+    turn_level: true
+    turn_binding: {field: thread, placement: drawer}
+
+  # spans anywhere in the thread
+  - annotation_type: span
+    name: evidence
+    labels: [claim, evidence, concession]
+
+  # links between spans in DIFFERENT comments
+  - annotation_type: span_link
+    name: argument_links
+    span_schema: evidence
+    link_types:
+      - {name: rebuts, directed: true}
+```
+
+Per-comment schemes accept `radio`, `multiselect`, `likert`, `slider`, `select`,
+`text`, and `number` — see
+[turn-level annotation](../../agent-evaluation/turn_level_annotation.md) for the
+binding filters (by speaker, agent, step type, tool, or turn range).
+
+!!! info "Spans and per-comment widgets coexist"
+    Span offsets are measured against the field's text with the per-turn widget
+    subtrees excluded, so adding widgets to a comment never shifts a span. Spans
+    are scoped to the field rather than to a turn, which is also what lets a
+    `span_link` join two spans in different comments.
+
+### Why the threading chrome is invisible to spans
+
+Indentation, timestamps, depth badges, and metadata chips are drawn entirely as
+CSS pseudo-element content from data attributes. None of them adds a text node,
+so none of them changes the text that span offsets are measured against.
+
+This is a hard constraint, not a stylistic choice. If you extend the display,
+keep new decoration in `::before`/`::after` `content` or add
+`data-span-offset-skip` to the element — do not introduce elements containing
+text inside a span target. `tests/unit/test_dialogue_span_contract.py` enforces
+it.
+
 ### Dialogue with Alternating Shading
 
 For conversations, use `alternating_shading` to visually distinguish turns:

@@ -1596,15 +1596,15 @@ def _validate_turn_level_bindings(config_data: Dict[str, Any], schemes: List[Dic
                 f"'{bound_field}' does not match any instance_display field. "
                 f"Available fields: {sorted(k for k in field_keys if k)}"
             )
-        affected = {bound_field} if bound_field is not None else field_keys
-        overlapping = affected & span_target_keys
-        if overlapping:
-            logger.warning(
-                "Turn-level scheme '%s' attaches widgets to span_target field(s) %s. "
-                "Slot widget text changes the container textContent, so span "
-                "annotation offsets may misalign on those fields.",
-                scheme.get('name'), sorted(k for k in overlapping if k),
-            )
+        # Turn-level widgets and span targets on the same field are supported and
+        # tested: the widgets render inside `.turn-anno-slot`, which
+        # shouldSkipForOffsets() in static/span-core.js excludes from the offset
+        # basis, and reconstruct_dialogue_dom_text() omits it correspondingly on
+        # the server. tests/unit/test_dialogue_span_contract.py pins that down.
+        # A warning used to be emitted here claiming the offsets would misalign;
+        # it was wrong, and it steered people away from a combination — rate each
+        # comment AND highlight text in it — that is one of the main reasons to
+        # annotate a conversation at all.
 
 
 def _collect_all_annotation_schemes(config_data: Dict[str, Any]) -> List[Dict[str, Any]]:

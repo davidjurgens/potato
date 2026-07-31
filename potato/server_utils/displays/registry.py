@@ -424,13 +424,31 @@ def _register_builtin_displays():
             name="dialogue",
             renderer=DialogueDisplay(),
             required_fields=["key"],
+            # Must stay in step with DialogueDisplay.optional_fields — that class
+            # attribute is what get_display_options() actually merges, while this
+            # copy feeds the docs and the generated config schema.
             optional_fields={
                 "alternating_shading": True,
                 "speaker_extraction": True,
+                "speaker_key": "speaker",
+                "text_key": "text",
                 "show_turn_numbers": False,
+                "per_turn_ratings": None,
+                "indent_replies": False,
+                "max_indent_depth": 6,
+                "show_reply_lines": True,
+                "show_timestamps": False,
+                "timestamp_format": "relative",
+                "turn_meta_fields": None,
+                "meta_key": "meta",
+                "depth_key": "depth",
+                "reply_to_key": "reply_to",
             },
             supports_span_target=True,
-            description="Dialogue/conversation turns display"
+            description=(
+                "Dialogue/conversation turns, optionally threaded by reply-to "
+                "with timestamps and per-turn metadata"
+            )
         ),
         DisplayDefinition(
             name="audio_dialogue",
@@ -551,7 +569,13 @@ def _register_builtin_displays():
                 "node_style": "card",
                 "show_node_ids": False,
                 "max_depth": None,
+                "show_timestamps": False,
+                "turn_meta_fields": None,
+                "meta_key": "meta",
             },
+            # Not a span target: collapsed subtrees make the container's
+            # textContent depend on UI state, so span offsets would shift when a
+            # branch is expanded. Pair it with a `dialogue` field for spans.
             supports_span_target=False,
             description="Conversation tree with collapsible branching nodes"
         ),
