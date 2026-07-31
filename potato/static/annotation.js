@@ -2742,24 +2742,40 @@ function restoreTextEditAnnotations() {
         const labelName = hiddenInput.getAttribute('label_name');
         if (!labelName || !currentAnnotations[schema][labelName]) return;
 
+        const stored = currentAnnotations[schema][labelName];
+        const editor = form.querySelector('.text-edit-textarea');
+
+        // Records written before the textarea and the hidden input were separated can
+        // hold either shape under this one key: the JSON blob when the annotator
+        // typed, or the plain edited string when they accepted the pre-filled source
+        // verbatim and never fired `oninput`. Read both, so a legacy plain-text record
+        // still restores the editor instead of throwing and leaving it blank.
+        let editedText = null;
         try {
-            const data = JSON.parse(currentAnnotations[schema][labelName]);
-            if (data && data.edited_text !== undefined) {
-                const editor = form.querySelector('.text-edit-textarea');
-                if (editor) {
-                    editor.value = data.edited_text;
-                    // Trigger diff update
-                    if (typeof window.textEditOnInput === 'function') {
-                        window.textEditOnInput(schema);
-                    }
-                }
+            const data = JSON.parse(stored);
+            if (data && typeof data === 'object' && data.edited_text !== undefined) {
+                editedText = data.edited_text;
+            } else if (typeof data === 'string') {
+                editedText = data;
             }
-            hiddenInput.value = currentAnnotations[schema][labelName];
-            hiddenInput.setAttribute('data-server-set', 'true');
-            hiddenInput.setAttribute('data-modified', 'true');
         } catch (e) {
-            debugLog('Error restoring text edit annotation:', e);
+            editedText = typeof stored === 'string' ? stored : null;
         }
+
+        if (editor && editedText !== null) {
+            editor.value = editedText;
+            // Recompute the diff and REWRITE the hidden input in the canonical JSON
+            // shape, so a legacy plain-text record converges on the next save.
+            if (typeof window.textEditOnInput === 'function') {
+                window.textEditOnInput(schema);
+            }
+        }
+
+        if (!hiddenInput.value) {
+            hiddenInput.value = stored;
+        }
+        hiddenInput.setAttribute('data-server-set', 'true');
+        hiddenInput.setAttribute('data-modified', 'true');
     });
 }
 
