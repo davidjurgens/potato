@@ -318,16 +318,24 @@ class TestSamplingDiversityConfidence:
             ]
 
             # Distinguish "the shared endpoint was too slow" from "labeling is broken".
-            # Producing nothing at all is a real failure; producing some but not enough
-            # inside the deadline is throughput, and must not be reported as a defect.
-            assert confs or not timed_out, (
-                "labeling produced no predictions at all — check the vLLM endpoint and "
-                "that a prompt version exists")
-            if len(confs) < 5 and timed_out:
+            #
+            # The deadline is the signal, not the prediction count. Sampling diversity
+            # issues num_samples requests per instance against an endpoint shared with
+            # the rest of this module, so under load a full run can legitimately
+            # produce ZERO in the window even though the pipeline is fine — this test
+            # passes on its own in ~80s and timed out inside the full suite.
+            #
+            # Finishing the loop WITHOUT timing out and still having nothing is the
+            # real defect: labeling completed and produced no predictions, which is
+            # what a missing prompt version or a bad endpoint looks like.
+            if timed_out:
                 pytest.skip(
-                    f"vLLM endpoint too slow: only {len(confs)} predictions in 240s "
+                    f"vLLM endpoint too slow: {len(confs)} predictions in 240s "
                     f"({len(manager.llm_labeled_ids)}/15 instances labeled)")
 
+            assert confs, (
+                "labeling finished without timing out and produced no predictions — "
+                "check the vLLM endpoint and that a prompt version exists")
             assert len(confs) >= 5, f"Too few predictions: {len(confs)}"
 
             mean_conf = sum(confs) / len(confs)
