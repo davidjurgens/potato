@@ -1,0 +1,100 @@
+{
+  "_comment": "Shared fixture for the answer-collapse parity tests. Python drives it from tests/unit/test_answer_collapse.py, JavaScript from tests/jest/display-logic-collapse.test.js. Both must produce `expected` for every case, or the browser and the export can disagree about whether a conditional question was shown. Add a case here rather than to either test.",
+  "cases": [
+    {
+      "name": "radio, current frontend shape",
+      "entries": [["Yes", "Yes"]],
+      "annotation_type": "radio",
+      "expected": "Yes"
+    },
+    {
+      "name": "radio, legacy boolean shape",
+      "entries": [["Yes", true], ["No", false]],
+      "annotation_type": "radio",
+      "expected": "Yes"
+    },
+    {
+      "name": "multiselect collapses to every selected label",
+      "why": "GH #167 follow-up (a): the frontend stores {label: label}, so no entry looked selected and a `contains` condition evaluated against one arbitrary member.",
+      "entries": [["en", "en"], ["fr", "fr"], ["de", "de"]],
+      "annotation_type": "multiselect",
+      "expected": ["en", "fr", "de"]
+    },
+    {
+      "name": "multiselect, legacy boolean shape",
+      "entries": [["en", true], ["fr", true]],
+      "annotation_type": "multiselect",
+      "expected": ["en", "fr"]
+    },
+    {
+      "name": "multiselect with one selection stays scalar",
+      "why": "So an existing `operator: equals` on a single-ticked multiselect keeps working.",
+      "entries": [["en", "en"]],
+      "annotation_type": "multiselect",
+      "expected": "en"
+    },
+    {
+      "name": "free_response does not out-vote the chosen option",
+      "why": "GH #167 follow-up (b): radio's has_free_response stores a second label on the same schema.",
+      "entries": [["Other", "Other"], ["free_response", "my prose"]],
+      "annotation_type": "radio",
+      "expected": "Other"
+    },
+    {
+      "name": "free_response alone is the answer",
+      "entries": [["free_response", "my prose"]],
+      "annotation_type": "radio",
+      "expected": "my prose"
+    },
+    {
+      "name": "same label recorded twice dedupes to one answer",
+      "why": "GH #167 follow-up (c): a question repeated across two survey pages became ['Yes','Yes'] server-side but 'Yes' in the browser, so the condition failed server-side only and the answer was dropped from the export.",
+      "entries": [["Yes", "Yes"], ["Yes", "Yes"]],
+      "annotation_type": "radio",
+      "expected": "Yes"
+    },
+    {
+      "name": "text schema passes its value through",
+      "entries": [["text_box", "hello"]],
+      "annotation_type": "text",
+      "expected": "hello"
+    },
+    {
+      "name": "empty text yields nothing to compare",
+      "entries": [["text_box", ""]],
+      "annotation_type": "text",
+      "expected": null
+    },
+    {
+      "name": "numeric slider passes through",
+      "entries": [["slider", 4]],
+      "annotation_type": "slider",
+      "expected": 4
+    },
+    {
+      "name": "likert collapses to the scale point label, not the input value",
+      "why": "A likert's value diverges from its label under key_value / sequential_key_binding, so the label name is the stable identity.",
+      "entries": [["3", "3"]],
+      "annotation_type": "likert",
+      "expected": "3"
+    },
+    {
+      "name": "no entries at all",
+      "entries": [],
+      "annotation_type": "radio",
+      "expected": null
+    },
+    {
+      "name": "unchecked booleans only",
+      "entries": [["Yes", false], ["No", false]],
+      "annotation_type": "radio",
+      "expected": null
+    },
+    {
+      "name": "unknown annotation type still collapses a selection",
+      "entries": [["Yes", "Yes"]],
+      "annotation_type": null,
+      "expected": "Yes"
+    }
+  ]
+}

@@ -732,29 +732,37 @@ def get_display_logic_dependencies(
     return validator.dependency_graph
 
 
-def flatten_phase_annotations(pages: Dict[str, Any]) -> Dict[str, Any]:
+def flatten_phase_annotations(pages: Dict[str, Any],
+                              schema_types: Dict[str, str] = None,
+                              changes: List[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Flatten a phase's stored answers into the ``{schema: comparable_value}`` shape
     that :func:`DisplayLogicEvaluator.evaluate_visibility` expects.
 
-    Mirrors the client-side ``transformRawAnnotations`` in ``display-logic.js`` so
-    server-side visibility matches what the participant actually saw. Accepts the
-    two on-disk shapes for ``phase_to_page_to_label_to_value[phase]``:
+    Parsing lives here; the reduction lives in
+    :mod:`potato.server_utils.answer_collapse`, shared with the browser's
+    ``collapseRawAnnotations`` and with training grading so all three agree. Accepts
+    the two on-disk shapes for ``phase_to_page_to_label_to_value[phase]``:
 
     - list form:  ``{page: [[{"schema": s, "name": l}, value], ...]}``
     - dict form:  ``{page: {label_obj_or_str: value}}``
 
     Answers from every page of the phase are merged (a phase is a single logical
-    survey for conditional purposes). Selected labels (value truthy/"true")
-    collapse to the label name (or a list for multiselect); scalar values pass
-    through.
+    survey for conditional purposes), deduplicated by label so a question repeated
+    across pages stays one answer.
 
     Args:
         pages: The ``{page: answers}`` mapping for one phase.
+        schema_types: Optional ``{schema: annotation_type}``. Supplying it enables the
+            type-aware rules — notably a multiselect collapsing to the full list of
+            selected labels rather than one arbitrary member.
+        changes: Optional ``annotation_changes`` records, used to resolve a
+            single-select schema that legacy data left holding several values.
 
     Returns:
         ``{schema_name: comparable_value}``
     """
+    from potato.server_utils.answer_collapse import collapse_answers
     # schema -> list of (label_name, value)
     by_schema: Dict[str, List[Tuple[str, Any]]] = {}
 
@@ -779,19 +787,7 @@ def flatten_phase_annotations(pages: Dict[str, Any]) -> Dict[str, Any]:
                 else:
                     _record(str(label_obj), "", value)
 
-    result: Dict[str, Any] = {}
-    for schema, entries in by_schema.items():
-        selected = [ln for (ln, v) in entries if v is True or v == "true" or v == 1]
-        if len(selected) == 1:
-            result[schema] = selected[0]
-        elif len(selected) > 1:
-            result[schema] = selected
-        else:
-            scalars = [v for (_ln, v) in entries
-                       if isinstance(v, (str, int, float)) and v != "" and not isinstance(v, bool)]
-            if scalars:
-                result[schema] = scalars[-1]
-    return result
+    return collapse_answers(by_schema, schema_types=schema_types, changes=changes)
 
 
 def compute_hidden_schemas(

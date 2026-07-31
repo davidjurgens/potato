@@ -27,13 +27,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-#: Kept in sync with potato.server_utils.schema_exclusivity.NON_EXCLUSIVE_LABEL_NAMES.
-#: Duplicated rather than imported so the export path stays usable without a loaded
-#: server config.
-EXEMPT_LABEL_NAMES = frozenset({"free_response"})
-
-#: Annotation types whose options each get their own Label entry.
-SINGLE_SELECT_TYPES = frozenset({"radio", "likert", "confidence"})
+#: Re-exported from answer_collapse, which owns the definition. That module is
+#: dependency-light on purpose (typing + logging only), so importing it here does not
+#: drag a server config into the export path.
+from potato.server_utils.answer_collapse import (  # noqa: E402
+    EXEMPT_LABEL_NAMES,
+    SINGLE_SELECT_TYPES,
+)
 
 
 def single_select_schema_names(schemas: List[dict]) -> set:
@@ -120,13 +120,17 @@ def behavioral_changes(user_state: dict, instance_id: str) -> List[Dict[str, Any
     return changes if isinstance(changes, list) else []
 
 
-def phase_changes(user_state: dict, phase: str, page: str) -> List[Dict[str, Any]]:
-    """``annotation_changes`` for one phase page.
+def phase_changes(user_state: dict, phase: str,
+                  page: Optional[str] = None) -> List[Dict[str, Any]]:
+    """``annotation_changes`` for one phase, optionally narrowed to one page.
 
     Every non-annotation page shares the ``__phase_page__`` bucket, so records are
-    filtered by the ``phase``/``page`` fields stamped since the #167 fix. Records
-    written by older versions carry neither field and cannot be attributed to a page;
-    they are included unconditionally, so the caller must treat the result as
+    filtered by the ``phase``/``page`` fields stamped since the #167 fix. Pass
+    ``page=None`` for every record in the phase — what the display-logic collapse
+    wants, since it merges a phase's pages into one survey.
+
+    Records written by older versions carry neither field and cannot be attributed to
+    a page; they are included unconditionally, so the caller must treat the result as
     best-effort evidence rather than proof.
     """
     out = []
@@ -139,6 +143,8 @@ def phase_changes(user_state: dict, phase: str, page: str) -> List[Dict[str, Any
             c_phase, c_page = change.get("phase"), change.get("page")
             if c_phase is None and c_page is None:
                 out.append(change)  # pre-#167 record, no phase tagging
-            elif str(c_phase) == str(phase) and (c_page is None or str(c_page) == str(page)):
+            elif str(c_phase) != str(phase):
+                continue
+            elif page is None or c_page is None or str(c_page) == str(page):
                 out.append(change)
     return out

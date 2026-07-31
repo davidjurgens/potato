@@ -37,7 +37,12 @@ logger = logging.getLogger(__name__)
 #:
 #: ``bad_text`` is deliberately NOT listed: it is a real member of the likert radio group
 #: (``likert.py`` ``bad_text_label``) and selecting it must replace the scale point.
-NON_EXCLUSIVE_LABEL_NAMES = frozenset({"free_response"})
+#:
+#: Owned by :mod:`potato.server_utils.answer_collapse` and re-exported here, so the
+#: purge and the display-logic collapse can never disagree about what is exempt.
+from potato.server_utils.answer_collapse import EXEMPT_LABEL_NAMES  # noqa: E402
+
+NON_EXCLUSIVE_LABEL_NAMES = EXEMPT_LABEL_NAMES
 
 
 def _config() -> Dict[str, Any]:

@@ -2274,6 +2274,22 @@ def get_current_page_html(config, username):
         target = soup.body if soup.body else soup
         target.append(script_tag)
 
+        # The collapse in display-logic.js needs each schema's annotation_type to know
+        # that, say, a multiselect answered on an earlier page collapses to the full
+        # list of selected labels rather than one arbitrary member. Types for schemas
+        # on the CURRENT page are read from the DOM (every generator stamps
+        # data-annotation-type on the schema form); prior-phase schemas have no markup
+        # here, so ship their types alongside the answers.
+        prior_types = {}
+        for scheme in (config.get("_surveyflow_schemes") or []):
+            if isinstance(scheme, dict) and scheme.get("name") in prior_raw:
+                prior_types[scheme["name"]] = scheme.get("annotation_type")
+        if prior_types:
+            types_json = easy_json(prior_types).replace("<", "\\u003c")
+            types_tag = soup.new_tag("script")
+            types_tag.string = "window.priorPhaseAnswerTypes = " + types_json + ";"
+            target.append(types_tag)
+
     return str(soup)
 
 def _sanitize_codebook_url(url: str) -> str:

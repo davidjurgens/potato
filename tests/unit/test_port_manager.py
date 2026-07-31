@@ -16,7 +16,11 @@ import socket
 
 import pytest
 
-from tests.helpers.port_manager import _is_port_available, find_free_port
+from tests.helpers.port_manager import (
+    _is_port_available,
+    find_free_port,
+    release_port,
+)
 
 
 @pytest.fixture
@@ -71,5 +75,9 @@ class TestFindFreePort:
         sock.bind(("0.0.0.0", 0))
         port = sock.getsockname()[1]
         sock.close()
+        # find_free_port remembers every port it has handed out in this process, so a
+        # test earlier in the run can have claimed this one — release it first, or the
+        # assertion depends on execution order.
+        release_port(port)
         assert find_free_port(preferred_port=port,
                               port_range=(port - 40, port + 40)) == port

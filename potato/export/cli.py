@@ -213,15 +213,29 @@ def load_phase_responses_from_output_dir(
         # Compute which schemas this user's answers hide. Cross-page aware:
         # all phases are merged into one annotation context so a poststudy
         # question can depend on a prestudy answer.
+        #
+        # The collapse is given the schema types and the behavioral trail, so the
+        # hidden-set is decided by the SAME resolution that stamps `superseded` on
+        # the emitted rows below. Previously the two ran different rules and could
+        # disagree — marking row A the winner while having hidden the schema on the
+        # strength of row B.
         hidden_schemas = set()
         if display_logic_schemes:
             from potato.server_utils.display_logic import (
                 flatten_phase_annotations,
                 compute_hidden_schemas,
             )
+            from potato.export.single_select import phase_changes
+            dl_types = {
+                s.get("name"): s.get("annotation_type")
+                for s in display_logic_schemes
+                if isinstance(s, dict) and s.get("name")
+            }
             flat = {}
             for _phase, _pages in phase_data.items():
-                flat.update(flatten_phase_annotations(_pages))
+                flat.update(flatten_phase_annotations(
+                    _pages, schema_types=dl_types,
+                    changes=phase_changes(user_state, _phase, None)))
             hidden_schemas = compute_hidden_schemas(display_logic_schemes, flat)
 
         def _emit(phase, page, sequence, schema, label_name, value, winners):

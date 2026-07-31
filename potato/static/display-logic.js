@@ -179,32 +179,19 @@ class DisplayLogicManager {
      * @param {Object} raw - Annotations keyed by schema then label
      * @returns {Object} Flattened annotations keyed by schema
      */
-    transformRawAnnotations(raw) {
+    transformRawAnnotations(raw, typeHints) {
         const result = {};
         if (!raw || typeof raw !== 'object') {
             return result;
         }
+        const hints = typeHints || this.getSchemaTypeHints();
 
         for (const [schema, labels] of Object.entries(raw)) {
             if (labels && typeof labels === 'object') {
-                const selectedLabels = [];
-                let textValue = null;
-
-                for (const [label, value] of Object.entries(labels)) {
-                    if (value === true || value === 'true' || value === 1) {
-                        selectedLabels.push(label);
-                    } else if (typeof value === 'string' || typeof value === 'number') {
-                        // Text or numeric value
-                        textValue = value;
-                    }
-                }
-
-                if (selectedLabels.length === 1) {
-                    result[schema] = selectedLabels[0];
-                } else if (selectedLabels.length > 1) {
-                    result[schema] = selectedLabels;
-                } else if (textValue !== null) {
-                    result[schema] = textValue;
+                const value = DisplayLogicManager.collapseEntries(
+                    Object.entries(labels), hints[schema]);
+                if (value !== null && value !== undefined) {
+                    result[schema] = value;
                 }
             } else if (labels !== null && labels !== undefined) {
                 result[schema] = labels;
@@ -215,68 +202,134 @@ class DisplayLogicManager {
     }
 
     /**
+     * Collapse one schema's [label, value] entries to a comparable value.
+     *
+     * Mirrors potato/server_utils/answer_collapse.py — see that module for why each
+     * rule exists. Kept in lockstep by tests/jest/display-logic-collapse.test.js,
+     * which drives both sides from tests/data/answer_collapse_cases.json.
+     *
+     * @param {Array} entries - [[labelName, value], ...]
+     * @param {string} [annotationType] - Enables the type-aware branches
+     * @returns {*} The comparable value, or null when there is nothing to compare
+     */
+    static collapseEntries(entries, annotationType) {
+        // Rule 2: dedupe by label, last write wins.
+        const byLabel = new Map();
+        for (const [label, value] of entries || []) {
+            byLabel.set(label || '', value);
+        }
+
+        // Rule 1: free_response is a companion answer, not a competing option.
+        const main = [], exempt = [];
+        byLabel.forEach((value, label) => {
+            (DisplayLogicManager.EXEMPT_LABELS.has(label) ? exempt : main).push([label, value]);
+        });
+
+        if (main.length === 0) {
+            for (const [, value] of exempt) {
+                if (value !== null && value !== '' && value !== false) return value;
+            }
+            return null;
+        }
+
+        const selected = main
+            .filter(([label, value]) => DisplayLogicManager.isSelected(label, value))
+            .map(([label]) => label);
+
+        if (annotationType === 'multiselect') {
+            // Presence means checked: unchecked boxes are deleted from state, not
+            // stored false. One selection stays scalar so `equals` keeps working.
+            const names = selected.length ? selected : main.map(([label]) => label);
+            if (!names.length) return null;
+            return names.length === 1 ? names[0] : names;
+        }
+
+        // Rule 4: the label NAME is the canonical value for a selection.
+        if (selected.length === 1) return selected[0];
+        if (selected.length > 1) return selected;
+
+        const scalars = main
+            .map(([, value]) => value)
+            .filter(v => (typeof v === 'string' || typeof v === 'number')
+                         && typeof v !== 'boolean' && v !== '');
+        if (!scalars.length) return null;
+        // Post-#167 a single-select schema cannot hold several values; the browser
+        // has no behavioural trail, so last-in-order is the best it can do here.
+        return scalars[scalars.length - 1];
+    }
+
+    /** Rule 3: True/1/"true", or a value echoing its own label name. */
+    static isSelected(label, value) {
+        if (value === true) return true;
+        if (typeof value === 'boolean') return false;
+        if (value === 1) return true;
+        if (typeof value === 'string') {
+            if (value.toLowerCase() === 'true') return true;
+            if (label && value === label) return true;
+        }
+        return false;
+    }
+
+    /**
+     * {schema: annotation_type} for every schema the page knows about.
+     *
+     * Read from the DOM — every generator stamps data-schema-name and
+     * data-annotation-type on the schema <form> — layered over
+     * window.priorPhaseAnswerTypes for schemas answered on an earlier phase page.
+     */
+    getSchemaTypeHints() {
+        const hints = {};
+        if (typeof window !== 'undefined' && window.priorPhaseAnswerTypes) {
+            Object.assign(hints, window.priorPhaseAnswerTypes);
+        }
+        if (typeof document !== 'undefined') {
+            document.querySelectorAll('[data-schema-name][data-annotation-type]')
+                .forEach(el => {
+                    hints[el.getAttribute('data-schema-name')] =
+                        el.getAttribute('data-annotation-type');
+                });
+        }
+        return hints;
+    }
+
+    /**
      * Fallback method to get annotations directly from DOM elements.
      * @returns {Object} Annotations keyed by schema name
      */
     getAnnotationsFromDOM() {
-        const annotations = {};
+        // Build the same nested {schema: {label: value}} shape currentAnnotations uses,
+        // then run it through the one collapse. This used to be a third, subtly
+        // different implementation: it keyed radios on `input.value` rather than the
+        // label name, which is identical for radio/multiselect (value === label) but
+        // NOT for likert, whose value diverges from its label under key_value or
+        // sequential_key_binding. Reading label_name here makes divergence impossible
+        // by construction.
+        const raw = {};
+        const record = (input, value) => {
+            const schema = input.getAttribute('schema');
+            const label = input.getAttribute('label_name');
+            if (!schema) return;
+            if (!raw[schema]) raw[schema] = {};
+            raw[schema][label || ''] = value;
+        };
 
-        // Radio buttons
         document.querySelectorAll('input[type="radio"]:checked').forEach(input => {
-            const schema = input.getAttribute('schema');
-            if (schema) {
-                annotations[schema] = input.value;
-            }
+            record(input, input.getAttribute('label_name') || input.value);
         });
-
-        // Checkboxes (multiselect)
-        const checkboxSchemas = new Map();
         document.querySelectorAll('input[type="checkbox"]:checked').forEach(input => {
-            const schema = input.getAttribute('schema');
-            if (schema) {
-                if (!checkboxSchemas.has(schema)) {
-                    checkboxSchemas.set(schema, []);
-                }
-                checkboxSchemas.get(schema).push(input.value);
-            }
+            record(input, input.getAttribute('label_name') || input.value);
         });
-        checkboxSchemas.forEach((values, schema) => {
-            annotations[schema] = values;
-        });
-
-        // Text inputs
-        document.querySelectorAll('textarea.annotation-input, input[type="text"].annotation-input').forEach(input => {
-            const schema = input.getAttribute('schema');
-            if (schema) {
-                annotations[schema] = input.value;
-            }
-        });
-
-        // Sliders
-        document.querySelectorAll('input[type="range"].annotation-input').forEach(input => {
-            const schema = input.getAttribute('schema');
-            if (schema) {
-                annotations[schema] = parseFloat(input.value);
-            }
-        });
-
-        // Number inputs
-        document.querySelectorAll('input[type="number"].annotation-input').forEach(input => {
-            const schema = input.getAttribute('schema');
-            if (schema) {
-                annotations[schema] = parseFloat(input.value);
-            }
-        });
-
-        // Select dropdowns
+        document.querySelectorAll(
+            'textarea.annotation-input, input[type="text"].annotation-input'
+        ).forEach(input => record(input, input.value));
+        document.querySelectorAll(
+            'input[type="range"].annotation-input, input[type="number"].annotation-input'
+        ).forEach(input => record(input, parseFloat(input.value)));
         document.querySelectorAll('select.annotation-input').forEach(select => {
-            const schema = select.getAttribute('schema');
-            if (schema && select.value) {
-                annotations[schema] = select.value;
-            }
+            if (select.value) record(select, select.value);
         });
 
-        return annotations;
+        return this.transformRawAnnotations(raw);
     }
 
     /**
@@ -732,6 +785,10 @@ class DisplayLogicManager {
     }
 }
 
+// Labels that coexist with a schema's real answer instead of competing with it.
+// Mirrors EXEMPT_LABEL_NAMES in potato/server_utils/answer_collapse.py.
+DisplayLogicManager.EXEMPT_LABELS = new Set(['free_response']);
+
 // Global instance
 let displayLogicManager = null;
 
@@ -756,4 +813,10 @@ function initDisplayLogic() {
  */
 function getDisplayLogicManager() {
     return displayLogicManager;
+}
+
+// Exported for the Python/JS parity test (tests/jest/display-logic-collapse.test.js).
+// Same guarded pattern as static/instance-display.js; no effect in the browser.
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { DisplayLogicManager, getDisplayLogicManager };
 }
