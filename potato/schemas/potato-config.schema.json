@@ -1289,6 +1289,7 @@
       "type": "object"
     },
     "export_annotation_format": {},
+    "export_include_annotation_changes": {},
     "export_include_phase_data": {},
     "format_handling": {
       "additionalProperties": true,

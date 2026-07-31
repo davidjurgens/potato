@@ -82,15 +82,25 @@ def page(context):
 
 # ---------- server fixtures ----------
 
-def _make_server(annotation_schemes, port=None, extra_config=None):
-    """Helper to build and start a FlaskTestServer with given schemes."""
+def _make_server(annotation_schemes, port=None, extra_config=None, num_items=3):
+    """Helper to build and start a FlaskTestServer with given schemes.
+
+    ``create_test_data_file`` requires the data rows, and ``create_test_config`` takes
+    ``data_files`` (plural) with paths relative to the test dir — passing neither
+    correctly raised TypeError before any server was started.
+    """
     test_dir = create_test_directory("playwright")
-    data_file = create_test_data_file(test_dir)
+    data_file = create_test_data_file(
+        test_dir,
+        [{"id": f"instance_{i}", "text": f"Test instance {i}"}
+         for i in range(num_items)],
+    )
     config_file = create_test_config(
         test_dir,
         annotation_schemes=annotation_schemes,
-        data_file=data_file,
+        data_files=[data_file],
         annotation_task_name="Playwright Test",
+        additional_config=extra_config or {},
     )
 
     if port is None:

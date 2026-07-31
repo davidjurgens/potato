@@ -644,12 +644,30 @@ class UserStateManager:
                 logger.debug(f"Creating InMemoryUserState for user: {user_id} (quota={quota})")
                 user_state = InMemoryUserState(user_id, quota)
 
+            self._apply_single_select_schemas(user_state)
             self.user_to_annotation_state[user_id] = user_state
             logger.debug(f"User state created and stored: {user_state}")
             logger.debug(f"Users after adding: {list(self.user_to_annotation_state.keys())}")
             logger.debug(f"=== ADD USER END ===")
 
             return user_state
+
+    def _apply_single_select_schemas(self, user_state: UserState) -> None:
+        """Tell a user state which schemas may hold at most one label (GH #167).
+
+        The manager is the only object with the config, so it resolves the set once and
+        hands it to the state rather than making the storage layer import config. The
+        set spans the global annotation schemes, every cohort's schemes, and the
+        SurveyFlow question schemes, so the invariant holds in every phase.
+        """
+        try:
+            from potato.server_utils.schema_exclusivity import all_single_select_schema_names
+            user_state._single_select_schemas = frozenset(
+                all_single_select_schema_names(self.config)
+            )
+        except Exception as e:  # never block user creation on this
+            logger.warning(f"Could not resolve single-select schemas: {e}")
+            user_state._single_select_schemas = frozenset()
 
     def get_or_create_user(self, user_id: str) -> UserState:
         """
@@ -1045,8 +1063,15 @@ class UserStateManager:
             if has_display_logic and self.config.get("exclude_hidden_survey_answers", True)
             else None
         )
+        # Resolve any pre-#167 duplicates in survey answers so the export marks the
+        # final answer rather than emitting two indistinguishable rows.
+        from potato.export.single_select import single_select_schema_names
+        ss_schemas = (single_select_schema_names(schemas)
+                      | single_select_schema_names(surveyflow_schemes))
         phase_responses = (
-            load_phase_responses_from_output_dir(output_dir, display_logic_schemes=dl_schemes)
+            load_phase_responses_from_output_dir(
+                output_dir, display_logic_schemes=dl_schemes,
+                single_select_schemas=ss_schemas)
             if self.config.get("export_include_phase_data", False)
             else []
         )
@@ -1086,6 +1111,7 @@ class UserStateManager:
         # TODO: make the user state type configurable between in-memory and DB-backed.
         user_state = InMemoryUserState.load(user_dir)
         user_state.prune_missing_assigned_instances()
+        self._apply_single_select_schemas(user_state)
 
         if user_state.get_user_id() in self.user_to_annotation_state:
             logger.warning(f'User "{user_state.get_user_id()}" already exists in the user state manager, but is being overwritten by load_state()')
@@ -1187,6 +1213,23 @@ class UserState:
     def get_label_annotations(self, instance_id):
         """
         Returns the label-based annotations for the instance.
+        """
+        raise NotImplementedError()
+
+    def clear_schema_labels(self, instance_id: str, schema_name: str) -> int:
+        """
+        Removes every stored label belonging to ``schema_name``.
+
+        Writes go to whichever container ``add_label_annotation`` would use: the
+        instance's labels during the annotation phase, otherwise the current phase
+        page's labels. This is what lets a single call cover annotation, consent,
+        instructions, training, prestudy and poststudy alike (GH #167).
+
+        Labels in ``schema_exclusivity.NON_EXCLUSIVE_LABEL_NAMES`` (notably
+        ``free_response``) are preserved.
+
+        Returns:
+            The number of labels removed.
         """
         raise NotImplementedError()
 
@@ -1853,6 +1896,12 @@ class InMemoryUserState(UserState):
         # a user labels for each instance.
         self.instance_id_to_label_to_value = defaultdict(dict)
 
+        # Schema names that may hold at most one label (GH #167). Populated by
+        # UserStateManager, the only place with access to the config. An empty default
+        # means the invariant simply isn't enforced — which is what bare unit tests
+        # that construct a UserState directly want, rather than a crash.
+        self._single_select_schemas = frozenset()
+
         # For non-annotation data, we save the responses for each page in separate
         # dictionaries to keep the data organized and make state-tracking easier.
         self.phase_to_page_to_label_to_value = defaultdict(lambda: defaultdict(dict))
@@ -2073,12 +2122,81 @@ class InMemoryUserState(UserState):
     def get_span_annotations(self):
         return self.span_annotations
 
-    def add_label_annotation(self, instance_id: str, label: Label, value: any) -> None:
+    def _label_container(self, instance_id: str, create: bool = True):
+        '''The dict that labels for this instance/page live in.
+
+        Annotation-phase writes are keyed by instance; every other phase (consent,
+        instructions, training, prestudy, poststudy) is keyed by phase+page. Both
+        add_label_annotation and clear_schema_labels must agree on this, or a clear
+        silently targets the wrong container — the second half of GH #167.
+
+        Both backing stores are defaultdicts, so read-only callers must pass
+        create=False; otherwise merely *looking* for stale labels would materialise an
+        empty entry and make an untouched instance look annotated to the exporter.
+        Returns None when create=False and nothing is stored yet.
+        '''
         if self.current_phase_and_page[0] == UserPhase.ANNOTATION:
-            self.instance_id_to_label_to_value[instance_id][label] = value
-        else:
-            self.phase_to_page_to_label_to_value[self.current_phase_and_page[0]][self.current_phase_and_page[1]][label] = value
-        #print('add_labels ->', self.instance_id_to_label_to_value)
+            if not create and instance_id not in self.instance_id_to_label_to_value:
+                return None
+            return self.instance_id_to_label_to_value[instance_id]
+        phase, page = self.current_phase_and_page
+        if not create:
+            pages = self.phase_to_page_to_label_to_value.get(phase)
+            if pages is None or page not in pages:
+                return None
+            return pages[page]
+        return self.phase_to_page_to_label_to_value[phase][page]
+
+    def add_label_annotation(self, instance_id: str, label: Label, value: any) -> None:
+        container = self._label_container(instance_id)
+
+        # Single-select invariant. A radio/likert/confidence schema renders one input
+        # per option, each with its own label_name, so writing a changed answer would
+        # otherwise leave the previous option sitting beside it (GH #167). Enforced
+        # here rather than only in the routes so that every write path — including
+        # /submit_annotation and the legacy /updateinstance format — is covered.
+        schema_name = label.get_schema()
+        # A falsy value is a "not selected" marker, not an answer. The legacy v1
+        # template posts the whole fieldset as {name: <bool>} pairs, so letting an
+        # unselected option evict the selected one would destroy the annotation.
+        _is_selection = value is not None and value is not False and value != ""
+        if _is_selection and schema_name in getattr(self, '_single_select_schemas', frozenset()):
+            from potato.server_utils.schema_exclusivity import is_exempt_label
+            if not is_exempt_label(label.get_name()):
+                for stale in [
+                    lbl for lbl in container
+                    if isinstance(lbl, Label)
+                    and lbl.get_schema() == schema_name
+                    and lbl != label
+                    and not is_exempt_label(lbl.get_name())
+                ]:
+                    logger.warning(
+                        "Superseding single-select annotation %s:%s=%r with %s:%s=%r "
+                        "for user %s (%s)",
+                        schema_name, stale.get_name(), container[stale],
+                        schema_name, label.get_name(), value,
+                        self.user_id, instance_id,
+                    )
+                    del container[stale]
+
+        container[label] = value
+
+    def clear_schema_labels(self, instance_id: str, schema_name: str) -> int:
+        '''Removes every stored label for a schema. See UserState.clear_schema_labels.'''
+        from potato.server_utils.schema_exclusivity import is_exempt_label
+
+        container = self._label_container(instance_id, create=False)
+        if not container:
+            return 0
+        stale = [
+            lbl for lbl in container
+            if isinstance(lbl, Label)
+            and lbl.get_schema() == schema_name
+            and not is_exempt_label(lbl.get_name())
+        ]
+        for lbl in stale:
+            del container[lbl]
+        return len(stale)
 
     def add_span_annotation(self, instance_id: str, label: SpanAnnotation, value: any) -> None:
         '''Adds a set of span annotations to the instance or if the user is not

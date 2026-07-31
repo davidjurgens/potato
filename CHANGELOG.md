@@ -29,6 +29,39 @@ metadata, `--dry-run`, and `--list-corpora`.
 
 **Fixes**
 
+- **Single-select schemas could persist every value the annotator clicked
+  ([#167](https://github.com/davidjurgens/potato/issues/167)).** The stale-label
+  pre-clear in `/updateinstance` keyed off a hardcoded `{'radio', 'multiselect'}`
+  set, so a `likert` (or `confidence`) schema kept `Label(confidence, "5")` when
+  `Label(confidence, "4")` was written and both reached `user_state.json`. The same
+  block only ever touched `instance_id_to_label_to_value`, so on SurveyFlow pages —
+  consent, instructions, training, prestudy, poststudy — *every* type accumulated,
+  radio included. Both CSV exports then reproduced the duplicates with no way to tell
+  which value the annotator settled on. Exclusivity now comes from a `single_select`
+  flag on the schema registry (`radio`, `likert`, `confidence`), resolves SurveyFlow
+  question types via `config['_surveyflow_schemes']`, and is enforced through the new
+  phase-aware `UserState.clear_schema_labels()` plus a write-time invariant in
+  `add_label_annotation()`, so no route can bypass it. A `radio`'s `free_response`
+  companion label is preserved; a likert's `bad_text` is not (it is a real member of
+  the group).
+- Answer revisions remain recoverable. `handleInputChange()` recorded `old_value:
+  null` for every radio/likert change — it read the *new* label's entry, which is
+  always undefined — so the behavioral trail could not show what was superseded. It
+  now captures the previously selected label and value, and `/api/track_annotation_change`
+  stamps the phase and page so changes made on survey pages (which all share the
+  `__phase_page__` bucket) stay attributable. Set `export_include_annotation_changes:
+  true` to write `annotation_changes.csv`.
+- `phase_responses.csv` gains a `sequence` column, so row ordering is documented
+  rather than incidental.
+- New `potato repair-annotations <config>` rewrites state files already corrupted by
+  the above. It resolves each answer from the timestamped `annotation_changes` trail
+  rather than stored order — the label dict serializes in *first-touch* order, so a
+  5 → 4 → 5 revision persists as `["5", "4"]` and "last entry wins" would answer 4.
+  Runs as a dry run by default and reports every value it had to resolve heuristically.
+  See [Single-Select Answer Integrity](docs/data-export/single-select-integrity.md).
+- `MysqlUserState` has no `instance_id_to_label_to_value` attribute, so the same
+  `/updateinstance` block raised `AttributeError` on every save under the MySQL
+  backend. All three direct accesses now go through `UserState` methods.
 - **Dialogue span offsets were wrong.** `reconstruct_dialogue_dom_text()`
   collapsed whitespace while the client deliberately did not, so every dialogue
   span was sliced at a drifting offset — a few characters further off per turn,

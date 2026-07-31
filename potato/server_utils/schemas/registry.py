@@ -36,6 +36,25 @@ class SchemaDefinition:
         required_fields: List of required configuration fields
         optional_fields: List of optional configuration fields
         supports_keybindings: Whether this schema type supports keyboard shortcuts
+        single_select: Whether this type renders SEVERAL inputs carrying DIFFERENT
+            ``label_name`` values for one logical answer, of which at most one may
+            persist. Only ``radio``, ``likert`` and ``confidence`` qualify: each of
+            their options becomes its own ``Label(schema, option)`` key, so a changed
+            answer would otherwise accumulate beside the old one (GH #167).
+
+            This is NOT "the schema stores one value". Types like ``select``,
+            ``slider`` and the JSON-blob types emit a single fixed ``label_name``
+            ("select-one", "slider", "_data", ...), so re-answering simply overwrites
+            the same key and they must stay False. Types whose options are hidden
+            inputs gated on ``data-modified``/``data-server-set`` (``pairwise``,
+            ``bws``) must also stay False — the client does not reliably re-send
+            them, so clearing could drop real data.
+
+            Labels in ``NON_EXCLUSIVE_LABEL_NAMES`` (see
+            ``potato.server_utils.schema_exclusivity``) are exempt from the
+            resulting purge — notably ``free_response``, which ``radio`` legitimately
+            stores alongside the chosen option. ``bad_text`` is NOT exempt: it is a
+            genuine member of the likert radio group.
         description: Human-readable description of the schema type
     """
     name: str
@@ -43,6 +62,7 @@ class SchemaDefinition:
     required_fields: List[str] = field(default_factory=list)
     optional_fields: List[str] = field(default_factory=list)
     supports_keybindings: bool = True
+    single_select: bool = False
     description: str = ""
 
 
@@ -188,6 +208,7 @@ class SchemaRegistry:
                 "required_fields": schema.required_fields,
                 "optional_fields": schema.optional_fields,
                 "supports_keybindings": schema.supports_keybindings,
+                "single_select": schema.single_select,
             }
             for schema in sorted(self._schemas.values(), key=lambda s: s.name)
         ]
@@ -212,6 +233,21 @@ class SchemaRegistry:
             Sorted list of annotation type names
         """
         return sorted(self._schemas.keys())
+
+    def get_single_select_types(self) -> List[str]:
+        """
+        Get the annotation types that may persist at most one label per schema.
+
+        See ``SchemaDefinition.single_select`` for what qualifies. Callers should
+        prefer :mod:`potato.server_utils.schema_exclusivity`, which resolves a
+        schema *name* to its type first.
+
+        Returns:
+            Sorted list of single-select annotation type names
+        """
+        return sorted(
+            name for name, schema in self._schemas.items() if schema.single_select
+        )
 
 
 # Global registry instance
@@ -287,6 +323,7 @@ def _register_builtin_schemas():
             required_fields=["name", "description", "labels"],
             optional_fields=["horizontal", "label_requirement", "sequential_key_binding", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field"],
             supports_keybindings=True,
+            single_select=True,
             description="Single-choice radio button selection"
         ),
         SchemaDefinition(
@@ -311,6 +348,7 @@ def _register_builtin_schemas():
             required_fields=["name", "description", "min_label", "max_label", "size"],
             optional_fields=["label_requirement"],
             supports_keybindings=True,
+            single_select=True,
             description="Likert scale rating"
         ),
         SchemaDefinition(
@@ -479,6 +517,10 @@ def _register_builtin_schemas():
             required_fields=["name", "description"],
             optional_fields=["target_schema", "scale_type", "scale_points", "labels", "min_value", "max_value", "step", "left_label", "right_label"],
             supports_keybindings=False,
+            # scale_type: likert renders one radio per point (label_name "1".."N");
+            # scale_type: slider renders a single "confidence_level" label, where the
+            # purge is a harmless no-op. One flag covers both modes.
+            single_select=True,
             description="Confidence rating meta-annotation for any primary annotation"
         ),
         SchemaDefinition(

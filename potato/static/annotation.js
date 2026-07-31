@@ -1083,13 +1083,20 @@ function clearAllFormInputs() {
         input.value = '';
     });
 
-    // Clear radio buttons
+    // Clear radio buttons and checkboxes.
+    //
+    // Only the `.checked` PROPERTY is reset — the `checked` attribute is deliberately
+    // left in place. loadCurrentInstance() calls this immediately before
+    // loadAnnotations(), which reconstructs currentAnnotations from
+    // hasAttribute('checked') precisely because the property is unreliable (Firefox
+    // restores form state across navigation). The attribute is the server's rendering
+    // of the current instance, so stripping it here would wipe every restored
+    // annotation rather than protect against stale state.
     const radioInputs = document.querySelectorAll('input[type="radio"]');
     radioInputs.forEach(input => {
         input.checked = false;
     });
 
-    // Clear checkboxes
     const checkboxInputs = document.querySelectorAll('input[type="checkbox"]');
     checkboxInputs.forEach(input => {
         input.checked = false;
@@ -1246,8 +1253,17 @@ async function loadAnnotations() {
             }
         });
 
-        // Read radio button state from HTML 'checked' ATTRIBUTE
+        // Read radio button state from HTML 'checked' ATTRIBUTE.
+        //
+        // Radios in one group are mutually exclusive, so at most ONE may end up in
+        // currentAnnotations per schema. The server stamps `checked` once per stored
+        // label, so a state file carrying two values for one schema (data written
+        // before the GH #167 fix) would otherwise seed both here — the DOM shows one
+        // selection while currentAnnotations holds two, and the next save writes both
+        // straight back. Take the last checked radio per group, matching what the
+        // browser itself renders as selected.
         const radioInputs = document.querySelectorAll('input[type="radio"]');
+        const restoredRadios = {};
         radioInputs.forEach(input => {
             const schema = input.getAttribute('schema');
             const labelName = input.getAttribute('label_name');
@@ -1256,10 +1272,19 @@ async function loadAnnotations() {
             // Sync the browser state to match server state
             input.checked = serverChecked;
             if (schema && labelName && serverChecked) {
+                if (restoredRadios[schema]) {
+                    debugWarn(`Multiple stored values for single-select schema '${schema}' ` +
+                              `('${restoredRadios[schema].labelName}' and '${labelName}'); ` +
+                              `keeping the last. Run 'potato repair-annotations' to fix the ` +
+                              `stored state.`);
+                    // Undo the earlier winner so state matches the rendered selection.
+                    delete currentAnnotations[schema][restoredRadios[schema].labelName];
+                }
                 if (!currentAnnotations[schema]) {
                     currentAnnotations[schema] = {};
                 }
                 currentAnnotations[schema][labelName] = input.value;
+                restoredRadios[schema] = { labelName: labelName };
             }
         });
 
@@ -2263,13 +2288,35 @@ function handleInputChange(element) {
     if (inputType === 'radio') {
         // For radio buttons, only save if checked
         if (element.checked) {
-            const oldValue = currentAnnotations[schema] ? currentAnnotations[schema][labelName] : null;
-            // Radio buttons are mutually exclusive — clear old entries for this schema
+            // The PREVIOUSLY SELECTED option for this schema — not this input's own
+            // entry. A radio/likert group stores one key per option, so the outgoing
+            // answer lives under a *different* labelName than the incoming one;
+            // reading currentAnnotations[schema][labelName] here always yielded
+            // undefined, which is why every recorded change had old_value: null and
+            // a 5→4 revision was indistinguishable from a first-time 4.
+            let oldLabel = null, oldValue = null;
+            if (currentAnnotations[schema]) {
+                const prior = Object.keys(currentAnnotations[schema])
+                    .filter(k => k !== labelName && k !== 'free_response');
+                if (prior.length) {
+                    oldLabel = prior[prior.length - 1];
+                    oldValue = currentAnnotations[schema][oldLabel];
+                }
+            }
+            // Radio buttons are mutually exclusive — clear old entries for this schema,
+            // but keep the free-response text that radio/multiselect attach to the
+            // same schema (it is a separate answer, not a competing option).
+            const freeResponse = currentAnnotations[schema]
+                ? currentAnnotations[schema]['free_response'] : undefined;
             currentAnnotations[schema] = {};
+            if (freeResponse !== undefined) {
+                currentAnnotations[schema]['free_response'] = freeResponse;
+            }
             value = element.value;
             // Track radio button selection
             if (window.interactionTracker) {
-                window.interactionTracker.trackAnnotationChange(schema, labelName, 'select', oldValue, value, 'user');
+                window.interactionTracker.trackAnnotationChange(
+                    schema, labelName, 'select', oldValue, value, 'user', oldLabel);
             }
         } else {
             return; // Don't save unchecked radio buttons

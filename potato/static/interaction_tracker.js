@@ -223,18 +223,25 @@ class InteractionTracker {
      * @param {*} oldValue - Previous value
      * @param {*} newValue - New value
      * @param {string} source - What triggered the change (user, ai_accept, keyboard, prefill)
+     * @param {string} [oldLabel] - The label the answer moved AWAY from. Single-select
+     *   schemas (radio/likert/confidence) store one key per option, so a revision
+     *   changes the label as well as the value; without this the trail cannot show
+     *   which option was superseded.
      */
-    trackAnnotationChange(schemaName, labelName, action, oldValue, newValue, source = 'user') {
+    trackAnnotationChange(schemaName, labelName, action, oldValue, newValue, source = 'user',
+                          oldLabel = null) {
         this.addEvent('annotation_change', `schema:${schemaName}`, {
             label: labelName,
             action: action,
+            old_label: oldLabel,
             old_value: oldValue,
             new_value: newValue,
             source: source,
         });
 
         // Also send to dedicated annotation change endpoint for persistence
-        this.sendAnnotationChange(schemaName, labelName, action, oldValue, newValue, source);
+        this.sendAnnotationChange(schemaName, labelName, action, oldValue, newValue, source,
+                                  oldLabel);
     }
 
     /**
@@ -464,7 +471,8 @@ class InteractionTracker {
     /**
      * Send annotation change to dedicated endpoint
      */
-    async sendAnnotationChange(schemaName, labelName, action, oldValue, newValue, source) {
+    async sendAnnotationChange(schemaName, labelName, action, oldValue, newValue, source,
+                               oldLabel = null) {
         try {
             await fetch('/api/track_annotation_change', {
                 method: 'POST',
@@ -474,6 +482,7 @@ class InteractionTracker {
                     schema_name: schemaName,
                     label_name: labelName,
                     action: action,
+                    old_label: oldLabel,
                     old_value: oldValue,
                     new_value: newValue,
                     source: source,

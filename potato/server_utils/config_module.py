@@ -228,6 +228,10 @@ KNOWN_CONFIG_KEYS = {
     "allow_phase_back_navigation": None,
     "require_fully_annotated": None,
     "export_include_phase_data": None,
+    # Write annotation_changes.csv — the timestamped record of every answer revision.
+    # Off by default: it is much larger than the annotations and carries fine-grained
+    # interaction detail not every study wants to distribute.
+    "export_include_annotation_changes": None,
     "export_annotation_format": None,
     "auto_export_interval": None,
 

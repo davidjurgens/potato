@@ -159,6 +159,7 @@ nav:
         - Productivity: administration/productivity.md
     - Data & Export:
         - Export Formats: data-export/export_formats.md
+        - Single-Select Integrity: data-export/single-select-integrity.md
         - HuggingFace Export: data-export/huggingface_export.md
         - HuggingFace Datasets: data-export/datasets_integration.md
         - HuggingFace Spaces: data-export/huggingface_spaces.md

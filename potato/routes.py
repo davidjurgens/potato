@@ -970,6 +970,62 @@ def logout():
     logger.debug("Redirecting /logout to logout_page")
     return logout_page()
 
+def _incoming_schema_names(annotations: dict) -> set:
+    """Schema names present in an ``{"schema:label": value}`` payload.
+
+    Keys use ``:::`` for the JSON-blob schemas (image/audio/video ``_data``) and a
+    single ``:`` for everything else; keys with neither are malformed and skipped.
+    """
+    names = set()
+    for key in annotations or {}:
+        sep = ":::" if ":::" in key else (":" if ":" in key else None)
+        if sep:
+            names.add(key.split(sep, 1)[0])
+    return names
+
+
+def _preclear_exclusive_schemas(user_state, username, instance_id, schema_names,
+                                *, complete_set: bool) -> None:
+    """Drop stale labels for schemas whose incoming state supersedes what's stored.
+
+    Two distinct reasons to clear, deliberately kept apart (GH #167):
+
+    * **single-select** (``radio``/``likert``/``confidence``): each option is stored
+      under its own ``Label(schema, option)``, so a changed answer would otherwise
+      accumulate beside the old one. Always clear, regardless of ``complete_set``.
+    * **multiselect**: labels are per-checkbox and legitimately plural, but a
+      *deselected* checkbox is communicated only by its absence from the payload.
+      Clearing is therefore correct **only** when the caller sends the complete set.
+      The legacy ``/updateinstance`` format posts one checkbox at a time, so it must
+      pass ``complete_set=False`` or every save would wipe the other selections.
+
+    Clearing goes through ``UserState.clear_schema_labels``, which routes to the
+    instance's labels during the annotation phase and to the current phase page's
+    labels otherwise — so consent, instructions, training, prestudy and poststudy are
+    covered by the same call. (Reaching into ``instance_id_to_label_to_value``
+    directly, as this code used to, both missed every phase page and raised
+    AttributeError on the MySQL backend, which has no such attribute.)
+    """
+    from potato.server_utils.schema_exclusivity import is_multiselect, is_single_select
+
+    for schema_name in schema_names:
+        should_clear = is_single_select(schema_name, username) or (
+            complete_set and is_multiselect(schema_name, username))
+        if not should_clear:
+            continue
+        try:
+            removed = user_state.clear_schema_labels(instance_id, schema_name)
+        except NotImplementedError:
+            logger.warning(
+                f"User state {type(user_state).__name__} cannot clear schema labels; "
+                f"stale labels for '{schema_name}' may persist")
+            continue
+        if removed:
+            logger.debug(
+                f"Cleared {removed} stale label(s) for schema '{schema_name}' "
+                f"(user={username}, instance={instance_id})")
+
+
 @app.route("/submit_annotation", methods=["POST"])
 def submit_annotation():
     """
@@ -1045,6 +1101,11 @@ def submit_annotation():
         logger.debug(f"Retrieved user state: {user_state}")
         logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
 
+
+        # Payload is {schema: {label: value}}, i.e. the complete state per schema, so
+        # stale labels can be cleared the same way /updateinstance does (GH #167).
+        _preclear_exclusive_schemas(
+            user_state, user_id, instance_id, set(annotations), complete_set=True)
 
         # Process the annotations
         annotations_processed = 0
@@ -4657,39 +4718,12 @@ def update_instance():
                 return jsonify({"status": "error",
                                 "message": "'annotations' must be an object"})
 
-            # Pre-clear stale labels for radio/multiselect schemas.
-            # The client always sends the COMPLETE current state, so any label
-            # not in the incoming set should be removed. Without this, deselected
-            # radio options or unchecked checkboxes persist as stale data.
-            _exclusive_types = {'radio', 'multiselect'}
-            _schema_type_cache = {}
-            # Resolve the user's cohort schemes so exclusive-label clearing keys
-            # off the schemes this user actually sees (falls back to global).
-            try:
-                from potato.server_utils.cohort_schemes import get_cohort_scheme_resolver
-                _user_schemes = get_cohort_scheme_resolver().get_schemes_for_user(username)
-            except Exception:
-                _user_schemes = config.get('annotation_schemes', [])
-            for scheme in _user_schemes:
-                _schema_type_cache[scheme.get('name')] = scheme.get('annotation_type')
-
-            # Collect which schemas appear in the incoming annotations
-            _incoming_schemas = set()
-            for key in annotations:
-                sep = ":::" if ":::" in key else (":" if ":" in key else None)
-                if sep:
-                    _incoming_schemas.add(key.split(sep, 1)[0])
-
-            # For each exclusive schema, remove all existing labels
-            if instance_id in user_state.instance_id_to_label_to_value:
-                for schema_name_to_clear in _incoming_schemas:
-                    if _schema_type_cache.get(schema_name_to_clear) in _exclusive_types:
-                        labels_to_remove = [
-                            lbl for lbl in user_state.instance_id_to_label_to_value[instance_id]
-                            if isinstance(lbl, Label) and lbl.get_schema() == schema_name_to_clear
-                        ]
-                        for lbl in labels_to_remove:
-                            del user_state.instance_id_to_label_to_value[instance_id][lbl]
+            # Pre-clear stale labels before re-writing. The client sends the COMPLETE
+            # current state for these schemas, so any label not in the incoming set
+            # should be removed.
+            _preclear_exclusive_schemas(
+                user_state, username, instance_id,
+                _incoming_schema_names(annotations), complete_set=True)
 
             for key, value in annotations.items():
                 if ":::" in key:
@@ -4705,10 +4739,9 @@ def update_instance():
                     logger.warning(f"Skipping annotation with no separator: {key}")
                     continue
 
-                # Get old value for comparison
-                old_value = None
-                if instance_id in user_state.instance_id_to_label_to_value:
-                    old_value = user_state.instance_id_to_label_to_value[instance_id].get(label)
+                # Get old value for comparison. Go through the accessor rather than
+                # the dict: MysqlUserState has no instance_id_to_label_to_value.
+                old_value = (user_state.get_label_annotations(instance_id) or {}).get(label)
 
                 # Determine action type
                 action_type = "add_label" if old_value is None else "update_label"
@@ -4987,14 +5020,21 @@ def update_instance():
                         user_state.add_span_annotation(instance_id, span, value)
                         logger.debug(f"Added span annotation: {span} with value: {value}")
             elif annotation_type == "label":
+                # Legacy v1 template posts ONE input per request (base_template.html
+                # registerAnnotation), so this is not a complete-set payload: clearing
+                # a multiselect here would wipe the user's other checkboxes. Only
+                # single-select schemas are cleared.
+                _preclear_exclusive_schemas(
+                    user_state, username, instance_id, {schema_name},
+                    complete_set=False)
+
                 for sv in schema_state:
                     label = Label(schema_name, sv["name"])
                     value = sv["value"]
 
-                    # Get old value for comparison
-                    old_value = None
-                    if instance_id in user_state.instance_id_to_label_to_value:
-                        old_value = user_state.instance_id_to_label_to_value[instance_id].get(label)
+                    # Get old value for comparison. Go through the accessor rather than
+                    # the dict: MysqlUserState has no instance_id_to_label_to_value.
+                    old_value = (user_state.get_label_annotations(instance_id) or {}).get(label)
 
                     # Determine action type
                     action_type = "add_label" if old_value is None else "update_label"
@@ -6284,15 +6324,28 @@ def track_annotation_change():
         instance_id
     )
 
+    # Stamp the phase/page server-side. Behavioral data is bucketed by instance id and
+    # every non-annotation page posts the same "__phase_page__" sentinel, so without
+    # this the trail cannot say whether a change happened in the prestudy, the training
+    # or the poststudy.
+    try:
+        _phase, _page = user_state.get_current_phase_and_page()
+        _phase_name = _phase.name.lower() if hasattr(_phase, 'name') else str(_phase)
+    except Exception:
+        _phase_name, _page = None, None
+
     # Create annotation change record
     change = AnnotationChange(
         timestamp=time_module.time(),
         schema_name=schema_name,
         label_name=data.get('label_name'),
+        old_label=data.get('old_label'),
         action=action,
         old_value=data.get('old_value'),
         new_value=data.get('new_value'),
         source=data.get('source', 'user'),
+        phase=_phase_name,
+        page=_page,
     )
 
     if hasattr(bd, 'annotation_changes'):

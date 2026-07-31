@@ -24,6 +24,12 @@ from .registry import export_registry
 logger = logging.getLogger(__name__)
 
 
+def _behavioral_changes(user_state: dict, instance_id: str) -> list:
+    """The ``annotation_changes`` recorded against one instance, or an empty list."""
+    from potato.export.single_select import behavioral_changes
+    return behavioral_changes(user_state, instance_id)
+
+
 def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
     """
     Load user annotations from the Potato output directory.
@@ -90,6 +96,12 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
                 "spans": {},
                 "links": {},
                 "image_annotations": {},
+                # Timestamped revision trail for this instance. Exporters use it to
+                # resolve a single-select schema that was stored with several values
+                # by pre-#167 servers; the persisted label order alone cannot (it is
+                # first-write order, not recency). Leading underscore keeps it out of
+                # the flattened output.
+                "_changes": _behavioral_changes(user_state, instance_id),
             }
 
             # Process span data.
@@ -143,12 +155,22 @@ def load_phase_responses_from_output_dir(
     output_dir: str,
     display_logic_schemes: list = None,
     exclude_hidden: bool = True,
+    single_select_schemas: set = None,
 ) -> list:
     """
     Load phase/surveyflow responses from the Potato output directory.
 
     Reads phase_to_page_to_label_to_value from each user's user_state.json
     and flattens into a list of records.
+
+    Every record carries a ``sequence`` index — its position within that page's stored
+    responses. Row order in the CSV previously conveyed nothing a consumer could rely
+    on; ``sequence`` makes the ordering explicit and stable (GH #167 suggestion 3).
+
+    When ``single_select_schemas`` is given, schemas that may hold at most one answer
+    but were found holding several (data written before the #167 fix) are resolved to
+    their final answer: the winner is tagged ``superseded: False`` and the stale rows
+    ``superseded: True``, so nothing is dropped but the real answer is unambiguous.
 
     Server-side enforcement of conditional survey logic: if
     ``display_logic_schemes`` (the survey/phase scheme dicts, some carrying
@@ -161,10 +183,14 @@ def load_phase_responses_from_output_dir(
     behavior is unchanged (all responses returned, no ``hidden`` field).
 
     Returns:
-        List of dicts with keys: user_id, phase, page, schema, label_name, value
-        (and ``hidden`` when ``display_logic_schemes`` is provided).
+        List of dicts with keys: user_id, phase, page, sequence, schema, label_name,
+        value (plus ``hidden`` when ``display_logic_schemes`` is provided, and
+        ``superseded`` when ``single_select_schemas`` is provided).
     """
+    from potato.export.single_select import resolve_final_label, phase_changes
+
     responses = []
+    single_select_schemas = single_select_schemas or set()
 
     if not os.path.isdir(output_dir):
         return responses
@@ -198,26 +224,28 @@ def load_phase_responses_from_output_dir(
                 flat.update(flatten_phase_annotations(_pages))
             hidden_schemas = compute_hidden_schemas(display_logic_schemes, flat)
 
-        def _emit(phase, page, schema, label_name, value):
+        def _emit(phase, page, sequence, schema, label_name, value, winners):
+            record = {
+                "user_id": user_id, "phase": phase, "page": page,
+                "sequence": sequence,
+                "schema": schema, "label_name": label_name, "value": value,
+            }
             if display_logic_schemes:
                 is_hidden = schema in hidden_schemas
                 if is_hidden and exclude_hidden:
                     return
-                responses.append({
-                    "user_id": user_id, "phase": phase, "page": page,
-                    "schema": schema, "label_name": label_name,
-                    "value": value, "hidden": is_hidden,
-                })
-            else:
-                responses.append({
-                    "user_id": user_id, "phase": phase, "page": page,
-                    "schema": schema, "label_name": label_name, "value": value,
-                })
+                record["hidden"] = is_hidden
+            if schema in winners:
+                # Only tagged for schemas that actually held more than one answer,
+                # so a healthy export is unchanged apart from the sequence column.
+                record["superseded"] = label_name != winners[schema]
+            responses.append(record)
 
         for phase, pages in phase_data.items():
             for page, label_values in pages.items():
                 # label_values is a list of [[{schema, name}, value], ...]
                 if isinstance(label_values, list):
+                    parsed = []
                     for entry in label_values:
                         if isinstance(entry, (list, tuple)) and len(entry) == 2:
                             label_obj, value = entry
@@ -226,10 +254,27 @@ def load_phase_responses_from_output_dir(
                                 label_name = label_obj.get("name", "")
                             else:
                                 schema, label_name = str(label_obj), ""
-                            _emit(phase, page, schema, label_name, value)
+                            parsed.append((schema, label_name, value))
                 elif isinstance(label_values, dict):
-                    for label_obj, value in label_values.items():
-                        _emit(phase, page, str(label_obj), "", value)
+                    parsed = [(str(label_obj), "", value)
+                              for label_obj, value in label_values.items()]
+                else:
+                    continue
+
+                # Resolve any single-select schema that ended up with several answers.
+                winners = {}
+                by_schema = {}
+                for schema, label_name, _ in parsed:
+                    by_schema.setdefault(schema, []).append(label_name)
+                for schema, names in by_schema.items():
+                    if schema in single_select_schemas and len(names) > 1:
+                        winner, _method = resolve_final_label(
+                            schema, names, phase_changes(user_state, phase, page))
+                        if winner is not None:
+                            winners[schema] = winner
+
+                for sequence, (schema, label_name, value) in enumerate(parsed):
+                    _emit(phase, page, sequence, schema, label_name, value, winners)
 
     return responses
 

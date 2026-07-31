@@ -15,10 +15,11 @@ def arguments():
     parser.add_argument(
         "mode",
         choices=['start', 'migrate', 'reset-password', 'codebook', 'transcripts',
-                 'convokit'],
+                 'convokit', 'repair-annotations'],
         help=(
             "set the mode when potato is used, currently supporting: start, "
-            "migrate, reset-password, codebook, transcripts, convokit"
+            "migrate, reset-password, codebook, transcripts, convokit, "
+            "repair-annotations"
         ),
         default="start",
     )
@@ -170,6 +171,24 @@ def arguments():
         dest="username",
         help="[reset-password mode] Username to reset password for",
         default=None,
+    )
+
+    # Annotation repair arguments (GH #167)
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        dest="apply",
+        help="[repair-annotations mode] Write the repairs. Without this the run is a "
+             "dry run that only reports what would change.",
+        default=False,
+    )
+    parser.add_argument(
+        "--no-backup",
+        action="store_true",
+        dest="no_backup",
+        help="[repair-annotations mode] Do not write user_state.json.bak before "
+             "overwriting. Only meaningful with --apply.",
+        default=False,
     )
 
     return parser.parse_args()

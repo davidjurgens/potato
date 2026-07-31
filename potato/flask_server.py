@@ -4720,6 +4720,10 @@ def main():
         logger.info("Starting codebook initialization")
         from potato.codebook_cli import main as codebook_main
         sys.exit(codebook_main([args.config_file]))
+    elif args.mode == 'repair-annotations':
+        logger.info("Starting single-select annotation repair")
+        from potato.repair_cli import run_repair
+        sys.exit(run_repair(args))
 
     logger.info("Annotation platform shutdown complete")
 

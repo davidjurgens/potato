@@ -116,17 +116,29 @@ class AnnotationChange:
         schema_name: Which schema was modified
         label_name: Which label was affected (if applicable)
         action: Type of change ("select", "deselect", "update", "clear")
+        old_label: The label the answer moved AWAY from. Single-select schemas
+            (radio/likert/confidence) store one entry per option, so a revision changes
+            the label as well as the value — recording only old_value cannot express
+            "moved from scale point 5 to scale point 4".
         old_value: Previous value (if any)
         new_value: New value after the change
         source: What triggered the change ("user", "ai_accept", "prefill", "keyboard")
+        phase: Workflow phase the change happened in ("annotation", "prestudy", ...).
+            Behavioral data is bucketed by instance id, and every non-annotation page
+            shares the sentinel "__phase_page__", so without phase/page the trail
+            cannot say which survey a change belongs to.
+        page: The phase page name, for non-annotation phases.
     """
     timestamp: float
     schema_name: str
     action: str
     label_name: Optional[str] = None
+    old_label: Optional[str] = None
     old_value: Any = None
     new_value: Any = None
     source: str = "user"
+    phase: Optional[str] = None
+    page: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -134,23 +146,33 @@ class AnnotationChange:
             'timestamp': self.timestamp,
             'schema_name': self.schema_name,
             'label_name': self.label_name,
+            'old_label': self.old_label,
             'action': self.action,
             'old_value': self.old_value,
             'new_value': self.new_value,
             'source': self.source,
+            'phase': self.phase,
+            'page': self.page,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AnnotationChange':
-        """Reconstruct from serialized dictionary."""
+        """Reconstruct from serialized dictionary.
+
+        Every field added after the original release is read with .get(), so records
+        written by older Potato versions deserialize unchanged.
+        """
         return cls(
             timestamp=data.get('timestamp', 0),
             schema_name=data.get('schema_name', ''),
             label_name=data.get('label_name'),
+            old_label=data.get('old_label'),
             action=data.get('action', ''),
             old_value=data.get('old_value'),
             new_value=data.get('new_value'),
             source=data.get('source', 'user'),
+            phase=data.get('phase'),
+            page=data.get('page'),
         )
 
 
@@ -329,16 +351,21 @@ class BehavioralData:
     def add_annotation_change(self, schema_name: str, action: str,
                              label_name: Optional[str] = None,
                              old_value: Any = None, new_value: Any = None,
-                             source: str = "user") -> None:
+                             source: str = "user", old_label: Optional[str] = None,
+                             phase: Optional[str] = None,
+                             page: Optional[str] = None) -> None:
         """Record an annotation change."""
         self.annotation_changes.append(AnnotationChange(
             timestamp=time.time(),
             schema_name=schema_name,
             label_name=label_name,
+            old_label=old_label,
             action=action,
             old_value=old_value,
             new_value=new_value,
             source=source,
+            phase=phase,
+            page=page,
         ))
 
     def add_navigation(self, action: str, from_instance: Optional[str] = None,

@@ -323,12 +323,36 @@ def write_user_state(user_id, state):
     print(f"  Wrote {filepath}")
 
 
+#: The annotators this script owns. Anything else under OUTPUT_DIR is left over from
+#: a previous run of some other demo or test.
+DEMO_USERS = ("reliable_1", "reliable_2", "moderate", "spammer", "biased")
+
+
 def clean_mace_cache():
     """Remove cached MACE results."""
     mace_dir = os.path.join(OUTPUT_DIR, "mace")
     if os.path.exists(mace_dir):
         shutil.rmtree(mace_dir)
         print(f"  Removed {mace_dir}")
+
+
+def clean_stale_users():
+    """Remove annotator directories this script did not create.
+
+    MACE is a joint EM model: competence is estimated for all annotators together
+    against the inferred gold label. Leftover annotators from another demo or a
+    browser session therefore shift *every* score, and the demo's documented ranking
+    (reliable_1 > reliable_2 > moderate > biased ~ spammer) silently stops holding.
+    """
+    if not os.path.isdir(OUTPUT_DIR):
+        return
+    for entry in sorted(os.listdir(OUTPUT_DIR)):
+        if entry in DEMO_USERS or entry == "mace":
+            continue
+        path = os.path.join(OUTPUT_DIR, entry)
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+            print(f"  Removed stale annotator directory {path}")
 
 
 def main():
@@ -342,6 +366,8 @@ def main():
 
     print("Generating synthetic annotation data for MACE demo...")
     print()
+
+    clean_stale_users()
 
     annotators = [
         ("reliable_1", RELIABLE_1_LABELS, RELIABLE_1_BEHAVIORAL),

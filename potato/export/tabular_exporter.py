@@ -12,22 +12,59 @@ import logging
 from typing import Optional, Tuple, List
 
 from .base import BaseExporter, ExportContext, ExportResult
+from .single_select import (
+    EXEMPT_LABEL_NAMES,
+    resolve_final_label,
+    single_select_schema_names,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def _flatten_annotation(ann: dict) -> dict:
-    """Flatten a single annotation record into a flat dict for tabular output."""
+def _single_select_names(context: ExportContext) -> set:
+    """Single-select schema names across annotation schemes and SurveyFlow questions."""
+    names = single_select_schema_names(context.schemas or [])
+    cfg = getattr(context, "config", None) or {}
+    names |= single_select_schema_names(cfg.get("_surveyflow_schemes") or [])
+    return names
+
+
+def _flatten_annotation(ann: dict, single_select: Optional[set] = None,
+                        ambiguities: Optional[List[str]] = None) -> dict:
+    """Flatten a single annotation record into a flat dict for tabular output.
+
+    ``single_select`` names the schemas that may hold at most one label. When such a
+    schema arrives with several labels — data written before the GH #167 fix — the
+    per-label columns are still emitted (nothing is hidden), but an additional
+    ``{schema}`` column carries the resolved final answer so a consumer reading the CSV
+    is never left guessing. Each collapse is appended to ``ambiguities``.
+    """
     row = {
         "instance_id": ann.get("instance_id", ""),
         "user_id": ann.get("user_id", ""),
     }
+    single_select = single_select or set()
+
     # Flatten labels: schema_name.label_name = value
     for schema_name, labels in ann.get("labels", {}).items():
         if isinstance(labels, dict):
             for label_name, value in labels.items():
                 col = f"{schema_name}.{label_name}" if label_name else schema_name
                 row[col] = value if not isinstance(value, (dict, list)) else json.dumps(value)
+
+            if schema_name in single_select:
+                non_exempt = [n for n in labels if n not in EXEMPT_LABEL_NAMES]
+                if len(non_exempt) > 1:
+                    winner, method = resolve_final_label(
+                        schema_name, list(labels.keys()), ann.get("_changes"))
+                    if winner is not None:
+                        row[schema_name] = labels[winner]
+                    if ambiguities is not None:
+                        ambiguities.append(
+                            f"{ann.get('user_id', '')}/{ann.get('instance_id', '')}"
+                            f"/{schema_name}: {len(non_exempt)} stored labels "
+                            f"({', '.join(map(str, non_exempt))}) -> '{winner}' "
+                            f"[{method}]")
         else:
             row[schema_name] = labels if not isinstance(labels, (dict, list)) else json.dumps(labels)
 
@@ -36,6 +73,24 @@ def _flatten_annotation(ann: dict) -> dict:
         row[f"{schema_name}._spans"] = json.dumps(spans)
 
     return row
+
+
+def _ambiguity_warning(ambiguities: List[str], method_note: bool = True) -> Optional[str]:
+    """One warning summarising every single-select group that had to be collapsed."""
+    if not ambiguities:
+        return None
+    shown = ambiguities[:10]
+    more = len(ambiguities) - len(shown)
+    msg = (f"{len(ambiguities)} single-select schema(s) had more than one stored value "
+           f"(pre-#167 data corruption). A canonical column holding the resolved final "
+           f"answer was added alongside the per-label columns: " + "; ".join(shown))
+    if more:
+        msg += f"; and {more} more"
+    if method_note:
+        msg += (". Entries marked [order] were resolved by persisted order, which is "
+                "first-write order rather than recency and can be wrong for A->B->A "
+                "revisions. Run 'potato repair-annotations' to rewrite the stored state.")
+    return msg
 
 
 class CSVExporter(BaseExporter):
@@ -156,7 +211,14 @@ def _write_phase_delimited(context: ExportContext, output_path: str,
         return None
 
     out_file = os.path.join(output_path, f"phase_responses.{fmt_name}")
-    columns = ["user_id", "phase", "page", "schema", "label_name", "value"]
+    # `sequence` documents the ordering the row layout previously only implied
+    # (GH #167). Optional columns are appended only when present in the data, so a
+    # deployment with neither display_logic nor legacy duplicates gets the same shape
+    # it always had, plus `sequence`.
+    columns = ["user_id", "phase", "page", "sequence", "schema", "label_name", "value"]
+    for optional in ("hidden", "superseded"):
+        if any(optional in row for row in context.phase_responses):
+            columns.append(optional)
 
     with open(out_file, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=columns, delimiter=delimiter,
@@ -182,6 +244,62 @@ def _write_phase_jsonl(context: ExportContext, output_path: str) -> Optional[str
     return out_file
 
 
+ANNOTATION_CHANGE_COLUMNS = [
+    "user_id", "instance_id", "phase", "page", "timestamp",
+    "schema", "old_label", "old_value", "new_label", "new_value", "action", "source",
+]
+
+
+def _write_annotation_changes(context: ExportContext, output_path: str,
+                              fmt_name: str, delimiter: str) -> Optional[str]:
+    """Write the annotation revision trail. Returns file path or None.
+
+    One row per recorded change, so a study can show *that* an annotator moved from
+    scale point 5 to 4 even though only 4 is stored as the answer. Sourced from the
+    behavioral data Potato already persists in ``user_state.json``; the exporter never
+    has to reconstruct history from the label dict.
+
+    Written only when ``export_include_annotation_changes: true`` — the trail is
+    considerably larger than the annotations themselves, and it carries per-keystroke
+    detail that not every study wants to distribute.
+    """
+    if not (context.config or {}).get("export_include_annotation_changes", False):
+        return None
+
+    rows = []
+    for ann in context.annotations:
+        for change in ann.get("_changes") or []:
+            if not isinstance(change, dict):
+                continue
+            rows.append({
+                "user_id": ann.get("user_id", ""),
+                "instance_id": ann.get("instance_id", ""),
+                "phase": change.get("phase") or "",
+                "page": change.get("page") or "",
+                "timestamp": change.get("timestamp", ""),
+                "schema": change.get("schema_name", ""),
+                "old_label": change.get("old_label") or "",
+                "old_value": change.get("old_value") if change.get("old_value") is not None else "",
+                "new_label": change.get("label_name") or "",
+                "new_value": change.get("new_value") if change.get("new_value") is not None else "",
+                "action": change.get("action", ""),
+                "source": change.get("source", ""),
+            })
+
+    if not rows:
+        return None
+
+    rows.sort(key=lambda r: (r["user_id"], r["instance_id"], r["timestamp"] or 0))
+    out_file = os.path.join(output_path, f"annotation_changes.{fmt_name}")
+    with open(out_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=ANNOTATION_CHANGE_COLUMNS,
+                                delimiter=delimiter, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+    return out_file
+
+
 def _write_delimited(context: ExportContext, output_path: str,
                      fmt_name: str, delimiter: str) -> ExportResult:
     """Write annotations as a delimited file (CSV or TSV)."""
@@ -189,7 +307,10 @@ def _write_delimited(context: ExportContext, output_path: str,
     out_file = os.path.join(output_path, f"annotations.{fmt_name}")
 
     # Flatten all annotations to collect the full set of columns
-    rows = [_flatten_annotation(ann) for ann in context.annotations]
+    single_select = _single_select_names(context)
+    ambiguities = []
+    rows = [_flatten_annotation(ann, single_select, ambiguities)
+            for ann in context.annotations]
 
     if not rows:
         return ExportResult(
@@ -219,11 +340,18 @@ def _write_delimited(context: ExportContext, output_path: str,
     phase_file = _write_phase_delimited(context, output_path, fmt_name, delimiter)
     if phase_file:
         files_written.append(phase_file)
+    changes_file = _write_annotation_changes(context, output_path, fmt_name, delimiter)
+    if changes_file:
+        files_written.append(changes_file)
 
     warnings = []
     excl = _phase_exclusion_warning(context)
     if excl:
         warnings.append(excl)
+    amb = _ambiguity_warning(ambiguities)
+    if amb:
+        warnings.append(amb)
+        logger.warning(amb)
 
     return ExportResult(
         success=True,
@@ -233,6 +361,7 @@ def _write_delimited(context: ExportContext, output_path: str,
         stats={
             "num_records": len(rows),
             "num_columns": len(columns),
+            "num_single_select_collapsed": len(ambiguities),
             "num_phase_responses": len(context.phase_responses) if phase_file else 0,
             "num_phase_responses_excluded": (
                 len(context.phase_responses) if not phase_file else 0),
