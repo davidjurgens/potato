@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Audio Dialogue (Podcast Turn Annotation) Example
 #
 # Annotate a spoken multi-speaker transcript as a chat of colored speaker
@@ -12,9 +13,13 @@
 #   * speaker assignment         (undiarized instance: annotator picks speaker,
 #                                 which recolors + repositions the bubble)
 #
-# The `conversation` field value is a dict {audio, turns}. `turns` may come
-# from native turn JSON, WhisperX/diarized JSON, plain Whisper JSON, or VTT/SRT
-# (see potato/server_utils/transcript_ingest.py) — all normalized on render.
+# The `conversation` field value is a dict {audio, turns}. `turns` may come from
+# native turn JSON or any of 21 transcript formats — Whisper, WhisperX, cloud ASR,
+# SRT/WebVTT, YouTube captions, Praat TextGrid, ELAN EAF — all normalized on render
+# by potato/server_utils/transcripts/. The transcript may also be a path to a
+# sidecar file next to the audio. See docs/annotation-types/multimedia/
+# transcript_formats.md for the full table, and examples/audio/transcript-formats/
+# for a side-by-side demo.
 #
 # Run from the repository root:
 #   python potato/flask_server.py start examples/audio/audio-dialogue/config.yaml -p 8000

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Hotkey Review Mode Example
 #
 # Keyboard-driven rapid review queue: each schema has key bindings, and

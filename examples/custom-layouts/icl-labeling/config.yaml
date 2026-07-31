@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # ICL (In-Context Learning) Labeling Example
 #
 # This example demonstrates AI-assisted labeling using high-confidence human

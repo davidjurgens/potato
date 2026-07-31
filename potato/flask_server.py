@@ -100,6 +100,7 @@ from potato.server_utils.prolific_apis import ProlificStudy
 from potato.server_utils.mturk_apis import init_mturk_hit, get_mturk_hit
 from potato.server_utils.json import easy_json
 from potato.server_utils.instance_display import InstanceDisplayRenderer, get_instance_display_renderer
+from potato.server_utils.transcripts.binding import enrich_record as enrich_transcript_record
 
 # This allows us to create an AI endpoint for the system to interact with as needed (if configured)
 from potato.ai.ai_endpoint import get_ai_endpoint
@@ -759,6 +760,86 @@ def _resolve_batch_assignment_data_file_entry(config: dict, data_file_entry):
     return data_file_entry
 
 
+def _has_live_ingestion_source(config: dict) -> bool:
+    """
+    True when any enabled data source polls for rows added at runtime.
+
+    Args:
+        config: Application configuration
+
+    Returns:
+        True if at least one enabled data_sources entry has
+        ``live_ingestion.enabled``
+    """
+    for source in (config.get("data_sources") or []):
+        if not isinstance(source, dict):
+            continue
+        if source.get("enabled", True) is False:
+            continue
+        live = source.get("live_ingestion")
+        if isinstance(live, dict) and live.get("enabled"):
+            return True
+    return False
+
+
+def _start_live_ingestion(config: dict) -> None:
+    """
+    Start the background poll workers for live data sources.
+
+    Called from ``configure_app()``, i.e. after the initial data load and
+    after user state has been restored. Failures are logged, never fatal: a
+    database that is unreachable at boot must not stop the annotation server
+    from serving the items it already has.
+    """
+    # Flask's reloader runs the module twice; only the child (WERKZEUG_RUN_MAIN
+    # == "true") should own the poll threads, or every insert gets fetched by
+    # two workers in two separate item pools.
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "false":
+        logger.debug("Skipping live ingestion start in the reloader parent process")
+        return
+
+    try:
+        from potato.data_sources import get_data_source_manager
+        manager = get_data_source_manager()
+        if manager is None:
+            logger.warning(
+                "live_ingestion is configured but the DataSourceManager is not "
+                "initialized; no pollers started"
+            )
+            return
+
+        for index, source in enumerate(config.get("data_sources") or []):
+            if not isinstance(source, dict):
+                continue
+            live = source.get("live_ingestion")
+            if isinstance(live, dict) and live.get("enabled") and not (
+                source.get("id") or source.get("source_id")
+            ):
+                logger.warning(
+                    "data_sources[%d] enables live_ingestion but has no explicit "
+                    "'id'. The auto-generated id encodes the list position, so "
+                    "reordering data_sources would point this source's stored "
+                    "cursor at a different table. Set an explicit id.",
+                    index,
+                )
+
+        started = manager.start_live_ingestion()
+        if started:
+            logger.info("Started %d live ingestion worker(s)", started)
+            logger.warning(
+                "Live ingestion assumes a SINGLE server process. Potato keeps "
+                "its item pool in memory per process, so running under multiple "
+                "workers (e.g. gunicorn -w N) gives each one its own pool, its "
+                "own poller, and no cross-process deduplication."
+            )
+
+        import atexit
+        atexit.register(manager.stop_live_ingestion)
+
+    except Exception as e:
+        logger.error("Failed to start live ingestion: %s", e, exc_info=True)
+
+
 def _default_max_annotations_per_user(config: dict, ism) -> int:
     """
     Resolve the default per-user annotation quota.
@@ -766,17 +847,30 @@ def _default_max_annotations_per_user(config: dict, ism) -> int:
     When ``max_annotations_per_user`` is explicitly configured, honor it.
     Otherwise the historical default is "annotate everything" = the instance
     count. But that count is frozen at load time, so when a DYNAMIC data source
-    can add items at runtime (trace ingestion, directory watching), freezing the
-    cap means later-added items exceed every user's quota and are never assigned
-    to any annotator (F-037). In that case default to unlimited (-1) instead, so
-    the live ``remaining_instance_ids`` pool stays fully assignable.
+    can add items at runtime (trace ingestion, directory watching, live database
+    ingestion), freezing the cap means later-added items exceed every user's
+    quota and are never assigned to any annotator (F-037). In that case default
+    to unlimited (-1) instead, so the live ``remaining_instance_ids`` pool stays
+    fully assignable.
     """
+    has_live_ingestion = _has_live_ingestion_source(config)
+
     configured = config.get("max_annotations_per_user")
     if configured is not None:
+        if has_live_ingestion and configured >= 0:
+            logger.warning(
+                "max_annotations_per_user is set to %s while live database "
+                "ingestion is enabled. Each annotator will stop receiving items "
+                "after %s, including newly ingested ones. Remove the setting (or "
+                "set it to -1) to keep the live pool fully assignable.",
+                configured, configured,
+            )
         return configured
+
     dynamic_source = bool(
         (config.get("trace_ingestion") or {}).get("enabled")
         or config.get("watch_data_directory")
+        or has_live_ingestion
     )
     if dynamic_source:
         return -1
@@ -2605,8 +2699,12 @@ def render_page_with_annotations(username: str):
         instance_obj=item,
         # Full record dict so schemas like process_reward / trajectory_eval
         # can bind to structured fields (e.g. structured_turns) via the
-        # [data-instance-json] element.
-        instance_record=item.get_data(),
+        # [data-instance-json] element. Transcript-consuming schemes also get a
+        # normalized "_transcripts" index attached here, so they accept every
+        # format the audio_dialogue display does (see transcripts/binding.py).
+        instance_record=enrich_transcript_record(
+            item.get_data(), config, base_dir=config.get("task_dir")
+        ),
         instance_id=instance_id,
         instance_index=user_state.get_current_instance_index(),
         finished=get_user_state(username).get_annotation_count(),
@@ -3601,6 +3699,22 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
                 import atexit
                 atexit.register(poller.stop)
 
+    # Live database ingestion: background cursor pollers for data_sources
+    # entries with live_ingestion.enabled. Started here in configure_app() —
+    # the single chokepoint called by create_app() on BOTH the live `start`
+    # path and the WSGI factory path — so pollers run regardless of launch
+    # mode. (The directory watcher, started from run_server(), does not have
+    # that parity; do not copy its placement.)
+    #
+    # Ordering matters twice over. This point is after load_all_data(), so the
+    # manager exists and the initial catch-up read has already seeded the
+    # cursor — polling before that would race the initial load. It is also
+    # after load_user_data(), which rebuilds ism.instance_annotators by
+    # iterating instance_id_to_instance; a poll thread mutating that dict
+    # mid-rebuild yields a nondeterministic map that adjudication reads.
+    if _has_live_ingestion_source(config):
+        _start_live_ingestion(config)
+
     # Datasets / Experiments. Registered here in configure_app() — the single
     # chokepoint called by create_app() on BOTH the live `start` path and the
     # WSGI factory path — so the route exists regardless of how the server is
@@ -4562,6 +4676,13 @@ def main():
 
     This function initializes the application, loads data, and runs the server.
     """
+    # ``transcripts`` is dispatched before the server's own argument parsing.
+    # It takes input paths rather than a config file and has its own flags, so
+    # routing it through the server parser would mean bending both.
+    if len(sys.argv) > 1 and sys.argv[1] == 'transcripts':
+        from potato.transcript_cli import main as transcripts_main
+        sys.exit(transcripts_main(sys.argv[2:]))
+
     # Parse command line arguments
     args = arguments()
 

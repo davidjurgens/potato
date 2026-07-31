@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Embedding Visualization Demo
 # This example demonstrates the embedding visualization feature in the admin dashboard.
 # It includes pre-annotated data to show how label coloring works.

@@ -3,8 +3,8 @@
 Agents increasingly act in modalities beyond text and static images — they drive
 GUIs, watch video, hold spoken conversations. These schemas (the M-series,
 multimodal half) give human raters surfaces purpose-built for those traces, beyond
-Potato's existing [image](../image_annotation.md), [audio](../audio_annotation.md),
-[video](../video_annotation.md), and [web-agent](agent_traces.md) displays.
+Potato's existing [image](../annotation-types/multimedia/image_annotation.md), [audio](../annotation-types/multimedia/audio_annotation.md),
+[video](../annotation-types/multimedia/video_annotation.md), and [web-agent](agent_traces.md) displays.
 
 ## GUI / computer-use trajectory (`gui_trajectory`)
 
@@ -89,7 +89,7 @@ TimeScope, 2509.26360). For each event prompt the annotator sets the gold
 when the data carries a model's *predicted* interval, sees a live **IoU** and a
 two-bar mini-timeline (predicted vs. gold). Purpose-built for predicted-vs-gold
 localization scoring, distinct from the general segment labeling in
-[`video_annotation`](../video_annotation.md).
+[`video_annotation`](../annotation-types/multimedia/video_annotation.md).
 
 ```yaml
 annotation_schemes:
@@ -111,7 +111,7 @@ speech-quality errors (Speak&Improve 2025, 2412.11986; NVSpeech). Each segment
 `{start, end, text, speaker?}` is a card showing its timestamp and text; the
 annotator tags errors (ASR error / TTS artifact / mispronunciation / disfluency …)
 and can type the corrected transcript. Segment-level complement to the turn-taking
-view in [`voice_interaction`](#voice--full-duplex-interaction-voice_interaction).
+view in [`voice_interaction`](#voice-full-duplex-interaction-voice_interaction).
 
 ```yaml
 annotation_schemes:
@@ -133,7 +133,7 @@ Annotate the **cell structure** of a table image — the document-specific piece
 plain bounding boxes can't capture (OmniDocBench, CVPR 2025; RealHiTBench). The
 annotator sets the grid dimensions and clicks cells to mark their role (data /
 column-header / row-header / empty). Per-page *region* boxes (table / figure /
-header) are already covered by running [`image_annotation`](../image_annotation.md)
+header) are already covered by running [`image_annotation`](../annotation-types/multimedia/image_annotation.md)
 per page, so this schema focuses on the structure those boxes can't express.
 
 ```yaml

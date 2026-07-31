@@ -76,7 +76,7 @@ from *not yet labeled*.
 ## Export
 
 Process-reward annotations export through the
-[coding evaluation exporter](../data-export/index.md) as JSONL, one record per
+[coding evaluation exporter](../data-export/export_formats.md) as JSONL, one record per
 annotator per instance:
 
 ```json

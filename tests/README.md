@@ -1,5 +1,10 @@
 # Potato Test Suite
 
+> **Start with the [Testing guide](../docs/guides/testing.md).** It is the single
+> entry point: how to run the suite, which tier to write in, the two rules that
+> cause real bugs when broken, and the drift tests. This file is the detailed
+> index — the regression table below and the per-directory READMEs go deeper.
+
 This directory contains comprehensive tests for the Potato annotation platform, covering both backend functionality and frontend user interface testing.
 
 ## Recent Bugs and Their Tests

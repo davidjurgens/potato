@@ -151,7 +151,7 @@ Labels appear in the order they were selected. Both parent and child labels can 
 
 ## Related Documentation
 
-- [Multiselect / Checkbox](../schemas_and_templates.md#multiselect) — flat multi-label checkbox schema
+- [Multiselect / Checkbox](../schemas_and_templates.md#3-multiple-choice-multiselect) — flat multi-label checkbox schema
 - [Conditional Logic](../../configuration/conditional_logic.md) — show/hide questions based on prior selections
 - [Schema Gallery](../schemas_and_templates.md) — all annotation types with examples
 - [Configuration Reference](../../configuration/configuration.md) — complete config options

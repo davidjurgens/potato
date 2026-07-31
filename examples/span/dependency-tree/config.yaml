@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Simple Dependency Tree Annotation Example
 # Run from repo root:
 #   python potato/flask_server.py start examples/span/dependency-tree/config.yaml -p 8000

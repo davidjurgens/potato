@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Judge Calibration example
 #
 # LLM-as-judge auto-labeling + blind human calibration. The judge LLM(s) label

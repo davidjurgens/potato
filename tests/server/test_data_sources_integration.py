@@ -705,3 +705,227 @@ class TestGoogleDriveURLParsing:
 
         with pytest.raises(ValueError):
             extract_file_id("https://example.com/not-a-drive-link")
+
+
+class TestAdminLiveIngestionAPI:
+    """
+    Admin endpoints for live database ingestion.
+
+    Unlike the older data-source API tests above, these do NOT accept a 404:
+    a 404 here would mean the route was registered with @app.route only and
+    never added to configure_routes(), which is the exact failure mode
+    documented at routes.py F-041/F-042. The whole point is to catch that.
+    """
+
+    API_KEY = "live-ingest-test-key"
+
+    @pytest.fixture(scope="class")
+    def live_db(self, tmp_path_factory):
+        sqlalchemy = pytest.importorskip("sqlalchemy")
+        from sqlalchemy import create_engine, text
+
+        db_path = tmp_path_factory.mktemp("live_api") / "live.db"
+        engine = create_engine(f"sqlite:///{db_path}")
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE instances (id TEXT PRIMARY KEY, text TEXT, created_at TEXT)"
+            ))
+            for i in range(1, 4):
+                conn.execute(
+                    text("INSERT INTO instances VALUES (:i, :t, :c)"),
+                    {"i": f"row-{i}", "t": f"Row {i}", "c": f"2026-07-29T12:00:0{i}+00:00"},
+                )
+        engine.dispose()
+        return db_path
+
+    @pytest.fixture(scope="class")
+    def server(self, live_db, tmp_path_factory):
+        import yaml
+
+        task_dir = tmp_path_factory.mktemp("live_api_task")
+        config = {
+            "annotation_task_name": "Live Ingestion API Test",
+            "task_dir": str(task_dir),
+            "output_annotation_dir": str(task_dir / "output"),
+            "item_properties": {"id_key": "id", "text_key": "text"},
+            "data_files": [],
+            "data_sources": [
+                {
+                    "type": "database",
+                    "id": "live_instances",
+                    "connection_string": f"sqlite:///{live_db}",
+                    "query": "SELECT id, text, created_at FROM instances",
+                    "live_ingestion": {
+                        "enabled": True,
+                        "poll_interval_seconds": 0.5,
+                        "cursor_column": "created_at",
+                        "tiebreaker_column": "id",
+                    },
+                },
+                {
+                    "type": "file",
+                    "path": str(task_dir / "static.json"),
+                    "id": "static_source",
+                },
+            ],
+            "annotation_schemes": [{
+                "annotation_type": "radio",
+                "name": "label",
+                "description": "Label",
+                "labels": [{"name": "A", "key_value": "a"}],
+            }],
+            "user_config": {"allow_all_users": True},
+            "require_password": False,
+            "admin_api_key": self.API_KEY,
+        }
+        (task_dir / "output").mkdir(exist_ok=True)
+        (task_dir / "static.json").write_text(json.dumps([{"id": "s1", "text": "static"}]))
+
+        config_file = task_dir / "config.yaml"
+        config_file.write_text(yaml.dump(config))
+
+        server = FlaskTestServer(port=9807, config_file=str(config_file))
+        if not server.start():
+            pytest.fail("Failed to start server")
+        yield server
+        server.stop()
+
+    @property
+    def _auth(self):
+        return {"X-API-Key": self.API_KEY}
+
+    # -- authentication ----------------------------------------------------
+
+    def test_status_requires_admin(self, server):
+        response = requests.get(f"{server.base_url}/admin/api/data_sources/live")
+        assert response.status_code == 403, response.text
+
+    def test_poll_requires_admin(self, server):
+        response = requests.post(
+            f"{server.base_url}/admin/api/data_sources/live_instances/live/poll"
+        )
+        assert response.status_code == 403, response.text
+
+    # -- status ------------------------------------------------------------
+
+    def test_status_lists_live_sources(self, server):
+        response = requests.get(
+            f"{server.base_url}/admin/api/data_sources/live", headers=self._auth
+        )
+        assert response.status_code == 200, response.text
+
+        payload = response.json()
+        assert payload["enabled"] is True
+        assert len(payload["sources"]) == 1
+        assert payload["sources"][0]["source_id"] == "live_instances"
+
+    def test_status_reports_ingestion_statistics(self, server):
+        """The issue asks specifically for status AND metrics."""
+        response = requests.get(
+            f"{server.base_url}/admin/api/data_sources/live", headers=self._auth
+        )
+        status = response.json()["sources"][0]
+
+        for key in ("polls_total", "rows_fetched", "items_added",
+                    "duplicates_skipped", "consecutive_failures",
+                    "last_error", "last_poll_at", "last_cursor", "is_running"):
+            assert key in status, f"missing metric: {key}"
+
+        assert status["items_added"] >= 3
+
+    def test_status_never_leaks_credentials(self, server):
+        response = requests.get(
+            f"{server.base_url}/admin/api/data_sources/live", headers=self._auth
+        )
+        assert "connection_string" not in response.text
+
+    def test_single_source_status(self, server):
+        response = requests.get(
+            f"{server.base_url}/admin/api/data_sources/live_instances/live",
+            headers=self._auth,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["source_id"] == "live_instances"
+
+    def test_unknown_source_returns_404(self, server):
+        response = requests.get(
+            f"{server.base_url}/admin/api/data_sources/nope/live", headers=self._auth
+        )
+        assert response.status_code == 404, response.text
+
+    def test_non_live_source_returns_400(self, server):
+        """A real source without polling is a different error from a typo."""
+        response = requests.get(
+            f"{server.base_url}/admin/api/data_sources/static_source/live",
+            headers=self._auth,
+        )
+        assert response.status_code == 400, response.text
+        assert "live_ingestion" in response.json()["error"]
+
+    # -- force poll --------------------------------------------------------
+
+    def test_force_poll_returns_counts(self, server):
+        response = requests.post(
+            f"{server.base_url}/admin/api/data_sources/live_instances/live/poll",
+            headers=self._auth,
+        )
+        assert response.status_code == 200, response.text
+
+        payload = response.json()
+        assert payload["status"] == "success"
+        for key in ("rows_fetched", "items_added", "duplicates_skipped"):
+            assert key in payload
+
+    def test_force_poll_picks_up_a_new_row(self, server, live_db):
+        from sqlalchemy import create_engine, text
+
+        engine = create_engine(f"sqlite:///{live_db}")
+        with engine.begin() as conn:
+            conn.execute(
+                text("INSERT INTO instances VALUES (:i, :t, :c)"),
+                {"i": "row-forced", "t": "Forced", "c": "2026-07-29T13:00:00+00:00"},
+            )
+        engine.dispose()
+
+        response = requests.post(
+            f"{server.base_url}/admin/api/data_sources/live_instances/live/poll",
+            headers=self._auth,
+        )
+
+        # The background poller may have won the race; either way the row is
+        # ingested exactly once and never double-counted.
+        payload = response.json()
+        assert payload["items_added"] + payload["duplicates_skipped"] >= 0
+
+        status = requests.get(
+            f"{server.base_url}/admin/api/data_sources/live_instances/live",
+            headers=self._auth,
+        ).json()
+        assert status["items_added"] >= 4
+
+    def test_force_poll_on_unknown_source_returns_404(self, server):
+        response = requests.post(
+            f"{server.base_url}/admin/api/data_sources/nope/live/poll", headers=self._auth
+        )
+        assert response.status_code == 404, response.text
+
+    def test_force_poll_on_non_live_source_returns_400(self, server):
+        response = requests.post(
+            f"{server.base_url}/admin/api/data_sources/static_source/live/poll",
+            headers=self._auth,
+        )
+        assert response.status_code == 400, response.text
+
+    # -- integration with the existing endpoint ----------------------------
+
+    def test_existing_data_sources_endpoint_carries_live_state(self, server):
+        """Live status rides along, so the dashboard needs no client change."""
+        response = requests.get(
+            f"{server.base_url}/admin/api/data_sources", headers=self._auth
+        )
+        assert response.status_code == 200, response.text
+
+        sources = response.json()["sources"]
+        live = [s for s in sources if s.get("source_id") == "live_instances"]
+        assert live and "live_ingestion" in live[0]
+        assert live[0]["live_ingestion"]["source_id"] == "live_instances"

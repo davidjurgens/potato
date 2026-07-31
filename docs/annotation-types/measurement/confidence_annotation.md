@@ -118,7 +118,7 @@ The selected Likert point is stored as its 1-based position string:
 
 ## Related Documentation
 
-- [Likert Scale](../schemas_and_templates.md#likert) — standalone Likert rating schema
-- [Slider](../schemas_and_templates.md#slider) — continuous numeric slider schema
+- [Likert Scale](../schemas_and_templates.md#2-likert-scale-likert) — standalone Likert rating schema
+- [Slider](../schemas_and_templates.md#5-slider-slider) — continuous numeric slider schema
 - [Quality Control](../../workflow/quality_control.md) — attention checks and gold standards
 - [Active Learning](../../ai-intelligence/active_learning_guide.md) — ML-based item prioritization

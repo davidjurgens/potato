@@ -72,7 +72,7 @@ QDA Mode already turns cases and memos on. Write them only to tune the
 defaults (e.g. choose the `cases.key`, or enable `annotator_claim`).
 
 A complete runnable example lives in
-[`examples/advanced/qda-mode-example/`](../../examples/advanced/qda-mode-example/):
+[`examples/advanced/qda-mode-example/`](https://github.com/davidjurgens/potato/tree/master/examples/advanced/qda-mode-example/):
 
 ```bash
 python potato/flask_server.py start \

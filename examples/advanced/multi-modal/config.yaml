@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Multi-Modal Annotation Example
 #
 # This example demonstrates displaying multiple content types side-by-side:

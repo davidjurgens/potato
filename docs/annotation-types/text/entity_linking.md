@@ -805,6 +805,6 @@ Then open http://localhost:8000 in your browser.
 
 ## See Also
 
-- [Span Annotation](../schemas_and_templates.md#span-labeling) - Basic span annotation setup
+- [Span Annotation](../schemas_and_templates.md#4-text-span-selection-span) - Basic span annotation setup
 - [Configuration Reference](../../configuration/configuration.md) - Full configuration options
 - [Admin Dashboard](../../administration/admin_dashboard.md) - Monitoring annotation progress

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Live Coding Agent Example
 #
 # Watch a coding agent work in real-time, with pause/resume/instruct controls.

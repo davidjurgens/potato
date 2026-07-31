@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Orchestration-pattern confirm/correct (M6)
 # Recipe: a radio schema to confirm or correct the multi-agent orchestration pattern,
 # paired with the agent_trace display. The pattern label is the key metadata an

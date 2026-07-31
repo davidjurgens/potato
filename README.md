@@ -37,38 +37,6 @@ Open [http://localhost:8000](http://localhost:8000) and start annotating. Browse
 
 ---
 
-## ⚡ Boundary Lab: Annotate the Boundary, Not the Point
-
-Every annotation tool collects point labels: item X gets label Y. **Potato is the first
-annotation tool that captures decision boundaries.** The moment an annotator commits a
-label, Potato generates minimal counterfactual edits of the text and asks — one click
-per probe — *"Would your label survive this change?"*
-
-```yaml
-boundary_probing:
-  enabled: true
-  sources: [precomputed, llm, rules]   # curated probes, LLM-generated, or offline rules
-```
-
-Ordinary annotation then yields three things no label export can give you:
-
-| You get | Why it matters |
-|---------|----------------|
-| **Contrast sets, for free** | Every answered probe is a labeled (original, counterfactual) pair — the counterfactually-augmented data shown to improve model robustness ([Gardner et al. 2020](https://aclanthology.org/2020.findings-emnlp.117/), [Kaushik et al. 2020](https://openreview.net/forum?id=Sklgs0NFvr)), normally built as an expensive separate effort |
-| **Boundary rationales** | When a label flips, annotators say what crossed the line — pinpointing exactly where your codebook is ambiguous |
-| **Invisible quality control** | Paraphrase probes should never flip a label; annotators who flip on them are flagged — attention checks without planting a single fake gold item |
-
-A live dashboard (`/boundary/dashboard`) shows per-label boundary sensitivity, per-annotator
-consistency, and a gallery of the exact edits where labels flip. Try it:
-
-```bash
-python potato/flask_server.py start examples/advanced/boundary-probing/config.yaml -p 8000 --debug
-```
-
-See the [Boundary Lab documentation](docs/advanced/boundary_lab.md).
-
----
-
 ## What Can You Annotate?
 
 Potato handles the full spectrum of annotation tasks — from traditional NLP labeling to evaluating the latest AI agent systems, to interpretive qualitative analysis.
@@ -83,10 +51,10 @@ The tables below are a **representative sample, not a complete list.** Schemes a
 | **Agent Traces** | Step-by-step evaluation of LLM agents, tool calls, ReAct chains, and multi-agent systems ([docs](docs/agent-evaluation/agent_traces.md)) |
 | **Web Agents** | Screenshot-based review with SVG click/scroll overlays, or live browsing with automatic trace recording ([docs](docs/agent-evaluation/web_agent_annotation.md)) |
 | **RAG Pipelines** | Retrieval relevance, answer faithfulness, citation accuracy, hallucination detection |
-| **Audio** | Waveform visualization, segment labeling, ELAN-style tiered annotation ([docs](docs/annotation-types/multimedia/audio_annotation.md)) |
+| **Audio** | Waveform visualization, segment labeling, ELAN-style tiered annotation, and 21 transcript/subtitle formats read directly — Whisper, cloud ASR, SRT/VTT, YouTube captions, TextGrid/EAF ([docs](docs/annotation-types/multimedia/audio_annotation.md), [transcripts](docs/guides/working_with_transcripts.md)) |
 | **Video** | Frame-by-frame labeling, temporal segments, playback sync ([docs](docs/annotation-types/multimedia/video_annotation.md)) |
 | **Images** | Bounding boxes, polygons, landmarks, classification ([docs](docs/annotation-types/multimedia/image_annotation.md)) |
-| **Dialogue** | Turn-level annotation, conversation trees, interactive chat evaluation |
+| **Dialogue** | Turn-level annotation, conversation trees, interactive chat evaluation, and diarized transcripts synced to their audio ([docs](docs/annotation-types/multimedia/audio_dialogue.md)) |
 | **Documents** | PDF, Word, Markdown, code, and spreadsheets with coordinate mapping ([docs](docs/annotation-types/format_support.md)) |
 
 ### Annotation Schemes
@@ -197,6 +165,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | Inter-annotator agreement | Krippendorff's alpha (general) and Cohen's kappa (step-level agent evaluation) |
 | Training phase | Practice annotations with feedback before the real task |
 | Behavioral tracking | Timing, click patterns, and annotation change history |
+| **Psychometrics** | Live IRT (multiclass GLAD, Whitehill et al. 2009) fit as annotations arrive: per-item label posteriors, annotator ability with standard errors, item difficulty, and discrimination flags for codebook bugs — no gold labels, no LLM ([docs](docs/advanced/psychometrics.md)) |
 | **Boundary probing** | Counterfactual probes map each annotator's decision boundary; paraphrase-invariance flags inconsistency ([docs](docs/advanced/boundary_lab.md)) |
 | **Truth Serum** | Surprisingly-popular scoring (Prelec et al., Nature 2017): gold-free verdicts that beat majority vote on hard items, plus annotator calibration ([docs](docs/advanced/truth_serum.md)) |
 | **Paper Mode** | `python -m potato.paper config.yaml` emits a compilable LaTeX dataset report — methods paragraphs, booktabs tables, IAA, limitations — ready to cut-paste ([docs](docs/advanced/paper_mode.md)) |
@@ -211,6 +180,7 @@ An LLM-powered sidebar where annotators can ask questions about difficult instan
 | **Solo mode** | Human-LLM collaboration with progressive automation ([docs](docs/solo-mode/solo_mode.md)) |
 | **Crowdsourcing** | Prolific and MTurk integration with platform-specific auth ([docs](docs/deployment/crowdsourcing.md)) |
 | **Triage** | Rapid accept/reject/skip for data curation ([docs](docs/annotation-types/triage.md)) |
+| **Multiplayer Rooms** | Live shared sessions: norming (blind vote → reveal → discuss, with blind vs. post-discussion α), huddle (walk current disagreements together), and shadow (trainees watch the host annotate) ([docs](docs/advanced/multiplayer_rooms.md)) |
 | **Pocket Mode** | Annotate from your phone: installable PWA with a card-stack UI, one-tap labeling, and offline annotation that syncs on reconnect ([docs](docs/advanced/pocket_mode.md)) |
 
 ### Continuous Evaluation Loop
@@ -309,6 +279,24 @@ Potato has two complementary doc sites: **[potatoannotator.com/docs](https://www
 | Export Formats | [docs/data-export/export_formats.md](docs/data-export/export_formats.md) |
 | Full Documentation Index | [docs/index.md](docs/index.md) |
 
+### For coding agents
+
+If you point Claude Code, Codex, or Cursor at Potato, give it these generated,
+machine-checkable specs rather than prose — they are built from the running code,
+so they cannot drift from it.
+
+| Artifact | What it gives you |
+|----------|-------------------|
+| [`llms.txt`](https://potatoannotator.readthedocs.io/en/latest/llms.txt) | Curated index of the docs ([llms.txt standard](https://llmstxt.org)) |
+| [`llms-full.txt`](https://potatoannotator.readthedocs.io/en/latest/llms-full.txt) | Every documentation page in one file |
+| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 154 config keys, 56 annotation types, 23 display types — validates a `config.yaml` before the server runs |
+| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 390 HTTP paths, with per-operation auth and config gating |
+
+Every config in `examples/` carries a `# yaml-language-server: $schema=…`
+modeline, so editors validate it live. See
+[Machine-Readable Specs](docs/api-reference/machine_readable.md) for editor
+setup, CI validation, and `jq` recipes.
+
 ---
 
 ## Development
@@ -325,6 +313,10 @@ pytest tests/selenium/ -v    # Browser tests
 # With coverage
 pytest --cov=potato --cov-report=html
 ```
+
+See the **[Testing guide](docs/guides/testing.md)** for which tier to write in,
+the test-file security rules, the annotation-persistence testing pattern, and
+the drift tests that keep the generated specs honest.
 
 ---
 

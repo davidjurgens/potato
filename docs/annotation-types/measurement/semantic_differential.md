@@ -116,7 +116,7 @@ A value of `1` corresponds to the leftmost (negative) pole; a value of `scale_po
 
 ## Related Documentation
 
-- [Likert Scale](../schemas_and_templates.md#likert) — unipolar rating scales
-- [Multirate](../schemas_and_templates.md#multirate) — rating matrix for multiple items/dimensions
-- [Slider](../schemas_and_templates.md#slider) — single continuous numeric slider
+- [Likert Scale](../schemas_and_templates.md#2-likert-scale-likert) — unipolar rating scales
+- [Multirate](../schemas_and_templates.md#7-multi-rate-multirate) — rating matrix for multiple items/dimensions
+- [Slider](../schemas_and_templates.md#5-slider-slider) — single continuous numeric slider
 - [Schema Gallery](../schemas_and_templates.md) — all annotation types with examples

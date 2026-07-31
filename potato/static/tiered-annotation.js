@@ -1235,6 +1235,7 @@ class TieredAnnotationManager {
     _loadExistingAnnotations() {
         if (!this.inputEl || !this.inputEl.value) {
             tieredDebugLog('No existing annotations to load');
+            this._seedFromTranscript();
             return;
         }
 
@@ -1257,6 +1258,79 @@ class TieredAnnotationManager {
         } catch (error) {
             console.warn('[TieredAnnotation] Failed to parse existing annotations:', error);
         }
+    }
+
+    /**
+     * Seed a tier from the instance's transcript (opt-in via transcript_field).
+     *
+     * ASR has already segmented the speech; making annotators re-draw those
+     * boundaries by hand is wasted work. When configured, each transcript turn
+     * becomes one annotation on the target tier, carrying the turn's text as its
+     * value, ready to be corrected, relabeled, or subdivided.
+     *
+     * Seeds are NOT saved on their own. Writing annotations the user never made
+     * would misattribute them; instead they persist on the first real edit, and
+     * because the same transcript always yields the same turns, re-seeding on
+     * reload is idempotent.
+     */
+    _seedFromTranscript() {
+        const field = this.config.transcriptField;
+        const tierName = this.config.transcriptTier;
+        if (!field || !tierName || !this.annotations.hasOwnProperty(tierName)) return;
+        if (this.annotations[tierName] && this.annotations[tierName].length) return;
+
+        const turns = this._transcriptTurns(field);
+        if (!turns.length) return;
+
+        const tier = this.config.tiers.find(t => t.name === tierName);
+        // Dependent tiers need a parent annotation per seed, which does not
+        // exist yet on a blank instance — seed independent tiers only.
+        if (tier && tier.tier_type === 'dependent') {
+            console.warn(
+                '[TieredAnnotation] transcript_tier "' + tierName +
+                '" is a dependent tier; skipping transcript seeding.'
+            );
+            return;
+        }
+
+        const defaultLabel = (tier && tier.labels && tier.labels.length)
+            ? tier.labels[0] : null;
+
+        this.annotations[tierName] = turns.map((turn, i) => ({
+            // Derived from the turn id so the same transcript reproduces the
+            // same annotation ids across reloads.
+            id: 'turn-' + (turn.turn_id || ('t' + i)),
+            tier: tierName,
+            start_time: (turn.start || 0) * 1000,
+            end_time: (turn.end || turn.start || 0) * 1000,
+            label: defaultLabel ? defaultLabel.name : '',
+            color: defaultLabel ? (defaultLabel.color || '#cccccc') : '#cccccc',
+            parent_id: null,
+            value: turn.text || '',
+            speaker: turn.speaker || null
+        }));
+
+        tieredDebugLog(
+            'Seeded ' + this.annotations[tierName].length +
+            ' annotation(s) on tier "' + tierName + '" from transcript field "' + field + '"'
+        );
+        this._syncAnnotationsToPeaks();
+    }
+
+    /**
+     * Normalized turns for a record field, from the server-side transcript
+     * index (see transcripts/binding.py).
+     */
+    _transcriptTurns(field) {
+        let record = {};
+        try {
+            const el = document.querySelector('[data-instance-json]');
+            if (el) record = JSON.parse(el.getAttribute('data-instance-json')) || {};
+        } catch (e) {
+            return [];
+        }
+        const index = record._transcripts && record._transcripts[field];
+        return (index && Array.isArray(index.turns)) ? index.turns : [];
     }
 
     /**

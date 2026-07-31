@@ -173,7 +173,7 @@ on the overview page:
 | GET | `/admin/eval/ingested_traces` | Runtime-ingested traces with source breakdown |
 | POST | `/admin/eval/assignment` | `{action: "pause"\|"resume"}` — freeze/resume new assignments (existing assignments untouched) |
 
-For full inter-annotator agreement use [`/admin/iaa`](../admin_dashboard.md); for
+For full inter-annotator agreement use [`/admin/iaa`](../administration/admin_dashboard.md); for
 per-annotator timing use `/admin/api/annotators`.
 
 ### Example

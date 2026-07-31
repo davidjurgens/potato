@@ -24,7 +24,7 @@ Below are examples of the different annotation schema types available in Potato:
 
 | Triage | Coreference | Conversation Tree |
 |:---:|:---:|:---:|
-| ![Triage](../img/screenshots/triage_annotation.png) | ![Coreference](../img/screenshots/coreference_annotation.png) | ![Tree](../img/screenshots/tree_annotation.png) |
+| ![Triage](../img/screenshots/triage_inline.png) | Group mentions of the same entity across a document | Annotate branching conversation structures |
 
 | Soft Label | Constant Sum | Semantic Differential |
 |:---:|:---:|:---:|

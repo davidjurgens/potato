@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Voice / full-duplex interaction (M9)
 # Dual-track timeline of a spoken human<->agent call; classify barge-ins/overlaps + rate turn-taking.
 # Run: python potato/flask_server.py start examples/agent-traces/voice-interaction/config.yaml -p 8000

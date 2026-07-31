@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Trajectory Correction — edit agent traces into SFT/DPO training data
 #
 # Annotators rewrite the steps of an agent trace (and optionally the final

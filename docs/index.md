@@ -36,6 +36,17 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Configuration Reference](configuration/configuration.md) - Complete config options
 - [Comparison with Other Tools](comparison.md) - How Potato compares to alternatives
 
+## For Coding Agents
+
+Generated, machine-checkable specs built from the running code — prefer these
+over prose when writing a config or calling the API.
+
+- **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use all four, with editor setup and CI validation
+- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 56 annotation types and 23 display types
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 390 HTTP paths, with per-operation auth and config gating
+- [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
+- [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
+
 ## Annotation Schemas
 
 - **[Choosing the Right Annotation Type](annotation-types/choosing_annotation_types.md)** - Decision guide for selecting the best schema for your task
@@ -47,6 +58,8 @@ Role-based guides that walk you through Potato for your specific use case:
 - [Audio Dialogue](annotation-types/multimedia/audio_dialogue.md) - Podcast/interview turn annotation: speaker bubbles, per-turn audio playback, ratings, spans, and cross-turn linking
 - [Video Annotation](annotation-types/multimedia/video_annotation.md) - Frame-by-frame video labeling
 - [Tiered Annotation](annotation-types/multimedia/tiered_annotation.md) - ELAN-style hierarchical multi-tier annotation
+- [Transcript Formats](annotation-types/multimedia/transcript_formats.md) - Whisper, subtitles, cloud ASR, TextGrid, and EAF: what Potato reads and how
+- [Working with Transcripts](guides/working_with_transcripts.md) - From Whisper output or YouTube subtitles to a running annotation task
 - [Triage](annotation-types/triage.md) - Rapid accept/reject/skip data curation interface
 - [Entity Linking](annotation-types/text/entity_linking.md) - Link spans to external knowledge bases (Wikidata, UMLS)
 - [Coreference Annotation](annotation-types/text/coreference_annotation.md) - Group mentions of the same entity
@@ -208,6 +221,7 @@ Role-based guides that walk you through Potato for your specific use case:
 
 ## Release Notes
 
+- [v2.7.1](releasenotes/v2.7.1.md) - Transcripts In, Without the Reformatting (21 input formats, sidecar files, `potato transcripts` CLI)
 - [v2.7.0](releasenotes/v2.7.0.md) - Seven New Ways to Annotate (Psychometrics, Multiplayer Rooms, Boundary Lab, Truth Serum, Think-Aloud, Paper Mode, Pocket Mode)
 - [v2.6.1](releasenotes/v2.6.1.md) - Agentic Evaluation Suite (evaluators, datasets/experiments, automation, CI gating, tracing SDK, curation, arena)
 - [v2.6.0](releasenotes/v2.6.0.md) - QDA Mode, LLM-as-Judge Calibration & Trajectory Editing
@@ -264,7 +278,7 @@ Role-based guides that walk you through Potato for your specific use case:
 | Align/calibrate an LLM judge to human labels | [Judge Alignment](agent-evaluation/judge_alignment.md) |
 | Auto-label with LLM judges + calibrate blind | [Judge Calibration](ai-intelligence/judge_calibration.md) |
 | Use Solo Mode for collaborative annotation | [Solo Mode](solo-mode/solo_mode.md) |
-| Export annotations to Parquet | [Export Formats](data-export/export_formats.md#parquet) |
+| Export annotations to Parquet | [Export Formats](data-export/export_formats.md#parquet-parquet) |
 | Export to COCO/YOLO/CoNLL | [Export Formats](data-export/export_formats.md) |
 | Push annotations to HuggingFace Hub | [HuggingFace Export](data-export/huggingface_export.md) |
 | Deploy on HuggingFace Spaces | [HuggingFace Spaces](data-export/huggingface_spaces.md) |

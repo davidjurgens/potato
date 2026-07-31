@@ -130,10 +130,43 @@ class DataSourceManager:
         self._id_key = item_props.get("id_key", "id")
         self._text_key = item_props.get("text_key", "text")
 
+        # Live ingestion. The coordinator is an attribute rather than its own
+        # module singleton, so the existing clear_data_source_manager() ->
+        # close() teardown already stops every poll thread.
+        from potato.data_sources.live_ingestion import (
+            LiveCursorStore,
+            LiveIngestionCoordinator,
+        )
+        self._live_ingestion = LiveIngestionCoordinator(
+            LiveCursorStore(config.get("output_annotation_dir", "."))
+        )
+
         # Initialize sources from configuration
         self._init_sources()
+        self._init_live_workers()
 
         logger.info(f"DataSourceManager initialized with {len(self._sources)} sources")
+
+    def _init_live_workers(self) -> None:
+        """Register a poll worker for every source that opted into live mode."""
+        for source_id, source in self._sources.items():
+            if not source.supports_live_ingestion():
+                continue
+
+            live_config = getattr(source, "live_config", None)
+            if live_config is None:
+                continue
+
+            self._live_ingestion.register(
+                source,
+                live_config,
+                lambda item, sid=source_id: self.ingest_item(item, sid),
+            )
+            logger.info(
+                "Live ingestion registered for %s (poll interval: %.1fs, cursor: %s)",
+                source_id, live_config.poll_interval_seconds,
+                live_config.cursor_column or "<query-supplied>",
+            )
 
     def _init_sources(self) -> None:
         """Initialize data sources from configuration."""
@@ -233,6 +266,12 @@ class DataSourceManager:
                         status["is_complete"] = state.is_complete
                         status["last_loaded_at"] = state.last_loaded_at
 
+                # Live state rides along on the existing payload, so the admin
+                # dashboard shows it without any client change.
+                worker = self._live_ingestion.get_worker(source.source_id)
+                if worker is not None:
+                    status["live_ingestion"] = worker.get_status()
+
                 statuses.append(status)
 
             return statuses
@@ -304,6 +343,20 @@ class DataSourceManager:
         """
         source_id = source.source_id
 
+        # A live source does its startup read through the cursor path, so the
+        # cursor is seeded and persisted by the same code that will maintain
+        # it. On a restart this reads only what arrived while the server was
+        # down, instead of re-reading the whole table.
+        if source.supports_live_ingestion():
+            worker = self._live_ingestion.get_worker(source_id)
+            if worker is not None:
+                loaded = worker.prime()
+                logger.info(
+                    f"Live source {source_id}: {loaded} items loaded in the "
+                    f"initial catch-up read"
+                )
+                return loaded
+
         # Check if source is complete
         if self.partial_reader:
             state = self.partial_reader.get_state(source_id)
@@ -334,26 +387,8 @@ class DataSourceManager:
 
         try:
             for item in source.read_items(start=start, count=count):
-                # Validate ID key exists
-                if self._id_key not in item:
-                    logger.warning(
-                        f"Missing id_key '{self._id_key}' in item from {source_id}"
-                    )
-                    continue
-
-                instance_id = str(item[self._id_key])
-
-                # Check for duplicates
-                if self._item_state_manager.has_item(instance_id):
-                    logger.debug(f"Skipping duplicate ID: {instance_id}")
-                    continue
-
-                # Add item to state manager
-                try:
-                    self._item_state_manager.add_item(instance_id, item)
+                if self.ingest_item(item, source_id) == "added":
                     items_loaded += 1
-                except ValueError as e:
-                    logger.warning(f"Failed to add item {instance_id}: {e}")
 
             # Check if we loaded fewer items than requested (source exhausted)
             if count is not None and items_loaded < count:
@@ -373,6 +408,71 @@ class DataSourceManager:
             )
 
         return items_loaded
+
+    def ingest_item(self, item: Dict[str, Any], source_id: str = "") -> str:
+        """
+        Add a single item to the ItemStateManager.
+
+        This is the one insertion path for every source, static or live. That
+        matters for more than tidiness: the id is stringified here, and a
+        second path that skipped the ``str()`` would dedupe integer ``1``
+        against string ``"1"`` incorrectly and admit the same row twice.
+
+        Note this method does NOT take ``self._lock``. It is called from the
+        live poll thread, and ``DataSourceManager._lock`` is held by
+        ``list_sources()`` on the admin request path and by
+        ``check_auto_load()`` on the annotation path -- taking it here would
+        let a slow database stall annotation requests.
+
+        Args:
+            item: The raw item dictionary
+            source_id: Source identifier, for log messages only
+
+        Returns:
+            ``"added"``, ``"duplicate"`` or ``"invalid"``
+        """
+        if self._id_key not in item:
+            logger.warning(
+                f"Missing id_key '{self._id_key}' in item from {source_id or 'source'}"
+            )
+            return "invalid"
+
+        instance_id = str(item[self._id_key])
+
+        # Cheap unlocked pre-filter; add_item re-checks under its own lock.
+        if self._item_state_manager.has_item(instance_id):
+            logger.debug(f"Skipping duplicate ID: {instance_id}")
+            return "duplicate"
+
+        self._prepare_displayed_text(item)
+
+        try:
+            self._item_state_manager.add_item(instance_id, item)
+            return "added"
+        except ValueError:
+            # Lost a race with another ingest path. That is a duplicate, not
+            # a failure -- it must never be counted against a poll.
+            logger.debug(f"Concurrent duplicate ID: {instance_id}")
+            return "duplicate"
+
+    def _prepare_displayed_text(self, item: Dict[str, Any]) -> None:
+        """
+        Precompute ``displayed_text`` before the item enters the pool.
+
+        ``_render_displayed_text()`` only ever runs at startup, over the items
+        loaded by then. There is a lazy fallback when rendering an instance,
+        but it does not cover exports, search indexing or the quality-control
+        injection path, so runtime-added items need this up front.
+        """
+        if "displayed_text" in item:
+            return
+        try:
+            from potato.flask_server import get_displayed_text
+            raw_text = item.get(self._text_key, item.get("text", ""))
+            item["displayed_text"] = get_displayed_text(raw_text) if raw_text is not None else ""
+        except Exception as e:
+            # Never let display rendering block ingestion.
+            logger.debug(f"Could not precompute displayed_text: {e}")
 
     def refresh_source(self, source_id: str) -> bool:
         """
@@ -439,6 +539,62 @@ class DataSourceManager:
 
         return results
 
+    # =========================================================================
+    # Live ingestion
+    # =========================================================================
+
+    def has_live_sources(self) -> bool:
+        """True when at least one source is configured for live polling."""
+        return self._live_ingestion.has_workers()
+
+    def start_live_ingestion(self) -> int:
+        """
+        Start every live poll worker.
+
+        Must be called after the initial load and after user state has been
+        loaded -- see the call site in ``flask_server.configure_app()``.
+
+        Returns:
+            Number of workers started
+        """
+        return self._live_ingestion.start_all()
+
+    def stop_live_ingestion(self) -> None:
+        """Stop every live poll worker and wait briefly for them to exit."""
+        self._live_ingestion.stop_all()
+
+    def poll_source_now(self, source_id: str) -> Dict[str, int]:
+        """
+        Run one poll immediately, outside the normal interval.
+
+        Args:
+            source_id: The source to poll
+
+        Returns:
+            Counts for this poll: rows_fetched, items_added, duplicates_skipped
+
+        Raises:
+            ValueError: If the source is unknown or has no live worker
+        """
+        worker = self._live_ingestion.get_worker(source_id)
+        if worker is None:
+            raise ValueError(f"Source '{source_id}' has no live ingestion worker")
+        return worker.poll_once()
+
+    def get_live_ingestion_status(self, source_id: Optional[str] = None):
+        """
+        Status for one live worker, or all of them.
+
+        Returns:
+            A single status dict, None if that source has no worker, or a list
+            of dicts when ``source_id`` is omitted
+        """
+        if source_id is None:
+            return self._live_ingestion.get_status()
+
+        worker = self._live_ingestion.get_worker(source_id)
+        return worker.get_status() if worker else None
+
     def clear_cache(self) -> int:
         """
         Clear the download cache for all sources.
@@ -468,10 +624,19 @@ class DataSourceManager:
         if self.partial_reader:
             stats["partial_loading"] = self.partial_reader.get_stats()
 
+        if self._live_ingestion.has_workers():
+            stats["live_ingestion"] = self._live_ingestion.get_status()
+
         return stats
 
     def close(self) -> None:
         """Close all sources and release resources."""
+        # Stop the poll threads BEFORE taking the lock. stop_all() joins
+        # threads that may currently be inside ingest_item(); joining while
+        # holding a lock they could want is a deadlock. Stopping first also
+        # means no worker is mid-query when its engine is disposed below.
+        self._live_ingestion.stop_all()
+
         with self._lock:
             for source in self._sources.values():
                 try:

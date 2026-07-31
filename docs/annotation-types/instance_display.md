@@ -60,7 +60,12 @@ instance_display:
 | `image` | Image display with zoom | No |
 | `video` | Video player | No |
 | `audio` | Audio player | No |
+| `audio_dialogue` | **Diarized transcript synced to audio**: speaker bubbles, per-turn playback, per-turn ratings, spans, cross-turn linking | Yes |
+| `gallery` | Scrollable image gallery with captions | No |
 | `dialogue` | Conversation turns | Yes |
+| `conversation_tree` | Conversation tree with collapsible branching nodes | No |
+| `multi_agent_discussion` | Multi-agent discussion with agent legend, colors, addressees, and filtering | Yes |
+| `interactive_chat` | Interactive agent chat with post-interaction trace display | Yes |
 | `pairwise` | Side-by-side comparison | No |
 | `code` | Syntax-highlighted source code | Yes |
 | `spreadsheet` | Tabular data (Excel/CSV) | Yes (row/cell) |
@@ -68,9 +73,13 @@ instance_display:
 | `pdf` | PDF documents with page controls | Yes |
 | `agent_trace` | Agent trace as vertical step cards (Thought/Action/Observation) | No |
 | `coding_trace` | Coding agent trace with diffs, terminal blocks, file tree | Yes |
-| `eval_trace` | One trace split into three panes: reasoning \| function calls \| final answer | No |
+| `eval_trace` | One trace split into three panes: reasoning \| function calls \| final answer | Yes |
+| `cot_trace` | Long chain-of-thought trace: step cards with a sticky progress rail for process-reward verification | No |
+| `web_agent_trace` | Web agent trace with screenshots, SVG click/scroll overlays, step navigation | No |
+| `live_agent` | Live AI agent viewer with real-time screenshots and intervention controls | No |
+| `live_coding_agent` | Live coding agent viewer with real-time streaming and intervention controls | No |
 
-For detailed configuration of document formats (`code`, `spreadsheet`, `document`, `pdf`), see the [Extended Format Support](format_support.md) guide. For agent-trace displays (`agent_trace`, `coding_trace`, `eval_trace`), see the [Agent Evaluation](../agent-evaluation/agent_traces.md) guides — `eval_trace` has its own [three-pane eval guide](../agent-evaluation/eval_trace.md).
+For speech and dialogue over audio, see [Audio Dialogue](multimedia/audio_dialogue.md) and [Transcript Format Support](multimedia/transcript_formats.md). For detailed configuration of document formats (`code`, `spreadsheet`, `document`, `pdf`), see the [Extended Format Support](format_support.md) guide. For agent-trace displays (`agent_trace`, `coding_trace`, `eval_trace`, `cot_trace`, `web_agent_trace`, `live_agent`, `live_coding_agent`), see the [Agent Evaluation](../agent-evaluation/agent_traces.md) guides — `eval_trace` has its own [three-pane eval guide](../agent-evaluation/eval_trace.md).
 
 ## Display Type Options
 
@@ -128,7 +137,40 @@ For detailed configuration of document formats (`code`, `spreadsheet`, `document
     show_waveform: false      # Show waveform visualization
 ```
 
+### Audio Dialogue Display
+
+For a **diarized transcript played against its audio** — podcasts, interviews, meetings,
+call-center recordings — use `audio_dialogue` rather than `audio` or `dialogue`. Turns
+render as colored speaker bubbles; each has a ▶ that plays just that turn, and a sticky
+transport bar plays the whole recording while highlighting and auto-scrolling the active
+turn. Undiarized turns can be assigned a speaker by the annotator.
+
+```yaml
+- key: "conversation"
+  type: "audio_dialogue"
+  label: "Transcript"
+  span_target: true              # enable span highlighting inside turns
+  display_options:
+    speakers:
+      - {id: host,  name: Host,  color: "#7c3aed", side: left}
+      - {id: guest, name: Guest, color: "#059669", side: right}
+```
+
+The transcript may be inline, or a path to a sidecar file in any of
+[21 supported formats](multimedia/transcript_formats.md) — Whisper, WhisperX, cloud ASR,
+SRT/WebVTT, YouTube captions, TextGrid/EAF:
+
+```json
+{"id": "int_001",
+ "conversation": {"audio": "media/int_001.mp3", "transcript": "media/int_001.srt"}}
+```
+
+See [Audio Dialogue](multimedia/audio_dialogue.md) for every option, per-turn ratings,
+cross-turn linking, and speaker assignment.
+
 ### Dialogue Display
+
+For text-only conversations with no audio:
 
 ```yaml
 - key: "conversation"

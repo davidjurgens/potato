@@ -306,5 +306,5 @@ Actions are serialized with ISO 8601 timestamps:
 ## Related Documentation
 
 - [Admin Dashboard](admin_dashboard.md) - View annotation statistics
-- [Annotator Stats](annotator_stats.md) - Per-annotator metrics
+- [Annotator Progress Dashboard](annotator_dashboard.md) - Read-only progress page annotators can view while they work
 - [User and Collaboration](../auth-users/user_and_collaboration.md) - User management

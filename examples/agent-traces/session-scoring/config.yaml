@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Session-Level Scoring Example
 #
 # Groups traces that share a session_id into *sessions* and scores whole

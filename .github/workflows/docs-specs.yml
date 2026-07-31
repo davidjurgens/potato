@@ -1,0 +1,85 @@
+name: Docs & Generated Specs
+
+# The config JSON Schema, the OpenAPI spec, and llms-full.txt are generated from
+# the code but checked in, so they are only trustworthy if something fails when
+# the code moves and the artifacts do not. That is what this workflow is for.
+#
+# It deliberately does NOT run the full test suite — that needs browsers and a
+# lot of wall clock. It runs the drift guards, which are fast.
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-specs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  specs:
+    name: Generated specs are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      # The full requirement set, not just the core one: the OpenAPI spec covers
+      # config-gated blueprints (datasets, arena, curation, …), and a blueprint
+      # that cannot import is silently dropped from the generated spec. Matching
+      # the environment the artifact was generated in is what makes the
+      # comparison meaningful.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+          pip install -e .
+
+      - name: Config JSON Schema is current
+        run: python scripts/generate_config_schema.py --check
+
+      - name: OpenAPI spec is current
+        run: python scripts/generate_openapi.py --check
+
+      - name: llms-full.txt is current
+        run: python scripts/generate_llms_full.py --check
+
+      - name: Drift guards
+        run: |
+          pytest -q \
+            tests/unit/test_config_schema_drift.py \
+            tests/unit/test_openapi_drift.py \
+            tests/unit/test_docs_nav_drift.py \
+            tests/unit/test_config_reference_completeness.py \
+            tests/unit/test_display_registry_docs_sync.py
+
+  docs:
+    name: Documentation builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install docs dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r docs/requirements.txt
+
+      # --strict turns broken internal links into build failures. The docs
+      # reached zero warnings by fixing all 24 of them; this keeps it that way.
+      - name: Build site
+        run: mkdocs build --strict

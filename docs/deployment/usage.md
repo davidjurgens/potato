@@ -14,8 +14,8 @@ hosted on any device. In order to install Potato:
 
 In order to input documents and specify annotation preferences:
 
-- [Prepare your input data](../configuration/data_format.md#input-data-formats) (CSV, TSV, or JSON) and upload it to your project's `data` folder
-- Specify where and in what format you want the [output data](../configuration/data_format.md#output-data-formats)
+- [Prepare your input data](../configuration/data_format.md#update-input-data-formats-on-the-yaml-config-file) (CSV, TSV, or JSON) and upload it to your project's `data` folder
+- Specify where and in what format you want the [output data](../configuration/data_format.md#update-output-data-preferences-on-the-yaml-config-file)
 - Optional: Update the config YAML file with input and output data preferences
 
 ## Create your codebook and schema
@@ -29,7 +29,7 @@ Next, you'll need to specify what annotators annotate:
   - Answer Choices for multiselect and radio types
   - End Labels and Length for likert type questions
   - Optional Question Features: `required`, `horizontal` (placement of answers is horizontal not vertical), `has_free_response` (whether to include an open text box at the end of multiselect or radio question, like having an "other" option)
-  - Optional Answer Features: [tooltips](../administration/productivity.md#tooltips), [keyboard shortcuts](../administration/productivity.md#keyboard-shortcuts), [keywords to highlight](../administration/productivity.md#dynamic-highlighting)
+  - Optional Answer Features: [tooltips](../administration/productivity.md#tooltips), [keyboard shortcuts](../administration/productivity.md#keyboard-shortcuts), [keywords to highlight](../administration/productivity.md#admin-keyword-highlights)
 - Optional: See [schemas and templates](../annotation-types/schemas_and_templates.md) for basic and advanced examples
 
 ## Define annotation settings

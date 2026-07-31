@@ -234,5 +234,5 @@ Then navigate to `http://localhost:8000` and register/login to start annotating.
 ## Related Documentation
 
 - [Annotation Schemas](../schemas_and_templates.md) - Overview of all annotation types
-- [List as Text Display](../../configuration/configuration.md#list-as-text) - Display lists with prefixes
-- [Display Types](../../configuration/configuration.md#display-types) - Different ways to display content
+- [List as Text Display](../../configuration/configuration.md#list-as-text-configuration) - Display lists with prefixes
+- [Display Types](../../configuration/configuration.md#supported-display-types) - Different ways to display content

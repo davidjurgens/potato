@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Chain-of-Thought Process Reward — LLM pre-label + human verify
 #
 # Segments a long chain-of-thought (CoT) reasoning trace into per-step cards,

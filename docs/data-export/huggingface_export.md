@@ -143,7 +143,7 @@ item_properties:
   text_key: text
 ```
 
-See the [`url-data` example](../../examples/advanced/url-data/config.yaml) for the full
+See the [`url-data` example](https://github.com/davidjurgens/potato/blob/master/examples/advanced/url-data/config.yaml) for the full
 `data_sources` syntax (URL, S3, Google Drive). For configuring HF *models* (not data), see
 [Using HuggingFace Models](../ai-intelligence/huggingface_models.md).
 

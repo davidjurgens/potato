@@ -1,0 +1,61 @@
+{
+  "metadata": {
+    "transaction_key": "deprecated",
+    "request_id": "0000-example",
+    "duration": 27.4,
+    "channels": 1,
+    "models": ["nova-2"]
+  },
+  "results": {
+    "channels": [
+      {
+        "alternatives": [
+          {
+            "transcript": "we kept two versions of every file the raw one and the corrected one that turned out to matter more than any of the modelling choices you can always recompute a model you cannot recover a transcript you overwrote",
+            "confidence": 0.986
+          }
+        ]
+      }
+    ],
+    "utterances": [
+      {
+        "start": 0.0,
+        "end": 6.2,
+        "confidence": 0.991,
+        "channel": 0,
+        "speaker": 0,
+        "transcript": "We kept two versions of every file, the raw one and the corrected one.",
+        "words": [
+          {"word": "we", "punctuated_word": "We", "start": 0.0, "end": 0.22, "confidence": 0.99, "speaker": 0},
+          {"word": "kept", "punctuated_word": "kept", "start": 0.22, "end": 0.58, "confidence": 0.99, "speaker": 0},
+          {"word": "two", "punctuated_word": "two", "start": 0.58, "end": 0.86, "confidence": 0.99, "speaker": 0},
+          {"word": "versions", "punctuated_word": "versions", "start": 0.86, "end": 1.44, "confidence": 0.98, "speaker": 0}
+        ]
+      },
+      {
+        "start": 6.2,
+        "end": 13.9,
+        "confidence": 0.978,
+        "channel": 0,
+        "speaker": 1,
+        "transcript": "That turned out to matter more than any of the modelling choices."
+      },
+      {
+        "start": 13.9,
+        "end": 21.0,
+        "confidence": 0.982,
+        "channel": 0,
+        "speaker": 1,
+        "transcript": "You can always recompute a model."
+      },
+      {
+        "start": 21.0,
+        "end": 27.4,
+        "confidence": 0.974,
+        "channel": 0,
+        "speaker": 0,
+        "transcript": "You cannot recover a transcript you overwrote."
+      }
+    ]
+  }
+}

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Conditional Schema Branching Example
 #
 # This example demonstrates how to use display_logic to show/hide annotation

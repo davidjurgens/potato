@@ -125,5 +125,5 @@ Values are string-encoded integers. The sum of all values equals `total_points`.
 
 - [Soft Label](soft_label.md) — percentage-based probability distribution
 - [Best-Worst Scaling](../comparison/bws.md) — comparative ranking without explicit scores
-- [Slider](../schemas_and_templates.md#slider) — single continuous slider
+- [Slider](../schemas_and_templates.md#5-slider-slider) — single continuous slider
 - [Schema Gallery](../schemas_and_templates.md) — all annotation types with examples

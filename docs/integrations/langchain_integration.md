@@ -151,5 +151,5 @@ python examples/agent-traces/langchain-integration/demo_agent.py
 
 ## Related Documentation
 
-- [Agent Trace Evaluation](../examples/agent-traces/agent-trace-evaluation/) — annotation schemas for agent evaluation
-- [Webhook Receiver](../potato/trace_ingestion/) — trace ingestion internals
+- [Agent Trace Evaluation](https://github.com/davidjurgens/potato/tree/master/examples/agent-traces/agent-trace-evaluation/) — annotation schemas for agent evaluation
+- [Webhook Receiver](https://github.com/davidjurgens/potato/tree/master/potato/trace_ingestion/) — trace ingestion internals

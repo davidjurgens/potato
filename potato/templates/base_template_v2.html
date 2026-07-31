@@ -209,9 +209,15 @@
                 <div class="navbar-divider"></div>
 
                 <div class="goto-section">
+                    <!-- No onfocusin/onfocusout handlers: the v1 template used
+                         user_input()/user_input_leave() to suspend label keyboard
+                         shortcuts while typing here, but those functions were never
+                         carried over and threw a ReferenceError on every focus.
+                         annotation.js now handles this properly instead — its keyup
+                         handler checks for id 'go_to' and its keydown handler skips
+                         any non-radio/checkbox input. -->
                     <input type="number" id="go_to" placeholder="#"
-                           value="" min="0" max="{{total_count}}" required
-                           onfocusin="user_input()" onfocusout="user_input_leave()">
+                           value="" min="0" max="{{total_count}}" required>
                     <button type="button" class="goto-btn" id="go-to-btn">{{ ui_lang.go_button }}</button>
                 </div>
                 {% endif %}
@@ -756,7 +762,7 @@
 
     <!-- Tiered annotation manager (ELAN-style hierarchical annotation) -->
     {% if frontend_assets.tiered_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=3"></script>
     {% endif %}
 
     <!-- Document bounding box annotation -->

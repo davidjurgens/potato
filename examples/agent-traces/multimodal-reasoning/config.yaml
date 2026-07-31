@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Interleaved multimodal reasoning (M15)
 # Rate each step of a text/image/tool reasoning trace for coherence + visual grounding.
 # Run: python potato/flask_server.py start examples/agent-traces/multimodal-reasoning/config.yaml -p 8000

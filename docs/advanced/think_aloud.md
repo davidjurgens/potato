@@ -102,4 +102,4 @@ Transcripts persist to `{output_annotation_dir}/thinkaloud/transcripts.jsonl`
 ## Related documentation
 
 - [Quality Control](../workflow/quality_control.md) — hesitation signals complement attention checks
-- [Behavioral Tracking](../administration/behavioral_tracking.md) — timing analytics
+- [Behavioral Tracking](behavioral_tracking.md) — timing analytics

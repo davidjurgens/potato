@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Multi-Agent Discussion Example
 #
 # Demonstrates annotation of discussions BETWEEN multiple agents (3-4 agents

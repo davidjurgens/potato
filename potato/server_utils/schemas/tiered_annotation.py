@@ -128,6 +128,22 @@ def _generate_tiered_annotation_layout_internal(
     playback_rate_control = annotation_scheme.get("playback_rate_control", True)
     overview_height = annotation_scheme.get("overview_height", 40)
 
+    # Optional transcript seeding: pre-populate a tier with one annotation per
+    # transcript turn, so annotators correct and enrich an existing alignment
+    # instead of re-segmenting speech that ASR already segmented. Opt-in — the
+    # field is only read when named. Defaults to the first tier.
+    transcript_field = annotation_scheme.get("transcript_field")
+    transcript_tier = annotation_scheme.get("transcript_tier") or (
+        processed_tiers[0]["name"] if processed_tiers else None
+    )
+    if transcript_field and transcript_tier:
+        known = {tier["name"] for tier in processed_tiers}
+        if transcript_tier not in known:
+            raise ValueError(
+                f"transcript_tier '{transcript_tier}' is not a defined tier. "
+                f"Available tiers: {', '.join(sorted(known))}"
+            )
+
     # Build tier rows HTML
     tier_rows_html = _generate_tier_rows_html(
         schema_name, processed_tiers, tier_height, show_tier_labels, collapsed_tiers
@@ -148,6 +164,8 @@ def _generate_tiered_annotation_layout_internal(
         "zoomEnabled": zoom_enabled,
         "playbackRateControl": playback_rate_control,
         "overviewHeight": overview_height,
+        "transcriptField": transcript_field,
+        "transcriptTier": transcript_tier if transcript_field else None,
     }
     config_json = json.dumps(js_config)
 

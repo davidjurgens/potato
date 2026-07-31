@@ -39,6 +39,7 @@ from potato.data_sources.base import (
     DataSource,
     SourceType,
     SourceConfig,
+    LiveRow,
 )
 
 from potato.data_sources.credentials import (
@@ -66,6 +67,7 @@ __all__ = [
     "DataSource",
     "SourceType",
     "SourceConfig",
+    "LiveRow",
     # Credential management
     "CredentialManager",
     "substitute_env_vars",

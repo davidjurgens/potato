@@ -453,6 +453,11 @@ Export tiered annotations as Praat TextGrid files for use with [Praat](https://w
 python -m potato.export --config config.yaml --format textgrid --output ./export/
 ```
 
+!!! tip "Both formats round-trip"
+    Potato also *reads* EAF and TextGrid, so annotations can go out to ELAN or
+    Praat, be refined there, and come back in. See
+    [Transcript Format Support](../annotation-types/multimedia/transcript_formats.md).
+
 ### Agent Evaluation (agent_eval)
 
 Export agent trace evaluation results with aggregated scores, step-level ratings, and error taxonomies.
