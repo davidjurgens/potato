@@ -2271,7 +2271,10 @@ def get_current_page_html(config, username):
             if input_field.get('type') == 'checkbox' or input_field.get('type') == 'radio':
                 if value:
                     if input_field.get('type') == 'radio':
-                        if input_field.get('value') == value:
+                        # See the annotation-page restore below: label_name is the
+                        # identity, `value` only disambiguates when several inputs
+                        # share one label_name.
+                        if len(input_fields) == 1 or input_field.get('value') == value:
                             input_field['checked'] = True
                     else:
                         input_field['checked'] = True
@@ -2957,10 +2960,15 @@ def render_page_with_annotations(username: str):
 
                     if input_field.get('type') == 'checkbox' or input_field.get('type') == 'radio':
                         if value:
-                            # For radio buttons, only check if the value matches
-                            # (multiple radios share the same schema/label_name but have different values)
                             if input_field.get('type') == 'radio':
-                                if input_field.get('value') == value:
+                                # label_name is the identity; `value` is only a
+                                # tie-break for the rare case where several inputs
+                                # share one label_name. Requiring an exact value match
+                                # here means any change to how a value is derived
+                                # silently stops old answers restoring — a likert
+                                # stored under sequential_key_binding, for instance,
+                                # kept its label_name but had its value rewritten.
+                                if len(input_fields) == 1 or input_field.get('value') == value:
                                     input_field['checked'] = True
                             else:
                                 # For checkboxes, set checked
