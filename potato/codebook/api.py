@@ -253,6 +253,17 @@ def _admin_or_adjudicator() -> bool:
                 return True
         except Exception:
             pass
+    # Solo Mode: one person runs the whole workflow (setup, annotation,
+    # AND codebook curation) — there's no multi-annotator crowd to guard
+    # merge/split/notes-suggest/proposals from, so gating those behind a
+    # separate admin/adjudicator role would make them permanently
+    # unreachable for the common case of a single solo-mode user.
+    try:
+        from potato.solo_mode.manager import get_solo_mode_manager
+        if get_solo_mode_manager() is not None:
+            return True
+    except Exception:
+        pass
     return False
 
 

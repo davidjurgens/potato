@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import threading
+import time
 
 from .config import SoloModeConfig, ModelConfig, parse_solo_mode_config
 from .phase_controller import SoloPhase, SoloPhaseController
@@ -184,6 +185,16 @@ class SoloModeManager:
         self.llm_labeled_ids: Set[str] = set()
         self.disagreement_ids: Set[str] = set()
         self.validation_sample_ids: Set[str] = set()
+
+        # Instances a human already labeled under an *older* prompt version
+        # and need to relabel under the current one, so the agreement rate
+        # reflects the prompt actually in effect rather than a stale mix of
+        # versions. Populated by _flag_relabel_after_prompt_change().
+        self.pending_relabel_ids: Set[str] = set()
+        self.relabel_wave_size: int = 0  # denominator for the progress bar
+        self._last_notes_suggest_run: float = 0.0
+        self._notes_suggest_since: float = 0.0
+        self._NOTES_SUGGEST_MIN_INTERVAL = 300.0  # 5 min between auto passes
 
         # Edge cases
         self.edge_case_ids: Set[str] = set()
@@ -763,6 +774,40 @@ class SoloModeManager:
         proposals = suggest_from_notes(
             task_dir, project, endpoint=endpoint, since=since)
         return {"proposals": proposals}
+
+    def _maybe_auto_suggest_from_notes(self) -> None:
+        """Best-effort: after a rationale note is saved (disagreement
+        resolution or validation), check whether it's worth asking the LLM
+        for codebook-edit suggestions from accumulated notes.
+
+        Without this, notes just sit in storage until someone remembers to
+        click "Suggest edits from notes" in the tray — so human
+        explanations never actually reach the codebook/prompt on their
+        own. Still proposal-only (nothing is applied without a human
+        clicking Confirm in the tray, same as every other model-authored
+        codebook edit); this just makes sure proposals actually get
+        generated. Throttled so a burst of notes doesn't fire an LLM call
+        per note, and never raises — this piggybacks on the
+        disagreement/validation flow and must not break it.
+        """
+        now = time.time()
+        with self._lock:
+            if now - self._last_notes_suggest_run < self._NOTES_SUGGEST_MIN_INTERVAL:
+                return
+            self._last_notes_suggest_run = now
+            cursor = self._notes_suggest_since
+            self._notes_suggest_since = now
+
+        def _run():
+            try:
+                self.suggest_codebook_edits_from_notes(since=cursor)
+            except Exception:
+                logger.debug("automatic notes-suggest pass failed",
+                             exc_info=True)
+
+        threading.Thread(
+            target=_run, name="NotesSuggestThread", daemon=True
+        ).start()
 
     @property
     def confusion_analyzer(self):
@@ -2104,10 +2149,91 @@ class SoloModeManager:
             # with the improved prompt. Keep counts only for recent prompt versions.
             self._reset_stale_reannotation_counts(new_version)
 
+            # A real change (not the very first version created during
+            # Setup) invalidates any comparison a human label made against
+            # the old prompt — flag those instances for a fresh pass.
+            flagged = 0
+            if parent is not None:
+                flagged = self._flag_relabel_after_prompt_change()
+
             self._save_state()
 
-            logger.info(f"Created prompt version {new_version} by {created_by}")
+            logger.info(
+                f"Created prompt version {new_version} by {created_by}"
+                + (f" ({flagged} instance(s) flagged for relabel)" if flagged else "")
+            )
             return prompt
+
+    def _flag_relabel_after_prompt_change(self) -> int:
+        """After the prompt changes, resurface every instance a human
+        already labeled so it gets a fresh pass under the new prompt.
+
+        A human label made against an old prompt version isn't a fair
+        comparison against LLM predictions made under the new one, so:
+        - the instance moves from ``human_labeled_ids`` back into the
+          available pool (``pending_relabel_ids``), and
+        - its cached LLM prediction is dropped so the instance gets a
+          fresh prediction under the new prompt too (fair "both sides
+          under the same prompt" comparison), and the on-demand
+          suggestion path picks it up automatically.
+
+        Idempotent-ish: only newly-labeled instances (not already
+        pending) are added, so calling this repeatedly across several
+        prompt edits accumulates rather than double-counts.
+
+        Returns the number of instances newly flagged.
+        """
+        newly_flagged = self.human_labeled_ids - self.pending_relabel_ids
+        if not newly_flagged:
+            return 0
+
+        self.pending_relabel_ids |= newly_flagged
+        self.relabel_wave_size += len(newly_flagged)
+        self.human_labeled_ids -= newly_flagged
+        for instance_id in newly_flagged:
+            self.llm_labeled_ids.discard(instance_id)
+            self.predictions.pop(instance_id, None)
+
+        logger.info(
+            f"[Relabel] Prompt changed — flagged {len(newly_flagged)} "
+            f"previously-labeled instance(s) for relabel under prompt "
+            f"version {self.current_prompt_version}"
+        )
+        return len(newly_flagged)
+
+    def get_relabel_progress(self) -> Dict[str, Any]:
+        """Progress of the current relabel wave (instances flagged after
+        the prompt last changed). ``total`` is 0 when nothing is pending —
+        i.e. there has never been a prompt change with prior human labels,
+        or the wave already completed and a new one hasn't started."""
+        with self._lock:
+            pending = len(self.pending_relabel_ids)
+            total = self.relabel_wave_size
+            done = max(total - pending, 0)
+            return {
+                'pending': pending,
+                'total': total,
+                'done': done,
+                'percent_complete': round((done / total * 100), 1) if total else 100.0,
+            }
+
+    def get_current_version_agreement(self) -> Dict[str, Any]:
+        """Agreement rate scoped to the *current* prompt version only —
+        unlike ``agreement_metrics`` (lifetime-cumulative across every
+        prompt version ever used), this is what "the agreement rate under
+        the prompt I'm looking at right now" actually means. Backs the
+        "Refresh Agreement" control."""
+        with self._lock:
+            stats = self._per_version_agreement.get(self.current_prompt_version, {})
+            compared = stats.get('compared', 0)
+            agreements = stats.get('agreements', 0)
+            return {
+                'prompt_version': self.current_prompt_version,
+                'compared': compared,
+                'agreements': agreements,
+                'agreement_rate': (agreements / compared) if compared else None,
+                'pending_relabel': len(self.pending_relabel_ids),
+            }
 
     def _reset_stale_reannotation_counts(self, current_version: int) -> None:
         """Reset reannotation counts for instances not recently re-annotated.
@@ -2257,6 +2383,7 @@ class SoloModeManager:
         """
         with self._lock:
             self.human_labeled_ids.add(instance_id)
+            self.pending_relabel_ids.discard(instance_id)
 
             prediction = self.get_llm_prediction(instance_id, schema_name)
             if prediction is None:
@@ -2497,6 +2624,7 @@ class SoloModeManager:
 
             prediction.disagreement_resolved = True
             prediction.resolution_label = resolution_label
+            llm_label = prediction.predicted_label
 
             self._save_state()
             logger.info(
@@ -2513,10 +2641,86 @@ class SoloModeManager:
                         source='disagreement', actor=resolved_by,
                         label=str(resolution_label)
                         if resolution_label is not None else None)
+                    self._maybe_auto_suggest_from_notes()
                 except Exception:
                     logger.debug("could not persist disagreement note",
                                  exc_info=True)
+
+            self._teach_codebook_from_resolution(
+                instance_id, resolution_label, llm_label, notes, resolved_by)
             return True
+
+    def _teach_codebook_from_resolution(
+        self, instance_id: str, resolution_label: Any, llm_label: Any,
+        notes: str, actor: str,
+    ) -> None:
+        """When a human resolves a disagreement with their own (or a third)
+        label, that IS a concrete, human-verified example of the correct
+        code — and, when the LLM's original guess was a *different* code,
+        an equally concrete negative example of that one (exactly the
+        "looks like X but is NOT" case ``negative_examples`` exists for,
+        see codebook/prompt.py). Written straight into the codebook, no
+        separate propose/confirm step: unlike an LLM-authored suggestion,
+        there's nothing to double-check here — the human already made
+        the call by resolving the disagreement this way. Best-effort and
+        silent: a codebook write failure must never break disagreement
+        resolution, and this is a no-op wherever the label doesn't match
+        an actual code (free-text schemas, codebook disabled, etc).
+        """
+        if resolution_label is None or llm_label is None:
+            return
+        if str(resolution_label) == str(llm_label):
+            return  # the LLM's own label was accepted -- nothing to correct
+        try:
+            from potato.server_utils.config_module import get_codebook_mode
+            if get_codebook_mode(self.app_config) == 'fixed':
+                return
+
+            text = self._get_instance_text(instance_id)
+            if not text:
+                return
+            why = (notes or "").strip() or (
+                f"Human corrected the LLM's \"{llm_label}\" prediction "
+                f"during disagreement resolution"
+            )
+
+            from potato.codebook.codebook import Codebook
+            task_dir, project = self._codebook_ids()
+            cb = Codebook.load(task_dir, project)
+            by_name = {d.get("name"): d for d in cb.details_in_order()}
+
+            target = by_name.get(str(resolution_label))
+            if target:
+                self._append_codebook_example(
+                    task_dir, project, target, "positive_examples",
+                    text, why, actor)
+
+            wrong = by_name.get(str(llm_label))
+            if wrong:
+                self._append_codebook_example(
+                    task_dir, project, wrong, "negative_examples",
+                    text, why, actor)
+        except Exception:
+            logger.debug(
+                "could not teach codebook from disagreement resolution",
+                exc_info=True)
+
+    def _append_codebook_example(
+        self, task_dir: str, project: str, code: Dict[str, Any],
+        field: str, text: str, why: str, actor: str,
+    ) -> None:
+        """Append one {text, why} example to a code's positive_examples or
+        negative_examples, deduping on exact text so re-resolving the same
+        instance doesn't pile up repeats."""
+        from potato.codebook.service import update_code_fields
+        existing = list(code.get(field) or [])
+        norm = text.strip()
+        if any((e or {}).get("text", "").strip() == norm for e in existing):
+            return
+        existing.append({"text": text, "why": why})
+        update_code_fields(
+            task_dir, code["id"], details={field: existing},
+            project=project, actor=actor, actor_kind="human")
 
     # === Instance Selection ===
 
@@ -2552,6 +2756,18 @@ class SoloModeManager:
 
             if not available:
                 return None
+
+            # A prompt change flags previously-labeled instances for a
+            # relabel pass — surface those before anything else so the
+            # per-current-version agreement rate fills in as fast as
+            # possible instead of competing with brand-new instances in
+            # the normal weighted pools.
+            due_for_relabel = self.pending_relabel_ids & available
+            if due_for_relabel:
+                for iid in ism.instance_id_ordering:
+                    if iid in due_for_relabel:
+                        return iid
+                return next(iter(due_for_relabel))
 
             # Convert predictions to dict format for refresh_pools
             pred_dicts = {}
@@ -2959,6 +3175,8 @@ class SoloModeManager:
                     'llm_labeled_ids': list(self.llm_labeled_ids),
                     'disagreement_ids': list(self.disagreement_ids),
                     'validation_sample_ids': list(self.validation_sample_ids),
+                    'pending_relabel_ids': list(self.pending_relabel_ids),
+                    'relabel_wave_size': self.relabel_wave_size,
                     'edge_case_ids': list(self.edge_case_ids),
                     'edge_case_labels': self.edge_case_labels,
                     'agreement_metrics': self.agreement_metrics.to_dict(),
@@ -3044,6 +3262,8 @@ class SoloModeManager:
                 self.llm_labeled_ids = set(state.get('llm_labeled_ids', []))
                 self.disagreement_ids = set(state.get('disagreement_ids', []))
                 self.validation_sample_ids = set(state.get('validation_sample_ids', []))
+                self.pending_relabel_ids = set(state.get('pending_relabel_ids', []))
+                self.relabel_wave_size = state.get('relabel_wave_size', 0)
                 self.edge_case_ids = set(state.get('edge_case_ids', []))
                 self.edge_case_labels = state.get('edge_case_labels', {})
 
@@ -3180,6 +3400,7 @@ class SoloModeManager:
         assembled['instance_id'] = instance_id
         assembled['schema_name'] = schema_name
         assembled['codebook_revision'] = revision
+        assembled['prompt_version'] = self.current_prompt_version
         return assembled
 
     def get_or_create_llm_suggestion(
@@ -3320,6 +3541,18 @@ class SoloModeManager:
         # Check if refinement loop should trigger
         self._maybe_trigger_refinement()
 
+    def get_human_label_for_instance(self, instance_id: str) -> Optional[Any]:
+        """The human's previously-submitted label for ``instance_id``, if
+        any. Used when Back/Next navigation (or the codebook worklist's
+        "Go" button) lands on an instance the annotator already labeled, so
+        the annotate screen can pre-select it instead of looking blank."""
+        if instance_id not in self.human_labeled_ids:
+            return None
+        schemes = self.app_config.get('annotation_schemes', [])
+        schema_name = schemes[0].get('name', 'default') if schemes else 'default'
+        prediction = self.get_llm_prediction(instance_id, schema_name)
+        return prediction.human_label if prediction else None
+
     def get_llm_labeling_stats(self) -> Dict[str, Any]:
         """Get LLM labeling statistics."""
         with self._lock:
@@ -3390,6 +3623,7 @@ class SoloModeManager:
                     task_dir, project=project, instance_id=instance_id,
                     schema_name=schema_name, note=notes, source='validation',
                     label=str(human_label) if human_label is not None else None)
+                self._maybe_auto_suggest_from_notes()
             except Exception:
                 logger.debug("could not persist validation note",
                              exc_info=True)

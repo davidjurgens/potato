@@ -274,8 +274,15 @@ def edge_cases():
             # Check if all edge cases are labeled
             unlabeled = manager.edge_case_synthesizer.get_unlabeled_edge_cases()
             if not unlabeled:
-                # Advance to prompt validation
-                manager.advance_to_phase(SoloPhase.PROMPT_VALIDATION)
+                # Advance to prompt validation. A duplicate/near-simultaneous
+                # submit (e.g. a double-click) can race here: both requests
+                # see an empty `unlabeled` list before either has advanced
+                # the phase, so the second call targets a phase we're
+                # already in/past — not a real error, just a lost race.
+                try:
+                    manager.advance_to_phase(SoloPhase.PROMPT_VALIDATION)
+                except ValueError:
+                    pass
                 return redirect(url_for('solo_mode.prompt_editor'))
 
             # The form posts normally (no JS/AJAX), so redirect back to render
@@ -297,8 +304,18 @@ def edge_cases():
             )
             unlabeled = manager.edge_case_synthesizer.get_unlabeled_edge_cases()
 
-        # Advance to labeling phase
-        manager.advance_to_phase(SoloPhase.EDGE_CASE_LABELING)
+        # Advance to labeling phase. Edge case synthesis is a slow LLM
+        # call (10-30s) — a second request that arrives while the first
+        # is still synthesizing (double-click, refresh, a second tab)
+        # will also see phase == EDGE_CASE_SYNTHESIS and reach this same
+        # line; whichever one loses the race is trying to transition into
+        # a phase we're already in, which is a lost race, not a real
+        # error (this is the same defensive pattern annotate() already
+        # uses for its own auto-advance calls below).
+        try:
+            manager.advance_to_phase(SoloPhase.EDGE_CASE_LABELING)
+        except ValueError:
+            pass
 
     # Get edge cases to display
     unlabeled = manager.edge_case_synthesizer.get_unlabeled_edge_cases()
@@ -376,11 +393,11 @@ def annotate():
         return jsonify({'error': 'Missing instance_id or annotation'}), 400
 
     # Get next instance ID — or a specific one requested via ?instance_id=,
-    # which is how the codebook tray's review-worklist "Go" button jumps
-    # to a particular stale instance (solo mode has no AJAX instance
-    # navigation, so that's a full-page link to this same route).
+    # which is how the codebook tray's review-worklist "Go" button (and the
+    # Back/Next nav below) jump to a particular instance (solo mode has no
+    # AJAX instance navigation, so these are full-page links to this route).
     requested_id = request.args.get('instance_id')
-    instance_id = requested_id or manager.get_next_instance_for_human(user_id)
+    instance_id, nav = _resolve_nav_instance(manager, user_id, requested_id)
 
     # Get available labels (needed for all render paths)
     labels = manager.get_available_labels()
@@ -398,6 +415,9 @@ def annotate():
             message='No more instances available',
             phase=manager.get_current_phase().name.lower(),
             stats=manager.get_annotation_stats(),
+            nav=nav,
+            relabel=manager.get_relabel_progress(),
+            existing_label=None,
         )
 
     # Get full instance data
@@ -418,6 +438,9 @@ def annotate():
             labels=labels,
             message='Error: Item state manager not available. Please restart the server.',
             phase=manager.get_current_phase().name.lower(),
+            nav=nav,
+            existing_label=None,
+            relabel=manager.get_relabel_progress(),
         )
     except KeyError as e:
         logger.error(f"Instance {instance_id} not found in ItemStateManager: {e}")
@@ -428,10 +451,19 @@ def annotate():
             labels=labels,
             message=f'Error: Instance {instance_id} not found.',
             phase=manager.get_current_phase().name.lower(),
+            nav=nav,
+            existing_label=None,
+            relabel=manager.get_relabel_progress(),
         )
 
     # Get LLM prediction if available
     llm_prediction = manager.get_llm_prediction_for_instance(instance_id)
+
+    # Was this instance already labeled by this human? (true when Back/Next
+    # nav or the codebook worklist "Go" button lands on a prior instance) —
+    # lets the template show "Update label" instead of "Submit" and
+    # pre-select the existing choice.
+    existing_label = manager.get_human_label_for_instance(instance_id)
 
     return render_template(
         'solo/annotate.html',
@@ -441,7 +473,73 @@ def annotate():
         labels=labels,
         phase=manager.get_current_phase().name.lower(),
         stats=manager.get_annotation_stats(),
+        nav=nav,
+        existing_label=existing_label,
+        relabel=manager.get_relabel_progress(),
     )
+
+
+# Cap how many instance IDs we keep in the session's Back/Next history so
+# the session cookie can't grow unbounded over a long annotation run.
+_NAV_HISTORY_CAP = 200
+
+
+def _resolve_nav_instance(manager, user_id, requested_id):
+    """Resolve which instance to show and update the Back/Next history.
+
+    The history is a simple visited-instances stack kept in the session
+    (``solo_nav_history`` + ``solo_nav_pos``). Landing on an explicit
+    ``?instance_id=`` (Back/Next links, or the codebook worklist's "Go"
+    button) moves the cursor to that id without disturbing the rest of the
+    stack; a plain "next" request (no id) either resumes moving forward
+    through history the annotator already visited, or — once at the
+    frontier — asks the instance selector for a brand new instance and
+    appends it.
+
+    Returns:
+        (instance_id, nav) where nav is a dict of
+        {can_back, can_forward, back_id, forward_id} for the template.
+    """
+    history = session.get('solo_nav_history', [])
+    pos = session.get('solo_nav_pos', -1)
+
+    if requested_id:
+        instance_id = requested_id
+        if 0 <= pos < len(history) and history[pos] == instance_id:
+            pass  # already here
+        elif instance_id in history:
+            pos = history.index(instance_id)
+        else:
+            history.append(instance_id)
+            pos = len(history) - 1
+    elif 0 <= pos < len(history) - 1:
+        # Previously went Back — a plain "next" resumes toward the
+        # frontier instead of picking a brand new instance.
+        pos += 1
+        instance_id = history[pos]
+    else:
+        instance_id = manager.get_next_instance_for_human(user_id)
+        if instance_id is not None:
+            history.append(instance_id)
+            pos = len(history) - 1
+
+    if len(history) > _NAV_HISTORY_CAP:
+        trim = len(history) - _NAV_HISTORY_CAP
+        history = history[trim:]
+        pos -= trim
+
+    session['solo_nav_history'] = history
+    session['solo_nav_pos'] = pos
+
+    can_back = pos > 0
+    can_forward = 0 <= pos < len(history) - 1
+    nav = {
+        'can_back': can_back,
+        'can_forward': can_forward,
+        'back_id': history[pos - 1] if can_back else None,
+        'forward_id': history[pos + 1] if can_forward else None,
+    }
+    return instance_id, nav
 
 
 @solo_mode_bp.route('/llm-suggestion', methods=['GET'])
@@ -540,6 +638,22 @@ def disagreements():
     manager = get_solo_mode_manager()
 
     if request.method == 'POST':
+        if request.form.get('action') == 'refine_with_edge_cases':
+            # Detour: disagreement rate is high enough that resolving one
+            # instance at a time isn't fixing the underlying ambiguity —
+            # offer to synthesize/label fresh edge cases to sharpen the
+            # guidelines instead. Existing edge cases (if any) are shown
+            # first; edge_cases() only synthesizes new ones while in
+            # EDGE_CASE_SYNTHESIS with none unlabeled.
+            try:
+                manager.advance_to_phase(
+                    SoloPhase.EDGE_CASE_SYNTHESIS,
+                    reason='High disagreement rate during annotation',
+                )
+            except ValueError:
+                pass
+            return redirect(url_for('solo_mode.edge_cases'))
+
         disagreement_id = request.form.get('disagreement_id')
         resolution = request.form.get('resolution')  # 'human', 'llm', or custom label
         notes = request.form.get('notes', '')
@@ -596,11 +710,23 @@ def disagreements():
     # Get available labels
     labels = manager.get_available_labels()
 
+    # Suggest an edge-case-labeling detour once there's enough signal that
+    # the disagreement isn't a one-off: agreement rate has dipped below
+    # threshold across enough compared instances.
+    metrics = manager.get_agreement_metrics()
+    thresholds = manager.config.thresholds
+    suggest_edge_cases = (
+        metrics.total_compared >= thresholds.edge_case_suggestion_min_compared
+        and metrics.agreement_rate < thresholds.edge_case_suggestion_agreement_rate
+    )
+
     return render_template(
         'solo/disagreement.html',
         disagreement=disagreement,
         labels=labels,
         phase=manager.get_current_phase().name.lower(),
+        suggest_edge_cases=suggest_edge_cases,
+        agreement_rate=metrics.agreement_rate,
     )
 
 
@@ -841,6 +967,26 @@ def api_status():
         'validation_progress': manager.get_validation_progress(),
         'should_end_human_annotation': manager.should_end_human_annotation(),
     })
+
+
+@solo_mode_bp.route('/api/relabel-status')
+@solo_mode_required
+def api_relabel_status():
+    """Progress of the current relabel wave — instances that need a fresh
+    label because the prompt changed since they were last labeled. Backs
+    the spinner/progress bar next to the Agreement stat."""
+    manager = get_solo_mode_manager()
+    return jsonify(manager.get_relabel_progress())
+
+
+@solo_mode_bp.route('/api/current-agreement')
+@solo_mode_required
+def api_current_agreement():
+    """Agreement rate scoped to the prompt version currently in effect
+    (as opposed to ``agreement_metrics``, which is cumulative across every
+    prompt version ever used). Backs the "Refresh Agreement" control."""
+    manager = get_solo_mode_manager()
+    return jsonify(manager.get_current_version_agreement())
 
 
 @solo_mode_bp.route('/api/prompts')

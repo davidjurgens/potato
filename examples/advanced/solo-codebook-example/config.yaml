@@ -19,6 +19,15 @@ task_dir: .
 port: 8000
 verbose: true
 
+# Keeps you logged in across server restarts (default behavior generates a
+# fresh random session key on every start, which silently logs everyone
+# out). This is a fixed local-demo key, not a real secret — it only signs
+# your own Ollama-backed localhost session cookie, so committing it here
+# is fine (and much simpler than an env var you'd have to remember every
+# time you start the server).
+persist_sessions: true
+secret_key: "b186f5ca257eb138e2a005ef1670ab3d24c9af6d7c9383ed56c11fe6816e0be7"
+
 # Pre-fills the Solo Mode Setup screen so you don't have to type a task
 # description every run. It's just a default — edit it on the Setup screen
 # and your edit wins. (Leave it out to start from a blank Setup form.)
@@ -58,8 +67,18 @@ solo_mode:
       model: "llama3.2:3b"
       endpoint_url: "http://localhost:11434"
 
+  # sampling_diversity: labels each instance N times at higher temperature
+  # and measures how much the label itself changes across runs — real
+  # signal (the model actually disagreeing with itself when uncertain),
+  # unlike direct_confidence's self-reported number which small models
+  # like llama3.2:3b tend to flatten to a boilerplate ~90 regardless of
+  # difficulty. Costs num_samples extra local Ollama calls per instance;
+  # kept at 3 (not the default 5) so background labeling doesn't stall.
   uncertainty:
-    strategy: "direct_confidence"
+    strategy: "sampling_diversity"
+    sampling_diversity:
+      num_samples: 3
+      temperature: 0.8
 
   thresholds:
     end_human_annotation_agreement: 0.90

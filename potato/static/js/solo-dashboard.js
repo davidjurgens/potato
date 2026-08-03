@@ -22,6 +22,11 @@ class SoloDashboard {
     this._loadOverview();
     this._loadRules();
 
+    const refreshBtn = document.getElementById('ov-agreement-refresh');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => this._refreshCurrentAgreement());
+    }
+
     // Auto-refresh overview every 30s
     this.refreshInterval = setInterval(() => {
       if (this.currentTab === 'overview') this._loadOverview();
@@ -74,6 +79,7 @@ class SoloDashboard {
     }
     this._loadRefinementStatus();
     this._loadLabelingFunctionStatus();
+    this._loadRelabelStatus();
   }
 
   _renderOverview(data) {
@@ -155,6 +161,91 @@ class SoloDashboard {
           }
         });
       }
+    }
+  }
+
+  // ── Agreement: relabel-pending banner + manual refresh ──────────
+  // A prompt change flags every previously-labeled instance for a fresh
+  // pass, and the Agreement card's displayed rate is a lifetime-
+  // cumulative counter that mixes labels made under old and new prompts.
+  // While relabeling is in progress we show a spinner + progress bar;
+  // once it's done, the refresh control lights up so the human can pull
+  // in the rate scoped to just the current prompt version.
+
+  async _loadRelabelStatus() {
+    try {
+      const resp = await fetch('/solo/api/relabel-status');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      this._renderRelabelStatus(data);
+    } catch (e) {
+      console.warn('Solo dashboard: failed to load relabel status', e);
+    }
+  }
+
+  _renderRelabelStatus(data) {
+    const banner = document.getElementById('ov-relabel-banner');
+    const bar = document.getElementById('ov-relabel-bar');
+    const text = document.getElementById('ov-relabel-text');
+    const btn = document.getElementById('ov-agreement-refresh');
+    if (!banner || !btn) return;
+
+    const pending = data.pending || 0;
+    const total = data.total || 0;
+
+    if (pending > 0) {
+      banner.hidden = false;
+      const pct = total > 0 ? Math.round((data.done / total) * 100) : 0;
+      if (bar) bar.style.width = pct + '%';
+      if (text) {
+        text.textContent = 'Prompt changed — ' + data.done + ' of ' + total
+          + ' relabeled under the new prompt (' + pending + ' left)';
+      }
+      btn.classList.add('is-spinning');
+      btn.classList.remove('needs-refresh');
+      btn.disabled = true;
+      this._relabelWasPending = true;
+    } else {
+      banner.hidden = true;
+      btn.classList.remove('is-spinning');
+      btn.disabled = false;
+      if (this._relabelWasPending) {
+        // The wave just finished — invite the human to pull in the
+        // fresh, current-prompt-scoped agreement rate.
+        btn.classList.add('needs-refresh');
+      }
+      this._relabelWasPending = false;
+    }
+  }
+
+  async _refreshCurrentAgreement() {
+    const btn = document.getElementById('ov-agreement-refresh');
+    if (btn) { btn.classList.add('is-spinning'); btn.disabled = true; }
+    try {
+      const resp = await fetch('/solo/api/current-agreement');
+      if (resp.ok) {
+        const data = await resp.json();
+        const rate = data.agreement_rate;
+        const agEl = document.getElementById('ov-agreement');
+        if (agEl) {
+          agEl.textContent = (rate == null ? '—' : Math.round(rate * 100) + '%');
+          agEl.className = 'card-value';
+          if (rate != null) {
+            if (rate >= 0.9) agEl.classList.add('text-success');
+            else if (rate >= 0.7) agEl.classList.add('text-warning');
+            else agEl.classList.add('text-danger');
+          }
+        }
+        this._setText('ov-comparisons', data.compared || 0);
+        this._setText('ov-agreements', data.agreements || 0);
+        this._setText('ov-disagreements', Math.max((data.compared || 0) - (data.agreements || 0), 0));
+      }
+    } catch (e) {
+      console.warn('Solo dashboard: failed to refresh agreement', e);
+    }
+    if (btn) {
+      btn.classList.remove('is-spinning', 'needs-refresh');
+      btn.disabled = false;
     }
   }
 

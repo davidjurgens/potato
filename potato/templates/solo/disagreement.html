@@ -95,13 +95,66 @@
         font-size: 13px;
         color: #666;
     }
+
+    .edge-case-suggestion {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-md, 1rem);
+        flex-wrap: wrap;
+        margin: 0 0 20px 0;
+        padding: var(--space-md, 1rem);
+        background: color-mix(in oklab, #f59e0b 8%, var(--card, white));
+        border: 1px solid color-mix(in oklab, #f59e0b 30%, transparent);
+        border-radius: var(--radius, 0.5rem);
+    }
+
+    .edge-case-suggestion p {
+        margin: 0;
+        font-size: var(--text-sm, 0.8125rem);
+        color: var(--foreground, #09090b);
+    }
+
+    .edge-case-suggestion strong { font-variant-numeric: tabular-nums; }
 </style>
+{% endblock %}
+
+{% block flow_guidance %}
+{% if disagreement %}
+<div class="flow-guidance" role="note">
+    <span class="flow-guidance-icon" aria-hidden="true">&rarr;</span>
+    <span>
+        Compare your label with the LLM's for this instance, then choose
+        whichever is correct (or pick a third label). Resolving it sends
+        you back to annotation. If disagreements like this keep coming
+        up, look for a "Refine with edge cases" option below.
+    </span>
+</div>
+{% else %}
+{{ super() }}
+{% endif %}
 {% endblock %}
 
 {% block content %}
 <h1>Resolve Disagreement</h1>
 
 <p>You and the LLM disagree on the label for this instance. Please review both labels and decide which is correct.</p>
+
+{% if suggest_edge_cases %}
+<div class="edge-case-suggestion" role="status">
+    <p>
+        You and the LLM are only agreeing on
+        <strong>{{ (agreement_rate * 100)|int }}%</strong>
+        of compared instances so far. Resolving these one at a time may not
+        fix the underlying ambiguity &mdash; labeling a batch of synthetic
+        edge cases can help sharpen the guidelines instead.
+    </p>
+    <form method="POST" action="{{ url_for('solo_mode.disagreements') }}" style="margin: 0;">
+        <input type="hidden" name="action" value="refine_with_edge_cases">
+        <button type="submit" class="btn btn-secondary">Refine with edge cases &rarr;</button>
+    </form>
+</div>
+{% endif %}
 
 {% if disagreement %}
 <form method="POST" action="{{ url_for('solo_mode.disagreements') }}">

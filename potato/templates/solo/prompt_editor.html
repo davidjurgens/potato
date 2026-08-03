@@ -53,6 +53,21 @@
 </style>
 {% endblock %}
 
+{% block flow_guidance %}
+<div class="flow-guidance" role="note">
+    <span class="flow-guidance-icon" aria-hidden="true">&rarr;</span>
+    <span>
+        This is the base prompt sent to the LLM. Structured codes
+        (definitions, examples, exclusion rules) live separately in the
+        <strong>Codebook</strong> panel &mdash; open it with the floating
+        button in the bottom-right corner. Codebook edits are appended to
+        this prompt automatically, so you don't need to paste them in
+        here. When you're ready, generate edge cases (recommended) or
+        skip straight to annotation below.
+    </span>
+</div>
+{% endblock %}
+
 {% block content %}
 <h1>Review Annotation Prompt</h1>
 

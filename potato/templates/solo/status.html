@@ -126,6 +126,64 @@
     .metric-row span { color: var(--muted-foreground, #71717a); }
     .metric-row strong { color: var(--heading-color, #09090b); }
 
+    /* ── Agreement card: refresh control + relabel-pending banner ──── */
+    .card-heading-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+
+    .agreement-refresh-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--muted-foreground, #71717a);
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        line-height: 1;
+    }
+
+    .agreement-refresh-btn:hover {
+        background: var(--muted, #f4f4f5);
+        color: var(--foreground, #09090b);
+    }
+
+    .agreement-refresh-btn .agreement-refresh-icon {
+        display: inline-block;
+    }
+
+    .agreement-refresh-btn.is-spinning .agreement-refresh-icon {
+        animation: agreement-spin 0.9s linear infinite;
+    }
+
+    .agreement-refresh-btn.needs-refresh {
+        color: var(--primary, #6e56cf);
+        box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary, #6e56cf) 18%, transparent);
+    }
+
+    @keyframes agreement-spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+    }
+
+    .relabel-banner {
+        margin-top: 0.75rem;
+        padding-top: 0.625rem;
+        border-top: 1px dashed var(--border, #e4e4e7);
+    }
+
+    .relabel-text {
+        font-size: 0.75rem;
+        color: var(--muted-foreground, #71717a);
+    }
+
     /* ── Status Badges ──────────────────────────────────────── */
     .status-badge {
         display: inline-block;
@@ -755,7 +813,15 @@
 
         {# Agreement Card #}
         <div class="dashboard-card">
-            <h3>Agreement</h3>
+            <div class="card-heading-row">
+                <h3>Agreement</h3>
+                <button type="button" id="ov-agreement-refresh"
+                        class="agreement-refresh-btn"
+                        title="Refresh agreement rate for the current prompt"
+                        aria-label="Refresh agreement rate for the current prompt">
+                    <span class="agreement-refresh-icon" aria-hidden="true">&#8635;</span>
+                </button>
+            </div>
             {% if agreement_metrics %}
             {% set rate = agreement_metrics.agreement_rate or 0 %}
             <p class="card-value {% if rate >= 0.9 %}text-success{% elif rate >= 0.7 %}text-warning{% else %}text-danger{% endif %}"
@@ -775,6 +841,12 @@
             {% else %}
             <p class="card-description">No agreement data yet</p>
             {% endif %}
+            <div id="ov-relabel-banner" class="relabel-banner" hidden>
+                <div class="progress-track">
+                    <div id="ov-relabel-bar" class="progress-fill" style="width: 0%;"></div>
+                </div>
+                <span id="ov-relabel-text" class="relabel-text"></span>
+            </div>
         </div>
 
         {# LLM Labeling Card #}

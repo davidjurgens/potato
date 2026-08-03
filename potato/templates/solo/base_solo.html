@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Solo Mode{% endblock %} - Potato</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=12">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=15">
     <style>
         /* Solo Mode shell — design-token-driven to match the rest of Potato.
            All colors, type, and spacing come from /static/styles.css. */
@@ -454,6 +454,38 @@
             border-top: 1px solid var(--border, #e4e4e7);
         }
 
+        /* ── Flow guidance ("what to do next") banner ──────────────
+           One line, always in the same place (above the content card),
+           telling the annotator what this screen is for and what the
+           next action is. Keeps the codebook / codebook editor /
+           annotate / "what the LLM sees" / resolve screens from reading
+           as disconnected tools. */
+        .flow-guidance {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-sm, 0.5rem);
+            margin-bottom: var(--space-lg, 1.5rem);
+            padding: var(--space-sm, 0.5rem) var(--space-md, 1rem);
+            background: color-mix(in oklab, var(--primary, #6e56cf) 7%, var(--card, white));
+            border: 1px solid color-mix(in oklab, var(--primary, #6e56cf) 20%, transparent);
+            border-radius: var(--radius, 0.5rem);
+            font-size: var(--text-sm, 0.8125rem);
+            color: var(--foreground, #09090b);
+            line-height: 1.5;
+        }
+
+        .flow-guidance-icon {
+            flex: 0 0 auto;
+            color: var(--primary, #6e56cf);
+            font-weight: 700;
+        }
+
+        .flow-guidance strong {
+            font-weight: 600;
+        }
+
+        .flow-guidance:empty { display: none; }
+
         /* ── kbd display ────────────────────────────────────────── */
         kbd {
             background: var(--muted, #f4f4f5);
@@ -553,6 +585,35 @@
             {% endfor %}
         </nav>
 
+        {# ── Flow guidance ("what to do next") ───────────────────────
+           Screen-specific copy wins (child templates override this
+           block); otherwise fall back to a phase-driven default so no
+           screen is ever silent about what happens next. #}
+        {% set default_guidance_by_phase = {
+            'setup': 'Describe the annotation task below to generate a starting prompt.',
+            'prompt_review': 'Review the generated prompt, then continue to edge cases (recommended) or skip straight to annotation.',
+            'edge_case_synthesis': 'Generating tricky boundary examples to pressure-test your guidelines&hellip;',
+            'edge_case_labeling': 'Label each edge case below. This teaches the prompt exactly where your categories\' boundaries are.',
+            'prompt_validation': 'Checking the prompt against your edge case labels before annotation begins.',
+            'parallel_annotation': 'Pick a label for each instance. The LLM labels alongside you &mdash; when it disagrees, you\'ll be asked to resolve it.',
+            'active_annotation': 'Keep labeling &mdash; low-confidence and previously-disagreed instances are prioritized for you.',
+            'disagreement_resolution': 'You and the LLM disagreed on this one. Compare both labels below and decide which is correct.',
+            'periodic_review': 'Spot-check a sample of LLM labels to keep quality high before continuing.',
+            'rule_review': 'Approve or reject the edge-case rules the model inferred from your labels.',
+            'autonomous_labeling': 'Agreement is high enough that the LLM is now labeling the rest of the dataset on its own.',
+            'final_validation': 'Spot-check a sample of the LLM-only labels to confirm the run is ready to finish.',
+            'completed': 'The workflow is complete &mdash; export your annotations from the dashboard.',
+        } %}
+        {% block flow_guidance %}
+        {% set default_guidance = default_guidance_by_phase.get(phase, '') %}
+        {% if default_guidance %}
+        <div class="flow-guidance" role="note">
+            <span class="flow-guidance-icon" aria-hidden="true">&rarr;</span>
+            <span>{{ default_guidance|safe }}</span>
+        </div>
+        {% endif %}
+        {% endblock %}
+
         <!-- Main Content -->
         <div class="solo-main">
             <div class="solo-content">
@@ -642,73 +703,113 @@
             <button type="button" id="cb-panel-close"
                     aria-label="Close codebook">&times;</button>
         </div>
+        {# First-open walkthrough: shown once per browser (localStorage),
+           dismissible. Sits above the scrollable body so it's the first
+           thing seen, not competing with the tree for space. #}
+        <div id="cb-onboarding" class="cb-onboarding" hidden role="note">
+            <p><strong>This is your codebook</strong> &mdash; the labels
+                you and the LLM use.</p>
+            <ul>
+                <li>Click <strong>Edit</strong> on a code to add a
+                    definition, examples, or exclusion rules.</li>
+                <li><strong>Add a code</strong> at the bottom creates a
+                    new one.</li>
+                <li><strong>Codebook tools</strong> holds advanced,
+                    occasional actions (merge duplicates, split by
+                    annotator, suggestions from your notes) &mdash; most
+                    people won't need these often.</li>
+            </ul>
+            <button type="button" id="cb-onboarding-dismiss"
+                    class="cb-primary">Got it</button>
+        </div>
         <div id="cb-stale-banner" class="cb-stale-banner" hidden>
             <span class="cb-stale-msg" id="cb-stale-msg" role="status"></span>
             <button type="button" id="cb-stale-dismiss" class="cb-stale-x"
                     aria-label="Dismiss this notice">&times;</button>
         </div>
-        <div id="cb-tree" class="cb-tree" aria-live="polite">
-            <div class="cb-empty">Loading&hellip;</div>
-        </div>
-        <div class="cb-worklist-section" id="cb-worklist-section" hidden>
-            <h2 id="cb-worklist-head" class="cb-worklist-head">Review</h2>
-            <div id="cb-worklist" class="cb-worklist"
-                 aria-labelledby="cb-worklist-head">
-                <div class="cb-empty">Nothing to review.</div>
+        {# Everything below scrolls as one column, so the tree always gets
+           its fair share of space instead of being squeezed by whatever
+           else is open (worklist, codebook tools). Add-a-code stays
+           outside this, pinned at the bottom, since it's the one action
+           people reach for constantly. #}
+        <div class="cb-panel-body" id="cb-panel-body">
+            <div id="cb-tree" class="cb-tree" aria-live="polite">
+                <div class="cb-empty">Loading&hellip;</div>
             </div>
-        </div>
-        <div id="cb-admin-section" class="cb-admin-section" hidden>
-            <h2 class="cb-admin-head">Curate (admin)</h2>
-            <div class="cb-admin-group">
-                <label class="cb-admin-label"
-                       for="cb-merge-src">Merge a code into another</label>
-                <div class="cb-admin-row">
-                    <select id="cb-merge-src" class="cb-admin-select"
-                            aria-label="Code to merge from"></select>
-                    <span class="cb-admin-arrow" aria-hidden="true">→</span>
-                    <select id="cb-merge-dst" class="cb-admin-select"
-                            aria-label="Code to merge into"></select>
-                </div>
-                <button type="button" id="cb-merge-btn"
-                        class="cb-primary">Merge</button>
-            </div>
-            <div class="cb-admin-group">
-                <label class="cb-admin-label"
-                       for="cb-split-src">Split a code by annotator</label>
-                <div class="cb-admin-row">
-                    <select id="cb-split-src" class="cb-admin-select"
-                            aria-label="Code to split"></select>
-                    <input type="text" id="cb-split-annotator"
-                           class="cb-admin-input" placeholder="annotator"
-                           aria-label="Annotator to split out">
-                </div>
-                <input type="text" id="cb-split-name" class="cb-admin-input"
-                       placeholder="New code name&hellip;"
-                       aria-label="New code name">
-                <button type="button" id="cb-split-btn"
-                        class="cb-primary">Split</button>
-            </div>
-            <div class="cb-admin-group">
-                <span class="cb-admin-label">
-                    Suggest edits from annotator notes</span>
-                <button type="button" id="cb-notes-suggest-btn"
-                        class="cb-primary">Suggest edits from notes</button>
-            </div>
-            <div id="cb-admin-error" class="cb-error" hidden
-                 role="alert" tabindex="-1"></div>
-            <div id="cb-admin-status" class="cb-admin-status"
-                 role="status" aria-live="polite"></div>
-            <div class="cb-admin-group">
-                <h3 class="cb-admin-sub" id="cb-proposals-head">
-                    Pending proposals</h3>
-                <div id="cb-proposals" class="cb-proposals"
-                     aria-labelledby="cb-proposals-head" aria-live="polite">
-                    <div class="cb-empty">No pending proposals.</div>
+            <div class="cb-worklist-section" id="cb-worklist-section" hidden>
+                <h2 id="cb-worklist-head" class="cb-worklist-head">Review</h2>
+                <div id="cb-worklist" class="cb-worklist"
+                     aria-labelledby="cb-worklist-head">
+                    <div class="cb-empty">Nothing to review.</div>
                 </div>
             </div>
-            <details class="cb-admin-group cb-changes-wrap">
-                <summary class="cb-admin-sub">Recent changes</summary>
-                <ul id="cb-changes" class="cb-changes-list"></ul>
+            {# Collapsed by default — these are occasional, admin-flavored
+               actions, not the primary use of the panel. Reopens itself
+               when there's a pending proposal worth noticing. #}
+            <details id="cb-admin-section" class="cb-admin-section" hidden>
+                <summary class="cb-admin-head">Codebook tools</summary>
+                <div class="cb-admin-body">
+                    <div class="cb-admin-group">
+                        <label class="cb-admin-label"
+                               for="cb-merge-src">Merge a code into another</label>
+                        <p class="cb-admin-hint">
+                            Use when two codes mean the same thing.</p>
+                        <div class="cb-admin-row">
+                            <select id="cb-merge-src" class="cb-admin-select"
+                                    aria-label="Code to merge from"></select>
+                            <span class="cb-admin-arrow" aria-hidden="true">→</span>
+                            <select id="cb-merge-dst" class="cb-admin-select"
+                                    aria-label="Code to merge into"></select>
+                        </div>
+                        <button type="button" id="cb-merge-btn"
+                                class="cb-primary">Merge</button>
+                    </div>
+                    <div class="cb-admin-group">
+                        <label class="cb-admin-label"
+                               for="cb-split-src">Split a code by annotator</label>
+                        <p class="cb-admin-hint">
+                            Use when one code is being applied
+                            inconsistently by different annotators.</p>
+                        <div class="cb-admin-row">
+                            <select id="cb-split-src" class="cb-admin-select"
+                                    aria-label="Code to split"></select>
+                            <input type="text" id="cb-split-annotator"
+                                   class="cb-admin-input" placeholder="annotator"
+                                   aria-label="Annotator to split out">
+                        </div>
+                        <input type="text" id="cb-split-name" class="cb-admin-input"
+                               placeholder="New code name&hellip;"
+                               aria-label="New code name">
+                        <button type="button" id="cb-split-btn"
+                                class="cb-primary">Split</button>
+                    </div>
+                    <div class="cb-admin-group">
+                        <span class="cb-admin-label">
+                            Suggest edits from annotator notes</span>
+                        <p class="cb-admin-hint">
+                            Turns your rationale notes into proposed
+                            definition tweaks &mdash; review and confirm
+                            below before anything changes.</p>
+                        <button type="button" id="cb-notes-suggest-btn"
+                                class="cb-primary">Suggest edits from notes</button>
+                    </div>
+                    <div id="cb-admin-error" class="cb-error" hidden
+                         role="alert" tabindex="-1"></div>
+                    <div id="cb-admin-status" class="cb-admin-status"
+                         role="status" aria-live="polite"></div>
+                    <div class="cb-admin-group">
+                        <h3 class="cb-admin-sub" id="cb-proposals-head">
+                            Pending proposals</h3>
+                        <div id="cb-proposals" class="cb-proposals"
+                             aria-labelledby="cb-proposals-head" aria-live="polite">
+                            <div class="cb-empty">No pending proposals.</div>
+                        </div>
+                    </div>
+                    <details class="cb-admin-group cb-changes-wrap">
+                        <summary class="cb-admin-sub">Recent changes</summary>
+                        <ul id="cb-changes" class="cb-changes-list"></ul>
+                    </details>
+                </div>
             </details>
         </div>
         <div id="cb-composer" class="cb-composer" hidden>
@@ -723,7 +824,7 @@
             <div id="cb-mode-hint" class="cb-mode-hint"></div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='codebook.js') }}?v=13"></script>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=16"></script>
 
     {% block extra_js %}{% endblock %}
 </body>

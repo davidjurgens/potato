@@ -64,6 +64,25 @@
 
 .cb-panel-toggle:active { background: var(--cb-surface-3); }
 
+.cb-toggle-badge {
+    position: absolute;
+    top: -6px;
+    left: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--cb-accent);
+    color: var(--cb-accent-ink);
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    border: 1.5px solid var(--cb-surface);
+}
+
 .cb-panel {
     position: fixed;
     right: 0;
@@ -93,6 +112,25 @@
 @keyframes cb-panel-in {
     from { opacity: 0; transform: translateX(12px); }
     to   { opacity: 1; transform: translateX(0); }
+}
+
+.cb-panel-resize-handle {
+    position: absolute;
+    top: 0;
+    left: -3px;
+    width: 7px;
+    height: 100%;
+    cursor: ew-resize;
+    z-index: 1051;
+    touch-action: none;
+    border-radius: 3px;
+}
+
+.cb-panel-resize-handle:hover,
+.cb-panel-resize-handle:focus-visible,
+.cb-panel-resize-handle.cb-resizing {
+    background: color-mix(in srgb, var(--cb-accent) 45%, transparent);
+    outline: none;
 }
 
 .cb-panel-header {
@@ -127,9 +165,18 @@
     color: var(--cb-ink);
 }
 
-.cb-tree {
+/* Everything below the header/onboarding/stale-banner scrolls as one
+   column, so the tree always gets its fair share of space instead of
+   being squeezed by whatever else happens to be open below it. */
+.cb-panel-body {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.cb-tree {
     padding: var(--cb-space-4);
 }
 
@@ -230,6 +277,26 @@
     transform: none;
 }
 
+.cb-danger {
+    border: 1px solid #c0392b;
+    background: var(--cb-surface);
+    color: #c0392b;
+    min-height: 36px;
+    padding: 7px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-left: auto;
+    transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+
+.cb-danger:hover { background: #c0392b; color: #fff; }
+.cb-danger:disabled {
+    opacity: 0.55;
+    cursor: progress;
+}
+
 .cb-mode-hint {
     font-size: 0.72rem;
     color: var(--cb-ink-soft);
@@ -292,6 +359,30 @@
 @media (prefers-reduced-motion: reduce) {
     .cb-stale-x { transition: none; }
 }
+
+/* First-open walkthrough. */
+.cb-onboarding {
+    flex-shrink: 0;
+    margin: var(--cb-space-3) var(--cb-space-4) 0;
+    padding: var(--cb-space-3);
+    background: color-mix(in srgb, var(--cb-accent) 8%, var(--cb-surface));
+    border: 1px solid color-mix(in srgb, var(--cb-accent) 25%, transparent);
+    border-radius: var(--cb-radius);
+    font-size: 0.82rem;
+    color: var(--cb-ink);
+}
+
+.cb-onboarding p { margin: 0 0 var(--cb-space-2); line-height: 1.4; }
+
+.cb-onboarding ul {
+    margin: 0 0 var(--cb-space-3);
+    padding-left: 1.1em;
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-2);
+}
+
+.cb-onboarding li { line-height: 1.4; }
 
 .cb-worklist-section {
     border-top: 1px solid var(--cb-line);
@@ -592,22 +683,43 @@
 
 .cb-iv-cancel:active { background: var(--cb-surface-3); }
 
-/* Admin curation section — same token system as the rest of the tray. */
+/* "Codebook tools" (admin curation) — collapsed <details> by default so
+   these occasional, advanced actions never crowd out the code tree,
+   which is the panel's primary job. Same token system as the rest of
+   the tray. */
 .cb-admin-section {
     border-top: 1px solid var(--cb-line);
-    padding: var(--cb-space-3) var(--cb-space-4) var(--cb-space-4);
-    display: flex;
-    flex-direction: column;
-    gap: var(--cb-space-4);
+    flex-shrink: 0;
 }
 
-.cb-admin-head {
+.cb-admin-section > summary.cb-admin-head {
+    cursor: pointer;
+    list-style: revert;
     margin: 0;
+    padding: var(--cb-space-3) var(--cb-space-4);
     font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--cb-ink-soft);
+}
+
+.cb-admin-section > summary.cb-admin-head:hover {
+    color: var(--cb-ink);
+}
+
+.cb-admin-body {
+    padding: 0 var(--cb-space-4) var(--cb-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--cb-space-4);
+}
+
+.cb-admin-hint {
+    margin: -2px 0 0;
+    font-size: 0.74rem;
+    color: var(--cb-ink-soft);
+    line-height: 1.4;
 }
 
 .cb-admin-group {

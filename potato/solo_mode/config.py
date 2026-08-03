@@ -89,6 +89,11 @@ class ThresholdConfig:
     multiselect_jaccard_threshold: float = 0.5
     textbox_embedding_threshold: float = 0.7
     span_overlap_threshold: float = 0.5
+    # Below this agreement rate (once enough comparisons exist), the
+    # disagreement resolution screen offers a detour into edge case
+    # labeling so the human can teach the model the boundary it's missing.
+    edge_case_suggestion_agreement_rate: float = 0.7
+    edge_case_suggestion_min_compared: int = 5
 
 
 @dataclass
@@ -465,6 +470,10 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
         multiselect_jaccard_threshold=thresh_data.get('multiselect_jaccard_threshold', 0.5),
         textbox_embedding_threshold=thresh_data.get('textbox_embedding_threshold', 0.7),
         span_overlap_threshold=thresh_data.get('span_overlap_threshold', 0.5),
+        edge_case_suggestion_agreement_rate=thresh_data.get(
+            'edge_case_suggestion_agreement_rate', 0.7),
+        edge_case_suggestion_min_compared=thresh_data.get(
+            'edge_case_suggestion_min_compared', 5),
     )
 
     # Parse instance selection config

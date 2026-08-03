@@ -435,56 +435,112 @@
         "disagreement_resolved": true,
         "resolution_label": "negative"
       }
+    },
+    "3": {
+      "sentiment": {
+        "instance_id": "3",
+        "schema_name": "sentiment",
+        "predicted_label": "negative",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 14,
+        "timestamp": "2026-07-28T12:58:43.211725",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The text expresses disappointment in oneself, which is a negative emotion.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "12": {
+      "sentiment": {
+        "instance_id": "12",
+        "schema_name": "sentiment",
+        "predicted_label": "neutral",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 14,
+        "timestamp": "2026-07-28T12:58:47.409404",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The text states that nothing major happened today, which implies a lack of significant event or emotion, aligning with the neutral label.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "18": {
+      "sentiment": {
+        "instance_id": "18",
+        "schema_name": "sentiment",
+        "predicted_label": "negative",
+        "confidence_score": 0.9,
+        "uncertainty_score": 0.09999999999999998,
+        "prompt_version": 14,
+        "timestamp": "2026-07-28T12:58:51.714850",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The text expresses a feeling of being 'down' without any clear reason, which suggests a negative emotional state.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
     }
   },
   "human_labeled_ids": [
-    "14",
-    "11",
-    "4",
-    "2",
     "21",
-    "6",
-    "18",
-    "8",
-    "9",
-    "10",
-    "1",
-    "12",
+    "15",
     "3",
-    "15",
+    "12",
+    "9",
     "7",
-    "5",
-    "16",
-    "13",
-    "20",
-    "19",
-    "17"
-  ],
-  "llm_labeled_ids": [
     "6",
-    "13",
+    "1",
+    "10",
     "14",
     "11",
-    "4",
-    "10",
-    "1",
-    "8",
-    "20",
-    "15",
-    "21",
     "19",
-    "7",
-    "5",
     "16",
+    "8",
     "17",
     "2",
-    "9"
+    "13",
+    "4",
+    "20",
+    "5",
+    "18"
+  ],
+  "llm_labeled_ids": [
+    "21",
+    "15",
+    "3",
+    "12",
+    "9",
+    "7",
+    "6",
+    "1",
+    "10",
+    "14",
+    "11",
+    "19",
+    "16",
+    "8",
+    "17",
+    "2",
+    "13",
+    "4",
+    "20",
+    "5",
+    "18"
   ],
   "disagreement_ids": [
-    "8",
-    "21"
+    "21",
+    "8"
   ],
   "validation_sample_ids": [],
+  "pending_relabel_ids": [],
+  "relabel_wave_size": 0,
   "edge_case_ids": [],
   "edge_case_labels": {},
   "agreement_metrics": {
@@ -601,8 +657,33 @@
         12,
         0.8
       ]
+    ],
+    "3": [
+      [
+        14,
+        0.9
+      ]
+    ],
+    "12": [
+      [
+        14,
+        0.9
+      ]
+    ],
+    "18": [
+      [
+        14,
+        0.9
+      ]
     ]
   },
+  "reannotation_counts": {},
+  "per_version_agreement": {},
+  "refinement_consecutive_failures": 0,
+  "pending_refinements": [],
+  "refinement_log": [],
+  "icl_library": null,
+  "last_review_revision": null,
   "edge_case_rule_data": {
     "rules": {},
     "categories": {}

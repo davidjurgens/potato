@@ -1,6 +1,6 @@
 {
-  "show_examples": false,
-  "max_examples": 0,
+  "show_examples": true,
+  "max_examples": 2,
   "include_rationale": true,
   "summarize_above_tokens": 0
 }

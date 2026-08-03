@@ -73,10 +73,12 @@ PHASE_TRANSITIONS: Dict[SoloPhase, Set[SoloPhase]] = {
     SoloPhase.PARALLEL_ANNOTATION: {
         SoloPhase.DISAGREEMENT_RESOLUTION,
         SoloPhase.ACTIVE_ANNOTATION,
+        SoloPhase.EDGE_CASE_SYNTHESIS,  # Detour: disagreement rate is high
     },
     SoloPhase.DISAGREEMENT_RESOLUTION: {
         SoloPhase.PARALLEL_ANNOTATION,
         SoloPhase.PROMPT_REVIEW,  # If major prompt revision needed
+        SoloPhase.EDGE_CASE_SYNTHESIS,  # Detour: disagreement rate is high
     },
     SoloPhase.ACTIVE_ANNOTATION: {
         SoloPhase.PERIODIC_REVIEW,

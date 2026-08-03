@@ -27,6 +27,83 @@
         font-variant-numeric: tabular-nums;
     }
 
+    .solo-nav-history {
+        display: flex;
+        gap: var(--space-sm, 0.5rem);
+    }
+
+    .solo-nav-history:empty { display: none; }
+
+    /* ── Sidebar Agreement refresh + relabel-pending note ───────── */
+    .sidebar-agreement-refresh {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        margin-left: 4px;
+        border: none;
+        background: none;
+        color: var(--muted-foreground, #71717a);
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        line-height: 1;
+        vertical-align: middle;
+    }
+
+    .sidebar-agreement-refresh:hover {
+        background: var(--muted, #f4f4f5);
+        color: var(--foreground, #09090b);
+    }
+
+    .sidebar-agreement-refresh.is-spinning {
+        animation: llm-pulse-spin 0.9s linear infinite;
+    }
+
+    .sidebar-agreement-refresh.needs-refresh {
+        color: var(--primary, #6e56cf);
+    }
+
+    @keyframes llm-pulse-spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+    }
+
+    .sidebar-relabel-track {
+        height: 4px;
+        background: var(--muted, #f4f4f5);
+        border-radius: 2px;
+        overflow: hidden;
+        margin: 2px 0 var(--space-xs, 0.25rem);
+    }
+
+    .sidebar-relabel-fill {
+        height: 100%;
+        background: #f59e0b;
+        transition: width 0.4s ease;
+    }
+
+    .sidebar-relabel-hint {
+        font-size: var(--text-xs, 0.75rem);
+        color: var(--muted-foreground, #71717a);
+        margin: 0 0 var(--space-sm, 0.5rem);
+    }
+
+    .revisit-banner {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm, 0.5rem);
+        margin-bottom: var(--space-md, 1rem);
+        padding: var(--space-sm, 0.5rem) var(--space-md, 1rem);
+        background: color-mix(in oklab, var(--primary, #6e56cf) 8%, var(--card, white));
+        border: 1px solid color-mix(in oklab, var(--primary, #6e56cf) 25%, transparent);
+        border-radius: var(--radius, 0.5rem);
+        font-size: var(--text-sm, 0.8125rem);
+        color: var(--foreground, #09090b);
+    }
+
     .llm-suggestion-row {
         display: flex;
         align-items: center;
@@ -161,6 +238,37 @@
         margin-bottom: var(--space-sm, 0.5rem);
     }
 
+    /* ── Stale marker: codebook or prompt changed since this preview was
+       last loaded, so the Refresh button needs a click before the panel
+       reflects reality. ─────────────────────────────────────────────── */
+    #prompt-peek-refresh.is-stale {
+        position: relative;
+        border-color: #f59e0b;
+        color: #7a5200;
+        background: color-mix(in oklab, #f59e0b 14%, var(--secondary, #f4f4f5));
+    }
+
+    #prompt-peek-refresh.is-stale::after {
+        content: '';
+        position: absolute;
+        top: -3px; right: -3px;
+        width: 9px; height: 9px;
+        border-radius: 50%;
+        background: #f59e0b;
+        border: 1.5px solid var(--card, white);
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        #prompt-peek-refresh.is-stale::after {
+            animation: llm-pulse 1.4s ease-in-out infinite;
+        }
+    }
+
+    .prompt-peek-rev.is-stale {
+        color: #7a5200;
+        background: color-mix(in oklab, #f59e0b 16%, transparent);
+    }
+
     .prompt-peek-hint {
         font-size: var(--text-xs, 0.75rem);
         color: var(--muted-foreground, #71717a);
@@ -194,6 +302,17 @@
         color: var(--muted-foreground, #71717a);
     }
 
+    /* The `hidden` attribute must win over the explicit `display: flex`
+       rules below (JS toggles both panels via `.hidden = true/false`).
+       Without this, the bare `.prompt-peek-options { display: flex }` /
+       `.prompt-peek-feedback { display: flex }` rules override `[hidden]`
+       (equal specificity, author CSS beats the UA default), so both
+       panels render open with unpopulated/default inputs even when JS
+       thinks they're closed — same bug class already fixed for
+       `.cb-panel` in base_solo.html. */
+    .prompt-peek-options[hidden],
+    .prompt-peek-feedback[hidden] { display: none; }
+
     /* ── Distill Options (codebook -> prompt rendering knobs) ───── */
     .prompt-peek-options {
         display: flex;
@@ -219,6 +338,19 @@
         width: 3.5rem;
         font: inherit;
         padding: 2px 4px;
+    }
+
+    .prompt-peek-options-hint {
+        flex-basis: 100%;
+        margin: 0 0 var(--space-xs, 0.25rem);
+        color: var(--muted-foreground, #71717a);
+    }
+
+    .prompt-peek-options-hint code {
+        font-family: var(--font-mono, ui-monospace);
+        background: color-mix(in oklab, var(--foreground, #09090b) 8%, transparent);
+        padding: 0 4px;
+        border-radius: 3px;
     }
 
     /* ── Get Feedback panel (LLM critique of the prompt) ─────────── */
@@ -280,6 +412,24 @@
 </style>
 {% endblock %}
 
+{% block flow_guidance %}
+{% if instance %}
+<div class="flow-guidance" role="note">
+    <span class="flow-guidance-icon" aria-hidden="true">&rarr;</span>
+    <span>
+        Pick a label below, or accept the LLM's suggestion. Curious what
+        the model is seeing? Open <strong>"Prompt the LLM sees"</strong>
+        underneath the form. Need to add, edit, or delete a code? Use the
+        floating <strong>Codebook</strong> button &mdash; changes there
+        show up in the prompt after a refresh. Already labeled something
+        and want to revisit it? Use Back / Forward below.
+    </span>
+</div>
+{% else %}
+{{ super() }}
+{% endif %}
+{% endblock %}
+
 {% block content %}
 {% if instance %}
     <div class="annotate-header">
@@ -291,6 +441,17 @@
             </span>
         {% endif %}
     </div>
+
+    {% if existing_label %}
+    <div class="revisit-banner" role="status">
+        <span>&#8617;</span>
+        <span>
+            You're revisiting this instance. You labeled it
+            <strong>{{ existing_label }}</strong> &mdash; pick a label and
+            submit to change it, or use Back / Forward to move on.
+        </span>
+    </div>
+    {% endif %}
 
     <form method="POST" action="{{ url_for('solo_mode.annotate') }}" id="annotate-form">
         <input type="hidden" name="instance_id" value="{{ instance.id }}">
@@ -372,7 +533,32 @@
         </fieldset>
 
         <div class="solo-nav">
-            <span></span>
+            <div class="solo-nav-history">
+                {% if nav and nav.can_back %}
+                <a class="btn btn-secondary" id="nav-back-btn"
+                   href="{{ url_for('solo_mode.annotate', instance_id=nav.back_id) }}"
+                   aria-keyshortcuts="Alt+ArrowLeft">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M19 12H5M11 18l-6-6 6-6"
+                              stroke="currentColor" stroke-width="2"
+                              stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Back
+                </a>
+                {% endif %}
+                {% if nav and nav.can_forward %}
+                <a class="btn btn-secondary" id="nav-forward-btn"
+                   href="{{ url_for('solo_mode.annotate', instance_id=nav.forward_id) }}"
+                   aria-keyshortcuts="Alt+ArrowRight">
+                    Forward
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M5 12h14M13 6l6 6-6 6"
+                              stroke="currentColor" stroke-width="2"
+                              stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </a>
+                {% endif %}
+            </div>
             <button type="submit" class="btn btn-primary" id="submit-btn" disabled>
                 <span id="submit-label">Submit</span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -409,6 +595,12 @@
                     </span>
                 </div>
                 <div class="prompt-peek-options" id="prompt-peek-options" hidden>
+                    <p class="prompt-peek-options-hint">
+                        These control how your codebook gets compressed
+                        into the <code>## Codebook</code> block above &mdash;
+                        they don't change your codes, just how much of
+                        each one gets sent to the LLM.
+                    </p>
                     <label>
                         <input type="checkbox" id="distill-show-examples" />
                         Show examples
@@ -487,8 +679,27 @@
 </div>
 <div class="stat-item">
     <span class="stat-label">Agreement</span>
-    <span class="stat-value">{{ (stats.agreement_rate * 100)|int }}%</span>
+    <span class="stat-value">
+        <span id="sidebar-agreement-value">{{ (stats.agreement_rate * 100)|int }}%</span>
+        <button type="button" id="sidebar-agreement-refresh"
+                class="sidebar-agreement-refresh"
+                title="Refresh agreement rate for the current prompt"
+                aria-label="Refresh agreement rate for the current prompt">&#8635;</button>
+    </span>
 </div>
+{% if relabel and relabel.pending %}
+<div class="stat-item relabel-stat" id="sidebar-relabel-note">
+    <span class="stat-label" style="color: #b45309;">Needs relabel</span>
+    <span class="stat-value" style="color: #b45309;">{{ relabel.done }} / {{ relabel.total }}</span>
+</div>
+<div class="sidebar-relabel-track">
+    <div class="sidebar-relabel-fill" style="width: {{ relabel.percent_complete }}%;"></div>
+</div>
+<p class="sidebar-relabel-hint">
+    The prompt changed, so previously-labeled instances are being
+    resurfaced for a fresh pass before the agreement rate updates.
+</p>
+{% endif %}
 {% else %}
 {{ super() }}
 {% endif %}
@@ -514,6 +725,12 @@
         <kbd>Enter</kbd>
         <span>Submit</span>
     </div>
+    {% if nav and (nav.can_back or nav.can_forward) %}
+    <div style="margin-top: var(--space-xs, 0.25rem); display: flex; gap: var(--space-sm, 0.5rem); align-items: center;">
+        <kbd>Alt</kbd>+<kbd>&larr;</kbd>/<kbd>&rarr;</kbd>
+        <span>Back / Forward</span>
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 {% endblock %}
@@ -543,6 +760,26 @@
     // Label button clicks (delegated)
     document.querySelectorAll('.label-btn').forEach(btn => {
         btn.addEventListener('click', () => selectLabel(btn.dataset.label));
+    });
+
+    // Revisiting an instance via Back/Forward (or the codebook worklist's
+    // "Go" button)? Pre-select the label already on file so re-submitting
+    // without changing anything is a no-op, not an accidental blank.
+    const existingLabel = {{ (existing_label if existing_label is defined else none)|tojson|safe }};
+    if (existingLabel) selectLabel(existingLabel);
+
+    // Back/Forward keyboard shortcuts, mirroring browser history nav.
+    document.addEventListener('keydown', (e) => {
+        if (!e.altKey) return;
+        const tag = (document.activeElement && document.activeElement.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        if (e.key === 'ArrowLeft') {
+            const back = document.getElementById('nav-back-btn');
+            if (back) { e.preventDefault(); back.click(); }
+        } else if (e.key === 'ArrowRight') {
+            const fwd = document.getElementById('nav-forward-btn');
+            if (fwd) { e.preventDefault(); fwd.click(); }
+        }
     });
 
     // One-click accept LLM suggestion
@@ -587,17 +824,63 @@
         const refreshBtn = document.getElementById('prompt-peek-refresh');
         if (!details || !pre) return;
 
-        const instanceId = {{ instance.id|tojson|safe }};
+        const instanceId = {{ (instance.id if instance else none)|tojson|safe }};
         const baseUrl = "{{ url_for('solo_mode.prompt_preview') }}";
+        const codebookVersionUrl = '/api/codebook/version';
+        const promptsUrl = "{{ url_for('solo_mode.api_prompts') }}";
         let loadedOnce = false;
+
+        // ── Staleness tracking — the codebook or the prompt can change out
+        // from under this panel (another tab, the tray's Add/Edit/Delete,
+        // a prompt edit on /solo/prompt) without this page reloading.
+        // Remember what this preview currently reflects, then poll the
+        // cheap version endpoints and flag the Refresh button the moment
+        // either one moves, so "click Refresh" is an obvious next step
+        // instead of a silent staleness.
+        let baselineCodebookRev = null;
+        let baselinePromptVersion = null;
+
+        function markStale() {
+            if (refreshBtn) {
+                refreshBtn.classList.add('is-stale');
+                refreshBtn.title = 'The codebook or prompt changed since '
+                    + 'this preview was loaded — click to regenerate.';
+            }
+            if (rev && !rev.hidden) rev.classList.add('is-stale');
+        }
+
+        function clearStale() {
+            if (refreshBtn) {
+                refreshBtn.classList.remove('is-stale');
+                refreshBtn.removeAttribute('title');
+            }
+            if (rev) rev.classList.remove('is-stale');
+        }
+
+        function checkFreshness() {
+            if (refreshBtn && refreshBtn.classList.contains('is-stale')) return;
+            Promise.all([
+                fetch(codebookVersionUrl).then(r => r.ok ? r.json() : null).catch(() => null),
+                fetch(promptsUrl).then(r => r.ok ? r.json() : null).catch(() => null),
+            ]).then(([cb, pr]) => {
+                const cbStale = cb && baselineCodebookRev !== null
+                    && cb.revision !== baselineCodebookRev;
+                const promptStale = pr && baselinePromptVersion !== null
+                    && pr.current_version !== baselinePromptVersion;
+                if (cbStale || promptStale) markStale();
+            });
+        }
 
         function load() {
             pre.textContent = 'Loading…';
             note.hidden = true;
+            clearStale();
             fetch(baseUrl + '?instance_id=' + encodeURIComponent(instanceId))
                 .then(r => r.ok ? r.json() : Promise.reject(r.status))
                 .then(d => {
                     pre.textContent = d.full_prompt || '(empty prompt)';
+                    baselineCodebookRev = (d.codebook_revision === undefined) ? null : d.codebook_revision;
+                    baselinePromptVersion = (d.prompt_version === undefined) ? null : d.prompt_version;
                     if (d.codebook_revision !== null && d.codebook_revision !== undefined) {
                         rev.textContent = 'codebook rev ' + d.codebook_revision;
                         rev.hidden = false;
@@ -622,6 +905,11 @@
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => { loadedOnce = true; load(); });
         }
+
+        // Poll every 12s once the panel has been opened at least once —
+        // cheap (two small JSON endpoints), and only runs while the human
+        // is actually on this screen looking at it.
+        setInterval(() => { if (loadedOnce) checkFreshness(); }, 12000);
 
         // ── Distill Options (show examples / max examples / rationale /
         // summarize-above-k) ── live override for this session, read by
@@ -746,7 +1034,7 @@
         const row = document.getElementById('llm-async');
         if (!row) return;  // server already rendered a suggestion
         const status = document.getElementById('llm-async-status');
-        const instanceId = {{ instance.id|tojson|safe }};
+        const instanceId = {{ (instance.id if instance else none)|tojson|safe }};
         const url = "{{ url_for('solo_mode.llm_suggestion') }}";
 
         function esc(s) {
@@ -835,6 +1123,41 @@
                     '<span style="color: var(--muted-foreground, #71717a);">'
                     + 'Could not get an LLM suggestion.</span>';
             });
+    })();
+
+    // ── Sidebar Agreement refresh ──────────────────────────────────
+    // Pulls in the agreement rate scoped to just the current prompt
+    // version (see the "Needs relabel" note above it, when present).
+    (function () {
+        const btn = document.getElementById('sidebar-agreement-refresh');
+        const valueEl = document.getElementById('sidebar-agreement-value');
+        if (!btn || !valueEl) return;
+        const url = "{{ url_for('solo_mode.api_current_agreement') }}";
+        const relabelPending = {{ (relabel.pending if relabel else 0)|tojson|safe }};
+
+        if (relabelPending) {
+            btn.disabled = true;
+        } else if ({{ (relabel.total if relabel else 0)|tojson|safe }}) {
+            // A relabel wave finished at some point — invite a refresh.
+            btn.classList.add('needs-refresh');
+        }
+
+        btn.addEventListener('click', () => {
+            btn.classList.add('is-spinning');
+            btn.disabled = true;
+            fetch(url)
+                .then(r => r.ok ? r.json() : Promise.reject(r.status))
+                .then(d => {
+                    valueEl.textContent = d.agreement_rate == null
+                        ? '—' : Math.round(d.agreement_rate * 100) + '%';
+                    btn.classList.remove('is-spinning', 'needs-refresh');
+                    btn.disabled = false;
+                })
+                .catch(() => {
+                    btn.classList.remove('is-spinning');
+                    btn.disabled = false;
+                });
+        });
     })();
 </script>
 {% endblock %}

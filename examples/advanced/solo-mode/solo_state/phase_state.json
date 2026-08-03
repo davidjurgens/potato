@@ -1,5 +1,5 @@
 {
-  "current_phase": "parallel-annotation",
+  "current_phase": "edge-case-labeling",
   "transition_history": [
     {
       "from_phase": "setup",
@@ -33,6 +33,20 @@
       "from_phase": "prompt-validation",
       "to_phase": "parallel-annotation",
       "timestamp": "2026-02-18T22:21:50.180787",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "parallel-annotation",
+      "to_phase": "edge-case-synthesis",
+      "timestamp": "2026-07-28T12:59:46.043092",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "edge-case-synthesis",
+      "to_phase": "edge-case-labeling",
+      "timestamp": "2026-07-28T13:00:02.819530",
       "reason": "",
       "metadata": {}
     }

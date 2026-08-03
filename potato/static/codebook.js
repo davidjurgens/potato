@@ -589,10 +589,47 @@
         });
     }
 
+    function setToggleBadge(n) {
+        var toggle = el("cb-panel-toggle");
+        if (!toggle) return;
+        var badge = el("cb-toggle-badge");
+        if (!n) {
+            if (badge) badge.remove();
+            return;
+        }
+        if (!badge) {
+            badge = document.createElement("span");
+            badge.id = "cb-toggle-badge";
+            badge.className = "cb-toggle-badge";
+            toggle.appendChild(badge);
+        }
+        badge.textContent = String(n);
+        badge.title = n + " pending codebook proposal" + (n > 1 ? "s" : "")
+            + " to review";
+    }
+
+    // Best-effort, page-load-time check for pending proposals (e.g. from
+    // the automatic notes-suggest pass) so the badge is visible even
+    // before the tray has ever been opened this session.
+    function refreshProposalBadge() {
+        fetch(ADMIN_API + "/proposals")
+            .then(function (r) { return r.status === 200 ? r.json() : null; })
+            .then(function (d) {
+                setToggleBadge((d && d.proposals && d.proposals.length) || 0);
+            })
+            .catch(function () { /* best-effort */ });
+    }
+
     function renderProposals(items) {
+        items = items || [];
+        setToggleBadge(items.length);
+        // Pending proposals are actionable — surface the (collapsed by
+        // default) Codebook tools section automatically so they're not
+        // silently buried.
+        var sec = el("cb-admin-section");
+        if (sec && items.length && !sec.hidden) sec.open = true;
         var box = el("cb-proposals");
         if (!box) return;
-        items = items || [];
         if (!items.length) {
             box.innerHTML =
                 '<div class="cb-empty">No pending proposals.</div>';
@@ -814,6 +851,9 @@
             + "Save</button>"
             + '<button type="button" class="cb-iv-cancel cb-detail-hist">'
             + "History</button>"
+            + '<button type="button" class="cb-danger cb-detail-delete" '
+            + 'data-id="' + esc(code.id) + '" data-name="'
+            + escAttr(code.name || "") + '">Delete</button>'
             + "</div>"
             + '<div class="cb-detail-status" aria-live="polite"></div>'
             + '<div class="cb-detail-history" hidden></div>';
@@ -913,6 +953,40 @@
         });
     }
 
+    function deleteCode(id, name, btn) {
+        if (!id) return;
+        var ok = window.confirm(
+            "Delete \"" + (name || "this code") + "\"? This also removes "
+            + "any child codes underneath it. Existing annotations that "
+            + "used it are kept, but the label will no longer be in the "
+            + "codebook.");
+        if (!ok) return;
+        btn.disabled = true;
+        fetch(API + "/" + encodeURIComponent(id), { method: "DELETE" })
+            .then(function (r) {
+                return r.json().then(function (b) {
+                    return { ok: r.ok, body: b };
+                });
+            })
+            .then(function (res) {
+                btn.disabled = false;
+                if (!res.ok) {
+                    window.alert((res.body && res.body.error)
+                        || "Could not delete code.");
+                    return;
+                }
+                var li = btn.closest(".cb-node");
+                var panel = li && li.querySelector(".cb-detail");
+                var toggle = li && li.querySelector(".cb-detail-toggle");
+                if (panel && toggle) closeDetail(panel, toggle);
+                afterAdminOp("Deleted " + (name ? "“" + name + "”" : "code") + ".");
+            })
+            .catch(function () {
+                btn.disabled = false;
+                window.alert("Could not delete code.");
+            });
+    }
+
     function renderHistory(box, rows) {
         rows = rows || [];
         if (!rows.length) {
@@ -975,6 +1049,12 @@
                 if (li2 && pnl2) {
                     toggleHistory(li2.getAttribute("data-id"), pnl2);
                 }
+                return;
+            }
+            var del = t.closest(".cb-detail-delete");
+            if (del) {
+                deleteCode(del.getAttribute("data-id"),
+                    del.getAttribute("data-name"), del);
                 return;
             }
             var addEx = t.closest(".cb-ex-add");
@@ -1408,6 +1488,123 @@
         if (toggle) { toggle.hidden = false; toggle.focus(); }
     }
 
+    // ---- resizable panel — drag the left edge to make the tray wider or
+    // narrower; width persists across sessions via localStorage. ----------
+
+    var RESIZE_MIN_W = 280;
+    var RESIZE_WIDTH_KEY = "cb-panel-width";
+
+    function resizeMaxW() { return Math.round(window.innerWidth * 0.92); }
+
+    function applyStoredWidth(panel) {
+        var stored = parseInt(localStorage.getItem(RESIZE_WIDTH_KEY) || "", 10);
+        if (!isNaN(stored)) {
+            var w = Math.max(RESIZE_MIN_W, Math.min(resizeMaxW(), stored));
+            panel.style.width = w + "px";
+        }
+    }
+
+    function setPanelWidth(panel, w) {
+        w = Math.max(RESIZE_MIN_W, Math.min(resizeMaxW(), w));
+        panel.style.width = w + "px";
+        try { localStorage.setItem(RESIZE_WIDTH_KEY, String(w)); }
+        catch (e) { /* storage full/disabled — width just won't persist */ }
+        return w;
+    }
+
+    function initResize() {
+        var panel = el("cb-panel");
+        if (!panel || el("cb-panel-resize-handle")) return;
+
+        var handle = document.createElement("div");
+        handle.id = "cb-panel-resize-handle";
+        handle.className = "cb-panel-resize-handle";
+        handle.setAttribute("role", "separator");
+        handle.setAttribute("aria-orientation", "vertical");
+        handle.setAttribute("aria-label",
+            "Resize codebook panel (drag, or use arrow keys)");
+        handle.tabIndex = 0;
+        panel.insertBefore(handle, panel.firstChild);
+
+        applyStoredWidth(panel);
+
+        var dragging = false, startX = 0, startW = 0;
+
+        function onMove(clientX) {
+            // Panel is right-anchored: dragging the handle left (smaller
+            // clientX) should widen it.
+            setPanelWidth(panel, startW + (startX - clientX));
+        }
+        function endDrag() {
+            if (!dragging) return;
+            dragging = false;
+            handle.classList.remove("cb-resizing");
+            document.body.style.userSelect = "";
+            document.removeEventListener("mousemove", onMouseMove);
+            document.removeEventListener("mouseup", endDrag);
+        }
+        function onMouseMove(e) { if (dragging) onMove(e.clientX); }
+
+        handle.addEventListener("mousedown", function (e) {
+            dragging = true;
+            startX = e.clientX;
+            startW = panel.offsetWidth;
+            handle.classList.add("cb-resizing");
+            document.body.style.userSelect = "none";
+            document.addEventListener("mousemove", onMouseMove);
+            document.addEventListener("mouseup", endDrag);
+            e.preventDefault();
+        });
+        handle.addEventListener("touchstart", function (e) {
+            if (!e.touches.length) return;
+            dragging = true;
+            startX = e.touches[0].clientX;
+            startW = panel.offsetWidth;
+            handle.classList.add("cb-resizing");
+        }, { passive: true });
+        handle.addEventListener("touchmove", function (e) {
+            if (!dragging || !e.touches.length) return;
+            onMove(e.touches[0].clientX);
+        }, { passive: true });
+        handle.addEventListener("touchend", endDrag);
+
+        // Keyboard resize (WCAG 2.1.1): left/right nudge by 24px.
+        handle.addEventListener("keydown", function (e) {
+            if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                setPanelWidth(panel, panel.offsetWidth + 24);
+            } else if (e.key === "ArrowRight") {
+                e.preventDefault();
+                setPanelWidth(panel, panel.offsetWidth - 24);
+            }
+        });
+
+        window.addEventListener("resize", function () {
+            // Keep the panel within bounds if the viewport shrinks.
+            setPanelWidth(panel, panel.offsetWidth);
+        });
+    }
+
+    // ---- first-open walkthrough -------------------------------------
+
+    var ONBOARD_KEY = "cb_onboarding_dismissed";
+
+    function maybeShowOnboarding() {
+        var box = el("cb-onboarding");
+        if (!box) return;
+        var dismissed = false;
+        try { dismissed = localStorage.getItem(ONBOARD_KEY) === "1"; }
+        catch (e) { /* storage disabled — just show it every time */ }
+        box.hidden = dismissed;
+    }
+
+    function dismissOnboarding() {
+        var box = el("cb-onboarding");
+        if (box) box.hidden = true;
+        try { localStorage.setItem(ONBOARD_KEY, "1"); }
+        catch (e) { /* non-fatal */ }
+    }
+
     function wire() {
         var toggle = el("cb-panel-toggle");
         var panel = el("cb-panel");
@@ -1417,11 +1614,16 @@
                 panel.hidden = false;
                 toggle.hidden = true;
                 onInstance();
+                maybeShowOnboarding();
                 var n = el("cb-new-name");
                 if (n && !el("cb-composer").hidden) n.focus();
             });
         }
         if (close) close.addEventListener("click", closePanel);
+        var onboardDismiss = el("cb-onboarding-dismiss");
+        if (onboardDismiss) {
+            onboardDismiss.addEventListener("click", dismissOnboarding);
+        }
         if (panel) {
             panel.addEventListener("keydown", function (e) {
                 if (e.key === "Escape") {
@@ -1429,6 +1631,7 @@
                 }
             });
         }
+        initResize();
         // In-vivo coding: global key, active whenever a codebook span
         // scheme exists (wire() runs only when the codebook is enabled).
         document.addEventListener("keydown", onGlobalKeydown);
@@ -1468,6 +1671,8 @@
             renderTray(data);
             reconcileForms(data, instanceId());
             refreshProvenance();
+            refreshProposalBadge();
+            setInterval(refreshProposalBadge, 60000);
         }).catch(function () { /* leave hidden */ });
     }
 

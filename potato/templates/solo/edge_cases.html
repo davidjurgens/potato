@@ -2,6 +2,23 @@
 
 {% block title %}Edge Cases - Solo Mode{% endblock %}
 
+{% block flow_guidance %}
+<div class="flow-guidance" role="note">
+    <span class="flow-guidance-icon" aria-hidden="true">&rarr;</span>
+    <span>
+        {% if current_case %}
+        Label this synthetic boundary example the way your guidelines say
+        it should be labeled &mdash; add notes if it's genuinely
+        ambiguous. Once every edge case is labeled, you'll move on to
+        annotating the real dataset.
+        {% else %}
+        No edge cases left to label. Continue to annotation below, or
+        revise the prompt first if a pattern here suggests it needs work.
+        {% endif %}
+    </span>
+</div>
+{% endblock %}
+
 {% block content %}
 <h1>Label Edge Cases</h1>
 
