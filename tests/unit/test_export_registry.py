@@ -142,6 +142,9 @@ class TestBuiltinExportersRegistered:
             "codebook", "quotation_report",
             # ConvoKit round-trip — stdlib only, so not optional
             "convokit",
+            # Keystroke / typing-dynamics streams. Falls back to JSONL when
+            # pyarrow is absent, so it has no hard dependency either.
+            "keystrokes",
         }
         # HuggingFace exporter is optional (depends on datasets/huggingface_hub)
         optional = {"huggingface"}

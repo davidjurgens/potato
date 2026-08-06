@@ -181,6 +181,9 @@ over prose when writing a config or calling the API.
 - [Admin Dashboard](administration/admin_dashboard.md) - Monitoring and management
 - [Annotator Progress Dashboard](administration/annotator_dashboard.md) - Opt-in, read-only progress view for annotators
 - [Behavioral Tracking](advanced/behavioral_tracking.md) - User behavior analytics
+- [Keystroke Logging](advanced/keystroke_logging.md) - Content-blind typing dynamics on free-text fields
+- [Writing-Process Detection](advanced/writing_process_detection.md) - Tell composed text from transcribed or LLM-pasted text
+- [Keystroke Logging Ethics](advanced/keystroke_logging_ethics.md) - IRB, consent, and participant rights
 - [Annotation History](administration/annotation_history.md) - Tracking annotation changes
 
 ## Data & Output

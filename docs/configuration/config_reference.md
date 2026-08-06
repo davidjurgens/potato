@@ -149,6 +149,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `pocket` |  | object | `auto_redirect`, `batch_size`, `enabled` |
 | `analytics` |  | object | `pricing`, `thresholds` |
 | `annotator_dashboard` |  | object | `enabled`, `show_active_annotators`, `show_personal_progress`, `show_project_progress` |
+| `keystroke_logging` |  | object | `classify_paste_source`, `detection`, `disclose_to_annotators`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_session_ms`, `include_schemas`, `pause_thresholds_ms`, `store_events` |
 
 ## UI & Layout
 

@@ -129,6 +129,8 @@ def _register_builtin_exporters():
     from .tabular_exporter import CSVExporter, TSVExporter, JSONLExporter
     from .codebook_exporter import CodebookExporter
     from .quotation_report_exporter import QuotationReportExporter
+    from .convokit_exporter import ConvoKitExporter
+    from .keystroke_exporter import KeystrokeExporter
 
     exporters = [
         COCOExporter(),
@@ -148,6 +150,12 @@ def _register_builtin_exporters():
         JSONLExporter(),
         CodebookExporter(),
         QuotationReportExporter(),
+        # Reads and writes the ConvoKit format with the standard library only,
+        # so it belongs here rather than among the optional exporters below.
+        ConvoKitExporter(),
+        # Reads the project SQLite database rather than user_state.json; falls
+        # back to JSONL when pyarrow is absent, so it has no hard dependency.
+        KeystrokeExporter(),
     ]
 
     # Optional exporters with external dependencies

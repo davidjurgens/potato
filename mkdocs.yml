@@ -130,6 +130,9 @@ nav:
         - Category-Based Assignment: advanced/category_assignment.md
         - Task Assignment: advanced/task_assignment.md
         - Behavioral Tracking: advanced/behavioral_tracking.md
+        - Keystroke Logging: advanced/keystroke_logging.md
+        - Writing-Process Detection: advanced/writing_process_detection.md
+        - Keystroke Logging Ethics: advanced/keystroke_logging_ethics.md
         - Qualitative Data Analysis (QDA): advanced/qda.md
         - Codebook: advanced/codebook.md
         - Memos: advanced/memos.md

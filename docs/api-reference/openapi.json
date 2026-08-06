@@ -1347,6 +1347,20 @@
         ]
       }
     },
+    "/admin/api/writing_process": {
+      "get": {
+        "operationId": "get_admin_api_writing_process",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Per-annotator typing-dynamics rollup: how free-text responses were produced.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/admin/arena": {
       "get": {
         "operationId": "get_arena_arena_page",
@@ -4403,6 +4417,44 @@
           }
         },
         "summary": "Receive batched interaction events from the frontend.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/api/track_typing": {
+      "post": {
+        "operationId": "post_track_typing",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Receive completed typing sessions from the keystroke tracker.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/api/typing_summary/{instance_id}": {
+      "get": {
+        "operationId": "get_get_typing_summary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Typing-dynamics summaries for one instance, for the current user.",
         "tags": [
           "core"
         ]

@@ -1,0 +1,18 @@
+{
+  "training_instances": [
+    {
+      "id": "t1",
+      "text": "COPY THE PASSAGE BELOW EXACTLY AS IT APPEARS. Type it out - do not copy and paste.\n\nThe harbour master kept two ledgers, one for the tides and one for the debts, and by the end of the season it was no longer obvious to anyone, least of all to him, which of the two was governing the other.",
+      "correct_answers": {
+        "response": "The harbour master kept two ledgers, one for the tides and one for the debts, and by the end of the season it was no longer obvious to anyone, least of all to him, which of the two was governing the other."
+      }
+    },
+    {
+      "id": "t2",
+      "text": "COPY THE PASSAGE BELOW EXACTLY AS IT APPEARS. Type it out - do not copy and paste.\n\nEvery map is a claim about what deserves to be remembered. The cartographer decides which rivers are worth a name, which villages are worth a dot, and which paths are worth the ink to draw them.",
+      "correct_answers": {
+        "response": "Every map is a claim about what deserves to be remembered. The cartographer decides which rivers are worth a name, which villages are worth a dot, and which paths are worth the ink to draw them."
+      }
+    }
+  ]
+}

@@ -113,10 +113,13 @@ Each annotation instance includes a `behavioral_data` object:
         "timestamp": 1706500002.5,
         "schema_name": "sentiment",
         "label_name": "positive",
+        "old_label": null,
         "action": "select",
         "old_value": null,
         "new_value": true,
-        "source": "user"
+        "source": "user",
+        "phase": "annotation",
+        "page": null
       }
     ],
     "navigation_history": [
@@ -135,10 +138,34 @@ Each annotation instance includes a `behavioral_data` object:
     "scroll_depth_max": 75.5,
     "keyword_highlights_shown": [
       {"text": "excellent", "label": "positive", "type": "keyword"}
-    ]
+    ],
+    "chat_history": [
+      {
+        "role": "user",
+        "content": "Is sarcasm counted as negative here?",
+        "timestamp": 1706500020.0,
+        "instance_id": "instance_123",
+        "response_time_ms": null
+      }
+    ],
+    "typing_summaries": {
+      "explanation:::explanation": {
+        "keystrokes": 172,
+        "final_chars": 154,
+        "iki_median_ms": 133.0,
+        "pause_counts": {"2000": 2},
+        "pasted_fraction": 0.0,
+        "verdict": {"level": "ok", "flag_names": []}
+      }
+    }
   }
 }
 ```
+
+`chat_history` is populated only when the LLM chat sidebar is enabled.
+`typing_summaries` is populated only when
+[keystroke logging](keystroke_logging.md) is enabled; the raw keystroke streams
+live in the project's SQLite database rather than here.
 
 ### Storage Location
 
@@ -151,6 +178,12 @@ Behavioral data is stored in:
 ### Enabling Behavioral Tracking
 
 Behavioral tracking is enabled by default. No additional configuration is required.
+
+!!! note "Keystroke logging is a separate, opt-in feature"
+    Fine-grained typing dynamics on free-text fields — pauses, bursts,
+    revisions, paste detection — are **not** part of this default tracking. They
+    are configured under `keystroke_logging`, default off, and documented in
+    [Keystroke Logging](keystroke_logging.md).
 
 ### Frontend Debug Mode
 
@@ -195,6 +228,29 @@ Content-Type: application/json
   "accepted_value": "positive"
 }
 ```
+
+### Track Annotation Change
+
+```http
+POST /api/track_annotation_change
+Content-Type: application/json
+
+{
+  "instance_id": "instance_123",
+  "schema_name": "sentiment",
+  "label_name": "positive",
+  "action": "select|deselect|update|clear",
+  "old_label": null,
+  "old_value": null,
+  "new_value": true,
+  "source": "user|ai_accept|keyboard|prefill"
+}
+```
+
+The workflow `phase` and `page` are stamped server-side rather than sent by the
+client: behavioral data is bucketed by instance id, and every non-annotation
+page shares the same `__phase_page__` sentinel, so without them the trail cannot
+say which survey a change belongs to.
 
 ### Get Behavioral Data
 

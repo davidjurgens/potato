@@ -462,6 +462,42 @@ Step-level agreement metrics (Cohen's kappa) are computed per annotator pair for
 
 ---
 
+## Writing-Process Signals (free-text quality)
+
+Attention checks and gold standards work on *categorical* answers. They cannot
+tell you whether a free-text rationale was written by the annotator or pasted in
+from an LLM — the finished text usually looks fine either way.
+
+[Keystroke logging](../advanced/keystroke_logging.md) adds a complementary
+signal for free-text fields by recording *how* the response was produced:
+
+```yaml
+keystroke_logging:
+  enabled: true
+  detection:
+    enabled: true
+    on_external_insert: flag   # allow | warn | block | flag
+```
+
+This produces per-response flags — `paste_dominant`, `silent_insertion`,
+`transcription_rhythm`, `offscreen_composition`, `implausible_speed`,
+`synthetic_input` — each carrying the evidence that fired it. They surface in
+the **Writing Process** panel of the admin dashboard and in the
+`typing_dynamics.csv` export.
+
+!!! warning "These flags are not attention checks"
+    A failed attention check is a discrete, defensible fact: the annotator gave
+    a known-wrong answer. A writing-process flag is a **statistical signal about
+    a behaviour that has innocent explanations** — fast typists, mobile
+    keyboards, dictation, assistive technology. Do not wire them to automatic
+    rejection.
+
+    See [false positives](../advanced/writing_process_detection.md#false-positives)
+    and [the ethics guide](../advanced/keystroke_logging_ethics.md) before using
+    them in any decision that affects an annotator.
+
+---
+
 ## Troubleshooting
 
 ### Attention checks not appearing

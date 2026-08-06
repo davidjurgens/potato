@@ -115,6 +115,19 @@ class InstanceData:
     num_ai_instance: int
     average_time_per_annotation: Optional[float]
 
+def _unwrap_admin_result(result):
+    """Normalize an admin method's return to a plain dict.
+
+    Admin methods signal failure by returning ``(payload, status_code)``. When
+    one is embedded in another method's response rather than returned straight
+    to Flask, the tuple would land in the JSON as a two-element array; unwrap it
+    so the caller always sees a dict.
+    """
+    if isinstance(result, tuple):
+        return result[0]
+    return result
+
+
 class AdminDashboard:
     """
     Main class for admin dashboard functionality.
@@ -2075,7 +2088,12 @@ class AdminDashboard:
                 'quality_summary': quality_summary,
                 'interaction_types': dict(interaction_counts.most_common(20)),
                 'change_sources': dict(change_sources),
-                'users': sorted(user_stats, key=lambda x: -x['suspicion_score'])
+                'users': sorted(user_stats, key=lambda x: -x['suspicion_score']),
+                # Kept as a separate block with its own risk score rather than
+                # folded into suspicion_score: those four weights sum to 1.0 and
+                # every existing deployment's numbers are calibrated against
+                # them, so adding a term would silently reinterpret history.
+                'writing_process': _unwrap_admin_result(self.get_writing_process_data()),
             }
 
         except Exception as e:
@@ -2083,6 +2101,144 @@ class AdminDashboard:
             import traceback
             traceback.print_exc()
             return {"error": f"Failed to get behavioral analytics data: {str(e)}"}, 500
+
+    #: Weights for writing_process_risk. Deliberately dominated by the two
+    #: signals with the least innocent explanation — text arriving from
+    #: off-screen, and input that was not user-generated at all. Rhythm and speed
+    #: contribute far less because a fast, fluent typist genuinely produces them.
+    WRITING_RISK_WEIGHTS = {
+        'paste_dominant': 0.30,
+        'silent_insertion': 0.30,
+        'offscreen_composition': 0.20,
+        'synthetic_input': 0.15,
+        'transcription_rhythm': 0.03,
+        'implausible_speed': 0.02,
+    }
+
+    def get_writing_process_data(self) -> Dict[str, Any]:
+        """Per-annotator typing-dynamics rollup for the admin dashboard.
+
+        Reads the project's typing-session store. Returns an ``enabled: False``
+        stub when keystroke logging is off or nothing has been recorded, so the
+        dashboard can hide the panel without special-casing errors.
+
+        ``writing_process_risk`` is the share of a user's sessions that fired
+        each flag, weighted by :attr:`WRITING_RISK_WEIGHTS`. It ranks who to look
+        at first. It is not evidence, and the per-session flags with their
+        evidence are what an adjudicator should actually read.
+        """
+        # Behavioural measurements of identifiable annotators. Gated like every
+        # other admin rollup — this must never be readable without the key.
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            from potato.server_utils.config_module import get_keystroke_logging_config
+            ks = get_keystroke_logging_config(config)
+        except Exception:
+            ks = {"enabled": False}
+
+        if not ks.get("enabled"):
+            return {"enabled": False, "reason": "keystroke_logging is not enabled"}
+
+        try:
+            from potato import typing_store
+            task_dir = config.get("task_dir") or "."
+            project = config.get("annotation_task_name") or "potato"
+            rollup = typing_store.aggregate_by_user(task_dir, project)
+        except Exception as e:
+            self.logger.warning(f"Could not read typing sessions: {e}")
+            return {"enabled": True, "error": str(e), "users": []}
+
+        if not rollup:
+            return {"enabled": True, "users": [], "reason": "No typing sessions recorded yet"}
+
+        flag_totals = Counter()
+        users = []
+
+        for row in rollup:
+            user_id = row["user_id"]
+            try:
+                sessions = typing_store.sessions_for_user(task_dir, project, user_id)
+            except Exception:
+                sessions = []
+
+            user_flags = Counter()
+            flagged_sessions = []
+            for s in sessions:
+                verdict = s.get("flags") or {}
+                names = verdict.get("flag_names") or []
+                for name in names:
+                    user_flags[name] += 1
+                    flag_totals[name] += 1
+                if names:
+                    flagged_sessions.append({
+                        "session_id": s["id"],
+                        "instance_id": s["instance_id"],
+                        "schema": s["schema_name"],
+                        "label": s["label_name"],
+                        "level": verdict.get("level", "review"),
+                        "flags": names,
+                        # The evidence is the point: an adjudicator should be able
+                        # to see the numbers, not just the label.
+                        "evidence": {
+                            f.get("name"): f.get("evidence")
+                            for f in verdict.get("flags", [])
+                        },
+                        "explanations": [f.get("explanation") for f in verdict.get("flags", [])],
+                    })
+
+            n = max(1, len(sessions))
+            risk = sum(
+                weight * (user_flags.get(flag, 0) / n)
+                for flag, weight in self.WRITING_RISK_WEIGHTS.items()
+            )
+
+            users.append({
+                "user_id": user_id,
+                "sessions": row.get("sessions", 0),
+                "instances": row.get("instances", 0),
+                "chars": row.get("chars") or 0,
+                "keystrokes": row.get("keystrokes") or 0,
+                "iki_median_ms": round(row.get("iki_median_ms") or 0, 1),
+                "iki_log_cv": round(row.get("iki_log_cv") or 0, 4),
+                "pause_2s_per_100_chars": round(row.get("pause_2s_per_100_chars") or 0, 3),
+                "revision_ratio": round(row.get("revision_ratio") or 0, 4),
+                "paste_events": row.get("paste_events") or 0,
+                "pasted_char_fraction": round(row.get("pasted_char_fraction") or 0, 4),
+                "mean_silent_insert_ratio": round(row.get("mean_silent_insert_ratio") or 0, 4),
+                "max_blur_before_insert_ms": row.get("max_blur_before_insert_ms") or 0,
+                "untrusted_events": row.get("untrusted_events") or 0,
+                "any_virtual_keyboard": row.get("any_virtual_keyboard", False),
+                "flag_counts": dict(user_flags),
+                "flagged_sessions": flagged_sessions[:25],
+                "writing_process_risk": round(risk, 4),
+            })
+
+        users.sort(key=lambda u: -u["writing_process_risk"])
+        total_sessions = sum(u["sessions"] for u in users)
+        flagged_users = [u for u in users if u["flag_counts"]]
+
+        return {
+            "enabled": True,
+            "fidelity": ks.get("fidelity", "events"),
+            "detection_enabled": ks.get("detection", {}).get("enabled", True),
+            "calibrated": bool(ks.get("detection", {}).get("calibrate")),
+            "users": users,
+            "summary": {
+                "total_users": len(users),
+                "total_sessions": total_sessions,
+                "users_with_flags": len(flagged_users),
+                "flag_totals": dict(flag_totals),
+            },
+            # Surfaced in the UI so nobody reads the ranking as an accusation.
+            "caveat": (
+                "Writing-process flags are evidence for human review, not proof of "
+                "misconduct. Fast, fluent typists and annotators on mobile keyboards "
+                "can legitimately resemble the patterns these rules look for. Read the "
+                "per-session evidence before acting."
+            ),
+        }
 
     def get_adjudication_overview(self) -> Dict[str, Any]:
         """

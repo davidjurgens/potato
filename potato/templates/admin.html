@@ -292,6 +292,18 @@
             </div>
           </div>
 
+          <!-- Writing Process (typing dynamics on free-text fields).
+               Hidden entirely unless keystroke_logging is enabled. -->
+          <div class="question-card" id="writingProcessSection"
+               style="margin-bottom: 1.5rem; display: none;">
+            <div class="question-header">
+              <h3 class="question-title">{{ ui_lang.admin_section_writing_process|default('Writing Process') }}</h3>
+            </div>
+            <div id="writingProcessContent">
+              <!-- Writing process data will be loaded here -->
+            </div>
+          </div>
+
           <!-- Per-User Behavioral Data -->
           <div class="admin-table-container">
             <table class="admin-table" id="behavioralTable">
@@ -646,6 +658,19 @@
       }
 
       // API functions
+      // User ids, schema names and flag explanations are interpolated into
+      // innerHTML below. They originate from annotator input and config files,
+      // so they are escaped rather than trusted.
+      function escapeHtml(value) {
+        if (value === null || value === undefined) return "";
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
       async function makeApiRequest(endpoint, options = {}) {
         const defaultOptions = {
           headers: {
@@ -1586,11 +1611,111 @@
         }
       }
 
+      // Writing Process panel: how free-text responses were produced.
+      // Rendered from the `writing_process` block of the behavioral payload.
+      function displayWritingProcess(wp) {
+        const section = document.getElementById("writingProcessSection");
+        const content = document.getElementById("writingProcessContent");
+        if (!section || !content) return;
+
+        if (!wp || !wp.enabled) {
+          section.style.display = "none";
+          return;
+        }
+        section.style.display = "";
+
+        if (wp.error) {
+          content.innerHTML = `<p style="color: var(--destructive, #b91c1c);">Could not read typing sessions: ${escapeHtml(wp.error)}</p>`;
+          return;
+        }
+        if (!wp.users || wp.users.length === 0) {
+          content.innerHTML = `<p style="color: var(--muted-foreground);">${escapeHtml(wp.reason || "No typing sessions recorded yet.")}</p>`;
+          return;
+        }
+
+        const s = wp.summary || {};
+        const flagTotals = Object.entries(s.flag_totals || {})
+          .sort((a, b) => b[1] - a[1]);
+
+        // The caveat is rendered first and unconditionally. These rankings are
+        // easy to over-read, and the panel should say so before the numbers do.
+        let html = `
+          <div style="padding: 0.75rem 1rem; margin-bottom: 1rem; border-left: 3px solid var(--primary, #6d5ce7); background: var(--muted, #f4f4f6); border-radius: 4px;">
+            <strong>Read this first.</strong>
+            <div style="margin-top: 0.25rem; color: var(--muted-foreground);">${escapeHtml(wp.caveat || "")}</div>
+          </div>
+          <div class="question-stats" style="margin-bottom: 1rem;">
+            <div class="question-stat"><span class="value">${s.total_sessions || 0}</span><span class="label">Typing Sessions</span></div>
+            <div class="question-stat"><span class="value">${s.total_users || 0}</span><span class="label">Annotators</span></div>
+            <div class="question-stat"><span class="value">${s.users_with_flags || 0}</span><span class="label">With Any Flag</span></div>
+            <div class="question-stat"><span class="value">${escapeHtml(wp.fidelity || "")}</span><span class="label">Fidelity</span></div>
+            <div class="question-stat"><span class="value">${wp.calibrated ? "Yes" : "No"}</span><span class="label">Calibrated</span></div>
+          </div>`;
+
+        if (flagTotals.length) {
+          html += `<div style="margin-bottom: 1rem;">` +
+            flagTotals.map(([name, n]) =>
+              `<span style="display:inline-block; margin:0 0.4rem 0.4rem 0; padding:0.15rem 0.5rem; border-radius:999px; background: var(--muted, #eee); font-size: 0.85em;">${escapeHtml(name)} &times; ${n}</span>`
+            ).join("") + `</div>`;
+        }
+
+        html += `
+          <div class="admin-table-container">
+            <table class="admin-table">
+              <thead><tr>
+                <th>User ID</th><th>Sessions</th><th>Chars</th>
+                <th>Median IKI</th><th>Rhythm CV</th><th>Pauses &ge;2s /100ch</th>
+                <th>Pasted</th><th>Silent Insert</th><th>Flags</th><th>Risk</th>
+              </tr></thead>
+              <tbody>`;
+
+        for (const u of wp.users) {
+          const flags = Object.entries(u.flag_counts || {})
+            .map(([n, c]) => `${n}×${c}`).join(", ") || "—";
+          // Colour tracks risk, but the number is always shown next to it so the
+          // colour is never the only thing an admin acts on.
+          const risk = u.writing_process_risk || 0;
+          const colour = risk >= 0.3 ? "#b91c1c" : (risk > 0 ? "#b45309" : "inherit");
+          const mobile = u.any_virtual_keyboard
+            ? ` <span title="Some sessions used a mobile keyboard, where keystroke-count rules do not apply" style="font-size:0.8em; color: var(--muted-foreground);">(mobile)</span>`
+            : "";
+          html += `<tr>
+            <td>${escapeHtml(u.user_id)}${mobile}</td>
+            <td>${u.sessions}</td>
+            <td>${u.chars}</td>
+            <td>${u.iki_median_ms}ms</td>
+            <td>${u.iki_log_cv}</td>
+            <td>${u.pause_2s_per_100_chars}</td>
+            <td>${(u.pasted_char_fraction * 100).toFixed(1)}%</td>
+            <td>${(u.mean_silent_insert_ratio * 100).toFixed(1)}%</td>
+            <td style="font-size: 0.85em;">${escapeHtml(flags)}</td>
+            <td style="color:${colour}; font-weight:600;">${risk.toFixed(3)}</td>
+          </tr>`;
+
+          // Per-session evidence, so an adjudicator can see the actual numbers
+          // rather than only the verdict label.
+          for (const fs of (u.flagged_sessions || [])) {
+            html += `<tr style="background: var(--muted, #fafafa);">
+              <td colspan="10" style="font-size: 0.85em; padding-left: 2rem; color: var(--muted-foreground);">
+                <strong>instance ${escapeHtml(fs.instance_id)}</strong> &middot;
+                ${escapeHtml(fs.schema)}.${escapeHtml(fs.label)} &middot;
+                <em>${escapeHtml(fs.level)}</em><br>
+                ${(fs.explanations || []).map(e => escapeHtml(e)).join("<br>")}
+              </td></tr>`;
+          }
+        }
+
+        html += `</tbody></table></div>`;
+        content.innerHTML = html;
+      }
+
       function displayBehavioral(data) {
         const grid = document.getElementById("behavioralGrid");
         const aiContent = document.getElementById("aiUsageContent");
         const qualityContent = document.getElementById("qualityContent");
         const tbody = document.getElementById("behavioralTableBody");
+
+        displayWritingProcess(data.writing_process);
 
         // Display summary cards
         const stats = data.aggregate_stats;

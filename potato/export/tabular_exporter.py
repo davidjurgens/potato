@@ -300,6 +300,100 @@ def _write_annotation_changes(context: ExportContext, output_path: str,
     return out_file
 
 
+TYPING_DYNAMICS_COLUMNS = [
+    "user_id", "instance_id", "schema", "label",
+    # volume / product-to-process
+    "keystrokes", "final_chars", "chars_typed", "chars_deleted",
+    "chars_per_keystroke", "active_ms",
+    # rhythm
+    "iki_median_ms", "iki_log_cv",
+    # pausing
+    "pause_2s", "pause_10s", "pause_total_ms",
+    # bursting / revision
+    "bursts", "burst_mean_chars", "revision_ratio", "non_terminal_edits",
+    # external insertion
+    "paste_events", "pasted_chars", "pasted_fraction",
+    "silent_insert_ratio", "external_insert_ratio",
+    # attention / integrity
+    "blur_total_ms", "max_blur_before_insert_ms", "untrusted_events",
+    "virtual_keyboard",
+    # detector output
+    "verdict_level", "flags",
+]
+
+
+def _write_typing_dynamics(context: ExportContext, output_path: str,
+                           fmt_name: str, delimiter: str) -> Optional[str]:
+    """Write per-field typing-dynamics features. Returns file path or None.
+
+    One row per (user, instance, free-text field): how the response was
+    produced, not what it said. Sourced from the ``typing_summaries`` Potato
+    persists in ``user_state.json``.
+
+    Written only when ``export_include_typing_dynamics: true``. These are
+    behavioural measurements of identifiable annotators, so distributing them
+    is an explicit choice rather than a default. Raw keystroke event streams are
+    not here at all — they stay in the project database and have their own
+    exporter.
+    """
+    if not (context.config or {}).get("export_include_typing_dynamics", False):
+        return None
+
+    rows = []
+    for ann in context.annotations:
+        for field_key, summary in (ann.get("_typing") or {}).items():
+            if not isinstance(summary, dict):
+                continue
+            schema, _, label = field_key.partition(":::")
+            pauses = summary.get("pause_counts") or {}
+            verdict = summary.get("verdict") or {}
+            rows.append({
+                "user_id": ann.get("user_id", ""),
+                "instance_id": ann.get("instance_id", ""),
+                "schema": schema,
+                "label": label,
+                "keystrokes": summary.get("keystrokes", 0),
+                "final_chars": summary.get("final_chars", 0),
+                "chars_typed": summary.get("chars_typed", 0),
+                "chars_deleted": summary.get("chars_deleted", 0),
+                "chars_per_keystroke": round(summary.get("chars_per_keystroke", 0) or 0, 3),
+                "active_ms": summary.get("active_ms", 0),
+                "iki_median_ms": round(summary.get("iki_median_ms", 0) or 0, 1),
+                "iki_log_cv": round(summary.get("iki_log_cv", 0) or 0, 4),
+                "pause_2s": pauses.get("2000", 0),
+                "pause_10s": pauses.get("10000", 0),
+                "pause_total_ms": summary.get("pause_total_ms", 0),
+                "bursts": summary.get("bursts", 0),
+                "burst_mean_chars": round(summary.get("burst_mean_chars", 0) or 0, 2),
+                "revision_ratio": round(summary.get("revision_ratio", 0) or 0, 4),
+                "non_terminal_edits": summary.get("non_terminal_edits", 0),
+                "paste_events": summary.get("paste_events", 0),
+                "pasted_chars": summary.get("pasted_chars", 0),
+                "pasted_fraction": round(summary.get("pasted_fraction", 0) or 0, 4),
+                "silent_insert_ratio": round(summary.get("silent_insert_ratio", 0) or 0, 4),
+                "external_insert_ratio": round(summary.get("external_insert_ratio", 0) or 0, 4),
+                "blur_total_ms": summary.get("blur_total_ms", 0),
+                "max_blur_before_insert_ms": summary.get("max_blur_before_insert_ms", 0),
+                "untrusted_events": summary.get("untrusted_events", 0),
+                "virtual_keyboard": int(bool(summary.get("virtual_keyboard"))),
+                "verdict_level": verdict.get("level", ""),
+                "flags": "|".join(verdict.get("flag_names") or []),
+            })
+
+    if not rows:
+        return None
+
+    rows.sort(key=lambda r: (r["user_id"], r["instance_id"], r["schema"], r["label"]))
+    out_file = os.path.join(output_path, f"typing_dynamics.{fmt_name}")
+    with open(out_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=TYPING_DYNAMICS_COLUMNS,
+                                delimiter=delimiter, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+    return out_file
+
+
 def _write_delimited(context: ExportContext, output_path: str,
                      fmt_name: str, delimiter: str) -> ExportResult:
     """Write annotations as a delimited file (CSV or TSV)."""
@@ -343,6 +437,9 @@ def _write_delimited(context: ExportContext, output_path: str,
     changes_file = _write_annotation_changes(context, output_path, fmt_name, delimiter)
     if changes_file:
         files_written.append(changes_file)
+    typing_file = _write_typing_dynamics(context, output_path, fmt_name, delimiter)
+    if typing_file:
+        files_written.append(typing_file)
 
     warnings = []
     excl = _phase_exclusion_warning(context)

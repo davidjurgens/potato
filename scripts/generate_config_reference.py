@@ -93,7 +93,7 @@ CATEGORY_ORDER = [
         "icl_labeling", "llm_labeling",
         "psychometrics", "boundary_probing", "event_template", "corpus_map",
         "rooms", "truth_serum", "thinkaloud", "pocket",
-        "analytics", "annotator_dashboard",
+        "analytics", "annotator_dashboard", "keystroke_logging",
     ]),
     ("UI & Layout", [
         "ui", "ui_config", "layout", "instance_display", "format_handling",

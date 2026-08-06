@@ -1,0 +1,105 @@
+# Keystroke logging / typing dynamics
+#
+# Records HOW annotators produce free-text responses -- pauses, bursts,
+# revisions, pastes -- without ever recording WHAT they type. Lets you tell a
+# composed response from one that was transcribed or pasted in from an LLM.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/keystroke-logging/config.yaml -p 8000
+#
+# See docs/advanced/keystroke_logging.md and
+#     docs/advanced/writing_process_detection.md
+
+annotation_task_name: keystroke-logging
+task_dir: .
+output_annotation_dir: annotation_output/
+output_annotation_format: csv
+
+data_files:
+  - data/keystroke-logging-example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 10000000
+
+keystroke_logging:
+  enabled: true
+
+  # off      - no capture at all
+  # summary  - compute features, store no raw stream
+  # events   - store the content-blind event stream too (default)
+  fidelity: events
+
+  # Empty include_schemas means every free-text field on the page.
+  include_schemas: []
+  exclude_schemas: []
+
+  store_events: true
+
+  # Compare pasted text against the passage, any AI suggestion, and the field's
+  # own prior contents, so quoting the passage is not mistaken for importing
+  # text from off-screen. Only the resulting label is stored, never the text.
+  classify_paste_source: true
+
+  idle_session_ms: 30000
+  flush_interval_ms: 5000
+  pause_thresholds_ms: [500, 1000, 2000, 5000, 10000]
+
+  # Show annotators a notice that their typing process is being recorded.
+  # Leave this on unless your consent documentation covers it another way.
+  disclose_to_annotators: true
+
+  detection:
+    enabled: true
+
+    # Refit thresholds to this project's own annotators once you have data:
+    #   python -m potato.typing_detect calibrate examples/advanced/keystroke-logging/config.yaml
+    calibrate: false
+
+    # allow | warn | block | flag   (flag = record it, decide later)
+    on_external_insert: flag
+
+    # Override any built-in threshold, e.g.
+    # thresholds:
+    #   paste_dominant.pasted_fraction: 0.4
+    thresholds: {}
+
+annotation_schemes:
+  - annotation_type: radio
+    name: recommendation
+    description: "What should the decision-maker do?"
+    labels:
+      - proceed
+      - proceed with changes
+      - do not proceed
+    label_requirement:
+      required: true
+
+  - annotation_type: text
+    name: rationale
+    description: "Explain your reasoning in a few sentences. Write in your own words."
+    labels:
+      - rationale
+    multiline: true
+    rows: 6
+    label_requirement:
+      required: true
+
+  - annotation_type: text
+    name: tradeoffs
+    description: "What is the strongest argument against your recommendation?"
+    labels:
+      - tradeoffs
+    multiline: true
+    rows: 4
+
+html_layout: default
+base_html_template: default
+header_file: default
+site_dir: default

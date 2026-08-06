@@ -236,6 +236,13 @@ class BehavioralData:
         focus_time_by_element: Milliseconds spent focused on each element
         scroll_depth_max: Maximum scroll percentage reached (0-100)
         keyword_highlights_shown: Keyword highlights displayed (from randomization feature)
+        chat_history: Messages exchanged with the LLM assistant sidebar
+        typing_summaries: Per-field typing-dynamics sketch, keyed
+            "{schema}:::{label}". Only the compact summary lives here — the raw
+            keystroke event streams go to SQLite (potato/typing_store.py), because
+            user_state.json is fully re-serialized on every annotation save and a
+            single long response is thousands of events. See
+            potato/typing_dynamics.py.
     """
     instance_id: str
     session_start: float = field(default_factory=time.time)
@@ -249,6 +256,7 @@ class BehavioralData:
     scroll_depth_max: float = 0.0
     keyword_highlights_shown: List[Dict[str, Any]] = field(default_factory=list)
     chat_history: List[ChatMessage] = field(default_factory=list)
+    typing_summaries: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -277,6 +285,7 @@ class BehavioralData:
                 e.to_dict() if hasattr(e, 'to_dict') else e
                 for e in self.chat_history
             ],
+            'typing_summaries': self.typing_summaries,
         }
 
     @classmethod
@@ -323,6 +332,10 @@ class BehavioralData:
             ChatMessage.from_dict(e) if isinstance(e, dict) else e
             for e in chat_history
         ]
+
+        # Read with .get() so states written before typing dynamics existed
+        # deserialize unchanged.
+        bd.typing_summaries = data.get('typing_summaries', {})
 
         return bd
 
@@ -387,6 +400,15 @@ class BehavioralData:
         """Update maximum scroll depth if new depth is greater."""
         if depth > self.scroll_depth_max:
             self.scroll_depth_max = depth
+
+    def set_typing_summary(self, schema_name: str, label_name: str,
+                          summary: Dict[str, Any]) -> None:
+        """Store the typing-dynamics sketch for one free-text field.
+
+        Keyed the same way annotation labels are (`schema:::label`), so a field
+        can be joined back to its annotation without a separate mapping.
+        """
+        self.typing_summaries[f"{schema_name}:::{label_name}"] = summary
 
     def finalize_session(self) -> None:
         """Mark session as ended and calculate total time."""

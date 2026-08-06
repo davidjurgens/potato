@@ -30,6 +30,19 @@ def _behavioral_changes(user_state: dict, instance_id: str) -> list:
     return behavioral_changes(user_state, instance_id)
 
 
+def _typing_summaries(user_state: dict, instance_id: str) -> dict:
+    """The ``typing_summaries`` recorded against one instance, or an empty dict.
+
+    The sketch that travels with the annotation. Raw keystroke streams live in
+    the project's SQLite database and are exported separately by the
+    ``keystrokes`` exporter.
+    """
+    bd = (user_state.get("instance_id_to_behavioral_data") or {}).get(instance_id)
+    if not isinstance(bd, dict):
+        return {}
+    return bd.get("typing_summaries") or {}
+
+
 def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
     """
     Load user annotations from the Potato output directory.
@@ -102,6 +115,11 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
                 # first-write order, not recency). Leading underscore keeps it out of
                 # the flattened output.
                 "_changes": _behavioral_changes(user_state, instance_id),
+                # Per-field typing-dynamics sketch (pauses, bursts, revisions,
+                # pastes) plus the detector verdict. Same underscore convention:
+                # kept out of the flattened columns, written to its own sidecar
+                # file by the tabular exporters.
+                "_typing": _typing_summaries(user_state, instance_id),
             }
 
             # Process span data.

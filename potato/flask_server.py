@@ -2249,6 +2249,19 @@ def get_current_page_html(config, username):
         'can_go_back': usm.can_user_go_back(username),
         'jumping_to_id_disabled': config.get('jumping_to_id_disabled', False),
     }
+    # Phase pages render through this path rather than render_page_with_annotations,
+    # so the keystroke-tracker wiring has to be repeated here. Without it, typing
+    # dynamics would be captured on the annotation page only — and the endpoint
+    # stamps phase/page precisely so that free-text answers in surveys and the
+    # training phase can be attributed too.
+    from potato.server_utils.config_module import get_keystroke_client_config
+    keystroke_client_config = get_keystroke_client_config(config)
+    context['keystroke_client_config'] = keystroke_client_config
+    context['keystroke_logging_enabled'] = (
+        keystroke_client_config["enabled"]
+        and keystroke_client_config["fidelity"] != "off"
+    )
+
     if phase == UserPhase.TRAINING:
         context.update(_training_page_context(user_state))
     rendered_html = render_template(html_fname, **context)
@@ -2698,6 +2711,15 @@ def render_page_with_annotations(username: str):
                 "rationale_on_flip": bc.rationale_on_flip,
             }
     boundary_enabled = boundary_client_config is not None
+    # Keystroke logging (typing dynamics on free-text fields): conditional asset
+    # + JS config. Detection thresholds stay server-side; see
+    # get_keystroke_client_config.
+    from potato.server_utils.config_module import get_keystroke_client_config
+    keystroke_client_config = get_keystroke_client_config(config)
+    keystroke_logging_enabled = (
+        keystroke_client_config["enabled"]
+        and keystroke_client_config["fidelity"] != "off"
+    )
     # Truth Serum (surprisingly-popular scoring): conditional assets + JS config
     truth_serum_client_config = None
     if config.get("truth_serum", {}).get("enabled", False):
@@ -2811,6 +2833,8 @@ def render_page_with_annotations(username: str):
         chat_enabled=chat_enabled,
         # Boundary Lab (counterfactual boundary probing)
         boundary_enabled=boundary_enabled,
+        keystroke_logging_enabled=keystroke_logging_enabled,
+        keystroke_client_config=keystroke_client_config,
         boundary_client_config=boundary_client_config,
         # Truth Serum (surprisingly-popular scoring)
         truth_serum_enabled=truth_serum_enabled,

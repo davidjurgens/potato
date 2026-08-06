@@ -3517,6 +3517,24 @@ def admin_api_quality_control():
     return jsonify(result)
 
 
+@app.route("/admin/api/writing_process", methods=["GET"])
+def admin_api_writing_process():
+    """
+    Per-annotator typing-dynamics rollup: how free-text responses were produced.
+
+    Admin-only. Returns ``enabled: False`` when keystroke_logging is off, so the
+    dashboard can hide the panel rather than render an error.
+
+    Also available as the ``writing_process`` key of /admin/api/behavioral_analytics;
+    this route exists so the panel can refresh on its own without recomputing the
+    whole behavioral rollup.
+    """
+    result = admin_dashboard.get_writing_process_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
 @app.route("/admin/api/behavioral_analytics", methods=["GET"])
 def admin_api_behavioral_analytics():
     """
@@ -6285,6 +6303,220 @@ def track_annotation_change():
     return jsonify({"status": "ok"})
 
 
+def _keystroke_config():
+    """The project's `keystroke_logging` block, with defaults applied.
+
+    Returns a dict that is always safe to index; `enabled` is False when the
+    feature was never configured.
+    """
+    from potato.server_utils.config_module import get_keystroke_logging_config
+    return get_keystroke_logging_config(config)
+
+
+@app.route("/api/track_typing", methods=["POST"])
+def track_typing():
+    """
+    Receive completed typing sessions from the keystroke tracker.
+
+    Expected JSON payload:
+    {
+        "instance_id": "...",
+        "sessions": [{
+            "schema_name": "...", "label_name": "...", "instance_id": "...",
+            "started_at": <epoch s>, "ended_at": <epoch s>,
+            "final_chars": int, "virtual_keyboard": bool,
+            "events": [{"t_ms", "input_type", "key_class", "pos", "delta", "meta"}]
+        }]
+    }
+
+    Each session is summarized server-side rather than trusting a client-computed
+    summary, so a metric added later can be recomputed from the stored streams and
+    so the numbers cannot be forged by a modified client.
+    """
+    from potato.interaction_tracking import get_or_create_behavioral_data
+    from potato import typing_detect, typing_store
+    from potato.typing_dynamics import TypingEvent, merge_summaries, summarize
+
+    # Authentication is checked before the feature flag: an unauthenticated
+    # caller gets 401 whether or not this project happens to have keystroke
+    # logging switched on.
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    ks_config = _keystroke_config()
+    if not ks_config.get("enabled") or ks_config.get("fidelity") == "off":
+        # Answer 200 rather than an error: a stale page may still be posting
+        # after the feature was switched off, and that is not a client fault.
+        return jsonify({"status": "disabled", "sessions_recorded": 0})
+
+    username = session['username']
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    user_state = get_user_state(username)
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    sessions = data.get('sessions') or []
+    if not isinstance(sessions, list):
+        return jsonify({"error": "'sessions' must be a list"}), 400
+
+    # Same reasoning as track_annotation_change: behavioral data is bucketed by
+    # instance id and every non-annotation page shares the "__phase_page__"
+    # sentinel, so the phase/page must be stamped here or the trail cannot say
+    # which survey a typing session belongs to.
+    try:
+        _phase, _page = user_state.get_current_phase_and_page()
+        phase_name = _phase.name.lower() if hasattr(_phase, 'name') else str(_phase)
+    except Exception:
+        phase_name, _page = None, None
+
+    task_dir = config.get("task_dir") or "."
+    project = config.get("annotation_task_name") or "potato"
+    fidelity = ks_config.get("fidelity", "events")
+    store_events = bool(ks_config.get("store_events", True)) and fidelity == "events"
+    thresholds = dict(ks_config.get("detection", {}).get("thresholds") or {})
+    detection_on = ks_config.get("detection", {}).get("enabled", True)
+
+    # Project-calibrated thresholds override the built-in defaults but lose to an
+    # explicit config override, which is the most specific statement of intent.
+    if detection_on and ks_config.get("detection", {}).get("calibrate"):
+        try:
+            fitted = typing_store.load_calibration(task_dir, project)
+            for key, value in fitted.items():
+                thresholds.setdefault(key, value)
+        except Exception as e:
+            logger.warning("Could not load typing calibration: %s", e)
+
+    recorded = 0
+    # Sessions on the same field are merged before being written to the user
+    # state, so that leaving a field and coming back reads as one response
+    # rather than several suspiciously short ones.
+    by_field = {}
+
+    for raw in sessions:
+        if not isinstance(raw, dict):
+            continue
+        schema_name = raw.get('schema_name')
+        label_name = raw.get('label_name')
+        if not schema_name or not label_name:
+            continue
+
+        # Phase pages (training, prestudy/poststudy surveys) have no instance id
+        # — the annotation template leaves it empty — so free-text answers there
+        # arrive with instance_id null. Bucket them under the same
+        # "__phase_page__" sentinel the rest of the behavioral system uses rather
+        # than dropping them; `phase` and `page` are stamped below, which is what
+        # actually identifies them.
+        instance_id = str(raw.get('instance_id') or data.get('instance_id') or '')
+        if not instance_id or instance_id in ('null', 'None', 'undefined'):
+            instance_id = '__phase_page__'
+
+        events = [
+            TypingEvent.from_dict(e)
+            for e in (raw.get('events') or []) if isinstance(e, dict)
+        ]
+        if not events:
+            continue
+
+        summary = summarize(
+            events,
+            schema_name=schema_name,
+            label_name=label_name,
+            final_chars=raw.get('final_chars'),
+            pause_thresholds_ms=ks_config.get('pause_thresholds_ms'),
+            virtual_keyboard=bool(raw.get('virtual_keyboard')),
+        )
+
+        verdict = typing_detect.evaluate(summary, thresholds=thresholds) \
+            if detection_on else None
+
+        try:
+            typing_store.record_session(
+                task_dir,
+                project=project,
+                user_id=username,
+                instance_id=instance_id,
+                schema_name=schema_name,
+                label_name=label_name,
+                summary=summary,
+                events=events if store_events else None,
+                started_at=raw.get('started_at'),
+                ended_at=raw.get('ended_at'),
+                phase=phase_name,
+                page=_page,
+                fidelity=fidelity,
+                flags=verdict.to_dict() if verdict else None,
+            )
+            recorded += 1
+        except Exception as e:
+            logger.error("Failed to store typing session: %s", e, exc_info=True)
+            continue
+
+        by_field.setdefault((instance_id, schema_name, label_name), []).append(
+            (summary, verdict))
+
+    # Mirror the compact sketch into the user state so it travels with the
+    # annotation through export and the admin dashboard. The raw streams stay in
+    # SQLite: user_state.json is rewritten in full on every save.
+    for (instance_id, schema_name, label_name), entries in by_field.items():
+        bd = get_or_create_behavioral_data(
+            user_state.instance_id_to_behavioral_data, instance_id)
+        if not hasattr(bd, 'set_typing_summary'):
+            continue
+
+        existing = (bd.typing_summaries or {}).get(f"{schema_name}:::{label_name}")
+        summaries = [s for s, _ in entries]
+        if existing:
+            from potato.typing_dynamics import TypingSummary
+            summaries.insert(0, TypingSummary.from_dict(existing))
+
+        merged = merge_summaries(summaries)
+        if merged is None:
+            continue
+        payload = merged.to_dict()
+        if detection_on:
+            # Re-evaluate against the merged view: a paste that looks dominant
+            # within one short session may be a small fraction of the whole
+            # response once the other sessions on the field are counted.
+            payload['verdict'] = typing_detect.evaluate(
+                merged, thresholds=thresholds).to_dict()
+        bd.set_typing_summary(schema_name, label_name, payload)
+
+    # Unlike the other track_* handlers, this one persists. A typing session can
+    # end without any annotation save (the annotator types, then navigates away),
+    # so waiting for /updateinstance to flush would lose it.
+    if recorded:
+        try:
+            get_user_state_manager().save_user_state(user_state)
+        except Exception as e:
+            logger.warning("Could not persist user state after typing flush: %s", e)
+
+    return jsonify({"status": "ok", "sessions_recorded": recorded})
+
+
+@app.route("/api/typing_summary/<instance_id>", methods=["GET"])
+def get_typing_summary(instance_id):
+    """Typing-dynamics summaries for one instance, for the current user."""
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    user_state = get_user_state(session['username'])
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    bd = user_state.instance_id_to_behavioral_data.get(instance_id)
+    summaries = {}
+    if bd is not None:
+        if hasattr(bd, 'typing_summaries'):
+            summaries = bd.typing_summaries or {}
+        elif isinstance(bd, dict):
+            summaries = bd.get('typing_summaries', {})
+
+    return jsonify({"instance_id": instance_id, "typing_summaries": summaries})
+
+
 @app.route("/api/behavioral_data/<instance_id>", methods=["GET"])
 def get_behavioral_data(instance_id):
     """
@@ -7608,10 +7840,13 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/code_crosstab", "admin_api_code_crosstab", admin_api_code_crosstab, methods=["GET"])
     app.add_url_rule("/admin/api/quality_control", "admin_api_quality_control", admin_api_quality_control, methods=["GET"])
     app.add_url_rule("/admin/api/behavioral_analytics", "admin_api_behavioral_analytics", admin_api_behavioral_analytics, methods=["GET"])
+    app.add_url_rule("/admin/api/writing_process", "admin_api_writing_process", admin_api_writing_process, methods=["GET"])
     app.add_url_rule("/api/track_interactions", "track_interactions", track_interactions, methods=["POST"])
     app.add_url_rule("/api/track_ai_usage", "track_ai_usage", track_ai_usage, methods=["POST"])
     app.add_url_rule("/api/track_annotation_change", "track_annotation_change", track_annotation_change, methods=["POST"])
     app.add_url_rule("/api/behavioral_data/<instance_id>", "get_behavioral_data", get_behavioral_data, methods=["GET"])
+    app.add_url_rule("/api/track_typing", "track_typing", track_typing, methods=["POST"])
+    app.add_url_rule("/api/typing_summary/<instance_id>", "get_typing_summary", get_typing_summary, methods=["GET"])
 
     # Adjudication routes
     app.add_url_rule("/adjudicate", "adjudicate", adjudicate, methods=["GET"])

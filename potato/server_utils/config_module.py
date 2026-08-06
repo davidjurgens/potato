@@ -278,6 +278,15 @@ KNOWN_CONFIG_KEYS = {
                    "stems", "fillers", "require_spoken_label", "language"},
     # Pocket Mode: mobile-first annotation surface (PWA) at /pocket.
     "pocket": {"enabled", "batch_size", "auto_redirect"},
+    # Keystroke logging: content-blind typing dynamics on free-text fields, and
+    # the composed/transcribed/pasted detection built on them. Validated in
+    # detail by validate_keystroke_logging_config().
+    "keystroke_logging": {
+        "enabled", "fidelity", "include_schemas", "exclude_schemas",
+        "store_events", "classify_paste_source", "idle_session_ms",
+        "flush_interval_ms", "pause_thresholds_ms", "disclose_to_annotators",
+        "detection",
+    },
     # Psychometrics: live IRT (labels with error bars) + adaptive routing.
     "psychometrics": {"enabled", "schema", "refit_interval", "min_observations",
                       "min_annotators_per_item", "confidence_threshold",
@@ -1043,6 +1052,158 @@ def validate_cot_segmentation_config(config_data: Dict[str, Any]) -> None:
         )
 
 
+#: Defaults for the ``keystroke_logging`` block. Note ``enabled`` is False: this
+#: records how annotators produce free text, so it is opt-in rather than
+#: something a project acquires by upgrading Potato.
+KEYSTROKE_LOGGING_DEFAULTS: Dict[str, Any] = {
+    "enabled": False,
+    "fidelity": "events",          # off | summary | events
+    "include_schemas": [],         # empty = every free-text field
+    "exclude_schemas": [],
+    "store_events": True,
+    "classify_paste_source": True,
+    "idle_session_ms": 30000,
+    "flush_interval_ms": 5000,
+    "pause_thresholds_ms": [500, 1000, 2000, 5000, 10000],
+    "disclose_to_annotators": True,
+    "detection": {
+        "enabled": True,
+        "calibrate": False,
+        "on_external_insert": "flag",   # allow | warn | block | flag
+        "thresholds": {},
+    },
+}
+
+VALID_KEYSTROKE_FIDELITIES = {"off", "summary", "events"}
+VALID_EXTERNAL_INSERT_ACTIONS = {"allow", "warn", "block", "flag"}
+
+
+def validate_keystroke_logging_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``keystroke_logging`` block when present.
+
+    Records content-blind typing dynamics on free-text fields so a researcher can
+    tell composed text from transcribed or pasted text. See
+    ``docs/advanced/keystroke_logging.md``.
+    """
+    ks = config_data.get("keystroke_logging")
+    if ks is None:
+        return
+    if not isinstance(ks, dict):
+        raise ConfigValidationError("keystroke_logging must be a mapping")
+
+    errors = []
+
+    fidelity = ks.get("fidelity", "events")
+    if fidelity not in VALID_KEYSTROKE_FIDELITIES:
+        errors.append(
+            "keystroke_logging.fidelity must be one of: "
+            + ", ".join(sorted(VALID_KEYSTROKE_FIDELITIES))
+        )
+
+    for bool_key in ("enabled", "store_events", "classify_paste_source",
+                     "disclose_to_annotators"):
+        if bool_key in ks and not isinstance(ks[bool_key], bool):
+            errors.append(f"keystroke_logging.{bool_key} must be true or false")
+
+    for list_key in ("include_schemas", "exclude_schemas"):
+        if list_key in ks and not isinstance(ks[list_key], list):
+            errors.append(f"keystroke_logging.{list_key} must be a list of schema names")
+
+    for int_key in ("idle_session_ms", "flush_interval_ms"):
+        if int_key in ks and not isinstance(ks[int_key], int):
+            errors.append(f"keystroke_logging.{int_key} must be an integer")
+
+    thresholds = ks.get("pause_thresholds_ms")
+    if thresholds is not None:
+        if not isinstance(thresholds, list) or not thresholds:
+            errors.append(
+                "keystroke_logging.pause_thresholds_ms must be a non-empty list of "
+                "millisecond integers"
+            )
+        elif not all(isinstance(t, int) and t > 0 for t in thresholds):
+            errors.append(
+                "keystroke_logging.pause_thresholds_ms entries must be positive integers"
+            )
+
+    detection = ks.get("detection")
+    if detection is not None:
+        if not isinstance(detection, dict):
+            errors.append("keystroke_logging.detection must be a mapping")
+        else:
+            for bool_key in ("enabled", "calibrate"):
+                if bool_key in detection and not isinstance(detection[bool_key], bool):
+                    errors.append(
+                        f"keystroke_logging.detection.{bool_key} must be true or false")
+            action = detection.get("on_external_insert", "flag")
+            if action not in VALID_EXTERNAL_INSERT_ACTIONS:
+                errors.append(
+                    "keystroke_logging.detection.on_external_insert must be one of: "
+                    + ", ".join(sorted(VALID_EXTERNAL_INSERT_ACTIONS))
+                )
+            th = detection.get("thresholds")
+            if th is not None and not isinstance(th, dict):
+                errors.append(
+                    "keystroke_logging.detection.thresholds must be a mapping of "
+                    "threshold name to number")
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid keystroke_logging configuration:\n  - " + "\n  - ".join(errors)
+        )
+
+    # Warn rather than fail: the combination is legal, just self-defeating.
+    if ks.get("enabled") and fidelity == "summary" and ks.get("store_events"):
+        logger.warning(
+            "keystroke_logging.store_events is true but fidelity is 'summary'; "
+            "no raw event streams will be stored."
+        )
+    if ks.get("enabled") and not ks.get("disclose_to_annotators", True):
+        logger.warning(
+            "keystroke_logging.disclose_to_annotators is false. Typing dynamics are "
+            "behavioural data about your annotators; check that your consent "
+            "documentation and ethics approval cover collecting them silently."
+        )
+
+
+def get_keystroke_logging_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the ``keystroke_logging`` block with defaults filled in.
+
+    Always returns a dict that is safe to index. ``enabled`` is False when the
+    block is absent, so callers need no separate presence check.
+    """
+    import copy
+    merged = copy.deepcopy(KEYSTROKE_LOGGING_DEFAULTS)
+    block = (config_data or {}).get("keystroke_logging")
+    if not isinstance(block, dict):
+        return merged
+    for key, value in block.items():
+        if key == "detection" and isinstance(value, dict):
+            merged["detection"].update(value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def get_keystroke_client_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """The subset of the keystroke config the browser needs.
+
+    Detection thresholds are deliberately withheld: they are evaluated
+    server-side, and shipping them would tell an annotator exactly how slowly to
+    paste in order to stay under the flag.
+    """
+    ks = get_keystroke_logging_config(config_data)
+    return {
+        "enabled": ks["enabled"],
+        "fidelity": ks["fidelity"],
+        "include_schemas": ks["include_schemas"],
+        "exclude_schemas": ks["exclude_schemas"],
+        "classify_paste_source": ks["classify_paste_source"],
+        "idle_session_ms": ks["idle_session_ms"],
+        "flush_interval_ms": ks["flush_interval_ms"],
+        "on_external_insert": ks["detection"].get("on_external_insert", "flag"),
+    }
+
+
 def validate_corpus_map_config(config_data: Dict[str, Any]) -> None:
     """Validate the ``corpus_map`` block when enabled and warn on quota conflict.
 
@@ -1245,6 +1406,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate chain-of-thought segmentation block if present
     validate_cot_segmentation_config(config_data)
+
+    # Validate keystroke logging / typing dynamics block if present
+    validate_keystroke_logging_config(config_data)
 
     # Validate ui_language (bundled code / _base / inline overrides)
     validate_ui_language_config(config_data)

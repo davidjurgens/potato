@@ -199,6 +199,35 @@ The suspicion score is calculated based on:
 
 Users with suspicion scores above 50% are highlighted in red.
 
+**Writing Process Panel:**
+
+Shown in the Behavioral tab only when
+[keystroke logging](../advanced/keystroke_logging.md) is enabled. Reports how
+each annotator produced their free-text responses:
+
+- **Median IKI**: Typical inter-keystroke interval
+- **Rhythm CV**: Dispersion of log inter-key intervals. Low = metronomic = the copy-typing signature
+- **Pauses ≥2s /100ch**: Thinking pauses, normalized by response length
+- **Pasted**: Share of characters that arrived by paste
+- **Silent Insert**: Share of inserted characters with no corresponding keystroke
+- **Flags**: Which detection rules fired, and how often
+- **Risk**: `writing_process_risk`, a ranking aid
+
+Each flagged session is listed beneath its annotator with the **evidence** that
+fired it — the actual feature values, not just a verdict label.
+
+`writing_process_risk` is deliberately kept **separate** from the suspicion
+score above. Those four weights sum to 1.0 and every existing deployment's
+numbers are calibrated against them; folding in a new term would silently
+reinterpret historical scores.
+
+!!! warning "A ranking, not a finding"
+    Writing-process flags have innocent explanations — fast typists, mobile
+    keyboards, IME users, dictation, assistive technology. The panel renders a
+    caveat above the table for this reason. Read the per-session evidence, and
+    see [false positives](../advanced/writing_process_detection.md#false-positives)
+    before acting on any flag.
+
 ### 6. Crowdsourcing Tab
 
 The Crowdsourcing tab provides dedicated monitoring for workers from crowdsourcing platforms like Prolific and Amazon Mechanical Turk (MTurk).
@@ -395,7 +424,61 @@ Returns comprehensive behavioral analytics data for all annotators.
       "ai_accept_rate": 0.7,
       "suspicion_score": 0.15
     }
-  ]
+  ],
+  "writing_process": { "enabled": false }
+}
+```
+
+The `writing_process` block is `{"enabled": false}` unless
+[keystroke logging](../advanced/keystroke_logging.md) is configured.
+
+### Writing Process
+```
+GET /admin/api/writing_process
+Headers: X-API-Key: admin_api_key
+```
+
+The same `writing_process` block on its own, so the panel can refresh without
+recomputing the whole behavioral rollup.
+
+**Response Structure:**
+```json
+{
+  "enabled": true,
+  "fidelity": "events",
+  "detection_enabled": true,
+  "calibrated": false,
+  "summary": {
+    "total_users": 25,
+    "total_sessions": 480,
+    "users_with_flags": 3,
+    "flag_totals": {"paste_dominant": 4, "silent_insertion": 4}
+  },
+  "users": [
+    {
+      "user_id": "user_017",
+      "sessions": 20,
+      "chars": 4820,
+      "iki_median_ms": 133.0,
+      "iki_log_cv": 0.145,
+      "pause_2s_per_100_chars": 0.27,
+      "pasted_char_fraction": 0.61,
+      "mean_silent_insert_ratio": 0.58,
+      "flag_counts": {"paste_dominant": 4},
+      "flagged_sessions": [
+        {
+          "instance_id": "item_12",
+          "schema": "rationale",
+          "level": "suspect",
+          "flags": ["paste_dominant"],
+          "evidence": {"paste_dominant": {"pasted_fraction": 0.983}},
+          "explanations": ["98% of the final text arrived by paste rather than typing."]
+        }
+      ],
+      "writing_process_risk": 0.34
+    }
+  ],
+  "caveat": "Writing-process flags are evidence for human review, not proof of misconduct..."
 }
 ```
 

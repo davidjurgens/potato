@@ -1516,6 +1516,23 @@
     "jumping_to_id_disabled": {
       "type": "boolean"
     },
+    "keystroke_logging": {
+      "additionalProperties": true,
+      "properties": {
+        "classify_paste_source": {},
+        "detection": {},
+        "disclose_to_annotators": {},
+        "enabled": {},
+        "exclude_schemas": {},
+        "fidelity": {},
+        "flush_interval_ms": {},
+        "idle_session_ms": {},
+        "include_schemas": {},
+        "pause_thresholds_ms": {},
+        "store_events": {}
+      },
+      "type": "object"
+    },
     "keyword_highlight_settings": {},
     "keyword_highlights_file": {},
     "layout": {

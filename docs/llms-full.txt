@@ -199,6 +199,9 @@ over prose when writing a config or calling the API.
 - [Admin Dashboard](administration/admin_dashboard.md) - Monitoring and management
 - [Annotator Progress Dashboard](administration/annotator_dashboard.md) - Opt-in, read-only progress view for annotators
 - [Behavioral Tracking](advanced/behavioral_tracking.md) - User behavior analytics
+- [Keystroke Logging](advanced/keystroke_logging.md) - Content-blind typing dynamics on free-text fields
+- [Writing-Process Detection](advanced/writing_process_detection.md) - Tell composed text from transcribed or LLM-pasted text
+- [Keystroke Logging Ethics](advanced/keystroke_logging_ethics.md) - IRB, consent, and participant rights
 - [Annotation History](administration/annotation_history.md) - Tracking annotation changes
 
 ## Data & Output
@@ -3519,6 +3522,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `pocket` |  | object | `auto_redirect`, `batch_size`, `enabled` |
 | `analytics` |  | object | `pricing`, `thresholds` |
 | `annotator_dashboard` |  | object | `enabled`, `show_active_annotators`, `show_personal_progress`, `show_project_progress` |
+| `keystroke_logging` |  | object | `classify_paste_source`, `detection`, `disclose_to_annotators`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_session_ms`, `include_schemas`, `pause_thresholds_ms`, `store_events` |
 
 ## UI & Layout
 
@@ -18018,6 +18022,42 @@ Step-level agreement metrics (Cohen's kappa) are computed per annotator pair for
 
 ---
 
+## Writing-Process Signals (free-text quality)
+
+Attention checks and gold standards work on *categorical* answers. They cannot
+tell you whether a free-text rationale was written by the annotator or pasted in
+from an LLM — the finished text usually looks fine either way.
+
+[Keystroke logging](../advanced/keystroke_logging.md) adds a complementary
+signal for free-text fields by recording *how* the response was produced:
+
+```yaml
+keystroke_logging:
+  enabled: true
+  detection:
+    enabled: true
+    on_external_insert: flag   # allow | warn | block | flag
+```
+
+This produces per-response flags — `paste_dominant`, `silent_insertion`,
+`transcription_rhythm`, `offscreen_composition`, `implausible_speed`,
+`synthetic_input` — each carrying the evidence that fired it. They surface in
+the **Writing Process** panel of the admin dashboard and in the
+`typing_dynamics.csv` export.
+
+!!! warning "These flags are not attention checks"
+    A failed attention check is a discrete, defensible fact: the annotator gave
+    a known-wrong answer. A writing-process flag is a **statistical signal about
+    a behaviour that has innocent explanations** — fast typists, mobile
+    keyboards, dictation, assistive technology. Do not wire them to automatic
+    rejection.
+
+    See [false positives](../advanced/writing_process_detection.md#false-positives)
+    and [the ethics guide](../advanced/keystroke_logging_ethics.md) before using
+    them in any decision that affects an annotator.
+
+---
+
 ## Troubleshooting
 
 ### Attention checks not appearing
@@ -30388,10 +30428,13 @@ Each annotation instance includes a `behavioral_data` object:
         "timestamp": 1706500002.5,
         "schema_name": "sentiment",
         "label_name": "positive",
+        "old_label": null,
         "action": "select",
         "old_value": null,
         "new_value": true,
-        "source": "user"
+        "source": "user",
+        "phase": "annotation",
+        "page": null
       }
     ],
     "navigation_history": [
@@ -30410,10 +30453,34 @@ Each annotation instance includes a `behavioral_data` object:
     "scroll_depth_max": 75.5,
     "keyword_highlights_shown": [
       {"text": "excellent", "label": "positive", "type": "keyword"}
-    ]
+    ],
+    "chat_history": [
+      {
+        "role": "user",
+        "content": "Is sarcasm counted as negative here?",
+        "timestamp": 1706500020.0,
+        "instance_id": "instance_123",
+        "response_time_ms": null
+      }
+    ],
+    "typing_summaries": {
+      "explanation:::explanation": {
+        "keystrokes": 172,
+        "final_chars": 154,
+        "iki_median_ms": 133.0,
+        "pause_counts": {"2000": 2},
+        "pasted_fraction": 0.0,
+        "verdict": {"level": "ok", "flag_names": []}
+      }
+    }
   }
 }
 ```
+
+`chat_history` is populated only when the LLM chat sidebar is enabled.
+`typing_summaries` is populated only when
+[keystroke logging](keystroke_logging.md) is enabled; the raw keystroke streams
+live in the project's SQLite database rather than here.
 
 ### Storage Location
 
@@ -30426,6 +30493,12 @@ Behavioral data is stored in:
 ### Enabling Behavioral Tracking
 
 Behavioral tracking is enabled by default. No additional configuration is required.
+
+!!! note "Keystroke logging is a separate, opt-in feature"
+    Fine-grained typing dynamics on free-text fields — pauses, bursts,
+    revisions, paste detection — are **not** part of this default tracking. They
+    are configured under `keystroke_logging`, default off, and documented in
+    [Keystroke Logging](keystroke_logging.md).
 
 ### Frontend Debug Mode
 
@@ -30470,6 +30543,29 @@ Content-Type: application/json
   "accepted_value": "positive"
 }
 ```
+
+### Track Annotation Change
+
+```http
+POST /api/track_annotation_change
+Content-Type: application/json
+
+{
+  "instance_id": "instance_123",
+  "schema_name": "sentiment",
+  "label_name": "positive",
+  "action": "select|deselect|update|clear",
+  "old_label": null,
+  "old_value": null,
+  "new_value": true,
+  "source": "user|ai_accept|keyboard|prefill"
+}
+```
+
+The workflow `phase` and `page` are stamped server-side rather than sent by the
+client: behavioral data is bucketed by instance id, and every non-annotation
+page shares the same `__phase_page__` sentinel, so without them the trail cannot
+say which survey a change belongs to.
 
 ### Get Behavioral Data
 
@@ -30690,6 +30786,950 @@ This notebook demonstrates:
 - [Annotation History](../administration/annotation_history.md) - Detailed change tracking
 - [Quality Control](../workflow/quality_control.md) - Automated quality checks
 - [Data Format](../configuration/data_format.md) - Output file formats
+
+
+---
+
+<!-- source: docs/advanced/keystroke_logging.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/advanced/keystroke_logging/
+
+# Keystroke Logging (Typing Dynamics)
+
+Records **how** annotators produce free-text responses — the pauses, bursts,
+revisions and pastes — without ever recording **what** they type.
+
+This lets you distinguish a response that was **composed** (typed, with the
+hesitations and revisions of real thought) from one that was **transcribed**
+(retyped from another window) or **pasted** (dropped in from an LLM). The
+finished text rarely reveals which; the writing process usually does.
+
+For the detection rules built on top of this data, see
+[Writing-Process Detection](writing_process_detection.md). Before enabling it on
+human participants, read [Keystroke Logging Ethics](keystroke_logging_ethics.md).
+
+---
+
+## Quick start
+
+```yaml
+keystroke_logging:
+  enabled: true
+```
+
+That is the whole minimum configuration. Every free-text field in the project
+starts producing a content-blind event stream, a ~40-field summary, and a set of
+detection flags.
+
+A runnable example lives at `examples/advanced/keystroke-logging/`:
+
+```bash
+python potato/flask_server.py start examples/advanced/keystroke-logging/config.yaml -p 8000
+```
+
+!!! warning "Off by default"
+    `enabled` defaults to `false`. Upgrading Potato never silently starts
+    recording your annotators.
+
+---
+
+## What gets captured
+
+Each event records a timestamp, an input type, a key **class**, the caret
+position, and the change in field length:
+
+```
+{t_ms: 1240, input_type: "insertText",            key_class: "letter", pos: 41, delta: +1}
+{t_ms: 1310, input_type: "insertText",            key_class: "letter", pos: 42, delta: +1}
+{t_ms: 3980, input_type: "deleteContentBackward", key_class: "bksp",   pos: 42, delta: -1}
+{t_ms: 9120, input_type: "insertFromPaste",       key_class: "unknown",pos: 43, delta: +287,
+    meta: {paste_source: "external", paste_hash: "sekqf3"}}
+```
+
+### What is deliberately *not* captured
+
+| Not captured | Why |
+|---|---|
+| The characters typed | The stream reconstructs the *process*, not the text. |
+| Pasted text | Only a length, a source label, and a salted hash. |
+| Intermediate drafts | Not reconstructable from length deltas alone. |
+| Anything in a password field | `getFieldIdentity` refuses `type="password"` outright. |
+| Clipboard contents generally | Read at paste time to classify, then discarded. |
+
+### Key classes
+
+The key itself is never stored — only which family it belongs to:
+
+`letter`, `digit`, `punct`, `space`, `enter`, `bksp`, `del`, `nav`, `mod`,
+`func`, `unknown`
+
+### Input types
+
+Potato's primary signal is `InputEvent.inputType`, not `keydown`. This is the
+central technical choice: paste, drag-and-drop, IME composition, dictation,
+autofill and undo **all mutate a field without firing `keydown` at all**, so a
+keydown-only logger is blind to precisely the cases this feature exists to
+detect.
+
+`insertText`, `insertReplacementText`, `insertFromPaste`, `insertFromDrop`,
+`insertCompositionText`, `insertLineBreak`, `insertParagraph`,
+`deleteContentBackward`, `deleteContentForward`, `deleteWordBackward`,
+`deleteWordForward`, `deleteByCut`, `deleteByDrag`, `historyUndo`,
+`historyRedo`, plus the synthetic `focus`, `blur` and `keydown`.
+
+`keydown`/`keyup` are still listened to, but only to count *physical* keystrokes
+and measure dwell. The gap between "characters that appeared" and "keys actually
+pressed" is the single strongest signal collected — see `silent_insert_ratio`.
+
+---
+
+## Which fields are instrumented
+
+By default, **every free-text field**: the `text` schema, free-response boxes
+inside `radio` and `multiselect`, and the rationale/notes textareas in
+`text_edit`, `pairwise`, `trajectory_eval` and similar schemas.
+
+Fields are identified by the `schema` and `label_name` attributes that Potato
+already stamps on every annotation input, falling back to splitting the `name`
+attribute on `:::`.
+
+Restrict the scope with either list:
+
+```yaml
+keystroke_logging:
+  enabled: true
+  include_schemas: [rationale]      # allowlist; empty = all fields
+  exclude_schemas: [scratch_notes]  # denylist
+```
+
+Or opt a single element out in custom HTML:
+
+```html
+<textarea data-keystroke-logging="off" ...></textarea>
+```
+
+---
+
+## Configuration reference
+
+```yaml
+keystroke_logging:
+  enabled: false                # master switch
+  fidelity: events              # off | summary | events
+  include_schemas: []           # empty = every free-text field
+  exclude_schemas: []
+  store_events: true            # persist raw streams (needs fidelity: events)
+  classify_paste_source: true   # label pastes self/instance_text/ai_suggestion/external
+  idle_session_ms: 30000        # close a session after this much inactivity
+  flush_interval_ms: 5000       # how often the browser posts completed sessions
+  pause_thresholds_ms: [500, 1000, 2000, 5000, 10000]
+  disclose_to_annotators: true  # show a recording notice
+  detection:
+    enabled: true
+    calibrate: false            # use project-fitted thresholds
+    on_external_insert: flag    # allow | warn | block | flag
+    thresholds: {}              # per-rule overrides
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | Master switch. Nothing is captured when false. |
+| `fidelity` | `events` | `off` disables; `summary` computes features but stores no stream; `events` stores both. |
+| `include_schemas` | `[]` | Allowlist of schema names. Empty means all. |
+| `exclude_schemas` | `[]` | Denylist, applied after the allowlist. |
+| `store_events` | `true` | Persist raw streams. Ignored unless `fidelity: events`. |
+| `classify_paste_source` | `true` | Compare pastes against the passage, AI suggestions, and the field's own contents. |
+| `idle_session_ms` | `30000` | Inactivity before a session is closed and flushed. |
+| `flush_interval_ms` | `5000` | Browser flush cadence. |
+| `pause_thresholds_ms` | `[500,1000,2000,5000,10000]` | Pause counts are reported at each. |
+| `disclose_to_annotators` | `true` | Show a recording notice. Turning it off logs a warning. |
+
+Detection keys are documented in
+[Writing-Process Detection](writing_process_detection.md).
+
+### Choosing a fidelity
+
+| Fidelity | Stream stored | Recompute new metrics later? | Use when |
+|---|---|---|---|
+| `off` | — | — | Feature disabled for this project. |
+| `summary` | No | **No** | You are certain about which features you need, or your ethics approval does not cover retaining streams. |
+| `events` | Yes | Yes | Default. Roughly 2 bytes per keystroke. |
+
+`events` is recommended: a 500-word response costs about 5 KB, and it means a
+metric you think of after data collection can still be computed.
+
+---
+
+## Summary features
+
+One summary per (user, instance, field), grouped by what each measures. Feature
+families follow Crossley et al. (2024) — see
+[Writing-Process Detection](writing_process_detection.md#research-grounding).
+
+### Volume / product-to-process
+
+| Field | Meaning |
+|---|---|
+| `keystrokes` | Physical keydowns that produced text |
+| `final_chars` | Field length at session end |
+| `chars_typed` / `chars_inserted` | Characters inserted by typing / by any means |
+| `chars_deleted` | Characters removed |
+| `chars_per_keystroke` | Above ~1.1 implies text arriving without keystrokes |
+| `active_ms` / `wall_ms` | Time on the field, excluding / including time away |
+
+### Rhythm (process variance)
+
+| Field | Meaning |
+|---|---|
+| `iki_median_ms`, `iki_mean_ms` | Inter-key interval central tendency |
+| `iki_p10/p25/p75/p90_ms` | IKI distribution shape |
+| `iki_log_sd`, `iki_log_cv` | Dispersion on a log scale. **Low = metronomic = transcription.** |
+
+Log scale because IKI distributions are heavily right-skewed. Intervals above
+30 s are excluded from these statistics so one coffee break cannot dominate them.
+
+### Pausing
+
+| Field | Meaning |
+|---|---|
+| `pause_counts` | Counts at each configured threshold |
+| `pause_total_ms` | Total time in pauses |
+| `pre_word_pause_mean_ms` | Mean pause before starting a word |
+| `pre_sentence_pause_mean_ms` | Mean pause after punctuation |
+| `intraword_iki_median_ms` | Median interval *within* words (keyboarding skill) |
+
+### Bursting
+
+| Field | Meaning |
+|---|---|
+| `bursts`, `burst_mean_chars`, `burst_max_chars` | Run-of-production statistics |
+| `p_bursts` | Bursts terminated by a pause |
+| `r_bursts` | Bursts terminated by a revision |
+
+### Revision
+
+| Field | Meaning |
+|---|---|
+| `backspaces`, `deletes`, `undo_events` | Deletion behaviour |
+| `non_terminal_edits` | Edits made *behind* the end of the text — going back to revise |
+| `caret_jumps` | Non-adjacent caret movements |
+| `revision_ratio` | `chars_deleted / chars_typed` |
+
+### External insertion — the AI tell
+
+| Field | Meaning |
+|---|---|
+| `paste_events`, `pasted_chars`, `largest_paste_chars` | Paste volume |
+| `pasted_fraction` | Share of the final text that was pasted |
+| `drop_events` | Drag-and-drop insertions |
+| `silent_insert_chars` / `silent_insert_ratio` | Characters with **no corresponding keystroke** |
+| `external_insert_chars` / `external_insert_ratio` | As above, **excluding** self-quotes and passage quotes |
+| `paste_sources`, `paste_chars_by_source` | Counts and characters per source label |
+
+`external_insert_ratio` is the one to use for detection.
+`silent_insert_ratio` counts *all* silent insertion, including the legitimate
+kind.
+
+### Attention
+
+| Field | Meaning |
+|---|---|
+| `blur_events`, `blur_total_ms` | Time away from the page |
+| `max_blur_before_insert_ms` | Longest absence **immediately preceding a large insertion** |
+| `first_keystroke_latency_ms` | Thinking time before the first character |
+
+### Integrity
+
+| Field | Meaning |
+|---|---|
+| `untrusted_events` | `InputEvent.isTrusted === false` — scripted or automated input |
+| `composition_events` | IME composition |
+| `virtual_keyboard` | Mobile/soft keyboard detected |
+
+---
+
+## Where the data is stored
+
+Two destinations, for two different reasons.
+
+### Raw streams → SQLite
+
+`<task_dir>/project.sqlite`, table `typing_sessions`, one row per session. Uses
+the same universal persistence layer as memos and the codebook.
+
+Queryable summary columns are denormalized alongside a full JSON summary and a
+zlib-packed event blob:
+
+```bash
+sqlite3 <task_dir>/project.sqlite "
+  SELECT user_id, schema_name, keystrokes, final_chars,
+         pasted_fraction, silent_insert_ratio, iki_log_cv,
+         json_extract(flags,'\$.level') AS level
+  FROM typing_sessions;"
+```
+
+The stream is stored as one packed blob per session rather than one row per
+keystroke: it is only ever read back wholesale, and at ~2 bytes per event a
+row-per-keystroke schema would put tens of millions of rows in a project file
+for no query benefit.
+
+#### Phase pages
+
+Free-text answers in the training phase and in prestudy/poststudy surveys are
+captured too. Those pages have no instance id, so their sessions are bucketed
+under the `__phase_page__` sentinel — the same one the rest of the behavioral
+system uses — and identified by their `phase` and `page` columns instead:
+
+```sql
+SELECT phase, page, count(*) FROM typing_sessions GROUP BY phase, page;
+```
+
+This is what makes the
+[calibration example](https://github.com/davidjurgens/potato/tree/master/examples/advanced/keystroke-calibration)
+work: a copy-the-passage task in the training phase yields transcription
+exemplars that can be told apart from ordinary composed answers by `phase` alone.
+
+### Summary → `user_state.json`
+
+The compact sketch is mirrored into
+`<output_annotation_dir>/<user>/user_state.json` under
+`instance_id_to_behavioral_data.<instance>.typing_summaries`, keyed
+`"{schema}:::{label}"`, so it travels with the annotation into the admin
+dashboard and the exports.
+
+Raw streams deliberately do **not** go there: that file is fully re-serialized
+and atomically rewritten on every annotation save, and a long response is
+thousands of events.
+
+---
+
+## Exporting
+
+### Summary features alongside annotations
+
+```yaml
+export_include_typing_dynamics: true
+```
+
+Produces `typing_dynamics.csv` (or `.tsv`) next to `annotations.csv`, one row
+per (user, instance, field), with the summary features and the detector verdict.
+
+### Raw streams
+
+```bash
+python -m potato.export.cli <config.yaml> --format keystrokes
+```
+
+Writes `keystroke_sessions.parquet` and `keystroke_events.parquet`, falling back
+to JSONL when `pyarrow` is not installed.
+
+```python
+import pandas as pd
+events = pd.read_parquet("keystroke_events.parquet")
+
+# Inter-key intervals for one session
+s = events[events.session_id == events.session_id.iloc[0]].sort_values("t_ms")
+iki = s.t_ms.diff().dropna()
+print(iki.median(), iki.std())
+
+# Every externally-sourced paste in the project
+print(events[events.paste_source == "external"])
+```
+
+---
+
+## API endpoints
+
+| Method | Route | Purpose |
+|---|---|---|
+| `POST` | `/api/track_typing` | Receive completed sessions from the browser |
+| `GET` | `/api/typing_summary/<instance_id>` | Summaries for one instance, current user |
+| `GET` | `/admin/api/writing_process` | Per-annotator rollup (**admin key required**) |
+
+Sessions are summarized **server-side**. The browser never sends a computed
+summary, so the numbers cannot be forged by a modified client, and a metric
+added later can be recomputed from the stored streams.
+
+---
+
+## How sessions work
+
+A session begins when a field is focused and ends at whichever comes first:
+losing focus, navigating to another instance, `idle_session_ms` of inactivity,
+or page unload. Completed sessions are posted every `flush_interval_ms`, and via
+`navigator.sendBeacon` on unload so an in-progress session is not lost.
+
+Multiple sessions on the same field are **merged** before the summary is written
+to the user state, so leaving a field and coming back reads as one response
+rather than several suspiciously short ones. Counts and durations add;
+distribution statistics are keystroke-weighted approximations — use the raw
+streams if you need an exact pooled distribution.
+
+---
+
+## Troubleshooting
+
+**No data is being recorded.**
+Check `keystroke_logging.enabled: true` and that `fidelity` is not `off`. In the
+browser console, `window.keystrokeTracker` should exist with
+`isInitialized === true`. If it is `undefined`, the config never reached the
+template.
+
+**The tracker exists but no sessions appear.**
+Check field identification:
+
+```js
+const el = document.querySelector('textarea');
+window.keystrokeTracker.getFieldIdentity(el);   // null means it is not tracked
+```
+
+`null` means the element has no `schema`/`label_name` attributes and no
+`:::`-separated `name`, or it is excluded by config.
+
+**`silent_insertion` flags every mobile annotator.**
+It should not — the rule is suppressed when `virtual_keyboard` is true. If
+detection is misfiring, check that the client set that flag; see the
+false-positive section in
+[Writing-Process Detection](writing_process_detection.md#false-positives).
+
+**`project.sqlite` is growing.**
+Roughly 2 bytes per keystroke. Set `fidelity: summary` to keep the features and
+drop the streams, or use `typing_store.delete_for_user()` to remove a
+participant's data.
+
+**Numbers look wrong for automated tests.**
+Browser automation types at near-zero intervals, which genuinely trips
+`implausible_speed`. That is the flag working, not a bug.
+
+---
+
+## Related documentation
+
+- [Writing-Process Detection](writing_process_detection.md) — the detection rules
+- [Keystroke Logging Ethics](keystroke_logging_ethics.md) — IRB, consent, participant rights
+- [Behavioral Tracking](behavioral_tracking.md) — the broader interaction-tracking system
+- [Quality Control](../workflow/quality_control.md) — attention checks and gold standards
+- [Admin Dashboard](../administration/admin_dashboard.md) — the Writing Process panel
+
+
+---
+
+<!-- source: docs/advanced/writing_process_detection.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/advanced/writing_process_detection/
+
+# Writing-Process Detection
+
+Turns the typing dynamics captured by [Keystroke Logging](keystroke_logging.md)
+into named, auditable flags: was this response composed, transcribed, or pasted?
+
+!!! danger "Read this before you use any of it"
+    **Flags are evidence for human review. They are not proof of misconduct, and
+    they must never be wired to automatic rejection, payment withholding, or
+    participant bans.**
+
+    A fast, fluent typist producing a clean first draft genuinely resembles
+    transcription. An annotator on a phone genuinely resembles someone pasting.
+    The rules below are built to minimise those collisions, and they still
+    happen. Read the [false positives](#false-positives) section — it is part of
+    the feature, not a disclaimer.
+
+---
+
+## Three tiers
+
+| Tier | What it is | Needs labeled data? | Default |
+|---|---|---|---|
+| **1. Rules** | Six named flags with explicit thresholds and visible evidence | No | **On** |
+| **2. Calibration** | Thresholds refitted to your project's own annotators | No | Off |
+| **3. Supervised** | A classifier you train on your own labels | **Yes** | Off |
+
+!!! note "No pre-trained model ships with Potato"
+    There is no labeled corpus in this repository, so shipping fitted
+    coefficients would be fabricating validation. Tier 1 is transparent rules
+    you can read and argue with. Tier 3 exists for researchers who have real
+    labels — that is the path that reproduces the accuracies in the literature.
+
+---
+
+## Tier 1: the rules
+
+Every flag returns the feature values that fired it, so you can defend or
+discard any individual one.
+
+### `paste_dominant` · severity: suspect
+
+Fires when `pasted_fraction ≥ 0.5` — half or more of the final text arrived by
+paste.
+
+**Suppressed** when every paste was classified as `self` (re-arranging your own
+draft) or `instance_text` (quoting the passage under annotation).
+
+### `silent_insertion` · severity: suspect
+
+Fires when `external_insert_ratio ≥ 0.3` — nearly a third of inserted characters
+appeared with **no corresponding keystroke**.
+
+This is the highest-value single signal. Paste, autofill, dictation and
+programmatic injection all show up here, even when the paste event itself is
+suppressed by the page. It is a direct operationalization of Asher et al.'s
+"keystroke count anomalously low relative to response length".
+
+**Suppressed** on soft keyboards (`virtual_keyboard`) and during IME composition,
+where `keydown` is not reliably emitted and every insert would look silent. Uses
+the source-aware ratio, so legitimate quoting does not count.
+
+### `transcription_rhythm` · severity: review
+
+Fires when **all three** hold:
+
+- `iki_log_cv ≤ 0.06` — metronomic typing rhythm
+- `revision_ratio ≤ 0.02` — essentially no deletion
+- fewer than 0.5 pauses ≥2 s per 100 characters
+
+Conjunctive by design. Any one alone has an innocent reading; together they are
+the copy-typing signature Crossley et al. describe — linear, burst-oriented, low
+variance.
+
+**Skipped** entirely for responses under 80 characters or 40 keystrokes, where
+there is no rhythm to speak of.
+
+### `offscreen_composition` · severity: suspect
+
+Fires when a large externally-sourced insertion (≥80 chars) immediately follows
+≥10 s away from the page. The "switched to ChatGPT, came back, pasted" pattern.
+
+**Suppressed** when the insertion's source was the passage or the annotator's own
+text — stepping away and then quoting the passage is ordinary behaviour.
+
+### `implausible_speed` · severity: review
+
+Fires above 900 characters/minute (~180 wpm) sustained across a whole response.
+
+### `synthetic_input` · severity: suspect
+
+Fires on any event with `isTrusted === false` — the browser reporting that input
+was generated by script rather than a person. Browser automation, injected
+scripts, some accessibility tooling.
+
+### Verdict levels
+
+| Level | Meaning |
+|---|---|
+| `ok` | No flags fired |
+| `review` | At least one `review`-severity flag |
+| `suspect` | At least one `suspect`-severity flag |
+
+### Overriding thresholds
+
+```yaml
+keystroke_logging:
+  detection:
+    thresholds:
+      paste_dominant.pasted_fraction: 0.4
+      silent_insertion.ratio: 0.25
+      transcription_rhythm.iki_log_cv: 0.05
+      transcription_rhythm.revision_ratio: 0.02
+      transcription_rhythm.pause_2s_per_100_chars: 0.5
+      offscreen_composition.blur_ms: 15000
+      offscreen_composition.insert_chars: 100
+      implausible_speed.chars_per_min: 1000
+```
+
+Thresholds are evaluated **server-side and never sent to the browser** —
+publishing them would tell an annotator exactly how slowly to paste in order to
+stay under the flag.
+
+---
+
+## Tier 2: project calibration
+
+Keystroke features vary substantially by writing task (Conijn et al. 2019), and
+fixed thresholds on a mixture-distributed quantity are biased (Roeser et al.
+2021). A cutoff that works for a one-sentence rationale is wrong for a
+five-paragraph essay.
+
+Calibration sets each threshold at a tail percentile of **your** project's
+sessions.
+
+```bash
+# Inspect the fit without saving it
+python -m potato.typing_detect calibrate config.yaml --dry-run
+
+# Save it
+python -m potato.typing_detect calibrate config.yaml
+```
+
+```yaml
+keystroke_logging:
+  detection:
+    calibrate: true    # use the saved fit
+```
+
+Requires at least 30 usable sessions (≥80 characters, non-mobile). Below that it
+returns `insufficient_data` and the defaults stay in force.
+
+!!! warning "What a calibrated flag does and does not mean"
+    A percentile cutoff is a **relative** outlier definition. By construction it
+    flags roughly `tail_fraction` (default 5%) of sessions **even in a population
+    where nobody is doing anything wrong.** It tells you where to look first. It
+    is not evidence.
+
+    Calibrated thresholds are additionally clamped to within 3× the built-in
+    defaults, so a homogeneous population cannot drag a cutoff onto its own
+    median and start flagging honest annotators.
+
+An explicit `thresholds:` override always beats a calibrated value, which always
+beats the built-in default.
+
+---
+
+## Tier 3: supervised classifier
+
+If you have labeled sessions, train a real model:
+
+```python
+from potato import typing_store
+from potato.typing_detect import fit_supervised
+
+rows = typing_store.feature_matrix(task_dir, project)
+labels = [...]   # 1 = non-composed, 0 = composed
+
+result = fit_supervised(rows, labels, model="random_forest")
+print(result["cv_accuracy_mean"], result["feature_importances"])
+```
+
+Requires `scikit-learn` (lazily imported; not a Potato dependency).
+
+### Getting labels without an external study
+
+Potato's training phase can generate them for you. Ask annotators to copy a
+supplied passage as a warm-up task: their copying sessions are genuine
+*transcription* exemplars, and their normal answers are *composed* exemplars —
+a labeled set from within your own project, on your own task, with your own
+annotators. This mirrors how Crossley et al. built their corpus.
+
+---
+
+## False positives
+
+The failure mode of this feature is accusing an honest annotator. These are the
+cases that legitimately resemble the patterns above.
+
+| Situation | Which rule it resembles | How Potato handles it |
+|---|---|---|
+| Quoting the passage under annotation | `paste_dominant`, `silent_insertion`, `offscreen_composition` | **Suppressed** via `paste_source: instance_text` |
+| Moving your own draft around | Same | **Suppressed** via `paste_source: self` |
+| Typing on a phone or tablet | `silent_insertion` | **Suppressed** via `virtual_keyboard` |
+| Non-Latin input via an IME | `silent_insertion` | **Suppressed** via `composition_events` |
+| Fast, fluent typist, clean draft | `transcription_rhythm`, `implausible_speed` | Conjunctive rules; `review` not `suspect`; calibration |
+| Very short answers | `transcription_rhythm` | **Skipped** below 80 chars / 40 keystrokes |
+| Dictation / speech-to-text | `silent_insertion` | **Not handled.** Will flag. Exclude those annotators or raise the threshold. |
+| Screen readers and some AT | `synthetic_input` | **Not fully handled.** Some tooling produces untrusted events. |
+| Autocorrect on mobile | `silent_insertion` | Partly — `insertReplacementText` counts as external. |
+| Browser extensions (grammar tools) | `silent_insertion`, `synthetic_input` | **Not handled.** Will flag. |
+
+The last four are real limitations, not oversights we forgot to mention. If your
+participant pool includes dictation users, assistive-technology users, or people
+who use writing extensions, either exclude those rules or treat every flag as a
+prompt to ask the annotator rather than to act.
+
+### Accessibility
+
+`synthetic_input` keys off `isTrusted`, which some assistive technologies also
+trip. Flagging a disabled annotator for using the tools they need to work is an
+unacceptable outcome. If your study is open to AT users, disable that rule:
+
+```yaml
+keystroke_logging:
+  detection:
+    thresholds:
+      # There is no explicit off switch; make it unreachable.
+      implausible_speed.chars_per_min: 1000000
+```
+
+or set `detection.enabled: false` and analyse the exported features yourself.
+
+---
+
+## Real-time intervention
+
+```yaml
+keystroke_logging:
+  detection:
+    on_external_insert: flag   # allow | warn | block | flag
+```
+
+| Value | Behaviour |
+|---|---|
+| `allow` | Do nothing beyond recording |
+| `warn` | Non-blocking notice on external paste (not on self/passage quotes) |
+| `block` | Prevent paste and drop into instrumented fields |
+| `flag` | **Default.** Record silently; you decide later |
+
+`block` is a blunt instrument: it also blocks legitimate quoting, and a
+determined participant can retype instead. `flag` plus review is usually better.
+
+---
+
+## Admin dashboard
+
+The **Writing Process** panel under the Behavioral tab shows per-annotator
+medians, paste rates, silent-insertion rates, and every flagged session with its
+evidence.
+
+It reports `writing_process_risk` — the share of a user's sessions that fired
+each flag, weighted toward the signals with the least innocent explanation. It
+is a **ranking aid**, deliberately kept separate from the existing
+`suspicion_score` so that neither number silently changes the other's meaning.
+
+---
+
+## Research grounding
+
+Every citation verified against the Crossref or DataCite registry.
+
+**Detection.** Crossley, Tian, Choi, Holmes & Morris (2024) collected 500
+argumentative essays, had other workers transcribe them, and separated authentic
+from transcribed at **99% accuracy** with a random forest (96–98% for other
+models). Their feature families — pause times before sentences and words,
+insertion/deletion counts, product-to-process ratios, bursts, revision, process
+variance — are what Potato captures. Their finding is the design target:
+authentic writing shows *longer pauses, more insertions and deletions, and
+greater variance*; transcription is *linear and burst-oriented*.
+
+Deane, Zhang, Hao & Li and Zhang, Feng, He, Li & Zhu independently confirm the
+copy-typing/natural-writing separation, the latter with a deep-learning model.
+Asher, Gold, Chen & Carvalho is the crowdsourcing-specific case: a keystroke tool
+on Prolific flagging participants who paste into response fields or whose
+keystroke count is anomalously low for their response length.
+
+**Process measures.** Leijten & Van Waes (Inputlog) for the standard log
+measures; Chenoweth & Hayes for the burst construct; Conijn, Roeser & van Zaanen
+for task-dependence of keystroke features; Roeser, De Maeyer, Leijten & Van Waes
+for why fixed pause thresholds are biased.
+
+### References
+
+1. Crossley, S., Tian, Y., Choi, J. S., Holmes, L., & Morris, W. (2024). *Plagiarism Detection Using Keystroke Logs*. EDM 2024 (Short Papers). [doi:10.5281/zenodo.12729864](https://doi.org/10.5281/zenodo.12729864)
+2. Deane, P., Zhang, M., Hao, J., & Li, C. *Using Keystroke Dynamics to Detect Nonoriginal Text*. **Journal of Educational Measurement**, 63(1). [doi:10.1111/jedm.12431](https://doi.org/10.1111/jedm.12431)
+3. Asher, M. W., Gold, G., Chen, E., & Carvalho, P. F. (2026). *Chatbots Are Undermining Crowdsourced Research in the Behavioral Sciences: Detecting Artificial Intelligence–Assisted Cheating With a Keystroke-Based Tool*. **Advances in Methods and Practices in Psychological Science**, 9(1). [doi:10.1177/25152459261424723](https://doi.org/10.1177/25152459261424723)
+4. Zhang, M., Feng, L., He, X., Li, C., & Zhu, M. (2026). *Disentangling copy typing and natural writing behaviors using keystroke logs and deep learning model*. **Assessing Writing**. [doi:10.1016/j.asw.2026.101070](https://doi.org/10.1016/j.asw.2026.101070)
+5. Leijten, M., & Van Waes, L. (2013). *Keystroke Logging in Writing Research: Using Inputlog to Analyze and Visualize Writing Processes*. **Written Communication**, 30(3), 358–392. [doi:10.1177/0741088313491692](https://doi.org/10.1177/0741088313491692)
+6. Chenoweth, N. A., & Hayes, J. R. (2001). *Fluency in Writing: Generating Text in L1 and L2*. **Written Communication**, 18(1), 80–98. [doi:10.1177/0741088301018001004](https://doi.org/10.1177/0741088301018001004)
+7. Conijn, R., Roeser, J., & van Zaanen, M. (2019). *Understanding the keystroke log: the effect of writing task on keystroke features*. **Reading and Writing**, 32(9), 2353–2374. [doi:10.1007/s11145-019-09953-8](https://doi.org/10.1007/s11145-019-09953-8)
+8. Roeser, J., De Maeyer, S., Leijten, M., & Van Waes, L. (2021). *Modelling typing disfluencies as finite mixture process*. **Reading and Writing**. [doi:10.1007/s11145-021-10203-z](https://doi.org/10.1007/s11145-021-10203-z)
+9. Lee, M., Liang, P., & Yang, Q. (2022). *CoAuthor: Designing a Human-AI Collaborative Writing Dataset for Exploring Language Model Capabilities*. CHI 2022. [doi:10.1145/3491102.3502030](https://doi.org/10.1145/3491102.3502030)
+
+---
+
+## Related documentation
+
+- [Keystroke Logging](keystroke_logging.md) — what is captured and how
+- [Keystroke Logging Ethics](keystroke_logging_ethics.md) — IRB, consent, participant rights
+- [Quality Control](../workflow/quality_control.md) — attention checks and gold standards
+- [Admin Dashboard](../administration/admin_dashboard.md) — the Writing Process panel
+
+
+---
+
+<!-- source: docs/advanced/keystroke_logging_ethics.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/advanced/keystroke_logging_ethics/
+
+# Keystroke Logging: Ethics, Consent and IRB
+
+[Keystroke logging](keystroke_logging.md) records how your annotators write.
+That is behavioural data about identifiable people, and it carries obligations
+that the technical documentation does not cover.
+
+This page is written for the researcher deploying the feature. It is not legal
+advice, and it does not substitute for your own institution's review.
+
+---
+
+## What you are actually collecting
+
+Potato's streams are **content-blind**: they record that a character was
+inserted, when, where in the field, and what class of key produced it — never
+which character. You cannot reconstruct the text from a stream.
+
+That is a meaningful privacy protection, and it is **not** the same as the data
+being non-identifying.
+
+### Timing patterns are a biometric
+
+Keystroke dynamics — the distribution of inter-key intervals, dwell times and
+digraph latencies — are a well-established behavioural biometric. They can be
+used to identify individuals and to link accounts across contexts. Potato does
+not do this and provides no tooling for it, but the underlying data supports it.
+
+Treat a keystroke stream the way you would treat any other behavioural
+biometric: as identifiable, as needing a retention limit, and as requiring
+consent.
+
+### What can be inferred beyond authorship
+
+Timing data has been used in research to infer typing skill, language
+proficiency and second-language status, cognitive load and fatigue, and in some
+literatures, motor and neurological conditions. Potato computes none of these,
+but the data you retain would support such analysis, and your participants are
+unlikely to anticipate that when they agree to "an annotation task".
+
+Say what you collect. Do not rely on a general-purpose "we collect usage data"
+clause to cover it.
+
+---
+
+## Disclosure
+
+`disclose_to_annotators` defaults to `true`. Turning it off logs a warning at
+startup:
+
+```yaml
+keystroke_logging:
+  disclose_to_annotators: false   # logs a warning; make sure your IRB covers this
+```
+
+There are legitimate reasons for undisclosed collection — some study designs are
+invalidated by telling participants what is being measured — but that is an
+ethics-board decision, not a configuration convenience. If you disable
+disclosure, you should be able to point to the approval that permits it.
+
+### Sample consent language
+
+Adapt to your protocol; this is a starting point, not boilerplate to paste
+unread.
+
+> **How you write is recorded, along with what you write.**
+>
+> While you type your responses, this study records the *timing* of your typing:
+> when you start and stop, how long you pause, when you go back and revise, and
+> when you paste text in from somewhere else. It records **the timing and
+> structure of your typing, not the individual keys you press** — the recording
+> cannot be used to recover anything you typed other than the answers you
+> submit.
+>
+> This is used to understand how people work through the task and to check the
+> quality of the collected data.
+>
+> [If applicable:] These measurements may be used to identify responses that were
+> copied or generated elsewhere rather than written by you.
+>
+> [If applicable:] The recordings will be shared as part of an anonymised
+> research dataset.
+>
+> You may ask us to delete your data at any time by contacting [ ].
+
+The bracketed clauses matter. If you intend to use flags for payment or
+exclusion decisions, say so before people start work — not after you have
+flagged them.
+
+---
+
+## Using flags fairly
+
+[Writing-process detection](writing_process_detection.md) produces flags with
+evidence. How you use them is your responsibility.
+
+**Do:**
+
+- Treat a flag as a prompt to look, not a finding.
+- Read the per-session evidence, not just the verdict label.
+- Give the annotator a chance to explain before acting.
+- Account for the [known false positives](writing_process_detection.md#false-positives) —
+  mobile keyboards, IME users, dictation, assistive technology, fast typists.
+- Document your decision rule in advance, in your protocol.
+
+**Do not:**
+
+- Wire flags to automatic rejection, payment withholding, or bans.
+- Treat the calibrated tail as wrongdoing. A percentile threshold flags a fixed
+  share of *any* population, including an entirely honest one.
+- Publish per-annotator risk scores in a way that identifies individuals.
+- Use flags to make claims about a person beyond authorship of a response —
+  the data does not support inferences about their competence, effort, or
+  character.
+
+### The base-rate problem
+
+If 5% of your responses are LLM-pasted and your rule flags 5% of sessions, most
+of what you flag can still be honest work, depending on how well the rule
+separates the two. On a platform where genuine misconduct is rare, a rule with
+even a small false-positive rate produces more false accusations than true
+catches. Estimate your base rate before you set a policy on top of the flags.
+
+---
+
+## Participant rights
+
+**Deletion.** Remove one participant's streams and summaries:
+
+```python
+from potato import typing_store
+typing_store.delete_for_user(task_dir, project, user_id)
+```
+
+This clears `typing_sessions`. Summaries mirrored into
+`<output_annotation_dir>/<user>/user_state.json` under `typing_summaries` must be
+removed separately if you are honouring a full deletion request.
+
+**Minimisation.** Collect the least that answers your question:
+
+```yaml
+keystroke_logging:
+  fidelity: summary          # features only, no raw streams retained
+  include_schemas: [rationale]   # instrument one field, not every box
+  classify_paste_source: false   # skip clipboard comparison entirely
+```
+
+**Retention.** Potato does not expire data. If your protocol commits to a
+retention window, delete the streams yourself when it elapses — `fidelity:
+summary` after the analysis period is a reasonable middle ground, keeping the
+aggregate features and dropping the biometric detail.
+
+---
+
+## Sharing and publication
+
+If you release keystroke data as part of a dataset:
+
+- Replace user ids with study-specific pseudonyms that do not map back to
+  platform ids (Prolific/MTurk worker ids are identifiers, not pseudonyms).
+- Consider whether session-level timing is needed, or whether summary features
+  suffice. Summaries are far less re-identifiable than streams.
+- Check that your consent covered redistribution, not only collection.
+- The paste hashes are salted per session and cannot be reversed, but they do
+  reveal that the same text was pasted twice — decide whether that linkage is
+  acceptable in a public release.
+
+Note that Potato's exports are opt-in for exactly this reason:
+`export_include_typing_dynamics` and the `keystrokes` exporter are both off by
+default, so behavioural data is never included in a dataset release by accident.
+
+---
+
+## Jurisdictional notes
+
+Not legal advice; flagging what tends to be relevant.
+
+- **GDPR / UK GDPR.** Timing patterns capable of identifying a person are
+  personal data. If you use them to single out individuals, consider whether
+  Article 22 (automated decision-making) applies — particularly if a flag
+  affects payment. Consent must be specific and informed; a general terms
+  acceptance is unlikely to suffice.
+- **US institutional review.** Typically human-subjects research. Some IRBs
+  treat keystroke dynamics as a biometric identifier, which can change the
+  review category.
+- **Crowdsourcing platforms.** Prolific, MTurk and similar have their own rules
+  about monitoring participants and about rejecting work. Check the platform's
+  policy before you reject anyone on the basis of a flag — several require you
+  to be able to justify a rejection to the worker.
+
+---
+
+## Related documentation
+
+- [Keystroke Logging](keystroke_logging.md) — what is captured and how
+- [Writing-Process Detection](writing_process_detection.md) — the rules and their false positives
+- [Crowdsourcing](../deployment/crowdsourcing.md) — working with paid annotators
 
 
 ---
@@ -34443,6 +35483,35 @@ The suspicion score is calculated based on:
 
 Users with suspicion scores above 50% are highlighted in red.
 
+**Writing Process Panel:**
+
+Shown in the Behavioral tab only when
+[keystroke logging](../advanced/keystroke_logging.md) is enabled. Reports how
+each annotator produced their free-text responses:
+
+- **Median IKI**: Typical inter-keystroke interval
+- **Rhythm CV**: Dispersion of log inter-key intervals. Low = metronomic = the copy-typing signature
+- **Pauses ≥2s /100ch**: Thinking pauses, normalized by response length
+- **Pasted**: Share of characters that arrived by paste
+- **Silent Insert**: Share of inserted characters with no corresponding keystroke
+- **Flags**: Which detection rules fired, and how often
+- **Risk**: `writing_process_risk`, a ranking aid
+
+Each flagged session is listed beneath its annotator with the **evidence** that
+fired it — the actual feature values, not just a verdict label.
+
+`writing_process_risk` is deliberately kept **separate** from the suspicion
+score above. Those four weights sum to 1.0 and every existing deployment's
+numbers are calibrated against them; folding in a new term would silently
+reinterpret historical scores.
+
+!!! warning "A ranking, not a finding"
+    Writing-process flags have innocent explanations — fast typists, mobile
+    keyboards, IME users, dictation, assistive technology. The panel renders a
+    caveat above the table for this reason. Read the per-session evidence, and
+    see [false positives](../advanced/writing_process_detection.md#false-positives)
+    before acting on any flag.
+
 ### 6. Crowdsourcing Tab
 
 The Crowdsourcing tab provides dedicated monitoring for workers from crowdsourcing platforms like Prolific and Amazon Mechanical Turk (MTurk).
@@ -34639,7 +35708,61 @@ Returns comprehensive behavioral analytics data for all annotators.
       "ai_accept_rate": 0.7,
       "suspicion_score": 0.15
     }
-  ]
+  ],
+  "writing_process": { "enabled": false }
+}
+```
+
+The `writing_process` block is `{"enabled": false}` unless
+[keystroke logging](../advanced/keystroke_logging.md) is configured.
+
+### Writing Process
+```
+GET /admin/api/writing_process
+Headers: X-API-Key: admin_api_key
+```
+
+The same `writing_process` block on its own, so the panel can refresh without
+recomputing the whole behavioral rollup.
+
+**Response Structure:**
+```json
+{
+  "enabled": true,
+  "fidelity": "events",
+  "detection_enabled": true,
+  "calibrated": false,
+  "summary": {
+    "total_users": 25,
+    "total_sessions": 480,
+    "users_with_flags": 3,
+    "flag_totals": {"paste_dominant": 4, "silent_insertion": 4}
+  },
+  "users": [
+    {
+      "user_id": "user_017",
+      "sessions": 20,
+      "chars": 4820,
+      "iki_median_ms": 133.0,
+      "iki_log_cv": 0.145,
+      "pause_2s_per_100_chars": 0.27,
+      "pasted_char_fraction": 0.61,
+      "mean_silent_insert_ratio": 0.58,
+      "flag_counts": {"paste_dominant": 4},
+      "flagged_sessions": [
+        {
+          "instance_id": "item_12",
+          "schema": "rationale",
+          "level": "suspect",
+          "flags": ["paste_dominant"],
+          "evidence": {"paste_dominant": {"pasted_fraction": 0.983}},
+          "explanations": ["98% of the final text arrived by paste rather than typing."]
+        }
+      ],
+      "writing_process_risk": 0.34
+    }
+  ],
+  "caveat": "Writing-process flags are evidence for human review, not proof of misconduct..."
 }
 ```
 
