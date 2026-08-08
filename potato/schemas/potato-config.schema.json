@@ -1522,6 +1522,7 @@
         "classify_paste_source": {},
         "detection": {},
         "disclose_to_annotators": {},
+        "disclosure_text": {},
         "enabled": {},
         "exclude_schemas": {},
         "fidelity": {},

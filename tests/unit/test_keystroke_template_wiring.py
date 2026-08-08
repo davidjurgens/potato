@@ -24,6 +24,9 @@ BASE_TEMPLATE = REPO_ROOT / "potato" / "templates" / "base_template_v2.html"
 #: Every function that renders a page which can contain a free-text field.
 RENDER_PATHS = ["render_page_with_annotations", "get_current_page_html"]
 
+#: Match the actual <script> tag, not a mention of the filename in a comment.
+TRACKER_TAG = "filename='keystroke_tracker.js'"
+
 
 @pytest.fixture(scope="module")
 def server_source():
@@ -78,7 +81,26 @@ class TestTemplateWiring:
         cut their sessions on the same navigation boundary. If it loaded first,
         the hook would silently not attach."""
         html = BASE_TEMPLATE.read_text(encoding="utf-8")
-        assert html.index("interaction_tracker.js") < html.index("keystroke_tracker.js")
+        assert html.index("filename='interaction_tracker.js'") < html.index(TRACKER_TAG)
+
+    def test_disclosure_notice_is_rendered_server_side(self):
+        """The notice must be Jinja, not JavaScript: an annotator who blocks
+        scripts still gets recorded on the fields that do load, and a tracker
+        that fails to load must not take the disclosure down with it."""
+        html = BASE_TEMPLATE.read_text(encoding="utf-8")
+        assert "keystroke-disclosure" in html
+        assert "disclosure_text" in html
+
+    def test_disclosure_notice_precedes_the_tracker_script(self):
+        """It is markup in <body>, not something the tracker injects."""
+        html = BASE_TEMPLATE.read_text(encoding="utf-8")
+        assert html.index("keystroke-disclosure") < html.index(TRACKER_TAG)
+
+    def test_disclosure_notice_is_guarded(self):
+        """Projects that never opted in must not see a recording notice."""
+        html = BASE_TEMPLATE.read_text(encoding="utf-8")
+        block = html.split("keystroke-disclosure")[0]
+        assert "keystroke_logging_enabled" in block[-400:]
 
     def test_thresholds_are_not_in_the_template(self):
         """Detection thresholds are server-side only."""

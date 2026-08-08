@@ -285,7 +285,7 @@ KNOWN_CONFIG_KEYS = {
         "enabled", "fidelity", "include_schemas", "exclude_schemas",
         "store_events", "classify_paste_source", "idle_session_ms",
         "flush_interval_ms", "pause_thresholds_ms", "disclose_to_annotators",
-        "detection",
+        "disclosure_text", "detection",
     },
     # Psychometrics: live IRT (labels with error bars) + adaptive routing.
     "psychometrics": {"enabled", "schema", "refit_interval", "min_observations",
@@ -1066,6 +1066,7 @@ KEYSTROKE_LOGGING_DEFAULTS: Dict[str, Any] = {
     "flush_interval_ms": 5000,
     "pause_thresholds_ms": [500, 1000, 2000, 5000, 10000],
     "disclose_to_annotators": True,
+    "disclosure_text": None,       # None = DEFAULT_DISCLOSURE_TEXT below
     "detection": {
         "enabled": True,
         "calibrate": False,
@@ -1076,6 +1077,17 @@ KEYSTROKE_LOGGING_DEFAULTS: Dict[str, Any] = {
 
 VALID_KEYSTROKE_FIDELITIES = {"off", "summary", "events"}
 VALID_EXTERNAL_INSERT_ACTIONS = {"allow", "warn", "block", "flag"}
+
+#: Shown on every page that can contain a free-text field when
+#: ``disclose_to_annotators`` is true. Deliberately states the limit of the
+#: collection as well as its existence: an annotator who is told only "your
+#: typing is recorded" will reasonably assume the keys themselves are stored.
+#: This is a persistent reminder, not a substitute for consent -- see
+#: docs/advanced/keystroke_logging_ethics.md for the consent language.
+DEFAULT_DISCLOSURE_TEXT = (
+    "This task records the timing and rhythm of your typing in text boxes "
+    "(when you pause, revise, or paste) — not the individual keys you press."
+)
 
 
 def validate_keystroke_logging_config(config_data: Dict[str, Any]) -> None:
@@ -1108,6 +1120,13 @@ def validate_keystroke_logging_config(config_data: Dict[str, Any]) -> None:
     for list_key in ("include_schemas", "exclude_schemas"):
         if list_key in ks and not isinstance(ks[list_key], list):
             errors.append(f"keystroke_logging.{list_key} must be a list of schema names")
+
+    text = ks.get("disclosure_text")
+    if text is not None and (not isinstance(text, str) or not text.strip()):
+        errors.append(
+            "keystroke_logging.disclosure_text must be a non-empty string "
+            "(omit it to use the default notice)"
+        )
 
     for int_key in ("idle_session_ms", "flush_interval_ms"):
         if int_key in ks and not isinstance(ks[int_key], int):
@@ -1201,7 +1220,29 @@ def get_keystroke_client_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
         "idle_session_ms": ks["idle_session_ms"],
         "flush_interval_ms": ks["flush_interval_ms"],
         "on_external_insert": ks["detection"].get("on_external_insert", "flag"),
+        # Rendered as a page notice; also readable by the client so a custom
+        # layout can place it somewhere better than the default bar.
+        "disclose_to_annotators": ks["disclose_to_annotators"],
+        "disclosure_text": get_keystroke_disclosure_text(config_data),
     }
+
+
+def get_keystroke_disclosure_text(config_data: Dict[str, Any]) -> str:
+    """The notice shown to annotators, or ``""`` when disclosure is off.
+
+    Returns the empty string both when the feature is disabled and when the
+    researcher has explicitly opted out of disclosure, so a caller can treat
+    "no text" as "render nothing" without re-checking the flags.
+    """
+    ks = get_keystroke_logging_config(config_data)
+    if not ks["enabled"] or ks["fidelity"] == "off":
+        return ""
+    if not ks.get("disclose_to_annotators", True):
+        return ""
+    custom = ks.get("disclosure_text")
+    if isinstance(custom, str) and custom.strip():
+        return custom.strip()
+    return DEFAULT_DISCLOSURE_TEXT
 
 
 def validate_corpus_map_config(config_data: Dict[str, Any]) -> None:

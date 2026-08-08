@@ -44,8 +44,29 @@ clause to cover it.
 
 ## Disclosure
 
-`disclose_to_annotators` defaults to `true`. Turning it off logs a warning at
-startup:
+Disclosure happens in two places, and they do different jobs.
+
+**1. Your consent phase — this is the one that matters.** Potato cannot write
+your consent form. The sample language below goes in your consent survey, before
+the annotator types anything.
+
+**2. The standing notice — a reminder, not consent.** With
+`disclose_to_annotators` on (the default), Potato renders a quiet bar under the
+navigation header on every page that can hold a free-text field:
+
+> ✎ This task records the timing and rhythm of your typing in text boxes (when
+> you pause, revise, or paste) — not the individual keys you press.
+
+It is server-rendered, so it survives a JavaScript failure, and it is not
+dismissible. Override the wording with `disclosure_text` if your approval
+specifies particular phrasing. The notice states the *limit* of the collection
+as well as its existence, deliberately: an annotator told only "your typing is
+recorded" will reasonably assume the keys themselves are stored.
+
+A banner an annotator sees mid-task is not informed consent. It is a reminder
+that the consent they already gave is still in force.
+
+**Turning disclosure off** logs a warning at startup:
 
 ```yaml
 keystroke_logging:

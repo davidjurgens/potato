@@ -10,12 +10,16 @@ paste in order to stay under the flag.
 import pytest
 
 from potato.server_utils.config_module import (
+    DEFAULT_DISCLOSURE_TEXT,
     KEYSTROKE_LOGGING_DEFAULTS,
     ConfigValidationError,
     get_keystroke_client_config,
+    get_keystroke_disclosure_text,
     get_keystroke_logging_config,
     validate_keystroke_logging_config,
 )
+
+ON = {"keystroke_logging": {"enabled": True}}
 
 
 class TestDefaults:
@@ -163,3 +167,63 @@ class TestClientConfig:
 
     def test_disabled_project_reports_disabled(self):
         assert get_keystroke_client_config({})["enabled"] is False
+
+
+class TestDisclosureText:
+    """The notice annotators actually see.
+
+    ``disclose_to_annotators`` was a flag with no rendering behind it for one
+    release: it validated, and warned when false, but nothing was ever shown.
+    These tests exist so it cannot quietly become a no-op again.
+    """
+
+    def test_disabled_feature_shows_nothing(self):
+        assert get_keystroke_disclosure_text({}) == ""
+
+    def test_enabled_feature_shows_the_default_notice(self):
+        assert get_keystroke_disclosure_text(ON) == DEFAULT_DISCLOSURE_TEXT
+
+    def test_notice_states_the_limit_not_just_the_collection(self):
+        """An annotator told only "typing is recorded" will assume the keys are
+        stored. The default notice must say what is *not* collected."""
+        text = get_keystroke_disclosure_text(ON).lower()
+        assert "not" in text and "keys" in text
+
+    def test_opting_out_shows_nothing(self):
+        cfg = {"keystroke_logging": {"enabled": True, "disclose_to_annotators": False}}
+        assert get_keystroke_disclosure_text(cfg) == ""
+
+    def test_fidelity_off_shows_nothing(self):
+        """Nothing is captured, so there is nothing to disclose."""
+        cfg = {"keystroke_logging": {"enabled": True, "fidelity": "off"}}
+        assert get_keystroke_disclosure_text(cfg) == ""
+
+    def test_custom_text_overrides_the_default(self):
+        cfg = {"keystroke_logging": {"enabled": True,
+                                     "disclosure_text": "  Study 2026-0142 records typing timing.  "}}
+        assert get_keystroke_disclosure_text(cfg) == "Study 2026-0142 records typing timing."
+
+    def test_blank_custom_text_is_rejected(self):
+        """Silently falling back to the default would let a typo look like a
+        working override."""
+        with pytest.raises(ConfigValidationError):
+            validate_keystroke_logging_config(
+                {"keystroke_logging": {"enabled": True, "disclosure_text": "   "}})
+
+    def test_non_string_custom_text_is_rejected(self):
+        with pytest.raises(ConfigValidationError):
+            validate_keystroke_logging_config(
+                {"keystroke_logging": {"enabled": True, "disclosure_text": 42}})
+
+    def test_omitting_the_key_is_valid(self):
+        validate_keystroke_logging_config(ON)
+
+    def test_client_config_carries_the_notice(self):
+        """The template renders from the client config dict, so the resolved
+        text has to be in it."""
+        client = get_keystroke_client_config(ON)
+        assert client["disclosure_text"] == DEFAULT_DISCLOSURE_TEXT
+        assert client["disclose_to_annotators"] is True
+
+    def test_client_config_carries_no_notice_when_disabled(self):
+        assert get_keystroke_client_config({})["disclosure_text"] == ""

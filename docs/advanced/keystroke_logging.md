@@ -127,7 +127,8 @@ keystroke_logging:
   idle_session_ms: 30000        # close a session after this much inactivity
   flush_interval_ms: 5000       # how often the browser posts completed sessions
   pause_thresholds_ms: [500, 1000, 2000, 5000, 10000]
-  disclose_to_annotators: true  # show a recording notice
+  disclose_to_annotators: true  # show a recording notice on every page
+  disclosure_text: null         # null = built-in notice; set a string to override
   detection:
     enabled: true
     calibrate: false            # use project-fitted thresholds
@@ -146,7 +147,42 @@ keystroke_logging:
 | `idle_session_ms` | `30000` | Inactivity before a session is closed and flushed. |
 | `flush_interval_ms` | `5000` | Browser flush cadence. |
 | `pause_thresholds_ms` | `[500,1000,2000,5000,10000]` | Pause counts are reported at each. |
-| `disclose_to_annotators` | `true` | Show a recording notice. Turning it off logs a warning. |
+| `disclose_to_annotators` | `true` | Render the recording notice described below. Turning it off logs a warning. |
+| `disclosure_text` | `null` | Replace the built-in notice wording. `null` uses the default. |
+
+### The recording notice
+
+When `disclose_to_annotators` is on, Potato renders a quiet bar directly under
+the navigation header, on **every** page that can contain a free-text field —
+annotation pages and phase pages (consent, instructions, training, surveys)
+alike:
+
+> ✎ This task records the timing and rhythm of your typing in text boxes (when
+> you pause, revise, or paste) — not the individual keys you press.
+
+It is rendered server-side, so it still appears if `keystroke_tracker.js` fails
+to load, and it cannot be removed by disabling JavaScript. It is deliberately
+**not** dismissible: it is a standing statement about what the task records
+rather than a one-time alert. It is styled as a status line rather than a
+warning, because an alarming banner would change how people write — which is
+the behaviour being measured.
+
+Override the wording with `disclosure_text` when your ethics approval specifies
+particular language:
+
+```yaml
+keystroke_logging:
+  enabled: true
+  disclosure_text: >-
+    Study ID 2026-0142 records typing timing (pauses, revisions, pasting) in
+    all text boxes. It does not record which keys you press.
+```
+
+This bar is a **reminder, not consent**. It appears alongside the task, at a
+point where the annotator has already agreed to participate. Informed consent
+belongs in your consent phase, before any typing happens — see
+[Ethics, Consent and IRB](keystroke_logging_ethics.md) for language you can
+adapt.
 
 Detection keys are documented in
 [Writing-Process Detection](writing_process_detection.md).

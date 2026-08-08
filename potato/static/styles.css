@@ -6748,3 +6748,33 @@ body > .container-fluid {
     color: #0c5460;
     border-left: 4px solid #17a2b8;
 }
+
+/* ---------------------------------------------------------------------------
+   Keystroke logging disclosure notice
+   Rendered under the navbar on every page that can hold a free-text field,
+   whenever keystroke_logging.disclose_to_annotators is on. Deliberately not
+   dismissible: it is a standing statement about what the task records, not a
+   one-time alert. Kept visually quiet so it reads as a status line rather than
+   a warning -- an alarming banner would bias how people write, which is the
+   very behaviour being measured.
+--------------------------------------------------------------------------- */
+.keystroke-disclosure {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 1rem;
+    background-color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+.keystroke-disclosure-icon {
+    flex: 0 0 auto;
+    opacity: 0.75;
+}
+
+.keystroke-disclosure-text {
+    flex: 1 1 auto;
+}
