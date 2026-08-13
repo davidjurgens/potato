@@ -46,4 +46,5 @@ when writing a config or calling the API.
 - [Quality Control](https://potatoannotator.readthedocs.io/en/latest/workflow/quality_control/): IAA, gold standards, attention checks
 - [Working with Transcripts](https://potatoannotator.readthedocs.io/en/latest/guides/working_with_transcripts/): annotate Whisper output and YouTube subtitles
 - [Transcript Formats](https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedia/transcript_formats/): Whisper, WhisperX, SRT/VTT/ASS/TTML, YouTube captions, AWS/Deepgram/AssemblyAI/Rev.ai, CTM, TextGrid, EAF
+- [Image Annotation Formats](https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedia/image_formats/): COCO import/export — polygons, uncompressed and compressed RLE, crowd regions, sparse category IDs, no preprocessing
 - [Crowdsourcing](https://potatoannotator.readthedocs.io/en/latest/deployment/crowdsourcing/): MTurk & Prolific integration

@@ -43,7 +43,8 @@ Potato is a flexible, open-source annotation platform built for NLP and ML resea
 | Crowdsourcing (MTurk, Prolific) | Yes | - | - | - | - | - | - | - |
 | Keyboard shortcuts | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | YAML configuration (no code) | Yes | XML templates | - | Python | Java config | Config files | GUI | - |
-| Export formats | 8+ | Multiple | 10+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
+| Export formats | 18+ | Multiple | 10+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
+| COCO import (incl. RLE masks) | Yes | - | Yes | - | - | - | - | - |
 
 \* Experimental.
 
@@ -83,7 +84,9 @@ Load data from 8 source types: local files, URLs, Google Drive, Dropbox, Amazon 
 
 ### Export Format Coverage
 
-Export annotations in 8+ formats including COCO JSON (with RLE masks), YOLO, Pascal VOC, CoNLL-2003, CoNLL-U, Mask PNG, EAF (ELAN), and TextGrid (Praat), plus standard JSON/JSONL/CSV/TSV.
+Export annotations in 18+ formats including COCO JSON (with RLE masks), YOLO, Pascal VOC, CoNLL-2003, CoNLL-U, Mask PNG, EAF (ELAN), and TextGrid (Praat), plus standard JSON/JSONL/CSV/TSV/Parquet.
+
+Potato also **imports** COCO as-is — polygon and RLE segmentation, including `iscrowd` crowd regions, with no preprocessing step — so existing annotations or model output can be corrected rather than recreated. See [Image Annotation Formats](annotation-types/multimedia/image_formats.md).
 
 ### Configuration Without Code
 

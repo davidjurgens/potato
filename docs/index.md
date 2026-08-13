@@ -54,6 +54,7 @@ over prose when writing a config or calling the API.
 - [Instance Display](annotation-types/instance_display.md) - Display images, video, audio, and text separately from annotation collection
 - [Conditional Logic](configuration/conditional_logic.md) - Show/hide questions based on prior answers
 - [Image Annotation](annotation-types/multimedia/image_annotation.md) - Bounding boxes, polygons, and landmarks
+- [Image Annotation Formats](annotation-types/multimedia/image_formats.md) - Import COCO (polygons, RLE masks, crowd regions) with no preprocessing, and export back
 - [Audio Annotation](annotation-types/multimedia/audio_annotation.md) - Audio segmentation with waveform visualization
 - [Audio Dialogue](annotation-types/multimedia/audio_dialogue.md) - Podcast/interview turn annotation: speaker bubbles, per-turn audio playback, ratings, spans, and cross-turn linking
 - [Video Annotation](annotation-types/multimedia/video_annotation.md) - Frame-by-frame video labeling
@@ -283,6 +284,7 @@ over prose when writing a config or calling the API.
 | Use Solo Mode for collaborative annotation | [Solo Mode](solo-mode/solo_mode.md) |
 | Export annotations to Parquet | [Export Formats](data-export/export_formats.md#parquet-parquet) |
 | Export to COCO/YOLO/CoNLL | [Export Formats](data-export/export_formats.md) |
+| Import COCO annotations (RLE masks included) | [Image Annotation Formats](annotation-types/multimedia/image_formats.md) |
 | Push annotations to HuggingFace Hub | [HuggingFace Export](data-export/huggingface_export.md) |
 | Deploy on HuggingFace Spaces | [HuggingFace Spaces](data-export/huggingface_spaces.md) |
 | Run behind a `/app1/` reverse proxy | [Reverse Proxy / URL Prefix](deployment/reverse-proxy.md) |

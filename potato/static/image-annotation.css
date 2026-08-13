@@ -75,14 +75,49 @@
     background: #0d6efd;
     border-color: #0d6efd;
     color: #fff;
+    /* Which tool and label are armed is the whole mode of this UI — drawing
+       with the wrong one silently produces wrong data. Colour alone does not
+       convey that to a colour-blind annotator (WCAG 1.4.1), so the active
+       state also carries weight and an inset ring. */
+    font-weight: 600;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65);
 }
 
+/* Focus ring.
+   :focus-visible so a mouse click does not leave a ring behind, with a plain
+   :focus fallback for browsers without it. The previous ring was 2px at 25%
+   alpha, which is barely visible against the white button background — this
+   is opaque and offset so it reads on both the active (blue) and inactive
+   (white) states. */
 .tool-btn:focus,
 .label-btn:focus,
 .zoom-btn:focus,
 .edit-btn:focus {
+    outline: 2px solid #0b5ed7;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.3);
+}
+
+.tool-btn:focus:not(:focus-visible),
+.label-btn:focus:not(:focus-visible),
+.zoom-btn:focus:not(:focus-visible),
+.edit-btn:focus:not(:focus-visible) {
     outline: none;
-    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+    box-shadow: none;
+}
+
+.tool-btn.active:focus,
+.label-btn.active:focus {
+    /* Keep the inset ring from the active state alongside the focus ring. */
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65),
+                0 0 0 4px rgba(13, 110, 253, 0.3);
+}
+
+/* The canvas is focusable (tabindex="0") so keyboard users can reach the
+   drawing surface; it needs a visible ring of its own. */
+.annotation-canvas:focus-visible {
+    outline: 2px solid #0b5ed7;
+    outline-offset: 2px;
 }
 
 /* Label buttons with color indicator */

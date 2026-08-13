@@ -276,6 +276,25 @@ class ImageAnnotationManager {
                             this._selectTool('landmark');
                         }
                         break;
+                    // The segmentation tools were listed in the docs and in the
+                    // generated tooltips ("(M)", "(E)", "(G)") but had no
+                    // handler, so the slowest tools to reach were the only ones
+                    // with no shortcut.
+                    case 'm':
+                        if (this.config.tools.includes('brush')) {
+                            this._selectTool('brush');
+                        }
+                        break;
+                    case 'e':
+                        if (this.config.tools.includes('eraser')) {
+                            this._selectTool('eraser');
+                        }
+                        break;
+                    case 'g':
+                        if (this.config.tools.includes('fill')) {
+                            this._selectTool('fill');
+                        }
+                        break;
                     case 'delete':
                     case 'backspace':
                         this.deleteSelected();
@@ -592,6 +611,11 @@ class ImageAnnotationManager {
         // Get or create mask for current label
         if (!this.masks[this.currentLabel]) {
             this.masks[this.currentLabel] = {
+                // `label` is stored explicitly because the store key is not
+                // always the label: imported per-instance masks are keyed
+                // "label#instance" so two instances of one class stay apart.
+                // Brushing always targets the bare label-keyed mask.
+                label: this.currentLabel,
                 color: this.currentColor,
                 data: new Uint8ClampedArray(this.maskImgWidth * this.maskImgHeight * 4)
             };
@@ -683,6 +707,11 @@ class ImageAnnotationManager {
         // Get or create mask for current label
         if (!this.masks[this.currentLabel]) {
             this.masks[this.currentLabel] = {
+                // `label` is stored explicitly because the store key is not
+                // always the label: imported per-instance masks are keyed
+                // "label#instance" so two instances of one class stay apart.
+                // Brushing always targets the bare label-keyed mask.
+                label: this.currentLabel,
                 color: this.currentColor,
                 data: new Uint8ClampedArray(this.maskImgWidth * this.maskImgHeight * 4)
             };
@@ -860,9 +889,9 @@ class ImageAnnotationManager {
         if (!input) return;
 
         const masksData = {};
-        for (const label in this.masks) {
-            const mask = this.masks[label];
-            masksData[label] = {
+        for (const key in this.masks) {
+            const mask = this.masks[key];
+            masksData[mask.label !== undefined ? mask.label : key] = {
                 color: mask.color,
                 rle: this._encodeMaskRLE(mask.data),
                 width: this.maskImgWidth,
@@ -1330,20 +1359,36 @@ class ImageAnnotationManager {
         // coco_exporter both want {type:"mask", label, rle:{counts, size:[h,w]}} —
         // rather than the {label: {color, rle:[...], width, height}} the client used
         // to write, which no exporter could consume.
-        for (const label in this.masks) {
-            const mask = this.masks[label];
+        for (const key in this.masks) {
+            const mask = this.masks[key];
             if (!mask || !mask.data) continue;
             const counts = this._encodeMaskRLE(mask.data);
             if (!counts.length) continue;
-            annotations.push({
+            const entry = {
                 type: 'mask',
-                label: label,
+                // NOT the store key. An imported per-instance mask is keyed
+                // "label#instance" so two instances of one class stay apart,
+                // but it has to serialize under its real label.
+                label: mask.label !== undefined ? mask.label : key,
                 color: mask.color,
                 rle: {
                     counts: counts,
                     size: [this.maskImgHeight, this.maskImgWidth],
                 },
-            });
+            };
+            // Preserved so imported COCO instances survive save/reload and
+            // export as N annotations rather than one merged blob.
+            if (mask.instance !== undefined && mask.instance !== null) {
+                entry.instance = mask.instance;
+            }
+            // Emitted whenever it is known, INCLUDING 0. A mask with no
+            // iscrowd defaults to 1 on export (a label-keyed brush mask really
+            // is a crowd region), so dropping an explicit 0 here would quietly
+            // turn imported instances back into one merged blob.
+            if (mask.iscrowd !== undefined && mask.iscrowd !== null) {
+                entry.iscrowd = mask.iscrowd;
+            }
+            annotations.push(entry);
         }
 
         return JSON.stringify(annotations);
@@ -1369,6 +1414,14 @@ class ImageAnnotationManager {
         });
 
         if (restoredMask) {
+            // setTool() ran during init, before any masks existed, so
+            // _showMaskCanvas(this._hasMasks()) hid the overlay. Without
+            // re-showing it here, restored masks are painted onto a
+            // display:none canvas — the pixels are there, nothing is visible.
+            // Freeform deliberately hides the overlay, so leave that alone.
+            if (this.currentTool !== 'freeform') {
+                this._showMaskCanvas(true);
+            }
             this._renderAllMasks();
         }
         this.canvas.renderAll();
@@ -1385,14 +1438,68 @@ class ImageAnnotationManager {
 
         const height = size[0];
         const width = size[1];
-        this.masks[ann.label] = {
+        let data = this._decodeMaskRLE(counts, width, height, ann.color);
+
+        // The mask buffers and the mask canvas must agree on resolution. They
+        // normally do — COCO's images[].width/height is the natural size, which
+        // is what the canvas is sized from — but a resized or thumbnailed
+        // image_url makes them disagree, and an RLE at the wrong resolution
+        // paints as diagonal garbage with no error at all. Rescale instead.
+        if (this.maskImgWidth && this.maskImgHeight &&
+            (this.maskImgWidth !== width || this.maskImgHeight !== height)) {
+            console.warn(
+                `[image-annotation] mask for "${ann.label}" is ${width}x${height} ` +
+                `but the canvas is ${this.maskImgWidth}x${this.maskImgHeight}; ` +
+                `rescaling. Check that the image served matches the size the ` +
+                `annotations were made against.`);
+            data = this._rescaleMaskData(data, width, height,
+                                         this.maskImgWidth, this.maskImgHeight);
+        } else {
+            // Keep the stored dimensions so a re-save round-trips the same
+            // rle.size even if nothing is redrawn.
+            this.maskImgWidth = this.maskImgWidth || width;
+            this.maskImgHeight = this.maskImgHeight || height;
+        }
+
+        // Per-instance masks are keyed "label#instance" so that N imported
+        // instances of one class do not collapse into a single blob. Brush
+        // strokes always target the bare label key, so painting edits the
+        // label-level mask and leaves imported instances intact.
+        const key = (ann.instance !== undefined && ann.instance !== null)
+            ? `${ann.label}#${ann.instance}`
+            : ann.label;
+
+        this.masks[key] = {
+            label: ann.label,
             color: ann.color,
-            data: this._decodeMaskRLE(counts, width, height, ann.color),
+            data: data,
         };
-        // The mask canvas is sized from the image; keep the stored dimensions so a
-        // re-save round-trips the same rle.size even if nothing is redrawn.
-        this.maskImgWidth = this.maskImgWidth || width;
-        this.maskImgHeight = this.maskImgHeight || height;
+        if (ann.instance !== undefined && ann.instance !== null) {
+            this.masks[key].instance = ann.instance;
+        }
+        if (ann.iscrowd !== undefined && ann.iscrowd !== null) {
+            this.masks[key].iscrowd = ann.iscrowd;
+        }
+    }
+
+    /**
+     * Nearest-neighbour rescale of an RGBA mask buffer.
+     */
+    _rescaleMaskData(data, srcW, srcH, dstW, dstH) {
+        const out = new Uint8ClampedArray(dstW * dstH * 4);
+        for (let y = 0; y < dstH; y++) {
+            const sy = Math.min(srcH - 1, Math.floor(y * srcH / dstH));
+            for (let x = 0; x < dstW; x++) {
+                const sx = Math.min(srcW - 1, Math.floor(x * srcW / dstW));
+                const si = (sy * srcW + sx) * 4;
+                const di = (y * dstW + x) * 4;
+                out[di] = data[si];
+                out[di + 1] = data[si + 1];
+                out[di + 2] = data[si + 2];
+                out[di + 3] = data[si + 3];
+            }
+        }
+        return out;
     }
 
     /**
@@ -1421,12 +1528,25 @@ class ImageAnnotationManager {
                     height: (obj.height * obj.scaleY) / imgHeight,
                 };
 
-            case 'polygon':
+            case 'polygon': {
+                // `obj.left/top` is the bounding box's top-left, but fabric's
+                // `points` stay in their own space and `pathOffset` is the
+                // box CENTRE — so `left + p.x - pathOffset.x` shifts every
+                // vertex by half the polygon's size. Sizes came out right and
+                // positions did not, which is why it survived: the exported
+                // bbox had the correct width and height in the wrong place.
+                //
+                // calcTransformMatrix() is fabric's own answer and also
+                // handles scaling and rotation, which the old arithmetic
+                // silently ignored after any resize.
+                const matrix = obj.calcTransformMatrix();
                 return obj.points.map(p => {
-                    const absX = obj.left + p.x - obj.pathOffset.x;
-                    const absY = obj.top + p.y - obj.pathOffset.y;
-                    return normalize(absX, absY);
+                    const local = new fabric.Point(
+                        p.x - obj.pathOffset.x, p.y - obj.pathOffset.y);
+                    const abs = fabric.util.transformPoint(local, matrix);
+                    return normalize(abs.x, abs.y);
                 });
+            }
 
             case 'landmark':
                 if (obj.type === 'group') {

@@ -250,7 +250,10 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
 
                     <!-- Annotation count -->
                     <div class="count-group">
-                        <span class="annotation-count">Annotations: <span class="count-value">0</span></span>
+                        <!-- aria-live: drawing and deleting are otherwise
+                             confirmed only visually, on a canvas a screen
+                             reader cannot see at all. -->
+                        <span class="annotation-count" aria-live="polite" aria-atomic="true">Annotations: <span class="count-value">0</span></span>
                     </div>
                 </div>
 
@@ -258,9 +261,15 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
 
                 <!-- Canvas wrapper -->
                 <div class="canvas-wrapper">
-                    <canvas id="canvas-{escaped_name}" class="annotation-canvas"></canvas>
+                    <!-- role/aria-label/tabindex give the drawing surface an
+                         identity: without them the entire annotation area is
+                         unreachable by keyboard and unannounced by assistive
+                         tech, even though the tool hotkeys work. -->
+                    <canvas id="canvas-{escaped_name}" class="annotation-canvas"
+                            role="application" tabindex="0"
+                            aria-label="Image annotation canvas. Use the tool buttons above, or the keyboard shortcuts listed on each tool, to draw and edit annotations."></canvas>
                     <!-- Mask canvas for segmentation (overlaid on top) -->
-                    <canvas id="mask-canvas-{escaped_name}" class="mask-canvas" style="display: none;"></canvas>
+                    <canvas id="mask-canvas-{escaped_name}" class="mask-canvas" aria-hidden="true" style="display: none;"></canvas>
                 </div>
 
                 <!-- Hidden input for storing annotation data -->
@@ -366,8 +375,10 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                                 manager.setTool(tool);
                                 container.querySelectorAll('.tool-btn').forEach(function(b) {{
                                     b.classList.remove('active');
+                                    b.setAttribute('aria-pressed', 'false');
                                 }});
                                 this.classList.add('active');
+                                this.setAttribute('aria-pressed', 'true');
 
                                 // Show/hide brush size control for brush/eraser tools
                                 var brushSizeGroup = container.querySelector('.brush-size-group');
@@ -395,8 +406,10 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                                 manager.setLabel(label, color);
                                 container.querySelectorAll('.label-btn').forEach(function(b) {{
                                     b.classList.remove('active');
+                                    b.setAttribute('aria-pressed', 'false');
                                 }});
                                 this.classList.add('active');
+                                this.setAttribute('aria-pressed', 'true');
                             }});
                         }});
 
@@ -548,9 +561,18 @@ def _generate_tool_buttons(tools):
     buttons = []
     for tool in tools:
         info = tool_info.get(tool, {"label": tool, "title": tool, "icon": "?"})
+        # These are toggles, not plain buttons: `aria-pressed` is what tells a
+        # screen reader which tool is armed. Without it the active state is
+        # carried only by a CSS class and is invisible to assistive tech --
+        # and picking the wrong tool silently produces the wrong annotation.
+        #
+        # The icon is decorative and aria-hidden: it is a stand-in glyph, not a
+        # word, and it would otherwise be read out as part of the button's name
+        # ("broom brush", "backspace eraser").
         buttons.append(
-            f'<button type="button" class="tool-btn" data-tool="{tool}" title="{info["title"]}">'
-            f'{info["icon"]} {info["label"]}</button>'
+            f'<button type="button" class="tool-btn" data-tool="{tool}" '
+            f'aria-pressed="false" title="{info["title"]}">'
+            f'<span aria-hidden="true">{info["icon"]}</span> {info["label"]}</button>'
         )
 
     return "\n".join(buttons)
@@ -567,8 +589,9 @@ def _generate_label_selector(labels):
         key_hint = f' ({label["key_value"]})' if label.get("key_value") else ""
         buttons.append(
             f'<button type="button" class="label-btn" data-label="{name}" data-color="{color}" '
-            f'title="{name}{key_hint}" style="--label-color: {color};">'
-            f'<span class="label-color-dot" style="background-color: {color};"></span>'
+            f'aria-pressed="false" title="{name}{key_hint}" style="--label-color: {color};">'
+            f'<span class="label-color-dot" aria-hidden="true" '
+            f'style="background-color: {color};"></span>'
             f'{name}</button>'
         )
 

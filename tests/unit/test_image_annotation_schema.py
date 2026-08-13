@@ -545,3 +545,68 @@ class TestSchemaRegistry:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestAccessibilityContract:
+    """The toolbar is a set of toggles over a canvas a screen reader cannot see.
+
+    Without aria-pressed the armed tool and label are conveyed by a CSS class
+    alone, and picking the wrong one silently produces wrong annotations.
+    """
+
+    def _html(self):
+        from potato.server_utils.schemas.image_annotation import (
+            generate_image_annotation_layout,
+        )
+        html, _ = generate_image_annotation_layout({
+            "annotation_type": "image_annotation",
+            "name": "obj",
+            "description": "d",
+            "tools": ["bbox", "polygon", "brush"],
+            "labels": [{"name": "person", "color": "#f00"},
+                       {"name": "dog", "color": "#0f0"}],
+        })
+        return html
+
+    def test_tool_buttons_expose_pressed_state(self):
+        html = self._html()
+        assert html.count('class="tool-btn" data-tool=') == 3
+        assert html.count('aria-pressed="false"') >= 5  # 3 tools + 2 labels
+
+    def test_label_buttons_expose_pressed_state(self):
+        html = self._html()
+        for label in ("person", "dog"):
+            idx = html.index(f'data-label="{label}"')
+            assert 'aria-pressed' in html[idx:idx + 200]
+
+    def test_handlers_keep_pressed_state_in_sync(self):
+        html = self._html()
+        # Both the clearing loop and the newly-armed button must be updated.
+        assert html.count("setAttribute('aria-pressed', 'false')") >= 2
+        assert html.count("setAttribute('aria-pressed', 'true')") >= 2
+
+    def test_decorative_icons_are_hidden_from_screen_readers(self):
+        """Otherwise the emoji is read as part of the button name."""
+        html = self._html()
+        assert '<span aria-hidden="true">' in html
+        assert 'label-color-dot" aria-hidden="true"' in html
+
+    def test_canvas_has_an_accessible_identity(self):
+        html = self._html()
+        idx = html.index('class="annotation-canvas"')
+        window = html[idx - 200:idx + 400]
+        assert 'role="application"' in window
+        assert 'tabindex="0"' in window
+        assert 'aria-label=' in window
+
+    def test_mask_canvas_is_hidden_from_screen_readers(self):
+        """It is a rendering surface, not content."""
+        html = self._html()
+        idx = html.index('class="mask-canvas"')
+        assert 'aria-hidden="true"' in html[idx - 120:idx + 120]
+
+    def test_annotation_count_is_a_live_region(self):
+        """Drawing and deleting are otherwise confirmed only visually."""
+        html = self._html()
+        idx = html.index('class="annotation-count"')
+        assert 'aria-live="polite"' in html[idx:idx + 120]

@@ -1,0 +1,44 @@
+port: 8000
+server_name: Potato Annotator
+annotation_task_name: object_detection (imported)
+task_dir: .
+output_annotation_dir: annotation_output/
+data_files:
+- data/instances_sample.json
+item_properties:
+  id_key: id
+  text_key: image_url
+user_config:
+  allow_all_users: true
+  users: []
+site_dir: default
+pre_annotation:
+  enabled: true
+  field: predictions
+  allow_modification: true
+annotation_schemes:
+- annotation_type: image_annotation
+  name: object_detection
+  description: Correct the imported annotations
+  source_field: image_url
+  tools:
+  - bbox
+  - polygon
+  - brush
+  - eraser
+  - fill
+  zoom_enabled: true
+  pan_enabled: true
+  labels:
+  - name: person
+    color: '#e6194b'
+    label_id: 1
+    supercategory: person
+  - name: dog
+    color: '#3cb44b'
+    label_id: 18
+    supercategory: animal
+  - name: toothbrush
+    color: '#4363d8'
+    label_id: 90
+    supercategory: indoor

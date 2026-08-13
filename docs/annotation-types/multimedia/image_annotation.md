@@ -113,38 +113,59 @@ item_properties:
 
 ### Output Data
 
-Annotations are saved as JSON with the following structure:
+Annotations are stored as a **flat JSON array**, with every shape and mask in
+the same list. Shape coordinates are **normalized to the range 0–1** against the
+image, so annotations stay correct if the image is served at a different size.
 
 ```json
-{
-  "object_detection": {
-    "annotations": [
-      {
-        "id": "ann_1",
-        "type": "bbox",
-        "label": "person",
-        "coordinates": {
-          "left": 100,
-          "top": 50,
-          "width": 200,
-          "height": 300
-        }
-      },
-      {
-        "id": "ann_2",
-        "type": "polygon",
-        "label": "vehicle",
-        "points": [
-          {"x": 10, "y": 20},
-          {"x": 100, "y": 20},
-          {"x": 100, "y": 100},
-          {"x": 10, "y": 100}
-        ]
-      }
+[
+  {
+    "type": "bbox",
+    "label": "person",
+    "color": "#FF6B6B",
+    "coordinates": {"x": 0.125, "y": 0.104, "width": 0.3125, "height": 0.625}
+  },
+  {
+    "type": "polygon",
+    "label": "vehicle",
+    "color": "#4ECDC4",
+    "coordinates": [
+      {"x": 0.02, "y": 0.04}, {"x": 0.20, "y": 0.04},
+      {"x": 0.20, "y": 0.21}, {"x": 0.02, "y": 0.21}
     ]
+  },
+  {
+    "type": "mask",
+    "label": "road",
+    "color": "#45B7D1",
+    "rle": {"counts": [12, 40, 8], "size": [480, 640]}
   }
-}
+]
 ```
+
+Per type:
+
+| Type | Geometry key | Shape |
+|------|--------------|-------|
+| `bbox` | `coordinates` | `{x, y, width, height}`, normalized |
+| `polygon` | `coordinates` | list of `{x, y}`, normalized |
+| `landmark` | `coordinates` | `{x, y}`, normalized |
+| `freeform` | `coordinates` | `{path, left, top, scaleX, scaleY}` |
+| `mask` | `rle` | `{counts: [ints], size: [height, width]}` |
+
+Notes:
+
+- `rle.size` is `[height, width]`, in that order.
+- Mask `counts` are row-major and alternate between background and foreground
+  runs, starting with a background run.
+- Masks may also carry `instance` (an index that keeps two instances of one
+  class apart) and `iscrowd`. A mask with no `iscrowd` is treated as a crowd
+  region on export, because a brush mask is keyed by label and merges every
+  stroke of that class.
+
+To convert to and from these shapes in Python, use
+`normalize_annotation_object()` and `to_client_object()` from
+`potato.export.cv_utils` rather than reading the fields directly.
 
 ## Segmentation Masks
 
@@ -176,29 +197,35 @@ annotation_schemes:
 
 ### Segmentation Output Format
 
-Mask data is stored as RLE (Run-Length Encoding) for efficient storage:
+Masks are stored as RLE (Run-Length Encoding) **in the same array as the
+shapes** — not under a separate `masks` key:
 
 ```json
-{
-  "segmentation": {
-    "annotations": [...],
-    "masks": {
-      "foreground": {
-        "rle": [0, 100, 50, 200, 25, ...],
-        "width": 800,
-        "height": 600,
-        "color": "#FF6B6B"
-      },
-      "background": {
-        "rle": [50, 150, 100, 300, ...],
-        "width": 800,
-        "height": 600,
-        "color": "#4ECDC4"
-      }
-    }
+[
+  {
+    "type": "mask",
+    "label": "foreground",
+    "color": "#FF6B6B",
+    "rle": {"counts": [0, 100, 50, 200, 25], "size": [600, 800]}
+  },
+  {
+    "type": "mask",
+    "label": "background",
+    "color": "#4ECDC4",
+    "rle": {"counts": [50, 150, 100, 300], "size": [600, 800]}
   }
-}
+]
 ```
+
+`size` is `[height, width]`. Counts are row-major and alternate between
+background and foreground runs, starting with background.
+
+Brush masks are keyed by **label**, so every stroke of one class merges into a
+single region — that is semantic segmentation, and it exports as COCO
+`iscrowd: 1`. Imported per-instance masks additionally carry an `instance`
+index and an explicit `iscrowd: 0`, which keeps them separate and exports them
+as N distinct annotations. Painting always edits the label-level mask and
+leaves imported instances untouched.
 
 ### Segmentation Tips
 
@@ -218,13 +245,16 @@ Mask data is stored as RLE (Run-Length Encoding) for efficient storage:
 | `m` | Select segmentation brush tool |
 | `e` | Select eraser tool |
 | `g` | Select fill tool |
-| `1-9` | Select label by number |
-| `Delete` | Delete selected annotation |
-| `Ctrl+Z` | Undo |
-| `Ctrl+Y` | Redo |
-| `+` / `-` | Zoom in/out |
+| `1-9` | Select label by number (whatever `key_value` you configure) |
+| `Delete` / `Backspace` | Delete selected annotation |
+| `Ctrl/Cmd+Z` | Undo |
+| `Ctrl/Cmd+Shift+Z` | Redo |
+| `+` / `=` | Zoom in |
+| `-` | Zoom out |
 | `0` | Fit image to view |
-| `Escape` | Cancel current drawing |
+| Hold `Space` or `Alt` | Pan (drag the image) |
+
+A tool shortcut only fires if that tool is enabled in `tools`.
 
 ## User Interface
 
@@ -242,18 +272,27 @@ The toolbar provides:
 - Click existing annotations to select them
 - Drag corners/edges to resize (bbox)
 - Drag points to reshape (polygon)
-- Use scroll wheel to zoom (when zoom enabled)
+- Double-click to close a polygon
+- Zoom with the toolbar buttons or `+` / `-` / `0`
+- Hold `Space` (or `Alt`) and drag to pan
 
-### Annotation List
+## Importing existing annotations
 
-Shows all annotations with:
-- Color indicator matching the label
-- Label name and annotation type
-- Click to select, double-click to focus
+You do not have to start from a blank image. A COCO file — polygons,
+uncompressed RLE, compressed RLE strings and crowd regions — can be imported
+as-is and shown to annotators pre-populated for correction:
 
-## Example Project
+```bash
+potato import --input instances.json --image-dir ./images \
+    --output-dir my-project/ --schema-name object_detection
+```
 
-See `examples/image/image-annotation/config.yaml` for a complete working example.
+See [Image Annotation Formats](image_formats.md) for the full format reference.
+
+## Example Projects
+
+- `examples/image/image-annotation/config.yaml` — annotating from scratch
+- `examples/image/coco-import/config.yaml` — correcting imported COCO annotations
 
 ## Tips for Administrators
 

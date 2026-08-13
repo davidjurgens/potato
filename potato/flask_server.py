@@ -2912,6 +2912,26 @@ def render_page_with_annotations(username: str):
                     annotations[schema_name]['text_box'] = str(predicted_value)
             elif scheme['annotation_type'] in ['likert', 'slider', 'number']:
                 annotations[schema_name]['slider'] = str(predicted_value)
+            elif scheme['annotation_type'] == 'image_annotation':
+                # Image annotations live in a single hidden input under the
+                # "_data" label. The DOM walk below has a dedicated fallback for
+                # it (`if not input_fields and label == "_data"`), which sets the
+                # value plus data-server-set='true' -- exactly the path a
+                # returning user's saved annotations already take, and which
+                # ImageAnnotationManager._loadExistingAnnotations() deserializes.
+                #
+                # The value must be a JSON *array* of client-shaped objects; see
+                # potato.export.cv_utils.to_client_object.
+                if isinstance(predicted_value, str):
+                    annotations[schema_name]['_data'] = predicted_value
+                elif isinstance(predicted_value, list):
+                    annotations[schema_name]['_data'] = json.dumps(predicted_value)
+                else:
+                    logger.warning(
+                        f"Pre-annotation for image schema {schema_name} must be a "
+                        f"list of annotation objects or a JSON string, got "
+                        f"{type(predicted_value).__name__}"
+                    )
             else:
                 logger.debug(f"Pre-annotation not yet supported for {scheme['annotation_type']}")
 
@@ -4784,6 +4804,12 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == 'convokit':
         from potato.convokit.cli import main as convokit_main
         sys.exit(convokit_main(sys.argv[2:]))
+
+    # ``import`` generates a project from an existing annotation file (COCO,
+    # ...), so it takes input paths rather than a config file.
+    if len(sys.argv) > 1 and sys.argv[1] == 'import':
+        from potato.importers.cli import main as import_main
+        sys.exit(import_main(sys.argv[2:]))
 
     # Parse command line arguments
     args = arguments()

@@ -34,7 +34,7 @@
 
     <!-- Image Annotation Styles -->
     {% if frontend_assets.image_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=3">
     {% endif %}
 
     <!-- Audio Annotation Styles -->
@@ -744,7 +744,7 @@
     {% if frontend_assets.image_annotation | default(false) %}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=4"></script>
     {% endif %}
     <!-- Visual AI Assistant for image/video annotation (loaded conditionally) -->
     {% if ai_enabled and ((frontend_assets.image_annotation | default(false)) or (frontend_assets.video_annotation | default(false))) %}

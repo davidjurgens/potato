@@ -107,22 +107,20 @@ python -m potato.export --config config.yaml --format coco --output ./export/ \
 
 The Common Objects in Context format, widely used for object detection and instance segmentation.
 
-**Best for:** Image bounding boxes, polygons, keypoints
+**Best for:** Image bounding boxes, polygons, segmentation masks
 
 **Output Structure:**
 ```
-export/
-├── annotations/
-│   └── instances.json
-└── images/
-    └── (symlinked or copied images)
+<output-dir>/
+└── annotations.json
 ```
 
-**annotations/instances.json:**
+A single file is written. **Images are not copied or symlinked** — the exported
+`file_name` values point at wherever your images already live.
+
+**annotations.json:**
 ```json
 {
-    "info": {"description": "Potato export", "version": "1.0"},
-    "licenses": [],
     "images": [
         {"id": 1, "file_name": "image_001.jpg", "width": 1920, "height": 1080}
     ],
@@ -143,10 +141,39 @@ export/
 }
 ```
 
+No `info` or `licenses` block is emitted. A few strict COCO consumers require
+them; add `"info": {}` and `"licenses": []` if yours does.
+
+**Category IDs** come from `label_id` on each label when present, so a file
+imported from COCO exports with its original (often sparse) numbering intact.
+Labels without one are numbered from 1 upward.
+
+**Segmentation:** polygons export as `segmentation: [[x1, y1, ...]]`; masks
+export as COCO compressed RLE with `iscrowd: 1` unless the annotation carries an
+explicit `iscrowd: 0`. Landmarks are skipped with a warning — COCO keypoints are
+not yet emitted.
+
+**Image dimensions are required.** They are read from `image_width`/`image_height`
+(or `width`/`height`) on each data item. Without them the export writes
+`width: 0, height: 0` and box geometry cannot be validated.
+
 **Usage:**
 ```bash
 python -m potato.export -c config.yaml -f coco -o ./coco_export/
 ```
+
+**Importing COCO** is covered in
+[Image Annotation Formats](../annotation-types/multimedia/image_formats.md).
+
+!!! warning "Fixed: box and polygon export before this release"
+    Every CV exporter (COCO, YOLO, Pascal VOC) read flat, absolute-pixel fields
+    that the annotation UI has never written — it stores coordinates normalized
+    and nested under `coordinates`. As a result **bounding boxes exported as
+    `[0, 0, 0, 0]` with `area: 0`, and polygons were silently dropped**, for any
+    annotation made in the browser. Masks were unaffected.
+
+    The unit tests hand-built the flat shape, so they passed throughout. If you
+    have COCO/YOLO/VOC exports produced before this release, re-export them.
 
 ### YOLO (yolo)
 
@@ -296,23 +323,29 @@ python -m potato.export -c config.yaml -f conll_u -o ./conllu_export/
 
 ### Segmentation Masks (mask)
 
-Export polygon/segmentation annotations as binary mask images.
+Export brush/fill mask annotations as PNG images, one per label per image.
 
-**Best for:** Semantic segmentation, instance segmentation
+**Best for:** Semantic segmentation
+
+**Requires:** `Pillow` (`pip install Pillow`)
 
 **Output Structure:**
 ```
-export/
-├── images/
-│   └── image_001.jpg
-├── masks/
-│   └── image_001.png
-└── class_mapping.json
+<output-dir>/
+├── image_001_road_mask.png
+├── image_001_sky_mask.png
+└── image_002_road_mask.png
 ```
 
+Files are written flat as `{image-stem}_{label}_mask.png`. **Images are not
+copied**, and no class-mapping file is written.
+
 **Mask Format:**
-- PNG images with pixel values corresponding to class IDs
-- 0 = background, 1+ = class indices
+- RGBA PNG, one file per (image, label) pair
+- Mask pixels take the label's configured colour at alpha 200; everything else
+  is fully transparent
+- Only `type: "mask"` annotations are exported. Polygons and boxes are ignored
+  by this format — use COCO for those.
 
 **Usage:**
 ```bash

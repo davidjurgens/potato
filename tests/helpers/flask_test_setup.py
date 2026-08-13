@@ -601,6 +601,27 @@ class FlaskTestServer:
                 except Exception as e:
                     print(f"[DEBUG] Error starting live ingestion: {e}")
 
+                # Initialize quality control manager if any QC feature is on.
+                # This mirrors flask_server._initialize_from_config(); without
+                # it get_quality_control_manager() returns None here, so
+                # attention checks, gold standards and pre-annotations all
+                # silently do nothing in server tests while working live.
+                qc_enabled = (
+                    config.get('attention_checks', {}).get('enabled', False) or
+                    config.get('gold_standards', {}).get('enabled', False) or
+                    config.get('pre_annotation', {}).get('enabled', False)
+                )
+                if qc_enabled:
+                    try:
+                        from potato.quality_control import init_quality_control_manager
+                        qc_task_dir = config.get(
+                            'task_dir',
+                            os.path.dirname(config.get('config_file', '')))
+                        init_quality_control_manager(config, qc_task_dir)
+                        print("[DEBUG] Quality control manager initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing quality control manager: {e}")
+
                 # Initialize adjudication manager if configured
                 if config.get('adjudication', {}).get('enabled', False):
                     try:

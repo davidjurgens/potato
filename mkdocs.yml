@@ -57,6 +57,7 @@ nav:
             - Audio Dialogue: annotation-types/multimedia/audio_dialogue.md
             - Video Annotation: annotation-types/multimedia/video_annotation.md
             - Tiered Annotation: annotation-types/multimedia/tiered_annotation.md
+            - Image Annotation Formats: annotation-types/multimedia/image_formats.md
             - Transcript Formats: annotation-types/multimedia/transcript_formats.md
         - Measurement:
             - Visual Analog Scale: annotation-types/measurement/vas.md
