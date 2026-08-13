@@ -12,17 +12,13 @@ from typing import Optional, Tuple
 
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
-    build_category_mapping,
-    polygon_to_bbox,
-    polygon_area,
+    build_coco_category_map,
     flatten_polygon,
     extract_image_annotations,
     get_image_dimensions,
     get_image_filename,
-    decode_rle,
+    normalize_annotation_object,
     rle_to_coco_rle,
-    rle_bbox,
-    rle_area,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,12 +44,12 @@ class COCOExporter(BaseExporter):
         warnings = []
         annotation_id_counter = 1
 
-        category_map = build_category_mapping(context.annotations, context.schemas)
-        # COCO uses 1-indexed category IDs
-        coco_categories = [
-            {"id": idx + 1, "name": name, "supercategory": ""}
-            for name, idx in sorted(category_map.items(), key=lambda kv: kv[1])
-        ]
+        # Category IDs come from the label config's `label_id` when present, so
+        # a file imported from COCO exports with its original (often sparse)
+        # IDs intact rather than being densely renumbered.
+        category_map, coco_categories = build_coco_category_map(
+            context.schemas, context.annotations
+        )
 
         coco_images = []
         coco_annotations = []
@@ -96,61 +92,55 @@ class COCOExporter(BaseExporter):
                         )
                         continue
 
-                    cat_id = category_map[label] + 1  # 1-indexed for COCO
-
-                    coco_ann = {
-                        "id": annotation_id_counter,
-                        "image_id": image_id,
-                        "category_id": cat_id,
-                        "iscrowd": 0,
-                    }
-                    annotation_id_counter += 1
-
-                    if obj_type == "bbox":
-                        x = obj.get("x", 0)
-                        y = obj.get("y", 0)
-                        w = obj.get("width", 0)
-                        h = obj.get("height", 0)
-                        coco_ann["bbox"] = [x, y, w, h]
-                        coco_ann["area"] = w * h
-                        coco_ann["segmentation"] = []
-
-                    elif obj_type in ("polygon", "freeform"):
-                        points = obj.get("points", [])
-                        if not points:
-                            warnings.append(
-                                f"Empty points for {obj_type} in {instance_id}"
-                            )
-                            continue
-                        flat = flatten_polygon(points)
-                        coco_ann["segmentation"] = [flat]
-                        bx, by, bw, bh = polygon_to_bbox(points)
-                        coco_ann["bbox"] = [bx, by, bw, bh]
-                        coco_ann["area"] = polygon_area(points)
-
-                    elif obj_type == "mask":
-                        rle = obj.get("rle", {})
-                        if not rle.get("counts"):
-                            warnings.append(
-                                f"Empty RLE mask in {instance_id}"
-                            )
-                            continue
-                        size = rle.get("size", [])
-                        mask_h = size[0] if len(size) >= 2 else height
-                        mask_w = size[1] if len(size) >= 2 else width
-                        coco_rle = rle_to_coco_rle(rle, mask_w, mask_h)
-                        decoded = decode_rle(rle, mask_w, mask_h)
-                        coco_ann["segmentation"] = coco_rle
-                        coco_ann["bbox"] = rle_bbox(decoded, mask_w, mask_h)
-                        coco_ann["area"] = rle_area(decoded)
-                        coco_ann["iscrowd"] = 1
-
-                    elif obj_type == "landmark":
+                    if obj_type == "landmark":
                         warnings.append(
                             f"Landmark annotation in {instance_id} skipped "
                             f"(not standard in COCO detection format)"
                         )
                         continue
+
+                    # Reads the shape the browser actually writes (normalized,
+                    # nested under `coordinates`) and returns absolute pixels.
+                    canon = normalize_annotation_object(obj, width, height)
+                    if canon is None:
+                        if obj_type == "mask":
+                            warnings.append(f"Empty RLE mask in {instance_id}")
+                        else:
+                            warnings.append(
+                                f"Unusable {obj_type or 'annotation'} in "
+                                f"{instance_id}, skipping"
+                            )
+                        continue
+                    warnings.extend(
+                        f"{w} ({instance_id})" for w in canon["warnings"]
+                    )
+
+                    coco_ann = {
+                        "id": annotation_id_counter,
+                        "image_id": image_id,
+                        "category_id": category_map[label],
+                        "iscrowd": canon["iscrowd"],
+                        "bbox": canon["bbox"],
+                        "area": canon["area"],
+                    }
+                    annotation_id_counter += 1
+
+                    if obj_type == "bbox":
+                        coco_ann["segmentation"] = []
+
+                    elif obj_type in ("polygon", "freeform"):
+                        coco_ann["segmentation"] = [
+                            flatten_polygon(canon["points"])
+                        ]
+
+                    elif obj_type == "mask":
+                        rle = canon["rle"]
+                        size = rle.get("size", [])
+                        mask_h = size[0] if len(size) >= 2 else height
+                        mask_w = size[1] if len(size) >= 2 else width
+                        coco_ann["segmentation"] = rle_to_coco_rle(
+                            rle, mask_w, mask_h
+                        )
 
                     else:
                         warnings.append(

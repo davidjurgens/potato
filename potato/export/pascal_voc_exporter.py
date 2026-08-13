@@ -12,11 +12,10 @@ from typing import Optional, Tuple
 
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
-    build_category_mapping,
-    polygon_to_bbox,
     extract_image_annotations,
     get_image_dimensions,
     get_image_filename,
+    normalize_annotation_object,
 )
 
 logger = logging.getLogger(__name__)
@@ -93,30 +92,30 @@ class PascalVOCExporter(BaseExporter):
                     )
                     continue
 
-                if obj_type == "bbox":
-                    xmin = obj.get("x", 0)
-                    ymin = obj.get("y", 0)
-                    xmax = xmin + obj.get("width", 0)
-                    ymax = ymin + obj.get("height", 0)
-
-                elif obj_type in ("polygon", "freeform"):
-                    points = obj.get("points", [])
-                    if not points:
-                        continue
-                    bx, by, bw, bh = polygon_to_bbox(points)
-                    xmin = bx
-                    ymin = by
-                    xmax = bx + bw
-                    ymax = by + bh
-                    warnings.append(
-                        f"{obj_type} in {instance_id} converted to enclosing bbox"
-                    )
-
-                else:
+                if obj_type not in ("bbox", "polygon", "freeform", "mask"):
                     warnings.append(
                         f"Unknown type '{obj_type}' in {instance_id}"
                     )
                     continue
+
+                # Reads the client's normalized `coordinates` shape; VOC wants
+                # absolute pixel corners.
+                canon = normalize_annotation_object(obj, width, height)
+                if canon is None:
+                    warnings.append(
+                        f"Unusable {obj_type} in {instance_id}, skipping"
+                    )
+                    continue
+                warnings.extend(f"{w} ({instance_id})" for w in canon["warnings"])
+
+                if obj_type != "bbox":
+                    warnings.append(
+                        f"{obj_type} in {instance_id} converted to enclosing bbox"
+                    )
+
+                bx, by, bw, bh = canon["bbox"]
+                xmin, ymin = bx, by
+                xmax, ymax = bx + bw, by + bh
 
                 obj_elem = SubElement(root, "object")
                 SubElement(obj_elem, "name").text = label
