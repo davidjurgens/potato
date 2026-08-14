@@ -1009,6 +1009,18 @@ class FlaskTestServer:
                     from flask import send_from_directory
                     return send_from_directory(test_data_dir, filename)
 
+                @app.route('/test-image/<path:filename>')
+                def serve_test_image(filename):
+                    """Serve test images from the tests/data directory.
+
+                    Image-annotation tests need a real image over HTTP: a
+                    data: URI cannot be used, because sanitize_html blocks the
+                    `data:` scheme outright (it is an XSS vector), so the URL
+                    never survives into the rendered instance text.
+                    """
+                    from flask import send_from_directory
+                    return send_from_directory(test_data_dir, filename)
+
                 # Use make_server instead of app.run() for proper shutdown support
                 from werkzeug.serving import make_server
                 self._wsgi_server = make_server('0.0.0.0', self.port, app, threaded=True)

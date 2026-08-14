@@ -35,6 +35,7 @@ from potato.export.cv_utils import (
     to_client_object,
 )
 
+from ._common import apply_url_prefix
 from .base import BaseAnnotationImporter, ImportedImage, ImportResult
 
 logger = logging.getLogger(__name__)
@@ -106,7 +107,6 @@ class COCOImporter(BaseAnnotationImporter):
         rle_as_polygon = bool(options.get("rle_as_polygon", False))
         merge_crowd = options.get("merge_crowd", True)
         want_keypoints = bool(options.get("keypoints", False))
-        url_prefix = options.get("image_url_prefix") or ""
 
         warnings: List[str] = []
         result = ImportResult(warnings=warnings)
@@ -197,9 +197,7 @@ class COCOImporter(BaseAnnotationImporter):
                     tools.update({"brush", "eraser", "fill"})
 
             instance_id = str(img.get("id"))
-            image_url = file_name
-            if url_prefix:
-                image_url = url_prefix.rstrip("/") + "/" + file_name.lstrip("/")
+            image_url = apply_url_prefix(file_name, options)
 
             result.images.append(ImportedImage(
                 instance_id=instance_id,
@@ -215,12 +213,7 @@ class COCOImporter(BaseAnnotationImporter):
             if t in tools
         ] or ["bbox"]
 
-        result.stats = {
-            "num_images": len(result.images),
-            "num_annotations": result.num_objects,
-            "num_categories": len(labels),
-            "num_warnings": len(warnings),
-        }
+        result.summarize(num_warnings=len(warnings))
         return result
 
     # ------------------------------------------------------------------
@@ -374,20 +367,48 @@ class COCOImporter(BaseAnnotationImporter):
                            width: int, height: int,
                            keypoint_names: List[str],
                            tools: set) -> List[dict]:
-        """COCO keypoints -> one landmark per visible point."""
+        """
+        COCO keypoints -> ONE ordered ``keypoint_set``.
+
+        This used to explode into one ``landmark`` per visible point, labelled
+        ``"person:left_shoulder"``. That lost three things at once and made the
+        format one-way:
+
+        * the **ordering**, which is the only reason index 5 means "left
+          shoulder" — so nothing could reassemble the COCO ``keypoints`` array;
+        * the **grouping**, so two people in one image became an
+          indistinguishable pile of points;
+        * the **visibility flags**, since unlabelled points were dropped
+          entirely and occluded ones (v=1) became indistinguishable from
+          visible ones (v=2).
+
+        Keeping the set intact means the exporter can emit a real COCO
+        ``keypoints`` array, and the round trip closes.
+        """
         flat = ann.get("keypoints") or []
-        objects: List[dict] = []
-        for i in range(0, len(flat) - 2, 3):
-            x, y, v = flat[i], flat[i + 1], flat[i + 2]
-            if not v:  # v == 0 means "not labeled"
-                continue
-            idx = i // 3
-            name = keypoint_names[idx] if idx < len(keypoint_names) else str(idx)
-            obj = to_client_object(
-                "landmark", f"{label}:{name}", color,
-                img_w=width, img_h=height, points=[[float(x), float(y)]],
-            )
-            if obj:
-                objects.append(obj)
-                tools.add("landmark")
-        return objects
+        if not flat:
+            return []
+
+        obj = to_client_object(
+            "keypoint_set", label, color,
+            img_w=width, img_h=height,
+            keypoints=flat,
+            # Names live on the schema's skeleton definition rather than being
+            # baked into each annotation; record which one applies.
+            skeleton=self._skeleton_name(label, keypoint_names),
+        )
+        if not obj:
+            return []
+        tools.add("keypoint_set")
+        return [obj]
+
+    @staticmethod
+    def _skeleton_name(label: str, keypoint_names: List[str]) -> str:
+        """Name the skeleton this set follows, so the client can draw edges."""
+        if not keypoint_names:
+            return ""
+        # COCO's 17-point person layout is the one everything assumes; anything
+        # else is named after its category so a config can define it.
+        if len(keypoint_names) == 17 and "nose" in keypoint_names:
+            return "coco_person"
+        return str(label)

@@ -243,6 +243,11 @@ class BehavioralData:
             user_state.json is fully re-serialized on every annotation save and a
             single long response is thousands of events. See
             potato/typing_dynamics.py.
+        annotation_telemetry: Per-schema drawing-dynamics sketch, keyed by
+            schema name. Same split and same reasoning as typing_summaries —
+            raw event streams live in SQLite
+            (potato/annotation_telemetry_store.py). See
+            potato/annotation_telemetry.py.
     """
     instance_id: str
     session_start: float = field(default_factory=time.time)
@@ -257,6 +262,7 @@ class BehavioralData:
     keyword_highlights_shown: List[Dict[str, Any]] = field(default_factory=list)
     chat_history: List[ChatMessage] = field(default_factory=list)
     typing_summaries: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    annotation_telemetry: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -286,6 +292,7 @@ class BehavioralData:
                 for e in self.chat_history
             ],
             'typing_summaries': self.typing_summaries,
+            'annotation_telemetry': self.annotation_telemetry,
         }
 
     @classmethod
@@ -336,6 +343,7 @@ class BehavioralData:
         # Read with .get() so states written before typing dynamics existed
         # deserialize unchanged.
         bd.typing_summaries = data.get('typing_summaries', {})
+        bd.annotation_telemetry = data.get('annotation_telemetry', {})
 
         return bd
 
@@ -409,6 +417,16 @@ class BehavioralData:
         can be joined back to its annotation without a separate mapping.
         """
         self.typing_summaries[f"{schema_name}:::{label_name}"] = summary
+
+    def set_annotation_telemetry(self, schema_name: str,
+                                 summary: Dict[str, Any]) -> None:
+        """Store the drawing-dynamics sketch for one geometry schema.
+
+        Keyed by schema alone rather than `schema:::label`: a drawn annotation
+        is stored under the single `_data` key, so there is no label to key on
+        and inventing one would create a join that does not exist.
+        """
+        self.annotation_telemetry[schema_name] = summary
 
     def finalize_session(self) -> None:
         """Mark session as ended and calculate total time."""

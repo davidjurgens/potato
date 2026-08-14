@@ -287,6 +287,14 @@ KNOWN_CONFIG_KEYS = {
         "flush_interval_ms", "pause_thresholds_ms", "disclose_to_annotators",
         "disclosure_text", "detection",
     },
+    # Annotation telemetry: content-blind drawing dynamics on geometry schemas,
+    # and the rubber-stamping screening built on them. Validated in detail by
+    # validate_annotation_telemetry_config().
+    "annotation_telemetry": {
+        "enabled", "fidelity", "include_schemas", "exclude_schemas",
+        "store_events", "idle_ms", "flush_interval_ms",
+        "disclose_to_annotators", "disclosure_text", "detection",
+    },
     # Psychometrics: live IRT (labels with error bars) + adaptive routing.
     "psychometrics": {"enabled", "schema", "refit_interval", "min_observations",
                       "min_annotators_per_item", "confidence_threshold",
@@ -1245,6 +1253,184 @@ def get_keystroke_disclosure_text(config_data: Dict[str, Any]) -> str:
     return DEFAULT_DISCLOSURE_TEXT
 
 
+# --------------------------------------------------------------------------
+# Annotation telemetry (the drawing-process analogue of keystroke logging)
+# --------------------------------------------------------------------------
+
+ANNOTATION_TELEMETRY_DEFAULTS: Dict[str, Any] = {
+    "enabled": False,
+    "fidelity": "events",          # off | summary | events
+    "include_schemas": [],         # empty = every geometry schema
+    "exclude_schemas": [],
+    "store_events": True,
+    # Gap above which the annotator is charged to idle rather than active time.
+    # Two minutes rather than a tighter bound because inspecting a hard image is
+    # real work that produces no events at all.
+    "idle_ms": 120000,
+    "flush_interval_ms": 10000,
+    "disclose_to_annotators": True,
+    "disclosure_text": None,       # None = DEFAULT_TELEMETRY_DISCLOSURE below
+    "detection": {
+        "enabled": True,
+        "calibrate": False,
+        "thresholds": {},
+    },
+}
+
+VALID_TELEMETRY_FIDELITIES = {"off", "summary", "events"}
+
+#: Shown on every page that can contain a drawing canvas when
+#: ``disclose_to_annotators`` is true. States the limit of the collection as
+#: well as its existence, for the same reason as the keystroke notice: an
+#: annotator told only "your annotation is recorded" will reasonably assume
+#: something more invasive than timing.
+DEFAULT_TELEMETRY_DISCLOSURE = (
+    "This task records how you work on the images — when you draw, zoom, "
+    "revise, and accept AI suggestions — not what you draw or where."
+)
+
+
+def validate_annotation_telemetry_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``annotation_telemetry`` block when present.
+
+    Records content-blind drawing dynamics on geometry schemas so a researcher
+    can tell considered annotation from rubber-stamping. See
+    ``docs/administration/annotation_telemetry.md``.
+    """
+    at = config_data.get("annotation_telemetry")
+    if at is None:
+        return
+    if not isinstance(at, dict):
+        raise ConfigValidationError("annotation_telemetry must be a mapping")
+
+    errors = []
+
+    fidelity = at.get("fidelity", "events")
+    if fidelity not in VALID_TELEMETRY_FIDELITIES:
+        errors.append(
+            "annotation_telemetry.fidelity must be one of: "
+            + ", ".join(sorted(VALID_TELEMETRY_FIDELITIES))
+        )
+
+    for bool_key in ("enabled", "store_events", "disclose_to_annotators"):
+        if bool_key in at and not isinstance(at[bool_key], bool):
+            errors.append(f"annotation_telemetry.{bool_key} must be true or false")
+
+    for list_key in ("include_schemas", "exclude_schemas"):
+        if list_key in at and not isinstance(at[list_key], list):
+            errors.append(
+                f"annotation_telemetry.{list_key} must be a list of schema names")
+
+    for int_key in ("idle_ms", "flush_interval_ms"):
+        if int_key in at and (not isinstance(at[int_key], int)
+                              or isinstance(at[int_key], bool)
+                              or at[int_key] <= 0):
+            errors.append(
+                f"annotation_telemetry.{int_key} must be a positive integer")
+
+    text = at.get("disclosure_text")
+    if text is not None and (not isinstance(text, str) or not text.strip()):
+        errors.append(
+            "annotation_telemetry.disclosure_text must be a non-empty string "
+            "(omit it to use the default notice)"
+        )
+
+    detection = at.get("detection")
+    if detection is not None:
+        if not isinstance(detection, dict):
+            errors.append("annotation_telemetry.detection must be a mapping")
+        else:
+            for bool_key in ("enabled", "calibrate"):
+                if bool_key in detection and not isinstance(detection[bool_key], bool):
+                    errors.append(
+                        f"annotation_telemetry.detection.{bool_key} "
+                        "must be true or false")
+            th = detection.get("thresholds")
+            if th is not None and not isinstance(th, dict):
+                errors.append(
+                    "annotation_telemetry.detection.thresholds must be a mapping "
+                    "of threshold name to number")
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid annotation_telemetry configuration:\n  - "
+            + "\n  - ".join(errors)
+        )
+
+    # Warn rather than fail: both combinations are legal, just self-defeating
+    # or ethically load-bearing.
+    if at.get("enabled") and fidelity == "summary" and at.get("store_events"):
+        logger.warning(
+            "annotation_telemetry.store_events is true but fidelity is "
+            "'summary'; no raw event streams will be stored."
+        )
+    if at.get("enabled") and not at.get("disclose_to_annotators", True):
+        logger.warning(
+            "annotation_telemetry.disclose_to_annotators is false. Drawing "
+            "dynamics are behavioural data about your annotators; check that "
+            "your consent documentation and ethics approval cover collecting "
+            "them silently."
+        )
+
+
+def get_annotation_telemetry_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the ``annotation_telemetry`` block with defaults filled in.
+
+    Always returns a dict that is safe to index. ``enabled`` is False when the
+    block is absent, so callers need no separate presence check.
+    """
+    import copy
+    merged = copy.deepcopy(ANNOTATION_TELEMETRY_DEFAULTS)
+    block = (config_data or {}).get("annotation_telemetry")
+    if not isinstance(block, dict):
+        return merged
+    for key, value in block.items():
+        if key == "detection" and isinstance(value, dict):
+            merged["detection"].update(value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def get_annotation_telemetry_client_config(
+    config_data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """The subset of the telemetry config the browser needs.
+
+    Screening thresholds are deliberately withheld, for the same reason as the
+    keystroke ones: they are evaluated server-side, and shipping them would tell
+    an annotator exactly how long to wait before clicking accept.
+    """
+    at = get_annotation_telemetry_config(config_data)
+    return {
+        "enabled": at["enabled"],
+        "fidelity": at["fidelity"],
+        "include_schemas": at["include_schemas"],
+        "exclude_schemas": at["exclude_schemas"],
+        "flush_interval_ms": at["flush_interval_ms"],
+        "disclose_to_annotators": at["disclose_to_annotators"],
+        "disclosure_text": get_annotation_telemetry_disclosure_text(config_data),
+    }
+
+
+def get_annotation_telemetry_disclosure_text(config_data: Dict[str, Any]) -> str:
+    """The notice shown to annotators, or ``""`` when disclosure is off.
+
+    Returns the empty string both when the feature is disabled and when the
+    researcher has explicitly opted out of disclosure, so a caller can treat
+    "no text" as "render nothing" without re-checking the flags.
+    """
+    at = get_annotation_telemetry_config(config_data)
+    if not at["enabled"] or at["fidelity"] == "off":
+        return ""
+    if not at.get("disclose_to_annotators", True):
+        return ""
+    custom = at.get("disclosure_text")
+    if isinstance(custom, str) and custom.strip():
+        return custom.strip()
+    return DEFAULT_TELEMETRY_DISCLOSURE
+
+
 def validate_corpus_map_config(config_data: Dict[str, Any]) -> None:
     """Validate the ``corpus_map`` block when enabled and warn on quota conflict.
 
@@ -1450,6 +1636,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate keystroke logging / typing dynamics block if present
     validate_keystroke_logging_config(config_data)
+
+    # Validate annotation telemetry (drawing dynamics) block if present
+    validate_annotation_telemetry_config(config_data)
 
     # Validate ui_language (bundled code / _base / inline overrides)
     validate_ui_language_config(config_data)
@@ -2292,8 +2481,13 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if not scheme['tools']:
             raise ConfigValidationError(f"{path}.tools cannot be empty")
 
-        # Validate tools
-        valid_tools = ['bbox', 'polygon', 'freeform', 'landmark', 'fill', 'eraser', 'brush']
+        # Validate tools.
+        #
+        # Imported, not restated. This list used to be a hand-maintained copy of
+        # VALID_TOOLS, so adding a tool in one place and not the other either
+        # rejected a valid config or accepted a tool with no implementation.
+        from potato.server_utils.schemas.image_annotation import VALID_TOOLS
+        valid_tools = list(VALID_TOOLS)
         invalid_tools = [t for t in scheme['tools'] if t not in valid_tools]
         if invalid_tools:
             raise ConfigValidationError(f"{path}.tools contains invalid values: {invalid_tools}. Valid tools are: {valid_tools}")
@@ -2313,6 +2507,36 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if 'max_annotations' in scheme and scheme['max_annotations'] is not None:
             if not isinstance(scheme['max_annotations'], int) or scheme['max_annotations'] < 1:
                 raise ConfigValidationError(f"{path}.max_annotations must be a positive integer or null")
+
+        if 'fill_mode' in scheme:
+            valid_fill_modes = ['region', 'empty']
+            if scheme['fill_mode'] not in valid_fill_modes:
+                raise ConfigValidationError(
+                    f"{path}.fill_mode must be one of {valid_fill_modes}, "
+                    f"got '{scheme['fill_mode']}'")
+
+        if 'carry_over' in scheme:
+            valid_carry_over = [False, True, 'prompt', 'auto']
+            if scheme['carry_over'] not in valid_carry_over:
+                raise ConfigValidationError(
+                    f"{path}.carry_over must be false, 'prompt', or 'auto'; "
+                    f"got {scheme['carry_over']!r}")
+
+        if 'keybinding_profile' in scheme:
+            from potato.server_utils.schemas.image_annotation import KEYBINDING_PROFILES
+            valid_profiles = sorted(KEYBINDING_PROFILES)
+            if scheme['keybinding_profile'] not in valid_profiles:
+                raise ConfigValidationError(
+                    f"{path}.keybinding_profile must be one of {valid_profiles}, "
+                    f"got '{scheme['keybinding_profile']}'. Use 'legacy' to keep the "
+                    f"keys Potato used before v2.8.")
+
+        if 'fill_tolerance' in scheme:
+            tol = scheme['fill_tolerance']
+            if not isinstance(tol, int) or isinstance(tol, bool) or not (0 <= tol <= 255):
+                raise ConfigValidationError(
+                    f"{path}.fill_tolerance must be an integer 0-255 "
+                    f"(per-channel colour distance)")
 
     elif annotation_type == 'audio_annotation':
         # Validate mode

@@ -285,21 +285,13 @@ def serve_media(filepath):
     """
     from flask import send_from_directory, abort
 
-    task_dir = config.get("task_dir", ".")
-    media_subdir = config.get("media_directory", "media")
+    from potato.media.paths import resolve_media_path
 
-    # Resolve relative to task_dir
-    if os.path.isabs(media_subdir):
-        media_dir = media_subdir
-    else:
-        media_dir = os.path.join(task_dir, media_subdir)
-
-    media_dir = os.path.realpath(media_dir)
-
-    # Security: ensure the resolved file is inside media_dir
-    requested = os.path.realpath(os.path.join(media_dir, filepath))
-    if not requested.startswith(media_dir + os.sep) and requested != media_dir:
-        logger.warning(f"Media path traversal blocked: {filepath}")
+    # One traversal guard, shared with the media proxy and the critique
+    # service (potato/media/paths.py) -- it used to be written out separately
+    # in each, which is how they drift.
+    media_dir, requested = resolve_media_path(config, filepath, context="Media")
+    if media_dir is None:
         abort(403)
 
     if not os.path.isfile(requested):
@@ -3077,7 +3069,11 @@ def admin_iaa():
         except Exception:
             # Template optional; fall back to JSON if missing.
             pass
-    return jsonify(report)
+    # NaN is not valid JSON, and an undefined metric is genuinely common here
+    # (fewer than two annotators, no overlap items yet). Emit null instead, or
+    # the browser's JSON.parse rejects the whole response.
+    from potato.server_utils.iaa.dispatcher import json_safe
+    return jsonify(json_safe(report))
 
 
 def _record_judge_comparison_if_enabled(username, instance_id):
@@ -3530,6 +3526,24 @@ def admin_api_writing_process():
     whole behavioral rollup.
     """
     result = admin_dashboard.get_writing_process_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
+@app.route("/admin/api/annotation_process", methods=["GET"])
+def admin_api_annotation_process():
+    """
+    Per-annotator drawing-dynamics rollup: how geometry annotations were made.
+
+    Admin-only. Returns ``enabled: False`` when annotation_telemetry is off, so
+    the dashboard can hide the panel rather than render an error.
+
+    Also available as the ``annotation_process`` key of
+    /admin/api/behavioral_analytics; this route exists so the panel can refresh
+    on its own without recomputing the whole behavioral rollup.
+    """
+    result = admin_dashboard.get_annotation_process_data()
     if isinstance(result, tuple):
         return jsonify(result[0]), result[1]
     return jsonify(result)
@@ -4284,6 +4298,376 @@ def get_annotations():
     except Exception as e:
         logger.error(f"Error getting annotations: {e}")
         return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route('/api/image_annotations/previous', methods=['GET'])
+def get_previous_image_annotations():
+    """
+    Return this user's image annotations for the item BEFORE their current one.
+
+    Backs "copy from previous image" (V7's carry-over). It matters most for
+    image sequences where the scene barely changes -- video frames, satellite
+    time series, microscopy z-stacks -- where redrawing the same twenty boxes
+    per frame is the bulk of the work.
+
+    Reads only the requesting user's own state, so it exposes nothing they
+    cannot already see by pressing Previous.
+
+    Query params:
+        schema: the image_annotation schema name (required)
+
+    Returns:
+        {"instance_id", "schema", "objects": [...], "count"} on success, or
+        {"objects": [], "reason": "no_previous"} at the start of the queue --
+        an empty result, not an error, because "nothing to copy" is a normal
+        state the button has to render.
+    """
+    try:
+        if 'username' not in session:
+            return jsonify({"error": "No user session"}), 401
+
+        schema = request.args.get('schema')
+        if not schema:
+            return jsonify({"error": "No schema provided"}), 400
+
+        user_state = get_user_state_manager().get_user_state(session['username'])
+        if not user_state:
+            return jsonify({"error": "User not found"}), 404
+
+        index = user_state.get_current_instance_index()
+        ordering = getattr(user_state, 'instance_id_ordering', []) or []
+        if index is None or index <= 0 or index > len(ordering):
+            return jsonify({"instance_id": None, "schema": schema,
+                            "objects": [], "count": 0,
+                            "reason": "no_previous"})
+
+        previous_id = ordering[index - 1]
+        labels = user_state.get_label_annotations(previous_id) or {}
+
+        # Image annotations live under a single "_data" label per schema,
+        # holding the JSON blob ImageAnnotationManager serializes.
+        raw = None
+        for label_obj, value in labels.items():
+            if (getattr(label_obj, 'get_schema', None)
+                    and label_obj.get_schema() == schema
+                    and label_obj.get_name() == "_data"):
+                raw = value
+                break
+
+        objects = []
+        if raw:
+            try:
+                parsed = json.loads(raw) if isinstance(raw, str) else raw
+                if isinstance(parsed, list):
+                    objects = parsed
+            except (ValueError, TypeError):
+                logger.warning(
+                    "Previous image annotations for %s/%s are not valid JSON; "
+                    "returning empty", previous_id, schema)
+
+        return jsonify({"instance_id": previous_id, "schema": schema,
+                        "objects": objects, "count": len(objects)})
+
+    except Exception as e:
+        logger.error(f"Error getting previous image annotations: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route('/api/calibration', methods=['GET'])
+def get_item_calibration():
+    """
+    Camera calibration for one item, so 3D boxes can be drawn onto its images.
+
+    The 3D viewer fetches this once per item and renders a verification panel
+    per camera: the annotator edits the cuboid in the point cloud and watches
+    it land on the car in the photograph. Without it, placing an oriented box
+    on a few dozen lidar returns is close to guessing.
+
+    Query params:
+        field: the item field holding the calibration (default "calibration")
+
+    Returns ``{"cameras": [...], "warnings": [...]}``, or ``{"cameras": [],
+    "reason": ...}`` with a 200 when the item simply has no calibration --
+    that is a normal state for a lidar-only project, not an error, and the
+    panel has to render it. A calibration that exists but cannot be read is a
+    400 carrying the parser's message, because that one an admin must fix.
+    """
+    from potato.media.calibration import CalibrationError, parse_calibration
+
+    try:
+        if 'username' not in session:
+            return jsonify({"error": "No user session"}), 401
+
+        field = request.args.get('field') or 'calibration'
+        instance_id = request.args.get('instance_id')
+        if not instance_id:
+            user_state = get_user_state_manager().get_user_state(
+                session['username'])
+            instance_id = user_state.get_current_instance_id() if user_state \
+                else None
+        if not instance_id:
+            return jsonify({"cameras": [], "reason": "no_instance"})
+
+        try:
+            item = get_item_state_manager().get_item(instance_id)
+        except (KeyError, AttributeError):
+            item = None
+        data = item.get_data() if item is not None else None
+        if not isinstance(data, dict):
+            return jsonify({"cameras": [], "reason": "no_instance"})
+
+        raw = data.get(field)
+        if raw is None or raw == "":
+            return jsonify({"cameras": [], "reason": "no_calibration",
+                            "field": field})
+
+        # Relative paths in a calibration resolve against the media directory,
+        # the same root serve_media uses -- so an admin writes one path that
+        # works for the image, the cloud and the calibration alike.
+        #
+        # Resolved through resolve_media_path rather than a plain join: this
+        # path comes out of a project's data file and is handed to open(), so
+        # without the containment guard a crafted data file could read any file
+        # the server can. Same guard, one implementation, per potato/media/paths.
+        from potato.media.paths import resolve_media_path
+
+        def resolve(path):
+            _root, target = resolve_media_path(config, path,
+                                               context="Calibration")
+            return target
+
+        try:
+            calibration = parse_calibration(raw, resolve=resolve)
+        except CalibrationError as exc:
+            return jsonify({"error": str(exc), "field": field}), 400
+
+        cameras = []
+        for cam in calibration.cameras:
+            entry = cam.to_dict()
+            entry["image_url"] = _media_url_for(cam.image)
+            cameras.append(entry)
+
+        return jsonify({"instance_id": instance_id, "cameras": cameras,
+                        "warnings": calibration.warnings})
+
+    except Exception as e:
+        logger.error(f"Error reading calibration: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+def _media_url_for(path):
+    """
+    A URL the browser can fetch for a media path named inside an item.
+
+    Routed through /media/proxy rather than /media so that a camera stream in a
+    format browsers cannot display -- 16-bit TIFF, HEIC -- still renders in the
+    verification panel. The proxy passes JPEG and PNG straight through, so this
+    costs nothing for the common case.
+    """
+    import re
+    import urllib.parse
+
+    if not path:
+        return None
+    if re.match(r'^(https?:)?//', str(path)) or str(path).startswith('data:'):
+        return str(path)
+    return '/media/proxy/' + urllib.parse.quote(str(path).lstrip('/'))
+
+
+# Per-(instance, schema, annotation-state) cache of critique passes. Keyed on a
+# hash of the annotations themselves rather than just the instance, so editing a
+# box invalidates its critique while re-opening an unchanged image does not
+# re-run 24 model calls.
+_CRITIQUE_CACHE: dict = {}
+_CRITIQUE_CACHE_LIMIT = 64
+
+
+def _find_scheme_by_name(schema_name: str):
+    """Return the annotation scheme dict with this name, or None."""
+    for scheme in config.get("annotation_schemes", []):
+        if scheme.get("name") == schema_name:
+            return scheme
+    return None
+
+
+def _scheme_label_names(scheme: dict) -> list:
+    """Label names for a scheme, whether declared as strings or dicts."""
+    names = []
+    for label in scheme.get("labels", []) or []:
+        if isinstance(label, dict):
+            name = label.get("name")
+        else:
+            name = label
+        if name:
+            names.append(str(name))
+    return names
+
+
+def _critique_image_reference(item_data, scheme: dict):
+    """Work out which field of an item holds the image being annotated.
+
+    ``source_field`` on the scheme wins, because a project that sets it has
+    said explicitly which field the canvas renders. Otherwise fall back to the
+    configured ``text_key`` and then to the usual field names -- the same order
+    the client uses to decide what to display, so the model is shown the image
+    the annotator is looking at rather than a different one from the same row.
+    """
+    if not isinstance(item_data, dict):
+        return str(item_data or "")
+
+    source_field = scheme.get("source_field")
+    if source_field and item_data.get(source_field):
+        return str(item_data[source_field])
+
+    text_key = config.get("item_properties", {}).get("text_key")
+    if text_key and item_data.get(text_key):
+        return str(item_data[text_key])
+
+    for field in ("image_url", "image", "img", "url", "path", "src", "text"):
+        value = item_data.get(field)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
+@app.route('/api/critique_annotations', methods=['POST'])
+def critique_annotations():
+    """
+    Ask a vision model to review this user's annotations on the current image.
+
+    This is the check inter-annotator agreement cannot make. Agreement asks
+    whether two people drew the same shape, so it is silent when both are
+    confidently wrong and says nothing at all when there is only one annotator.
+    A model looking at each region independently answers "is the outlined thing
+    really a {label}, and does the outline fit?".
+
+    Request JSON::
+
+        {"schema": "<image_annotation scheme name>",
+         "objects": [...],          # optional: what is on the canvas right now
+         "instance_id": "..."}      # optional: defaults to the current item
+
+    Responds with the shape of :meth:`CritiqueResult.to_dict` -- per-region
+    verdicts, possibly-missed objects, and a summary carrying the caveat that
+    these are a model's opinions rather than ground truth.
+
+    Nothing here writes an annotation. A verdict is advice the annotator acts
+    on or dismisses; the server never edits their work on a model's say-so.
+    """
+    import hashlib
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    data = request.get_json(silent=True) or {}
+    schema_name = data.get("schema")
+    if not schema_name:
+        return jsonify({"error": "schema is required"}), 400
+
+    scheme = _find_scheme_by_name(schema_name)
+    if scheme is None or scheme.get("annotation_type") != "image_annotation":
+        return jsonify({
+            "error": f"No image_annotation schema named '{schema_name}'"}), 404
+
+    ai_support = scheme.get("ai_support") or {}
+    options = dict(ai_support.get("critique") or {})
+    if ai_support.get("enabled") is False or options.get("enabled") is False:
+        return jsonify({"error": "Critique is not enabled for this schema"}), 400
+
+    username = session['username']
+    user_state = get_user_state(username)
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    instance_id = data.get("instance_id")
+    if not instance_id:
+        index = user_state.get_current_instance_index()
+        ordering = getattr(user_state, 'instance_id_ordering', []) or []
+        if index is None or index < 0 or index >= len(ordering):
+            return jsonify({"error": "No current instance"}), 400
+        instance_id = ordering[index]
+    instance_id = str(instance_id)
+
+    # Prefer the objects the client sent: the annotator expects a critique of
+    # what is on screen, and the last edit may not have been saved yet.
+    objects = data.get("objects")
+    if not isinstance(objects, list):
+        objects = []
+        labels = user_state.get_label_annotations(instance_id) or {}
+        for label_obj, value in labels.items():
+            if (getattr(label_obj, 'get_schema', None)
+                    and label_obj.get_schema() == schema_name
+                    and label_obj.get_name() == "_data"):
+                try:
+                    parsed = json.loads(value) if isinstance(value, str) else value
+                    if isinstance(parsed, list):
+                        objects = parsed
+                except (ValueError, TypeError):
+                    logger.warning("Stored annotations for %s/%s are not JSON",
+                                   instance_id, schema_name)
+                break
+
+    if not objects:
+        # Not an error: an image with nothing drawn on it is a normal state,
+        # and the missed-object pass is still worth running on it.
+        logger.debug("Critique on %s/%s has no regions to review",
+                     instance_id, schema_name)
+
+    ism = get_item_state_manager()
+    if not ism.has_item(instance_id):
+        return jsonify({"error": f"Unknown instance '{instance_id}'"}), 404
+    item_data = ism.get_item(instance_id).get_data()
+    image_reference = _critique_image_reference(item_data, scheme)
+
+    fingerprint = hashlib.sha256(
+        json.dumps([instance_id, schema_name, objects], sort_keys=True,
+                   default=str).encode("utf-8")).hexdigest()
+    cached = _CRITIQUE_CACHE.get(fingerprint)
+    if cached is not None:
+        payload = dict(cached)
+        payload["cached"] = True
+        return jsonify(payload)
+
+    ais = get_ai_cache_manager()
+    if ais is None:
+        return jsonify({"error": "AI support is not enabled for this project"}), 400
+
+    endpoint = ais._get_visual_endpoint()
+    if endpoint is None or not hasattr(endpoint, "query_with_image"):
+        return jsonify({
+            "error": "No vision-capable AI endpoint is configured. Critique "
+                     "needs a model that can see the image."}), 503
+
+    from potato.ai.critique import CritiqueError
+    from potato.ai.critique_service import CritiqueService
+
+    try:
+        service = CritiqueService(config, endpoint, options)
+        result = service.critique(
+            objects,
+            image_reference,
+            _scheme_label_names(scheme),
+            description=scheme.get("description", ""),
+            instance_id=instance_id,
+            schema=schema_name,
+        )
+    except CritiqueError as exc:
+        # A stated reason the annotator can act on -- missing Pillow, an image
+        # that will not load -- not a stack trace.
+        return jsonify({"error": str(exc)}), 422
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Critique failed for %s/%s: %s", instance_id, schema_name,
+                     exc, exc_info=True)
+        return jsonify({"error": "Critique failed"}), 500
+
+    payload = result.to_dict()
+    if len(_CRITIQUE_CACHE) >= _CRITIQUE_CACHE_LIMIT:
+        _CRITIQUE_CACHE.clear()
+    _CRITIQUE_CACHE[fingerprint] = payload
+    response = dict(payload)
+    response["cached"] = False
+    return jsonify(response)
+
 
 @app.route("/api/current_instance", methods=["GET"])
 def get_current_instance():
@@ -6496,6 +6880,227 @@ def track_typing():
     return jsonify({"status": "ok", "sessions_recorded": recorded})
 
 
+def _annotation_telemetry_config():
+    """The project's `annotation_telemetry` block, with defaults applied.
+
+    Returns a dict that is always safe to index; `enabled` is False when the
+    feature was never configured.
+    """
+    from potato.server_utils.config_module import get_annotation_telemetry_config
+    return get_annotation_telemetry_config(config)
+
+
+@app.route("/api/track_annotation_telemetry", methods=["POST"])
+def track_annotation_telemetry():
+    """
+    Receive completed drawing sessions from the annotation telemetry tracker.
+
+    Expected JSON payload:
+    {
+        "instance_id": "...",
+        "sessions": [{
+            "schema_name": "...", "instance_id": "...",
+            "started_at": <epoch s>, "ended_at": <epoch s>,
+            "events": [{"t_ms", "action", "shape", "value", "meta"}]
+        }]
+    }
+
+    Each session is summarized server-side rather than trusting a client-computed
+    summary — the same reasoning as /api/track_typing. AI-accept latency in
+    particular is derived here by pairing suggest/accept ids, so it cannot be
+    inflated by a modified client.
+    """
+    from potato.interaction_tracking import get_or_create_behavioral_data
+    from potato import annotation_telemetry as telemetry
+    from potato import annotation_telemetry_store as telemetry_store
+
+    # Authentication is checked before the feature flag: an unauthenticated
+    # caller gets 401 whether or not this project happens to have telemetry
+    # switched on.
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    at_config = _annotation_telemetry_config()
+    if not at_config.get("enabled") or at_config.get("fidelity") == "off":
+        # Answer 200 rather than an error: a stale page may still be posting
+        # after the feature was switched off, and that is not a client fault.
+        return jsonify({"status": "disabled", "sessions_recorded": 0})
+
+    username = session['username']
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    user_state = get_user_state(username)
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    sessions = data.get('sessions') or []
+    if not isinstance(sessions, list):
+        return jsonify({"error": "'sessions' must be a list"}), 400
+
+    # Same reasoning as track_typing: behavioral data is bucketed by instance id
+    # and every non-annotation page shares the "__phase_page__" sentinel, so the
+    # phase/page must be stamped here or the trail cannot say which training
+    # item a drawing session belongs to.
+    try:
+        _phase, _page = user_state.get_current_phase_and_page()
+        phase_name = _phase.name.lower() if hasattr(_phase, 'name') else str(_phase)
+    except Exception:
+        phase_name, _page = None, None
+
+    task_dir = config.get("task_dir") or "."
+    project = config.get("annotation_task_name") or "potato"
+    fidelity = at_config.get("fidelity", "events")
+    store_events = bool(at_config.get("store_events", True)) and fidelity == "events"
+    idle_ms = int(at_config.get("idle_ms") or telemetry.DEFAULT_IDLE_MS)
+    thresholds = dict(at_config.get("detection", {}).get("thresholds") or {})
+    detection_on = at_config.get("detection", {}).get("enabled", True)
+
+    include = set(at_config.get("include_schemas") or [])
+    exclude = set(at_config.get("exclude_schemas") or [])
+
+    # Project-calibrated thresholds override the built-in defaults but lose to
+    # an explicit config override, which is the most specific statement of
+    # intent.
+    if detection_on and at_config.get("detection", {}).get("calibrate"):
+        try:
+            fitted = telemetry_store.load_calibration(task_dir, project)
+            for key, value in fitted.items():
+                thresholds.setdefault(key, value)
+        except Exception as e:
+            logger.warning("Could not load telemetry calibration: %s", e)
+
+    recorded = 0
+    # Sessions on the same schema are merged before being written to the user
+    # state, so leaving an image and coming back reads as one piece of work
+    # rather than several suspiciously short ones.
+    by_schema = {}
+
+    for raw in sessions:
+        if not isinstance(raw, dict):
+            continue
+        schema_name = raw.get('schema_name')
+        if not schema_name:
+            continue
+        # The client filters too, but a stale page carries the old config, so
+        # the server enforces scope rather than trusting it.
+        if schema_name in exclude or (include and schema_name not in include):
+            continue
+
+        # Phase pages (training items) have no instance id — the annotation
+        # template leaves it empty — so sessions there arrive with instance_id
+        # null. Bucket them under the same "__phase_page__" sentinel the rest of
+        # the behavioral system uses rather than dropping them; `phase` and
+        # `page` are stamped below, which is what actually identifies them.
+        instance_id = str(raw.get('instance_id') or data.get('instance_id') or '')
+        if not instance_id or instance_id in ('null', 'None', 'undefined'):
+            instance_id = '__phase_page__'
+
+        events = [
+            telemetry.TelemetryEvent.from_dict(e)
+            for e in (raw.get('events') or []) if isinstance(e, dict)
+        ]
+        if not events:
+            continue
+        # Enforced here rather than on the client so one vocabulary stays
+        # authoritative, and so a stale page cannot reintroduce the noise.
+        if not telemetry.has_substance(events):
+            continue
+
+        summary = telemetry.summarize(
+            events,
+            schema_name=schema_name,
+            instance_id=instance_id,
+            idle_ms=idle_ms,
+        )
+
+        verdict = telemetry.evaluate(summary, thresholds=thresholds) \
+            if detection_on else None
+
+        try:
+            telemetry_store.record_session(
+                task_dir,
+                project=project,
+                user_id=username,
+                instance_id=instance_id,
+                schema_name=schema_name,
+                summary=summary,
+                events=events if store_events else None,
+                started_at=raw.get('started_at'),
+                ended_at=raw.get('ended_at'),
+                phase=phase_name,
+                page=_page,
+                fidelity=fidelity,
+                flags=verdict.to_dict() if verdict else None,
+            )
+            recorded += 1
+        except Exception as e:
+            logger.error("Failed to store telemetry session: %s", e, exc_info=True)
+            continue
+
+        by_schema.setdefault((instance_id, schema_name), []).append(summary)
+
+    # Mirror the compact sketch into the user state so it travels with the
+    # annotation through export and the admin dashboard. The raw streams stay in
+    # SQLite: user_state.json is rewritten in full on every save.
+    for (instance_id, schema_name), entries in by_schema.items():
+        bd = get_or_create_behavioral_data(
+            user_state.instance_id_to_behavioral_data, instance_id)
+        if not hasattr(bd, 'set_annotation_telemetry'):
+            continue
+
+        existing = (bd.annotation_telemetry or {}).get(schema_name)
+        summaries = list(entries)
+        if existing:
+            summaries.insert(0, telemetry.TelemetrySummary.from_dict(existing))
+
+        merged = telemetry.merge_summaries(summaries)
+        if merged is None:
+            continue
+        payload = merged.to_dict()
+        if detection_on:
+            # Re-evaluate against the merged view: five fast accepts within one
+            # short session may be a small fraction of the whole item's work
+            # once the other sessions on it are counted.
+            payload['verdict'] = telemetry.evaluate(
+                merged, thresholds=thresholds).to_dict()
+        bd.set_annotation_telemetry(schema_name, payload)
+
+    # Same reasoning as track_typing: a drawing session can end without any
+    # annotation save, so waiting for /updateinstance to flush would lose it.
+    if recorded:
+        try:
+            get_user_state_manager().save_user_state(user_state)
+        except Exception as e:
+            logger.warning(
+                "Could not persist user state after telemetry flush: %s", e)
+
+    return jsonify({"status": "ok", "sessions_recorded": recorded})
+
+
+@app.route("/api/annotation_telemetry/<instance_id>", methods=["GET"])
+def get_annotation_telemetry(instance_id):
+    """Drawing-dynamics summaries for one instance, for the current user."""
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    user_state = get_user_state(session['username'])
+    if not user_state:
+        return jsonify({"error": "User state not found"}), 404
+
+    bd = user_state.instance_id_to_behavioral_data.get(instance_id)
+    summaries = {}
+    if bd is not None:
+        if hasattr(bd, 'annotation_telemetry'):
+            summaries = bd.annotation_telemetry or {}
+        elif isinstance(bd, dict):
+            summaries = bd.get('annotation_telemetry', {})
+
+    return jsonify({"instance_id": instance_id,
+                    "annotation_telemetry": summaries})
+
+
 @app.route("/api/typing_summary/<instance_id>", methods=["GET"])
 def get_typing_summary(instance_id):
     """Typing-dynamics summaries for one instance, for the current user."""
@@ -7702,6 +8307,14 @@ def configure_routes(flask_app, app_config):
 
     # Register all routes with the flask app instance
     app.add_url_rule("/media/<path:filepath>", "serve_media", serve_media)
+    # Transcoding proxy for formats no browser displays (TIFF, HEIC, RAW,
+    # ProRes, MKV). Imported here rather than at module scope so a server with
+    # neither Pillow nor ffmpeg starts exactly as fast as before.
+    try:
+        from potato.media.routes import register_media_routes
+        register_media_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register media proxy routes: %s", e)
     app.add_url_rule(
         "/screenshots/<path:filepath>",
         "serve_trace_screenshot",
@@ -7723,6 +8336,16 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/go_to", "go_to", go_to, methods=["GET", "POST"])
     app.add_url_rule("/updateinstance", "update_instance", update_instance, methods=["POST"])
     app.add_url_rule("/get_annotations", "get_annotations", get_annotations, methods=["GET"])
+    # A bare @app.route decorator is not enough: the live server serves the app
+    # built by create_app(), so anything not registered here 404s under
+    # `potato start`.
+    app.add_url_rule("/api/image_annotations/previous",
+                     "get_previous_image_annotations",
+                     get_previous_image_annotations, methods=["GET"])
+    app.add_url_rule("/api/calibration", "get_item_calibration",
+                     get_item_calibration, methods=["GET"])
+    app.add_url_rule("/api/critique_annotations", "critique_annotations",
+                     critique_annotations, methods=["POST"])
     app.add_url_rule("/poststudy", "poststudy", poststudy, methods=["GET", "POST"])
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])
@@ -7841,12 +8464,15 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/quality_control", "admin_api_quality_control", admin_api_quality_control, methods=["GET"])
     app.add_url_rule("/admin/api/behavioral_analytics", "admin_api_behavioral_analytics", admin_api_behavioral_analytics, methods=["GET"])
     app.add_url_rule("/admin/api/writing_process", "admin_api_writing_process", admin_api_writing_process, methods=["GET"])
+    app.add_url_rule("/admin/api/annotation_process", "admin_api_annotation_process", admin_api_annotation_process, methods=["GET"])
     app.add_url_rule("/api/track_interactions", "track_interactions", track_interactions, methods=["POST"])
     app.add_url_rule("/api/track_ai_usage", "track_ai_usage", track_ai_usage, methods=["POST"])
     app.add_url_rule("/api/track_annotation_change", "track_annotation_change", track_annotation_change, methods=["POST"])
     app.add_url_rule("/api/behavioral_data/<instance_id>", "get_behavioral_data", get_behavioral_data, methods=["GET"])
     app.add_url_rule("/api/track_typing", "track_typing", track_typing, methods=["POST"])
     app.add_url_rule("/api/typing_summary/<instance_id>", "get_typing_summary", get_typing_summary, methods=["GET"])
+    app.add_url_rule("/api/track_annotation_telemetry", "track_annotation_telemetry", track_annotation_telemetry, methods=["POST"])
+    app.add_url_rule("/api/annotation_telemetry/<instance_id>", "get_annotation_telemetry", get_annotation_telemetry, methods=["GET"])
 
     # Adjudication routes
     app.add_url_rule("/adjudicate", "adjudicate", adjudicate, methods=["GET"])
@@ -8053,6 +8679,67 @@ def configure_routes(flask_app, app_config):
 # ============================================================================
 # Adjudication Routes
 # ============================================================================
+
+def _resolve_adjudicated_geometry(adj_mgr, instance_id, label_decisions):
+    """
+    Replace ``{adopted_annotations: [{annotator, idx}]}`` with real geometry.
+
+    The adjudication UI can only send references — it does not hold the
+    annotators' full annotation blobs. Resolving them here, once, means the
+    stored decision is in the same client-contract shape every exporter reads,
+    so an adjudicated image exports like any other.
+
+    Anything that is not a geometry adoption passes through untouched.
+    """
+    from potato.server_utils import annotation_values
+
+    if not isinstance(label_decisions, dict) or not label_decisions:
+        return label_decisions
+
+    needs_resolving = {
+        schema: value for schema, value in label_decisions.items()
+        if isinstance(value, dict) and value.get("adopted_annotations")
+    }
+    if not needs_resolving:
+        return label_decisions
+
+    schemes = {s.get("name"): s
+               for s in (config.get("annotation_schemes") or [])
+               if isinstance(s, dict)}
+
+    # Per-user stored values for this instance, keyed by schema.
+    per_schema_by_user = {}
+    try:
+        user_manager = get_user_state_manager()
+        for user_id in user_manager.get_all_users():
+            state = user_manager.get_user_state(user_id)
+            if not state:
+                continue
+            labels = state.get_label_annotations(instance_id) or {}
+            for label_obj, value in labels.items():
+                schema_name = getattr(label_obj, "get_schema", lambda: None)()
+                if schema_name in needs_resolving:
+                    per_schema_by_user.setdefault(schema_name, {})[user_id] = value
+    except Exception as exc:
+        logger.error("Could not load annotations to resolve adjudication: %s", exc)
+        return label_decisions
+
+    resolved = dict(label_decisions)
+    for schema, value in needs_resolving.items():
+        scheme = schemes.get(schema)
+        objects = annotation_values.resolve_adopted(
+            scheme, value.get("adopted_annotations") or [],
+            per_schema_by_user.get(schema, {}))
+        if objects:
+            # Stored exactly as the client writes it: a JSON array under _data.
+            resolved[schema] = {"_data": json.dumps(objects)}
+        else:
+            logger.warning(
+                "Adjudication for %s/%s adopted annotations that could not be "
+                "resolved; keeping the raw decision", instance_id, schema)
+
+    return resolved
+
 
 def _check_adjudicator_auth():
     """Check if current user is an authorized adjudicator.
@@ -8518,7 +9205,14 @@ def admin_api_embedding_viz_data():
         return jsonify({
             "points": points_json,
             "labels": data.labels,
-            "label_colors": data.label_colors,
+            # label_colors is keyed by label, with None standing for "unannotated".
+            # Flask sorts dict keys before serialising, and comparing None to a str
+            # raises TypeError, so the whole response 500'd as soon as any instance
+            # was unlabelled — i.e. always, on a fresh task. JSON has no null key in
+            # any case, and the client already looks this up as the string "null"
+            # (embedding-viz.js: label_colors[point.label] with point.label === null).
+            "label_colors": {("null" if k is None else k): v
+                             for k, v in data.label_colors.items()},
             "stats": data.stats
         })
 
@@ -8993,11 +9687,19 @@ def adjudicate_api_submit():
         if not instance_id:
             return jsonify({"error": "instance_id is required"}), 400
 
+        # Resolve any {annotator, idx} picks into real annotation objects
+        # BEFORE storing. The adjudication UI records geometry decisions as
+        # references; stored that way the adjudicated result is unusable — no
+        # CV exporter can read it, and the reference dangles if the annotator's
+        # own work later changes.
+        label_decisions = _resolve_adjudicated_geometry(
+            adj_mgr, str(instance_id), data.get('label_decisions', {}))
+
         decision = AdjudicationDecision(
             instance_id=str(instance_id),
             adjudicator_id=username,
             timestamp=datetime.datetime.now().isoformat(),
-            label_decisions=data.get('label_decisions', {}),
+            label_decisions=label_decisions,
             span_decisions=data.get('span_decisions', []),
             source=data.get('source', {}),
             confidence=data.get('confidence', 'medium'),

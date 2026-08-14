@@ -239,23 +239,46 @@ class TestMissingDimensionsAreAHardError:
 
 class TestKeypoints:
 
-    def test_opt_in_produces_one_landmark_per_visible_point(self):
-        data = _coco([
-            {"id": 1, "image_id": 1, "category_id": 1, "iscrowd": 0,
-             "bbox": [0, 0, 10, 10], "segmentation": [],
-             "keypoints": [10, 5, 2, 20, 10, 1, 30, 15, 0]},
-        ], categories=[{"id": 1, "name": "person",
-                        "keypoints": ["nose", "eye", "ear"]}])
+    #: One person: nose visible (v=2), eye occluded (v=1), ear unlabelled (v=0).
+    DATA = _coco([
+        {"id": 1, "image_id": 1, "category_id": 1, "iscrowd": 0,
+         "bbox": [0, 0, 10, 10], "segmentation": [],
+         "keypoints": [10, 5, 2, 20, 10, 1, 30, 15, 0]},
+    ], categories=[{"id": 1, "name": "person",
+                    "keypoints": ["nose", "eye", "ear"]}])
 
-        without = import_registry.parse("coco", data)
-        assert all(o["type"] != "landmark" for o in without.images[0].objects)
+    def test_opt_in_produces_one_keypoint_set(self):
+        """
+        Deliberate contract change: a skeleton is ONE annotation.
 
-        with_kp = import_registry.parse("coco", data, {"keypoints": True})
-        landmarks = [o for o in with_kp.images[0].objects
-                     if o["type"] == "landmark"]
-        # v=0 means unlabeled and must be skipped
-        assert len(landmarks) == 2
-        assert {l["label"] for l in landmarks} == {"person:nose", "person:eye"}
+        This used to emit one ``landmark`` per visible point, labelled
+        ``person:nose``. That threw away the ordering, the grouping and the
+        visibility flags, so nothing could rebuild the COCO ``keypoints`` array
+        and the format was import-only. See test_keypoint_roundtrip.py.
+        """
+        without = import_registry.parse("coco", self.DATA)
+        assert all(o["type"] != "keypoint_set"
+                   for o in without.images[0].objects)
+
+        with_kp = import_registry.parse("coco", self.DATA, {"keypoints": True})
+        sets = [o for o in with_kp.images[0].objects
+                if o["type"] == "keypoint_set"]
+
+        assert len(sets) == 1, "one person is one annotation, not N points"
+        assert sets[0]["label"] == "person"
+        # All three points are kept, including the unlabelled one: its slot in
+        # the ordering is what makes index 2 mean "ear".
+        assert len(sets[0]["coordinates"]) == 3
+
+    def test_visibility_flags_survive(self):
+        with_kp = import_registry.parse("coco", self.DATA, {"keypoints": True})
+        coords = next(o for o in with_kp.images[0].objects
+                      if o["type"] == "keypoint_set")["coordinates"]
+        assert [p["v"] for p in coords] == [2, 1, 0]
+
+    def test_no_landmarks_are_emitted_any_more(self):
+        with_kp = import_registry.parse("coco", self.DATA, {"keypoints": True})
+        assert all(o["type"] != "landmark" for o in with_kp.images[0].objects)
 
 
 class TestRleAsPolygon:

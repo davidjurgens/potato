@@ -100,6 +100,85 @@ class TestNormalizeReadsTheClientShape:
         assert canon["instance"] == 2
 
 
+class TestFreeformPathReconstruction:
+    """
+    Freeform is a fabric Path, positioned by treating ``pathOffset`` (the path
+    bounding box's centre, in the path's own coordinate space) as the object's
+    origin.
+
+    The client used to drop ``pathOffset``, so the exporter could only guess the
+    origin by anchoring the path's minimum corner at (left, top) -- right for an
+    unrotated, unscaled brush stroke and wrong for anything else. It now records
+    the offset, so the reconstruction is exact.
+
+    None of this had any coverage, because the tool was dead on the client:
+    nothing was subscribed to fabric's ``path:created``, so a freeform stroke
+    never got ``annotationData`` and the serializer filtered it straight out.
+    """
+
+    #: A 100x100 square path. Fabric's pathOffset for it is its centre, (50, 50).
+    PATH = [["M", 0, 0], ["L", 100, 0], ["L", 100, 100], ["L", 0, 100]]
+
+    def _obj(self, **coords):
+        base = {"path": self.PATH, "left": 0.0, "top": 0.0,
+                "scaleX": 1.0, "scaleY": 1.0}
+        base.update(coords)
+        return {"type": "freeform", "label": "scribble", "color": "#f00",
+                "coordinates": base}
+
+    def test_offset_gives_exact_geometry(self):
+        # left/top are normalized: 0.1 * 640 = 64, 0.1 * 480 = 48.
+        # Local coords are (p - pathOffset), so the path's corners land at
+        # (64-50, 48-50) .. (64+50, 48+50).
+        obj = self._obj(left=0.1, top=0.1, pathOffset={"x": 50, "y": 50})
+        result = normalize_annotation_object(obj, IMG_W, IMG_H)
+
+        assert _flat(result["points"]) == pytest.approx(
+            [14, -2, 114, -2, 114, 98, 14, 98])
+        assert result["warnings"] == []
+
+    def test_offset_reconstruction_honours_scale(self):
+        obj = self._obj(left=0.0, top=0.0, scaleX=2.0, scaleY=0.5,
+                        pathOffset={"x": 50, "y": 50})
+        result = normalize_annotation_object(obj, IMG_W, IMG_H)
+
+        # (p - 50) * scale, anchored at the origin.
+        assert _flat(result["points"]) == pytest.approx(
+            [-100, -25, 100, -25, 100, 25, -100, 25])
+
+    def test_offset_reconstruction_honours_rotation(self):
+        # 90 degrees: local (x, y) -> (-y, x).
+        obj = self._obj(left=0.0, top=0.0, angle=90,
+                        pathOffset={"x": 50, "y": 50})
+        result = normalize_annotation_object(obj, IMG_W, IMG_H)
+
+        assert _flat(result["points"]) == pytest.approx(
+            [50, -50, 50, 50, -50, 50, -50, -50])
+
+    def test_legacy_annotation_without_offset_still_parses(self):
+        obj = self._obj(left=0.1, top=0.1)
+        result = normalize_annotation_object(obj, IMG_W, IMG_H)
+
+        # The old approximation: minimum corner anchored at (left, top).
+        assert _flat(result["points"]) == pytest.approx(
+            [64, 48, 164, 48, 164, 148, 64, 148])
+
+    def test_only_the_approximate_case_warns(self):
+        exact = normalize_annotation_object(
+            self._obj(pathOffset={"x": 50, "y": 50}), IMG_W, IMG_H)
+        approx = normalize_annotation_object(self._obj(), IMG_W, IMG_H)
+
+        assert exact["warnings"] == []
+        assert any("approximate" in w for w in approx["warnings"])
+
+    def test_bbox_and_area_are_derived_from_the_path(self):
+        obj = self._obj(left=0.1, top=0.1, pathOffset={"x": 50, "y": 50})
+        result = normalize_annotation_object(obj, IMG_W, IMG_H)
+
+        assert result["bbox"] == pytest.approx([14, -2, 100, 100])
+        assert result["area"] == pytest.approx(10000)
+
+
 class TestLegacyAbsoluteShapeStillWorks:
     """Pre-2.x data and hand-written fixtures use flat absolute pixels."""
 

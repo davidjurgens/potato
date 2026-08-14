@@ -1,0 +1,30 @@
+# Vision endpoint for the annotation review demo.
+# Copy this file to ai-config.yaml and fill in your details.
+# ai-config.yaml is gitignored and will not be committed.
+#
+# The critique assistant needs a model that can see an image AND explain
+# itself. A pure detector (YOLO) is filtered out of the toolbar: it can find
+# boxes but not say why it disagrees, and a verdict with no reason is not
+# something an annotator can review.
+
+# --- Option A: any OpenAI-compatible server (vLLM, SGLang, LM Studio, ...) ---
+# The api_key is optional when base_url is set, because self-hosted servers
+# usually have none.
+endpoint_type: openai_vision
+base_url: http://localhost:8000
+model: your-vision-model
+
+# --- Option B: Ollama, for a local model with no server to run ---
+# endpoint_type: ollama_vision
+# model: qwen3-vl:4b
+# base_url: http://localhost:11434
+
+# --- Option C: OpenAI ---
+# endpoint_type: openai_vision
+# model: gpt-4o
+# api_key: ${OPENAI_API_KEY}
+
+# --- Option D: Anthropic ---
+# endpoint_type: anthropic_vision
+# model: claude-sonnet-4-20250514
+# api_key: ${ANTHROPIC_API_KEY}

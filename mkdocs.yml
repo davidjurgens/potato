@@ -53,12 +53,18 @@ nav:
             - PDF Cross-Page Linking: annotation-types/text/pdf_cross_page_linking.md
         - Multimedia:
             - Image Annotation: annotation-types/multimedia/image_annotation.md
+            - Interactive Segmentation: annotation-types/multimedia/segmentation.md
             - Audio Annotation: annotation-types/multimedia/audio_annotation.md
             - Audio Dialogue: annotation-types/multimedia/audio_dialogue.md
             - Video Annotation: annotation-types/multimedia/video_annotation.md
             - Tiered Annotation: annotation-types/multimedia/tiered_annotation.md
             - Image Annotation Formats: annotation-types/multimedia/image_formats.md
+            - Media Ingest (TIFF, HEIC, RAW, video): annotation-types/multimedia/media_ingest.md
+            - Video Annotation Formats: annotation-types/multimedia/video_formats.md
             - Transcript Formats: annotation-types/multimedia/transcript_formats.md
+        - Spatial (3D):
+            - Point Cloud Annotation: annotation-types/spatial/point_cloud.md
+            - Calibration and 2D Verification: annotation-types/spatial/calibration.md
         - Measurement:
             - Visual Analog Scale: annotation-types/measurement/vas.md
             - Range Slider: annotation-types/measurement/range_slider.md
@@ -74,6 +80,7 @@ nav:
             - Card Sorting: annotation-types/structured/card_sort.md
     - Workflow Phases:
         - Multi-Phase Workflows: workflow/surveyflow.md
+        - Guidelines and Codebooks: workflow/annotation_guidelines.md
         - Training Phase: workflow/training_phase.md
         - Quality Control: workflow/quality_control.md
         - Annotation Navigation: workflow/annotation_navigation.md
@@ -116,10 +123,12 @@ nav:
     - AI & Intelligence:
         - AI Support: ai-intelligence/ai_support.md
         - Visual AI Support: ai-intelligence/visual_ai_support.md
+        - Annotation Critique: ai-intelligence/annotation_critique.md
         - Chat Support: ai-intelligence/chat_support.md
         - AI Integration Internals: ai-intelligence/ai_integration_internals.md
         - Option Highlighting: ai-intelligence/option_highlighting.md
         - Active Learning Guide: ai-intelligence/active_learning_guide.md
+        - Vision Active Learning: ai-intelligence/vision_active_learning.md
         - Active Learning Strategies: ai-intelligence/active_learning_strategies.md
         - ICL Labeling: ai-intelligence/icl_labeling.md
         - HuggingFace Models: ai-intelligence/huggingface_models.md
@@ -134,7 +143,9 @@ nav:
         - Keystroke Logging: advanced/keystroke_logging.md
         - Writing-Process Detection: advanced/writing_process_detection.md
         - Keystroke Logging Ethics: advanced/keystroke_logging_ethics.md
+        - Annotation Telemetry: advanced/annotation_telemetry.md
         - Qualitative Data Analysis (QDA): advanced/qda.md
+        - Geometry Agreement: advanced/geometry_agreement.md
         - Codebook: advanced/codebook.md
         - Memos: advanced/memos.md
         - Cases: advanced/cases.md
@@ -163,6 +174,7 @@ nav:
         - Productivity: administration/productivity.md
     - Data & Export:
         - Export Formats: data-export/export_formats.md
+        - CV Format Matrix: data-export/format_matrix.md
         - Single-Select Integrity: data-export/single-select-integrity.md
         - HuggingFace Export: data-export/huggingface_export.md
         - HuggingFace Datasets: data-export/datasets_integration.md
@@ -170,6 +182,7 @@ nav:
         - Potato on HuggingFace: data-export/potato_on_huggingface.md
         - Publishing Datasets: data-export/publishing_datasets.md
     - Tools:
+        - Import CLI: tools/import_cli.md
         - Preview CLI: tools/preview_cli.md
         - Migration CLI: tools/migration_cli.md
         - Simulator: tools/simulator.md
@@ -192,6 +205,7 @@ nav:
         - MTurk Integration: deployment/mturk_integration.md
         - Open Sourcing: deployment/open-sourcing.md
         - Reverse Proxy: deployment/reverse-proxy.md
+        - Air-Gapped Deployment: deployment/air_gap.md
         - Scaling: deployment/scaling.md
     - API Reference:
         - API Reference: api-reference/api_reference.md

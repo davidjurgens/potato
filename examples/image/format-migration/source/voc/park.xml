@@ -1,0 +1,7 @@
+<annotation>
+  <filename>park.jpg</filename>
+  <size><width>640</width><height>480</height><depth>3</depth></size>
+  <object><name>car</name><difficult>0</difficult>
+    <bndbox><xmin>200</xmin><ymin>80</ymin><xmax>360</xmax><ymax>250</ymax></bndbox>
+  </object>
+</annotation>

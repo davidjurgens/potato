@@ -3,6 +3,16 @@
  * This file runs before each test and sets up the test environment
  */
 
+// TextEncoder / TextDecoder.
+//
+// Every browser has had these since 2016, but jsdom does not expose them on the
+// global object, so any module that decodes a binary payload (pc-wire.js reads
+// the UTF-8 JSON header of a point cloud buffer) throws ReferenceError in the
+// test environment and nowhere else. Node's own implementations are identical.
+const { TextEncoder, TextDecoder } = require('util');
+if (typeof global.TextEncoder === 'undefined') global.TextEncoder = TextEncoder;
+if (typeof global.TextDecoder === 'undefined') global.TextDecoder = TextDecoder;
+
 // Mock fetch globally
 global.fetch = jest.fn();
 

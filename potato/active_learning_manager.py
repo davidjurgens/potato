@@ -93,6 +93,51 @@ class SentenceTransformerVectorizer:
         return self.transform(X)
 
 
+def make_image_vectorizer(model_name: str = None, cache_dir: str = None,
+                          image_root: str = None):
+    """
+    The image counterpart of SentenceTransformerVectorizer.
+
+    Lives in ``potato.vision_features`` and is imported lazily here, so a text
+    project never loads CLIP. Because it exposes the same fit/transform
+    surface, every QueryStrategy below works on images WITHOUT modification --
+    uncertainty, diversity, BADGE, BALD and hybrid are all unchanged code.
+    """
+    from potato.vision_features import (DEFAULT_IMAGE_MODEL,
+                                        ImageEmbeddingVectorizer)
+
+    return ImageEmbeddingVectorizer(
+        model_name=model_name or DEFAULT_IMAGE_MODEL,
+        cache_dir=cache_dir,
+        image_root=image_root,
+    )
+
+
+#: Schema types whose items are images rather than text. Active learning ranks
+#: these by visual similarity; ranking them by `get_text()` would sort on the
+#: filename, which is worse than random because it is systematically wrong.
+VISUAL_SCHEMA_TYPES = {"image_annotation", "video_annotation"}
+
+
+def feature_for_item(item, schema_type: str, source_field: str = None) -> str:
+    """
+    What the vectorizer should see for one item.
+
+    Text for a text schema; the image reference for a visual one. This single
+    branch is the whole of what made active learning text-only: every strategy
+    already worked on whatever features it was handed.
+    """
+    if schema_type in VISUAL_SCHEMA_TYPES:
+        data = getattr(item, "data", None) or {}
+        if source_field and data.get(source_field):
+            return str(data[source_field])
+        for key in ("image_url", "image", "image_path", "file_name",
+                    "video_url", "url"):
+            if data.get(key):
+                return str(data[key])
+    return item.get_text()
+
+
 # ---------------------------------------------------------------------------
 # Query Strategies
 # ---------------------------------------------------------------------------

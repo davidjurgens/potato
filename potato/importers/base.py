@@ -53,6 +53,36 @@ class ImportResult:
     def num_objects(self) -> int:
         return sum(len(img.objects) for img in self.images)
 
+    def summarize(self, **extra: Any) -> Dict[str, Any]:
+        """
+        Fill :attr:`stats` with the keys the CLI prints, plus any extras.
+
+        Every importer built its own stats dict by hand, and the names drifted
+        twice: once to ``images``/``objects`` and once to ``num_labels``, each
+        time producing a ``KeyError`` in the CLI *after* a long import had
+        already succeeded. Computing them in one place means a new importer
+        cannot get them wrong, and ``test_importer_contract.py`` asserts none
+        goes back to hand-rolling them.
+
+        Args:
+            **extra: Format-specific counts (e.g. ``num_tracks``) merged in.
+
+        Returns:
+            The stats dict, also assigned to ``self.stats``.
+        """
+        self.stats = {
+            "num_images": len(self.images),
+            "num_annotations": self.num_objects,
+            "num_categories": len(self.labels),
+            **extra,
+        }
+        return self.stats
+
+
+#: The keys :mod:`potato.importers.cli` prints for every format. An importer
+#: that omits one crashes the CLI at the very end of a successful import.
+REQUIRED_STATS = ("num_images", "num_annotations", "num_categories")
+
 
 class BaseAnnotationImporter(ABC):
     """Base class for annotation format importers."""

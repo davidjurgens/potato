@@ -1114,3 +1114,49 @@
     background: #eff6ff;
     color: #3b82f6;
 }
+
+/* ---------------------------------------------------------------------------
+   Geometry preview for image adjudication.
+
+   Adjudicating shapes from a textual list of percentages is not really
+   possible — and for masks and polygons the old list showed no detail at all.
+   The overlay puts each annotator's shapes back on the image so the
+   adjudicator can see what they are choosing between.
+   --------------------------------------------------------------------------- */
+.adj-image-preview {
+    position: relative;
+    display: block;
+    margin: 8px 0;
+    /* Cap the height so a tall image cannot push the checkboxes off screen;
+       the adjudicator needs both visible at once. */
+    max-height: 320px;
+    overflow: hidden;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: #f8f9fa;
+}
+
+.adj-image-preview img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 320px;
+    object-fit: contain;
+}
+
+/* The SVG uses a 0..1 viewBox with preserveAspectRatio="none" so stored
+   normalized coordinates map straight on with no scaling maths — the overlay
+   cannot drift from what was saved. */
+.adj-image-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.adj-complex-detail {
+    color: #6c757d;
+    font-size: 0.85em;
+    font-variant-numeric: tabular-nums;
+}

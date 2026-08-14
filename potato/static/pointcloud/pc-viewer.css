@@ -1,0 +1,216 @@
+/*
+ * Point cloud annotation surface.
+ *
+ * Deliberately thin. `.tool-btn` and `.label-btn` are styled by
+ * image-annotation.css, and the spatial schema renders the *same* class names
+ * on purpose — see the note in spatial_annotation.py. Restyling them here
+ * would produce two toolbars that look subtly different for no reason, and
+ * would break the moment the shared rules change.
+ *
+ * That sharing is why base_template_v2.html loads image-annotation.css for
+ * spatial pages too. Gating it on `image_annotation` alone left a point-cloud
+ * page with completely unstyled toolbars.
+ *
+ * What is genuinely specific to 3D: the viewport is a dark WebGL surface
+ * rather than a light image canvas, and it has a status line that an image
+ * canvas has no equivalent of.
+ */
+
+.pointcloud-annotation-container .pc-toolbar,
+.pointcloud-annotation-container .pc-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.pointcloud-annotation-container .pc-viewport {
+    position: relative;
+}
+
+.pointcloud-annotation-container .pc-canvas {
+    display: block;
+    width: 100%;
+    /* Tall enough to judge depth in. A short viewport makes an oriented box
+       impossible to place, because the vertical extent is the only cue for
+       where the ground plane is. */
+    height: min(70vh, 620px);
+    /* The scene background is set in JS; this matches it so there is no flash
+       of white before the first frame. */
+    background: #11151c;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    cursor: grab;
+    /* The viewer owns the wheel and drag gestures. Without this, a scroll over
+       the canvas zooms the cloud AND scrolls the page. */
+    touch-action: none;
+}
+
+.pointcloud-annotation-container .pc-canvas:active {
+    cursor: grabbing;
+}
+
+/* Focus ring, matching the image canvas: a keyboard user has to be able to see
+   that the viewer is focused before the tool shortcuts do anything. */
+.pointcloud-annotation-container .pc-canvas:focus-visible,
+.pointcloud-annotation-container .pc-canvas:focus {
+    outline: 3px solid #0d6efd;
+    outline-offset: 2px;
+}
+
+.pointcloud-annotation-container .pc-status {
+    margin: 6px 0 0;
+    font-size: 12px;
+    /* Not #6c757d: on the white form background that is 4.68:1, which passes,
+       but this line carries the "showing N of M points" caveat and is the one
+       piece of text an annotator must not skim past. */
+    color: #495057;
+    min-height: 1.2em;
+}
+
+.pointcloud-annotation-container .pc-status[data-kind="warn"] {
+    /* 4.6:1 on white. */
+    color: #8a5a00;
+}
+
+.pointcloud-annotation-container .pc-status[data-kind="error"] {
+    /* 5.9:1 on white. */
+    color: #b02a37;
+    font-weight: 600;
+}
+
+/* Dark mode — forward-looking, and currently INERT.
+   Nothing in the app adds `.dark-mode` to an annotation container: the class
+   appears in stylesheets only (image-annotation.css carries the same dead
+   block). These rules are kept so the palette is ready and correct if a theme
+   toggle lands, but they are not doing anything today and no contrast claim
+   should rest on them. The earlier version of this comment implied they were
+   fixing a live 1.04:1 failure; they are not. */
+.pointcloud-annotation-container.dark-mode .pc-canvas {
+    border-color: #3a4a63;
+}
+
+.pointcloud-annotation-container.dark-mode .pc-status {
+    color: #c7d2e0;
+}
+
+.pointcloud-annotation-container.dark-mode .pc-status[data-kind="warn"] {
+    color: #ffc861;
+}
+
+.pointcloud-annotation-container.dark-mode .pc-status[data-kind="error"] {
+    color: #ff9aa4;
+}
+
+/* Camera verification panels.
+   Present only when the item carries calibration, so this whole block is a
+   no-op for a lidar-only project — an empty .pc-cameras has no children and
+   the grid collapses to nothing. */
+.pointcloud-annotation-container .pc-cameras {
+    display: grid;
+    /* `min(380px, 100%)`, not a bare 380px. With a bare minimum the track
+       stays 380px wide even when its container is narrower, and the PAGE
+       scrolls sideways to accommodate it -- measured at 366px of scroll width
+       in a 360px viewport, which is WCAG 1.4.10 (Reflow). The min() lets the
+       single column collapse to whatever room there is.
+       380 rather than 320 because a 1242x375 camera frame at 320px is 96px
+       tall, which is present but far too small to check a box against. */
+    grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+/* Nothing to show: an empty labelled group is announced to a screen reader as
+   a region containing nothing, and takes up grid gap besides. */
+.pointcloud-annotation-container .pc-cameras:empty {
+    display: none;
+}
+
+.pointcloud-annotation-container .pc-camera {
+    margin: 0;
+    /* Grid items default to `min-width: auto`, meaning "at least as wide as my
+       content's minimum" -- and the image below carries a 380px min-width. So
+       without this the track is inflated back to 380px by its own contents and
+       the inner scroller never engages: the PAGE scrolls instead. */
+    min-width: 0;
+}
+
+/* The overlay is positioned over the image, so both need a shared origin.
+   Sized in CSS pixels by the JS on every layout change — see _drawOverlay for
+   why the natural image size cannot be used directly. */
+.pointcloud-annotation-container .pc-camera-stack {
+    position: relative;
+    line-height: 0;
+    /* When the column is narrower than the image's usable size, scroll INSIDE
+       the panel rather than shrinking a 1242x375 frame to 79px tall, which is
+       present but too small to check a box against. The overlay is absolutely
+       positioned within this box, so it scrolls with the photograph and the
+       wireframes stay registered to it. */
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+}
+
+.pointcloud-annotation-container .pc-camera-image {
+    display: block;
+    width: 100%;
+    /* Matches the grid track minimum, so the image only starts scrolling at
+       exactly the point the column stops being able to hold it. */
+    min-width: 380px;
+    height: auto;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    background: #11151c;
+}
+
+.pointcloud-annotation-container .pc-camera-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    /* The panel is for verification, not editing: clicks belong to the 3D
+       viewport. Without this the overlay silently swallows them. */
+    pointer-events: none;
+}
+
+.pointcloud-annotation-container .pc-camera figcaption {
+    font-size: 12px;
+    color: #495057;
+    padding-top: 4px;
+    line-height: 1.3;
+}
+
+/* A calibration with no usable image still says which camera it was, rather
+   than leaving a broken-image icon with no explanation. */
+.pointcloud-annotation-container .pc-camera-broken .pc-camera-image {
+    display: none;
+}
+
+.pointcloud-annotation-container .pc-camera-broken figcaption {
+    color: #8a5a00;
+}
+
+.pointcloud-annotation-container.dark-mode .pc-camera-image {
+    border-color: #3a4a63;
+}
+
+.pointcloud-annotation-container.dark-mode .pc-camera figcaption {
+    color: #c7d2e0;
+}
+
+.pointcloud-annotation-container.dark-mode .pc-camera-broken figcaption {
+    color: #ffc861;
+}
+
+@media (max-width: 700px) {
+    .pointcloud-annotation-container .pc-canvas {
+        /* Orbiting needs room; below this a viewport sized by vh leaves almost
+           nothing once the toolbar and labels wrap onto three rows. */
+        height: 50vh;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pointcloud-annotation-container .tool-btn,
+    .pointcloud-annotation-container .label-btn {
+        transition: none;
+    }
+}

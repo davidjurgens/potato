@@ -10,7 +10,7 @@ When ``simpledorff`` is unavailable, falls back to NaN with a logged warning.
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence, Tuple, Union
+from typing import Any, Callable, Iterable, Sequence, Tuple, Union
 
 import logging
 
@@ -80,19 +80,31 @@ _DISTANCES = {
 
 def krippendorff_alpha(
     long_format: Sequence[Tuple[str, str, Union[str, float, frozenset]]],
-    level: str = "nominal",
+    level: Union[str, Callable[[Any, Any], float]] = "nominal",
 ) -> float:
     """
     Krippendorff's alpha.
 
     Args:
         long_format: iterable of (annotator_id, item_id, value) tuples.
-        level: 'nominal', 'ordinal', 'interval', 'ratio', or 'masi'.
+        level: 'nominal', 'ordinal', 'interval', 'ratio', 'masi', **or a
+            callable** ``(a, b) -> float`` giving the distance between two
+            values, 0 meaning identical.
+
+    Accepting a callable is what lets alpha run over geometry without any new
+    coefficient code: simpledorff already receives ``metric_fn``, and only the
+    named lookup was closed. Values must still be HASHABLE, because a
+    coincidence matrix is built over distinct values -- so geometry is passed
+    as opaque handles and the callable resolves handle -> shape.
 
     Returns:
         Alpha as a float, or NaN if undefined.
     """
-    if level not in _DISTANCES:
+    if callable(level):
+        dist = level
+    elif level in _DISTANCES:
+        dist = _DISTANCES[level]
+    else:
         raise ValueError(f"Unknown level for Krippendorff's alpha: {level!r}")
 
     try:
@@ -109,7 +121,6 @@ def krippendorff_alpha(
     if df["item"].nunique() < 2 or df["annotator"].nunique() < 2:
         return float("nan")
 
-    dist = _DISTANCES[level]
     try:
         return float(
             simpledorff.calculate_krippendorffs_alpha_for_df(

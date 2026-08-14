@@ -1,0 +1,114 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# VLM-as-judge review of image annotations.
+#
+# Agreement statistics answer "did two annotators draw the same shape?". They
+# are silent when both are confidently wrong, and they say nothing at all when
+# there is only one annotator. This asks a different question of each region
+# independently: is the outlined thing really a {label}, and does the outline
+# fit it?
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/image/annotation-critique/config.yaml -p 8000
+#
+# Then box a few objects -- deliberately mislabel one and draw one box much too
+# large -- and press "Review" in the AI Assist bar.
+#
+# You need a vision-capable endpoint. Copy ai-config.yaml.example to
+# ai-config.yaml and point it at yours; anything OpenAI-compatible works,
+# including a local vLLM or Ollama server.
+
+port: 8000
+annotation_task_name: "Annotation review (VLM as judge)"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+data_files:
+  - data/scenes.json
+
+item_properties:
+  id_key: id
+  text_key: image_url
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: objects
+    description: "Box every car, person and sign."
+    source_field: image_url
+    tools:
+      - bbox
+      - polygon
+    zoom_enabled: true
+    pan_enabled: true
+    labels:
+      - name: car
+        color: '#d6604d'
+        key_value: "1"
+      - name: person
+        color: '#4575b4'
+        key_value: "2"
+      - name: sign
+        color: '#5aa469'
+        key_value: "3"
+
+    ai_support:
+      enabled: true
+
+      features:
+        # The review button. On by default wherever ai_support is enabled;
+        # set it false on tasks where a model has no useful opinion.
+        critique: true
+        # Off here so the demo is about reviewing YOUR work rather than
+        # accepting the model's.
+        detection: false
+        pre_annotate: false
+        hint: false
+
+      critique:
+        # How much context to include around each region, as a fraction of its
+        # longer side. Some is essential: a crop tight to the box makes
+        # "is this boundary tight?" unanswerable, because the object fills the
+        # frame by construction and every box looks perfect.
+        context_ratio: 0.6
+
+        # Verdicts below this confidence are recorded as "unclear" and kept out
+        # of the review queue. A queue padded with coin-flips teaches
+        # annotators to close it.
+        min_confidence: 0.5
+
+        # Each region is a separate model call, so this is a real cost ceiling.
+        # Regions beyond it are reported as "not reviewed", never dropped
+        # silently.
+        max_regions: 24
+
+        # Concurrent calls. Keep it low against a single-GPU server: swamping
+        # it makes every request slower, not just these.
+        max_workers: 4
+
+        # Also ask, once per image, whether anything was missed. Answers are
+        # dropped when they land on a region that is already annotated -- that
+        # is the same mistake the per-region verdict already reported.
+        check_missed: true
+        coverage_ratio: 0.5
+
+# Endpoint details live in ai-config.yaml (gitignored), so this file can be
+# committed without credentials. See ai-config.yaml.example.
+ai_support:
+  enabled: true
+  ai_config_file: ai-config.yaml
+
+  ai_config:
+    # Judges return JSON with a rationale. Below ~512 the reply is truncated
+    # mid-object and every verdict parses as "unclear".
+    max_tokens: 512
+    temperature: 0.0
+
+    include:
+      all: true
+
+alert_time_each_instance: 10000000

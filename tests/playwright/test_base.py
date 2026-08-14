@@ -128,3 +128,199 @@ class BasePlaywrightTest:
             const el = document.getElementById('instance-id');
             return el ? el.textContent.trim() : null;
         }""")
+
+    # ---- image-annotation canvas helpers ----
+    #
+    # A fabric canvas is one <canvas> element: there is nothing in the DOM to
+    # click at, and Playwright's element selectors cannot reach a shape. These
+    # drive the manager through the same entry points the UI uses, and read
+    # state back from the hidden input the save path actually collects -- not
+    # from anything the test itself put there.
+
+    def image_manager_ready(self, page: "Page", schema: str, timeout=15_000):
+        """Wait until the ImageAnnotationManager exists and its image has loaded.
+
+        Drawing before the image loads silently produces nothing, because the
+        manager converts screen coordinates through `this.image`.
+        """
+        page.wait_for_function(
+            """(schema) => {
+                const c = document.querySelector(
+                    `.image-annotation-container[data-schema="${schema}"]`);
+                return !!(c && c.annotationManager && c.annotationManager.image);
+            }""",
+            arg=schema,
+            timeout=timeout,
+        )
+
+    def select_tool(self, page: "Page", schema: str, tool: str):
+        """Arm a drawing tool by clicking its toolbar button.
+
+        Clicking rather than calling setTool() directly: the button click is
+        what also syncs `active` classes and `aria-pressed`, and a test that
+        bypasses it would not notice those breaking.
+        """
+        page.click(
+            f'.image-annotation-container[data-schema="{schema}"] '
+            f'.tool-btn[data-tool="{tool}"]')
+
+    def select_label(self, page: "Page", schema: str, label: str):
+        """Arm a label by clicking its button."""
+        page.click(
+            f'.image-annotation-container[data-schema="{schema}"] '
+            f'.label-btn[data-label="{label}"]')
+
+    def image_rect(self, page: "Page", schema: str):
+        """Where the image sits on the canvas, in canvas pixels.
+
+        The image is scaled to fit and centred, so canvas (0, 0) is usually
+        *outside* it. Drawing there produces negative normalized coordinates —
+        correct behaviour, but rarely what a test means.
+        """
+        return page.evaluate(
+            """(schema) => {
+                const c = document.querySelector(
+                    `.image-annotation-container[data-schema="${schema}"]`);
+                const img = c && c.annotationManager && c.annotationManager.image;
+                if (!img) return null;
+                return {
+                    left: img.left, top: img.top,
+                    width: img.width * img.scaleX,
+                    height: img.height * img.scaleY,
+                };
+            }""",
+            arg=schema,
+        )
+
+    def draw_bbox_on_image(self, page: "Page", schema: str,
+                           fx0, fy0, fx1, fy1, label=None):
+        """Draw a bbox using IMAGE-relative fractions (0-1), not canvas pixels.
+
+        This is the unit the stored contract uses, and it keeps a test from
+        accidentally drawing outside the image just because the canvas is
+        larger than the picture.
+        """
+        rect = self.image_rect(page, schema)
+        assert rect, f"no image loaded for schema '{schema}'"
+        return self.draw_bbox(
+            page, schema,
+            rect["left"] + fx0 * rect["width"], rect["top"] + fy0 * rect["height"],
+            rect["left"] + fx1 * rect["width"], rect["top"] + fy1 * rect["height"],
+            label=label,
+        )
+
+    def paint_stroke_on_image(self, page: "Page", schema: str, points,
+                              label=None, tool="brush"):
+        """Paint a stroke using IMAGE-relative fractions (0-1)."""
+        rect = self.image_rect(page, schema)
+        assert rect, f"no image loaded for schema '{schema}'"
+        return self.paint_stroke(
+            page, schema,
+            [(rect["left"] + fx * rect["width"], rect["top"] + fy * rect["height"])
+             for fx, fy in points],
+            label=label, tool=tool,
+        )
+
+    def draw_bbox(self, page: "Page", schema: str, x0, y0, x1, y1, label=None):
+        """Drag a bounding box on the canvas, in CANVAS pixel coordinates.
+
+        Uses real mouse events so the manager's own mouse:down/move/up path
+        runs — the same code an annotator exercises.
+        """
+        if label:
+            self.select_label(page, schema, label)
+        self.select_tool(page, schema, "bbox")
+
+        canvas = page.locator(f"#canvas-{schema}")
+        box = canvas.bounding_box()
+        assert box, f"canvas-{schema} has no layout box (is it visible?)"
+
+        page.mouse.move(box["x"] + x0, box["y"] + y0)
+        page.mouse.down()
+        # Fabric needs at least one intermediate move to register a drag.
+        page.mouse.move(box["x"] + (x0 + x1) / 2, box["y"] + (y0 + y1) / 2)
+        page.mouse.move(box["x"] + x1, box["y"] + y1)
+        page.mouse.up()
+
+    def paint_stroke(self, page: "Page", schema: str, points, label=None, tool="brush"):
+        """Paint a mask stroke through a list of (x, y) canvas points.
+
+        Mask events are bound to the *mask* canvas overlay, not the fabric one,
+        so this targets that element deliberately.
+        """
+        if label:
+            self.select_label(page, schema, label)
+        self.select_tool(page, schema, tool)
+
+        mask = page.locator(f"#mask-canvas-{schema}")
+        box = mask.bounding_box()
+        assert box, f"mask-canvas-{schema} has no layout box"
+
+        first = points[0]
+        page.mouse.move(box["x"] + first[0], box["y"] + first[1])
+        page.mouse.down()
+        for x, y in points[1:]:
+            page.mouse.move(box["x"] + x, box["y"] + y)
+        page.mouse.up()
+
+    def read_annotation_data(self, page: "Page", schema: str):
+        """Parse the hidden input the save path collects.
+
+        This is the client contract as actually written -- normalized
+        coordinates under `coordinates`, masks as absolute RLE. Reading the
+        manager's in-memory state instead would hide serialization bugs, which
+        is precisely how the exporters stayed broken for so long.
+        """
+        raw = page.evaluate(
+            """(schema) => {
+                const el = document.getElementById('input-' + schema);
+                return el ? el.value : null;
+            }""",
+            arg=schema,
+        )
+        if not raw:
+            return []
+        return json.loads(raw)
+
+    def count_annotations(self, page: "Page", schema: str):
+        """Annotation count as the manager reports it (shapes plus masks)."""
+        return page.evaluate(
+            """(schema) => {
+                const c = document.querySelector(
+                    `.image-annotation-container[data-schema="${schema}"]`);
+                return c && c.annotationManager
+                    ? c.annotationManager.getAnnotationCount() : null;
+            }""",
+            arg=schema,
+        )
+
+    def assert_persists_across_navigation(self, page: "Page", schema: str,
+                                          expected_types=None):
+        """Navigate away and back, then assert the annotations returned.
+
+        NOT a page refresh. Browsers restore form state across a refresh, so a
+        refresh-based test passes even when the server never stored anything --
+        a recurring source of false-positive persistence tests in this repo.
+        Going forward and back forces a real server round trip.
+
+        Returns the reloaded annotation list so callers can assert further.
+        """
+        before = self.read_annotation_data(page, schema)
+        assert before, "nothing to test: no annotations before navigating"
+
+        self.wait_for_debounce(page)
+        self.click_next(page)
+        self.click_prev(page)
+        self.image_manager_ready(page, schema)
+
+        after = self.read_annotation_data(page, schema)
+        assert after, (
+            f"annotations for '{schema}' were lost on navigation "
+            f"({len(before)} before, 0 after)")
+        assert len(after) == len(before), (
+            f"annotation count changed across navigation: "
+            f"{len(before)} -> {len(after)}")
+
+        if expected_types is not None:
+            assert sorted(a.get("type") for a in after) == sorted(expected_types)
+        return after

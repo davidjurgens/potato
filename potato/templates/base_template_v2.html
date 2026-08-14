@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=5">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=8">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}">
@@ -32,9 +32,20 @@
 
     {% set frontend_assets = frontend_assets | default({}) %}
 
-    <!-- Image Annotation Styles -->
-    {% if frontend_assets.image_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=3">
+    <!-- Image Annotation Styles.
+         Also loaded for spatial_annotation: that schema renders the SAME
+         .tool-btn / .label-btn markup on purpose (so per-class show/hide works
+         with no new wiring), and those buttons are styled here. Gating this on
+         image_annotation alone left a point-cloud page with unstyled
+         toolbars. -->
+    {% if frontend_assets.image_annotation | default(false)
+          or frontend_assets.spatial_annotation | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=15">
+    {% endif %}
+
+    <!-- Point cloud viewer styles -->
+    {% if frontend_assets.spatial_annotation | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='pointcloud/pc-viewer.css') }}?v=2">
     {% endif %}
 
     <!-- Audio Annotation Styles -->
@@ -92,11 +103,6 @@
     <!-- Coreference Chain Styles -->
     {% if frontend_assets.coreference | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/coreference.css') }}">
-    {% endif %}
-
-    <!-- Segmentation Tool Styles -->
-    {% if frontend_assets.segmentation_tools | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/segmentation.css') }}">
     {% endif %}
 
     <!-- Conversation Tree Styles -->
@@ -263,6 +269,20 @@
     <div class="keystroke-disclosure" id="keystroke-disclosure" role="note">
         <span class="keystroke-disclosure-icon" aria-hidden="true">&#9998;</span>
         <span class="keystroke-disclosure-text">{{ keystroke_client_config.disclosure_text }}</span>
+    </div>
+    {% endif %}
+
+    {# Same reasoning for drawing telemetry: rendered server-side so it survives
+       a failed script load and cannot be suppressed by disabling scripts.
+       Reuses the keystroke notice's styling because it is the same kind of
+       statement, and two differently-styled recording notices on one page would
+       read as two unrelated systems. #}
+    {% if annotation_telemetry_enabled | default(false)
+          and annotation_telemetry_client_config
+          and annotation_telemetry_client_config.disclosure_text %}
+    <div class="keystroke-disclosure" id="annotation-telemetry-disclosure" role="note">
+        <span class="keystroke-disclosure-icon" aria-hidden="true">&#9998;</span>
+        <span class="keystroke-disclosure-text">{{ annotation_telemetry_client_config.disclosure_text }}</span>
     </div>
     {% endif %}
 
@@ -690,6 +710,16 @@
     </script>
     <script src="{{ url_for('static', filename='keystroke_tracker.js') }}?v=1"></script>
     {% endif %}
+    <!-- Annotation telemetry / drawing dynamics on geometry schemas
+         (conditional). Loads after interaction_tracker.js for the same reason
+         as the keystroke tracker: it hooks setInstanceId so both behavioural
+         subsystems cut their sessions on the same navigation boundary. -->
+    {% if annotation_telemetry_enabled | default(false) %}
+    <script type="text/javascript">
+        window.annotationTelemetryConfig = {{ annotation_telemetry_client_config | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='annotation_telemetry.js') }}?v=1"></script>
+    {% endif %}
     <script src="{{ url_for('static', filename='span-core.js') }}?v=15"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=1"></script>
     <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->
@@ -740,21 +770,63 @@
     <!-- Sub-agent run-tree sidebar (agent_trace display) -->
     <script src="{{ url_for('static', filename='run-tree.js') }}?v=1"></script>
 
-    <!-- Fabric.js for image annotation (loaded from CDN) -->
+    <!-- Fabric.js for image annotation. Vendored, not CDN: image annotation is
+         entirely non-functional without it, and several research deployments
+         run air-gapped. See scripts/vendor_assets.py for the manifest. -->
     {% if frontend_assets.image_annotation | default(false) %}
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="{{ url_for('static', filename='vendor/fabric-5.3.1.min.js') }}"></script>
+    <!-- Sparse tiled mask store, loaded before image-annotation.js because the
+         manager constructs a MaskBuffer on the first brush stroke and on every
+         restore of a saved mask. -->
+    <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=24"></script>
     {% endif %}
+
+    <!-- Interactive segmentation. Loaded only when a schema configures the
+         `sam` tool, because the ONNX runtime is a 13 MB download that no other
+         project should pay for. The runtime itself is fetched lazily on first
+         use, not here. -->
+    {% if frontend_assets.segmentation | default(false) %}
+    <script src="{{ url_for('static', filename='segmentation/sam-preprocess.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='segmentation/sam-session.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='segmentation/sam-tool.js') }}?v=2"></script>
+    {% endif %}
+
+    <!-- 3D point cloud annotation. three.js is vendored, not CDN-loaded, and
+         is gated on the schema because it is a 670 KB download. Pinned to the
+         last UMD global build: 0.161+ ships ES modules only, which would need
+         an import map and would not work from a file:// mirror. -->
+    {% if frontend_assets.spatial_annotation | default(false) %}
+    <script src="{{ url_for('static', filename='vendor/three-0.160.0.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-wire.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-calibration.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=2"></script>
+    {% endif %}
+
+    <!-- Per-class show/hide, shared by image and video annotation -->
+    {% if frontend_assets.label_visibility | default(false) %}
+    <script src="{{ url_for('static', filename='label-visibility.js') }}?v=2"></script>
+    {% endif %}
+
     <!-- Visual AI Assistant for image/video annotation (loaded conditionally) -->
     {% if ai_enabled and ((frontend_assets.image_annotation | default(false)) or (frontend_assets.video_annotation | default(false))) %}
-    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=4"></script>
     <!-- Option Highlight Manager for dimming less-likely options -->
     <script src="{{ url_for('static', filename='option_highlight_manager.js') }}?v=2"></script>
     {% endif %}
 
+    <!-- VLM critique review queue. Image only: it crops each annotated region,
+         so there is nothing for it to do on a video timeline. -->
+    {% if ai_enabled and (frontend_assets.image_annotation | default(false)) %}
+    <script src="{{ url_for('static', filename='annotation_critique.js') }}?v=4"></script>
+    {% endif %}
+
     <!-- Peaks.js for audio/video annotation (stored locally for reliability) -->
-    {% if (frontend_assets.audio_annotation | default(false)) or (frontend_assets.video_annotation | default(false)) %}
+    <!-- tiered_annotation belongs here too: its overview and zoomed waveform views are
+         Peaks views. Without this gate the schema loaded, logged "Peaks.js not
+         available", and left "Loading overview..." on screen forever. -->
+    {% if (frontend_assets.audio_annotation | default(false)) or (frontend_assets.video_annotation | default(false)) or (frontend_assets.tiered_annotation | default(false)) %}
     <script src="{{ url_for('static', filename='peaks.min.js') }}"></script>
     <!-- Shared right-click-drag range selection + edge auto-scroll for Peaks views -->
     <script src="{{ url_for('static', filename='peaks-range-select.js') }}?v=2"></script>
@@ -765,7 +837,7 @@
     {% endif %}
     <!-- Video annotation manager -->
     {% if frontend_assets.video_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=16"></script>
+    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=17"></script>
     {% endif %}
 
     <!-- Span link manager -->
@@ -791,11 +863,6 @@
     <script src="{{ url_for('static', filename='coreference-manager.js') }}?v=1"></script>
     {% endif %}
 
-    <!-- Segmentation tools -->
-    {% if frontend_assets.segmentation_tools | default(false) %}
-    <script src="{{ url_for('static', filename='segmentation-tools.js') }}?v=1"></script>
-    {% endif %}
-
     <!-- Conversation tree interaction -->
     {% if frontend_assets.conversation_tree | default(false) %}
     <script src="{{ url_for('static', filename='conversation-tree.js') }}?v=1"></script>
@@ -803,8 +870,8 @@
 
     <!-- Video tracking interpolation and UI -->
     {% if frontend_assets.tracking | default(false) %}
-    <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=3"></script>
     {% endif %}
 
     <!-- Triage annotation manager -->

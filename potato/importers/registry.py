@@ -100,9 +100,34 @@ import_registry = ImporterRegistry()
 
 def _register_builtin_importers():
     """Register built-in importers. Called on import."""
+    from .cityscapes_importer import CityscapesImporter
     from .coco_importer import COCOImporter
+    from .cvat_importer import CVATImporter
+    from .darwin_importer import DarwinImporter
+    from .davis_importer import DAVISImporter
+    from .hf_importer import HuggingFaceImporter
+    from .kitti_importer import KITTIImporter
+    from .labelbox_importer import LabelboxImporter
+    from .labelme_importer import LabelMeImporter
+    from .mot_importer import MOTImporter
+    from .openimages_importer import OpenImagesImporter
+    from .via_importer import VIAImporter
+    from .voc_importer import VOCImporter
+    from .webdataset_importer import WebDatasetImporter
+    from .yolo_importer import YOLOImporter
 
-    for importer in [COCOImporter()]:
+    # Order matters for auto-detection: the most specific detect() runs first.
+    # COCO is unambiguous; Labelbox, VIA and Cityscapes each key on a structure
+    # no other format has; LabelMe's bare `shapes` key is the most generic, so
+    # it goes last among the JSON formats. The directory-only importers detect
+    # on a marker dict this package builds, so they can never false-positive on
+    # a user's file and their order is immaterial.
+    for importer in [COCOImporter(), DarwinImporter(), LabelboxImporter(),
+                     CityscapesImporter(), VIAImporter(), CVATImporter(),
+                     VOCImporter(), YOLOImporter(), KITTIImporter(),
+                     MOTImporter(), DAVISImporter(), OpenImagesImporter(),
+                     WebDatasetImporter(), HuggingFaceImporter(),
+                     LabelMeImporter()]:
         import_registry.register(importer)
 
     logger.debug("Registered built-in annotation importers")

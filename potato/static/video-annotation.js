@@ -621,6 +621,48 @@ class VideoAnnotationManager {
     }
 
     /**
+     * Hide or show segments by label.
+     *
+     * The video half of the shared per-class show/hide (see
+     * label-visibility.js, which owns the state). A timeline of stacked
+     * segments is as unreadable as an image of stacked boxes, and the
+     * annotator wants the same affordance in both.
+     *
+     * Hidden segments are removed from the Peaks *view* only — they stay in
+     * `this.segments`, so they are still saved and exported. Hiding a class
+     * must never delete work.
+     *
+     * @param {Set<string>} hidden - Label names to hide
+     */
+    applyLabelVisibility(hidden) {
+        this.hiddenLabels = hidden || new Set();
+        if (!this.peaks) {
+            this._updateAnnotationList();
+            return;
+        }
+
+        this.segments.forEach(seg => {
+            const shouldHide = this.hiddenLabels.has(seg.label);
+            const onTimeline = !!this.peaks.segments.getSegment(seg.id);
+
+            if (shouldHide && onTimeline) {
+                this.peaks.segments.removeById(seg.id);
+            } else if (!shouldHide && !onTimeline) {
+                this.peaks.segments.add({
+                    id: seg.id,
+                    startTime: seg.startTime,
+                    endTime: seg.endTime,
+                    labelText: seg.label,
+                    color: seg.color,
+                    editable: true,
+                });
+            }
+        });
+
+        this._updateAnnotationList();
+    }
+
+    /**
      * Delete a segment
      */
     deleteSegment(segmentId) {
@@ -955,6 +997,12 @@ class VideoAnnotationManager {
                 break;
 
             case 'k': // Mark keyframe
+                // Plain k only. Ctrl/Cmd+K sets a TRACKING keyframe in
+                // tracking-ui.js, and both handlers are bound to `document`,
+                // so an unguarded letter case fires on the modified press too
+                // -- one keystroke would mark a keyframe here AND pin a
+                // tracking keyframe there.
+                if (event.ctrlKey || event.metaKey) break;
                 event.preventDefault();
                 this.markKeyframe(this.activeLabel);
                 break;
@@ -1129,6 +1177,10 @@ class VideoAnnotationManager {
         if (this.segments.length > 0) {
             html += '<div class="annotation-group"><h5>Segments</h5>';
             for (const segment of this.segments) {
+                // Keep the list in step with the timeline: a hidden class that
+                // still appears in the list is worse than no filter at all,
+                // because it reads as "the timeline lost my segment".
+                if (this.hiddenLabels && this.hiddenLabels.has(segment.label)) continue;
                 const isActive = this.activeAnnotationId === segment.id;
                 html += `
                     <div class="annotation-item ${isActive ? 'active' : ''}" data-id="${segment.id}">

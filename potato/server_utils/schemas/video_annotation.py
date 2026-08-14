@@ -736,6 +736,21 @@ def _generate_html(
                             console.warn('[VideoAnnotation] TrackingUIManager not loaded, tracking features unavailable');
                         }}
 
+                        // Per-class show/hide, shared with image annotation.
+                        // A timeline of stacked segments is as unreadable as an
+                        // image of stacked boxes; the shared manager owns the
+                        // state and this only applies it to the timeline.
+                        if (typeof LabelVisibilityManager !== 'undefined') {{
+                            manager.labelVisibility = new LabelVisibilityManager({{
+                                schemaName: config.schemaName || '{escaped_name}',
+                                projectKey: (window.config || {{}}).annotation_task_name,
+                                container: container,
+                                onChange: function(hidden) {{
+                                    manager.applyLabelVisibility(hidden);
+                                }},
+                            }});
+                        }}
+
                         // Set default label
                         var firstLabelBtn = container.querySelector('.label-btn');
                         if (firstLabelBtn) firstLabelBtn.click();

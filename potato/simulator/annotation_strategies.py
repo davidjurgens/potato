@@ -10,6 +10,7 @@ This module defines different strategies for generating annotations:
 
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, Tuple
+import json
 import random
 import logging
 import re
@@ -44,6 +45,22 @@ class _LLMResponse(BaseModel):
     )
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_geometry(value: Any) -> Optional[List[Dict[str, Any]]]:
+    """Read a reference annotation set from a gold answer, or ``None``.
+
+    Gold data reaches the simulator as either a JSON string (what the client
+    posts and what an exported dataset contains) or an already-parsed list.
+    """
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (ValueError, TypeError):
+            return None
+    if isinstance(value, list) and all(isinstance(o, dict) for o in value):
+        return value
+    return None
 
 
 class AnnotationStrategy(ABC):
@@ -105,6 +122,13 @@ class RandomStrategy(AnnotationStrategy):
         labels = self._extract_labels(schema)
         schema_name = schema.get("name")
 
+        # Drawn answers are handled before the gold branch below, because the
+        # "pick a wrong option from the list" model of being incorrect does not
+        # describe how annotators get geometry wrong. See geometry_strategy.
+        if annotation_type == "image_annotation":
+            return self._generate_image_annotation(
+                schema, labels, competence, gold_answer)
+
         # If we have gold answer and competence says be correct, use gold
         if gold_answer and schema_name in gold_answer:
             if competence.should_be_correct():
@@ -117,6 +141,39 @@ class RandomStrategy(AnnotationStrategy):
 
         # No gold standard - just random selection
         return self._generate_by_type(annotation_type, schema, labels, instance)
+
+    def _generate_image_annotation(
+        self,
+        schema: Dict[str, Any],
+        labels: List[str],
+        competence: Optional[CompetenceProfile],
+        gold_answer: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Draw shapes for one image, as a simulated annotator would.
+
+        With a reference set available, the annotator *redraws* it with noise
+        scaled to their competence — jitter, misses, mislabels and false
+        positives. Without one, shapes are invented from the schema's tools and
+        labels, which is enough to pilot and load-test an image project.
+
+        Emits ``{schema}:::_data`` because that is the key the real client
+        posts; a single-colon key would be parsed as a label name.
+        """
+        from potato.simulator import geometry_strategy
+
+        schema_name = schema.get("name")
+        tools = schema.get("tools") or geometry_strategy.DEFAULT_TOOLS
+        accuracy = competence.get_accuracy() if competence is not None else 1.0
+
+        reference = _parse_geometry(
+            (gold_answer or {}).get(schema_name)) if gold_answer else None
+
+        if reference:
+            objects = geometry_strategy.perturb_objects(reference, labels, accuracy)
+        else:
+            objects = geometry_strategy.random_objects(labels, tools)
+
+        return {f"{schema_name}:::_data": json.dumps(objects)}
 
     def _extract_labels(self, schema: Dict[str, Any]) -> List[str]:
         """Extract label options from schema.
@@ -164,6 +221,16 @@ class RandomStrategy(AnnotationStrategy):
             Formatted annotation dictionary in the format expected by the server
             (schema:value -> "on" for selection types)
         """
+        if annotation_type == "image_annotation":
+            # Reached from BiasedStrategy's gold path. "Correct" for geometry
+            # still means redrawn, not copied byte-for-byte, so the minimum
+            # jitter applies even at full accuracy.
+            from potato.simulator import geometry_strategy
+
+            reference = _parse_geometry(value) or []
+            objects = geometry_strategy.perturb_objects(reference, [], 1.0)
+            return {f"{schema_name}:::_data": json.dumps(objects)}
+
         if annotation_type == "multiselect":
             if isinstance(value, list):
                 return {f"{schema_name}:{v}": "on" for v in value}

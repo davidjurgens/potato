@@ -272,6 +272,7 @@ def _register_builtin_schemas():
     from .pure_display import generate_pure_display_layout
     from .video import generate_video_layout
     from .image_annotation import generate_image_annotation_layout
+    from .spatial_annotation import generate_spatial_annotation_layout
     from .audio_annotation import generate_audio_annotation_layout
     from .video_annotation import generate_video_annotation_layout
     from .pairwise import generate_pairwise_layout
@@ -411,9 +412,17 @@ def _register_builtin_schemas():
             name="image_annotation",
             generator=generate_image_annotation_layout,
             required_fields=["name", "description", "tools", "labels"],
-            optional_fields=["zoom_enabled", "pan_enabled", "min_annotations", "max_annotations", "freeform_brush_size", "freeform_simplify"],
+            optional_fields=["zoom_enabled", "pan_enabled", "min_annotations", "max_annotations", "freeform_brush_size", "freeform_simplify", "brush_size", "eraser_size", "mask_opacity", "fill_mode", "fill_tolerance", "fill_max_pixels", "source_field", "ai_support", "keybinding_profile", "carry_over"],
             supports_keybindings=True,
             description="Image annotation with bounding boxes, polygons, freeform drawing, and landmarks"
+        ),
+        SchemaDefinition(
+            name="spatial_annotation",
+            generator=generate_spatial_annotation_layout,
+            required_fields=["name", "description", "tools", "labels"],
+            optional_fields=["source_field", "color_mode", "point_size", "max_points", "min_annotations", "max_annotations"],
+            supports_keybindings=True,
+            description="3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments"
         ),
         SchemaDefinition(
             name="audio_annotation",

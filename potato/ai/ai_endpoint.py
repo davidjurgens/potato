@@ -92,6 +92,9 @@ class ModelCapabilities:
         image_classification: Can classify images into categories
         rationale_generation: Can generate explanations/rationales for labels
         keyword_extraction: Can extract keywords from text (not applicable to images)
+        mask_output: Can output pixel-level segmentation masks (RLE), not just boxes
+        text_prompt_segmentation: Can segment from a text prompt ("the red car")
+        interactive_segmentation: Can refine a mask from click/box prompts (SAM-class)
     """
     text_generation: bool = False
     vision_input: bool = False
@@ -100,6 +103,12 @@ class ModelCapabilities:
     image_classification: bool = False
     rationale_generation: bool = False
     keyword_extraction: bool = False
+    # Segmentation is a genuinely different output shape from detection: a
+    # detector that returns boxes cannot be asked for pixels, so the assistant
+    # for it has to be gated separately or the button appears and then fails.
+    mask_output: bool = False
+    text_prompt_segmentation: bool = False
+    interactive_segmentation: bool = False
 
     def supports_assistant(self, assistant_type: str, has_image_input: bool = False) -> bool:
         """
@@ -134,6 +143,19 @@ class ModelCapabilities:
             # Detection requires vision and bounding box output
             return self.bounding_box_output and self.vision_input
 
+        elif assistant_type == "critique":
+            # Critique reads an annotated crop and must say WHY it disagrees,
+            # so it needs vision plus the ability to justify -- a detector that
+            # only emits boxes has nothing to contribute. Deliberately not
+            # gated on bounding_box_output: the model judges geometry it is
+            # shown, it never has to produce any.
+            return self.vision_input and self.rationale_generation
+
+        elif assistant_type in ("segment", "segmentation"):
+            # Segmentation needs pixel output, which detection capability does
+            # NOT imply -- a box model asked for a mask returns nothing usable.
+            return self.mask_output and self.vision_input
+
         elif assistant_type == "classification":
             # Classification depends on input type
             if has_image_input:
@@ -153,7 +175,8 @@ class ModelCapabilities:
         Returns:
             List of supported assistant type names
         """
-        all_types = ["hint", "keyword", "rationale", "detection", "pre_annotate", "classification"]
+        all_types = ["hint", "keyword", "rationale", "detection", "pre_annotate",
+                     "classification", "segment", "critique"]
         return [t for t in all_types if self.supports_assistant(t, has_image_input)]
 
 
@@ -684,6 +707,10 @@ for _type, _module, _class, _hint in [
     ("openai_vision", ".openai_vision_endpoint", "OpenAIVisionEndpoint", "openai"),
     ("anthropic_vision", ".anthropic_vision_endpoint", "AnthropicVisionEndpoint", "anthropic"),
     ("openrouter", ".openrouter_endpoint", "OpenRouterEndpoint", None),
+    # Optional GPU segmentation. Lazy on purpose: a module-level torch
+    # import loads the whole ML stack at boot for every user who happens
+    # to have torch installed, whether or not they use segmentation.
+    ("sam", ".sam_endpoint", "SAMEndpoint", "potato[vision]"),
     # Alias kept for configs written against the old AICacheManager name.
     ("open_router", ".openrouter_endpoint", "OpenRouterEndpoint", None),
 ]:

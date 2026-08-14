@@ -843,9 +843,22 @@
               annotator.phase
             }</span></td>
                     <td>${annotator.total_annotations}</td>
-                    <td>${annotator.total_working_time || "N/A"}</td>
-                    <td>${annotator.average_time_per_annotation || "N/A"}</td>
-                    <td>${annotator.annotations_per_hour}/hr</td>
+                    <!-- /admin/api/annotators returns total_seconds and
+                         average_seconds_per_annotation (admin.py:265). Reading
+                         total_working_time / average_time_per_annotation, which it has
+                         never returned, made both columns read "N/A" for every
+                         annotator regardless of how much work they had done. -->
+                    <td>${
+                      annotator.total_seconds
+                        ? formatTime(Math.round(annotator.total_seconds))
+                        : "N/A"
+                    }</td>
+                    <td>${
+                      annotator.average_seconds_per_annotation
+                        ? formatTime(Math.round(annotator.average_seconds_per_annotation))
+                        : "N/A"
+                    }</td>
+                    <td>${Math.round(annotator.annotations_per_hour)}/hr</td>
                     <td>${annotator.completion_percentage.toFixed(1)}%</td>
                     <td>
                       <div style="display:flex;align-items:center;gap:4px;">

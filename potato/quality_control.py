@@ -20,6 +20,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from collections import defaultdict
 
+from potato.server_utils.training_grading import (
+    DEFAULT_GEOMETRY_TOLERANCE,
+    geometry_answer_is_correct,
+    looks_like_geometry,
+)
+
 logger = logging.getLogger(__name__)
 
 # Singleton instance
@@ -79,6 +85,12 @@ class QualityControlConfig:
     gold_auto_promote_enabled: bool = False
     gold_auto_promote_min_annotators: int = 3  # Minimum annotators before checking
     gold_auto_promote_agreement: float = 1.0   # Agreement threshold (1.0 = unanimous)
+
+    # Drawn answers (image annotation) are graded by overlap, not equality.
+    # The minimum IoU at which a user's shape counts as matching a gold shape.
+    # 0.5 matches the Pascal VOC / COCO detection convention and the default
+    # used for training practice questions.
+    geometry_iou_tolerance: float = 0.5
 
     # Pre-annotation config
     pre_annotation_enabled: bool = False
@@ -181,6 +193,20 @@ class QualityControlManager:
                 qc.gold_auto_promote_enabled = True
                 qc.gold_auto_promote_min_annotators = auto_promote.get('min_annotators', 3)
                 qc.gold_auto_promote_agreement = auto_promote.get('agreement_threshold', 1.0)
+
+        # Drawn-answer tolerance. Read from either block (and from the top level)
+        # so a project that only uses attention checks does not have to declare a
+        # gold_standards section just to loosen the IoU.
+        for source in (config.get('quality_control', {}) or {},
+                       gold_config, attn_config):
+            if isinstance(source, dict) and 'geometry_iou_tolerance' in source:
+                try:
+                    qc.geometry_iou_tolerance = float(source['geometry_iou_tolerance'])
+                except (TypeError, ValueError):
+                    self.logger.warning(
+                        "Ignoring non-numeric geometry_iou_tolerance: %r",
+                        source['geometry_iou_tolerance'])
+                break
 
         # Parse pre-annotation config
         pre_config = config.get('pre_annotation', {})
@@ -839,6 +865,11 @@ class QualityControlManager:
     # Utility Methods
     # =========================================================================
 
+    def _geometry_tolerance(self) -> float:
+        """Minimum IoU for a drawn answer to count as matching the gold shape."""
+        return getattr(self.qc_config, "geometry_iou_tolerance",
+                       DEFAULT_GEOMETRY_TOLERANCE)
+
     def _compare_responses(self, expected: Dict[str, Any], actual: Dict[str, Any]) -> bool:
         """
         Compare expected and actual responses.
@@ -871,6 +902,26 @@ class QualityControlManager:
 
             if actual_value is None:
                 return False
+
+            # Drawn answers (boxes, polygons, masks, points) are graded by
+            # overlap, not equality. Two annotators never produce byte-identical
+            # geometry, so string comparison failed EVERY image gold standard and
+            # attention check regardless of how well the annotator drew — making
+            # both features unusable on vision projects.
+            #
+            # Checked before the list branch below, because a geometry answer IS
+            # a list and would otherwise be set-compared as though the objects
+            # were label strings (and unhashable dicts would raise).
+            #
+            # Shares its comparator with training practice questions
+            # (server_utils.training_grading) so a project's gold standards and
+            # its training answers are graded to the same standard.
+            if looks_like_geometry(expected_value):
+                if not geometry_answer_is_correct(
+                    actual_value, expected_value, self._geometry_tolerance()
+                ):
+                    return False
+                continue
 
             # Compare values
             if isinstance(expected_value, list):

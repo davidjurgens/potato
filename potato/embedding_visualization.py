@@ -462,7 +462,15 @@ class EmbeddingVisualizationManager:
                 preview = ""
                 preview_type = "text"
                 if ism:
-                    item = ism.get_instance_by_id(instance_id)
+                    # ItemStateManager exposes get_item(), not get_instance_by_id() —
+                    # the latter has never existed, so /admin/api/embedding_viz/data
+                    # raised AttributeError and returned 500 for every request, leaving
+                    # the admin Embeddings tab on its loading spinner forever.
+                    # get_item() raises rather than returning None for an unknown id.
+                    try:
+                        item = ism.get_item(instance_id)
+                    except (KeyError, AttributeError):
+                        item = None
                     if item:
                         text = item.get_text()
                         if text:

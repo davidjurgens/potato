@@ -51,6 +51,69 @@ def build_category_mapping(annotations: List[dict], schemas: List[dict]) -> Dict
     return {name: idx for idx, name in enumerate(labels)}
 
 
+#: Vertices used when approximating an ellipse as a polygon. 36 keeps the
+#: worst-case radial error under 0.4% of the radius, which is well inside the
+#: boundary noise of any human annotator, while staying small enough that COCO
+#: segmentation lists remain readable.
+ELLIPSE_POLYGON_VERTICES = 36
+
+
+def ellipse_to_polygon(cx: float, cy: float, rx: float, ry: float,
+                       angle: float = 0.0,
+                       vertices: int = ELLIPSE_POLYGON_VERTICES
+                       ) -> List[List[float]]:
+    """
+    Approximate an ellipse as a closed polygon in absolute pixels.
+
+    Every exporter and IoU routine already understands polygons, so producing
+    one here means ellipse support costs nothing downstream — the alternative
+    is teaching each consumer the parametric form separately, which is how
+    geometry types drift apart.
+
+    ``angle`` is in degrees, clockwise, matching fabric's convention.
+    """
+    theta = math.radians(angle)
+    cos_t, sin_t = math.cos(theta), math.sin(theta)
+    points: List[List[float]] = []
+    for i in range(vertices):
+        phi = 2.0 * math.pi * i / vertices
+        ex, ey = rx * math.cos(phi), ry * math.sin(phi)
+        points.append([cx + ex * cos_t - ey * sin_t,
+                       cy + ex * sin_t + ey * cos_t])
+    return points
+
+
+def _coerce_keypoints(raw: Any) -> Tuple[List[List[float]], List[int]]:
+    """
+    Normalize a keypoint sequence to ``([[x, y], ...], [v, ...])``.
+
+    Accepts the client's ``[{"x":..,"y":..,"v":..}, ...]`` form, the flat
+    ``[[x, y, v], ...]`` form, and COCO's flat ``[x, y, v, x, y, v, ...]``.
+    A missing visibility flag defaults to 2 (visible), because a point someone
+    bothered to place is visible unless they said otherwise.
+    """
+    points: List[List[float]] = []
+    vis: List[int] = []
+    if not isinstance(raw, (list, tuple)) or not raw:
+        return points, vis
+
+    # COCO's flat triplet stream.
+    if all(isinstance(v, (int, float)) for v in raw):
+        for i in range(0, len(raw) - 2, 3):
+            points.append([float(raw[i]), float(raw[i + 1])])
+            vis.append(int(raw[i + 2]))
+        return points, vis
+
+    for p in raw:
+        if isinstance(p, dict):
+            points.append([float(p.get("x", 0) or 0), float(p.get("y", 0) or 0)])
+            vis.append(int(p.get("v", 2) if p.get("v") is not None else 2))
+        elif isinstance(p, (list, tuple)) and len(p) >= 2:
+            points.append([float(p[0]), float(p[1])])
+            vis.append(int(p[2]) if len(p) >= 3 else 2)
+    return points, vis
+
+
 def polygon_to_bbox(points: List[List[float]]) -> Tuple[float, float, float, float]:
     """
     Compute axis-aligned bounding box from a polygon.
@@ -498,6 +561,35 @@ def _runs_from_bitmap(bitmap: List[int]) -> List[int]:
     return counts
 
 
+def bitmap_to_rle(bitmap: List[int], height: int, width: int) -> Dict[str, Any]:
+    """
+    Encode a flat row-major 0/1 bitmap as a Potato RLE mask.
+
+    The inverse of :func:`decode_rle`, and the entry point mask importers use
+    when a format ships rasterized pixels rather than outlines (DAVIS and
+    Cityscapes indexed PNGs, per-instance bitmaps). Exposed publicly so those
+    importers do not each reach into a private helper and drift.
+
+    Args:
+        bitmap: Flat list of 0/1 values, ``width * height`` long, row-major
+        height: Mask height in pixels
+        width: Mask width in pixels
+
+    Returns:
+        Potato RLE dict ``{"counts": [ints], "size": [height, width]}``
+
+    Raises:
+        ValueError: If the bitmap length does not match the stated dimensions,
+            which otherwise produces a mask that is silently sheared.
+    """
+    expected = width * height
+    if len(bitmap) != expected:
+        raise ValueError(
+            f"bitmap has {len(bitmap)} pixels but {width}x{height} needs "
+            f"{expected}; encoding it would shear the mask")
+    return {"counts": _runs_from_bitmap(bitmap), "size": [height, width]}
+
+
 def polygons_to_rle(polygons: List[Any], height: int, width: int) -> Dict[str, Any]:
     """
     Rasterize one or more polygons into a Potato RLE mask.
@@ -643,12 +735,22 @@ def rle_to_polygons(rle: dict, width: int, height: int) -> List[List[List[float]
 #
 #   {"type": "bbox",     "label", "color", "coordinates": {x, y, width, height}}
 #   {"type": "polygon",  "label", "color", "coordinates": [{x, y}, ...]}
+#   {"type": "polyline", "label", "color", "coordinates": [{x, y}, ...]}
+#   {"type": "ellipse",  "label", "color", "coordinates": {cx, cy, rx, ry, angle}}
 #   {"type": "landmark", "label", "color", "coordinates": {x, y}}
+#   {"type": "keypoint_set", "label", "color", "skeleton": "<name>",
+#                            "coordinates": [{x, y, v}, ...]}
+#   {"type": "cuboid_2d", "label", "color",
+#                         "coordinates": {front: [{x,y} x4], back: [{x,y} x4]}}
 #   {"type": "freeform", "label", "color", "coordinates": {path, left, top,
-#                                                          scaleX, scaleY}}
+#                                                          scaleX, scaleY,
+#                                                          pathOffset, angle}}
 #   {"type": "mask",     "label", "color", "rle": {counts: [...], size: [h, w]}}
 #
 # Shape coordinates are NORMALIZED to [0, 1] against the image; masks are not.
+# Freeform's `path` and `pathOffset` are the exception within `coordinates`:
+# they stay in fabric's own path space, because that is the space `path` is
+# expressed in and rescaling one without the other would be meaningless.
 #
 # Every exporter used to read flat, absolute-pixel fields (obj["x"],
 # obj["points"], ...) that the client has never written. The result was that
@@ -661,6 +763,14 @@ def rle_to_polygons(rle: dict, width: int, height: int) -> List[List[List[float]
 # normalize_annotation_object() is now the single place that understands the
 # client shape. to_client_object() is its exact inverse and is the only thing
 # that should synthesize annotations for the client (used by the importers).
+#
+# THIS CONTRACT COVERS 2D ONLY. 3D spatial annotations (cuboid_3d, point_3d,
+# polyline_3d, segment_3d) have their own pair in potato/export/spatial_utils.py
+# and are NOT handled here. They are not normalized, they are in metres in a
+# sensor frame rather than pixels, and they carry an orientation -- so they
+# cannot pass through a function whose whole job is "normalized image
+# coordinates to pixels, given a width and a height". See the module docstring
+# there for the full reasoning.
 
 
 def _coerce_points(raw: Any) -> List[List[float]]:
@@ -693,15 +803,27 @@ def _get_dim(source: dict, *names: str, default: float = 0.0) -> float:
     return default
 
 
+def _has_path_offset(coords: dict) -> bool:
+    """True if a freeform annotation carries fabric's pathOffset."""
+    offset = coords.get("pathOffset")
+    return isinstance(offset, dict) and "x" in offset and "y" in offset
+
+
 def _freeform_points(coords: dict, img_w: float, img_h: float) -> List[List[float]]:
     """
-    Approximate a freeform (fabric path) annotation as an absolute-pixel polyline.
+    Convert a freeform (fabric path) annotation to an absolute-pixel polyline.
 
-    The client records {path, left, top, scaleX, scaleY} but drops fabric's
-    ``pathOffset``, so exact reconstruction is not possible here. Fabric's
-    default origin is the bounding box's top-left, so anchoring the path's own
-    minimum corner at (left, top) reproduces the geometry for anything drawn
-    with the brush. Callers should surface the accompanying warning.
+    The client records {path, left, top, scaleX, scaleY, pathOffset, angle}.
+
+    With ``pathOffset`` present the reconstruction is exact: fabric positions a
+    path by treating ``pathOffset`` (the path bounding box's centre in the
+    path's own coordinate space) as the object's origin, so the same transform
+    fabric applies can be reproduced here, rotation included.
+
+    Annotations written before the client recorded ``pathOffset`` can only be
+    approximated: anchoring the path's own minimum corner at (left, top)
+    reproduces the geometry for an unrotated, unscaled brush stroke and drifts
+    otherwise. Callers surface the accompanying warning for that case only.
     """
     raw_path = coords.get("path") or []
     endpoints: List[List[float]] = []
@@ -717,17 +839,36 @@ def _freeform_points(coords: dict, img_w: float, img_h: float) -> List[List[floa
     if not endpoints:
         return []
 
-    min_x = min(p[0] for p in endpoints)
-    min_y = min(p[1] for p in endpoints)
     left = _get_dim(coords, "left") * img_w
     top = _get_dim(coords, "top") * img_h
     scale_x = _get_dim(coords, "scaleX", default=1.0) or 1.0
     scale_y = _get_dim(coords, "scaleY", default=1.0) or 1.0
 
-    return [
-        [left + (p[0] - min_x) * scale_x, top + (p[1] - min_y) * scale_y]
-        for p in endpoints
-    ]
+    if not _has_path_offset(coords):
+        min_x = min(p[0] for p in endpoints)
+        min_y = min(p[1] for p in endpoints)
+        return [
+            [left + (p[0] - min_x) * scale_x, top + (p[1] - min_y) * scale_y]
+            for p in endpoints
+        ]
+
+    offset = coords["pathOffset"]
+    off_x = float(offset.get("x") or 0.0)
+    off_y = float(offset.get("y") or 0.0)
+    angle = math.radians(float(coords.get("angle") or 0.0))
+    cos_a, sin_a = math.cos(angle), math.sin(angle)
+
+    points: List[List[float]] = []
+    for px, py in endpoints:
+        # Into the object's local space, then scale, rotate, translate --
+        # the order fabric itself uses in calcTransformMatrix().
+        lx = (px - off_x) * scale_x
+        ly = (py - off_y) * scale_y
+        points.append([
+            left + lx * cos_a - ly * sin_a,
+            top + lx * sin_a + ly * cos_a,
+        ])
+    return points
 
 
 def normalize_annotation_object(obj: dict, img_w: float,
@@ -830,13 +971,63 @@ def normalize_annotation_object(obj: dict, img_w: float,
         result["area"] = polygon_area(points)
         return result
 
+    if obj_type == "polyline":
+        # An OPEN path: lane markings, vessels, cracks, coastlines. It has
+        # length but no interior, so `area` stays 0 and the bbox is the extent
+        # of the vertices. Treating it as a closed polygon would invent an
+        # interior the annotator never claimed.
+        raw = coords if normalized else obj.get("points")
+        points = _coerce_points(raw)
+        if len(points) < 2:
+            return None
+        if normalized:
+            points = [[p[0] * img_w, p[1] * img_h] for p in points]
+        result["points"] = points
+        result["bbox"] = list(polygon_to_bbox(points))
+        result["area"] = 0.0
+        result["closed"] = False
+        return result
+
+    if obj_type == "ellipse":
+        source = coords if normalized else obj
+        if not isinstance(source, dict):
+            return None
+        cx = _get_dim(source, "cx", "x")
+        cy = _get_dim(source, "cy", "y")
+        rx = _get_dim(source, "rx")
+        ry = _get_dim(source, "ry")
+        angle = float(source.get("angle", 0.0) or 0.0)
+        if normalized:
+            cx, cy, rx, ry = cx * img_w, cy * img_h, rx * img_w, ry * img_h
+        if rx <= 0 or ry <= 0:
+            return None
+
+        result["ellipse"] = {"cx": cx, "cy": cy, "rx": rx, "ry": ry,
+                             "angle": angle}
+        # A polygon approximation so every exporter that understands polygons
+        # understands ellipses for free, rather than each learning the maths.
+        result["points"] = ellipse_to_polygon(cx, cy, rx, ry, angle)
+        # The tight bbox of a ROTATED ellipse is not the rotated corner box:
+        # half-extents are sqrt((rx cos)^2 + (ry sin)^2) and its transpose.
+        theta = math.radians(angle)
+        hw = math.hypot(rx * math.cos(theta), ry * math.sin(theta))
+        hh = math.hypot(rx * math.sin(theta), ry * math.cos(theta))
+        result["bbox"] = [cx - hw, cy - hh, 2 * hw, 2 * hh]
+        result["area"] = math.pi * rx * ry
+        return result
+
     if obj_type == "freeform":
         if normalized and isinstance(coords, dict) and "path" in coords:
             points = _freeform_points(coords, img_w, img_h)
-            warnings.append(
-                "freeform reconstructed from a fabric path without pathOffset; "
-                "geometry is approximate"
-            )
+            # The client records pathOffset since the path:created fix; older
+            # annotations predate it and can only be approximated. Warn about
+            # the ones that are actually approximate rather than all of them.
+            if not _has_path_offset(coords):
+                warnings.append(
+                    "freeform reconstructed from a fabric path without pathOffset; "
+                    "geometry is approximate. Re-saving this annotation in the "
+                    "browser records the offset and makes it exact."
+                )
         else:
             raw = coords if normalized else obj.get("points")
             points = _coerce_points(raw)
@@ -848,6 +1039,56 @@ def normalize_annotation_object(obj: dict, img_w: float,
         bx, by, bw, bh = polygon_to_bbox(points)
         result["bbox"] = [bx, by, bw, bh]
         result["area"] = polygon_area(points)
+        return result
+
+    if obj_type == "keypoint_set":
+        # An ORDERED set with COCO visibility flags (0 unlabelled, 1 labelled
+        # but occluded, 2 visible). Order is the whole point — index 5 means
+        # "left shoulder" only because the skeleton says so — which is why this
+        # is one object rather than N landmarks. Exploding it into landmarks (as
+        # the COCO importer used to) loses the ordering, the skeleton, and the
+        # visibility flags, and there is no way to reassemble them on export.
+        raw = coords if normalized else obj.get("keypoints")
+        points, vis = _coerce_keypoints(raw)
+        if not points:
+            return None
+        if normalized:
+            points = [[p[0] * img_w, p[1] * img_h] for p in points]
+
+        result["points"] = points
+        result["visibility"] = vis
+        result["skeleton"] = obj.get("skeleton") or ""
+        # The bbox spans only the points the annotator actually marked; an
+        # unlabelled keypoint is stored as (0, 0, 0) and would otherwise drag
+        # the box to the image corner.
+        marked = [p for p, v in zip(points, vis) if v]
+        result["bbox"] = list(polygon_to_bbox(marked)) if marked else [0.0, 0.0, 0.0, 0.0]
+        result["area"] = 0.0
+        return result
+
+    if obj_type == "cuboid_2d":
+        # A 3D box PROJECTED into the image (KITTI-style), not true 3D — that
+        # is Wave 8's `spatial_annotation`, which lives in sensor coordinates.
+        source = coords if normalized else obj
+        if not isinstance(source, dict):
+            return None
+        front = _coerce_points(source.get("front"))
+        back = _coerce_points(source.get("back"))
+        if len(front) != 4 or len(back) != 4:
+            return None
+        if normalized:
+            front = [[p[0] * img_w, p[1] * img_h] for p in front]
+            back = [[p[0] * img_w, p[1] * img_h] for p in back]
+
+        result["front"] = front
+        result["back"] = back
+        # `points` is the full 8-vertex hull so consumers that only understand
+        # point lists still get something usable.
+        result["points"] = front + back
+        result["bbox"] = list(polygon_to_bbox(front + back))
+        # The visible extent is what a detector would be scored on, so area is
+        # the front face rather than the whole hull.
+        result["area"] = polygon_area(front)
         return result
 
     if obj_type == "landmark":
@@ -871,6 +1112,10 @@ def to_client_object(obj_type: str, label: str, color: str = "", *,
                      bbox: Optional[List[float]] = None,
                      points: Optional[List[List[float]]] = None,
                      rle: Optional[dict] = None,
+                     ellipse: Optional[dict] = None,
+                     keypoints: Optional[Any] = None,
+                     skeleton: str = "",
+                     cuboid: Optional[dict] = None,
                      instance: Optional[int] = None,
                      iscrowd: int = 0) -> Optional[dict]:
     """
@@ -881,14 +1126,15 @@ def to_client_object(obj_type: str, label: str, color: str = "", *,
     that should synthesize annotations for the client.
 
     Args:
-        obj_type: One of bbox, polygon, freeform, landmark, mask
+        obj_type: One of bbox, polygon, polyline, ellipse, freeform, landmark, mask
         label: Label name (must match a label in the schema config)
         color: Display color
         img_w: Image width in pixels
         img_h: Image height in pixels
         bbox: [x, y, w, h] absolute pixels (bbox type)
-        points: [[x, y], ...] absolute pixels (polygon/freeform/landmark)
+        points: [[x, y], ...] absolute pixels (polygon/polyline/freeform/landmark)
         rle: Potato RLE dict, passed through untouched (mask type)
+        ellipse: {cx, cy, rx, ry, angle} absolute pixels (ellipse type)
         instance: Optional instance index, used to key per-instance masks
         iscrowd: COCO crowd flag, preserved for round-tripping
 
@@ -928,12 +1174,54 @@ def to_client_object(obj_type: str, label: str, color: str = "", *,
         }
         return obj
 
-    if obj_type in ("polygon", "freeform"):
+    if obj_type in ("polygon", "freeform", "polyline"):
         if not points:
+            return None
+        if obj_type == "polyline" and len(points) < 2:
             return None
         obj["coordinates"] = [
             {"x": p[0] / img_w, "y": p[1] / img_h} for p in points
         ]
+        if obj_type == "polyline":
+            obj["closed"] = False
+        return obj
+
+    if obj_type == "ellipse":
+        if not ellipse:
+            return None
+        rx = float(ellipse.get("rx", 0) or 0)
+        ry = float(ellipse.get("ry", 0) or 0)
+        if rx <= 0 or ry <= 0:
+            return None
+        obj["coordinates"] = {
+            "cx": float(ellipse.get("cx", 0) or 0) / img_w,
+            "cy": float(ellipse.get("cy", 0) or 0) / img_h,
+            "rx": rx / img_w,
+            "ry": ry / img_h,
+            "angle": float(ellipse.get("angle", 0) or 0),
+        }
+        return obj
+
+    if obj_type == "keypoint_set":
+        pts, vis = _coerce_keypoints(keypoints if keypoints is not None else points)
+        if not pts:
+            return None
+        obj["coordinates"] = [
+            {"x": p[0] / img_w, "y": p[1] / img_h, "v": v}
+            for p, v in zip(pts, vis)
+        ]
+        obj["skeleton"] = skeleton or ""
+        return obj
+
+    if obj_type == "cuboid_2d":
+        front = _coerce_points((cuboid or {}).get("front"))
+        back = _coerce_points((cuboid or {}).get("back"))
+        if len(front) != 4 or len(back) != 4:
+            return None
+        obj["coordinates"] = {
+            "front": [{"x": p[0] / img_w, "y": p[1] / img_h} for p in front],
+            "back": [{"x": p[0] / img_w, "y": p[1] / img_h} for p in back],
+        }
         return obj
 
     if obj_type == "landmark":

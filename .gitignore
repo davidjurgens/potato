@@ -154,3 +154,8 @@ examples/**/project.sqlite-wal
 examples/**/project.sqlite-shm
 examples/**/admin_api_key.txt
 qa-testing/
+
+# Segmentation model weights: fetched per install via
+# `potato download-models`, never committed. The default model alone
+# is ~45MB, and the licence that applies is the upstream one, not ours.
+potato/models/

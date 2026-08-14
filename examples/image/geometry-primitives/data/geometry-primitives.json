@@ -1,0 +1,6 @@
+[
+  {"id": "geo_1", "caption": "Trace the lane markings as polylines and box each vehicle.",
+   "image_url": "/media/street.jpg"},
+  {"id": "geo_2", "caption": "Outline each round structure with an ellipse.",
+   "image_url": "/media/crowd.jpg"}
+]

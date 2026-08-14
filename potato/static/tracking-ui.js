@@ -117,6 +117,101 @@
         }
 
         /**
+         * Add a keyframe of ANY shape kind to the active track.
+         *
+         * The bbox-only ``addKeyframe`` remains for existing callers; this is
+         * what polygon and mask tracks go through.
+         *
+         * @param {Object} shape - {type, bbox?, points?, rle?}
+         */
+        addShapeKeyframe(shape) {
+            if (!this.activeTrackId || !shape) return;
+            var track = this.tracks[this.activeTrackId];
+            if (!track) return;
+
+            var frame = this._getCurrentFrame();
+            var keyframe = {
+                frame: frame,
+                time: this.video ? this.video.currentTime : 0,
+                type: shape.type || 'bbox'
+            };
+            if (shape.bbox) keyframe.bbox = shape.bbox;
+            if (shape.points) keyframe.points = shape.points;
+            if (shape.rle) keyframe.rle = shape.rle;
+
+            // A polygon or mask still needs a bounding box: the timeline, the
+            // label placement and every box-only consumer read it, and
+            // computing it once here beats each of them deriving it.
+            if (!keyframe.bbox && keyframe.points
+                && window.TrackingInterpolationEngine) {
+                keyframe.bbox = window.TrackingInterpolationEngine
+                    ._bboxOfPoints(keyframe.points);
+            }
+
+            track.keyframes[frame] = keyframe;
+            this._updateTrackRange(track);
+            this.selectedKeyframe = { trackId: this.activeTrackId, frame: frame };
+            this._renderTrackPanel();
+            this.renderOverlay();
+        }
+
+        /**
+         * Pin the current frame's interpolated shape as a real keyframe.
+         *
+         * The "yes, this one is right" action: an annotator scrubbing through
+         * an interpolated span should be able to confirm a frame without
+         * redrawing a shape that is already correct.
+         */
+        setKeyframeHere() {
+            if (!this.activeTrackId) return null;
+            var track = this.tracks[this.activeTrackId];
+            if (!track || !window.TrackingInterpolationEngine) return null;
+
+            var frame = this._getCurrentFrame();
+            if (track.keyframes[frame]) return frame;   // already one
+
+            var shape = window.TrackingInterpolationEngine
+                .interpolateShape(track, frame);
+            if (!shape) return null;
+            this.addShapeKeyframe(shape);
+            return frame;
+        }
+
+        /**
+         * Seek to the next or previous keyframe across the active track.
+         *
+         * @param {number} direction - +1 forward, -1 backward
+         * @returns {boolean} Whether a keyframe was found and sought to.
+         */
+        seekToAdjacentKeyframe(direction) {
+            var track = this.tracks[this.activeTrackId];
+            if (!track || !this.video) return false;
+
+            var frames = Object.keys(track.keyframes).map(Number)
+                .sort(function(a, b) { return a - b; });
+            if (frames.length === 0) return false;
+
+            var current = this._getCurrentFrame();
+            var target = null;
+            if (direction > 0) {
+                for (var i = 0; i < frames.length; i++) {
+                    if (frames[i] > current) { target = frames[i]; break; }
+                }
+            } else {
+                for (var j = frames.length - 1; j >= 0; j--) {
+                    if (frames[j] < current) { target = frames[j]; break; }
+                }
+            }
+            if (target === null) return false;
+
+            var fps = this.fps || 30;
+            this.video.currentTime = target / fps;
+            this.selectedKeyframe = { trackId: this.activeTrackId, frame: target };
+            this.renderOverlay();
+            return true;
+        }
+
+        /**
          * Update a keyframe's bbox.
          */
         updateKeyframe(trackId, frame, bbox) {
@@ -209,35 +304,48 @@
 
             for (var trackId in this.tracks) {
                 var track = this.tracks[trackId];
-                var bbox = null;
-                var isKeyframe = false;
+                var shape = null;
+                var isKeyframe = !!track.keyframes[currentFrame];
 
-                // Check if current frame is a keyframe
-                if (track.keyframes[currentFrame]) {
-                    bbox = track.keyframes[currentFrame].bbox;
-                    isKeyframe = true;
-                } else if (window.TrackingInterpolationEngine) {
-                    // Use interpolation engine for non-keyframes
-                    bbox = window.TrackingInterpolationEngine.interpolate(track, currentFrame);
+                if (window.TrackingInterpolationEngine) {
+                    // interpolateShape preserves the KIND, so a polygon track
+                    // draws as a polygon rather than collapsing to its
+                    // bounding box on every non-keyframe.
+                    shape = window.TrackingInterpolationEngine
+                        .interpolateShape(track, currentFrame);
+                } else if (isKeyframe) {
+                    shape = { type: 'bbox', bbox: track.keyframes[currentFrame].bbox };
+                }
+                if (!shape) continue;
+
+                var bbox = shape.bbox;
+                var isActive = trackId === this.activeTrackId;
+                var isSelected = this.selectedKeyframe &&
+                                this.selectedKeyframe.trackId === trackId &&
+                                this.selectedKeyframe.frame === currentFrame;
+
+                if (shape.type === 'polygon' && shape.points) {
+                    this._drawPolygon(shape.points, track.color, track.label,
+                                      isActive, isSelected);
+                } else if (bbox) {
+                    this._drawBbox(bbox, track.color, track.label, isActive,
+                                   isSelected);
                 }
 
-                if (bbox) {
-                    var isActive = trackId === this.activeTrackId;
-                    var isSelected = this.selectedKeyframe &&
-                                    this.selectedKeyframe.trackId === trackId &&
-                                    this.selectedKeyframe.frame === currentFrame;
+                if (!bbox) continue;
 
-                    this._drawBbox(bbox, track.color, track.label, isActive, isSelected);
-
-                    // Mark if this is a keyframe
-                    if (isKeyframe) {
-                        this._drawKeyframeDiamond(bbox, track.color);
-                    }
-
-                    // Draw resize handles if selected
-                    if (isSelected && isKeyframe) {
-                        this._drawResizeHandles(bbox, track.color);
-                    }
+                // A held frame (mask tracks, and either side of a kind change)
+                // is NOT a real annotation. Marking it visually keeps the
+                // annotator from trusting a frame nobody drew.
+                if (!isKeyframe && shape.interpolated === false) {
+                    this._drawHeldMarker(bbox, track.color);
+                }
+                if (isKeyframe) {
+                    this._drawKeyframeDiamond(bbox, track.color);
+                }
+                // Resize handles only make sense on a box the user can drag.
+                if (isSelected && isKeyframe && shape.type === 'bbox') {
+                    this._drawResizeHandles(bbox, track.color);
                 }
             }
 
@@ -293,6 +401,62 @@
             this.ctx.fillRect(bbox.x, bbox.y - 16, textWidth + 6, 16);
             this.ctx.fillStyle = isSelected ? '#000' : '#fff';
             this.ctx.fillText(label, bbox.x + 3, bbox.y - 4);
+        }
+
+        /**
+         * Draw a polygon track outline.
+         *
+         * Uses the same colour, dash and selection treatment as _drawBbox so a
+         * polygon track and a box track read as the same kind of thing.
+         */
+        _drawPolygon(points, color, label, isActive, isSelected) {
+            if (!points || points.length < 3) return;
+
+            this.ctx.strokeStyle = isSelected ? '#FFD700' : color;
+            this.ctx.lineWidth = isSelected ? 3 : (isActive ? 2 : 1);
+            this.ctx.setLineDash(!isActive && !isSelected ? [4, 4] : []);
+
+            this.ctx.beginPath();
+            this.ctx.moveTo(points[0].x, points[0].y);
+            for (var i = 1; i < points.length; i++) {
+                this.ctx.lineTo(points[i].x, points[i].y);
+            }
+            this.ctx.closePath();
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+
+            // Anchor the label to the top-left of the outline, matching the
+            // box treatment rather than floating it at a vertex.
+            var minX = points[0].x, minY = points[0].y;
+            for (var j = 1; j < points.length; j++) {
+                if (points[j].x < minX) minX = points[j].x;
+                if (points[j].y < minY) minY = points[j].y;
+            }
+            this.ctx.font = '11px Arial';
+            var textWidth = this.ctx.measureText(label).width;
+            this.ctx.fillStyle = isSelected ? '#FFD700' : color;
+            this.ctx.fillRect(minX, minY - 16, textWidth + 6, 16);
+            this.ctx.fillStyle = isSelected ? '#000' : '#fff';
+            this.ctx.fillText(label, minX + 3, minY - 4);
+        }
+
+        /**
+         * Mark a frame whose shape was HELD from a keyframe rather than
+         * interpolated -- mask tracks, and either side of a kind change.
+         *
+         * Without this the annotator cannot tell a frame somebody drew from a
+         * frame nobody did, which is the difference between an annotation and
+         * a guess.
+         */
+        _drawHeldMarker(bbox, color) {
+            var size = 5;
+            var cx = bbox.x + bbox.width / 2;
+            var cy = bbox.y;
+            this.ctx.strokeStyle = color;
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            this.ctx.arc(cx, cy, size, 0, Math.PI * 2);
+            this.ctx.stroke();
         }
 
         _drawKeyframeDiamond(bbox, color) {
@@ -616,14 +780,47 @@
             var self = this;
 
             document.addEventListener('keydown', function(e) {
+                // One guard for every shortcut below. Typing "don't, then" in
+                // a free-text field must not jump the playhead or create a
+                // track -- the exact failure that turned "bad boxes here" into
+                // "badboxesee" on the image canvas.
+                var el = document.activeElement || {};
+                var typing = el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'
+                    || el.tagName === 'SELECT' || el.isContentEditable === true;
+                if (typing) return;
+
                 // Delete key removes selected keyframe
                 if ((e.key === 'Delete' || e.key === 'Backspace') && self.selectedKeyframe) {
-                    // Make sure we're focused on the canvas area
-                    if (document.activeElement.tagName !== 'INPUT' &&
-                        document.activeElement.tagName !== 'TEXTAREA') {
+                    e.preventDefault();
+                    self.deleteSelectedKeyframe();
+                }
+
+                // Keyframe navigation on SHIFT+, / SHIFT+. (i.e. < and >).
+                //
+                // Plain , and . are already frame stepping in
+                // video-annotation.js, and both handlers are bound to
+                // `document` -- taking them here would fire BOTH, stepping a
+                // frame and jumping a keyframe on one press. Shifted is also
+                // the video-editor convention: , . for frames, < > for markers.
+                if ((e.key === '<' || e.key === '>')
+                    || (e.shiftKey && (e.key === ',' || e.key === '.'))) {
+                    var forward = (e.key === '>' || e.key === '.');
+                    if (self.seekToAdjacentKeyframe(forward ? 1 : -1)) {
                         e.preventDefault();
-                        self.deleteSelectedKeyframe();
                     }
+                }
+
+                // t starts a new track at the current frame.
+                if (e.key === 't' && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    self.createTrack();
+                }
+
+                // Ctrl/Cmd+K sets a keyframe on the active track, copying the
+                // interpolated shape so "confirm this frame" is one keystroke.
+                if (e.key === 'k' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    self.setKeyframeHere();
                 }
 
                 // Escape deselects

@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+port: 8000
+annotation_task_name: Geometry Primitives
+task_dir: .
+output_annotation_dir: annotation_output/geometry-primitives/
+output_annotation_format: json
+annotation_codebook_url: ''
+alert_time_each_instance: 10000000
+
+data_files:
+  - data/geometry-primitives.json
+
+item_properties:
+  id_key: id
+  # The image URL must be the displayed text: the client resolves the canvas
+  # image from `data-image-url` on the instance text first, so a caption here
+  # would be loaded as the image path. `source_field` only takes effect when
+  # the project also declares `instance_display` fields.
+  text_key: image_url
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: shapes
+    description: >-
+      Outline each structure with the tool that matches its geometry.
+      Open paths (a lane marking, a vessel, a crack) are polylines; round
+      structures are ellipses.
+    source_field: image_url
+    tools:
+      - bbox
+      - polygon
+      - polyline
+      - ellipse
+      - keypoint_set
+      - cuboid_2d
+      - landmark
+    skeletons:
+      simple_pose:
+        names: [head, neck, left_hand, right_hand]
+        edges: [[0, 1], [1, 2], [1, 3]]
+    labels:
+      - name: lane
+        color: '#E74C3C'
+      - name: cell
+        color: '#27AE60'
+      - name: vehicle
+        color: '#2980B9'

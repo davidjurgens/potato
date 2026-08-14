@@ -470,6 +470,24 @@
             "if": {
               "properties": {
                 "annotation_type": {
+                  "const": "spatial_annotation"
+                }
+              },
+              "required": [
+                "annotation_type"
+              ]
+            },
+            "then": {
+              "required": [
+                "labels",
+                "tools"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "annotation_type": {
                   "const": "tiered_annotation"
                 }
               },
@@ -511,6 +529,7 @@
           "agent_dimensions": {},
           "agent_key": {},
           "agents": {},
+          "ai_support": {},
           "allow_annotator_create": {},
           "allow_correction": {},
           "allow_discontinuous": {},
@@ -688,6 +707,10 @@
                 "description": "Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION)"
               },
               {
+                "const": "spatial_annotation",
+                "description": "3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments"
+              },
+              {
                 "const": "speech_transcript",
                 "description": "Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction"
               },
@@ -763,8 +786,11 @@
           "behaviors": {},
           "best_description": {},
           "branch_comparison": {},
+          "brush_size": {},
           "calls_key": {},
+          "carry_over": {},
           "collapsed_tiers": {},
+          "color_mode": {},
           "cols_key": {},
           "comment_categories": {},
           "contention_labels": {},
@@ -787,11 +813,15 @@
           "editable_fields": {},
           "entity_linking": {},
           "entity_types": {},
+          "eraser_size": {},
           "error_types": {},
           "event_types": {},
           "events_key": {},
           "fallback_text": {},
           "file_rating_dimensions": {},
+          "fill_max_pixels": {},
+          "fill_mode": {},
+          "fill_tolerance": {},
           "final_answer_key": {},
           "flags": {},
           "frame_stepping": {},
@@ -808,15 +838,18 @@
           "items": {},
           "items_field": {},
           "items_key": {},
+          "keybinding_profile": {},
           "label_requirement": {},
           "labels": {},
           "left_label": {},
           "link_types": {},
           "linked_acts": {},
           "loop": {},
+          "mask_opacity": {},
           "max": {},
           "max_annotations": {},
           "max_label": {},
+          "max_points": {},
           "max_score": {},
           "max_segments": {},
           "max_selections": {},
@@ -847,6 +880,7 @@
           "path_selection": {},
           "placeholder": {},
           "playback_rate_control": {},
+          "point_size": {},
           "profiles_field": {},
           "profiles_per_set": {},
           "quality_scale": {},
@@ -932,6 +966,22 @@
     "annotation_task_description": {},
     "annotation_task_name": {
       "type": "string"
+    },
+    "annotation_telemetry": {
+      "additionalProperties": true,
+      "properties": {
+        "detection": {},
+        "disclose_to_annotators": {},
+        "disclosure_text": {},
+        "enabled": {},
+        "exclude_schemas": {},
+        "fidelity": {},
+        "flush_interval_ms": {},
+        "idle_ms": {},
+        "include_schemas": {},
+        "store_events": {}
+      },
+      "type": "object"
     },
     "annotation_ui": {
       "additionalProperties": true,

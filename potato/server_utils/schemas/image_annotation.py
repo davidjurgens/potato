@@ -34,7 +34,109 @@ DEFAULT_COLORS = [
 ]
 
 # Valid annotation tools
-VALID_TOOLS = ["bbox", "polygon", "freeform", "landmark", "fill", "eraser", "brush"]
+#: Segmentation models the schema will accept. Kept here rather than imported
+#: from models_cli so that validating a config never pulls in the download
+#: machinery — config validation runs on every boot, downloads do not.
+VALID_SEGMENTATION_MODELS = ("mobile_sam", "edge_sam", "sam2_hiera_tiny")
+
+DEFAULT_SEGMENTATION_MODEL = "mobile_sam"
+
+
+def _segmentation_config(annotation_scheme, tools):
+    """
+    Client config for the magic-wand tool, or None when it is not configured.
+
+    Returning None rather than a disabled-looking dict matters: the client uses
+    its presence to decide whether to load a 13 MB runtime at all.
+    """
+    if "sam" not in (tools or []):
+        return None
+
+    raw = annotation_scheme.get("segmentation") or {}
+    model = raw.get("model", DEFAULT_SEGMENTATION_MODEL)
+    if model not in VALID_SEGMENTATION_MODELS:
+        logger.warning(
+            "Unknown segmentation model %r; falling back to %s. Valid models: %s",
+            model, DEFAULT_SEGMENTATION_MODEL,
+            ", ".join(VALID_SEGMENTATION_MODELS))
+        model = DEFAULT_SEGMENTATION_MODEL
+
+    return {
+        "model": model,
+        # Served by the /models route, not /static: the weights live outside
+        # the package's static tree because they are a per-install download.
+        "modelBaseUrl": raw.get("model_base_url", "/models"),
+        "runtimeUrl": raw.get("runtime_url",
+                              "/models/onnxruntime/ort.wasm.min.js"),
+        "wasmBaseUrl": raw.get("wasm_base_url", "/models/onnxruntime/"),
+        # How many image embeddings to keep. Each is ~4 MB, so the default
+        # trades ~16 MB for never re-encoding an image the annotator revisits.
+        "embeddingLimit": int(raw.get("embedding_limit", 4)),
+    }
+
+
+VALID_TOOLS = ["bbox", "polygon", "polyline", "ellipse", "freeform", "landmark",
+               "keypoint_set", "cuboid_2d", "fill", "eraser", "brush",
+               # Interactive segmentation. Needs a downloaded model; the tool
+               # renders regardless and reports what is missing, because a
+               # button that silently does nothing is worse than an error.
+               "sam"]
+
+
+# Tool keyboard shortcuts, by profile.
+#
+# "v7" matches the conventions V7 Darwin and CVAT use, so an annotator moving
+# from either is productive immediately: b=brush, e=eraser, f=fill, r=rectangle,
+# k=keypoint, plus [ and ] for brush size. "legacy" preserves the bindings
+# Potato shipped before, for projects already collecting data whose annotators
+# have trained muscle memory.
+#
+# Adding a tool means adding it to BOTH profiles; the unit tests assert that.
+KEYBINDING_PROFILES = {
+    "v7": {
+        "brush": "b",
+        "eraser": "e",
+        "fill": "f",
+        "bbox": "r",       # r for rectangle
+        "polygon": "p",
+        "landmark": "k",   # k for keypoint
+        "freeform": "d",   # d for draw; V7 has no direct equivalent
+        "polyline": "n",   # CVAT's polyline key
+        "ellipse": "i",    # CVAT uses ellipse; e is already the eraser
+        "keypoint_set": "s",  # s for skeleton; k is the single keypoint
+        "cuboid_2d": "c",
+        "sam": "w",        # w for wand; free in both profiles
+    },
+    "legacy": {
+        "bbox": "b",
+        "polygon": "p",
+        "freeform": "f",
+        "landmark": "l",
+        "brush": "m",
+        "fill": "g",
+        "eraser": "e",
+        "polyline": "n",
+        "ellipse": "i",
+        "keypoint_set": "s",
+        "cuboid_2d": "c",
+        "sam": "w",
+    },
+}
+
+DEFAULT_KEYBINDING_PROFILE = "v7"
+
+#: Shortcuts that are the same in every profile.
+COMMON_KEYBINDINGS = {
+    "select": "v",
+    "hide": "h",
+    "brush_size_down": "[",
+    "brush_size_up": "]",
+}
+
+
+def get_tool_keys(profile: str = DEFAULT_KEYBINDING_PROFILE) -> dict:
+    """Return the {tool: key} map for a keybinding profile."""
+    return dict(KEYBINDING_PROFILES.get(profile, KEYBINDING_PROFILES[DEFAULT_KEYBINDING_PROFILE]))
 
 
 def generate_image_annotation_layout(annotation_scheme):
@@ -112,12 +214,35 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
     eraser_size = annotation_scheme.get("eraser_size", 20)
     mask_opacity = annotation_scheme.get("mask_opacity", 0.5)
 
+    # Fill behaviour. "region" grows across pixels of similar colour in the
+    # source image (what a fill tool is normally expected to do); "empty" grows
+    # across unpainted mask area regardless of image content, which is useful
+    # for closing a hole inside an existing mask.
+    fill_mode = annotation_scheme.get("fill_mode", "region")
+    fill_tolerance = annotation_scheme.get("fill_tolerance", 32)
+    fill_max_pixels = annotation_scheme.get("fill_max_pixels", 4000000)
+
     # AI support configuration
     ai_support = annotation_scheme.get("ai_support", {})
     ai_enabled = ai_support.get("enabled", False)
 
     # source_field: Links this annotation schema to a display field from instance_display
     source_field = annotation_scheme.get("source_field", "")
+
+    # Keyboard profile. Defaults to V7/CVAT conventions; projects already
+    # collecting data set "legacy" to keep the bindings their annotators learned.
+    keybinding_profile = annotation_scheme.get(
+        "keybinding_profile", DEFAULT_KEYBINDING_PROFILE)
+    tool_keys = get_tool_keys(keybinding_profile)
+
+    # carry_over: false | "prompt" | "auto"
+    #   false   - no carry-over at all (default; the previous item is arbitrary
+    #             unless the data is a sequence)
+    #   prompt  - show a "Copy previous" button the annotator can press
+    #   auto    - additionally pre-fill on load when the item has no annotations
+    carry_over = annotation_scheme.get("carry_over", False)
+    if carry_over is True:
+        carry_over = "prompt"
 
     # Build config object for JavaScript
     js_config = {
@@ -133,16 +258,33 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
         "brushSize": brush_size,
         "eraserSize": eraser_size,
         "maskOpacity": mask_opacity,
+        "fillMode": fill_mode,
+        "fillTolerance": fill_tolerance,
+        "fillMaxPixels": fill_max_pixels,
+        # The client reads its shortcuts from here rather than hardcoding a
+        # switch, so a profile change is a config change and the two can never
+        # drift from the tooltips and the docs table.
+        "keybindingProfile": keybinding_profile,
+        "toolKeys": tool_keys,
+        "commonKeys": COMMON_KEYBINDINGS,
+        "carryOver": carry_over,
         "aiSupport": ai_enabled,
         "aiFeatures": ai_support.get("features", {}) if ai_enabled else {},
         "sourceField": source_field,
+        "skeletons": annotation_scheme.get("skeletons", {}) or {},
+        "maskMode": annotation_scheme.get("mask_mode", "semantic"),
+        # Interactive segmentation. Only meaningful when the `sam` tool is
+        # configured; the client checks that before loading anything, so a
+        # project without it never fetches the runtime.
+        "segmentation": _segmentation_config(annotation_scheme, tools),
     }
 
     # Generate HTML
     html = _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_enabled, ai_support)
 
     # Generate keybindings
-    keybindings = _generate_keybindings(labels, tools)
+    keybindings = _generate_keybindings(labels, tools, tool_keys, schema_name,
+                                        carry_over)
 
     logger.info(f"Successfully generated image annotation layout for {schema_name}")
     return html, keybindings
@@ -191,8 +333,23 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
     source_field = annotation_scheme.get("source_field", "")
     source_field_attr = f' data-source-field="{escape_html_content(source_field)}"' if source_field else ""
 
-    # Generate tool buttons
-    tool_buttons = _generate_tool_buttons(tools)
+    # Generate tool buttons, with key hints from the active profile.
+    tool_buttons = _generate_tool_buttons(tools, js_config.get("toolKeys"))
+    segmentation_html = _generate_segmentation_controls(
+        js_config.get("segmentation"), escaped_name)
+
+    # Carry-over ("copy from previous image") is off unless asked for: on an
+    # unordered image set the previous item is arbitrary and the button would
+    # invite nonsense. It earns its place on sequences -- video frames,
+    # satellite time series, z-stacks.
+    carry_over_button = ""
+    if js_config.get("carryOver") in ("prompt", "auto"):
+        carry_over_button = (
+            '<button type="button" class="edit-btn carry-over-btn" '
+            'data-action="carry-over" '
+            'title="Copy annotations from the previous image (Ctrl+D)">'
+            'Copy previous</button>'
+        )
 
     # Generate label selector
     label_selector = _generate_label_selector(labels)
@@ -239,14 +396,26 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                         <button type="button" class="edit-btn" data-action="undo" title="Undo (Ctrl+Z)">Undo</button>
                         <button type="button" class="edit-btn" data-action="redo" title="Redo (Ctrl+Shift+Z)">Redo</button>
                         <button type="button" class="edit-btn delete-btn" data-action="delete" title="Delete Selected (Del)">Delete</button>
+                        {carry_over_button}
                     </div>
 
-                    <!-- Brush size control (shown when brush/eraser selected) -->
+                    <!-- Brush size control (shown when brush/eraser selected).
+                         The readout is aria-live because [ and ] change the size
+                         from anywhere on the page: without it a screen-reader
+                         user resizing the brush gets no feedback at all
+                         (WCAG 4.1.3). The label is a real <label for=...> so the
+                         slider has a programmatic name, not just a title. -->
                     <div class="brush-size-group" style="display: none;">
-                        <span class="tool-group-label">Size:</span>
-                        <input type="range" class="brush-size-slider" min="1" max="100" value="20" title="Brush Size">
-                        <span class="brush-size-value">20</span>
+                        <label class="tool-group-label" for="brush-size-{escaped_name}">Size:</label>
+                        <input type="range" id="brush-size-{escaped_name}" class="brush-size-slider"
+                               min="1" max="100" value="20"
+                               aria-describedby="brush-size-value-{escaped_name}"
+                               title="Brush size (adjust with [ and ])">
+                        <span class="brush-size-value" id="brush-size-value-{escaped_name}"
+                              aria-live="polite" aria-atomic="true">20</span>
                     </div>
+
+                    {segmentation_html}
 
                     <!-- Annotation count -->
                     <div class="count-group">
@@ -385,7 +554,54 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                                 if (brushSizeGroup) {{
                                     brushSizeGroup.style.display = (tool === 'brush' || tool === 'eraser') ? 'flex' : 'none';
                                 }}
+                                var segGroup = container.querySelector('.segmentation-group');
+                                if (segGroup) {{
+                                    segGroup.style.display = (tool === 'sam') ? 'flex' : 'none';
+                                }}
                             }});
+                        }});
+
+                        // Interactive segmentation controls. The buttons stay
+                        // disabled until a preview actually exists, so Accept
+                        // can never commit nothing.
+                        var segAccept = container.querySelector('.segmentation-accept');
+                        var segCancel = container.querySelector('.segmentation-cancel');
+                        function syncSegButtons() {{
+                            var has = !!(manager.samTool && manager.samTool.hasPreview());
+                            if (segAccept) segAccept.disabled = !has;
+                            if (segCancel) segCancel.disabled = !has;
+                        }}
+                        manager.onSegmentationStatus = syncSegButtons;
+                        if (segAccept) {{
+                            segAccept.addEventListener('click', function() {{
+                                manager.acceptSegmentation();
+                                syncSegButtons();
+                            }});
+                        }}
+                        if (segCancel) {{
+                            segCancel.addEventListener('click', function() {{
+                                manager.cancelSegmentation();
+                                syncSegButtons();
+                            }});
+                        }}
+                        document.addEventListener('keydown', function(e) {{
+                            if (manager.currentTool !== 'sam') return;
+                            // Same text-field guard every other handler uses:
+                            // Enter in a free-text answer must not commit a mask.
+                            var el = document.activeElement || {{}};
+                            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'
+                                || el.tagName === 'SELECT' || el.isContentEditable === true) {{
+                                return;
+                            }}
+                            if (e.key === 'Enter' && manager.samTool
+                                && manager.samTool.hasPreview()) {{
+                                e.preventDefault();
+                                manager.acceptSegmentation();
+                                syncSegButtons();
+                            }} else if (e.key === 'Escape' && manager.samTool) {{
+                                manager.cancelSegmentation();
+                                syncSegButtons();
+                            }}
                         }});
 
                         // Wire up brush size slider
@@ -429,8 +645,36 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                                 if (action === 'undo') manager.undo();
                                 else if (action === 'redo') manager.redo();
                                 else if (action === 'delete') manager.deleteSelected();
+                                else if (action === 'carry-over') manager.copyFromPrevious(false);
                             }});
                         }});
+
+                        // Ctrl/Cmd+D: copy from the previous image. Bound here
+                        // rather than in the manager's own handler because the
+                        // browser's bookmark shortcut has to be suppressed.
+                        if (config.carryOver === 'prompt' || config.carryOver === 'auto') {{
+                            document.addEventListener('keydown', function(e) {{
+                                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {{
+                                    if (!container.offsetParent) return;
+                                    e.preventDefault();
+                                    manager.copyFromPrevious(false);
+                                }}
+                            }});
+                        }}
+
+                        // Per-class show/hide. The shared manager owns the
+                        // persisted state; the image manager only knows how to
+                        // hide fabric objects and masks.
+                        if (typeof LabelVisibilityManager !== 'undefined') {{
+                            manager.labelVisibility = new LabelVisibilityManager({{
+                                schemaName: config.schemaName,
+                                projectKey: (window.config || {{}}).annotation_task_name,
+                                container: container,
+                                onChange: function(hidden) {{
+                                    manager.applyLabelVisibility(hidden);
+                                }},
+                            }});
+                        }}
 
                         // Set default tool and label
                         var firstToolBtn = container.querySelector('.tool-btn');
@@ -497,6 +741,15 @@ def _generate_ai_toolbar(ai_features):
             '<span class="ai-btn-icon">💡</span> Hint</button>'
         )
 
+    # Critique reviews what the annotator has already drawn, rather than
+    # producing more of it, so it sits after the generative buttons.
+    if ai_features.get("critique", True):
+        buttons.append(
+            '<button type="button" class="ai-btn" data-action="critique" '
+            'title="Ask a vision model to review the regions you have drawn">'
+            '<span class="ai-btn-icon">🧐</span> Review</button>'
+        )
+
     if not buttons:
         return ""
 
@@ -544,23 +797,99 @@ def _generate_ai_init_script(escaped_name):
     '''
 
 
-def _generate_tool_buttons(tools):
+#: Human-readable names, used by tooltips and the generated keybinding table.
+TOOL_DESCRIPTIONS = {
+    "bbox": "Bounding Box",
+    "polygon": "Polygon",
+    "polyline": "Polyline (open path)",
+    "ellipse": "Ellipse",
+    "keypoint_set": "Skeleton / Keypoint Set",
+    "cuboid_2d": "Projected 3D Cuboid",
+    "freeform": "Freeform Draw",
+    "landmark": "Landmark Point",
+    "brush": "Segmentation Brush",
+    "fill": "Flood Fill",
+    "eraser": "Eraser",
+}
+
+#: Decorative glyphs. Kept apart from TOOL_DESCRIPTIONS because they are
+#: aria-hidden and carry no meaning.
+TOOL_ICONS = {
+    "bbox": "□",
+    "polygon": "⬡",
+    "polyline": "⌇",
+    "ellipse": "⬭",
+    "keypoint_set": "⛹",
+    "cuboid_2d": "⬛",
+    "freeform": "✎",
+    "landmark": "◉",
+    "brush": "🖌️",
+    "fill": "🪣",
+    "eraser": "⌫",
+}
+
+#: Short button labels.
+TOOL_LABELS = {
+    "bbox": "Box",
+    "polygon": "Polygon",
+    "polyline": "Polyline",
+    "ellipse": "Ellipse",
+    "keypoint_set": "Skeleton",
+    "cuboid_2d": "Cuboid",
+    "freeform": "Draw",
+    "landmark": "Point",
+    "brush": "Brush",
+    "fill": "Fill",
+    "eraser": "Eraser",
+}
+
+
+def _generate_segmentation_controls(segmentation, escaped_name):
+    """
+    Status line and accept/discard controls for the magic wand.
+
+    Rendered only when the tool is configured. The status line is `aria-live`
+    because every meaningful event here — the model loading, a mask appearing,
+    a click finding nothing — happens on a canvas a screen reader cannot see,
+    and several of them take seconds.
+    """
+    if not segmentation:
+        return ""
+    return f"""
+                    <div class="segmentation-group" style="display: none;">
+                        <span class="segmentation-status" role="status"
+                              aria-live="polite" aria-atomic="true"
+                              data-kind="info"></span>
+                        <button type="button" class="segmentation-accept"
+                                disabled
+                                title="Accept this mask (Enter)">Accept</button>
+                        <button type="button" class="segmentation-cancel"
+                                disabled
+                                title="Discard this mask (Escape)">Discard</button>
+                    </div>"""
+
+
+def _generate_tool_buttons(tools, tool_keys=None):
     """
     Generate HTML for tool selection buttons.
+
+    The tooltip's key hint comes from the active profile rather than a hardcoded
+    letter. It used to say "(B)" for bbox regardless, which was wrong the moment
+    the bindings became configurable -- and was already wrong for brush, fill and
+    eraser, whose documented "(M)/(G)/(E)" hints had no handler at all.
     """
-    tool_info = {
-        "bbox": {"label": "Box", "title": "Bounding Box (B)", "icon": "□"},
-        "polygon": {"label": "Polygon", "title": "Polygon (P)", "icon": "⬡"},
-        "freeform": {"label": "Draw", "title": "Freeform Draw (F)", "icon": "✎"},
-        "landmark": {"label": "Point", "title": "Landmark Point (L)", "icon": "◉"},
-        "brush": {"label": "Brush", "title": "Segmentation Brush (M)", "icon": "🖌️"},
-        "fill": {"label": "Fill", "title": "Flood Fill (G)", "icon": "🪣"},
-        "eraser": {"label": "Eraser", "title": "Eraser (E)", "icon": "⌫"},
-    }
+    if tool_keys is None:
+        tool_keys = get_tool_keys()
 
     buttons = []
     for tool in tools:
-        info = tool_info.get(tool, {"label": tool, "title": tool, "icon": "?"})
+        key = tool_keys.get(tool)
+        info = {
+            "label": TOOL_LABELS.get(tool, tool),
+            "icon": TOOL_ICONS.get(tool, "?"),
+            "title": (f"{TOOL_DESCRIPTIONS.get(tool, tool)} ({key.upper()})"
+                      if key else TOOL_DESCRIPTIONS.get(tool, tool)),
+        }
         # These are toggles, not plain buttons: `aria-pressed` is what tells a
         # screen reader which tool is armed. Without it the active state is
         # carried only by a CSS class and is invisible to assistive tech --
@@ -598,36 +927,67 @@ def _generate_label_selector(labels):
     return "\n".join(buttons)
 
 
-def _generate_keybindings(labels, tools):
+def _generate_keybindings(labels, tools, tool_keys=None, schema_name="",
+                          carry_over=False):
     """
     Generate keybinding list for the schema.
+
+    Args:
+        labels: Processed label dicts
+        tools: Enabled tool names
+        tool_keys: {tool: key} from the active profile; defaults to the default profile
+        schema_name: Used only to make collision warnings locatable
     """
+    if tool_keys is None:
+        tool_keys = get_tool_keys()
+
     keybindings = []
+    used = {}
 
-    # Tool shortcuts
-    tool_keys = {
-        "bbox": ("b", "Bounding Box tool"),
-        "polygon": ("p", "Polygon tool"),
-        "freeform": ("f", "Freeform draw tool"),
-        "landmark": ("l", "Landmark point tool"),
-        "brush": ("m", "Segmentation brush tool"),
-        "fill": ("g", "Flood fill tool"),
-        "eraser": ("e", "Eraser tool"),
-    }
     for tool in tools:
-        if tool in tool_keys:
-            keybindings.append(tool_keys[tool])
+        key = tool_keys.get(tool)
+        if not key:
+            continue
+        keybindings.append((key, f"{TOOL_DESCRIPTIONS.get(tool, tool)} tool"))
+        used[key] = f"{tool} tool"
 
-    # Label shortcuts
+    # Label shortcuts. A label whose key_value collides with a tool key would
+    # fire both actions on one press. Warn and keep the label, per the project
+    # convention -- dropping it silently would leave an annotator with a label
+    # they cannot reach.
     for label in labels:
-        if label.get("key_value"):
-            keybindings.append((label["key_value"], f"Select label: {label['name']}"))
+        key = label.get("key_value")
+        if not key:
+            continue
+        if key in used:
+            logger.warning(
+                "Keybinding conflict in image_annotation schema '%s': key '%s' is "
+                "bound to %s and also to label '%s'. Both will fire. Change the "
+                "label's key_value, or set keybinding_profile to move the tool keys.",
+                schema_name, key, used[key], label["name"],
+            )
+        else:
+            used[key] = f"label {label['name']}"
+        keybindings.append((key, f"Select label: {label['name']}"))
 
-    # Common shortcuts
     keybindings.extend([
+        (COMMON_KEYBINDINGS["select"], "Select/move mode"),
+        (COMMON_KEYBINDINGS["hide"], "Hide/show the current label"),
+        (f'Shift+{COMMON_KEYBINDINGS["hide"].upper()}',
+         "Show only the current label"),
         ("Del", "Delete selected"),
         ("+/-", "Zoom in/out"),
         ("0", "Fit to view"),
     ])
+
+    if carry_over in ("prompt", "auto"):
+        keybindings.append(("Ctrl+D", "Copy annotations from the previous image"))
+
+    # Brush size only makes sense when a size-using tool is enabled.
+    if any(t in tools for t in ("brush", "eraser")):
+        keybindings.append((
+            f'{COMMON_KEYBINDINGS["brush_size_down"]}/{COMMON_KEYBINDINGS["brush_size_up"]}',
+            "Decrease/increase brush size",
+        ))
 
     return keybindings

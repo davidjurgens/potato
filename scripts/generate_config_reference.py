@@ -94,6 +94,7 @@ CATEGORY_ORDER = [
         "psychometrics", "boundary_probing", "event_template", "corpus_map",
         "rooms", "truth_serum", "thinkaloud", "pocket",
         "analytics", "annotator_dashboard", "keystroke_logging",
+        "annotation_telemetry",
     ]),
     ("UI & Layout", [
         "ui", "ui_config", "layout", "instance_display", "format_handling",

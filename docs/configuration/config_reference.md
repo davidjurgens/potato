@@ -150,6 +150,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `analytics` |  | object | `pricing`, `thresholds` |
 | `annotator_dashboard` |  | object | `enabled`, `show_active_annotators`, `show_personal_progress`, `show_project_progress` |
 | `keystroke_logging` |  | object | `classify_paste_source`, `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_session_ms`, `include_schemas`, `pause_thresholds_ms`, `store_events` |
+| `annotation_telemetry` |  | object | `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_ms`, `include_schemas`, `store_events` |
 
 ## UI & Layout
 
@@ -339,6 +340,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `soft_label` | `labels` | `total`, `min_per_label`, `show_distribution_chart` | Probability distribution across labels via constrained sliders |
 | `span` | `labels` | `sequential_key_binding`, `bad_text_label`, `title`, `allow_discontinuous`, `entity_linking`, ... | Text span annotation/highlighting with optional entity linking to knowledge bases |
 | `span_link` | `link_types`, `span_schema` | `visual_display` | Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION) |
+| `spatial_annotation` | `tools`, `labels` | `source_field`, `color_mode`, `point_size`, `max_points`, `min_annotations`, ... | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments |
 | `speech_transcript` | (none beyond name/description) | `segments_key`, `audio_key`, `error_types`, `allow_correction` | Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction |
 | `table_grid` | (none beyond name/description) | `image_key`, `rows_key`, `cols_key`, `default_rows`, `default_cols`, ... | Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty) |
 | `temporal_grounding` | (none beyond name/description) | `video_key`, `events_key`, `duration` | Video temporal grounding: mark gold event intervals with live IoU vs predicted |

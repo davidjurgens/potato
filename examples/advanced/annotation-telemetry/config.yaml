@@ -1,0 +1,86 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Annotation telemetry: how a drawn annotation was produced.
+#
+# The drawing-process counterpart of keystroke logging. Records timing, zoom,
+# revision and AI-accept latency -- never coordinates -- so a researcher can
+# tell considered annotation from rubber-stamping.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/annotation-telemetry/config.yaml -p 8000
+#
+# Then draw a few boxes, zoom in, undo something, and look at:
+#   /admin/api/annotation_process     (needs the admin key below)
+#
+# The objects in these images are deliberately small. Deciding where their
+# boundary actually falls at 1x is hard, which is what makes zoom behaviour
+# informative here -- on a task whose objects fill the frame it would say
+# nothing at all.
+
+port: 8000
+annotation_task_name: "Annotation telemetry demo"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+
+admin_api_key: "demo_admin_key"
+
+data_files:
+  - data/scenes.json
+
+item_properties:
+  id_key: id
+  text_key: image_url
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: objects
+    description: "Box every coloured object. Zoom in before deciding where the edge is."
+    source_field: image_url
+    tools:
+      - bbox
+      - polygon
+      - brush
+      - eraser
+    zoom_enabled: true
+    pan_enabled: true
+    labels:
+      - name: block
+        color: '#d6604d'
+        key_value: "1"
+      - name: partial
+        color: '#4575b4'
+        key_value: "2"
+
+annotation_telemetry:
+  enabled: true
+
+  # `events` keeps the raw stream so a feature added later can be recomputed
+  # rather than re-collected. `summary` derives every number but persists
+  # nothing replayable -- the right setting when you want the measurements
+  # without keeping a record of each annotator's session.
+  fidelity: events
+  store_events: true
+
+  # Two minutes, not thirty seconds. Inspecting a hard image is real work that
+  # produces no events at all, and a tight cut-off would charge careful looking
+  # to idle time.
+  idle_ms: 120000
+  flush_interval_ms: 10000
+
+  # Annotators see a persistent notice. It is rendered server-side, so it
+  # survives a script that fails to load.
+  disclose_to_annotators: true
+
+  detection:
+    enabled: true
+
+    # Off here because this demo has nowhere near the 30 sessions a fit needs.
+    # On a real project turn it on: the built-in thresholds are documented
+    # starting points, not values with evidence behind them at those numbers.
+    calibrate: false
+
+    thresholds: {}

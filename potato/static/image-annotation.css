@@ -43,6 +43,163 @@
     margin-right: 5px;
 }
 
+/* Per-class show/hide.
+   The eye sits inside the label button but is its own control: selecting a
+   label to draw with and hiding that label are different intentions, and
+   conflating them would make the common action risky. */
+.label-visibility-toggle {
+    margin-left: 6px;
+    padding: 0 2px;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.55;
+    /* Keep the button width stable as the glyph swaps, or the toolbar reflows
+       every time a class is hidden. */
+    display: inline-block;
+    min-width: 14px;
+    text-align: center;
+}
+
+.label-visibility-toggle:hover,
+.label-visibility-toggle:focus-visible {
+    opacity: 1;
+}
+
+/* On the armed label the button turns solid blue. The glyph is an emoji, so it
+   keeps its own colours instead of inheriting the button's white text — at 55%
+   opacity it muddies into the blue and reads as a smudge. Show it at full
+   strength there. */
+.label-btn.active .label-visibility-toggle {
+    opacity: 1;
+}
+
+.label-visibility-toggle:focus-visible {
+    outline: 2px solid #0b5ed7;
+    outline-offset: 1px;
+    border-radius: 2px;
+}
+
+/* A hidden class stays legible and selectable — it is still a valid drawing
+   target, and its annotations still exist. Strike-through carries the state
+   without relying on the reduced opacity alone (WCAG 1.4.1). */
+.label-btn.label-hidden {
+    opacity: 0.55;
+}
+
+.label-btn.label-hidden .label-color-dot {
+    /* The colour swatch is the thing that reads as "this class is on screen",
+       so hollow it out rather than just fading it. */
+    background-color: transparent !important;
+    box-shadow: inset 0 0 0 2px currentColor;
+}
+
+/* Live region for actions that only change canvas pixels — copying annotations
+   in, clearing them — which are otherwise completely silent to a screen reader.
+   Clipped rather than display:none, because hidden content is not announced. */
+.image-annotation-container .annotation-announcer {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* One-time notice that the tool shortcuts moved to the V7/CVAT profile.
+   Informational, not an error: it uses the neutral-info treatment so it does
+   not read as "something went wrong with your annotation".
+
+   Scoped to the container (0,2,0) rather than bare (0,1,0) because
+   styles.css:455 `.annotation-form fieldset *` is (0,1,1) and set this text to
+   `inherit`. The inherited colour happened to be legible, but the notice has a
+   FIXED light-blue background, so any project that changes the base text colour
+   could have made it unreadable. The dark-mode rules below are already
+   container-scoped; this matches them. */
+.image-annotation-container .keybinding-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+    margin-bottom: 6px;
+    /* Kept deliberately short. This banner sits ABOVE the canvas, so every
+       pixel of its height pushes the Next button further down a page that
+       already overflows a laptop viewport. It is transient information, and
+       it must not cost the annotator a scroll on every item to advance. */
+    padding: 5px 10px;
+    border: 1px solid #b6d4fe;
+    border-left: 3px solid #0d6efd;
+    border-radius: 4px;
+    background: #eff6ff;
+    color: #1e3a5f;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.image-annotation-container .keybinding-notice code {
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.image-annotation-container .keybinding-notice-dismiss {
+    margin-left: auto;
+    /* min-height, not padding alone: this is the only control in the notice and
+       a 24px target is the WCAG 2.5.8 floor, not a comfortable size. */
+    min-height: 32px;
+    padding: 6px 12px;
+    border: 1px solid #0d6efd;
+    border-radius: 4px;
+    background: #fff;
+    color: #0d6efd;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.keybinding-notice-dismiss:hover {
+    background: #0d6efd;
+    color: #fff;
+}
+
+.keybinding-notice-dismiss:focus-visible {
+    outline: 2px solid #0b5ed7;
+    outline-offset: 2px;
+}
+
+/* Dark mode for the notice.
+   The container establishes a slate dark palette (see the .dark-mode block
+   below); without these rules the notice kept its light-mode colours and its
+   body text sat at 1.04:1 against the dark toolbar -- present, and unreadable. */
+.image-annotation-container.dark-mode .keybinding-notice {
+    border-color: #35507a;
+    border-left-color: #4d8bd8;
+    background: #22334d;
+    color: #e2e8f0;
+}
+
+.image-annotation-container.dark-mode .keybinding-notice code {
+    background: #2f4569;
+    color: #bfdbfe;
+}
+
+.image-annotation-container.dark-mode .keybinding-notice-dismiss {
+    border-color: #4d8bd8;
+    background: transparent;
+    color: #90c2ff;
+}
+
+.image-annotation-container.dark-mode .keybinding-notice-dismiss:hover {
+    background: #90c2ff;
+    color: #1a202c;
+}
+
 /* Tool buttons */
 .tool-btn,
 .label-btn,
@@ -363,4 +520,401 @@
 
 .image-annotation-toolbar::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8;
+}
+
+/* ==========================================================================
+   VLM critique review queue
+   ==========================================================================
+
+   Sits BELOW the canvas, unlike the keybinding notice: it is read after
+   drawing rather than before, and it is long enough that putting it above
+   would push the image and the Next button off a laptop viewport entirely.
+
+   Every colour rule here is container-scoped for the same reason the notice
+   is -- `styles.css:455 .annotation-form fieldset *` is (0,1,1) and silently
+   wins against a bare (0,1,0) declaration, leaving text colour dependent on
+   whatever ancestor it inherited from against a fixed background. */
+
+/* The panel background is deliberately a shade DOWN from the cards it holds,
+   not up. Cards were #fff on a #fbfcfe panel -- 1.02:1, so their 1px outline
+   was doing all the work and the result read as a bordered box inside a
+   bordered box. Letting figure/ground separate them means the card outline can
+   step back to a hairline instead of competing with the panel's. */
+.image-annotation-container .critique-panel {
+    margin-top: 10px;
+    padding: 12px 14px;
+    border: 1px solid #d6dee8;
+    border-radius: 6px;
+    background: #f2f5f9;
+    color: #1f2937;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.image-annotation-container .critique-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+}
+
+.image-annotation-container .critique-heading {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.image-annotation-container .critique-counts,
+.image-annotation-container .critique-provenance {
+    margin: 0;
+    font-size: 12px;
+    color: #55637a;
+}
+
+.image-annotation-container .critique-provenance {
+    margin-top: 10px;
+}
+
+/* The caveat is the honest framing, so it is legible body text rather than
+   fine print -- 12px at #4b5563 is 7.5:1, well past AA. Making it whisper
+   would be a way of not really saying it. */
+.image-annotation-container .critique-caveat {
+    margin: 8px 0 0;
+    padding-left: 10px;
+    border-left: 3px solid #cbd5e1;
+    font-size: 12px;
+    color: #4b5563;
+}
+
+.image-annotation-container .critique-stale,
+.image-annotation-container .critique-error {
+    margin: 10px 0 0;
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid #f0c36d;
+    background: #fdf6e3;
+    color: #6b4c11;
+    font-size: 12px;
+}
+
+.image-annotation-container .critique-error {
+    border-color: #e5a6a6;
+    background: #fdf2f2;
+    color: #7a2b2b;
+}
+
+.image-annotation-container .critique-error p {
+    margin: 4px 0 0;
+}
+
+.image-annotation-container .critique-status,
+.image-annotation-container .critique-clean,
+.image-annotation-container .critique-note {
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: #4b5563;
+}
+
+.image-annotation-container .critique-subheading {
+    margin: 14px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.image-annotation-container .critique-list {
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.image-annotation-container .critique-card {
+    padding: 9px 11px;
+    border: 1px solid #e3e9f1;
+    border-left: 3px solid #94a3b8;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.image-annotation-container .critique-warn {
+    border-left-color: #d97706;
+}
+
+.image-annotation-container .critique-info {
+    border-left-color: #2563eb;
+}
+
+.image-annotation-container .critique-muted {
+    border-left-color: #cbd5e1;
+    background: #f8fafc;
+}
+
+/* A card the annotator has finished with recedes but stays readable.
+
+   This used to be `opacity: 0.55` on the whole card, which was wrong in a way
+   that only shows up in numbers: the disabled BUTTONS are exempt from WCAG
+   1.4.3, but the result line under them is not, and "Relabelled to “sign”." --
+   the receipt for an action that changed the annotator's data -- was landing
+   at 2.46:1. The rationale went to 2.98:1 and the label to 3.99:1.
+
+   Receding by background and accent instead leaves every one of them at full
+   strength (5.69:1, 9.53:1, 16.40:1) while reading as clearly handled. The
+   left accent goes neutral because a verdict that has been dealt with is no
+   longer a severity worth colour-coding. */
+.image-annotation-container .critique-done {
+    background: #f4f6fa;
+    border-left-color: #cbd5e1;
+}
+
+.image-annotation-container .critique-card-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+/* The badge and the label are the only <span>s in this panel, and
+   `styles.css:464 .annotation-form fieldset span` sets
+   `color: var(--text-color) !important` on every one of them. No amount of
+   specificity beats that, so these two declarations need !important of their
+   own -- the only two in this file.
+
+   It is not cosmetic. In dark mode the badge text landed on
+   var(--text-color) (#374151) against a #2f425f pill: 1.2:1, an empty-looking
+   capsule with the verdict invisible inside it. Light mode only ever looked
+   right by luck, because var(--text-color) happens to be a dark grey. Both are
+   pinned explicitly here so neither depends on that coincidence. */
+.image-annotation-container .critique-badge {
+    padding: 1px 7px;
+    border-radius: 10px;
+    background: #eef2f7;
+    color: #334155 !important;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.image-annotation-container .critique-label {
+    font-weight: 600;
+    color: #111827 !important;
+}
+
+.image-annotation-container .critique-rationale {
+    margin: 5px 0 0;
+    font-size: 12px;
+    color: #374151;
+}
+
+.image-annotation-container .critique-card-result {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #1f6f43;
+}
+
+.image-annotation-container .critique-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.image-annotation-container .critique-btn,
+.image-annotation-container .critique-disclosure {
+    /* 32px, matching the notice dismiss: WCAG 2.5.8's 24px floor is a minimum
+       to pass, not a size anyone wants to hit repeatedly, and this queue is
+       worked through one item at a time. */
+    min-height: 32px;
+    padding: 5px 11px;
+    /* #b9c4d4 measured 1.72:1 against the panel and the button fill is only
+       1.02:1 against it, so the border was the sole thing defining the control
+       and it failed WCAG 1.4.11 (non-text contrast, AA, needs 3:1). #7d8b9f is
+       3.37:1 and still reads as quiet. This whole panel is controls, so a
+       boundary nobody can see is not a small problem. */
+    border: 1px solid #7d8b9f;
+    border-radius: 4px;
+    background: #fff;
+    color: #1f2937;
+    font-size: 12px;
+    cursor: pointer;
+    /* Matches .tool-btn and friends above. Colour only, so it stays on the
+       compositor; there is no layout property in this transition. */
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.image-annotation-container .critique-btn:hover:not(:disabled),
+.image-annotation-container .critique-disclosure:hover {
+    background: #eef2f7;
+}
+
+.image-annotation-container .critique-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* :focus with a :focus:not(:focus-visible) suppressor, matching the pattern the
+   tool buttons above already use, rather than bare :focus-visible — a browser
+   without :focus-visible support would otherwise get no ring at all on a panel
+   that is entirely controls. */
+.image-annotation-container .critique-btn:focus,
+.image-annotation-container .critique-disclosure:focus,
+.image-annotation-container .critique-close:focus {
+    outline: 2px solid #0b5ed7;
+    outline-offset: 2px;
+}
+
+.image-annotation-container .critique-btn:focus:not(:focus-visible),
+.image-annotation-container .critique-disclosure:focus:not(:focus-visible),
+.image-annotation-container .critique-close:focus:not(:focus-visible) {
+    outline: none;
+}
+
+.image-annotation-container .critique-disclosure-wrap {
+    margin-top: 12px;
+}
+
+.image-annotation-container .critique-close {
+    margin-left: auto;
+    min-width: 32px;
+    min-height: 32px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: #55637a;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.image-annotation-container .critique-close:hover {
+    background: #eef2f7;
+    color: #1f2937;
+}
+
+/* Dark mode. Without these the panel keeps its white cards against the slate
+   container -- the same failure the keybinding notice had, in reverse. */
+.image-annotation-container.dark-mode .critique-panel {
+    border-color: #35507a;
+    background: #1b2942;
+    color: #e2e8f0;
+}
+
+.image-annotation-container.dark-mode .critique-heading,
+.image-annotation-container.dark-mode .critique-subheading {
+    color: #f1f5f9;
+}
+
+/* !important for the reason given on .critique-label above: it is a <span>. */
+.image-annotation-container.dark-mode .critique-label {
+    color: #f1f5f9 !important;
+}
+
+.image-annotation-container.dark-mode .critique-badge {
+    color: #dbe4f0 !important;
+}
+
+.image-annotation-container.dark-mode .critique-counts,
+.image-annotation-container.dark-mode .critique-caveat,
+.image-annotation-container.dark-mode .critique-status,
+.image-annotation-container.dark-mode .critique-clean,
+.image-annotation-container.dark-mode .critique-note,
+.image-annotation-container.dark-mode .critique-provenance,
+.image-annotation-container.dark-mode .critique-rationale {
+    color: #cbd5e1;
+}
+
+.image-annotation-container.dark-mode .critique-caveat {
+    border-left-color: #4a5b78;
+}
+
+/* `border-color` is a shorthand and sets all four sides, so declaring it here
+   silently erased the coloured left edge that carries the verdict's severity.
+   Set the three neutral sides only, then re-declare the accent below in
+   brighter variants -- #d97706 on #22334d is 2.4:1 and reads as a smudge. */
+.image-annotation-container.dark-mode .critique-card {
+    border-top-color: #35507a;
+    border-right-color: #35507a;
+    border-bottom-color: #35507a;
+    border-left-color: #4a5b78;
+    background: #22334d;
+}
+
+.image-annotation-container.dark-mode .critique-warn {
+    border-left-color: #f0a338;
+}
+
+.image-annotation-container.dark-mode .critique-info {
+    border-left-color: #6da5f5;
+}
+
+.image-annotation-container.dark-mode .critique-muted {
+    background: #1e2c44;
+    border-left-color: #4a5b78;
+}
+
+/* Dark counterpart of the light .critique-done recede, for the same reason:
+   every one of these stays at full strength (result 9.00:1, rationale 9.44:1,
+   label 12.79:1) instead of being multiplied down by an opacity. */
+.image-annotation-container.dark-mode .critique-done {
+    background: #1e2c44;
+    border-left-color: #4a5b78;
+}
+
+.image-annotation-container.dark-mode .critique-badge {
+    background: #2f425f;
+}
+
+/* #4a5b78 was 2.12:1 against the panel — the same 1.4.11 failure as the light
+   border. #6b81a6 is 3.69:1. */
+.image-annotation-container.dark-mode .critique-btn,
+.image-annotation-container.dark-mode .critique-disclosure {
+    border-color: #6b81a6;
+    background: #2a3d5a;
+    color: #e2e8f0;
+}
+
+.image-annotation-container.dark-mode .critique-btn:hover:not(:disabled),
+.image-annotation-container.dark-mode .critique-disclosure:hover {
+    background: #35507a;
+}
+
+.image-annotation-container.dark-mode .critique-close {
+    color: #cbd5e1;
+}
+
+.image-annotation-container.dark-mode .critique-close:hover {
+    background: #35507a;
+    color: #f1f5f9;
+}
+
+.image-annotation-container.dark-mode .critique-stale {
+    border-color: #7a6021;
+    background: #3a3016;
+    color: #f0dcae;
+}
+
+.image-annotation-container.dark-mode .critique-error {
+    border-color: #7a3a3a;
+    background: #3a1f1f;
+    color: #f3c7c7;
+}
+
+.image-annotation-container.dark-mode .critique-card-result {
+    color: #86e2ac;
+}
+
+/* Live region for the review panel. Visually hidden but not display:none,
+   which would take it out of the accessibility tree and silence it. */
+.image-annotation-container .critique-announcer {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }

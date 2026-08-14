@@ -272,6 +272,20 @@
         ]
       }
     },
+    "/admin/api/annotation_process": {
+      "get": {
+        "operationId": "get_admin_api_annotation_process",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Per-annotator drawing-dynamics rollup: how geometry annotations were made.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/admin/api/annotators": {
       "get": {
         "operationId": "get_admin_api_annotators",
@@ -2478,6 +2492,30 @@
         ]
       }
     },
+    "/api/annotation_telemetry/{instance_id}": {
+      "get": {
+        "operationId": "get_get_annotation_telemetry",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Drawing-dynamics summaries for one instance, for the current user.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/api/audio/proxy": {
       "get": {
         "operationId": "get_audio_proxy",
@@ -2511,6 +2549,20 @@
           }
         },
         "summary": "Get behavioral data for a specific instance.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/api/calibration": {
+      "get": {
+        "operationId": "get_get_item_calibration",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Camera calibration for one item, so 3D boxes can be drawn onto its images.",
         "tags": [
           "core"
         ]
@@ -2992,6 +3044,20 @@
         ]
       }
     },
+    "/api/critique_annotations": {
+      "post": {
+        "operationId": "post_critique_annotations",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Ask a vision model to review this user's annotations on the current image.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/api/current_instance": {
       "get": {
         "operationId": "get_get_current_instance",
@@ -3158,6 +3224,20 @@
           }
         },
         "summary": "Record human verification of an LLM prediction.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/api/image_annotations/previous": {
+      "get": {
+        "operationId": "get_get_previous_image_annotations",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Return this user's image annotations for the item BEFORE their current one.",
         "tags": [
           "core"
         ]
@@ -4403,6 +4483,20 @@
           }
         },
         "summary": "Track annotation changes from the frontend.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/api/track_annotation_telemetry": {
+      "post": {
+        "operationId": "post_track_annotation_telemetry",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Receive completed drawing sessions from the annotation telemetry tracker.",
         "tags": [
           "core"
         ]
@@ -6227,6 +6321,81 @@
         ]
       }
     },
+    "/media/info/{filepath}": {
+      "get": {
+        "operationId": "get_media_info",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Describe a source without rendering it.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/pointcloud/{filepath}": {
+      "get": {
+        "operationId": "get_media_point_cloud",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Serve a point cloud as the PNT1 buffer the 3D viewer fetches.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/proxy/{filepath}": {
+      "get": {
+        "operationId": "get_media_proxy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Serve a transcoded rendering of ``filepath``, caching the result.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/media/{filepath}": {
       "get": {
         "operationId": "get_serve_media",
@@ -6247,6 +6416,31 @@
           }
         },
         "summary": "Serve a local media file from the project's media directory.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/models/{filepath}": {
+      "get": {
+        "operationId": "get_serve_model_file",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Serve a downloaded segmentation model or the ONNX runtime.",
         "tags": [
           "core"
         ]

@@ -274,24 +274,49 @@ annotation_schemes:
 
 ### 9. Image Annotation (`image_annotation`)
 
-Allows annotators to draw bounding boxes, polygons, and place landmarks on images.
+Allows annotators to draw bounding boxes, polygons, open polylines, ellipses and
+freeform shapes, place landmark points, and paint segmentation masks on images.
 
 **Required Fields:**
-- `labels` (list): Array of label categories for annotations
+- `labels` (list): Label categories. Entries may be plain strings, or objects
+  with `name`, `color`, `key_value`, and (for COCO round-tripping) `label_id`.
+- `tools` (list): Which drawing tools to enable. One or more of
+  `bbox`, `polygon`, `polyline`, `ellipse`, `freeform`, `landmark`,
+  `keypoint_set`, `cuboid_2d`, `brush`, `eraser`, `fill`.
 
 **Optional Fields:**
-- `annotation_mode` (string): Drawing mode - "bbox", "polygon", or "landmark"
-- `allow_multiple` (boolean): Allow multiple annotations per image
+- `source_field` (string): Instance field holding the image URL
+- `zoom_enabled` / `pan_enabled` (boolean, default `true`)
+- `min_annotations` / `max_annotations` (int)
+- `brush_size` / `eraser_size` (int, default 20), `mask_opacity` (float, default 0.5)
+- `fill_mode` (`"region"` default, or `"empty"`), `fill_tolerance` (0–255, default 32)
+- `keybinding_profile` (`"v7"` default, or `"legacy"`)
+- `carry_over` (`false` default, `"prompt"`, or `"auto"`)
+- `ai_support` (object): AI-assisted detection settings
 
 **Example:**
 ```yaml
 annotation_schemes:
-  - annotation_type: "image_annotation"
-    name: "object_detection"
+  - annotation_type: image_annotation
+    name: object_detection
     description: "Draw boxes around all vehicles"
-    labels: ["car", "truck", "motorcycle", "bicycle"]
-    annotation_mode: "bbox"
+    source_field: image_url
+    tools:
+      - bbox
+      - polygon
+      - brush
+    labels:
+      - name: car
+        color: "#FF6B6B"
+        key_value: "1"
+      - name: truck
+        color: "#4ECDC4"
+        key_value: "2"
 ```
+
+There is **no** `annotation_mode` or `allow_multiple` option — enable multiple
+entries in `tools` instead, and use `min_annotations` / `max_annotations` to
+control how many annotations an image may carry.
 
 See [Image Annotation](multimedia/image_annotation.md) for detailed documentation.
 
@@ -319,24 +344,40 @@ See [Audio Annotation](multimedia/audio_annotation.md) for detailed documentatio
 
 ### 11. Video Annotation (`video_annotation`)
 
-Allows frame-by-frame labeling of video content with playback controls.
+Temporal segmentation, frame classification, keyframes, and object tracking on
+video, with a waveform-style timeline.
 
 **Required Fields:**
-- `labels` (list): Array of label categories
+- `labels` (list): Label categories
 
 **Optional Fields:**
-- `annotation_mode` (string): "frame" for frame-by-frame, "segment" for time segments
-- `frame_step` (number): Frame advance increment
+- `mode` (string): One of `segment` (default), `frame`, `keyframe`, `tracking`,
+  or `combined`
+- `frame_stepping` (boolean): Enable frame-by-frame stepping controls
+- `video_fps` (number): Frames per second, for frame/timecode display
+- `segment_schemes` (list): Nested schemas applied to each segment
+- `min_segments` / `max_segments` (int)
+- `timeline_height` / `overview_height` (int)
+- `zoom_enabled`, `playback_rate_control`, `show_timecode` (boolean)
+- `tracking_options` (object): Settings for `tracking` mode
 
 **Example:**
 ```yaml
 annotation_schemes:
-  - annotation_type: "video_annotation"
-    name: "action_recognition"
+  - annotation_type: video_annotation
+    name: action_recognition
     description: "Label the action being performed"
-    labels: ["walking", "running", "sitting", "standing"]
-    annotation_mode: "frame"
+    mode: segment
+    frame_stepping: true
+    labels:
+      - name: walking
+        color: "#FF6B6B"
+      - name: running
+        color: "#4ECDC4"
 ```
+
+There is **no** `annotation_mode` or `frame_step` option; the keys are `mode`
+and `frame_stepping`, and `mode` accepts five values, not two.
 
 See [Video Annotation](multimedia/video_annotation.md) for detailed documentation.
 

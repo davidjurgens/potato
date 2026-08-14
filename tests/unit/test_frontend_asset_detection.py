@@ -78,8 +78,16 @@ class TestDetectFrontendAssets:
         for key, val in assets.items():
             assert val is False, f"{key} should be False for empty path"
 
-    def test_segmentation_tools_alias(self, tmp_path):
-        """segmentation_tools should mirror image_annotation."""
+    def test_no_segmentation_tools_alias(self, tmp_path):
+        """
+        segmentation_tools is gone.
+
+        It existed only to load segmentation-tools.js, whose
+        SegmentationToolManager was never instantiated anywhere, and
+        css/segmentation.css, whose only live rules overrode the accessible
+        .tool-btn.active styling for two tools. Both were deleted; the alias
+        would now gate nothing.
+        """
         html_file = tmp_path / "img.html"
         html_file.write_text(
             '<div class="image-annotation-container"></div>',
@@ -87,7 +95,7 @@ class TestDetectFrontendAssets:
         )
         assets = _detect_frontend_assets_for_page(str(html_file))
         assert assets["image_annotation"] is True
-        assert assets["segmentation_tools"] is True
+        assert "segmentation_tools" not in assets
 
     def test_coreference_also_enables_span_link(self, tmp_path):
         """span_link should be True when coreference is detected."""
@@ -343,8 +351,6 @@ class TestTemplateAssetSync:
         used_keys.discard("default")
 
         all_asset_keys = set(FRONTEND_ASSET_MARKERS.keys())
-        # segmentation_tools is a derived alias, not in FRONTEND_ASSET_MARKERS
-        all_asset_keys.add("segmentation_tools")
 
         missing = used_keys - all_asset_keys
         assert not missing, (

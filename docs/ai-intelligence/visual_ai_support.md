@@ -197,6 +197,18 @@ Identifies significant moments in a video that would make good annotation points
 ### Object Tracking (Video)
 Suggests object positions across frames for consistent tracking annotation.
 
+### Critique / Review
+Runs the other direction from every feature above: instead of producing
+annotations, it reviews the ones already drawn. Each region is cropped with the
+annotator's own outline drawn onto it and shown to the model, which says
+whether the outlined thing matches its label and whether the outline fits. The
+result is a review queue, not canvas overlays, and nothing is applied without a
+button press.
+
+Needs a model that can both see and explain, so a pure detector such as YOLO is
+filtered out of the toolbar. See
+**[Annotation Critique](annotation_critique.md)** for the full guide.
+
 ## Using AI Suggestions
 
 1. Click the AI assistance button (Detect, Auto, Hint, etc.)

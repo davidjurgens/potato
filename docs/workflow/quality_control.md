@@ -156,6 +156,53 @@ gold_standards:
 - `explanation` (optional): Explanation shown to annotators
 - `difficulty` (optional): Metadata for analysis
 
+### Gold Standards for Drawn Answers
+
+Image annotation gold standards work, and are graded by **overlap rather than
+equality** — two annotators never produce byte-identical geometry, so a string
+comparison would fail every drawn answer no matter how well it was drawn.
+
+The `gold_label` value is the same JSON the annotation client stores: a list of
+objects with normalized (0–1) coordinates.
+
+```json
+[
+  {
+    "id": "gold_img_001",
+    "image": "images/street_042.jpg",
+    "gold_label": {
+      "objects": "[{\"type\": \"bbox\", \"label\": \"car\", \"coordinates\": {\"x\": 0.12, \"y\": 0.40, \"width\": 0.22, \"height\": 0.18}}]"
+    },
+    "explanation": "The parked car on the left; the reflection in the window is not a second car."
+  }
+]
+```
+
+An answer passes when **every** gold shape is matched by a drawn shape of the
+**same label** at or above the IoU tolerance, with no extra shapes. Right place,
+wrong label is a failure — that is what a gold standard exists to catch.
+
+```yaml
+quality_control:
+  geometry_iou_tolerance: 0.5   # default; also accepted inside gold_standards
+```
+
+| Tolerance | Effect |
+|---|---|
+| `0.5` (default) | The Pascal VOC / COCO detection convention. The annotator clearly found and outlined the right object. |
+| `0.75`–`0.9` | Strict. Appropriate for segmentation work where boundary precision is the skill being tested. |
+| `0.25`–`0.4` | Loose. Appropriate for "did you spot it at all" screening, or for small objects where a few pixels dominate the IoU. |
+
+!!! tip "IoU punishes small objects"
+
+    A fixed pixel error costs far more IoU on a small object than a large one.
+    If your gold items are dominated by small objects, a 0.5 tolerance is
+    stricter in practice than it sounds — consider lowering it or choosing
+    larger gold objects.
+
+The same comparator grades training-phase practice questions, so a project's
+gold standards and its training answers are held to the same standard.
+
 ### Feedback Display
 
 After submitting a gold standard item, annotators see:

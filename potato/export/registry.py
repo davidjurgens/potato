@@ -117,6 +117,13 @@ def _register_builtin_exporters():
     from .coco_exporter import COCOExporter
     from .yolo_exporter import YOLOExporter
     from .pascal_voc_exporter import PascalVOCExporter
+    from .cityscapes_exporter import CityscapesExporter
+    from .cvat_exporter import CVATExporter
+    from .darwin_exporter import DarwinExporter
+    from .davis_exporter import DAVISExporter
+    from .kitti_exporter import KITTIExporter
+    from .labelme_exporter import LabelMeExporter
+    from .mot_exporter import MOTExporter
     from .conll_2003_exporter import CoNLL2003Exporter
     from .conll_u_exporter import CoNLLUExporter
     from .mask_exporter import MaskExporter
@@ -131,11 +138,25 @@ def _register_builtin_exporters():
     from .quotation_report_exporter import QuotationReportExporter
     from .convokit_exporter import ConvoKitExporter
     from .keystroke_exporter import KeystrokeExporter
+    from .annotation_telemetry_exporter import AnnotationTelemetryExporter
 
     exporters = [
         COCOExporter(),
         YOLOExporter(),
         PascalVOCExporter(),
+        # Close the round trips: both formats were import-only, and a
+        # one-way import means a team cannot move back or hand corrected
+        # annotations to a colleague still on the source tool.
+        CVATExporter(),
+        LabelMeExporter(),
+        # Closing the remaining migration round trips. Darwin in particular
+        # matters both ways: an import-only path lets a team move off V7 but
+        # never hand work back to a colleague still on it.
+        DarwinExporter(),
+        KITTIExporter(),
+        MOTExporter(),
+        CityscapesExporter(),
+        DAVISExporter(),
         CoNLL2003Exporter(),
         CoNLLUExporter(),
         MaskExporter(),
@@ -156,6 +177,7 @@ def _register_builtin_exporters():
         # Reads the project SQLite database rather than user_state.json; falls
         # back to JSONL when pyarrow is absent, so it has no hard dependency.
         KeystrokeExporter(),
+        AnnotationTelemetryExporter(),
     ]
 
     # Optional exporters with external dependencies

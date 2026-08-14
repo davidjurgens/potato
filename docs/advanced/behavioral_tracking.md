@@ -157,6 +157,18 @@ Each annotation instance includes a `behavioral_data` object:
         "pasted_fraction": 0.0,
         "verdict": {"level": "ok", "flag_names": []}
       }
+    },
+    "annotation_telemetry": {
+      "objects": {
+        "shapes_added": 7,
+        "shape_interval_median_ms": 4200.0,
+        "revision_ratio": 0.22,
+        "max_zoom": 3.5,
+        "ai_suggested": 9,
+        "ai_accepted": 6,
+        "ai_accept_latency_median_ms": 3100.0,
+        "verdict": {"flags": [], "scores": {}, "notes": {}}
+      }
     }
   }
 }
@@ -166,6 +178,12 @@ Each annotation instance includes a `behavioral_data` object:
 `typing_summaries` is populated only when
 [keystroke logging](keystroke_logging.md) is enabled; the raw keystroke streams
 live in the project's SQLite database rather than here.
+
+`annotation_telemetry` is populated only when
+[annotation telemetry](annotation_telemetry.md) is enabled, and follows the same
+split: the summary here, the raw event streams in SQLite. It is keyed by schema
+name alone rather than `schema:::label`, because a drawn annotation is stored
+under a single `_data` key and there is no label to key on.
 
 ### Storage Location
 
@@ -184,6 +202,12 @@ Behavioral tracking is enabled by default. No additional configuration is requir
     revisions, paste detection — are **not** part of this default tracking. They
     are configured under `keystroke_logging`, default off, and documented in
     [Keystroke Logging](keystroke_logging.md).
+
+!!! note "Annotation telemetry is also separate and opt-in"
+    Drawing dynamics on geometry schemas — time per shape, zoom behaviour,
+    revision counts, and AI-suggestion accept latency — are configured under
+    `annotation_telemetry`, default off, and documented in
+    [Annotation Telemetry](annotation_telemetry.md).
 
 ### Frontend Debug Mode
 

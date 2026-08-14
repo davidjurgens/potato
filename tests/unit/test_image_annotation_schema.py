@@ -102,14 +102,18 @@ class TestImageAnnotationSchema:
 
         html, keybindings = generate_image_annotation_layout(scheme)
 
-        # Should have tool keybindings
-        tool_keys = [k for k, _ in keybindings]
-        assert "b" in tool_keys  # bbox
-        assert "p" in tool_keys  # polygon
+        # Should have tool keybindings, taken from the active profile rather
+        # than hardcoded letters (the default profile is V7's, where bbox is R).
+        from potato.server_utils.schemas.image_annotation import get_tool_keys
+        expected = get_tool_keys()
+
+        bound = [k for k, _ in keybindings]
+        assert expected["bbox"] in bound
+        assert expected["polygon"] in bound
 
         # Should have label keybindings
-        assert "1" in tool_keys
-        assert "2" in tool_keys
+        assert "1" in bound
+        assert "2" in bound
 
     def test_zoom_controls_present(self):
         """Test that zoom controls are generated."""
@@ -368,15 +372,24 @@ class TestKeybindings:
     """Tests for keybinding generation."""
 
     def test_tool_keybindings(self):
-        """Test tool keybindings."""
+        """
+        Tool keybindings come from the active profile.
+
+        Asserted against the profile rather than literal letters: the default
+        moved to V7/CVAT conventions (bbox is R, not B), and hardcoding letters
+        here would just re-pin whichever profile happened to be default.
+        """
+        from potato.server_utils.schemas.image_annotation import get_tool_keys
+
         labels = [{"name": "test"}]
         keybindings = _generate_keybindings(labels, ["bbox", "polygon"])
 
         keys = dict(keybindings)
-        assert "b" in keys  # bbox
-        assert "p" in keys  # polygon
-        assert "Bounding Box" in keys["b"]
-        assert "Polygon" in keys["p"]
+        expected = get_tool_keys()
+        assert expected["bbox"] in keys
+        assert expected["polygon"] in keys
+        assert "Bounding Box" in keys[expected["bbox"]]
+        assert "Polygon" in keys[expected["polygon"]]
 
     def test_label_keybindings(self):
         """Test label keybindings."""

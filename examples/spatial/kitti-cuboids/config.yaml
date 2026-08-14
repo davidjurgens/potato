@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# 3D bounding boxes on a lidar point cloud.
+#
+# The clouds here are KITTI-style velodyne `.bin` files (raw float32
+# x, y, z, intensity, no header) generated synthetically so the example is
+# small and carries no licence questions. Drop real KITTI scans in `clouds/`
+# and they will load unchanged.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/spatial/kitti-cuboids/config.yaml -p 8000
+#
+# Then: press `c` for the box tool, pick a class, and drag on the ground plane
+# to place a box. Drag with the left mouse button to orbit, right button to
+# pan, scroll to zoom.
+#
+# The panels under the viewport show the same scene from the camera, with your
+# boxes projected onto it — edit in 3D, verify in 2D. That is what makes an
+# oriented box on a few dozen lidar returns checkable rather than a guess.
+#
+# Coordinates are stored in METRES in the sensor frame, never normalized —
+# unlike image annotation, which is normalized to [0, 1]. See
+# potato/export/spatial_utils.py for why 3D has its own contract.
+#
+# Regenerate the scans, camera views and calibration with:
+#   python examples/spatial/kitti-cuboids/generate_scene.py
+
+port: 8000
+annotation_task_name: "Lidar 3D boxes"
+task_dir: .
+# One media root holding clouds/, images/ and calib/. Everything the browser
+# may fetch lives under it and nothing else does, so the traversal guard in
+# potato/media/paths.py is scoped to exactly these files.
+media_directory: media
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+data_files:
+  - data/scenes.json
+
+item_properties:
+  id_key: id
+  text_key: point_cloud
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: spatial_annotation
+    name: objects
+    description: "Put a 3D box around every vehicle and pedestrian."
+    source_field: point_cloud
+    tools:
+      - cuboid_3d
+      - point_3d
+    labels:
+      - name: car
+        color: "#FF6B6B"
+        key_value: "1"
+      - name: truck
+        color: "#4ECDC4"
+        key_value: "2"
+      - name: pedestrian
+        color: "#FFD93D"
+        key_value: "3"
+    # height | intensity | rgb | uniform. Lidar has no colour, so height is the
+    # useful default; intensity works too and often separates road markings.
+    color_mode: height
+    point_size: 2.0
+    # Clouds larger than this are thinned by uniform stride before being sent,
+    # and the viewer says so. Raise it on a fast machine.
+    max_points: 400000
+    # Item field holding the camera calibration. Omit it (or leave the field
+    # empty) and the camera panels simply do not appear — a lidar-only project
+    # is a normal thing to have, not a misconfiguration.
+    calibration_field: calibration
+    # A new box starts this tall, then snaps its vertical extent to the points
+    # inside its footprint. Height is the dimension a top-down drag cannot
+    # express and the one annotators judge worst; the returns answer it exactly.
+    default_box_height: 1.7
+    fit_box_height: true
+
+  - annotation_type: text
+    name: notes
+    description: "Anything unclear about this scene? (optional)"

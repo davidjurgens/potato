@@ -322,6 +322,13 @@ def _resolve_generated_template_path(html_file: str) -> str:
 # rather than a silent asset-loading miss.
 FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "image_annotation": ("image-annotation-container",),
+    # Interactive segmentation, keyed on the tool button the schema renders.
+    # Gated separately from image_annotation because the ONNX runtime is a
+    # 13 MB fetch that a project drawing only boxes should never pay for.
+    "segmentation": ('data-tool="sam"',),
+    # 3D point cloud annotation. Gated separately from image_annotation
+    # because three.js is a 670 KB download that a 2D project must not pay for.
+    "spatial_annotation": ("pointcloud-annotation-container",),
     "audio_annotation": ("audio-annotation-container",),
     "video_annotation": ("video-annotation-container",),
     "span_link": ("span-link-container",),
@@ -339,6 +346,10 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "web_agent_playback": ('data-auto-playback="true"',),
     "web_agent_recorder": ("web-agent-recorder",),
     "live_coding_agent": ("live-coding-agent-viewer",),
+    # Per-class show/hide is shared across modalities. Keyed on the label-button
+    # convention that image and video annotation already render identically, so
+    # any surface adopting that markup gets the feature without new wiring.
+    "label_visibility": ("label-btn",),
 }
 
 
@@ -357,8 +368,6 @@ def _detect_frontend_assets_for_page(html_file: str, display_html: str = "") -> 
 
     detected = {key: has_any(*markers) for key, markers in FRONTEND_ASSET_MARKERS.items()}
 
-    # segmentation_tools is an alias — loaded whenever image_annotation is present
-    detected["segmentation_tools"] = detected["image_annotation"]
     # span_link also loads when coreference is present
     detected["span_link"] = detected["span_link"] or detected["coreference"]
 
@@ -2180,7 +2189,14 @@ def _training_page_context(user_state):
     instance_id = ""
     if instance is not None:
         data = instance.get_data()
-        text = data.get("displayed_text") or data.get("text", "")
+        # Respect the project's configured text_key. Hardcoding
+        # displayed_text/text meant an image project — whose text_key points at
+        # the image URL field — produced an EMPTY training question, so the
+        # canvas had no image to load even once its assets were wired up.
+        text_key = config.get("item_properties", {}).get("text_key", "text")
+        text = (data.get("displayed_text")
+                or data.get(text_key)
+                or data.get("text", ""))
         instance_id = instance.get_id()
 
     total = len(training_state.training_instances)
@@ -2261,6 +2277,40 @@ def get_current_page_html(config, username):
         keystroke_client_config["enabled"]
         and keystroke_client_config["fidelity"] != "off"
     )
+
+    # Same for drawing telemetry, and for the same reason: the TRAINING phase
+    # renders real annotation schemes through this path, so telemetry gated only
+    # on the annotation path would silently collect nothing during training --
+    # which is exactly where a new annotator's drawing behaviour is most worth
+    # measuring.
+    from potato.server_utils.config_module import (
+        get_annotation_telemetry_client_config)
+    telemetry_client_config = get_annotation_telemetry_client_config(config)
+    context['annotation_telemetry_client_config'] = telemetry_client_config
+    context['annotation_telemetry_enabled'] = (
+        telemetry_client_config["enabled"]
+        and telemetry_client_config["fidelity"] != "off"
+    )
+
+    # Phase pages are rendered from the SAME template as the annotation page, so
+    # they need the same asset gating. Without this, `frontend_assets` defaults
+    # to {} and neither fabric.js nor image-annotation.js is loaded — which made
+    # image annotation completely non-functional during TRAINING: the canvas
+    # element rendered and nothing ever initialized it. Audio, video, and span
+    # practice questions had the same problem.
+    #
+    # This is the two-render-path hazard: anything conditional added to
+    # base_template_v2.html must be wired here as well as in
+    # render_page_with_annotations, or the feature silently works on only half
+    # the workflow.
+    annotation_schemes = config.get("annotation_schemes", []) or []
+    # The detector resolves the template path itself.
+    context['frontend_assets'] = _detect_frontend_assets_for_page(html_fname)
+    context['has_image_annotation'] = any(
+        scheme.get("annotation_type") == "image_annotation"
+        for scheme in annotation_schemes
+    )
+    context['ai_enabled'] = config.get("ai_support", {}).get("enabled", False)
 
     if phase == UserPhase.TRAINING:
         context.update(_training_page_context(user_state))
@@ -2720,6 +2770,16 @@ def render_page_with_annotations(username: str):
         keystroke_client_config["enabled"]
         and keystroke_client_config["fidelity"] != "off"
     )
+    # Annotation telemetry (drawing dynamics on geometry schemas): conditional
+    # asset + JS config. Screening thresholds stay server-side; see
+    # get_annotation_telemetry_client_config.
+    from potato.server_utils.config_module import (
+        get_annotation_telemetry_client_config)
+    annotation_telemetry_client_config = get_annotation_telemetry_client_config(config)
+    annotation_telemetry_enabled = (
+        annotation_telemetry_client_config["enabled"]
+        and annotation_telemetry_client_config["fidelity"] != "off"
+    )
     # Truth Serum (surprisingly-popular scoring): conditional assets + JS config
     truth_serum_client_config = None
     if config.get("truth_serum", {}).get("enabled", False):
@@ -2835,6 +2895,8 @@ def render_page_with_annotations(username: str):
         boundary_enabled=boundary_enabled,
         keystroke_logging_enabled=keystroke_logging_enabled,
         keystroke_client_config=keystroke_client_config,
+        annotation_telemetry_enabled=annotation_telemetry_enabled,
+        annotation_telemetry_client_config=annotation_telemetry_client_config,
         boundary_client_config=boundary_client_config,
         # Truth Serum (surprisingly-popular scoring)
         truth_serum_enabled=truth_serum_enabled,
@@ -4810,6 +4872,12 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == 'import':
         from potato.importers.cli import main as import_main
         sys.exit(import_main(sys.argv[2:]))
+
+    # ``download-models`` fetches segmentation weights. Dispatched here for the
+    # same reason as the others: it takes a model name, not a config file.
+    if len(sys.argv) > 1 and sys.argv[1] == 'download-models':
+        from potato.models_cli import main as models_main
+        sys.exit(models_main(sys.argv[2:]))
 
     # Parse command line arguments
     args = arguments()

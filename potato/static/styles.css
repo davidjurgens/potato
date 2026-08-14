@@ -1137,11 +1137,27 @@ input[type="range"]::-moz-range-thumb {
   padding: var(--space-sm) var(--space-md);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* Was `center`. As a column flex container, that made every child shrink to
+   * its content on the cross axis — including the <fieldset>, which then became
+   * ~200px wide inside an 860px box. `.shadcn-span-options` is a
+   * `repeat(auto-fill, minmax(180px, 1fr))` grid resolved against that fieldset,
+   * so it only ever got ONE column: five labels stacked in a narrow centred
+   * strip with two thirds of the box empty beside them. */
+  align-items: stretch;
   width: fit-content;
   max-width: 100%;
   font-family: var(--font-sans);
   position: relative;
+}
+
+/* The fieldset is the grid's containing block, so it has to carry the box's
+ * width or the label grid cannot use it. The `[schema]` in the selector is not
+ * decoration: `fieldset[schema] { width: fit-content }` further down this file
+ * has the same specificity as a bare `.shadcn-span-container > fieldset` and
+ * comes later, so the plain form of this rule loses. */
+.shadcn-span-container > fieldset[schema] {
+  width: 100%;
+  min-width: 0;
 }
 
 .shadcn-span-title {
@@ -4085,7 +4101,12 @@ body > .container-fluid {
   color: var(--primary-color);
 }
 
-.potato-navbar .adjudicate-btn {
+/* The Codebook link (annotation_codebook_url) is a sibling of these buttons in
+   .navbar-end and had no rule of its own, so it fell back to the default anchor
+   colour: link-blue on the purple navbar, effectively unreadable. It is the same
+   kind of control, so it gets the same treatment. */
+.potato-navbar .adjudicate-btn,
+.potato-navbar .codebook-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -4100,7 +4121,8 @@ body > .container-fluid {
   transition: background 0.15s ease;
 }
 
-.potato-navbar .adjudicate-btn:hover {
+.potato-navbar .adjudicate-btn:hover,
+.potato-navbar .codebook-btn:hover {
   background: rgba(255,255,255,0.25);
   color: white;
 }
@@ -6390,10 +6412,36 @@ body > .container-fluid {
   transition: box-shadow 0.15s ease;
 }
 
-/* Annotation form card — clean presentation, no uniform border */
-#annotation-forms > .annotation_schema > .annotation-form {
-  border-left: none;
-  padding-left: 0;
+/* NOTE: there used to be a blanket reset here —
+ *
+ *   #annotation-forms > .annotation_schema > .annotation-form {
+ *     border-left: none; padding-left: 0; }
+ *
+ * — described as "clean presentation, no uniform border". Nothing gives a plain
+ * .annotation-form a left border or left padding to remove, so the rule had no
+ * upside; what it did have was an id in its selector, which let it outrank every
+ * schema container's own card. `.event-annotation-container`,
+ * `.audio-annotation-container`, `.span-link-container`, `.mde-container` and the
+ * `.shadcn-*-container` family all declare a border and shorthand padding, and
+ * this stripped the LEFT side of both, leaving panels bordered on three sides
+ * with their content flush against the missing edge. It also erased the left
+ * edge of the red `.annotation-form.required-unfilled` outline, so the
+ * "please answer this" affordance was visibly broken on every schema. */
+
+/* Event annotation is read together with the span schema it references — the
+ * labels create the entities, the panel wires them into events. Left to the
+ * default flow the label box takes the full row (see .shadcn-span-container in
+ * the full-width list) and the event panel lands underneath it in a narrow
+ * column, so the two halves of one task are never on screen together. Pair them
+ * into two columns instead; flex-wrap still stacks them on a narrow viewport. */
+#annotation-forms > .annotation_schema:has(.event-annotation-container)
+  > .shadcn-span-container,
+#annotation-forms > .annotation_schema:has(.event-annotation-container)
+  > .event-annotation-container {
+  flex: 1 1 340px;
+  width: auto;
+  max-width: none;
+  min-width: 0;
 }
 
 /* Annotation schema description text (below legend) — styled as help text */
@@ -6777,4 +6825,15 @@ body > .container-fluid {
 
 .keystroke-disclosure-text {
     flex: 1 1 auto;
+}
+
+/* Two collections can be on at once -- typing dynamics on free-text answers
+   and drawing dynamics on the canvas. Each is a separate opt-in and each keeps
+   its own line, because merging them would let one notice imply consent to the
+   other. But stacked with a full border between them they read as two
+   competing banners, so only the last one carries the separating rule and the
+   pair reads as one statement about what the task records. */
+.keystroke-disclosure + .keystroke-disclosure {
+    border-top: none;
+    padding-top: 0;
 }

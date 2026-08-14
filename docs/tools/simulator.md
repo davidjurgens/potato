@@ -190,6 +190,47 @@ Gold standard file format:
 ]
 ```
 
+## Simulating Image Annotation
+
+Simulated annotators can draw. An `image_annotation` schema produces boxes,
+polygons, or points in the same normalized (0–1) client contract the real
+annotation canvas writes, so image projects can be piloted, load-tested, and —
+most usefully — used to check that the agreement statistics behave.
+
+Without a reference set, shapes are invented from the schema's `tools` and
+`labels`. With one, the simulated annotator **redraws** it with noise scaled to
+their competence, because that is how real annotators actually disagree:
+
+| Error mode | What it represents | Rate at competence `a` |
+|---|---|---|
+| Boundary jitter | Nobody traces the same outline twice | `0.004 + 0.04 × (1 − a)` |
+| Dropped object | A detection miss | `0.30 × (1 − a)` |
+| Mislabelled object | A classification error | `0.40 × (1 − a)` |
+| Spurious object | A false positive | `0.25 × (1 − a)` |
+
+Jitter never reaches zero, deliberately. A simulator that reproduced geometry
+byte-for-byte would make an exact-match comparator look correct — which is
+exactly the bug that made image gold standards unusable in the first place.
+
+### Validating your agreement statistics
+
+Because competence is known, the reported agreement can be checked against it.
+Running two annotators of equal competence over 25 items gives:
+
+| Competence | `mean_agreement` | `mean_matched_iou` | `detection_f1` |
+|---|---|---|---|
+| 1.0 | 0.90 | 0.90 | 1.00 |
+| 0.9 | 0.73 | 0.81 | 0.96 |
+| 0.8 | 0.51 | 0.76 | 0.79 |
+| 0.5 | 0.26 | 0.71 | 0.55 |
+| 0.2 | 0.12 | 0.67 | 0.31 |
+
+Note the divergence, which is the reason the report has four numbers rather than
+one: at competence 0.2 the *matched* IoU is still 0.67 — the shapes those
+annotators did draw are reasonable — while detection F1 has collapsed to 0.31
+because they are missing most objects. A single "agreement" score would hide
+which of the two problems you have.
+
 ## Quality Control Testing
 
 Test attention check detection:

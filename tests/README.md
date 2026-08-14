@@ -211,10 +211,43 @@ JavaScript unit tests for frontend functionality using jsdom.
 - **User Isolation**: Each test gets unique user account
 - **Session Persistence**: Maintains user sessions across requests
 
+### Playwright Tests (Browser, `tests/playwright/`)
+- **BasePlaywrightTest**: mirrors `BaseSeleniumTest` — register/login, plus
+  `verify_server_annotations()` against `/get_annotations`
+- **Auto-skipped** when playwright is not installed; marked `@pytest.mark.playwright`
+- **120s per-test timeout**, applied by the directory's conftest. The global
+  30s in `pytest.ini` is too short for start-server → launch-browser →
+  load-image → drive-mouse → navigate, and raising it globally would weaken
+  the fast unit suite.
+- **Canvas helpers** for image annotation, because a fabric canvas is a single
+  `<canvas>`: no shape has a DOM node, so nothing can be asserted with a
+  selector.
+
+| Helper | Purpose |
+|--------|---------|
+| `image_manager_ready()` | Wait for the manager **and its loaded image** — drawing before the image loads silently produces nothing |
+| `draw_bbox_on_image()` / `paint_stroke_on_image()` | Coordinates as **image-relative fractions (0–1)**. The image is scaled and centred, so canvas (0,0) is usually outside it and drawing there yields negative — correct but unintended — coordinates |
+| `read_annotation_data()` | Parse the hidden input the save path collects, **not** the manager's in-memory state, which would hide serialization bugs |
+| `assert_persists_across_navigation()` | Next → Previous, never `refresh()` |
+
+**Persistence is always tested by navigating away and back.** Browsers restore
+form state across a refresh, so a refresh-based test passes even when the server
+stored nothing — a recurring source of false positives in this repo.
+
+Image fixtures live in `tests/data/` and are served at `/test-image/` (matching
+the existing `/test-audio/` and `/test-video/` routes). A `data:` URI cannot be
+used: `sanitize_html` blocks the `data:` scheme as an XSS vector, so the URL is
+stripped out of the rendered instance text and no image ever loads.
+
 ### Unit Tests (Isolated)
 - **Mock Interfaces**: No external dependencies
 - **Fast Execution**: Quick feedback for development
 - **Pure Functions**: Test individual components in isolation
+- **Drift guards**: several tests fail when a generated artifact or a
+  hand-maintained list falls out of step with the code —
+  `test_static_asset_versions.py` (a `?v=` cache-buster not bumped after an edit),
+  `test_no_new_cdn_assets.py` (a new external dependency), plus the config-schema,
+  OpenAPI, and docs-nav drift tests. Each prints the exact command to fix it.
 
 ## Annotation Types Tested
 

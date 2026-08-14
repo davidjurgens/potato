@@ -98,6 +98,35 @@ class VisualDetectionFormat(BaseModel):
     detections: List[Detection]
 
 
+class SegmentationMask(BaseModel):
+    """One pixel-level mask, in the RLE shape the client and exporters share.
+
+    `rle` is Potato's own run-length form -- {"counts": [...], "size": [h, w]}
+    -- deliberately NOT a base64 PNG or a polygon. It is what
+    `cv_utils.normalize_annotation_object` already reads, so an accepted mask
+    reaches every exporter with no conversion step to get wrong.
+    """
+    #: Must match a label in the schema config, or the accept path rejects it.
+    label: str
+    #: {"counts": [int, ...], "size": [height, width]}
+    rle: dict
+    confidence: Optional[float] = None
+
+
+class VisualSegmentationFormat(BaseModel):
+    """Segmentation results for an image.
+
+    Example output:
+    {
+        "masks": [
+            {"label": "road", "rle": {"counts": [0, 120, 45], "size": [480, 640]},
+             "confidence": 0.94}
+        ]
+    }
+    """
+    masks: List[SegmentationMask]
+
+
 class VisualClassificationFormat(BaseModel):
     """Classification result for an image or region.
 
@@ -198,6 +227,55 @@ class VideoTrackingSuggestionFormat(BaseModel):
     tracks: List[ObjectTrack]
 
 
+class AnnotationCritiqueFormat(BaseModel):
+    """A vision model's verdict on ONE annotated region.
+
+    This is a judge output, not an annotation: nothing here becomes geometry.
+    The model is shown a crop with the annotator's own outline drawn on it and
+    asked whether the outlined thing matches its label and whether the outline
+    fits. See :mod:`potato.ai.critique` for the parsing and confidence gating
+    -- every field here is treated as advisory and re-validated, because open
+    models return verdict strings and labels outside the allowed vocabulary
+    often enough that trusting the schema alone would manufacture findings.
+
+    Example output:
+    {
+        "verdict": "wrong_label",
+        "suggested_label": "dog",
+        "boundary": "tight",
+        "confidence": 0.82,
+        "rationale": "The outlined animal has a long snout and floppy ears."
+    }
+    """
+    verdict: str
+    suggested_label: Optional[str] = None
+    boundary: Optional[str] = None
+    confidence: float = 0.0
+    rationale: Optional[str] = None
+
+
+class MissedObjectEntry(BaseModel):
+    """One object the model believes was left unannotated.
+
+    ``bbox`` is normalized and approximate. Vision-language models localize
+    poorly, so this is a hint about where to look, never an acceptable
+    annotation -- accepting it would put a guessed coordinate in the dataset.
+    """
+    label: str
+    bbox: Optional[BoundingBox] = None
+    confidence: float = 0.0
+    rationale: Optional[str] = None
+
+
+class MissedObjectsFormat(BaseModel):
+    """Whole-image "what did the annotator miss?" result.
+
+    An empty list is the expected answer for careful work, and the prompt says
+    so -- without that, models pad the list to look useful.
+    """
+    missed: List[MissedObjectEntry]
+
+
 class FrameDetections(BaseModel):
     """Detections for a single video frame."""
     frame_index: int
@@ -248,7 +326,12 @@ CLASS_REGISTRY = {
 
     # Visual annotation formats - Image
     "visual_detection": VisualDetectionFormat,
+    "visual_segmentation": VisualSegmentationFormat,
     "visual_classification": VisualClassificationFormat,
+
+    # Judge formats -- these critique annotations rather than producing them
+    "annotation_critique": AnnotationCritiqueFormat,
+    "missed_objects": MissedObjectsFormat,
 
     # Visual annotation formats - Video
     "video_scene_detection": VideoSceneDetectionFormat,

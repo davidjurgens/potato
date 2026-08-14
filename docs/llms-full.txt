@@ -72,6 +72,9 @@ over prose when writing a config or calling the API.
 - [Instance Display](annotation-types/instance_display.md) - Display images, video, audio, and text separately from annotation collection
 - [Conditional Logic](configuration/conditional_logic.md) - Show/hide questions based on prior answers
 - [Image Annotation](annotation-types/multimedia/image_annotation.md) - Bounding boxes, polygons, and landmarks
+- [Image Annotation Formats](annotation-types/multimedia/image_formats.md) - Import COCO (polygons, RLE masks, crowd regions) with no preprocessing, and export back
+- [Point Cloud Annotation (3D)](annotation-types/spatial/point_cloud.md) - Oriented 3D boxes on lidar: KITTI, PCD, PLY and LAS, converted server-side
+- [Calibration and 2D Verification](annotation-types/spatial/calibration.md) - Project 3D boxes into the camera images, so a box is checkable rather than a guess
 - [Audio Annotation](annotation-types/multimedia/audio_annotation.md) - Audio segmentation with waveform visualization
 - [Audio Dialogue](annotation-types/multimedia/audio_dialogue.md) - Podcast/interview turn annotation: speaker bubbles, per-turn audio playback, ratings, spans, and cross-turn linking
 - [Video Annotation](annotation-types/multimedia/video_annotation.md) - Frame-by-frame video labeling
@@ -301,6 +304,7 @@ over prose when writing a config or calling the API.
 | Use Solo Mode for collaborative annotation | [Solo Mode](solo-mode/solo_mode.md) |
 | Export annotations to Parquet | [Export Formats](data-export/export_formats.md#parquet-parquet) |
 | Export to COCO/YOLO/CoNLL | [Export Formats](data-export/export_formats.md) |
+| Import COCO annotations (RLE masks included) | [Image Annotation Formats](annotation-types/multimedia/image_formats.md) |
 | Push annotations to HuggingFace Hub | [HuggingFace Export](data-export/huggingface_export.md) |
 | Deploy on HuggingFace Spaces | [HuggingFace Spaces](data-export/huggingface_spaces.md) |
 | Run behind a `/app1/` reverse proxy | [Reverse Proxy / URL Prefix](deployment/reverse-proxy.md) |
@@ -845,7 +849,8 @@ Potato is a flexible, open-source annotation platform built for NLP and ML resea
 | Crowdsourcing (MTurk, Prolific) | Yes | - | - | - | - | - | - | - |
 | Keyboard shortcuts | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | YAML configuration (no code) | Yes | XML templates | - | Python | Java config | Config files | GUI | - |
-| Export formats | 8+ | Multiple | 10+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
+| Export formats | 18+ | Multiple | 10+ | JSONL | UIMA, CoNLL | Standoff | EAF | JSONL |
+| COCO import (incl. RLE masks) | Yes | - | Yes | - | - | - | - | - |
 
 \* Experimental.
 
@@ -885,7 +890,9 @@ Load data from 8 source types: local files, URLs, Google Drive, Dropbox, Amazon 
 
 ### Export Format Coverage
 
-Export annotations in 8+ formats including COCO JSON (with RLE masks), YOLO, Pascal VOC, CoNLL-2003, CoNLL-U, Mask PNG, EAF (ELAN), and TextGrid (Praat), plus standard JSON/JSONL/CSV/TSV.
+Export annotations in 18+ formats including COCO JSON (with RLE masks), YOLO, Pascal VOC, CoNLL-2003, CoNLL-U, Mask PNG, EAF (ELAN), and TextGrid (Praat), plus standard JSON/JSONL/CSV/TSV/Parquet.
+
+Potato also **imports** COCO as-is — polygon and RLE segmentation, including `iscrowd` crowd regions, with no preprocessing step — so existing annotations or model output can be corrected rather than recreated. See [Image Annotation Formats](annotation-types/multimedia/image_formats.md).
 
 ### Configuration Without Code
 
@@ -3523,6 +3530,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `analytics` |  | object | `pricing`, `thresholds` |
 | `annotator_dashboard` |  | object | `enabled`, `show_active_annotators`, `show_personal_progress`, `show_project_progress` |
 | `keystroke_logging` |  | object | `classify_paste_source`, `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_session_ms`, `include_schemas`, `pause_thresholds_ms`, `store_events` |
+| `annotation_telemetry` |  | object | `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_ms`, `include_schemas`, `store_events` |
 
 ## UI & Layout
 
@@ -3712,6 +3720,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `soft_label` | `labels` | `total`, `min_per_label`, `show_distribution_chart` | Probability distribution across labels via constrained sliders |
 | `span` | `labels` | `sequential_key_binding`, `bad_text_label`, `title`, `allow_discontinuous`, `entity_linking`, ... | Text span annotation/highlighting with optional entity linking to knowledge bases |
 | `span_link` | `link_types`, `span_schema` | `visual_display` | Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION) |
+| `spatial_annotation` | `tools`, `labels` | `source_field`, `color_mode`, `point_size`, `max_points`, `min_annotations`, ... | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments |
 | `speech_transcript` | (none beyond name/description) | `segments_key`, `audio_key`, `error_types`, `allow_correction` | Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction |
 | `table_grid` | (none beyond name/description) | `image_key`, `rows_key`, `cols_key`, `default_rows`, `default_cols`, ... | Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty) |
 | `temporal_grounding` | (none beyond name/description) | `video_key`, `events_key`, `duration` | Video temporal grounding: mark gold event intervals with live IoU vs predicted |
@@ -7143,24 +7152,49 @@ annotation_schemes:
 
 ### 9. Image Annotation (`image_annotation`)
 
-Allows annotators to draw bounding boxes, polygons, and place landmarks on images.
+Allows annotators to draw bounding boxes, polygons, open polylines, ellipses and
+freeform shapes, place landmark points, and paint segmentation masks on images.
 
 **Required Fields:**
-- `labels` (list): Array of label categories for annotations
+- `labels` (list): Label categories. Entries may be plain strings, or objects
+  with `name`, `color`, `key_value`, and (for COCO round-tripping) `label_id`.
+- `tools` (list): Which drawing tools to enable. One or more of
+  `bbox`, `polygon`, `polyline`, `ellipse`, `freeform`, `landmark`,
+  `keypoint_set`, `cuboid_2d`, `brush`, `eraser`, `fill`.
 
 **Optional Fields:**
-- `annotation_mode` (string): Drawing mode - "bbox", "polygon", or "landmark"
-- `allow_multiple` (boolean): Allow multiple annotations per image
+- `source_field` (string): Instance field holding the image URL
+- `zoom_enabled` / `pan_enabled` (boolean, default `true`)
+- `min_annotations` / `max_annotations` (int)
+- `brush_size` / `eraser_size` (int, default 20), `mask_opacity` (float, default 0.5)
+- `fill_mode` (`"region"` default, or `"empty"`), `fill_tolerance` (0–255, default 32)
+- `keybinding_profile` (`"v7"` default, or `"legacy"`)
+- `carry_over` (`false` default, `"prompt"`, or `"auto"`)
+- `ai_support` (object): AI-assisted detection settings
 
 **Example:**
 ```yaml
 annotation_schemes:
-  - annotation_type: "image_annotation"
-    name: "object_detection"
+  - annotation_type: image_annotation
+    name: object_detection
     description: "Draw boxes around all vehicles"
-    labels: ["car", "truck", "motorcycle", "bicycle"]
-    annotation_mode: "bbox"
+    source_field: image_url
+    tools:
+      - bbox
+      - polygon
+      - brush
+    labels:
+      - name: car
+        color: "#FF6B6B"
+        key_value: "1"
+      - name: truck
+        color: "#4ECDC4"
+        key_value: "2"
 ```
+
+There is **no** `annotation_mode` or `allow_multiple` option — enable multiple
+entries in `tools` instead, and use `min_annotations` / `max_annotations` to
+control how many annotations an image may carry.
 
 See [Image Annotation](multimedia/image_annotation.md) for detailed documentation.
 
@@ -7188,24 +7222,40 @@ See [Audio Annotation](multimedia/audio_annotation.md) for detailed documentatio
 
 ### 11. Video Annotation (`video_annotation`)
 
-Allows frame-by-frame labeling of video content with playback controls.
+Temporal segmentation, frame classification, keyframes, and object tracking on
+video, with a waveform-style timeline.
 
 **Required Fields:**
-- `labels` (list): Array of label categories
+- `labels` (list): Label categories
 
 **Optional Fields:**
-- `annotation_mode` (string): "frame" for frame-by-frame, "segment" for time segments
-- `frame_step` (number): Frame advance increment
+- `mode` (string): One of `segment` (default), `frame`, `keyframe`, `tracking`,
+  or `combined`
+- `frame_stepping` (boolean): Enable frame-by-frame stepping controls
+- `video_fps` (number): Frames per second, for frame/timecode display
+- `segment_schemes` (list): Nested schemas applied to each segment
+- `min_segments` / `max_segments` (int)
+- `timeline_height` / `overview_height` (int)
+- `zoom_enabled`, `playback_rate_control`, `show_timecode` (boolean)
+- `tracking_options` (object): Settings for `tracking` mode
 
 **Example:**
 ```yaml
 annotation_schemes:
-  - annotation_type: "video_annotation"
-    name: "action_recognition"
+  - annotation_type: video_annotation
+    name: action_recognition
     description: "Label the action being performed"
-    labels: ["walking", "running", "sitting", "standing"]
-    annotation_mode: "frame"
+    mode: segment
+    frame_stepping: true
+    labels:
+      - name: walking
+        color: "#FF6B6B"
+      - name: running
+        color: "#4ECDC4"
 ```
+
+There is **no** `annotation_mode` or `frame_step` option; the keys are `mode`
+and `frame_stepping`, and `mode` accepts five values, not two.
 
 See [Video Annotation](multimedia/video_annotation.md) for detailed documentation.
 
@@ -12822,18 +12872,112 @@ annotation_schemes:
 | `brush_size` | integer | `20` | Default brush size for segmentation (1-100) |
 | `eraser_size` | integer | `20` | Default eraser size for segmentation (1-100) |
 | `mask_opacity` | float | `0.5` | Mask overlay opacity (0-1) |
+| `fill_mode` | string | `region` | `region` grows across similar colours in the image; `empty` grows across unpainted mask area |
+| `fill_tolerance` | integer | `32` | Per-channel colour distance for `region` fill (0-255) |
+| `keybinding_profile` | string | `v7` | `v7` matches V7/CVAT conventions; `legacy` keeps Potato's pre-2.8 keys |
+| `carry_over` | string/bool | `false` | `prompt` adds a Copy-previous button; `auto` also pre-fills empty images |
+| `mask_mode` | string | `semantic` | `semantic` merges every stroke of a class into one region; `instance` keeps objects separate |
+| `skeletons` | object | `{}` | Named keypoint layouts: `{name: {names: [...], edges: [[i,j], ...]}}` |
 
 ### Available Tools
 
-| Tool | Key | Description |
-|------|-----|-------------|
-| `bbox` | `b` | Rectangular bounding boxes |
-| `polygon` | `p` | Multi-point polygons |
-| `freeform` | `f` | Free-hand drawing |
-| `landmark` | `l` | Single point markers |
-| `brush` | `m` | Segmentation brush for pixel-level masks |
-| `eraser` | `e` | Eraser for removing mask regions |
-| `fill` | `g` | Flood fill for enclosed regions |
+Keys below are the default `v7` profile; see
+[Keyboard Shortcuts](#keyboard-shortcuts) for the `legacy` mapping.
+
+| Tool | Key (`v7`) | Key (`legacy`) | Description |
+|------|-----------|----------------|-------------|
+| `bbox` | `r` | `b` | Rectangular bounding boxes |
+| `polygon` | `p` | `p` | Multi-point closed polygons |
+| `polyline` | `n` | `n` | Multi-point **open** paths — lane markings, vessels, cracks, coastlines |
+| `ellipse` | `i` | `i` | Ellipses and circles — cells, nuclei, wheels, faces |
+| `keypoint_set` | `s` | `s` | Ordered skeletons — human pose, animal pose, facial landmarks |
+| `cuboid_2d` | `c` | `c` | 3D boxes projected into the image (KITTI style) |
+| `sam` | `w` | `w` | Magic wand — click an object and a model segments it. See [Interactive segmentation](segmentation.md) |
+| `freeform` | `d` | `f` | Free-hand drawing |
+| `landmark` | `k` | `l` | Single point markers |
+| `brush` | `b` | `m` | Segmentation brush for pixel-level masks |
+| `eraser` | `e` | `e` | Eraser for removing mask regions |
+| `fill` | `f` | `g` | Flood fill for enclosed regions |
+
+#### Polyline vs polygon
+
+A polygon is closed and encloses an area; a polyline is open and has length but
+no interior. The distinction is not cosmetic — a polyline exports with `area: 0`
+and is never treated as a region, because closing it would invent an interior
+the annotator never claimed. Use `polyline` for anything linear: road markings,
+blood vessels, fractures, wires, shorelines.
+
+#### Keypoint sets (skeletons)
+
+An **ordered** set of points with COCO visibility flags — `2` visible, `1`
+labelled but occluded, `0` not labelled. Order is what gives each point its
+meaning (index 5 is "left shoulder" only because the skeleton says so), which is
+why this is one annotation rather than N separate points.
+
+```yaml
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: pose
+    tools: [keypoint_set]
+    labels: [person]
+    skeletons:
+      coco_person:
+        names: [nose, left_eye, right_eye, left_ear, right_ear,
+                left_shoulder, right_shoulder, left_elbow, right_elbow,
+                left_wrist, right_wrist, left_hip, right_hip,
+                left_knee, right_knee, left_ankle, right_ankle]
+        edges: [[0,1],[0,2],[1,3],[2,4],[5,6],[5,7],[7,9],[6,8],[8,10],
+                [5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]]
+```
+
+COCO keypoints now round-trip. Import previously exploded each set into one
+`landmark` per visible point named `person:left_shoulder`, which discarded the
+ordering, the grouping (two people became an indistinguishable pile of points),
+and the visibility flags — so nothing could reassemble the COCO `keypoints`
+array and the format was import-only. Agreement between annotators uses **OKS**
+(Object Keypoint Similarity), COCO's own metric, rather than IoU.
+
+#### Projected 3D cuboids
+
+`cuboid_2d` stores a 3D box **projected into the image** as two quadrilaterals,
+`{front: [4 points], back: [4 points]}` — the KITTI convention. This is not true
+3D: it has no depth in sensor coordinates and no calibration. Genuine 3D cuboids
+in a point cloud are a separate schema (planned, not built).
+
+The reported `area` is the **front face**, not the 8-vertex hull, because that is
+the visible extent a detector would be scored against.
+
+#### Ellipse
+
+Stored parametrically as `{cx, cy, rx, ry, angle}` (centre, radii, rotation in
+degrees), which keeps it exact rather than accumulating error through a vertex
+list. For export it is approximated as a 36-vertex polygon, so every format that
+understands polygons handles ellipses with no extra configuration. The reported
+bounding box is the *tight* box of the rotated ellipse, not the rotated corner
+box.
+
+#### Semantic vs instance masks
+
+By default (`mask_mode: semantic`) every brush stroke of a class merges into one
+region — correct for semantic segmentation, where "road" is one thing.
+
+`mask_mode: instance` keys masks `label#N`, so two adjacent cats stay two
+objects. Use it for instance segmentation, and note that it is a **prerequisite
+for interactive segmentation**: a model that returns one mask per object cannot
+be used if the store merges them on arrival.
+
+```yaml
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: instances
+    tools: [brush, eraser, fill]
+    mask_mode: instance
+    labels: [cat, dog]
+```
+
+Instance masks export with `iscrowd: 0` (one object); label-keyed semantic
+regions export with `iscrowd: 1`, which is what COCO means by a crowd region.
+Imported COCO instances already use this keying, so the two paths meet.
 
 ### Label Configuration
 
@@ -12856,6 +13000,12 @@ labels:
     key_value: "2"
 ```
 
+`color` must be **hex**: `#rgb`, `#rrggbb`, or `#rrggbbaa` (the alpha byte is
+ignored — use `mask_opacity` for overlay transparency). Named CSS colours and
+`rgb()` / `hsl()` are not read: shapes and buttons are styled by CSS and would
+look right, but masks are painted pixel by pixel and fall back to red. An
+unreadable colour logs a console warning naming the value.
+
 ## Data Format
 
 ### Input Data
@@ -12876,38 +13026,59 @@ item_properties:
 
 ### Output Data
 
-Annotations are saved as JSON with the following structure:
+Annotations are stored as a **flat JSON array**, with every shape and mask in
+the same list. Shape coordinates are **normalized to the range 0–1** against the
+image, so annotations stay correct if the image is served at a different size.
 
 ```json
-{
-  "object_detection": {
-    "annotations": [
-      {
-        "id": "ann_1",
-        "type": "bbox",
-        "label": "person",
-        "coordinates": {
-          "left": 100,
-          "top": 50,
-          "width": 200,
-          "height": 300
-        }
-      },
-      {
-        "id": "ann_2",
-        "type": "polygon",
-        "label": "vehicle",
-        "points": [
-          {"x": 10, "y": 20},
-          {"x": 100, "y": 20},
-          {"x": 100, "y": 100},
-          {"x": 10, "y": 100}
-        ]
-      }
+[
+  {
+    "type": "bbox",
+    "label": "person",
+    "color": "#FF6B6B",
+    "coordinates": {"x": 0.125, "y": 0.104, "width": 0.3125, "height": 0.625}
+  },
+  {
+    "type": "polygon",
+    "label": "vehicle",
+    "color": "#4ECDC4",
+    "coordinates": [
+      {"x": 0.02, "y": 0.04}, {"x": 0.20, "y": 0.04},
+      {"x": 0.20, "y": 0.21}, {"x": 0.02, "y": 0.21}
     ]
+  },
+  {
+    "type": "mask",
+    "label": "road",
+    "color": "#45B7D1",
+    "rle": {"counts": [12, 40, 8], "size": [480, 640]}
   }
-}
+]
 ```
+
+Per type:
+
+| Type | Geometry key | Shape |
+|------|--------------|-------|
+| `bbox` | `coordinates` | `{x, y, width, height}`, normalized |
+| `polygon` | `coordinates` | list of `{x, y}`, normalized |
+| `landmark` | `coordinates` | `{x, y}`, normalized |
+| `freeform` | `coordinates` | `{path, left, top, scaleX, scaleY}` |
+| `mask` | `rle` | `{counts: [ints], size: [height, width]}` |
+
+Notes:
+
+- `rle.size` is `[height, width]`, in that order.
+- Mask `counts` are row-major and alternate between background and foreground
+  runs, starting with a background run.
+- Masks may also carry `instance` (an index that keeps two instances of one
+  class apart) and `iscrowd`. A mask with no `iscrowd` is treated as a crowd
+  region on export, because a brush mask is keyed by label and merges every
+  stroke of that class.
+
+To convert to and from these shapes in Python, use
+`normalize_annotation_object()` and `to_client_object()` from
+`potato.export.cv_utils` rather than reading the fields directly.
 
 ## Segmentation Masks
 
@@ -12939,29 +13110,35 @@ annotation_schemes:
 
 ### Segmentation Output Format
 
-Mask data is stored as RLE (Run-Length Encoding) for efficient storage:
+Masks are stored as RLE (Run-Length Encoding) **in the same array as the
+shapes** — not under a separate `masks` key:
 
 ```json
-{
-  "segmentation": {
-    "annotations": [...],
-    "masks": {
-      "foreground": {
-        "rle": [0, 100, 50, 200, 25, ...],
-        "width": 800,
-        "height": 600,
-        "color": "#FF6B6B"
-      },
-      "background": {
-        "rle": [50, 150, 100, 300, ...],
-        "width": 800,
-        "height": 600,
-        "color": "#4ECDC4"
-      }
-    }
+[
+  {
+    "type": "mask",
+    "label": "foreground",
+    "color": "#FF6B6B",
+    "rle": {"counts": [0, 100, 50, 200, 25], "size": [600, 800]}
+  },
+  {
+    "type": "mask",
+    "label": "background",
+    "color": "#4ECDC4",
+    "rle": {"counts": [50, 150, 100, 300], "size": [600, 800]}
   }
-}
+]
 ```
+
+`size` is `[height, width]`. Counts are row-major and alternate between
+background and foreground runs, starting with background.
+
+Brush masks are keyed by **label**, so every stroke of one class merges into a
+single region — that is semantic segmentation, and it exports as COCO
+`iscrowd: 1`. Imported per-instance masks additionally carry an `instance`
+index and an explicit `iscrowd: 0`, which keeps them separate and exports them
+as N distinct annotations. Painting always edits the label-level mask and
+leaves imported instances untouched.
 
 ### Segmentation Tips
 
@@ -12970,24 +13147,125 @@ Mask data is stored as RLE (Run-Length Encoding) for efficient storage:
 3. **Fill Tool**: Use after drawing a boundary with polygon or brush to quickly fill enclosed regions
 4. **Layer Order**: Masks are rendered in label order; later labels appear on top
 
+## Showing and Hiding Classes
+
+Dense images become unreadable once several classes overlap. Each label in the
+toolbar carries an eye toggle that hides that class's annotations, and `h` /
+`Shift+H` do the same from the keyboard for the currently selected label.
+
+- Hiding is **presentation only** — hidden annotations are still saved and still
+  exported. It never deletes work.
+- Hidden classes are also made unselectable, so an annotator cannot accidentally
+  drag or delete something they cannot see.
+- The state is stored per project and schema in the browser, so a class stays
+  hidden **as you move between items** rather than resetting on every image.
+
+Nothing needs to be configured; the toggles appear automatically.
+
+**Video annotation shares this feature.** The same toggles appear on the video
+label list and hide matching segments from the timeline and the annotation list,
+with the same project-wide persistence. Hidden segments remain stored and
+exported.
+
+## Copying Annotations Between Images
+
+On image *sequences* — video frames, satellite time series, microscopy z-stacks —
+consecutive images are nearly identical, and redrawing the same shapes every time
+is most of the work. `carry_over` copies the annotations from the previous image
+in the annotator's queue.
+
+```yaml
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: objects
+    carry_over: prompt      # false (default) | prompt | auto
+```
+
+| Value | Behaviour |
+|-------|-----------|
+| `false` | No carry-over. The default. |
+| `prompt` | Adds a **Copy previous** button and the `Ctrl/Cmd+D` shortcut. |
+| `auto` | Everything `prompt` does, and additionally pre-fills on load when the image has no annotations yet. |
+
+Copied shapes are added to whatever is already on the image rather than replacing
+it, so an annotator can copy, then adjust.
+
+`auto` deliberately fires **only when the image has no annotations of its own**.
+It will not overwrite existing work, and it will not re-copy on a revisit —
+otherwise annotations the annotator deliberately deleted would keep coming back.
+
+**Leave `carry_over` off for unordered image sets.** "The previous image" is only
+meaningful when the order means something; on a shuffled set it copies annotations
+from an arbitrary unrelated image.
+
+Copying reads only the requesting annotator's own work, so it never exposes
+another annotator's annotations.
+
 ## Keyboard Shortcuts
+
+Tool shortcuts come from a **keybinding profile**. The default, `v7`, matches the
+conventions used by V7 Darwin and CVAT, so annotators moving from either tool are
+productive without relearning anything.
+
+```yaml
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: segmentation
+    keybinding_profile: v7      # v7 (default) | legacy
+```
+
+### Tool keys by profile
+
+| Tool | `v7` (default) | `legacy` |
+|------|----------------|----------|
+| Segmentation brush | `b` | `m` |
+| Eraser | `e` | `e` |
+| Fill | `f` | `g` |
+| Bounding box | `r` (rectangle) | `b` |
+| Polygon | `p` | `p` |
+| Landmark point | `k` (keypoint) | `l` |
+| Freeform draw | `d` | `f` |
+
+### Keys that are the same in both profiles
 
 | Key | Action |
 |-----|--------|
-| `b` | Select bounding box tool |
-| `p` | Select polygon tool |
-| `f` | Select freeform tool |
-| `l` | Select landmark tool |
-| `m` | Select segmentation brush tool |
-| `e` | Select eraser tool |
-| `g` | Select fill tool |
-| `1-9` | Select label by number |
-| `Delete` | Delete selected annotation |
-| `Ctrl+Z` | Undo |
-| `Ctrl+Y` | Redo |
-| `+` / `-` | Zoom in/out |
+| `v` | Select/move mode (no drawing tool armed) |
+| `h` | Hide/show the currently selected label |
+| `Shift+H` | Show only the currently selected label (press again to restore) |
+| `[` / `]` | Decrease / increase brush size |
+| `Ctrl/Cmd+D` | Copy annotations from the previous image (when `carry_over` is enabled) |
+| `1-9` | Select label by number (whatever `key_value` you configure) |
+| `Delete` / `Backspace` | Delete selected annotation |
+| `Ctrl/Cmd+Z` | Undo |
+| `Ctrl/Cmd+Shift+Z` | Redo |
+| Scroll wheel | Zoom in/out, anchored at the cursor |
+| `+` / `=` | Zoom in |
+| `-` | Zoom out |
 | `0` | Fit image to view |
-| `Escape` | Cancel current drawing |
+| Hold `Space` or `Alt` | Pan (drag the image) |
+
+A tool shortcut only fires if that tool is enabled in `tools`.
+
+### Migrating an existing project
+
+The `v7` profile **rebinds `b`, `f`, and `l`**. If you have a study already
+collecting data, your annotators have trained muscle memory and a mid-study
+rebind will cost you accuracy. Set `keybinding_profile: legacy` to keep exactly
+the keys Potato used before:
+
+```yaml
+    keybinding_profile: legacy
+```
+
+Annotators on a rebound project see a one-time dismissible notice naming the keys
+that moved, so the change is announced rather than discovered.
+
+If a label's `key_value` collides with a tool key, both actions fire on that
+press. Potato logs a warning naming the schema, the key, and both bindings —
+it does not drop the label, since a label you cannot reach is worse than a
+double-fire you have been told about. Either change the `key_value` or switch
+profiles.
 
 ## User Interface
 
@@ -13005,18 +13283,27 @@ The toolbar provides:
 - Click existing annotations to select them
 - Drag corners/edges to resize (bbox)
 - Drag points to reshape (polygon)
-- Use scroll wheel to zoom (when zoom enabled)
+- Double-click to close a polygon
+- Zoom with the toolbar buttons or `+` / `-` / `0`
+- Hold `Space` (or `Alt`) and drag to pan
 
-### Annotation List
+## Importing existing annotations
 
-Shows all annotations with:
-- Color indicator matching the label
-- Label name and annotation type
-- Click to select, double-click to focus
+You do not have to start from a blank image. A COCO file — polygons,
+uncompressed RLE, compressed RLE strings and crowd regions — can be imported
+as-is and shown to annotators pre-populated for correction:
 
-## Example Project
+```bash
+potato import --input instances.json --image-dir ./images \
+    --output-dir my-project/ --schema-name object_detection
+```
 
-See `examples/image/image-annotation/config.yaml` for a complete working example.
+See [Image Annotation Formats](image_formats.md) for the full format reference.
+
+## Example Projects
+
+- `examples/image/image-annotation/config.yaml` — annotating from scratch
+- `examples/image/coco-import/config.yaml` — correcting imported COCO annotations
 
 ## Tips for Administrators
 
@@ -13029,6 +13316,342 @@ See `examples/image/image-annotation/config.yaml` for a complete working example
 4. **Zoom for Detail**: Enable zoom for tasks requiring precise boundaries.
 
 5. **Min/Max Annotations**: Set `min_annotations` to ensure annotators don't skip images. Set `max_annotations` to prevent over-annotation.
+
+
+---
+
+<!-- source: docs/annotation-types/multimedia/segmentation.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedia/segmentation/
+
+# Interactive Segmentation
+
+!!! success "Status: working end to end"
+
+    Click-to-segment runs in the browser. Verified in a real browser against
+    the real weights: a click at (150, 120) produced a mask whose centroid was
+    (150, 120) — 0px error — covering 11,397 pixels where the target's true
+    area is 11,310, in **132 ms** per click after a one-off encode.
+
+    Two commands and it works:
+
+    ```bash
+    potato download-models onnxruntime     # 13.5 MB, once per install
+    potato download-models mobile_sam      # 45 MB
+    ```
+
+    Then add `sam` to a schema's `tools`. The brush, eraser and colour-aware
+    fill tools remain available for manual mask work.
+
+## Why the browser is the default
+
+`pip install potato` should give you working segmentation with no GPU, no new
+Python dependency, and no outbound network at annotation time. That last point
+is not a nicety: several research groups deploy Potato air-gapped, where a
+model fetched at click time is a missing feature rather than a slow one.
+
+So the planned default is **ONNX Runtime Web** running a distilled SAM-class
+model in the annotator's browser. A server endpoint exists for labs that have a
+GPU and want a larger model, but it is the exception.
+
+| | Browser (default) | Server endpoint |
+|---|---|---|
+| Setup | `potato download-models` | `pip install 'potato[vision]'` + weights |
+| GPU | Not required | Recommended |
+| Air-gapped | Yes, once models are downloaded | Yes |
+| Model size | Distilled (~30 MB) | Whatever you supply |
+
+## Encoder and decoder are separate on purpose
+
+The encoder is expensive and runs **once per image**. The decoder is cheap and
+runs **once per click**. Keeping them apart, and caching the embedding per image
+URL, is the entire reason click-to-segment feels interactive rather than like a
+network request.
+
+The embedding cache is bounded and evicts least-recently-**used**, so an
+annotator flipping between two images does not re-encode the one they keep
+returning to.
+
+## Instance masks are a prerequisite
+
+A segmentation model returns one mask **per object**. Potato's default mask
+storage is semantic — every stroke of a class merges into one region — which
+would merge those masks the moment they arrived. Set:
+
+```yaml
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: objects
+    tools: [sam, brush, eraser, fill]
+    mask_mode: instance      # required for interactive segmentation
+    labels: [cat, dog]
+```
+
+See [Image Annotation](image_annotation.md#semantic-vs-instance-masks).
+
+## Downloading models
+
+Weights are **not** bundled and are **never** downloaded implicitly.
+
+```bash
+potato download-models --list          # what exists, what is installed
+potato download-models mobile_sam      # fetch one
+potato download-models --all
+```
+
+Two reasons for the explicit step:
+
+- **Licensing.** SAM-family releases do not share one licence and some are not
+  permissive. An explicit command means whoever runs it has seen the licence
+  line printed beside the model.
+- **Size.** A quantized encoder is tens of megabytes. Fetching that during an
+  annotator's first click would look like a hang.
+
+Every file is verified against a pinned SHA-256, and a mismatched download is
+**deleted** rather than kept — an unverified model does not raise, it silently
+produces wrong masks, which is far harder to notice than a crash.
+
+| Model | Licence | Commercial use | Notes |
+|---|---|---|---|
+| `mobile_sam` | MIT (ONNX export) ¹ | Yes | **Default, and the only one with weights configured.** SAM's ViT-H encoder distilled into TinyViT: 9.66M parameters total (5M encoder) against the original SAM's 611M. Encoder 28.2 MB + decoder 16.5 MB. |
+| `edge_sam` | NTU S-Lab License 1.0 | **No** | Fastest on low-end hardware. The licence permits use "for non-commercial purpose" only; commercial use requires contacting the authors. |
+| `sam2_hiera_tiny` | Apache-2.0 | Yes | The only option supporting **video mask propagation**. Smallest of SAM 2's four Hiera backbones (tiny / small / base+ / large). |
+
+¹ Upstream MobileSAM is Apache-2.0; the [ONNX export we download](https://huggingface.co/Acly/MobileSAM)
+is published under MIT. Both are permissive, but they are not the same licence,
+so the one recorded is the one that applies to the bytes you actually get.
+
+### The decoder's input contract
+
+Verified against the real export rather than assumed — the decoder declares
+**six** required inputs and throws if any is missing:
+
+| Input | Shape | Note |
+|---|---|---|
+| `image_embeddings` | `[1, 256, 64, 64]` | from the encoder, cached per image |
+| `point_coords` | `[1, N, 2]` | absolute pixels |
+| `point_labels` | `[1, N]` | **float**, not int. 1 = foreground, 0 = background, 2/3 = box corners |
+| `mask_input` | `[1, 1, 256, 256]` | the previous low-res mask — this is how a second click *refines* rather than restarts |
+| `has_mask_input` | `[1]` | 0 on the first click |
+| `orig_im_size` | `[2]` | **height first**. The wrong order returns a silently transposed mask, not an error. |
+
+The encoder takes raw `[H, W, 3]` pixel values: this export resizes and
+normalizes internally, which is why the browser can hand it canvas pixels
+directly.
+
+!!! warning "EdgeSAM is non-commercial"
+
+    EdgeSAM is the fastest of the three, and it is the one you most need to
+    check before using. The [NTU S-Lab License 1.0](https://github.com/chongzhou96/EdgeSAM/blob/master/LICENSE)
+    permits "redistribution and use for non-commercial purpose" only. That
+    restriction plausibly reaches a dataset annotated with its help, so decide
+    before you annotate, not after. `download-models --list` flags it.
+
+## Optional server endpoint
+
+For a GPU and a larger model:
+
+```yaml
+ai_endpoint:
+  type: sam
+  checkpoint: /path/to/sam_vit_h.pth   # a checkpoint you already hold
+  model_type: vit_h
+  device: cuda
+```
+
+Potato does not download these weights either. The endpoint is registered
+lazily, so a server with `torch` installed but segmentation unused does not pay
+the import cost at start-up.
+
+`SAMEndpoint.segment()` currently raises `NotImplementedError`; the class exists
+so the capability plumbing is in place and tested.
+
+## Failure states
+
+Each failure names a next action, because "segmentation unavailable" tells an
+annotator nothing they can use:
+
+| State | What the annotator sees |
+|---|---|
+| Runtime unavailable | The browser has WebAssembly disabled; use the brush tool |
+| Model missing | The exact `potato download-models <name>` command to run |
+| Encode failed | This image could not be prepared; brush and polygon still work |
+| Decode failed | That click did not produce a mask; try another point |
+
+Every message points at a tool that still works, so a segmentation problem never
+blocks the annotation.
+
+## Capability gating
+
+Segmentation is gated on a `mask_output` capability that is **independent of**
+`bounding_box_output`. A detector asked for pixels returns nothing usable, so a
+box model must not advertise the segment assistant.
+
+```python
+ModelCapabilities(vision_input=True, bounding_box_output=True)   # detect only
+ModelCapabilities(vision_input=True, mask_output=True)           # can segment
+```
+
+## Related
+
+- [Image Annotation](image_annotation.md)
+- [Visual AI Support](../../ai-intelligence/visual_ai_support.md)
+- [Air-gapped deployment](../../deployment/air_gap.md)
+
+
+## Using it
+
+Add `sam` to the schema's `tools`, then press **`w`** (or click the wand).
+
+| Action | Result |
+|---|---|
+| Click | Segment the object under the cursor |
+| Click again | **Refine** the same mask, not start a new one |
+| Shift-click | Subtract — remove a region the model wrongly included |
+| Drag a box | Constrain the mask to that region |
+| `Enter` | Accept the mask as an annotation |
+| `Escape` | Discard it |
+
+A click produces a **preview**, not an annotation. This matters more than it
+sounds: a first click rarely lands the mask perfectly, and a tool that only
+ever commits is one people abandon — they get a nearly-right mask, delete it,
+and reach for the brush. Refinement is the difference between a demo and
+something usable on a real corpus.
+
+Each accepted mask becomes its own instance (`label#0`, `label#1`, …) and
+exports to COCO as a separate RLE annotation with `iscrowd: 0`.
+
+### Configuration
+
+```yaml
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: objects
+    tools: [sam, brush, eraser]
+    mask_mode: instance
+    segmentation:
+      model: mobile_sam       # mobile_sam | edge_sam | sam2_hiera_tiny
+      embedding_limit: 4      # images kept encoded; ~4 MB each
+    labels: [cat, dog]
+```
+
+## Installing the runtime
+
+ONNX Runtime Web is **fetched, not vendored** — the wasm binary alone is
+13.5 MB, more than the rest of Potato's source combined. Since segmentation
+already requires downloading weights, it rides in the same step:
+
+```bash
+potato download-models onnxruntime
+```
+
+An air-gapped install therefore copies exactly one directory (`potato/models/`)
+and everything works offline. Nothing is fetched at annotation time.
+
+Threading is deliberately left **off**: multi-threaded wasm needs
+`SharedArrayBuffer`, which needs COOP/COEP response headers Potato does not
+set. The threaded binary runs correctly single-threaded; the non-threaded build
+is simply not published separately.
+
+## When something is missing
+
+Each failure names the command that fixes it, and the two are kept distinct
+because they have different fixes:
+
+| Situation | What you see |
+|---|---|
+| Runtime not installed | *"…install it with: `potato download-models onnxruntime`"* |
+| Weights not installed | *"The mobile_sam model is not installed… `potato download-models mobile_sam`"* |
+| WebAssembly disabled | Same runtime message, which also names the brush tool |
+| Click found nothing | *"Nothing found at that point. Try clicking the centre of the object."* |
+
+That last one is not an error. A click on featureless background legitimately
+produces no mask, and saying so beats adding an empty annotation the annotator
+then has to find and delete.
+
+!!! note "A misleading message, found by running it"
+
+    An early version classified any "failed to fetch" as a missing *model*. A
+    missing runtime glue module therefore reported *"the mobile_sam model is
+    not installed"* — false, and unfixable by the command it suggested. The
+    runtime's own failures are now checked first. No mocked test could see
+    this; it took a real browser.
+
+## Performance
+
+Measured on CPU with MobileSAM, a 520×340 image:
+
+| Step | Cost |
+|---|---|
+| Runtime load | once per session, 13.5 MB |
+| Model load | once per session, 45 MB |
+| Encode | ~1 s per image, cached |
+| **Decode (per click)** | **~130 ms** |
+
+Only the decode is in the interaction loop.
+
+### Mask memory on large images
+
+A mask is one bit per pixel, held in 64×64 tiles allocated only where something
+is painted (`potato/static/mask-buffer.js`), and every mask composites into a
+single offscreen canvas. This matters because segmentation is done zoomed in on
+large images, where a mask used to cost four bytes per image pixel per class
+whether or not anything was painted.
+
+Ten classes, one 40×40 brush dab each:
+
+| Image | Mask data | Canvas (all classes) | Render per mousemove |
+|---|---|---|---|
+| 1 MP | 38.1 MB → 16.0 KB | 3.8 MB | 0.017 ms |
+| 3 MP | 114.4 MB → 16.0 KB | 11.4 MB | 0.018 ms |
+| 12 MP | 457.8 MB → 16.0 KB | 45.8 MB | 0.013 ms |
+
+Two independent changes:
+
+- **Mask data** no longer scales with image area — only with what was painted.
+- **Canvas** no longer scales with the class count. Previously a full-size
+  temporary canvas was allocated *per class, per pointer move*, and discarded.
+
+The canvas is an irreducible cost of drawing at natural resolution, so the
+honest summary is that resident cost went from roughly 458 MB to 46 MB for ten
+classes on a 12 MP photo, and per-frame allocation churn went away.
+
+What did *not* change is bulk work: painting a stroke and encoding a whole mask
+to RLE still cost one step per pixel and are within noise of the old code.
+
+Label colours are read as hex — `#rgb`, `#rrggbb`, or `#rrggbbaa` (alpha
+dropped; use `mask_opacity` for the overlay). Anything else paints red and logs
+a console warning naming the value.
+
+## How the contract was established
+
+The tensor contract is the part that cannot be guessed, so it was **measured**
+rather than assumed. The encoder takes HWC pixels at native size, but the image
+must first be resized so its **longest side is 1024**, and click coordinates
+must be scaled by that same factor while `orig_im_size` stays the original
+`(height, width)`.
+
+Three plausible alternative readings were tested against the real weights, on a
+non-square image with three separated targets:
+
+| Reading | Mean centroid error |
+|---|---|
+| Raw original pixels | 148 px |
+| Scale by 1024/width and 1024/height separately | 70 px |
+| Unresized image into the encoder | 70 px |
+| **The contract above** | **0.1 px** |
+
+Every wrong reading still returns a confident, plausible-looking mask. That is
+why `tests/unit/test_sam_model_pipeline.py` runs the real weights and includes
+controls asserting the wrong readings *are* wrong, and
+`test_sam_js_python_bridge.py` has Node build the tensors and Python feed them
+to the model — so a divergence between the browser code and the weights fails
+the build rather than shipping.
+
+## Related
+
+- [Image annotation](image_annotation.md)
+- [Geometry types](geometry_types.md)
+- [Format matrix](../../data-export/format_matrix.md)
 
 
 ---
@@ -13762,10 +14385,10 @@ For marking important moments in the video.
 For object tracking across video frames with keyframe-based bounding box annotation.
 
 **Features:**
-- Canvas overlay for drawing bounding boxes directly on the video
+- Canvas overlay for drawing directly on the video
 - Track multiple objects across frames with color-coded labels
-- Automatic interpolation between keyframes
-- Keyframe-based workflow: annotate key positions and let the system interpolate
+- **Boxes and polygons** both interpolate between keyframes; masks are held
+- Keyframe-based workflow: annotate key positions and let the system fill in
 
 **Tracking-Specific Options:**
 
@@ -13779,12 +14402,54 @@ For object tracking across video frames with keyframe-based bounding box annotat
 - `cubic` - Cubic/smooth interpolation (natural motion curves)
 - `constant` - Constant/hold interpolation (box stays in place until next keyframe)
 
+**Shape kinds**
+
+A track is not always a box.
+
+| Kind | Between keyframes |
+|---|---|
+| Box | Interpolated, by the method above |
+| Polygon | Interpolated by **arc-length resampling** (see below) |
+| Mask | **Held** from the nearest keyframe, and marked as held |
+
+Polygon tracks cannot simply interpolate vertex-to-vertex. Two outlines of the
+same object rarely have the same vertex count, and even when they do, an
+annotator who starts tracing at the nose on one frame and the tail on the next
+produces two correct outlines whose vertices correspond to nothing —
+interpolating them pairwise turns the shape inside out halfway between
+keyframes. Potato resamples both outlines to equal fractions of their perimeter
+and rotates the second to the offset that best matches the first, so differing
+vertex counts and start points both work.
+
+Masks are **not** blended. Averaging two rasters produces a shape that is
+neither — ghost regions where the object was and where it will be, with holes
+between. Potato holds the nearest keyframe and draws a hollow circle marker on
+held frames, so an annotator can always tell a frame somebody drew from a frame
+nobody did.
+
 **Tracking Workflow:**
-1. Click **+ Track** to create a new object track
-2. Draw a bounding box on the video at the current frame
-3. Advance to another frame using frame stepping (`,` and `.` keys)
-4. Draw another bounding box for the same object
-5. The system interpolates the box position between keyframes
+1. Press `t` (or click **+ Track**) to create a new object track
+2. Draw a shape on the video at the current frame
+3. Advance to another frame using frame stepping (`,` and `.`)
+4. Draw the same object again
+5. The system interpolates between the keyframes
+6. Scrub with `<` and `>` to jump between this track's keyframes
+7. Press `Ctrl/Cmd+K` on any interpolated frame to pin it as a real keyframe
+
+**Tracking keyboard shortcuts**
+
+| Key | Action |
+|---|---|
+| `t` | New track |
+| `,` / `.` | Step one frame back / forward |
+| `<` / `>` (Shift+`,` / Shift+`.`) | Previous / next **keyframe** of the active track |
+| `Ctrl/Cmd+K` | Pin the current interpolated shape as a keyframe |
+| `Delete` / `Backspace` | Delete the selected keyframe |
+| `Escape` | Deselect |
+
+`,` and `.` step frames; the shifted pair jumps keyframes. This mirrors video
+editors, where `,`/`.` are frames and `<`/`>` are markers — and it keeps the two
+handlers from firing on the same press.
 
 **Example Configuration:**
 
@@ -13854,6 +14519,20 @@ Enables all annotation types in one interface.
 
 - Segment, frame, and keyframe controls all available
 - Useful for comprehensive video analysis tasks
+
+## Showing and Hiding Classes
+
+A timeline of stacked segments becomes unreadable in the same way a densely
+boxed image does, so video shares the per-class show/hide used by
+[image annotation](image_annotation.md#showing-and-hiding-classes). Each label
+in the toolbar carries an eye toggle; hiding a class removes its segments from
+the timeline and the annotation list.
+
+- Hiding is **presentation only** — hidden segments are still saved and exported.
+- The state persists per project and schema, so a class stays hidden as the
+  annotator moves between items.
+
+Nothing needs to be configured; the toggles appear automatically.
 
 ## Keyboard Shortcuts
 
@@ -14624,6 +15303,525 @@ For TextGrid export:
 
 ---
 
+<!-- source: docs/annotation-types/multimedia/image_formats.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedia/image_formats/
+
+# Image Annotation Formats
+
+Potato reads and writes the common computer-vision interchange formats. A COCO
+file can be imported **as-is** — every segmentation encoding, including crowd
+regions — annotated or corrected in the browser, and exported back out.
+
+## Supported import formats
+
+| Format | Geometry read |
+|--------|---------------|
+| **COCO JSON** | bounding boxes, polygon segmentation (single and multi-ring), uncompressed RLE, compressed RLE strings, crowd regions, keypoints (opt-in) |
+
+## Supported export formats
+
+| Format | Geometry written |
+|--------|------------------|
+| **COCO JSON** | bbox, polygon `segmentation`, RLE `segmentation` |
+| **YOLO** | bbox (other shapes reduced to their enclosing box) |
+| **Pascal VOC** | bbox (other shapes reduced to their enclosing box) |
+| **Mask PNG** | one PNG per label |
+
+See [Export Formats](../../data-export/export_formats.md) for the export CLI.
+
+## Quick start
+
+```bash
+# 1. Turn a COCO file into a runnable Potato project
+potato import --input instances_val2017.json \
+    --image-dir /data/val2017 \
+    --image-url-prefix /files \
+    --output-dir my-project/ \
+    --schema-name object_detection
+
+# 2. Annotate
+python potato/flask_server.py start my-project/config.yaml -p 8000
+
+# 3. Export back to COCO
+python -m potato.export -c my-project/config.yaml -f coco -o ./export/
+```
+
+`python -m potato.importers` is equivalent to `potato import` if you are running
+from a source checkout.
+
+## The four COCO segmentation encodings
+
+COCO files in the wild use all of these, often in the same file. No conversion
+step is required for any of them.
+
+| Input | Becomes |
+|-------|---------|
+| `"segmentation": [[x1, y1, x2, y2, ...]]` | a polygon |
+| `"segmentation": [[...], [...]]` (multi-ring) | one polygon **per ring** |
+| `"segmentation": {"counts": [ints], "size": [h, w]}` | a mask |
+| `"segmentation": {"counts": "ascii", "size": [h, w]}` | a mask |
+| `"segmentation": []` or absent, with `bbox` | a bounding box |
+
+Compressed `counts` strings are decoded with a pure-Python port of
+pycocotools' `rleFrString`; **pycocotools is not a dependency.**
+
+## Crowd regions
+
+Canonical COCO pairs `iscrowd: 1` with RLE segmentation. Potato imports those
+annotations rather than skipping them.
+
+- `iscrowd: 1` regions of the same category **merge into one mask** per image.
+  COCO permits at most one crowd annotation per category per image, and a crowd
+  region is already an unlabeled blob. They export again as `iscrowd: 1`.
+- `iscrowd: 0` RLE annotations each keep their own instance index and export as
+  N separate annotations.
+
+## Instances vs. labels
+
+Brush masks are keyed by **label**: every stroke of one class merges into a
+single region. That is semantic segmentation.
+
+Imported non-crowd RLE annotations are keyed by **label and instance**, so two
+adjacent instances of one class stay separate through a save/reload cycle and
+export as two annotations.
+
+The current limitation: you can see, move between, and preserve imported
+instance masks, but painting always edits the label-level mask. Brushing will
+not add pixels to a specific imported instance.
+
+## Category IDs
+
+COCO category IDs are frequently sparse — COCO 2017 runs from 1 to 90 with gaps.
+The generated config records each original ID as `label_id` on the label:
+
+```yaml
+labels:
+  - name: person
+    color: '#e6194b'
+    label_id: 1
+    supercategory: person
+  - name: dog
+    color: '#3cb44b'
+    label_id: 18
+    supercategory: animal
+```
+
+The COCO exporter honours `label_id`, so a file keeps its original numbering
+through a round trip. Labels without a `label_id` are assigned IDs above the
+highest explicit one, so they never collide.
+
+## Image dimensions are required
+
+COCO coordinates are absolute pixels; Potato stores them normalized to 0–1. The
+importer therefore needs each image's size and **fails loudly** if it is missing
+rather than writing zeros:
+
+```
+Image 'street.jpg' has no usable width/height in images[] ...
+```
+
+Two fixes: repair the `images[]` entries, or pass `--image-dir` so sizes are
+read from the files directly (needs Pillow).
+
+The generated data file carries `image_width` / `image_height` on every row,
+which is also what the COCO and YOLO exporters need. Without those fields YOLO
+export refuses to run and COCO writes `width: 0, height: 0`.
+
+## How imported annotations reach annotators
+
+Imported annotations are loaded as **pre-annotations**:
+
+```yaml
+pre_annotation:
+  enabled: true
+  field: predictions
+  allow_modification: true
+```
+
+Every annotator sees them as a starting point. As soon as someone saves, their
+corrections replace the imported ones permanently.
+
+They are deliberately **not** written into any user's saved annotations. Doing
+that would make machine output indistinguishable from human work, and with
+several annotators an untouched item would export as multiple identical
+"independent" annotations — fabricating perfect agreement in the subsystem
+Potato is most used for.
+
+The consequence to be aware of: an item nobody has opened exports as empty. Use
+`--seed-user NAME` if you need an import→export cycle with no human in the loop;
+it says plainly that it fabricates an annotator.
+
+## Options
+
+| Flag | Effect |
+|------|--------|
+| `--input-format` | Force a format instead of auto-detecting |
+| `--image-dir` | Read missing image sizes from the files (needs Pillow) |
+| `--image-url-prefix` | Prefix joined to each `file_name` to build the served URL |
+| `--schema-name` | Name of the generated annotation scheme |
+| `--keypoints` | Import COCO keypoints as landmarks, one per visible point |
+| `--rle-as-polygon` | Trace masks into polygons (**lossy**, see below) |
+| `--no-merge-crowd` | Keep each crowd region separate |
+| `--config-only` | Regenerate `config.yaml` without touching the data file |
+| `--seed-user NAME` | Also write the annotations as NAME's saved work |
+
+### `--rle-as-polygon` is lossy
+
+Off by default, and worth understanding before using:
+
+- Holes are dropped; a single outer ring cannot represent them.
+- The traced contour will not re-rasterize to exactly the source bitmap.
+- Boundaries follow pixel centres, so they sit half a pixel inside the mask.
+
+Use it when annotators need to drag vertices and you accept the fidelity loss.
+Otherwise keep masks as masks — they round-trip pixel-exactly.
+
+## Round-trip guarantees
+
+| Geometry | Guarantee |
+|----------|-----------|
+| Masks (RLE) | **Exact pixel equality.** Counts pass through as integers. |
+| Bounding boxes | Within `1e-6` relative |
+| Polygon vertices | Within `1e-6` relative, vertex count exact |
+| Categories | Exact, including sparse IDs and `supercategory` |
+| Image metadata | `file_name`, `width`, `height` exact |
+
+The tolerance on shapes exists because coordinates are stored normalized, so a
+round trip is a float division followed by a multiplication
+(`10 / 640 * 640 == 10.000000000000002`).
+
+Two documented many-to-one cases:
+
+- A multi-ring polygon becomes one annotation per ring.
+- Crowd regions of one category merge into a single annotation.
+
+## Troubleshooting
+
+**"could not detect the format"** — pass `--input-format coco`. Auto-detection
+requires `images[]` and `annotations[]` arrays with `id` and `file_name`.
+
+**Exported boxes are all `[0, 0, 0, 0]`** — the data file is missing
+`image_width` / `image_height`. Versions before this feature also had an
+exporter bug with the same symptom; see
+[Export Formats](../../data-export/export_formats.md).
+
+**Masks look like diagonal streaks** — the image being served is a different
+size from the one the annotations were made against. The client rescales and
+logs a console warning; fix the served image to remove the warning.
+
+**A mask saved before v2.9 comes back inverted, or a full-canvas fill comes
+back empty** — masks are stored as run lengths that alternate background,
+foreground, background, …, always starting with background. Client versions
+before v2.9 suppressed a leading zero-length background run, so any mask whose
+**top-left pixel was painted** was written with its runs one position out of
+phase, and a completely painted mask was indistinguishable from an empty one.
+
+Masks that do not touch the top-left pixel — which is nearly all object
+masks — were never affected. Affected masks cannot be repaired automatically:
+the corrupt form is a legitimate encoding of a different mask, so nothing in
+the file distinguishes them. Repaint the affected masks, or invert them
+manually if you know they were whole-image fills. New saves are correct.
+
+**An exported file is empty** — imported annotations are pre-annotations and
+only persist once an annotator saves. See above.
+
+## Related documentation
+
+- [Image Annotation](image_annotation.md) — the annotation UI and schema options
+- [Export Formats](../../data-export/export_formats.md) — the export CLI
+- [Data Format](../../configuration/data_format.md) — `data_files` and `item_properties`
+- [Quality Control](../../workflow/quality_control.md) — the `pre_annotation` block
+
+
+---
+
+<!-- source: docs/annotation-types/multimedia/media_ingest.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedia/media_ingest/
+
+# Media Ingest
+
+Annotating files a browser cannot display: TIFF stacks, HEIC photos, camera
+RAW, ProRes and MKV.
+
+Without this, such a file produces a blank canvas or an empty video player and
+**no error** — from the page's point of view nothing went wrong, so the
+annotator concludes the tool is broken. Potato transcodes these on first
+request, caches the result, and when it genuinely cannot, says so with the
+command to run instead.
+
+## How it works
+
+Reference the file through `/media/proxy/` instead of `/media/`:
+
+```json
+{"id": "scan_001", "image_url": "/media/proxy/scan_001.tif"}
+```
+
+Files browsers already display (`.jpg`, `.png`, `.webp`, `.mp4`, `.webm`) pass
+straight through un-re-encoded, so a mixed corpus needs no special handling —
+point everything at the proxy.
+
+Results are cached under `<output_annotation_dir>/.media_cache/`. The cache key
+includes the source's size and mtime, so editing a source file produces a new
+key and the stale render is never served. Deleting the directory costs a
+re-render and nothing else.
+
+## Supported formats
+
+### Images
+
+| Format | Needs | Notes |
+|---|---|---|
+| TIFF (`.tif`, `.tiff`) | Pillow | Multi-page and 16-bit supported |
+| HEIC / HEIF | `pip install pillow-heif` | iPhone photos |
+| Camera RAW (`.dng`, `.cr2`, `.cr3`, `.nef`, `.arw`, `.orf`, `.rw2`, `.raf`) | `pip install rawpy` | |
+| JPEG 2000, PPM/PGM/PBM | Pillow | |
+
+Output is WebP.
+
+### Video
+
+| Format | Notes |
+|---|---|
+| `.mov` | QuickTime, often ProRes or HEVC |
+| `.mkv` | Not supported by Safari or iOS |
+| `.avi`, `.wmv`, `.flv`, `.mxf` | Legacy or broadcast containers |
+| `.mts`, `.m2ts` | AVCHD camera formats |
+
+Output is WebM/VP9, via **ffmpeg** — which is not a Python package. Install it
+with your system package manager (`brew install ffmpeg`,
+`apt install ffmpeg`).
+
+## 16-bit windowing
+
+This is the part that matters for scientific imagery, and the reason a naive
+conversion is worse than useless.
+
+A 16-bit microscopy or medical TIFF holds values a display cannot show. The
+obvious conversion — an 8-bit cast — divides by 256, so a scan whose structure
+lives between 1200 and 1800 becomes **4 grey levels apart out of 255**.
+The image looks uniformly black, and it reads as a corrupt file rather than a
+windowing problem.
+
+Potato instead applies a **percentile stretch** by default, clipping the
+extreme tails. On a test scan with content at 1200/1800 plus one hot pixel at
+65535, the difference is measured:
+
+| Conversion | Background | Signal | Separation |
+|---|---|---|---|
+| Full-range cast (the naive default) | 3 | 7 | **4 / 255** |
+| Percentile window (Potato's default) | 0 | 254 | **254 / 255** |
+
+A single hot pixel is enough to make a min/max stretch useless, which is why
+the default clips percentiles rather than extrema.
+
+### Controlling the window
+
+```
+/media/proxy/scan.tif?window_min=1200&window_max=1800&gamma=1.2
+```
+
+| Parameter | Meaning |
+|---|---|
+| `window_min` / `window_max` | Source values mapped to black and white |
+| `gamma` | Applied after windowing; `>1` brightens midtones |
+| `page` | Page index for multi-page TIFFs |
+
+Each combination is cached separately, so two windows of the same scan coexist
+rather than evicting each other.
+
+### Finding a sensible range
+
+```
+GET /media/info/scan.tif
+```
+
+```json
+{"kind": "image", "width": 200, "height": 150, "mode": "I;16",
+ "pages": 1, "high_depth": true,
+ "value_min": 1200, "value_max": 65535,
+ "suggested_window": {"min": 1200.0, "max": 1800.0}}
+```
+
+Note that `suggested_window.max` is 1800, not 65535: the hot pixel is visible
+in `value_max` but excluded from the suggestion. "This is 16-bit" is not
+actionable; "values run 1200–1800" is.
+
+## Multi-page TIFF
+
+`/media/info/` reports the page count and `?page=N` selects one. Silently
+showing page 0 would present a 40-slice stack as a single image and lose the
+rest without saying anything, so an out-of-range page is an error rather than a
+fallback.
+
+To annotate every slice, generate one item per page:
+
+```json
+{"id": "stack_p0", "image_url": "/media/proxy/stack.tif?page=0"}
+{"id": "stack_p1", "image_url": "/media/proxy/stack.tif?page=1"}
+```
+
+## When a dependency is missing
+
+Nothing here is required, and no absence produces a broken player. Each one
+reports the specific fix:
+
+- no Pillow → *"This image format needs Pillow… `pip install Pillow`"*
+- no `pillow-heif` → *"HEIC images need the pillow-heif decoder…"* (saying
+  "install Pillow" would be unhelpful when Pillow is already there)
+- no `rawpy` → the install command, plus the `dcraw` alternative
+- no ffmpeg → the exact conversion command:
+
+```
+ffmpeg -i clip.mov -c:v libvpx-vp9 -crf 30 -b:v 0 -c:a libopus output.webm
+```
+
+These come back as HTTP **415** with a JSON `error`, not a 500 — the file is
+fine, we cannot render it, and a 500 would suggest a bug and bury the
+actionable message.
+
+## Long videos
+
+A feature-length ProRes master will not transcode inside a web request.
+Transcoding is bounded (10 minutes by default) and, on timeout, tells you to
+convert ahead of time rather than leaving the request hanging.
+
+For a large video corpus, convert once up front:
+
+```bash
+for f in *.mov; do
+  ffmpeg -i "$f" -c:v libvpx-vp9 -crf 30 -b:v 0 -c:a libopus "${f%.mov}.webm"
+done
+```
+
+## Cache management
+
+The cache is bounded (2 GiB by default) and evicts least-recently-used entries.
+Eviction is never data loss — every entry can be regenerated.
+
+```bash
+rm -rf <output_annotation_dir>/.media_cache/
+```
+
+## Configuration
+
+```yaml
+task_dir: .
+media_directory: media          # where source files live
+output_annotation_dir: output   # .media_cache/ goes here
+```
+
+Both `/media/` and `/media/proxy/` resolve against `media_directory` with the
+same path-traversal guard, so the proxy cannot reach outside it.
+
+## Not yet supported
+
+DICOM, NIfTI and whole-slide (SVS) formats are **not** handled. The 16-bit
+windowing here is the on-ramp for them, but medical imaging brings regulatory
+and workflow requirements that deserve their own design rather than being
+bolted on.
+
+## Related
+
+- [Image annotation](image_annotation.md)
+- [Video annotation](video_annotation.md)
+- [Import CLI](../../tools/import_cli.md)
+
+
+---
+
+<!-- source: docs/annotation-types/multimedia/video_formats.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedia/video_formats/
+
+# Video Annotation Formats
+
+What Potato reads and writes for video, and where a video dataset's structure
+survives the trip.
+
+The short version: video tracking datasets import as **one item per frame**,
+with the track identity preserved in each object's `instance` field. Every box
+is editable and the identity that links them across frames survives — but they
+do not yet move together as a single scrubable object inside the annotation UI.
+The import says so rather than implying otherwise.
+
+## Import
+
+| Format | Source shape | What comes in |
+|---|---|---|
+| `mot` | `seqinfo.ini` + `gt/gt.txt` | Boxes per frame, track ids, ignore regions, visibility |
+| `davis` | `Annotations/<seq>/*.png` | Per-instance masks per frame, stable object ids |
+| `cvat` | CVAT XML 1.1 | Images only — `<track>` elements are **reported, not flattened** |
+
+```bash
+potato import -i ./MOT17-02 -o my-project --image-url-prefix /media
+potato import -i ./DAVIS    -o my-project --image-url-prefix /media
+```
+
+Neither needs `--image-dir`: MOT carries its image dimensions in `seqinfo.ini`,
+and a DAVIS mask PNG is the same size as its frame.
+
+### Why CVAT tracks are refused rather than imported
+
+A CVAT `<track>` is one object across many frames. Flattening it to frame 0
+would look like a successful import of a dataset that had quietly lost its
+video annotations — the worst of the available outcomes. The importer counts
+the tracks and says so.
+
+## Export
+
+| Format | Writes |
+|---|---|
+| `mot` | `<sequence>/seqinfo.ini` + `<sequence>/gt/gt.txt` |
+| `davis` | `Annotations/<sequence>/<frame>.png`, indexed |
+| `coco` | One image entry per frame, carrying `sequence` and `frame_id` |
+
+```bash
+python -m potato.export --config config.yaml --format mot   --output ./out
+python -m potato.export --config config.yaml --format davis --output ./out
+```
+
+Items carry `sequence` and `frame` (as the importers set them), and the
+exporters group and number by those. An item with no recorded frame is numbered
+in order **starting at 1** — never 0, which every MOT evaluator drops.
+
+## The conventions that bite
+
+| Format | Box | Frame index | Notes |
+|---|---|---|---|
+| MOT | `bb_left bb_top bb_width bb_height` — origin+size | **1-indexed** | `conf=0` means *exclude from evaluation*, not *low confidence* |
+| KITTI | `x1 y1 x2 y2` — **corners** | per-file | Sits in the same pipelines as MOT and uses the opposite convention |
+| DAVIS | n/a (raster) | 0-indexed filenames | Pixel **values** are object ids; 255 is void |
+
+Three specific ways to lose data silently, each handled explicitly:
+
+- **MOT's `conf` column.** In ground truth, 0 means the region is excluded from
+  evaluation. Writing a real confidence score into that column converts
+  uncertain annotations into ignore regions. Potato sets it from an explicit
+  `ignore` flag only.
+- **MOT track ids.** A `gt.txt` with id `-1` is a *detection* file, not ground
+  truth, and evaluators treat the two very differently. Objects with no id get
+  fresh ones rather than `-1`, and the export reports how many.
+- **DAVIS indexed PNGs.** The pixel values are the object ids; the palette
+  merely makes the file look sensible in an image viewer. Saving RGB renders
+  identically and is unreadable as a mask — Potato writes mode `P` and there is
+  a test that reads the pixel values back rather than comparing the rendering.
+
+## Video files the browser cannot play
+
+MOV, MKV, ProRes, HEVC and friends are transcoded on demand. See
+[Media ingest](media_ingest.md). The failure without it is silent: the player
+loads, reports nothing, and never paints a frame.
+
+## Related
+
+- [Video annotation](video_annotation.md)
+- [Format matrix](../../data-export/format_matrix.md)
+- [Import CLI](../../tools/import_cli.md)
+- [Media ingest](media_ingest.md)
+
+
+---
+
 <!-- source: docs/annotation-types/multimedia/transcript_formats.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedia/transcript_formats/
 
@@ -14881,6 +16079,382 @@ python potato/flask_server.py start examples/audio/transcript-formats/config.yam
 - [Audio Annotation](audio_annotation.md) — waveform segmentation
 - [Tiered Annotation](tiered_annotation.md) — ELAN-style multi-tier timelines
 - [Export Formats](../../data-export/export_formats.md) — EAF and TextGrid export
+
+
+---
+
+<!-- source: docs/annotation-types/spatial/point_cloud.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/spatial/point_cloud/
+
+# Point Cloud Annotation (3D)
+
+Oriented 3D boxes, points, polylines and per-point segments on lidar and
+photogrammetry data, rendered in the browser with three.js.
+
+```yaml
+annotation_schemes:
+  - annotation_type: spatial_annotation
+    name: objects
+    description: "Put a 3D box around every vehicle and pedestrian."
+    source_field: point_cloud
+    tools: [cuboid_3d, point_3d]
+    labels:
+      - {name: car, color: "#FF6B6B", key_value: "1"}
+      - {name: pedestrian, color: "#FFD93D", key_value: "2"}
+    color_mode: height
+    point_size: 2.0
+    max_points: 400000
+```
+
+Runnable example: `examples/spatial/kitti-cuboids/`.
+
+## Formats
+
+Point clouds are read **server-side** and converted into one compact binary the
+browser understands. The alternative — parsing each format in JavaScript —
+would mean four parsers, four sets of endianness and record-layout bugs, and
+re-parsing a two-million-point scan on every page load.
+
+| Format | Read | Notes |
+|---|---|---|
+| KITTI velodyne `.bin` | ✅ | Raw `float32` x, y, z, intensity, no header |
+| PCD | ✅ | `ascii`, `binary`, and `binary_compressed` (LZF) |
+| PLY | ✅ | `ascii`, `binary_little_endian`, `binary_big_endian` |
+| LAS | ✅ | 1.0–1.4, point record formats 0–3 and 6–8 |
+| `.xyz` / `.pts` | ✅ | `x y z [r g b]` per line |
+| LAZ | ❌ | Compressed LAS. Convert first: `laszip -i scan.laz -o scan.las` |
+
+Colour is read where a format carries it (PLY, LAS formats 2/3/7/8, `.xyz`);
+intensity is read from KITTI, PCD and LAS.
+
+### Options
+
+| Option | Default | What it does |
+|---|---|---|
+| `source_field` | `point_cloud` | Item field holding the cloud path |
+| `calibration_field` | `calibration` | Item field holding the camera rig; turns on the [2D verification panels](calibration.md) |
+| `tools` | — | Any of `cuboid_3d`, `point_3d`, `polyline_3d`, `segment_3d` |
+| `color_mode` | `height` | `height`, `intensity`, `rgb`, `uniform` |
+| `point_size` | `1.5` | Rendered point size in pixels |
+| `max_points` | `500000` | Decimation cap (see below) |
+| `default_box_height` | `1.7` | Height a new box starts at, in metres |
+| `fit_box_height` | `true` | Snap a new box's vertical extent to the points inside its footprint |
+| `min_annotations` / `max_annotations` | — | Completion rules |
+
+`color_mode: rgb` needs a file that carries colour, and `intensity` needs one
+that carries intensity. When the data is absent the viewer falls back to height
+**and says so** in the status line, rather than silently rendering something
+that looks like the mode you asked for.
+
+Colour ramps are normalized against the 2nd and 98th percentile rather than
+min/max, because a single stray return from a reflective surface otherwise
+compresses everything else into one colour and the cloud renders as a flat
+sheet.
+
+## Large clouds are thinned, and the viewer says so
+
+Anything above `max_points` is reduced by **uniform stride** — every Nth point —
+not truncated. A lidar file is written in scan order, so keeping the first N
+points keeps one contiguous slice of the sweep and drops the rest of the scene,
+which looks like a sensor failure rather than a decimation.
+
+The status line under the viewport reports both numbers:
+
+> Showing 400,000 of 2,100,000 points (evenly sampled to keep the viewer
+> responsive).
+
+An annotator who does not know a cloud was thinned will draw boxes around gaps
+that are artefacts of the sampling, so this is stated rather than implied.
+
+## Controls
+
+| Action | Result |
+|---|---|
+| Left-drag *(no tool armed)* | Orbit |
+| Right-drag | Pan |
+| Scroll | Zoom |
+| `c` then left-drag | Draw a 3D box footprint on the ground |
+| `k` then click | Place a point |
+| `n` | Polyline |
+| `g` | Paint points |
+| `q` / `e` | Rotate the selected box (Shift for 1° steps) |
+| `Delete` | Remove the selected box |
+| `Escape` | Deselect |
+| click *(no tool armed)* | Select the nearest annotation |
+| `h` / `Shift+H` | Hide the armed class / solo it |
+
+Per-class show/hide is the same feature image and video annotation have — the
+schema renders the same label-button markup deliberately, so it works with no
+extra configuration.
+
+### Drawing a box
+
+Drag out the **footprint** on the ground plane. The ground is estimated from
+the cloud's own `z` values rather than assumed to be zero — a roof-mounted
+lidar reports the road at about −1.7 m, so a box drawn on `z = 0` floats above
+the whole scene.
+
+The box's **height is then fitted to the points inside the footprint**. Height
+is the dimension a footprint drag cannot express and the one annotators judge
+worst in a perspective view of a sparse cloud, and the returns answer it
+exactly. A footprint containing only road is left at the drawn height rather
+than collapsed onto the tarmac — the annotator drew around something the lidar
+did not see, and fitting to nothing would be fabricating a measurement.
+
+Yaw is not part of the drag; `q` and `e` rotate the selected box afterwards, in
+the world frame, so the key always turns it the same way on screen.
+
+## Coordinates are metres, not fractions
+
+This is the one thing to get right when moving from 2D.
+
+Image annotations are normalized to `[0, 1]` against the image. Spatial ones are
+**absolute metres in the sensor frame**, because there is no extent to normalize
+against — a lidar sweep has no "width" the way a photograph does.
+
+```json
+{"type": "cuboid_3d", "label": "car", "color": "#FF6B6B",
+ "coordinates": {"center": [12.0, 1.5, -0.9],
+                 "size": [4.3, 1.8, 1.6],
+                 "rotation": [0.0, 0.0, 0.025, 0.9997]}}
+```
+
+| Type | Stored as |
+|---|---|
+| `cuboid_3d` | `{center: [x,y,z], size: [l,w,h], rotation: [qx,qy,qz,qw]}` |
+| `point_3d` | `[x, y, z]` |
+| `polyline_3d` | `[[x,y,z], ...]` |
+| `segment_3d` | `indices: [i, ...]` into the served cloud |
+
+`segment_3d` stores **point indices**, not coordinates: per-point labels over a
+million-point cloud would otherwise be larger than the cloud itself. The
+indices are stable because the served cloud is a fixed decimation, and the
+decimation is part of the cache key.
+
+### Rotation is a quaternion, not a yaw angle
+
+KITTI stores a single yaw, and matching it would be simpler. nuScenes stores
+quaternions, and any dataset with pitch or roll — drone, handheld, indoor scan,
+anything that is not a car on a flat road — needs them. Storing yaw alone would
+make those datasets unrepresentable, and the loss would be **silent**: a tilted
+box would be written back flat with no warning.
+
+So storage keeps the full rotation and format-specific exporters convert at
+their own boundary, which is where a format's limitation belongs.
+
+## Troubleshooting
+
+**"No point cloud for this item"** — the field named by `source_field` is empty,
+or its value does not end in a recognised extension. The viewer checks the
+extension before fetching, so a text-only item does not produce a request for
+the sentence it contains.
+
+**"…needs laszip to read"** — LAZ is compressed LAS. Convert with
+`laszip -i scan.laz -o scan.las`.
+
+**"is not a multiple of 16"** — a `.bin` file read as a KITTI scan must be
+`float32` x, y, z, intensity per point. This is the only integrity check the
+format allows, since it has no header; without it, any binary file read as KITTI
+yields a confident cloud of noise.
+
+**"3D viewer unavailable: three.js did not load"** — three.js is vendored, not
+CDN-loaded, and is gated on this schema being present. Check that the schema is
+`spatial_annotation` and that `potato/static/vendor/three-0.160.0.min.js`
+exists.
+
+**The cloud is there but nothing is visible** — check `color_mode`. A cloud with
+no colour rendered in `rgb` mode falls back to height, but a viewport zoomed
+inside the cloud looks empty either way; scroll out.
+
+## Related documentation
+
+- [Calibration and 2D Verification](calibration.md) — project boxes into the camera images
+- [Image Annotation](../multimedia/image_annotation.md) — the 2D equivalent
+- [Media Ingest](../multimedia/media_ingest.md) — formats browsers cannot display
+- [Geometry Agreement](../../advanced/geometry_agreement.md) — agreement over shapes
+
+
+---
+
+<!-- source: docs/annotation-types/spatial/calibration.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/spatial/calibration/
+
+# Camera Calibration and 2D Verification
+
+Draw a 3D box in the point cloud, and see it land on the object in the
+photograph that saw it.
+
+```yaml
+annotation_schemes:
+  - annotation_type: spatial_annotation
+    name: objects
+    source_field: point_cloud
+    calibration_field: calibration    # the item field holding the rig
+    tools: [cuboid_3d]
+    labels:
+      - {name: car, color: "#FF6B6B"}
+```
+
+Runnable example: `examples/spatial/kitti-cuboids/`.
+
+## Why this matters more than it sounds
+
+A car at 40 m is a few dozen lidar returns. Whether the box is tight, whether
+it is the right length, and whether it is rotated correctly are all close to
+unanswerable from the cloud alone — but obvious in the camera image. So the
+annotator **edits in 3D and verifies in 2D**: the panels under the viewport
+show each camera's view of the scene with the boxes projected onto it, redrawn
+as the box moves.
+
+Without it, 3D labelling is a guessing game with no feedback. With it, a wrong
+box is visible at a glance.
+
+## Configuring it
+
+Add a field to each item naming the rig. Nothing else changes; the panels
+appear when the field is present and stay absent when it is not — a lidar-only
+project is a normal thing to have, not a misconfiguration.
+
+### A KITTI calibration file
+
+```json
+{"id": "scene_0001",
+ "point_cloud": "clouds/scene_0001.bin",
+ "calibration": {"file": "calib/scene_0001.txt",
+                 "images": {"P2": "images/scene_0001.png"}}}
+```
+
+`file` is a standard KITTI `calib` file — `P0`–`P3`, `R0_rect`,
+`Tr_velo_to_cam`. `images` maps a camera to the picture it took; the keys are
+either the `P` row (`P2`) or KITTI's own directory name (`image_2`).
+
+By default only `P2` (the left colour camera, which every KITTI benchmark uses)
+is built. Ask for more with `"cameras": ["P2", "P3"]` alongside `file`.
+
+### Explicit intrinsics and extrinsics
+
+For any other rig — nuScenes, a custom multi-camera setup, an RGB-D sensor:
+
+```json
+{"id": "sample_042",
+ "point_cloud": "lidar/sample_042.pcd",
+ "calibration": {"cameras": [
+   {"name": "CAM_FRONT",
+    "image": "cams/front_042.jpg",
+    "intrinsics": {"fx": 1266.4, "fy": 1266.4, "cx": 816.3, "cy": 491.5},
+    "extrinsics": {"rotation": [0.500, -0.499, 0.501, -0.500],
+                   "translation": [1.70, 0.02, -1.51]},
+    "distortion": [-0.28, 0.11, 0.001, -0.002, 0.0]}]}}
+```
+
+| Field | Accepted forms |
+|---|---|
+| `intrinsics` | `{fx, fy, cx, cy}` (plus optional `skew`), a 3×3 matrix, or a 3×4 `P` |
+| `extrinsics` | `{rotation, translation}` with rotation as a quaternion `[x,y,z,w]` or a 3×3 matrix; or a 3×4 / 4×4 matrix directly |
+| `distortion` | Brown-Conrady `[k1, k2, p1, p2, k3]`. Omit for a rectified rig |
+| `image` | Path to the picture, relative to `media_directory` |
+| `width` / `height` | Optional; the browser reads them from the image itself |
+
+nuScenes' `calibrated_sensor` spelling — `camera_intrinsic`, `rotation` and
+`translation` at the top level — is accepted as written.
+
+**Extrinsics map the sensor frame to the camera frame**, where +Z is forward,
++X right and +Y down (the OpenCV convention). The sensor frame is whatever
+frame the point cloud is in, which is the frame annotations are stored in.
+
+## What it does not silently get wrong
+
+**Points behind the camera.** Negative depth divides to a perfectly plausible
+pixel, mirrored through the principal point. A box straddling the image plane
+would draw inside-out across the frame, which reads as an annotator error
+rather than a projection bug. Points behind the camera project to nothing, and
+box edges crossing the plane are clipped at it, so a box half in front of the
+camera draws its visible half correctly.
+
+**Boxes outside the frame.** An object off to one side still projects to real
+pixel coordinates. Drawing it would put lines along the panel edge for things
+the camera never saw. Boxes whose projection does not overlap the image are
+left out.
+
+**The stereo baseline.** KITTI's `P` matrices are `K · [I | t]` where `t` is
+the rectified baseline — 6 cm for the left colour camera, 54 cm for the right.
+It is recovered exactly, as `K⁻¹ · P[:,3]`. Assuming it is zero (or dividing
+`P[0,3]` by `fx`, which is the same mistake more subtly) puts every box off by
+a few centimetres — small, systematic, and easy to read as sloppy annotation.
+
+**A calibration it cannot read.** The panels report the reason, and the reason
+names what was missing. A calibration that is quietly wrong puts boxes in the
+wrong place in the one view meant to catch wrong boxes, which is worse than
+having no view at all.
+
+## Paths are contained
+
+A calibration path comes out of your data file and is opened by the server, so
+it is resolved against `media_directory` with the same containment guard the
+image and point cloud routes use. A path escaping that directory is refused,
+and the refusal does not report whether the file exists.
+
+Keep everything the browser may fetch under one media root:
+
+```
+media/
+  clouds/   scene_0001.bin
+  images/   scene_0001.png
+  calib/    scene_0001.txt
+```
+
+## Drawing boxes with the projection
+
+Arm the box tool (`c`), pick a class, and **drag out the footprint on the
+ground plane**. Two things then happen automatically:
+
+- The ground plane is the cloud's own ground, estimated as a low percentile of
+  its `z` values — not `z = 0`. A roof-mounted lidar reports the road at about
+  −1.7 m, so a box drawn on `z = 0` would float above the whole scene.
+- The box's **height is fitted to the points inside its footprint**. Height is
+  the dimension a footprint drag cannot express and the one annotators judge
+  worst in a perspective view of a sparse cloud, and the returns answer it
+  exactly. A footprint containing only road is left alone rather than collapsed
+  onto the tarmac.
+
+| Key | Action |
+|---|---|
+| drag | Draw the footprint |
+| `q` / `e` | Rotate the selected box (hold Shift for 1° steps) |
+| `Delete` | Remove the selected box |
+| `Escape` | Deselect |
+| click | Select the nearest annotation |
+
+Rotation is applied in the world frame, so `q` always turns the box the same
+way on screen regardless of how it is already oriented.
+
+Set `fit_box_height: false` to keep the drawn height, and `default_box_height`
+to change what a new box starts at (1.7 m by default).
+
+## Troubleshooting
+
+**The panels never appear.** The item's `calibration_field` is empty. That is
+silent by design. Check the field name matches the schema and that the value is
+not an empty string.
+
+**"Camera views unavailable: …".** The calibration exists but could not be
+read; the message names what was missing. A missing `Tr_velo_to_cam` parses but
+warns, because the lidar frame is then assumed to be the camera frame and every
+box will be in the wrong place.
+
+**The boxes are consistently offset.** Check the direction of your extrinsics.
+`rotation`/`translation` must map **sensor → camera**; supplying the inverse
+gives a rig that looks correct until an object is off-centre.
+
+**The image is there but no boxes.** Either every box is behind the camera or
+outside the frame — both are drawn as nothing on purpose. Confirm the box
+centres are in the sensor frame and in metres.
+
+## Related documentation
+
+- [Point Cloud Annotation](point_cloud.md) — the 3D surface itself
+- [Media Ingest](../multimedia/media_ingest.md) — camera formats browsers cannot display
+- [Geometry Agreement](../../advanced/geometry_agreement.md) — agreement over shapes
 
 
 ---
@@ -17195,6 +18769,210 @@ ui_configuration:
 
 ---
 
+<!-- source: docs/workflow/annotation_guidelines.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/workflow/annotation_guidelines/
+
+# Guidelines and Codebooks
+
+Most of the examples in this repo describe their task in the one-line
+`description:` on each annotation scheme. That is all a three-label demo needs,
+and it is nowhere near enough for a real study: a codebook that has been through
+two rounds of adjudication has definitions, inclusion and exclusion criteria,
+worked examples, already-settled edge cases, and a change log.
+
+Potato gives you four places to put annotator-facing instructions. They differ
+in **when the annotator reads them**, and a well-run task uses more than one.
+
+| Surface | Config | Read |
+|---|---|---|
+| Instructions **phase** | `phases.<name>.type: instructions` + `file:` | Once, before the first item |
+| Collapsible **banner** | `annotation_instructions` | On every annotation screen, foldable |
+| **Codebook** button | `annotation_codebook_url` | On demand, in a new tab |
+| **Codebook tray + `/codebook`** | `codebook: true` on a scheme | Per label, while deciding |
+
+Working examples:
+[`examples/advanced/long-guidelines/`](https://github.com/davidjurgens/potato/tree/master/examples/advanced/long-guidelines)
+covers the first three;
+[`examples/advanced/codebook-sidebar/`](https://github.com/davidjurgens/potato/tree/master/examples/advanced/codebook-sidebar)
+covers the fourth.
+
+---
+
+## 1. An instructions phase
+
+Give the `instructions` phase an `.html` file and it is rendered as-is — tables,
+ordered lists, worked examples, whatever the task needs. The annotator scrolls.
+
+```yaml
+phases:
+  order:
+  - guidelines
+  - annotation
+  guidelines:
+    type: instructions
+    file: surveys/instructions.html
+```
+
+Point the same phase at a `.json` file instead and you get a *survey* rather
+than a document — that is how the consent phase works. A survey page can still
+carry long prose by way of a `pure_display` entry:
+
+```json
+[
+  {
+    "name": "consent_info",
+    "annotation_type": "pure_display",
+    "allow_html": true,
+    "description": "Consent to participate",
+    "labels": ["<p>You are invited to take part in ...</p>"]
+  }
+]
+```
+
+!!! warning "`allow_html: true` is not optional"
+    Without it, `pure_display` **escapes** its content and the annotator reads
+    your raw `<p>` and `<h4>` tags. This is the single most common mistake with
+    survey pages.
+
+## 2. The collapsible banner
+
+`annotation_instructions` renders as a `<details>` element at the top of every
+annotation screen, open by default. Annotators fold it away once the task is
+familiar and reopen it when they hit something odd.
+
+```yaml
+annotation_instructions: |
+  <p>Rate how the message lands <strong>on the person receiving it</strong>,
+  not whether you would have written it that way.</p>
+  <ul>
+    <li><strong>Polite</strong> &mdash; the writer visibly softens the ask.</li>
+    <li><strong>Neutral</strong> &mdash; plain business, nothing that stings.</li>
+    <li><strong>Impolite</strong> &mdash; sarcasm, blame, a pointed reminder.</li>
+  </ul>
+```
+
+Keep this shorter than the phase page: it is the reminder, not the teaching
+material. Good content here is the two or three rules that decide most items.
+
+The HTML passes through the project sanitizer — formatting survives, `<script>`
+and event handlers do not, and character entities such as `&mdash;` render
+correctly.
+
+## 3. The Codebook button
+
+`annotation_codebook_url` puts a **Codebook** button in the nav bar that opens
+any URL in a new tab.
+
+```yaml
+media_directory: media
+annotation_codebook_url: /media/codebook.html
+```
+
+A Google Doc, a wiki page or a PDF all work. Serving it from the project's own
+`media/` directory (files under it are served at `/media/<path>`) means the
+codebook is versioned alongside the config — which is the point of treating
+annotation as a reproducible process rather than a folder of labels.
+
+## 4. The codebook tray and `/codebook`
+
+When your reference material is organized **per label** rather than as prose,
+put it in the codebook. Any scheme with `codebook: true` sources its labels from
+the project codebook and turns on two surfaces:
+
+- the **tray**, a button on the right edge of the annotation screen that lists
+  every code and links to the full document;
+- the **`/codebook` page**, which renders each code's complete entry.
+
+```yaml
+codebook_mode: fixed        # read-only reference
+
+annotation_schemes:
+- annotation_type: radio
+  name: politeness
+  description: How polite is this workplace message?
+  codebook: true
+  labels: [Polite, Neutral, Impolite]
+```
+
+`codebook_mode` governs who may change it:
+
+| Mode | Annotators may |
+|---|---|
+| `fixed` | nothing — consult only. Mutation endpoints return 403 |
+| `extensible` | add codes, not restructure |
+| `open` | add, rename, recolor, move, delete; the tray gains an inline editor |
+
+QDA and solo mode default to `open`; a crowdsourcing backend force-locks
+`fixed`. See [Codebook](../advanced/codebook.md) and
+[QDA mode](../advanced/qda.md).
+
+!!! note "Under `fixed`, the tray is navigation, not a reader"
+    The tray's per-code content view is the inline "quick definition" editor,
+    which is gated on edit permission. A `fixed`-mode annotator therefore sees
+    code **names** plus **Open full codebook**, and reads the entries on
+    `/codebook`. That is usually what you want — but do not promise annotators
+    that definitions appear in the tray itself.
+
+### Writing the entries
+
+A YAML `labels:` list carries only *names*, so a codebook seeded from one lists
+bare labels with no definitions. The content lives in typed blocks, written
+through the content API:
+
+```python
+from potato.codebook.content_service import save_scope
+
+save_scope(task_dir, project=project, scope_kind="code", scope_id=code_id,
+           base_version=version, actor="seed_codebook.py",
+           blocks_in=[{"block_type": "definition", "body_md": "..."},
+                      {"block_type": "use_when",   "body_md": "..."},
+                      {"block_type": "avoid_when", "body_md": "..."}])
+```
+
+`examples/advanced/codebook-sidebar/seed_codebook.py` is a complete, idempotent
+example. The available block types are defined in `potato/codebook/blocks.py`:
+
+| Block | Heading |
+|---|---|
+| `short_def` | Short definition |
+| `definition` | Definition |
+| `use_when` | Use when |
+| `avoid_when` | Avoid when |
+| `example` | Examples |
+| `counter_example` | Counter-examples |
+| `rationale` | Rationale |
+| `background` | Background |
+| `downstream_usage` | Downstream usage |
+| `keywords` | Keywords |
+| `notes` | Notes |
+| `custom` | (carries its own heading) |
+
+The first four are **semantic**. Editing one bumps the codebook's semantic
+revision and re-flags every instance already coded with that code, because a
+changed definition means those labels were made under a different rule. That
+re-flagging is the feature, not a nuisance: it is the difference between a
+codebook that records what you decided and one that quietly rewrites history.
+
+## Which to use
+
+- **Long teaching material** → instructions phase.
+- **The two or three rules that settle most items** → banner.
+- **The authoritative document, with a version number** → codebook button.
+- **Per-label definitions with inclusion/exclusion criteria** → codebook.
+
+Using all four is normal. They are not alternatives; they are different reading
+moments.
+
+## Related
+
+- [Multi-Phase Workflows](surveyflow.md)
+- [Training Phase](training_phase.md)
+- [Codebook](../advanced/codebook.md)
+- [QDA Mode](../advanced/qda.md)
+
+
+---
+
 <!-- source: docs/workflow/training_phase.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/workflow/training_phase/
 
@@ -17715,6 +19493,53 @@ gold_standards:
 - `gold_label` (required): Dictionary with correct annotations
 - `explanation` (optional): Explanation shown to annotators
 - `difficulty` (optional): Metadata for analysis
+
+### Gold Standards for Drawn Answers
+
+Image annotation gold standards work, and are graded by **overlap rather than
+equality** — two annotators never produce byte-identical geometry, so a string
+comparison would fail every drawn answer no matter how well it was drawn.
+
+The `gold_label` value is the same JSON the annotation client stores: a list of
+objects with normalized (0–1) coordinates.
+
+```json
+[
+  {
+    "id": "gold_img_001",
+    "image": "images/street_042.jpg",
+    "gold_label": {
+      "objects": "[{\"type\": \"bbox\", \"label\": \"car\", \"coordinates\": {\"x\": 0.12, \"y\": 0.40, \"width\": 0.22, \"height\": 0.18}}]"
+    },
+    "explanation": "The parked car on the left; the reflection in the window is not a second car."
+  }
+]
+```
+
+An answer passes when **every** gold shape is matched by a drawn shape of the
+**same label** at or above the IoU tolerance, with no extra shapes. Right place,
+wrong label is a failure — that is what a gold standard exists to catch.
+
+```yaml
+quality_control:
+  geometry_iou_tolerance: 0.5   # default; also accepted inside gold_standards
+```
+
+| Tolerance | Effect |
+|---|---|
+| `0.5` (default) | The Pascal VOC / COCO detection convention. The annotator clearly found and outlined the right object. |
+| `0.75`–`0.9` | Strict. Appropriate for segmentation work where boundary precision is the skill being tested. |
+| `0.25`–`0.4` | Loose. Appropriate for "did you spot it at all" screening, or for small objects where a few pixels dominate the IoU. |
+
+!!! tip "IoU punishes small objects"
+
+    A fixed pixel error costs far more IoU on a small object than a large one.
+    If your gold items are dominated by small objects, a 0.5 tolerance is
+    stricter in practice than it sounds — consider lowering it or choosing
+    larger gold objects.
+
+The same comparator grades training-phase practice questions, so a project's
+gold standards and its training answers are held to the same standard.
 
 ### Feedback Display
 
@@ -26133,6 +27958,18 @@ Identifies significant moments in a video that would make good annotation points
 ### Object Tracking (Video)
 Suggests object positions across frames for consistent tracking annotation.
 
+### Critique / Review
+Runs the other direction from every feature above: instead of producing
+annotations, it reviews the ones already drawn. Each region is cropped with the
+annotator's own outline drawn onto it and shown to the model, which says
+whether the outlined thing matches its label and whether the outline fits. The
+result is a review queue, not canvas overlays, and nothing is applied without a
+button press.
+
+Needs a model that can both see and explain, so a pure detector such as YOLO is
+filtered out of the toolbar. See
+**[Annotation Critique](annotation_critique.md)** for the full guide.
+
 ## Using AI Suggestions
 
 1. Click the AI assistance button (Detect, Auto, Hint, etc.)
@@ -26232,6 +28069,247 @@ For video segments:
   ]
 }
 ```
+
+
+---
+
+<!-- source: docs/ai-intelligence/annotation_critique.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/annotation_critique/
+
+# Annotation critique (VLM as judge)
+
+Ask a vision model to review the regions an annotator has already drawn, and
+present what it doubts as a queue they work through.
+
+This is the check inter-annotator agreement cannot make. Agreement asks whether
+two people drew the same shape. It is silent when both are confidently wrong —
+which is what an ambiguous guideline produces — and it says nothing at all when
+there is only one annotator, which is the usual state of a pilot. A model
+looking at each region independently answers a different question: *is the
+outlined thing really a `{label}`, and does the outline fit it?*
+
+It is also much weaker evidence than agreement, and the interface says so every
+time it opens. A flag means "look at this again", never "the model says change
+it".
+
+---
+
+## Overview
+
+Pressing **Review** in the AI Assist bar sends the annotations currently on the
+canvas to the server. For each one the server:
+
+1. crops the region **with surrounding context**;
+2. draws the annotator's own outline onto that crop in red;
+3. asks the model whether the outlined region contains the label it was given,
+   and whether the outline fits.
+
+A separate whole-image pass asks what was missed.
+
+Both halves of step 2–3 are load-bearing:
+
+- **Without context**, the object fills the frame by construction, so every
+  boundary looks tight and "is this boundary loose?" has no answerable form.
+- **Without the drawn outline**, the model cannot see where the boundary is and
+  answers about one it imagined.
+
+Cropping rather than sending the whole image matters for the same reason: a
+4000×3000 photograph downsampled to a model's input resolution loses a
+twenty-pixel object entirely, and the model then confirms annotations it cannot
+see.
+
+## Requirements
+
+A vision endpoint that can also explain itself. The toolbar button is gated on
+`vision_input` **and** `rationale_generation`, so:
+
+| Endpoint | Critique available | Why |
+|---|---|---|
+| `openai_vision`, `anthropic_vision`, `ollama_vision` | ✅ | Sees images, writes rationales |
+| Any OpenAI-compatible server via `base_url` (vLLM, SGLang, LM Studio) | ✅ | Same |
+| `yolo` | ❌ | Finds boxes but cannot say why it disagrees, and a verdict with no reason is not reviewable |
+| Text-only endpoints | ❌ | Cannot see the image |
+
+Cropping needs **Pillow**. Without it the route answers with a stated reason
+rather than failing opaquely.
+
+## Configuration
+
+Options live under the image schema's `ai_support`:
+
+```yaml
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: objects
+    description: "Box every car, person and sign."
+    tools: [bbox, polygon]
+    labels:
+      - {name: car, color: '#d6604d'}
+      - {name: person, color: '#4575b4'}
+      - {name: sign, color: '#5aa469'}
+
+    ai_support:
+      enabled: true
+      features:
+        critique: true          # the Review button; default true
+      critique:
+        context_ratio: 0.6
+        min_confidence: 0.5
+        max_regions: 24
+        max_workers: 4
+        check_missed: true
+        coverage_ratio: 0.5
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `context_ratio` | `0.6` | Context around each region, as a fraction of its longer side. Lower it only if regions are so dense that neighbours confuse the model. |
+| `min_confidence` | `0.5` | Verdicts below this become "unclear" and stay out of the queue. |
+| `max_regions` | `24` | Cost ceiling — one model call per region. The excess is reported as "not reviewed", never dropped silently. |
+| `max_workers` | `4` | Concurrent calls. Keep it low against a single-GPU server. |
+| `check_missed` | `true` | Also run the whole-image "what was missed?" pass. |
+| `coverage_ratio` | `0.5` | How much of a reported missed object must lie inside an existing annotation to count as already covered. |
+
+The endpoint itself is configured as usual under the top-level `ai_support`.
+Judges return JSON with a rationale, so **`max_tokens` must be at least 512** —
+below that the reply is truncated mid-object and every verdict parses as
+"unclear".
+
+## What the annotator sees
+
+The panel leads with the count that needs attention and keeps confirmations
+collapsed. A panel that opens on "9 of 12 correct!" trains people to close it.
+
+Each finding shows the verdict, the model's one-sentence reason, and the
+actions that apply to it:
+
+| Verdict | Shown as | Actions |
+|---|---|---|
+| `wrong_label` | Label may be wrong | Show me · Relabel to *X* · Delete · Keep as is |
+| `not_an_object` | May not be an object | Show me · Delete · Keep as is |
+| `loose_boundary` | Boundary may not fit | Show me · Delete · Keep as is |
+| `uncertain` | Unclear (collapsed) | Show me |
+| `confirmed` | Confirmed (collapsed) | Show me |
+
+**Nothing is applied automatically, and there is no "fix all".** Every change
+happens because the annotator pressed a button with the reason on screen. A
+model that is right most of the time, applied in bulk, produces a dataset that
+is wrong in a *correlated* way — worse than the scattered mistakes it corrects.
+
+Possibly-missed objects are shown separately, with a "show the area" button
+that draws a temporary dashed outline. They cannot be accepted as annotations:
+vision-language models localize poorly, and a guessed coordinate in a dataset
+is worse than no coordinate.
+
+## What keeps the queue honest
+
+Several rules exist specifically to stop the feature manufacturing findings:
+
+- An **unreadable or unrecognised response** is `uncertain`, never a flag.
+- A **model error or timeout** is `uncertain`. An outage is not a finding.
+- A **low-confidence disagreement** is downgraded to `uncertain`.
+- A **suggested label outside the schema** is not actionable — the annotator
+  cannot apply a label the task does not have — so it is downgraded and the
+  reason is stated.
+- A **self-contradiction** (`wrong_label` naming the label the region already
+  has) is resolved in favour of the label it named.
+- A **missed object that lies inside an existing annotation** is dropped,
+  because that is the same mistake the per-region verdict already reported.
+
+That last one uses *containment*, not IoU, and the difference is not academic.
+An oversized box plainly contains the object inside it, but its IoU with that
+object is low **precisely because the box is loose** — so an IoU test reports
+"you missed this car" about a car that was annotated, on exactly the images
+where the boundary was already flagged.
+
+## Calibration, honestly
+
+`min_confidence` does less work than it looks like it should. Instruction-tuned
+open models are badly calibrated on this task: in testing against a Gemma-class
+vision model, essentially every verdict came back at confidence 0.9–1.0,
+including the ones that were wrong. The gate catches models that hedge; it does
+not catch models that are confidently wrong.
+
+Treat the flag rate, not the confidence, as the thing to watch. If a project's
+critique flags a large fraction of a careful annotator's work, the prompt is
+mismatched to the task — usually because the label names mean something
+specific in the domain that the model reads generically.
+
+## Relationship to the other quality signals
+
+| Question | Instrument |
+|---|---|
+| Did two annotators draw the same shape? | [Geometry agreement](../advanced/geometry_agreement.md) |
+| Is this annotation right at all? | **This page** |
+| How was the annotation produced? | [Annotation telemetry](../advanced/annotation_telemetry.md) |
+| Which annotator should be trusted where? | [MACE](../advanced/mace.md) |
+
+They answer different questions and fail differently. Critique is the only one
+of the four that works with a single annotator, and the only one that can catch
+a shared misunderstanding.
+
+Acting on a critique is recorded by [annotation telemetry](../advanced/annotation_telemetry.md)
+as an AI suggestion accepted or rejected, with the same latency measurement
+used for detection suggestions — rubber-stamping a critique is exactly as bad
+as rubber-stamping a detection.
+
+## API
+
+`POST /api/critique_annotations`
+
+```json
+{"schema": "objects", "objects": [...], "instance_id": "img_1"}
+```
+
+`objects` is optional; when absent the server reads the user's stored
+annotations for the instance. Supplying them is preferred, since the annotator
+expects a review of what is on screen and the last edit may not have saved yet.
+
+Response:
+
+```json
+{
+  "instance_id": "img_1",
+  "schema": "objects",
+  "verdicts": [
+    {"index": 1, "label": "car", "verdict": "wrong_label",
+     "suggested_label": "sign", "boundary": "tight", "confidence": 0.9,
+     "rationale": "The outlined region contains a traffic sign, not a car.",
+     "flagged": true, "error": ""}
+  ],
+  "missed": [],
+  "summary": {"reviewed": 3, "confirmed": 1, "flagged": 1, "uncertain": 1,
+              "errors": 0, "missed": 0, "skipped": 0, "caveat": "..."},
+  "model": "…", "image_width": 640, "image_height": 420, "cached": false
+}
+```
+
+Results are cached per (instance, schema, annotation state), so re-opening an
+unchanged image does not re-run the model, while editing a box invalidates its
+critique.
+
+The route never writes an annotation.
+
+## Troubleshooting
+
+**"No vision-capable AI endpoint is configured"** — the project's endpoint
+cannot take an image. Set a vision endpoint; see the table above.
+
+**Every verdict is "unclear"** — almost always `max_tokens` below 512, which
+truncates the JSON. Check the server log for the raw reply.
+
+**The button is missing** — `ai_support.enabled` is false for the schema, or
+`features.critique` is false, or the schema is not `image_annotation`.
+
+**Review is slow** — one model call per region. Raise `max_workers` if the
+server can take it, or lower `max_regions`.
+
+## Related
+
+- [Visual AI Support](visual_ai_support.md) — detection and pre-annotation
+- [Geometry agreement](../advanced/geometry_agreement.md)
+- [Annotation telemetry](../advanced/annotation_telemetry.md)
+- Example: `examples/image/annotation-critique/`
 
 
 ---
@@ -27519,6 +29597,122 @@ Active learning in Potato provides powerful capabilities for optimizing annotati
 For additional support and advanced configurations, refer to:
 - [Active Learning Query Strategies](active_learning_strategies.md) — Detailed strategy reference with citations
 - [AI Support](ai_support.md) — LLM endpoint configuration
+
+
+---
+
+<!-- source: docs/ai-intelligence/vision_active_learning.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/vision_active_learning/
+
+# Vision Active Learning
+
+Rank unlabeled images by how much annotating them would teach the model, so
+annotators spend their time where it counts.
+
+**CVAT has no active learning at all**, so the goal here is not to match a
+competitor's model stage — it is to be the only self-hostable annotation tool
+with real active learning over images.
+
+## How little had to change
+
+Potato's active learning was already mature: uncertainty, diversity, BADGE,
+BALD, hybrid ranking, background training, persistence. It was text-bound
+through exactly one call — `item.get_text()`.
+
+Every `QueryStrategy` already took a *vectorizer* and called
+`vectorizer.transform(items)`. So images needed **one new vectorizer**, not a
+parallel pipeline:
+
+| Component | Text | Images |
+|---|---|---|
+| Vectorizer | `SentenceTransformerVectorizer` | `ImageEmbeddingVectorizer` |
+| Feature | `item.get_text()` | the item's image reference |
+| Uncertainty / diversity / BADGE / BALD / hybrid | unchanged | **unchanged** |
+
+That is the whole change. If a strategy works on text it works on images.
+
+## Setup
+
+```bash
+pip install sentence-transformers Pillow
+```
+
+Both are optional. Their absence produces a message naming the install command
+— never a silent fallback to random ordering, which would look like active
+learning while being nothing of the kind.
+
+```yaml
+active_learning:
+  enabled: true
+  strategy: uncertainty        # or diversity, badge, bald, hybrid
+  vectorizer: image            # text (default) | image
+  image_model: clip-ViT-B-32
+```
+
+## Why CLIP rather than DINOv2
+
+DINOv2 gives slightly better pure-vision features. CLIP embeds **text into the
+same space**, which makes cross-modal checks free once the model is loaded:
+
+```python
+vectorizer.embed_text(["a photo of a cat", "a photo of a dog"])
+```
+
+An annotated crop that sits far from its own class name is a candidate
+mislabel. That is dataset QA neither V7 nor CVAT offers, from a model we need
+anyway.
+
+## The embedding cache
+
+Embedding is the expensive step and the corpus does not change. Active learning
+re-ranks after **every batch** of annotations, so an uncached embedder would
+re-encode the entire unlabeled pool each time — minutes of GPU-less compute,
+repeated for nothing.
+
+Embeddings are cached under `<output_dir>/.embeddings/<model>/`, one `.npy` per
+image, keyed by **file content**:
+
+- renaming or moving an image does **not** force a re-encode
+- editing an image **does**
+- two models never share entries, because their vectors are in different spaces
+  and mixing them silently would make every distance meaningless
+
+The cache is disposable — delete the directory and it rebuilds.
+
+```python
+from potato.vision_features import EmbeddingCache
+EmbeddingCache(output_dir).clear()
+```
+
+## Image references
+
+The vectorizer takes whatever the item stores — `image_url`, `image`,
+`file_name`, or a field you name with `source_field`.
+
+**Remote URLs are skipped, not fetched.** Active learning ranks a whole
+unlabeled pool from a background thread; fetching would fire thousands of
+requests. Serve images locally, or set `image_root` to where they live on disk.
+Skipped references are recorded in `vectorizer.failures` so a partial ranking
+can be reported honestly rather than presented as complete.
+
+An unreadable image still occupies its row in the output, as a zero vector.
+That is deliberate: callers index results against the input list, so dropping a
+row would misalign every ranking after the gap — and a misranking looks like a
+model quirk rather than a bug.
+
+## What is not here
+
+**Detector retraining is out of scope.** Pre-labelling comes from SAM
+(see [Interactive segmentation](../annotation-types/multimedia/segmentation.md))
+and the existing YOLO endpoint, not from a detector Potato trains. Ordering
+plus pre-labelling is most of the value at a small fraction of the
+infrastructure, and training remains a separable later decision.
+
+## Related
+
+- [Active learning guide](active_learning_guide.md)
+- [Interactive segmentation](../annotation-types/multimedia/segmentation.md)
+- [Geometry agreement](../advanced/geometry_agreement.md)
 
 
 ---
@@ -30472,6 +32666,18 @@ Each annotation instance includes a `behavioral_data` object:
         "pasted_fraction": 0.0,
         "verdict": {"level": "ok", "flag_names": []}
       }
+    },
+    "annotation_telemetry": {
+      "objects": {
+        "shapes_added": 7,
+        "shape_interval_median_ms": 4200.0,
+        "revision_ratio": 0.22,
+        "max_zoom": 3.5,
+        "ai_suggested": 9,
+        "ai_accepted": 6,
+        "ai_accept_latency_median_ms": 3100.0,
+        "verdict": {"flags": [], "scores": {}, "notes": {}}
+      }
     }
   }
 }
@@ -30481,6 +32687,12 @@ Each annotation instance includes a `behavioral_data` object:
 `typing_summaries` is populated only when
 [keystroke logging](keystroke_logging.md) is enabled; the raw keystroke streams
 live in the project's SQLite database rather than here.
+
+`annotation_telemetry` is populated only when
+[annotation telemetry](annotation_telemetry.md) is enabled, and follows the same
+split: the summary here, the raw event streams in SQLite. It is keyed by schema
+name alone rather than `schema:::label`, because a drawn annotation is stored
+under a single `_data` key and there is no label to key on.
 
 ### Storage Location
 
@@ -30499,6 +32711,12 @@ Behavioral tracking is enabled by default. No additional configuration is requir
     revisions, paste detection — are **not** part of this default tracking. They
     are configured under `keystroke_logging`, default off, and documented in
     [Keystroke Logging](keystroke_logging.md).
+
+!!! note "Annotation telemetry is also separate and opt-in"
+    Drawing dynamics on geometry schemas — time per shape, zoom behaviour,
+    revision counts, and AI-suggestion accept latency — are configured under
+    `annotation_telemetry`, default off, and documented in
+    [Annotation Telemetry](annotation_telemetry.md).
 
 ### Frontend Debug Mode
 
@@ -31791,6 +34009,218 @@ Not legal advice; flagging what tends to be relevant.
 
 ---
 
+<!-- source: docs/advanced/annotation_telemetry.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/advanced/annotation_telemetry/
+
+# Annotation Telemetry
+
+How a bounding box, polygon or mask was *produced* — the drawing-process
+counterpart of [keystroke logging](keystroke_logging.md).
+
+The headline signal is **AI-accept latency**. Everything else on this page is
+supporting context for it.
+
+## The problem it addresses
+
+Pre-labelling makes annotators faster. It also makes rubber-stamping
+frictionless: a suggestion appears, the annotator clicks accept, and the
+resulting dataset is a record of a model agreeing with itself. Nothing in the
+annotation itself distinguishes that from careful review — the geometry is
+identical, agreement statistics are *higher*, and every quality measure Potato
+has looks better, not worse.
+
+The only place the difference shows up is in the timing.
+
+> A human cannot inspect a mask boundary and decide in 300ms. Once, maybe —
+> the object was obvious. As a **median across many items**, it is not fast
+> expertise. It is not looking.
+
+## What is recorded
+
+An event carries a timestamp, an action, a geometry kind, and one integer.
+
+| Action | Meaning | The integer |
+|---|---|---|
+| `shape_add` | a shape was committed | vertices (4 for a box, `len(points)` for a polygon, 0 for a mask) |
+| `shape_edit` | an existing shape was moved or reshaped | — |
+| `shape_remove` | a shape was deleted | — |
+| `stroke` | one brush or eraser stroke finished | stroke length in **image** pixels |
+| `fill` | flood fill applied | pixels filled |
+| `zoom` | zoom level changed | level × 100 |
+| `pan` | one pan drag finished | distance in screen pixels |
+| `tool`, `undo`, `redo` | | — |
+| `ai_suggest` | a suggestion was rendered to the annotator | — |
+| `ai_accept` / `ai_reject` | | — |
+
+**No coordinates are recorded, ever.** A stream reconstructs how an annotation
+was made; it cannot reconstruct the annotation. That is a structural property of
+the event record, not a policy — there is no field a coordinate could go in, and
+a test asserts it.
+
+Stroke length is in image pixels rather than screen pixels, so the same stroke
+measures the same whether the annotator was zoomed in or out.
+
+## Configuration
+
+```yaml
+annotation_telemetry:
+  enabled: true
+  fidelity: events           # off | summary | events
+  store_events: true
+  include_schemas: []        # empty = every geometry schema
+  exclude_schemas: []
+  idle_ms: 120000            # gap above which time is idle, not active
+  flush_interval_ms: 10000
+  disclose_to_annotators: true
+  detection:
+    enabled: true
+    calibrate: false         # fit thresholds from this project's own data
+    thresholds: {}
+```
+
+`fidelity: summary` derives every feature but persists no raw stream. Use it when
+you want the numbers without keeping a replayable record of each annotator's
+session.
+
+`idle_ms` defaults to two minutes rather than something tighter because
+**inspecting a hard image is real work that produces no events at all**. A
+30-second idle cut-off would charge careful looking to idle time and reward
+whoever clicked fastest.
+
+## What the numbers mean
+
+| Feature | Reading it |
+|---|---|
+| `ai_accept_latency_median_ms` | the primary signal |
+| `ai_accepted_then_edited` | accepts that were subsequently corrected — evidence of actual review |
+| `shape_interval_median_ms` | pace of **hand-drawn** shapes, only meaningful against the project's own distribution |
+| `shapes_drawn` / `shapes_from_ai` | how the shapes got there |
+| `revision_ratio` | edits ÷ (creates + edits) |
+| `zoomed_fraction` | share of the session spent above 1.05× |
+| `active_ms` / `idle_ms` | time on task, split at `idle_ms` |
+| `vertices_median` | polygon detail — a 4-vertex "polygon" around a curved object is a box in disguise |
+
+### Screening flags
+
+| Flag | Fires when | What it does **not** establish |
+|---|---|---|
+| `rubber_stamping` | ≥5 accepts, median latency < 500ms, ≤5% subsequently corrected | that the annotator was wrong. A genuinely excellent detector produces suggestions that *deserve* to be accepted. Check the suggestions before the annotator. |
+| `hasty` | ≥4 **hand-drawn** shapes, median interval < 700ms | that the work is bad. Drawing boxes on obvious objects is legitimately quick. |
+| `never_zoomed` | never magnified — **and only when another flag already fired** | anything on its own. A project whose objects fill the frame needs no zoom. |
+
+`never_zoomed` is deliberately never reported alone. Flagging every annotator on
+a task that does not require zoom would train reviewers to ignore the flag, and
+a flag people ignore is worse than no flag.
+
+### Accepted suggestions are not "drawing"
+
+The client commits an accepted suggestion through the same path as a hand-drawn
+shape, so it arrives as a `shape_add` milliseconds later. Pace is therefore
+measured over `shapes_drawn` only.
+
+This is not a technicality. An annotator who reviews eight suggestions for four
+seconds each and then accepts them produces eight shapes in rapid succession —
+so counting accepted shapes as drawing would have the latency measure report
+"careful" and the pace measure report "hasty" about the same behaviour, firing
+hardest on exactly the annotators doing it right. Found by running the exporter
+on a two-annotator fixture and noticing the careful one was flagged too.
+
+### These are screening signals, not findings
+
+The correct use of everything on this page is deciding **what to look at**. None
+of it is evidence of misconduct, and the API returns each flag with a note
+saying so, because a flag surfaced in a dashboard without its caveat gets read
+as a finding.
+
+## Calibration
+
+Thresholds cannot be transplanted between tasks — the same finding as
+Conijn, Roeser & van Zaanen (2019) for keystrokes. The built-in defaults are
+documented **starting points**, not values with evidence behind them.
+
+```yaml
+annotation_telemetry:
+  detection:
+    calibrate: true
+```
+
+This fits thresholds from the project's own distribution (default: the fastest
+5% of its sessions). It refuses to fit on fewer than 30 sessions and falls back
+to the defaults — a threshold from a handful of sessions is worse than a
+documented constant, because it *looks* principled.
+
+An explicit `thresholds:` override always wins over a fitted value, being the
+most specific statement of intent.
+
+## Where the data goes
+
+| Destination | What | Why |
+|---|---|---|
+| `<task_dir>/project.sqlite` | raw event streams + per-session features | `user_state.json` is rewritten **in full** on every annotation save |
+| `user_state.json` | the compact summary only, under `annotation_telemetry` | so it travels with the annotation through export |
+
+Sessions on the same schema and instance are merged before the summary is
+written: leaving an image and coming back is one piece of work, not two
+suspiciously short ones. The flags are re-evaluated against the *merged* view,
+so five fast accepts within one short session may be a small fraction of the
+item's total once everything is counted.
+
+## Admin
+
+`GET /admin/api/annotation_process` — per-annotator rollup, ranked by
+`annotation_process_risk`. Also available as the `annotation_process` key of
+`/admin/api/behavioral_analytics`.
+
+Annotators who never used AI assistance sort **last** rather than first:
+ordering on a null latency would otherwise put the people with no signal at all
+above the ones worth looking at.
+
+## Export
+
+```bash
+potato export <config.yaml> --format annotation_telemetry
+```
+
+Writes `annotation_sessions.parquet` and `annotation_events.parquet` (JSONL when
+pyarrow is absent). The event table promotes `suggestion_id` to its own column,
+because pairing suggest to accept is the first thing anyone does with it.
+
+Because these are behavioural measurements of identifiable annotators, this is
+deliberately **not** part of the default annotation export.
+
+## Disclosure and ethics
+
+Annotators see a persistent notice by default. It is rendered server-side, so it
+survives a script that fails to load and cannot be removed by disabling
+JavaScript. It states the limit of the collection as well as its existence —
+someone told only "your annotation is recorded" will reasonably assume something
+more invasive than timing.
+
+Setting `disclose_to_annotators: false` logs a warning. The same reasoning as
+[keystroke logging ethics](keystroke_logging_ethics.md) applies in full: this is
+behavioural data about people, and consent documentation should cover it.
+
+## Citations
+
+- Skitka, L., Mosier, K., Burdick, M. (1999). Does automation bias
+  decision-making? *International Journal of Human-Computer Studies* 51(5).
+  doi:10.1006/ijhc.1999.0252
+- Parasuraman, R., Manzey, D. (2010). Complacency and Bias in Human Use of
+  Automation. *Human Factors* 52(3). doi:10.1177/0018720810376055
+- Conijn, R., Roeser, J., van Zaanen, M. (2019). Understanding the keystroke log.
+  *Reading and Writing* 32(9). doi:10.1007/s11145-019-09953-8 — why thresholds
+  must be calibrated per task.
+
+## Related
+
+- [Keystroke Logging](keystroke_logging.md) — the free-text counterpart
+- [Behavioral Tracking](behavioral_tracking.md)
+- [Geometry Agreement](geometry_agreement.md) — agreement catches disagreement;
+  this catches agreement that was never actually reached
+
+
+---
+
 <!-- source: docs/advanced/qda.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/advanced/qda/
 
@@ -31955,6 +34385,311 @@ reference.
 - [Cases](cases.md) — units of analysis + attributes
 - [Search](search.md) — FTS5 full-text search and claim
 - [Solo mode](../solo-mode/solo_mode.md) — single-annotator deployments
+
+
+---
+
+<!-- source: docs/advanced/geometry_agreement.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/advanced/geometry_agreement/
+
+# Chance-Corrected Agreement over Geometry
+
+How reliable is a bounding-box or segmentation dataset? This page is the method
+Potato uses to answer that, and what each number does and does not tell you.
+
+It is a research artifact, not marketing copy. Where a measure is weak, that is
+stated.
+
+## What everyone else reports, and why it is not enough
+
+CVAT's consensus engine and V7's consensus stage both compare annotators with
+**raw IoU against a per-class threshold**. Neither applies any chance
+correction. That makes the headline number uninterpretable on its own:
+
+> A corpus where every image holds one large, centred object will show a mean
+> IoU around 0.95 no matter who annotates it — including annotators who never
+> looked at the image and simply drew a box in the middle.
+
+Chance correction is what separates "these annotators agree" from "this task is
+too easy to disagree on".
+
+## Why not Krippendorff's α over 1 − IoU
+
+That was this project's original plan, and it is empirically the wrong default.
+
+Braylan, Alonso and Lease (WWW 2022, *Measuring Annotator Agreement Generally
+across Complex Structured, Multi-object, and Free-text Annotation Tasks*)
+evaluate candidate distance functions by whether the resulting agreement score
+**ranks annotator quality correctly** — the only property that really matters —
+and report that for bounding boxes, α ranks plain L2 (0.687) *above* IoU (0.505)
+and GIoU (0.507), inverting the ordering their own distribution-based measures
+and practitioners both give.
+
+There is a structural reason. IoU distance is bounded in [0, 1] and saturates:
+two randomly paired shapes almost always have IoU 0, so expected disagreement
+collapses to ≈1 and α degenerates to `1 − mean distance` with no working chance
+correction left in it.
+
+Plain IoU is also **flat where it matters most**. Two boxes that do not overlap
+score 0 whether they are touching or at opposite corners of the image — so the
+measure has no gradient exactly where annotators disagree.
+
+## What Potato reports instead
+
+### σ (sigma) — the primary measure
+
+```
+σ = 1 − mean(within-item distance) / mean(between-item distance)
+```
+
+This is α's own `1 − D_o/D_e` form generalized to an arbitrary distance, with
+the chance baseline estimated empirically by comparing annotations of
+**different items**.
+
+| σ | Meaning |
+|---|---|
+| 1.0 | Perfect agreement |
+| 0.0 | Annotators agree no more than they would on unrelated items |
+| < 0 | Systematic disagreement — usually a *definition* problem, not carelessness |
+
+Negative values are **not clamped**. "Further apart on the same image than on
+different images" is a real, diagnosable state and hiding it helps nobody.
+
+### KS — the robust companion
+
+The two-sample Kolmogorov–Smirnov statistic between the within-item and
+between-item distance *distributions*. σ compares two means and can be dragged
+by a few outliers; KS compares the whole distributions and holds up better when
+item difficulty varies a lot.
+
+Report both. They disagreeing is itself informative: it means a minority of
+items is driving the mean.
+
+### GIoU as the default distance
+
+Generalized IoU (Rezatofighi et al., CVPR 2019) subtracts the share of the
+smallest enclosing box that neither annotator's shape occupies, so a near-miss
+scores better than a wild miss. That restores the gradient plain IoU lacks.
+
+`centroid` (normalized L2) and `iou` are also available. **Every offered
+distance is tested for the ordering property** — noisier annotations must score
+lower — and one that failed would be removed rather than shipped.
+
+## Three questions, not one
+
+Annotators can disagree about whether an object exists, what it is, and where
+its boundary lies. These have different causes and different fixes, so Potato
+reports them separately.
+
+| Measure | Question | Method |
+|---|---|---|
+| `detection_alpha` | Did they find the same objects? | α over present/absent per matched cluster |
+| `classification_alpha` | Do they agree what it is? | α over labels, matched objects only |
+| `sigma` / `ks` | Do they agree where it is? | σ/KS over matched-pair distances |
+
+Detection and classification are genuine **categorical** variables, so α applies
+without any of the objections above — and the same decomposition is what lets
+MACE estimate per-annotator competence on those parts.
+
+Reading them together:
+
+| detection | localization | Diagnosis |
+|---|---|---|
+| high | low | They agree what to annotate; drawing guidelines are too loose |
+| low | high | They draw well; the definition of "an object" is unclear |
+| low | low | The task needs rethinking, not more annotators |
+
+A single blended 0.65 would suggest none of these.
+
+## 3D boxes
+
+Cuboids flow through exactly the same machinery — matched, then split into the
+same three questions — because the only thing that has to change is the
+distance between two shapes. The measure is **volumetric IoU, exact for any
+rotation**.
+
+That last part is a deliberate cost. The usual approach is bird's-eye-view IoU
+multiplied by vertical overlap, which is exact when both boxes are level and
+silently wrong when either is not. Potato's storage contract carries a full
+quaternion precisely so that drone, handheld and indoor-scan data are
+representable, so an agreement measure that quietly degraded on exactly those
+datasets would undo the decision. Instead, two boxes are treated as twelve
+half-spaces and the shared volume comes out of the divergence theorem over the
+resulting faces.
+
+| Type | Distance |
+|---|---|
+| `cuboid_3d` | 1 − volumetric IoU, exact under arbitrary rotation |
+| `point_3d` | Euclidean, with a 2 m falloff — two annotators clicking the same lamppost in a sparse cloud will not agree to the centimetre |
+| `polyline_3d` | Boundary F1 in **three** dimensions; two paths tracing the same ground track at different heights are not the same annotation |
+| `segment_3d` | Jaccard over point indices, which *is* IoU when the unit is a point |
+
+Vertically separated boxes score 0, not 1: a sign that BEV-only comparison is
+not being used anywhere.
+
+## When a number is undefined
+
+α divides by expected disagreement. A corpus where every annotator gave the
+same answer everywhere has D<sub>e</sub> = 0, so α is **genuinely undefined —
+not 1.0**.
+
+Potato reports `NaN` *with a reason*:
+
+```json
+{"detection_alpha": NaN,
+ "detection_alpha_note": "every annotator found every object, so there is no
+   variation for alpha to correct against. Perfect agreement, not a failed
+   computation."}
+```
+
+A bare NaN cannot be told apart from a broken computation, and someone will
+eventually read one as the other.
+
+## Matching, and its one honest weakness
+
+Objects are paired across annotators by the Hungarian algorithm on IoU
+(globally optimal when scipy is present; greedy best-first otherwise), above a
+threshold that defaults to 0.5.
+
+**The threshold is a real modelling choice, not an implementation detail.** Two
+boxes at IoU 0.4 are recorded as a *detection* disagreement — two different
+objects — where a human reviewer would likely call them one object drawn
+sloppily. Lower the threshold and sloppy work is re-attributed from detection to
+localization.
+
+There is no correct universal value. If your objects are small or your
+annotators are imprecise, lower it and say so in your methods section.
+
+## Confidence intervals
+
+Percentile bootstrap, resampling **items** rather than instances:
+
+```python
+report = geometry_agreement(items, bootstrap=200)
+report["confidence"]   # {"sigma_lower": .., "sigma_upper": .., "n_resamples": ..}
+```
+
+Two boxes on one image are not independent observations. Resampling instances
+individually produces intervals far too narrow to be honest.
+
+The chance baseline is sampled, so the seed is fixed by default: an agreement
+number that moves between runs of identical data cannot go in a paper.
+
+## Usage
+
+```python
+from potato.server_utils.iaa.geometry_agreement import geometry_agreement
+
+report = geometry_agreement(
+    {"image_1": {"alice": [obj, ...], "bob": [obj, ...]}},
+    distance="giou",        # giou | centroid | iou
+    threshold=0.5,
+    bootstrap=200,
+)
+```
+
+The admin agreement report includes `sigma`, `ks`, `detection_alpha` and
+`classification_alpha` for every `image_annotation` schema automatically,
+alongside the uncorrected `mean_matched_iou` and `detection_f1`.
+
+## Mask consensus: whose boundary do you trust?
+
+σ answers "do they agree?". It does not answer "whose mask should the dataset
+record, and who drew it well?" That is a different question and it needs a
+different model.
+
+**MACE cannot do it.** MACE models each annotator as knowing-or-guessing over a
+*finite shared label set*; a mask lives in an unbounded space with no
+categorical variable to estimate. Forcing masks through it would mean inventing
+a label set, and whatever was invented would drive the answer.
+
+**STAPLE can** (Warfield, Zou & Wells, 2004) — the established tool for exactly
+this in medical imaging. It runs EM over per-pixel labels and estimates, per
+annotator:
+
+| | Meaning | Low value means |
+|---|---|---|
+| **sensitivity** | of the true foreground, how much did you include? | under-segmenting — drawing inside the boundary |
+| **specificity** | of the true background, how much did you correctly exclude? | over-segmenting — drawing generously around it |
+
+Both are reported because they have **opposite fixes**, and a single "accuracy"
+number would score the two failure modes identically.
+
+```python
+from potato.server_utils.iaa.geometry_agreement import mask_consensus
+
+report = mask_consensus(items, {"image_1": (640, 480)}, label="cell")
+report["mean_sensitivity"]   # {"alice": 0.98, "bob": 0.33}
+```
+
+### It is not a majority vote
+
+That is the whole point. Weighting means a careful annotator's disagreement
+moves the consensus more than a careless one's, and the algorithm works out
+which is which from the data.
+
+Measured on two careful annotators outnumbered 3-to-2 by noisy ones:
+
+| Method | Dice against truth |
+|---|---|
+| Majority vote | 0.846 |
+| **STAPLE** | **1.000** |
+
+A vote lets the three noisy annotators decide. STAPLE notices that the careful
+pair agree with each other and the noisy three do not.
+
+### Caveats worth knowing
+
+- An annotator with three instances of a class contributes their **union**.
+  STAPLE compares pixel by pixel; keeping instances apart would require
+  matching them across annotators first, which is the detection question and is
+  answered separately.
+- Items with fewer than two mask-bearing annotators are **counted and skipped**,
+  not silently dropped — otherwise coverage is overstated.
+
+## Cost control
+
+Pairwise comparison is quadratic in annotators *and* in instances per item. A
+5-annotator project with 50 instances per image costs 25,000 mask decodes per
+image, which turns an admin page load into a hang.
+
+There is a hard budget (`max_pairs`, default 200,000). When it is hit:
+
+- the item is skipped **whole**, never half-measured — a partially processed
+  item biases the mean toward whichever annotator pair happened to run
+- the report sets `truncated: true` and says how many items *did* fit
+
+A truncated agreement number that reads as complete is worse than no number,
+because it will be quoted.
+
+## What this does not do
+
+- **Temporal segments** get the uncorrected measures only. σ's baseline is built
+  from between-item distances, and "a segment from a different clip" is not a
+  meaningful comparison when clips differ in length. Getting that right needs
+  its own design.
+- **Per-annotator competence over box geometry** is not estimated. Detection and
+  classification are categorical and MACE handles them; STAPLE covers masks; the
+  box case needs a random-effects treatment that is not built yet.
+
+## Citations
+
+- Krippendorff, K. (2004). *Content Analysis: An Introduction to Its
+  Methodology*, 2nd ed. — α and the `1 − D_o/D_e` form.
+- Braylan, A., Alonso, O., Lease, M. (2022). Measuring Annotator Agreement
+  Generally across Complex Structured, Multi-object, and Free-text Annotation
+  Tasks. *WWW '22*. arXiv:2212.09503 — the σ/KS approach and the distance-ranking
+  evaluation.
+- Rezatofighi, H. et al. (2019). Generalized Intersection over Union: A Metric
+  and A Loss for Bounding Box Regression. *CVPR 2019*. — GIoU.
+- Warfield, S., Zou, K., Wells, W. (2004). Simultaneous Truth and Performance
+  Level Estimation (STAPLE). *IEEE TMI 23(7)*. — named above as the correct tool
+  for mask consensus, which Potato does not yet implement.
+
+## Related
+
+- [Image annotation](../annotation-types/multimedia/image_annotation.md)
+- [Quality control](../workflow/quality_control.md)
 
 
 ---
@@ -33273,6 +36008,42 @@ Once overlap-sample items saturate, agreement statistics are available at
 | multi-label (multiselect, hierarchical_multiselect, card_sort) | mean Jaccard, MASI-α |
 | ranking (ranking, bws, pairwise) | Kendall's τ, Spearman footrule |
 | span (span, error_span, event_annotation, coreference, extractive_qa) | token-level κ (BIO), span F1 (exact + partial), Krippendorff's α<sub>U</sub>, γ (Mathet) |
+| geometry (image_annotation) | mean agreement, mean matched IoU, detection F1, mean object count difference |
+| temporal (audio_annotation, video_annotation) | mean agreement, mean matched IoU (temporal), detection F1, mean segment count difference |
+
+### Agreement over drawn and timed annotations
+
+Boxes, polygons, masks, points, and audio/video segments are compared by
+**overlap**, not equality — two annotators never produce byte-identical
+geometry. Objects are paired across annotators with the Hungarian algorithm at a
+0.5 IoU threshold (the Pascal VOC / COCO detection convention), and four numbers
+are reported because annotators disagree in distinguishable ways:
+
+| Metric | Question it answers |
+|---|---|
+| `mean_agreement` | Overall, penalizing both sloppy boundaries and missed objects. This is the number adjudication routes on. |
+| `mean_matched_iou` | *Given* both annotators found the object, do they agree where it is? |
+| `detection_f1` | Did they find the same objects at all? |
+| `mean_object_count_diff` | The crudest signal, and often the first to move. |
+
+Reading them together is the point. High `mean_matched_iou` with low
+`detection_f1` means your annotators draw well but miss things — a coverage
+problem, fixed with better instructions. The reverse means they find everything
+but trace it carelessly — a precision problem, fixed with training.
+
+!!! note "Why not Krippendorff's α over IoU?"
+
+    Because IoU distance is bounded in [0, 1], randomly paired shapes saturate
+    at distance ≈ 1, expected disagreement collapses to ≈ 1, and α degenerates
+    to `1 − mean distance` — the chance correction does no work. Worse, it
+    misleads: Braylan, Alonso & Lease
+    ([WWW 2022](https://arxiv.org/abs/2212.09503)) measured α ranking L2 (0.687)
+    *above* IoU (0.505) and GIoU (0.507) on bounding boxes, inverting the
+    ordering their distribution-based measures give. α remains sound for
+    detection and classification agreement, where a real base rate exists.
+
+Free-text schemas are **omitted** from the report rather than scored. Absent is
+honest; a number would not be.
 
 Set `?format=html` for the rendered table:
 
@@ -37495,22 +40266,20 @@ python -m potato.export --config config.yaml --format coco --output ./export/ \
 
 The Common Objects in Context format, widely used for object detection and instance segmentation.
 
-**Best for:** Image bounding boxes, polygons, keypoints
+**Best for:** Image bounding boxes, polygons, segmentation masks
 
 **Output Structure:**
 ```
-export/
-├── annotations/
-│   └── instances.json
-└── images/
-    └── (symlinked or copied images)
+<output-dir>/
+└── annotations.json
 ```
 
-**annotations/instances.json:**
+A single file is written. **Images are not copied or symlinked** — the exported
+`file_name` values point at wherever your images already live.
+
+**annotations.json:**
 ```json
 {
-    "info": {"description": "Potato export", "version": "1.0"},
-    "licenses": [],
     "images": [
         {"id": 1, "file_name": "image_001.jpg", "width": 1920, "height": 1080}
     ],
@@ -37531,10 +40300,39 @@ export/
 }
 ```
 
+No `info` or `licenses` block is emitted. A few strict COCO consumers require
+them; add `"info": {}` and `"licenses": []` if yours does.
+
+**Category IDs** come from `label_id` on each label when present, so a file
+imported from COCO exports with its original (often sparse) numbering intact.
+Labels without one are numbered from 1 upward.
+
+**Segmentation:** polygons export as `segmentation: [[x1, y1, ...]]`; masks
+export as COCO compressed RLE with `iscrowd: 1` unless the annotation carries an
+explicit `iscrowd: 0`. Landmarks are skipped with a warning — COCO keypoints are
+not yet emitted.
+
+**Image dimensions are required.** They are read from `image_width`/`image_height`
+(or `width`/`height`) on each data item. Without them the export writes
+`width: 0, height: 0` and box geometry cannot be validated.
+
 **Usage:**
 ```bash
 python -m potato.export -c config.yaml -f coco -o ./coco_export/
 ```
+
+**Importing COCO** is covered in
+[Image Annotation Formats](../annotation-types/multimedia/image_formats.md).
+
+!!! warning "Fixed: box and polygon export before this release"
+    Every CV exporter (COCO, YOLO, Pascal VOC) read flat, absolute-pixel fields
+    that the annotation UI has never written — it stores coordinates normalized
+    and nested under `coordinates`. As a result **bounding boxes exported as
+    `[0, 0, 0, 0]` with `area: 0`, and polygons were silently dropped**, for any
+    annotation made in the browser. Masks were unaffected.
+
+    The unit tests hand-built the flat shape, so they passed throughout. If you
+    have COCO/YOLO/VOC exports produced before this release, re-export them.
 
 ### YOLO (yolo)
 
@@ -37684,23 +40482,29 @@ python -m potato.export -c config.yaml -f conll_u -o ./conllu_export/
 
 ### Segmentation Masks (mask)
 
-Export polygon/segmentation annotations as binary mask images.
+Export brush/fill mask annotations as PNG images, one per label per image.
 
-**Best for:** Semantic segmentation, instance segmentation
+**Best for:** Semantic segmentation
+
+**Requires:** `Pillow` (`pip install Pillow`)
 
 **Output Structure:**
 ```
-export/
-├── images/
-│   └── image_001.jpg
-├── masks/
-│   └── image_001.png
-└── class_mapping.json
+<output-dir>/
+├── image_001_road_mask.png
+├── image_001_sky_mask.png
+└── image_002_road_mask.png
 ```
 
+Files are written flat as `{image-stem}_{label}_mask.png`. **Images are not
+copied**, and no class-mapping file is written.
+
 **Mask Format:**
-- PNG images with pixel values corresponding to class IDs
-- 0 = background, 1+ = class indices
+- RGBA PNG, one file per (image, label) pair
+- Mask pixels take the label's configured colour at alpha 200; everything else
+  is fully transparent
+- Only `type: "mask"` annotations are exported. Polygons and boxes are ignored
+  by this format — use COCO for those.
 
 **Usage:**
 ```bash
@@ -38123,6 +40927,229 @@ See [HuggingFace Hub Export](huggingface_export.md) for HuggingFace-specific opt
 - [Configuration](../configuration/configuration.md) - Output configuration options
 - [Image Annotation](../annotation-types/multimedia/image_annotation.md) - Bounding box and polygon annotation
 - [Schemas and Templates](../annotation-types/schemas_and_templates.md) - All annotation types
+
+
+---
+
+<!-- source: docs/data-export/format_matrix.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/data-export/format_matrix/
+
+# Computer Vision Format Matrix
+
+What Potato can read, what it can write, and which geometry types survive each
+direction. If you are deciding whether to migrate a dataset, this is the page.
+
+!!! note "This table is tested"
+
+    `tests/unit/test_format_matrix_accuracy.py` asserts every format named here
+    is actually registered, that no registered CV format is missing from the
+    table, and that one-way paths are labelled one-way **in both directions** —
+    so a format that gains an exporter cannot keep being described as one-way.
+    A matrix that can drift from the code is worse than no matrix: it tells
+    people a migration will work when it will not, and understating what works
+    steers them away from a migration that would have succeeded.
+
+## Import
+
+| Format | Source shape | Boxes | Polygons | Masks | Points | Polylines |
+|---|---|:---:|:---:|:---:|:---:|:---:|
+| `coco` | single JSON | ✅ | ✅ | ✅ RLE, incl. `iscrowd=1` | ✅ keypoint sets | ❌ |
+| `cvat` | CVAT XML 1.1 | ✅ | ✅ | ❌ ⁴ | ✅ points + sets | ✅ |
+| `darwin` | V7 JSON v2, one per item | ✅ | ⚠️ ⁵ | ❌ | ✅ skeletons | ✅ |
+| `pascal_voc` | one XML per image | ✅ | ❌ ¹ | ❌ ¹ | ❌ | ❌ |
+| `yolo` | `data.yaml` + `labels/*.txt` | ✅ | ✅ | ❌ ² | ❌ | ❌ |
+| `labelme` | one JSON per image | ✅ | ✅ | ⚠️ ³ | ✅ | ✅ |
+| `kitti` | `label_2/*.txt` | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `mot` | `seqinfo.ini` + `gt/gt.txt` | ✅ ⁸ | ❌ | ❌ | ❌ | ❌ |
+| `cityscapes` | `*_gtFine_polygons.json` | ❌ | ✅ | ❌ ⁹ | ❌ | ❌ |
+| `davis` | indexed PNG per frame | ❌ | ❌ | ✅ per instance | ❌ | ❌ |
+| `via` | VIA project JSON | ✅ | ✅ | ❌ | ✅ | ✅ |
+| `labelbox` | NDJSON export | ✅ | ✅ | ⚠️ ¹⁰ | ✅ | ✅ |
+| `openimages` | CSV | ✅ | ❌ | ❌ | ✅ V7 points | ❌ |
+| `webdataset` | `.tar` shards | ⚠️ ¹¹ | ⚠️ ¹¹ | ⚠️ ¹¹ | ⚠️ ¹¹ | ⚠️ ¹¹ |
+| `huggingface` | Hub id or `save_to_disk` dir | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+¹ Pascal VOC keeps segmentation in a separate `SegmentationObject/` directory of
+indexed PNGs, not in the XML. The importer says so in a warning rather than
+silently returning boxes only.
+
+² YOLO's segmentation variant stores polygon outlines, which import as polygons.
+There is no raster mask in the format.
+
+³ LabelMe's `mask` shape type imports as its polygon outline.
+
+⁴ CVAT's `<mask>` element and its video `<track>` elements are not imported. A
+track is one object across frames, which the image schema cannot express;
+flattening it to frame 0 would look like a successful import of a dataset that
+had quietly lost its video annotations, so it is reported instead.
+
+⁵ V7 "complex polygons" carry holes as extra rings. Potato's polygon has no hole
+concept, and unioning the rings would **fill** the holes rather than preserve
+them — a plausible-looking wrong answer. The exterior ring is imported and each
+dropped hole is reported. V7 image-level `tag` annotations are classifications
+rather than regions; they are reported with a pointer to using a radio or
+multiselect schema.
+
+⁸ MOT tracks import as **one box per frame**, with the track id kept in each
+object's `instance` field. The identity survives and every box is editable, but
+they do not yet move together as a single scrubable object.
+
+⁹ Cityscapes' `*_labelIds.png` rasters are derived from the polygons, so the
+polygons are the editable source and the PNGs need no separate path.
+
+¹⁰ Labelbox stores each segmentation mask as a separate authenticated PNG URL,
+not as pixels in the export. Downloading them needs your API key and an
+unbounded fetch during what looks like a local conversion, so the URLs are kept
+on each item under `labelbox_mask_urls` and reported. Download them, then import
+the PNGs with `--input-format davis`.
+
+¹¹ WebDataset is a **container, not an annotation format**. Sidecars are handed
+to whichever importer recognises them, so a WebDataset-wrapped LabelMe file
+imports as LabelMe, with LabelMe's conventions and caveats. Whatever that
+format supports is what survives.
+
+## Export
+
+| Format | Boxes | Polygons | Masks | Keypoints | Notes |
+|---|:---:|:---:|:---:|:---:|---|
+| `coco` | ✅ | ✅ | ✅ RLE | ✅ | Preserves original (often sparse) category IDs |
+| `yolo` | ✅ | ✅ | ❌ | ❌ | Normalized centre-based boxes |
+| `pascal_voc` | ✅ | ❌ | ❌ | ❌ | Corner coordinates |
+| `cvat` | ✅ | ✅ | ❌ ⁶ | ⚠️ ⁷ | Also polylines and ellipses — nothing is flattened to a box |
+| `labelme` | ✅ | ✅ | ❌ | ⚠️ ⁷ | Also polylines; circular ellipses survive, others become polygons |
+| `darwin` | ✅ | ✅ | ⚠️ ¹² | ✅ as keypoints | Also ellipses and lines; stable content-derived ids |
+| `kitti` | ✅ | ❌ | ❌ | ❌ | Corners; 3D fields written as the devkit's unset sentinels |
+| `mot` | ✅ | ❌ | ❌ | ❌ | Origin+size; writes `seqinfo.ini` so the size survives |
+| `cityscapes` | ✅ as 4-gon | ✅ | ⚠️ traced | ❌ | Painter's order preserved — it **is** the occlusion |
+| `davis` | ✅ rasterized | ✅ rasterized | ✅ | ❌ | Indexed PNG; pixel values are object ids |
+| `mask_png` | — | ✅ | ✅ | — | Rasterized indexed PNGs |
+
+⁶ CVAT 1.1's `<mask>` uses its own RLE dialect with an offset origin. Emitting
+an untested approximation of someone else's binary format would be worse than
+saying it is unsupported, so masks are reported and you are pointed at COCO.
+
+⁷ Neither format has an ordered skeleton type. CVAT's `<points>` has no
+visibility flag, so unlabelled joints are dropped rather than written at (0, 0)
+where they would read back as real points in the corner; LabelMe loses joint
+identity entirely. Both report it. Use COCO to keep keypoints intact.
+
+¹² Darwin stores masks as `raster_layer`, a dense encoding tied to V7's own
+layer model. Rather than write a plausible guess into a file you would upload to
+a paid platform, masks are traced to polygons and the loss is reported.
+
+Potato also exports `csv`, `tsv`, `jsonl`, `parquet`, `huggingface` and several
+NLP formats; those carry annotations generically rather than as CV geometry.
+
+## What survives a round trip
+
+| Path | Lossless? |
+|---|---|
+| COCO → Potato → COCO | ✅ including crowd RLE, sparse category IDs, and keypoint visibility flags |
+| YOLO → Potato → YOLO | ✅ for boxes and polygons |
+| Pascal VOC → Potato → Pascal VOC | ✅ for boxes; `difficult` / `truncated` / `occluded` flags are preserved |
+| LabelMe → Potato → LabelMe | ✅ for boxes, polygons, polylines, points and circles |
+| CVAT → Potato → CVAT | ✅ for boxes, polygons, polylines and ellipses, with label colours and shape attributes intact |
+| V7 Darwin → Potato → Darwin | ✅ for boxes, polygons, ellipses, lines and keypoints; holes and raster masks are reported |
+| KITTI → Potato → KITTI | ✅ for 2D boxes; `truncated` / `occluded` / `alpha` and the 3D fields ride through untouched |
+| KITTI 3D → Potato → KITTI 3D | ✅ exact, with the calibration — see [3D labels](#kitti-3d-labels) |
+| MOT → Potato → MOT | ✅ for boxes, track ids, ignore regions and visibility |
+| Cityscapes → Potato → Cityscapes | ✅ for polygons, crowd `group` labels and painter's order |
+| DAVIS → Potato → DAVIS | ✅ for per-instance masks and stable object ids |
+| `labelbox` → Potato | ⚠️ one-way — no exporter |
+| `openimages` → Potato | ⚠️ one-way — no exporter |
+| `via` → Potato | ⚠️ one-way — no exporter |
+| `webdataset` → Potato | ⚠️ one-way — no exporter |
+| CVAT masks / video tracks | ⚠️ not read on import, not written on export |
+| COCO → Potato → YOLO | ⚠️ lossy: masks have no YOLO representation |
+
+### Conversions worth knowing about
+
+**Ellipses** export as a 36-vertex polygon approximation, so any format that
+understands polygons accepts them. The parametric form is preserved inside
+Potato, so re-importing your own export loses precision but editing in place
+does not.
+
+**Polylines** have `area: 0` and are never converted to a closed region.
+Formats with no open-path concept simply omit them rather than fabricating one.
+
+**Keypoint sets** round-trip through COCO's `keypoints` array with visibility
+flags intact. In formats with no keypoint concept they are dropped with a
+warning, not silently flattened into loose points.
+
+**Masks to outlines** (Cityscapes, Darwin) is genuinely lossy: holes are
+dropped and the traced contour will not re-rasterize to the source pixels.
+Every exporter that does this reports it and names COCO as the lossless route.
+
+## Coordinate conventions
+
+The ones that produce a *plausible* wrong answer when misread, and are
+therefore worth stating:
+
+| Format | Box convention |
+|---|---|
+| COCO | `[x, y, width, height]`, absolute pixels, top-left origin |
+| YOLO | `cx cy w h`, **normalized, centre-based** — reading as `x y w h` shifts every box by half its own size |
+| Pascal VOC | `xmin ymin xmax ymax`, **corners** — reading `xmax` as a width makes every box run too far |
+| LabelMe rectangle | **two opposite corners**, in whichever order the user dragged |
+| CVAT | `xtl ytl xbr ybr`, **corners**, like VOC |
+| V7 Darwin | `x y w h`, origin plus size, like COCO |
+| KITTI | `x1 y1 x2 y2`, **corners** — and it sits next to MOT, which does not |
+| MOT | `bb_left bb_top bb_width bb_height`, **origin plus size** — the opposite of KITTI |
+| Open Images | `XMin XMax YMin YMax` — **both X values first**, normalized; every other CSV format here interleaves them |
+| Labelbox | `{top, left, height, width}` — named differently from everything else, so reading `top` as `x` transposes every box |
+| VIA ellipse | `theta` is in **radians**; Potato stores degrees |
+
+Potato stores shapes normalized to 0–1 under `coordinates`; masks stay absolute
+RLE. `potato/export/cv_utils.py` is the single definition of that contract.
+
+## KITTI 3D labels
+
+3D annotations are the one place with a **second** coordinate contract, because
+a cuboid is in metres in a sensor frame with an orientation and there is no
+image to normalize against. `potato/export/spatial_utils.py` defines it; the
+KITTI conversion lives in `potato/export/kitti3d.py` and needs the sequence's
+`calib` file.
+
+Four things in the format are easy to get wrong, and all four bite silently:
+
+| | KITTI | Read naively |
+|---|---|---|
+| Frame | Rectified **reference** camera | Using a camera's own matrix shifts every box by that camera's stereo baseline |
+| Location | Centre of the **bottom face** | Read as the centre, every object sinks half its height |
+| Dimensions | `h w l`, with **length along the box's local X** and width along Z | Assuming length runs along camera +Z rotates every box exactly 90° |
+| Rotation | A single yaw about camera Y | Hard-coding `yaw = −ry − π/2` is right for the standard rig and wrong, silently, for any other |
+
+Potato derives the rotation from the calibration matrices rather than from that
+constant, so a non-standard rig converts correctly and the standard one
+reproduces the familiar number.
+
+**Direction of loss.** KITTI → Potato is lossless: the *full* rotation is
+carried across, including the roughly 0.85° at which the standard rig's camera
+is mounted relative to its lidar — a box that is level in the camera frame is
+genuinely tilted in the lidar frame, and storing only a yaw would throw that
+away. Potato → KITTI discards pitch and roll, because the format has nowhere to
+put them; the exporter reports how much rotation each box lost rather than
+writing a flat box and saying nothing.
+
+## Importing
+
+```bash
+potato import annotations.json --output-dir my-project     # auto-detects
+potato import --input-format yolo ./yolo-dataset --output-dir my-project
+potato import --hf-dataset cppe-5 --output-dir my-project
+potato import --list-formats
+```
+
+Most CV formats are **directory-based** — point at the dataset root, not a
+single file. COCO, Darwin, LabelMe, VIA and Labelbox are also readable as a
+single file. See the [Import CLI guide](../tools/import_cli.md) for per-format
+invocations and the flags each one needs.
+
+## Related
+
+- [Image Annotation](../annotation-types/multimedia/image_annotation.md)
+- [Import CLI](../tools/import_cli.md)
+- [Media ingest](../annotation-types/multimedia/media_ingest.md)
 
 
 ---
@@ -39147,6 +42174,216 @@ README, the `paper.tex`, and the admin IAA page always agree.
 
 ---
 
+<!-- source: docs/tools/import_cli.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/tools/import_cli/
+
+# Import CLI
+
+Turn an existing annotation dataset into a runnable Potato project — a data
+file, a config, and a README — in one command.
+
+```bash
+potato import --input instances_val2017.json --output-dir my-project
+python potato/flask_server.py start my-project/config.yaml -p 8000
+```
+
+Fifteen formats are supported. See the
+[format matrix](../data-export/format_matrix.md) for what survives each
+direction; this page is about running the tool.
+
+!!! important "Imported annotations are pre-annotations"
+
+    They are shown to every annotator as a starting point and are only stored
+    once someone saves. An item nobody opens exports as **empty**, not as
+    fabricated agreement. Use `--seed-user` only when you deliberately want a
+    synthetic annotator (see below).
+
+## Quick reference
+
+```bash
+potato import --list-formats            # what is supported
+potato import -i FILE   -o DIR          # single-file formats
+potato import -i DIR    -o DIR          # directory formats
+potato import --hf-dataset cppe-5 -o DIR    # straight from the Hub
+```
+
+The format is auto-detected. Pass `--input-format` when detection is wrong or
+ambiguous — auto-detection is deliberately conservative and refuses to guess
+rather than handing you a silently wrong import.
+
+## Per-format invocations
+
+### Single-file formats
+
+| Format | Command |
+|---|---|
+| COCO | `potato import -i instances.json -o proj` |
+| Darwin (V7) | `potato import -i item.json -o proj` |
+| LabelMe | `potato import -i image.json -o proj` |
+| VIA | `potato import -i via_project.json -o proj --via-label-key class` |
+| Labelbox | `potato import -i export.ndjson -o proj` |
+
+Labelbox exports are **newline-delimited JSON**, not a JSON array. The CLI
+detects that and reads them line by line; `json.load` on one fails at line 2
+with a message about extra data that reads as file corruption.
+
+### Directory formats
+
+Point at the dataset root, not at a file inside it.
+
+| Format | Command | Detected by |
+|---|---|---|
+| YOLO | `potato import -i ./dataset -o proj` | `data.yaml` or `labels/` |
+| Pascal VOC | `potato import -i ./VOC2012 -o proj` | `.xml` with an `<annotation>` root |
+| CVAT | `potato import -i ./export -o proj` | `.xml` with an `<annotations>` root |
+| KITTI | `potato import -i ./training -o proj --image-dir ./training/image_2` | `label_2/` |
+| MOT | `potato import -i ./MOT17-02 -o proj` | `seqinfo.ini` or `gt/gt.txt` |
+| Cityscapes | `potato import -i ./gtFine -o proj` | `*_gtFine_polygons.json` |
+| DAVIS | `potato import -i ./DAVIS -o proj` | `Annotations/**/*.png` |
+| Open Images | `potato import -i ./oid -o proj` | a CSV with `ImageID,LabelName,XMin` |
+| WebDataset | `potato import -i shard.tar -o proj --extract-media ./media` | any readable `.tar` |
+| HuggingFace | `potato import -i ./saved-dataset -o proj` | `dataset_info.json` |
+
+CVAT and Pascal VOC are **both XML**, so the file extension decides nothing.
+Detection reads the root element instead — guessing from the suffix sent every
+CVAT export to the VOC importer, which rejected it with a confusing error.
+
+### From the HuggingFace Hub
+
+```bash
+potato import --hf-dataset cppe-5 --hf-split train -o proj
+```
+
+Needs `pip install datasets`. Hub datasets store images inline, so they must be
+written out and served before the canvas can show them — the import says so.
+
+## The flags that decide whether it works
+
+### `--image-url-prefix` — almost always needed
+
+The generated project stores whatever filename the source used. If no route
+serves that path, the canvas shows a broken image and nothing in the UI
+explains why.
+
+```bash
+# Images served by Potato from <task_dir>/media
+potato import -i ann.json -o proj --image-url-prefix /media
+
+# Images hosted elsewhere
+potato import -i ann.json -o proj --image-url-prefix https://cdn.example.org/images
+```
+
+### `--image-dir` — needed when the format stores absolute pixels
+
+KITTI, VIA and Labelme record coordinates in pixels but not the image
+dimensions, so the images must be measured to normalize correctly. Without it
+the import assumes 1000×1000, says so loudly, and every annotation lands in the
+wrong place.
+
+```bash
+potato import -i ./training -o proj --image-dir ./training/image_2
+```
+
+Needs Pillow. Formats that store normalized coordinates (YOLO, Open Images) are
+unaffected, and formats that carry their own dimensions (COCO, MOT's
+`seqinfo.ini`, Cityscapes) never need it.
+
+### `--extract-media` — WebDataset only
+
+Images inside a `.tar` cannot be served. This writes them out:
+
+```bash
+potato import -i shard.tar -o proj --extract-media proj/media --image-url-prefix /media
+```
+
+### `--via-label-key` — VIA only
+
+VIA's `region_attributes` is whatever the project author defined. The key is
+inferred from the project's own attribute declarations and the choice is
+reported; pass this to override it. Guessing silently would relabel a corpus.
+
+### `--rle-as-polygon` — lossy, and says so
+
+Traces COCO RLE masks into editable polygons. **Holes are dropped** and the
+contour will not re-rasterize to the source mask. Without it, masks import as
+masks and stay exact.
+
+### `--keypoints`
+
+COCO keypoint arrays import as ordered keypoint sets with visibility flags.
+Off by default because most detection files carry them unpopulated.
+
+### `--seed-user NAME`
+
+Also writes the imported annotations as `NAME`'s saved work. This
+**fabricates an annotator** and exists so import→export can be verified without
+a human opening every item. Off by default for exactly that reason.
+
+### `--config-only`
+
+Regenerate `config.yaml` without touching an existing data file.
+
+## What gets written
+
+```
+my-project/
+├── config.yaml          # image_annotation schema with the labels found
+├── data/<name>.json     # one JSONL row per image
+└── README.md            # what was imported, and every warning
+```
+
+The README is **not overwritten** on re-import, so refreshing a data file never
+destroys project notes.
+
+Each data row carries `image_width` / `image_height` — exactly the keys
+`cv_utils.get_image_dimensions()` reads — so COCO exports carry real sizes and
+YOLO's `can_export()` check passes.
+
+## Read the warnings
+
+Every importer reports what it could not carry, and these are not decoration.
+Real examples:
+
+- *"complex polygon with 2 hole(s); only the exterior ring was imported"* —
+  Potato has no hole concept, and unioning the rings would **fill** the holes.
+- *"3 track(s) were imported as one box per frame"* — the identity survives in
+  `instance`, but the boxes do not yet move together.
+- *"Boxes were read as CORNERS"* — a HuggingFace dataset's `bbox` column does
+  not declare its convention, so it is inferred and the conclusion stated.
+  Check one item before annotating.
+- *"masks are stored as separate authenticated PNG URLs"* — Labelbox does not
+  ship mask pixels in its export.
+
+The first 20 print to the console; all of them go into the generated README.
+
+## Troubleshooting
+
+**"could not tell what kind of dataset this is"** — detection found no
+signature file. Pass `--input-format`.
+
+**Images do not appear** — you almost certainly need `--image-url-prefix`. Check
+what the data file stores under `image_url`.
+
+**Every annotation is in the wrong place** — the import could not measure the
+images and fell back to an assumed size. Re-run with `--image-dir` and Pillow
+installed; the warning names this explicitly.
+
+**Labels are `class_0`, `class_1`…** — YOLO needs its `data.yaml`, and Open
+Images needs `class-descriptions-boxable.csv` beside the annotations.
+
+**"is neither JSON nor newline-delimited JSON"** — the file is a different
+container. `.tar` and `.csv` inputs are routed automatically; anything else
+needs converting first.
+
+## Related
+
+- [Format matrix](../data-export/format_matrix.md) — what survives each direction
+- [Media ingest](../annotation-types/multimedia/media_ingest.md) — for TIFF, HEIC, RAW and unplayable video
+- [Image annotation](../annotation-types/multimedia/image_annotation.md)
+
+
+---
+
 <!-- source: docs/tools/preview_cli.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/tools/preview_cli/
 
@@ -39857,6 +43094,47 @@ Gold standard file format:
   {"id": "instance_002", "sentiment": "negative"}
 ]
 ```
+
+## Simulating Image Annotation
+
+Simulated annotators can draw. An `image_annotation` schema produces boxes,
+polygons, or points in the same normalized (0–1) client contract the real
+annotation canvas writes, so image projects can be piloted, load-tested, and —
+most usefully — used to check that the agreement statistics behave.
+
+Without a reference set, shapes are invented from the schema's `tools` and
+`labels`. With one, the simulated annotator **redraws** it with noise scaled to
+their competence, because that is how real annotators actually disagree:
+
+| Error mode | What it represents | Rate at competence `a` |
+|---|---|---|
+| Boundary jitter | Nobody traces the same outline twice | `0.004 + 0.04 × (1 − a)` |
+| Dropped object | A detection miss | `0.30 × (1 − a)` |
+| Mislabelled object | A classification error | `0.40 × (1 − a)` |
+| Spurious object | A false positive | `0.25 × (1 − a)` |
+
+Jitter never reaches zero, deliberately. A simulator that reproduced geometry
+byte-for-byte would make an exact-match comparator look correct — which is
+exactly the bug that made image gold standards unusable in the first place.
+
+### Validating your agreement statistics
+
+Because competence is known, the reported agreement can be checked against it.
+Running two annotators of equal competence over 25 items gives:
+
+| Competence | `mean_agreement` | `mean_matched_iou` | `detection_f1` |
+|---|---|---|---|
+| 1.0 | 0.90 | 0.90 | 1.00 |
+| 0.9 | 0.73 | 0.81 | 0.96 |
+| 0.8 | 0.51 | 0.76 | 0.79 |
+| 0.5 | 0.26 | 0.71 | 0.55 |
+| 0.2 | 0.12 | 0.67 | 0.31 |
+
+Note the divergence, which is the reason the report has four numbers rather than
+one: at competence 0.2 the *matched* IoU is still 0.67 — the shapes those
+annotators did draw are reasonable — while detection F1 has collapsed to 0.31
+because they are missing most objects. A single "agreement" score would hide
+which of the two problems you have.
 
 ## Quality Control Testing
 
@@ -43544,6 +46822,86 @@ location /app1/api/ {
 
 - [Installation & Usage](usage.md)
 - [HuggingFace Spaces](../data-export/huggingface_spaces.md)
+
+
+---
+
+<!-- source: docs/deployment/air_gap.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/air_gap/
+
+# Air-Gapped and Offline Deployment
+
+Potato is often run on networks with no outbound internet access — secure
+research environments, clinical settings, field deployments, or simply a machine
+behind a strict proxy.
+
+**Status: partially supported.** Read this page before deploying offline; some
+of the interface still reaches out to public CDNs and will degrade without them.
+
+## What works offline today
+
+| Asset | Status |
+|-------|--------|
+| **Fabric.js** (image annotation canvas) | ✅ Vendored at `potato/static/vendor/fabric-5.3.1.min.js` |
+| Peaks.js (audio/video waveforms) | ✅ Vendored at `potato/static/peaks.min.js` |
+| PDF.js (PDF display) | ✅ Vendored at `potato/static/vendor/pdfjs/` |
+| Bootstrap CSS + Font Awesome on the **adjudication** page | ✅ Vendored |
+| All of Potato's own CSS and JavaScript | ✅ Served locally |
+
+Fabric.js matters most: image annotation is entirely non-functional without it —
+the canvas never initializes, so the tools render but nothing can be drawn.
+
+## What still requires internet access
+
+`base_template_v2.html` — the template behind the main annotation interface —
+still loads three assets from public CDNs:
+
+| Asset | Host | Effect when unreachable |
+|-------|------|-------------------------|
+| jQuery 3.6.0 | `code.jquery.com` | **Span (text) annotation breaks.** jQuery is a hard dependency there. |
+| Bootstrap 5.1.3 (CSS + JS) | `cdn.jsdelivr.net` | Layout and spacing degrade; dropdowns, modals, and tooltips stop working. |
+| Font Awesome 6.0.0 | `cdnjs.cloudflare.com` | Icons render as empty boxes. Labels remain readable. |
+
+Bootstrap CSS and Font Awesome are *already vendored* for the adjudication page,
+but at **different versions** (Bootstrap 5.3.3, Font Awesome 6.7.2) than the CDN
+copies used here. Pointing the main template at them is therefore a version bump
+— Bootstrap 5.1 → 5.3 introduces colour modes and renames CSS variables — and
+needs a full-application regression pass rather than a one-line edit. Bootstrap's
+JavaScript bundle is not vendored at all.
+
+**If you are deploying air-gapped now**, mirror those three files onto a host
+your network can reach and override the template, or accept the degradation
+above. Text annotation in particular should be tested before you rely on it.
+
+## Managing vendored assets
+
+`scripts/vendor_assets.py` is the manifest and the tool:
+
+```bash
+python scripts/vendor_assets.py --check    # verify committed files against pinned hashes
+python scripts/vendor_assets.py            # download anything missing
+python scripts/vendor_assets.py --force    # re-download everything
+```
+
+Every download is verified against the CDN's published Subresource Integrity
+hash and is **refused** on mismatch. These files are committed to the
+repository, so an unverified download would ship to every user.
+
+## Adding a new frontend dependency
+
+Vendor it. `tests/unit/test_no_new_cdn_assets.py` fails the build if a new
+external `<script>` or `<link>` appears in the main template, so this is
+enforced rather than remembered.
+
+If a dependency genuinely cannot be vendored yet, add its host to
+`ALLOWED_EXTERNAL` in that test **with a note explaining why**. Each entry is
+tracked work, not an exemption — and the test also fails if an allowlist entry
+becomes stale, so the list keeps meaning something.
+
+## Related
+
+- [Deployment overview](../deployment/reverse-proxy.md)
+- [Image annotation](../annotation-types/multimedia/image_annotation.md)
 
 
 ---

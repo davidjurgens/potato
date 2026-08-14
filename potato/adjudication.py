@@ -33,6 +33,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Set
 
+from potato.server_utils import annotation_values
+
 logger = logging.getLogger(__name__)
 
 # Singleton instance
@@ -457,21 +459,13 @@ class AdjudicationManager:
             return True
 
     def _serialize_labels(self, label_data: Dict) -> Dict[str, Any]:
-        """Convert label annotation data to serializable dict."""
-        result = {}
-        for key, value in label_data.items():
-            # Key might be a Label object or a string
-            if hasattr(key, 'get_schema'):
-                schema = key.get_schema()
-                name = key.get_name()
-                if schema not in result:
-                    result[schema] = {}
-                result[schema][name] = value
-            elif isinstance(key, str):
-                result[key] = value
-            else:
-                result[str(key)] = value
-        return result
+        """Convert label annotation data to serializable dict.
+
+        Delegates to :func:`annotation_values.group_by_schema` so adjudication
+        and the IAA dispatcher share one definition of how the flat
+        ``{Label: value}`` container regroups by schema.
+        """
+        return annotation_values.group_by_schema(label_data)
 
     def _serialize_spans(self, span_data: Dict) -> List[Dict]:
         """Convert span annotation data to serializable list."""
@@ -513,8 +507,31 @@ class AdjudicationManager:
             Dict mapping schema_name to agreement score (0.0 - 1.0)
         """
         agreement_scores = {}
+        # Defensive: this is reachable from code paths (and tests) that build a
+        # manager without a full config. An unknown schema falls through to the
+        # categorical path below, which is the pre-existing behaviour.
+        own_config = getattr(self, "config", None) or {}
+        scheme_by_name = {s.get("name"): s
+                          for s in (own_config.get("annotation_schemes") or [])
+                          if isinstance(s, dict)}
 
         for schema in scheme_names:
+            scheme_def = scheme_by_name.get(schema)
+
+            # Schemas with no defined notion of agreement are OMITTED, not
+            # scored. Image annotation used to fall through to the branch below
+            # and collapse to frozenset({"_data"}) for every annotator, so two
+            # people who agreed on nothing scored 1.0 and no image item could
+            # ever be routed for review.
+            if scheme_def is not None and not annotation_values.is_comparable(scheme_def):
+                continue
+
+            if scheme_def is not None and annotation_values.supports_geometry(scheme_def):
+                score = self._geometry_agreement(item_annotations, schema, scheme_def)
+                if score is not None:
+                    agreement_scores[schema] = score
+                continue
+
             values = []
             for user_id, user_annots in item_annotations.items():
                 if schema in user_annots:
@@ -554,8 +571,40 @@ class AdjudicationManager:
 
         return agreement_scores
 
+    def _geometry_agreement(self, item_annotations: Dict[str, Dict],
+                            schema: str, scheme_def: dict) -> Optional[float]:
+        """
+        Mean pairwise geometry agreement for one image schema on one item.
+
+        Compares actual shapes: 1 - distance, where distance accounts for both
+        boundary overlap and unmatched instances, so an annotator who misses
+        half the objects scores low even if their boxes are pixel-perfect.
+        """
+        values = [
+            annotation_values.comparable_value(scheme_def, annots[schema])
+            for annots in item_annotations.values()
+            if schema in annots
+        ]
+        if len(values) < 2:
+            return None
+
+        scores = []
+        for i in range(len(values)):
+            for j in range(i + 1, len(values)):
+                d = annotation_values.distance(scheme_def, values[i], values[j])
+                if d is not None:
+                    scores.append(1.0 - d)
+
+        return sum(scores) / len(scores) if scores else None
+
     def _compute_overall_agreement(self, agreement_scores: Dict[str, float]) -> float:
-        """Compute overall agreement as the mean of per-schema scores."""
+        """
+        Overall agreement as the mean of the schemas that HAVE a score.
+
+        Schemas omitted by ``_compute_agreement`` (no defined notion of
+        agreement) are absent from this dict and so are excluded here rather
+        than silently counted as perfect.
+        """
         if not agreement_scores:
             return 1.0
         return sum(agreement_scores.values()) / len(agreement_scores)

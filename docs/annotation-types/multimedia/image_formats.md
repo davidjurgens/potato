@@ -201,6 +201,19 @@ exporter bug with the same symptom; see
 size from the one the annotations were made against. The client rescales and
 logs a console warning; fix the served image to remove the warning.
 
+**A mask saved before v2.9 comes back inverted, or a full-canvas fill comes
+back empty** — masks are stored as run lengths that alternate background,
+foreground, background, …, always starting with background. Client versions
+before v2.9 suppressed a leading zero-length background run, so any mask whose
+**top-left pixel was painted** was written with its runs one position out of
+phase, and a completely painted mask was indistinguishable from an empty one.
+
+Masks that do not touch the top-left pixel — which is nearly all object
+masks — were never affected. Affected masks cannot be repaired automatically:
+the corrupt form is a legitimate encoding of a different mask, so nothing in
+the file distinguishes them. Repaint the affected masks, or invert them
+manually if you know they were whole-image fills. New saves are correct.
+
 **An exported file is empty** — imported annotations are pre-annotations and
 only persist once an annotator saves. See above.
 

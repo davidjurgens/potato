@@ -15,6 +15,14 @@ window.AdjudicationForms = (function () {
         'adj-color-4', 'adj-color-5', 'adj-color-6', 'adj-color-7'
     ];
 
+    //: Concrete stroke colours for the SVG shape overlay. The CHIP_COLORS above
+    //: are CSS classes, which SVG attributes cannot use; these are the same
+    //: sequence as literal values so a chip and its shapes match.
+    const ANNOTATOR_STROKES = [
+        '#e6194b', '#3cb44b', '#4363d8', '#f58231',
+        '#911eb4', '#42d4f4', '#f032e6', '#bfef45'
+    ];
+
     // Map annotator names to consistent colors
     let annotatorColorMap = {};
     let colorIndex = 0;
@@ -382,37 +390,123 @@ window.AdjudicationForms = (function () {
      * Render an image annotation adjudication form.
      * Shows side-by-side comparison of each annotator's bounding boxes.
      */
-    function renderImageForm(schema, annotations, behavioralData, config) {
+    /**
+     * Describe one annotation object in a way an adjudicator can act on.
+     *
+     * The old version printed `x:10% y:20% w:30% h:40%` and produced an EMPTY
+     * string for every non-box type, because it read `coordinates.x` — which
+     * polygons (an array) and masks (no coordinates at all, only RLE) do not
+     * have. Masks and polygons therefore appeared as an unlabelled checkbox
+     * with no information whatsoever.
+     */
+    function describeShape(obj) {
+        var coords = obj.coordinates;
+        var type = obj.type || 'shape';
+
+        if (type === 'mask') {
+            var counts = (obj.rle && obj.rle.counts) || [];
+            var pixels = 0;
+            for (var i = 1; i < counts.length; i += 2) pixels += counts[i];
+            var size = (obj.rle && obj.rle.size) || [];
+            var pct = (size[0] && size[1])
+                ? ' (' + (100 * pixels / (size[0] * size[1])).toFixed(1) + '% of image)' : '';
+            return 'mask — ' + pixels.toLocaleString() + ' px' + pct;
+        }
+        if (Array.isArray(coords)) {
+            return type + ' — ' + coords.length + ' points';
+        }
+        if (coords && coords.width !== undefined) {
+            return 'box — x:' + Math.round(coords.x * 100) + '% y:' + Math.round(coords.y * 100) +
+                '% w:' + Math.round((coords.width || 0) * 100) +
+                '% h:' + Math.round((coords.height || 0) * 100) + '%';
+        }
+        if (coords && coords.x !== undefined) {
+            return 'point — x:' + Math.round(coords.x * 100) + '% y:' + Math.round(coords.y * 100) + '%';
+        }
+        return type;
+    }
+
+    /** Parse a stored image-annotation value into its object list. */
+    function parseImageObjects(val) {
+        try {
+            if (typeof val === 'string') return JSON.parse(val) || [];
+            if (Array.isArray(val)) return val;
+            if (val && typeof val === 'object') {
+                if (val._data !== undefined) return parseImageObjects(val._data);
+                return [val];
+            }
+        } catch (e) { /* fall through */ }
+        return [];
+    }
+
+    /**
+     * An SVG overlay of one annotator's shapes on the image.
+     *
+     * Coordinates in a viewBox of 0..1 map straight onto the stored normalized
+     * form, so no scaling maths is needed and the overlay cannot drift from
+     * what was saved. Masks are drawn as their extent with a hatched fill —
+     * honest about being an approximation, since SVG cannot render RLE, and far
+     * more use than the nothing that was shown before.
+     */
+    function renderShapeOverlay(objects, imageUrl, stroke) {
+        if (!imageUrl) return '';
+
+        var shapes = '';
+        objects.forEach(function(obj, idx) {
+            var c = obj.coordinates;
+            var common = 'fill="none" stroke="' + stroke + '" stroke-width="0.006" ' +
+                'vector-effect="non-scaling-stroke" data-idx="' + idx + '"';
+            if (obj.type === 'mask') {
+                shapes += '<rect x="0.02" y="0.02" width="0.96" height="0.96" ' +
+                    'fill="' + stroke + '" fill-opacity="0.10" stroke="' + stroke +
+                    '" stroke-dasharray="0.02 0.02" stroke-width="0.006" ' +
+                    'vector-effect="non-scaling-stroke" data-idx="' + idx + '"></rect>';
+            } else if (Array.isArray(c)) {
+                var pts = c.map(function(p) { return p.x + ',' + p.y; }).join(' ');
+                shapes += '<polygon points="' + pts + '" ' + common +
+                    ' fill="' + stroke + '" fill-opacity="0.15"></polygon>';
+            } else if (c && c.width !== undefined) {
+                shapes += '<rect x="' + c.x + '" y="' + c.y + '" width="' + c.width +
+                    '" height="' + c.height + '" ' + common +
+                    ' fill="' + stroke + '" fill-opacity="0.15"></rect>';
+            } else if (c && c.x !== undefined) {
+                shapes += '<circle cx="' + c.x + '" cy="' + c.y + '" r="0.015" ' +
+                    common + ' fill="' + stroke + '"></circle>';
+            }
+        });
+
+        return '<div class="adj-image-preview">' +
+            '<img src="' + escapeHtml(imageUrl) + '" alt="Annotated image" loading="lazy">' +
+            '<svg class="adj-image-overlay" viewBox="0 0 1 1" preserveAspectRatio="none" ' +
+            'aria-hidden="true">' + shapes + '</svg></div>';
+    }
+
+    function renderImageForm(schema, annotations, behavioralData, config, imageUrl) {
         var schemaName = schema.name || '';
 
         var html = '<div class="adj-image-form" data-schema="' + schemaName + '">';
         html += '<div class="adj-complex-instructions">' +
             '<i class="fas fa-info-circle"></i> ' +
-            'Each annotator\'s bounding boxes are listed below. Select annotations to include in your decision.' +
+            'Each annotator\'s shapes are shown below. Select the ones to keep — ' +
+            'your selection becomes the adjudicated annotation.' +
             '</div>';
 
         Object.keys(annotations).forEach(function(userId) {
             var userAnn = annotations[userId];
-            if (!userAnn[schemaName]) return;
+            if (userAnn[schemaName] === undefined) return;
 
-            var val = userAnn[schemaName];
-            var boxes = [];
-            try {
-                if (typeof val === 'string') boxes = JSON.parse(val);
-                else if (Array.isArray(val)) boxes = val;
-                else if (typeof val === 'object') boxes = [val];
-            } catch(e) { /* ignore */ }
-
-            if (boxes.length === 0) return;
+            var objects = parseImageObjects(userAnn[schemaName]);
+            if (objects.length === 0) return;
 
             var colorClass = getAnnotatorColor(userId);
-            var timing = getTimingMs(behavioralData, userId);
-            var timeStr = formatTime(timing);
+            var stroke = ANNOTATOR_STROKES[
+                Object.keys(annotations).indexOf(userId) % ANNOTATOR_STROKES.length];
+            var timeStr = formatTime(getTimingMs(behavioralData, userId));
 
             html += '<div class="adj-complex-annotator-group">';
             html += '<div class="adj-complex-annotator-header">';
             html += '<span class="adj-annotator-chip ' + colorClass + '">' +
-                (config.show_annotator_names ? userId : 'Annotator') +
+                (config.show_annotator_names ? escapeHtml(userId) : 'Annotator') +
                 (timeStr ? ' <span class="adj-chip-timing">' + timeStr + '</span>' : '') +
                 '</span>';
             html += '<button type="button" class="adj-complex-adopt-all-btn" data-annotator="' + userId +
@@ -420,19 +514,15 @@ window.AdjudicationForms = (function () {
                 '<i class="fas fa-check-double"></i> Adopt All</button>';
             html += '</div>';
 
-            boxes.forEach(function(box, idx) {
-                var label = box.label || box.type || 'annotation';
-                var coords = box.coordinates || {};
-                var detail = '';
-                if (coords.x !== undefined) {
-                    detail = 'x:' + Math.round(coords.x * 100) + '% y:' + Math.round(coords.y * 100) +
-                        '% w:' + Math.round((coords.width || 0) * 100) + '% h:' + Math.round((coords.height || 0) * 100) + '%';
-                }
+            html += renderShapeOverlay(objects, imageUrl, stroke);
+
+            objects.forEach(function(obj, idx) {
+                var label = obj.label || obj.type || 'annotation';
                 html += '<div class="adj-complex-item">';
                 html += '<label><input type="checkbox" class="adj-complex-adopt-cb" data-annotator="' + userId +
                     '" data-idx="' + idx + '" data-schema="' + schemaName + '" data-type="image">';
                 html += ' <span class="adj-span-label-badge ' + colorClass + '">' + escapeHtml(label) + '</span>';
-                if (detail) html += ' <span class="adj-complex-detail">' + detail + '</span>';
+                html += ' <span class="adj-complex-detail">' + escapeHtml(describeShape(obj)) + '</span>';
                 html += '</label></div>';
             });
             html += '</div>';
@@ -533,7 +623,7 @@ window.AdjudicationForms = (function () {
     /**
      * Render the appropriate form for a schema type
      */
-    function renderForm(schema, annotations, behavioralData, config, spanAnnotations) {
+    function renderForm(schema, annotations, behavioralData, config, spanAnnotations, imageUrl) {
         var type = schema.annotation_type || '';
 
         switch (type) {
@@ -553,7 +643,7 @@ window.AdjudicationForms = (function () {
             case 'span':
                 return renderSpanForm(schema, spanAnnotations || {}, behavioralData, config);
             case 'image_annotation':
-                return renderImageForm(schema, annotations, behavioralData, config);
+                return renderImageForm(schema, annotations, behavioralData, config, imageUrl);
             case 'audio_annotation':
                 return renderMediaForm(schema, annotations, behavioralData, config, 'audio');
             case 'video_annotation':

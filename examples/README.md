@@ -95,14 +95,23 @@ nothing large is committed. See [ConvoKit integration](../docs/integrations/conv
 
 | Example | Description |
 |---------|-------------|
-| `image-annotation/` | Image region annotation |
+| `image-annotation/` | Image region annotation (boxes and polygons) |
+| `coco-import/` | Correct imported COCO annotations — polygons, RLE masks, and crowd regions |
+| `format-migration/` | The same dataset in COCO, YOLO, Pascal VOC and KITTI, with commands proving all four import to identical geometry |
+| `geometry-primitives/` | Every drawing tool side by side, including open polylines and ellipses |
 | `image-classification/` | Image classification |
 | `image-ai-detection/` | AI-generated image detection |
 | `image-vllm-rationale/` | Image annotation with vLLM rationale |
+| `annotation-critique/` | A vision model reviews the regions you drew: wrong label, loose boundary, missed object |
 | `pdf-annotation/` | PDF document annotation |
 | `pdf-bbox/` | PDF bounding box annotation |
 | `document-bbox/` | Document bounding box annotation |
-| `document-annotation/` | Document format annotation |
+
+### [spatial/](spatial/) - 3D Point Clouds
+
+| Example | Description |
+|---------|-------------|
+| `kitti-cuboids/` | Oriented 3D boxes on a lidar scan — KITTI `.bin`, PCD, PLY and LAS all load |
 
 ### [advanced/](advanced/) - Complex Features & Workflows
 
@@ -110,6 +119,7 @@ nothing large is committed. See [ConvoKit integration](../docs/integrations/conv
 |---------|-------------|
 | `all-annotation-types/` | Demo of every annotation type |
 | `all-phases-example/` | Full workflow with all phases |
+| `long-guidelines/` | Where annotator instructions live: instructions phase, collapsible banner, codebook button |
 | `conditional-logic/` | Show/hide questions based on answers |
 | `multi-modal/` | Multi-modal (text + image) annotation |
 | `grid-layout/` | Grid-based annotation layout |
@@ -118,6 +128,7 @@ nothing large is committed. See [ConvoKit integration](../docs/integrations/conv
 | `adjudication/` | Multi-annotator adjudication |
 | `mace-demo/` | MACE aggregation demo |
 | `active-learning/` | Active learning prioritization |
+| `annotation-telemetry/` | Drawing dynamics: time per shape, zoom behaviour, revision, and AI-suggestion accept latency |
 | `quality-control/` | Attention checks and gold standards |
 | `mturk-example/` | Amazon MTurk integration |
 | `diversity/` | Diversity-based ordering |
@@ -137,6 +148,7 @@ nothing large is committed. See [ConvoKit integration](../docs/integrations/conv
 | `qda-mode-example/` | Composed QDA workspace: codebook + memos + cases + search via `qda_mode` |
 | `codebook-example/` | Mutable, on-the-fly codebook (multiselect scheme) |
 | `codebook-invivo-example/` | In-vivo coding: mint a code from a text selection (`i`) |
+| `codebook-sidebar/` | Read-only per-label codebook (`codebook_mode: fixed`): definitions, use-when/avoid-when, examples |
 | `memos-example/` | Annotator notes (instance/span-anchored, private/shared) |
 | `cases-example/` | Group instances into units of analysis; crosstab by case attribute |
 | `search-example/` | FTS5 search; admin search + annotator search-and-claim |

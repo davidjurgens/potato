@@ -35,12 +35,29 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "playwright: mark test as requiring Playwright browser")
 
 
+#: Browser tests need longer than the 30s global timeout in pytest.ini: a
+#: canvas test starts a server, launches a browser, loads an image, drives real
+#: mouse events, and navigates between instances. Raising the GLOBAL timeout
+#: would weaken the protection on the fast unit suite, so it is scoped here.
+BROWSER_TEST_TIMEOUT_SECONDS = 120
+
+
 def pytest_collection_modifyitems(config, items):
+    skip_pw = None
     if not HAS_PLAYWRIGHT:
-        skip_pw = pytest.mark.skip(reason="playwright not installed (pip install pytest-playwright)")
-        for item in items:
-            if "playwright" in item.keywords or "tests/playwright" in str(item.fspath):
-                item.add_marker(skip_pw)
+        skip_pw = pytest.mark.skip(
+            reason="playwright not installed (pip install pytest-playwright)")
+
+    for item in items:
+        is_playwright = ("playwright" in item.keywords
+                         or "tests/playwright" in str(item.fspath))
+        if not is_playwright:
+            continue
+        if skip_pw is not None:
+            item.add_marker(skip_pw)
+        # Respect an explicit per-test timeout; only supply the default.
+        if item.get_closest_marker("timeout") is None:
+            item.add_marker(pytest.mark.timeout(BROWSER_TEST_TIMEOUT_SECONDS))
 
 
 # ---------- browser fixtures ----------
@@ -82,16 +99,21 @@ def page(context):
 
 # ---------- server fixtures ----------
 
-def _make_server(annotation_schemes, port=None, extra_config=None, num_items=3):
+def _make_server(annotation_schemes, port=None, extra_config=None, num_items=3,
+                 items=None):
     """Helper to build and start a FlaskTestServer with given schemes.
 
     ``create_test_data_file`` requires the data rows, and ``create_test_config`` takes
     ``data_files`` (plural) with paths relative to the test dir — passing neither
     correctly raised TypeError before any server was started.
+
+    Pass ``items`` to supply the rows directly; image and video schemas need
+    fields (``image_url``, ``video_url``) the default text rows do not have.
     """
     test_dir = create_test_directory("playwright")
     data_file = create_test_data_file(
         test_dir,
+        items if items is not None else
         [{"id": f"instance_{i}", "text": f"Test instance {i}"}
          for i in range(num_items)],
     )

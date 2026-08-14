@@ -144,10 +144,10 @@ For marking important moments in the video.
 For object tracking across video frames with keyframe-based bounding box annotation.
 
 **Features:**
-- Canvas overlay for drawing bounding boxes directly on the video
+- Canvas overlay for drawing directly on the video
 - Track multiple objects across frames with color-coded labels
-- Automatic interpolation between keyframes
-- Keyframe-based workflow: annotate key positions and let the system interpolate
+- **Boxes and polygons** both interpolate between keyframes; masks are held
+- Keyframe-based workflow: annotate key positions and let the system fill in
 
 **Tracking-Specific Options:**
 
@@ -161,12 +161,54 @@ For object tracking across video frames with keyframe-based bounding box annotat
 - `cubic` - Cubic/smooth interpolation (natural motion curves)
 - `constant` - Constant/hold interpolation (box stays in place until next keyframe)
 
+**Shape kinds**
+
+A track is not always a box.
+
+| Kind | Between keyframes |
+|---|---|
+| Box | Interpolated, by the method above |
+| Polygon | Interpolated by **arc-length resampling** (see below) |
+| Mask | **Held** from the nearest keyframe, and marked as held |
+
+Polygon tracks cannot simply interpolate vertex-to-vertex. Two outlines of the
+same object rarely have the same vertex count, and even when they do, an
+annotator who starts tracing at the nose on one frame and the tail on the next
+produces two correct outlines whose vertices correspond to nothing —
+interpolating them pairwise turns the shape inside out halfway between
+keyframes. Potato resamples both outlines to equal fractions of their perimeter
+and rotates the second to the offset that best matches the first, so differing
+vertex counts and start points both work.
+
+Masks are **not** blended. Averaging two rasters produces a shape that is
+neither — ghost regions where the object was and where it will be, with holes
+between. Potato holds the nearest keyframe and draws a hollow circle marker on
+held frames, so an annotator can always tell a frame somebody drew from a frame
+nobody did.
+
 **Tracking Workflow:**
-1. Click **+ Track** to create a new object track
-2. Draw a bounding box on the video at the current frame
-3. Advance to another frame using frame stepping (`,` and `.` keys)
-4. Draw another bounding box for the same object
-5. The system interpolates the box position between keyframes
+1. Press `t` (or click **+ Track**) to create a new object track
+2. Draw a shape on the video at the current frame
+3. Advance to another frame using frame stepping (`,` and `.`)
+4. Draw the same object again
+5. The system interpolates between the keyframes
+6. Scrub with `<` and `>` to jump between this track's keyframes
+7. Press `Ctrl/Cmd+K` on any interpolated frame to pin it as a real keyframe
+
+**Tracking keyboard shortcuts**
+
+| Key | Action |
+|---|---|
+| `t` | New track |
+| `,` / `.` | Step one frame back / forward |
+| `<` / `>` (Shift+`,` / Shift+`.`) | Previous / next **keyframe** of the active track |
+| `Ctrl/Cmd+K` | Pin the current interpolated shape as a keyframe |
+| `Delete` / `Backspace` | Delete the selected keyframe |
+| `Escape` | Deselect |
+
+`,` and `.` step frames; the shifted pair jumps keyframes. This mirrors video
+editors, where `,`/`.` are frames and `<`/`>` are markers — and it keeps the two
+handlers from firing on the same press.
 
 **Example Configuration:**
 
@@ -236,6 +278,20 @@ Enables all annotation types in one interface.
 
 - Segment, frame, and keyframe controls all available
 - Useful for comprehensive video analysis tasks
+
+## Showing and Hiding Classes
+
+A timeline of stacked segments becomes unreadable in the same way a densely
+boxed image does, so video shares the per-class show/hide used by
+[image annotation](image_annotation.md#showing-and-hiding-classes). Each label
+in the toolbar carries an eye toggle; hiding a class removes its segments from
+the timeline and the annotation list.
+
+- Hiding is **presentation only** — hidden segments are still saved and exported.
+- The state persists per project and schema, so a class stays hidden as the
+  annotator moves between items.
+
+Nothing needs to be configured; the toggles appear automatically.
 
 ## Keyboard Shortcuts
 

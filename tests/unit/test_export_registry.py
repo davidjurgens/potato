@@ -134,6 +134,11 @@ class TestBuiltinExportersRegistered:
             # ML-format exporters (v2.1–2.2)
             "agent_eval", "coco", "coding_eval", "conll_2003", "conll_u",
             "eaf", "mask_png", "parquet", "pascal_voc", "textgrid", "yolo",
+            # CV round-trip exporters: each of these formats was import-only,
+            # which is the wrong asymmetry for a migration story — a team can
+            # move off the source tool but never hand work back to a colleague
+            # still on it.
+            "cvat", "labelme", "darwin", "kitti", "mot", "cityscapes", "davis",
             # Trajectory correction → SFT/DPO
             "trajectory_correction",
             # Tabular exporters
@@ -145,6 +150,9 @@ class TestBuiltinExportersRegistered:
             # Keystroke / typing-dynamics streams. Falls back to JSONL when
             # pyarrow is absent, so it has no hard dependency either.
             "keystrokes",
+            # Drawing-dynamics streams, the geometry counterpart. Same JSONL
+            # fallback, so also no hard dependency.
+            "annotation_telemetry",
         }
         # HuggingFace exporter is optional (depends on datasets/huggingface_hub)
         optional = {"huggingface"}

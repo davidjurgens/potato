@@ -15,6 +15,9 @@
  * client format drifts from the exporter contract again, this fails.
  */
 
+// mask-buffer.js first: image-annotation.js resolves MaskBuffer at load,
+// mirroring the script order the template guarantees in the browser.
+require('../../potato/static/mask-buffer.js');
 const ImageAnnotationManager = require('../../potato/static/image-annotation.js');
 
 /** A manager with just enough state to serialize; no DOM, no fabric canvas. */
@@ -27,17 +30,24 @@ function makeManager(masks, width, height) {
     return m;
 }
 
-/** Build an RGBA buffer with the given flat pixel indices switched on. */
+/** Build a MaskBuffer with the given flat pixel indices switched on. */
 function maskBuffer(width, height, onIndices) {
-    const data = new Uint8ClampedArray(width * height * 4);
-    onIndices.forEach(i => { data[i * 4 + 3] = 255; });
-    return data;
+    const buffer = new MaskBuffer(width, height);
+    onIndices.forEach(i => buffer.set(i));
+    return buffer;
+}
+
+/** The flat pixel indices a buffer has set, in ascending order. */
+function setPixels(buffer) {
+    const out = [];
+    buffer.forEachSetPixel(pix => out.push(pix));
+    return out.sort((a, b) => a - b);
 }
 
 describe('_serializeAnnotations', () => {
     test('emits masks in the shape every exporter reads', () => {
         const m = makeManager(
-            { road: { color: '#ff0000', data: maskBuffer(4, 3, [1, 2, 5, 6]) } }, 4, 3);
+            { road: { color: '#ff0000', buffer: maskBuffer(4, 3, [1, 2, 5, 6]) } }, 4, 3);
 
         const out = JSON.parse(m._serializeAnnotations());
         expect(out).toHaveLength(1);
@@ -54,7 +64,7 @@ describe('_serializeAnnotations', () => {
 
     test('masks ride the same blob as shapes, not a separate input', () => {
         const m = makeManager(
-            { road: { color: '#ff0000', data: maskBuffer(2, 2, [0]) } }, 2, 2);
+            { road: { color: '#ff0000', buffer: maskBuffer(2, 2, [0]) } }, 2, 2);
         m.canvas = {
             getObjects: () => [{
                 annotationData: { type: 'bbox', label: 'car', color: '#0000ff' },
@@ -89,7 +99,7 @@ describe('mask round-trip', () => {
     test('serialize then restore preserves the selected pixels', () => {
         const width = 4, height = 3, on = [1, 2, 5, 6];
         const m = makeManager(
-            { road: { color: '#ff0000', data: maskBuffer(width, height, on) } },
+            { road: { color: '#ff0000', buffer: maskBuffer(width, height, on) } },
             width, height);
 
         const entry = JSON.parse(m._serializeAnnotations())[0];
@@ -102,12 +112,30 @@ describe('mask round-trip', () => {
         expect(restored.maskImgWidth).toBe(width);
         expect(restored.maskImgHeight).toBe(height);
 
-        const data = restored.masks.road.data;
-        const backOn = [];
-        for (let i = 0; i < width * height; i++) {
-            if (data[i * 4 + 3] > 128) backOn.push(i);
-        }
-        expect(backOn).toEqual(on);
+        expect(setPixels(restored.masks.road.buffer)).toEqual(on);
+    });
+
+    test.each([
+        ['the top-left pixel', [0]],
+        ['the top-left pixel and its neighbour', [0, 1]],
+        ['the whole image', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]],
+        ['everything but the top-left pixel', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]],
+    ])('a mask covering %s survives save and reload', (_name, on) => {
+        // The shipped encoder suppressed the leading background run, so any
+        // mask whose FIRST pixel was painted came back inverted, and a fully
+        // painted mask came back empty — a full-canvas fill was silently lost.
+        // Storage-agnostic on purpose: this drives the real serializer and the
+        // real restore path, which is where the corruption actually happened.
+        const width = 4, height = 3;
+        const m = makeManager(
+            { road: { color: '#ff0000', buffer: maskBuffer(width, height, on) } },
+            width, height);
+
+        const entry = JSON.parse(m._serializeAnnotations())[0];
+        const restored = makeManager({}, 0, 0);
+        restored._restoreMaskFromEntry(entry);
+
+        expect(setPixels(restored.masks.road.buffer)).toEqual(on);
     });
 
     test('restoring a malformed entry is ignored rather than throwing', () => {
@@ -167,7 +195,7 @@ describe('instance masks', () => {
 
     test('a brush mask with no instance still serializes under its key', () => {
         const m = makeManager(
-            { road: { color: '#ff0000', data: maskBuffer(2, 2, [0]) } }, 2, 2);
+            { road: { color: '#ff0000', buffer: maskBuffer(2, 2, [0]) } }, 2, 2);
         const out = JSON.parse(m._serializeAnnotations());
         expect(out[0].label).toBe('road');
         expect(out[0].instance).toBeUndefined();
@@ -320,14 +348,11 @@ describe('mask resolution guard', () => {
         expect(warn).toHaveBeenCalled();
         expect(m.maskImgWidth).toBe(4);
         expect(m.maskImgHeight).toBe(4);
-        expect(m.masks.road.data.length).toBe(4 * 4 * 4);
+        expect(m.masks.road.buffer.width).toBe(4);
+        expect(m.masks.road.buffer.height).toBe(4);
 
         // Every pixel was set in the source, so every pixel is set after rescale.
-        let on = 0;
-        for (let i = 0; i < 16; i++) {
-            if (m.masks.road.data[i * 4 + 3] > 128) on++;
-        }
-        expect(on).toBe(16);
+        expect(m.masks.road.buffer.countSet()).toBe(16);
         warn.mockRestore();
     });
 
@@ -339,7 +364,8 @@ describe('mask resolution guard', () => {
             rle: { counts: [0, 4], size: [2, 2] },
         });
         expect(warn).not.toHaveBeenCalled();
-        expect(m.masks.road.data.length).toBe(2 * 2 * 4);
+        expect(m.masks.road.buffer.width).toBe(2);
+        expect(m.masks.road.buffer.height).toBe(2);
         warn.mockRestore();
     });
 });

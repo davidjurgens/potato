@@ -1,0 +1,30 @@
+annotation_task_name: Interactive segmentation
+data_files:
+- data/scenes.json
+item_properties:
+  id_key: id
+  text_key: image_url
+annotation_schemes:
+- annotation_type: image_annotation
+  name: objects
+  description: Click an object with the magic wand (w) to segment it.
+  source_field: image_url
+  tools:
+  - sam
+  - brush
+  - eraser
+  - bbox
+  mask_mode: instance
+  segmentation:
+    model: mobile_sam
+  labels:
+  - name: object
+    color: '#e6194b'
+  - name: background_thing
+    color: '#3cb44b'
+user_config:
+  allow_all_users: true
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+port: 8000
