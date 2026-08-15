@@ -120,6 +120,12 @@ nothing large is committed. See [ConvoKit integration](../docs/integrations/conv
 |---|---|
 | `lerobot-episode/` | Phases, outcome and dense progress reward on a multi-stream robot episode |
 
+### `agent-traces/` — agent and world-model evaluation
+
+| Example | What it shows |
+|---|---|
+| `world-model-rollouts/` | Frame-locked video panels: mark the frame where a generated rollout stops making sense, pick a winner, judge a counterfactual |
+
 ### [advanced/](advanced/) - Complex Features & Workflows
 
 | Example | Description |

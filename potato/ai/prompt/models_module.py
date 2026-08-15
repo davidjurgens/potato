@@ -290,6 +290,33 @@ class MultiFrameDetectionFormat(BaseModel):
     frames: List[FrameDetections]
 
 
+class RolloutBreakFormat(BaseModel):
+    """Where a generated rollout stops being physically coherent.
+
+    A judge output, not an annotation. ``break_tile`` is a 1-based index into
+    the numbered contact sheet the model was shown, and **0 means no break was
+    found** -- an answer the prompt asks for explicitly, because a model given
+    only "which frame is wrong" will always name one.
+
+    Every field is re-validated in :mod:`potato.ai.rollout_judge`: open models
+    return the tile as a string, name a tile that is not on the sheet, and pick
+    categories outside the taxonomy often enough that trusting the declared
+    schema would turn a parsing failure into a finding.
+
+    Example output:
+    {
+        "break_tile": 7,
+        "violation_type": "interpenetration",
+        "confidence": 0.71,
+        "rationale": "The hand passes through the mug rather than gripping it."
+    }
+    """
+    break_tile: int
+    violation_type: Optional[str] = None
+    confidence: float = 0.0
+    rationale: Optional[str] = None
+
+
 # ============================================================================
 # Class Registry
 # ============================================================================
@@ -338,4 +365,7 @@ CLASS_REGISTRY = {
     "video_keyframe_detection": VideoKeyframeDetectionFormat,
     "video_tracking_suggestion": VideoTrackingSuggestionFormat,
     "multi_frame_detection": MultiFrameDetectionFormat,
+
+    # World-model rollout evaluation
+    "rollout_break": RolloutBreakFormat,
 }

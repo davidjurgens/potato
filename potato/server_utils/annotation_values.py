@@ -228,6 +228,36 @@ def episode_outcome(scheme: Any, stored: Any) -> Optional[str]:
     return None
 
 
+def rollout_value(scheme: Any, stored: Any) -> Optional[Dict[str, Any]]:
+    """
+    The parsed layers of a ``rollout_evaluation`` value, or None.
+
+    Returns the whole blob rather than one layer, because the four layers are
+    scored by four different measures and splitting them here would mean four
+    parses of the same string. ``violations`` and ``clean`` are normalised to
+    lists so the agreement code can assume their shape; a value that is neither
+    a dict nor parseable JSON is None, not ``{}`` — "this annotator recorded
+    nothing" and "this annotator recorded an empty answer" lead to different
+    denominators, and only the second is an answer.
+    """
+    if _annotation_type(scheme) != "rollout_evaluation":
+        return None
+    for blob in _parse_blob(stored):
+        if not isinstance(blob, dict):
+            continue
+        return {
+            "violations": [v for v in (blob.get("violations") or [])
+                           if isinstance(v, dict)],
+            "clean": [str(s) for s in (blob.get("clean") or [])],
+            "preference": (blob.get("preference")
+                           if isinstance(blob.get("preference"), dict) else {}),
+            "counterfactual": (
+                blob.get("counterfactual")
+                if isinstance(blob.get("counterfactual"), dict) else {}),
+        }
+    return None
+
+
 def _parse_blob(stored: Any) -> List[dict]:
     """
     Pull the annotation list out of a stored image-annotation value.

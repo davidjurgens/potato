@@ -8323,6 +8323,14 @@ def configure_routes(flask_app, app_config):
         register_episode_routes(app, config)
     except Exception as e:
         logger.warning("Could not register episode routes: %s", e)
+    # World-model rollout sets. No optional dependency of its own, but it is
+    # registered alongside the other media-shaped routes so the whole family
+    # is in one place.
+    try:
+        from potato.rollouts.routes import register_rollout_routes
+        register_rollout_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register rollout routes: %s", e)
     app.add_url_rule(
         "/screenshots/<path:filepath>",
         "serve_trace_screenshot",

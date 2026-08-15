@@ -334,6 +334,8 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "depth_map": ("depth-display",),
     # Embodied robot episodes: synchronized video plus time-series lanes.
     "episode_annotation": ("episode-annotation-container",),
+    # World-model rollout evaluation: frame-locked video panels.
+    "rollout_evaluation": ("rollout-eval-container",),
     "audio_annotation": ("audio-annotation-container",),
     "video_annotation": ("video-annotation-container",),
     "span_link": ("span-link-container",),

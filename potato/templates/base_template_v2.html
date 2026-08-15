@@ -60,6 +60,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='episode-timeline.css') }}?v=2">
     {% endif %}
 
+    <!-- World-model rollout evaluation styles -->
+    {% if frontend_assets.rollout_evaluation | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='rollout-eval.css') }}?v=3">
+    {% endif %}
+
     <!-- Audio Annotation Styles -->
     {% if frontend_assets.audio_annotation | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}?v=4">
@@ -827,6 +832,11 @@
     <!-- Embodied episode timeline -->
     {% if frontend_assets.episode_annotation | default(false) %}
     <script src="{{ url_for('static', filename='episode-timeline.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- World-model rollout evaluation -->
+    {% if frontend_assets.rollout_evaluation | default(false) %}
+    <script src="{{ url_for('static', filename='rollout-eval.js') }}?v=5"></script>
     {% endif %}
 
     <!-- Per-class show/hide, shared by image and video annotation -->

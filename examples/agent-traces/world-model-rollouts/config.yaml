@@ -1,0 +1,139 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Evaluating a world model's rollouts.
+#
+# Three videos of the same scenario, frame-locked: the real recording and two
+# model continuations. The annotator finds the frame at which each one stops
+# making sense, says why, picks a winner, and — where the scenario carries an
+# intervention — judges whether the divergence follows from it.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/agent-traces/world-model-rollouts/config.yaml -p 8000
+#
+# Regenerate the rollouts with:
+#   python examples/agent-traces/world-model-rollouts/generate_rollouts.py
+#
+# Each generated rollout is wrong in one specific, findable way, and the frame
+# it goes wrong at is deliberately NOT in the data — that is what the annotator
+# is being asked to find. The generator's docstring lists the answers.
+
+port: 8000
+annotation_task_name: "World-model rollout evaluation"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+output_annotation_format: json
+
+data_files:
+  - data/rollouts.json
+
+item_properties:
+  id_key: id
+  text_key: note
+
+user_config:
+  allow_all_users: true
+
+# Two annotators per item, so the break-point agreement report has something to
+# compute. "Do annotators agree on WHEN the physics broke?" needs two of them,
+# and it is the number this schema exists to produce.
+automatic_assignment:
+  on: true
+  instance_per_annotator: 3
+  annotators_per_instance: 2
+
+annotation_schemes:
+  - annotation_type: rollout_evaluation
+    name: rollout_review
+    description: "Where does each rollout stop making sense?"
+
+    # The item fields holding each rollout's video. `role: real` marks the
+    # ground-truth recording; the rest default to `model`.
+    #
+    # The annotation stores the stream `id` (defaulting to the field name),
+    # never the panel position — positions are shuffled per annotator.
+    streams:
+      - field: real
+        name: "Recording"
+        role: real
+      - field: gen_a
+        name: "Model A"
+      - field: gen_b
+        name: "Model B"
+
+    # HTML video exposes no frame rate, so it is declared here. Without it,
+    # frame numbers are omitted rather than guessed — a frame index off by a
+    # factor of 30/24 is worse than no frame index, because it looks right.
+    fps: 25
+
+    # Which fields carry the scenario text. The intervention is the premise of
+    # the counterfactual question; the block stays hidden on items without one.
+    prompt_field: prompt
+    intervention_field: intervention
+    intervention_time_field: intervention_t
+
+    layers:
+      - violations
+      - preference
+      - counterfactual
+
+    # Hide the generator names and permute the panel order per annotator.
+    # Preference judgements have a large position bias, and an annotator who
+    # can read "Model A" off the caption is not judging the video.
+    #
+    # The permutation is seeded from (annotator, item), so it is the SAME every
+    # time that annotator returns to that item — otherwise their second look
+    # disagrees with their first.
+    blind: true
+    shuffle: true
+
+    # Refuse a submission that leaves a panel neither marked nor cleared. A
+    # panel with no marks is otherwise ambiguous between "watched it, nothing
+    # wrong" and "never got to it", and detection agreement cannot be computed
+    # across that ambiguity.
+    require_clean: true
+
+    # The physics / consistency taxonomy. Each entry's description becomes the
+    # option's tooltip — an annotator who cannot tell two categories apart will
+    # pick whichever is first, and the category agreement then measures the
+    # list order rather than the video.
+    violation_types:
+      - name: object_permanence
+        description: "An object vanishes, or appears, with nothing causing it."
+      - name: rigid_body_violation
+        description: "A solid object bends, stretches or changes size."
+      - name: interpenetration
+        description: "Two solid objects pass through each other."
+      - name: gravity_violation
+        description: "Something floats, falls upward, or stands unsupported."
+      - name: causality_violation
+        description: "An effect happens before, or without, its cause."
+      - name: identity_flicker
+        description: "An object swaps identity or category between frames."
+      - name: appearance_drift
+        description: "Texture, colour or shape drifts with no event to explain it."
+
+    # Three severity grades, not five. Annotators do not reliably distinguish
+    # five degrees of physical implausibility, and the extra resolution buys
+    # noise rather than signal.
+    severities:
+      - value: 1
+        name: subtle
+        description: "Visible on a second look."
+      - value: 2
+        name: clear
+        description: "Obvious on first viewing."
+      - value: 3
+        name: "breaks the scene"
+        description: "Nothing after this point is worth judging."
+
+    # Rubric dimensions scored 1-5 alongside the preference. Optional; drop the
+    # block to collect a bare winner.
+    rubric:
+      physics: "Do objects move and interact the way real objects would?"
+      fidelity: "Does it look like the same scene throughout?"
+      instruction: "Does it do what the scenario describes?"
+
+  - annotation_type: text
+    name: notes
+    description: "Anything the marks and the rubric do not capture?"

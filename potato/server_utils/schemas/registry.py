@@ -273,6 +273,7 @@ def _register_builtin_schemas():
     from .video import generate_video_layout
     from .image_annotation import generate_image_annotation_layout
     from .episode_annotation import generate_episode_annotation_layout
+    from .rollout_evaluation import generate_rollout_evaluation_layout
     from .spatial_annotation import generate_spatial_annotation_layout
     from .audio_annotation import generate_audio_annotation_layout
     from .video_annotation import generate_video_annotation_layout
@@ -432,6 +433,14 @@ def _register_builtin_schemas():
             optional_fields=["source_field", "episode_field", "layers", "phases", "outcomes", "failure_causes", "reward_range", "series_shown", "max_lanes", "min_phases", "max_phases"],
             supports_keybindings=True,
             description="Embodied robot episode: synchronized video streams and time-series lanes with phase, outcome and dense-reward annotation"
+        ),
+        SchemaDefinition(
+            name="rollout_evaluation",
+            generator=generate_rollout_evaluation_layout,
+            required_fields=["name", "description"],
+            optional_fields=["streams", "manifest_field", "prompt_field", "intervention_field", "intervention_time_field", "fps", "layers", "violation_types", "severities", "cf_verdicts", "rubric", "blind", "shuffle", "require_clean", "max_violations"],
+            supports_keybindings=True,
+            description="World-model rollout evaluation: frame-locked video panels with temporal violation localization, preference and counterfactual plausibility"
         ),
         SchemaDefinition(
             name="audio_annotation",

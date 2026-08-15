@@ -334,6 +334,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `radio` | `labels` | `horizontal`, `label_requirement`, `sequential_key_binding`, `has_free_response`, `option_randomization`, ... | Single-choice radio button selection |
 | `range_slider` | (none beyond name/description) | `min_value`, `max_value`, `step`, `left_label`, `right_label`, ... | Dual-thumb slider for selecting an acceptable range |
 | `ranking` | `labels` | `allow_ties` | Drag-and-drop ranking of items by preference or relevance |
+| `rollout_evaluation` | (none beyond name/description) | `streams`, `manifest_field`, `prompt_field`, `intervention_field`, `intervention_time_field`, ... | World-model rollout evaluation: frame-locked video panels with temporal violation localization, preference and counterfactual plausibility |
 | `rubric_eval` | `criteria` | `scale_points`, `scale_labels`, `show_overall` | Multi-criteria rubric evaluation grid for LLM and text quality assessment |
 | `select` | `labels` | `label_requirement`, `option_randomization`, `dynamic_options`, `dynamic_options_field` | Dropdown selection |
 | `semantic_differential` | `pairs` | `scale_points` | Bipolar adjective scales for measuring connotative meaning |

@@ -4260,6 +4260,34 @@
         ]
       }
     },
+    "/api/rollout/judge": {
+      "post": {
+        "operationId": "post_rollout_judge",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Ask a vision model where each rollout stops making sense.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/api/rollout/set": {
+      "get": {
+        "operationId": "get_rollout_set",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Build and return the current item's rollout manifest.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/api/schemas": {
       "get": {
         "operationId": "get_get_annotation_schemas",

@@ -154,6 +154,13 @@ VISION_SCHEMAS = {
     "spatial_depth_eval": "examples/spatial/depth-eval/config.yaml",
     # Embodied episodes. Video plus signal lanes on one timeline.
     "embodied_episode": "examples/embodied/lerobot-episode/config.yaml",
+    # World-model rollouts. Layout-only, like the point cloud: a hidden tab
+    # does not decode media, so the panels are letterboxed rectangles in the
+    # image even when the manifest, order and blinding are correct. The grid,
+    # the transport row, the timeline lanes and the forms below are what this
+    # is checking.
+    "world_model_rollouts":
+        "examples/agent-traces/world-model-rollouts/config.yaml",
 }
 
 # Combined

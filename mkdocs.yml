@@ -106,6 +106,7 @@ nav:
         - Automation Rules: agent-evaluation/automation_rules.md
         - CI Evaluation: agent-evaluation/ci_evaluation.md
         - Judge Alignment: agent-evaluation/judge_alignment.md
+        - World-Model & Rollout Evaluation: agent-evaluation/world_model_eval.md
         - Semantic Curation: agent-evaluation/semantic_curation.md
         - Model Arena: agent-evaluation/model_arena.md
         - Trace Analytics & Alerts: agent-evaluation/trace_analytics.md

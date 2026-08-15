@@ -29,6 +29,7 @@ class SchemaKind(str, Enum):
     GEOMETRY = "geometry"    # 2D shapes: boxes, polygons, masks, points
     TEMPORAL = "temporal"    # labelled time ranges: audio and video segments
     EPISODE = "episode"      # robot demonstrations: phases + outcome + reward
+    ROLLOUT = "rollout"      # world-model rollouts: break-points + preference
     TEXT = "text"            # free-form text, no automatic IAA
     UNSUPPORTED = "unsupported"
 
@@ -76,6 +77,7 @@ _KIND_BY_TYPE = {
     "audio_annotation": SchemaKind.TEMPORAL,
     "video_annotation": SchemaKind.TEMPORAL,
     "episode_annotation": SchemaKind.EPISODE,
+    "rollout_evaluation": SchemaKind.ROLLOUT,
     # Skipped
     "pure_display": SchemaKind.UNSUPPORTED,
     "video": SchemaKind.UNSUPPORTED,
@@ -126,6 +128,17 @@ def metrics_for_schema(scheme: Dict[str, Any]) -> List[str]:
             "outcome.outcome_alpha",
             "reward.reward_icc", "reward.reward_pearson_r",
             "reward.reward_coverage",
+        ],
+        # Four groups, and a tolerance sweep behind them. Reporting one number
+        # would hide which of "does it break", "when", "why" and "how badly"
+        # the annotators disagreed about, and every one of them depends on the
+        # tolerance window the sweep varies.
+        SchemaKind.ROLLOUT: [
+            "detection.alpha", "localization.mean_offset",
+            "localization.sigma", "localization.ks",
+            "category.alpha", "severity.alpha",
+            "preference.alpha", "counterfactual.alpha",
+            "coverage.answered_fraction",
         ],
         SchemaKind.TEXT: [],
         SchemaKind.UNSUPPORTED: [],
@@ -751,6 +764,13 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
             # timeline wrote.
             rows = _gather_raw(overlap_items, user_states, name)
             metrics = episode_iaa.episode_report(rows, scheme)
+        elif kind == SchemaKind.ROLLOUT:
+            from potato.server_utils.iaa import rollouts as rollout_iaa
+            # Raw for the same reason the episode report takes it raw: the four
+            # layers are parsed by the measure that scores them, so the report
+            # cannot drift from what the client wrote.
+            rows = _gather_raw(overlap_items, user_states, name)
+            metrics = rollout_iaa.rollout_report(rows, scheme)
         elif kind in (SchemaKind.GEOMETRY, SchemaKind.TEMPORAL):
             rows = _gather_blobs(overlap_items, user_states, name, scheme)
             metrics = _aggregate_blobs(rows, scheme)
