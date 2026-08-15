@@ -75,6 +75,9 @@ over prose when writing a config or calling the API.
 - [Image Annotation Formats](annotation-types/multimedia/image_formats.md) - Import COCO (polygons, RLE masks, crowd regions) with no preprocessing, and export back
 - [Point Cloud Annotation (3D)](annotation-types/spatial/point_cloud.md) - Oriented 3D boxes on lidar: KITTI, PCD, PLY and LAS, converted server-side
 - [Calibration and 2D Verification](annotation-types/spatial/calibration.md) - Project 3D boxes into the camera images, so a box is checkable rather than a guess
+- [Depth Maps](annotation-types/spatial/depth_maps.md) - 16-bit PNG, NPY, PFM and EXR depth with a near/far window and a readout in metres
+- [Embodied Episode Annotation](annotation-types/embodied/episodes.md) - Robot demonstrations: synchronized video, signal lanes, phases, outcomes and dense reward
+- [Robot Dataset Formats](annotation-types/embodied/robot_formats.md) - LeRobot v2, RoboMimic/ALOHA HDF5, RLDS/TFDS, and Potato's own manifest
 - [Audio Annotation](annotation-types/multimedia/audio_annotation.md) - Audio segmentation with waveform visualization
 - [Audio Dialogue](annotation-types/multimedia/audio_dialogue.md) - Podcast/interview turn annotation: speaker bubbles, per-turn audio playback, ratings, spans, and cross-turn linking
 - [Video Annotation](annotation-types/multimedia/video_annotation.md) - Frame-by-frame video labeling
@@ -3693,6 +3696,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `context_attribution` | (none beyond name/description) | `turns_key`, `acts`, `linked_acts`, `hint` | Tag how each turn uses earlier context (used correctly / hallucinated / ignored) with links to the source turn |
 | `coreference` | `span_schema` | `entity_types`, `allow_singletons`, `visual_display` | Coreference chain annotation for grouping mentions of the same entity |
 | `emergent_behavior` | (none beyond name/description) | `steps_key`, `agent_key`, `behaviors`, `allow_note` | Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift |
+| `episode_annotation` | (none beyond name/description) | `source_field`, `episode_field`, `layers`, `phases`, `outcomes`, ... | Embodied robot episode: synchronized video streams and time-series lanes with phase, outcome and dense-reward annotation |
 | `error_span` | `error_types` | `severities`, `show_score`, `max_score` | MQM-style error span annotation with typed severity for quality evaluation |
 | `event_annotation` | `event_types`, `span_schema` | `visual_display` | N-ary event annotation with triggers and typed arguments |
 | `extractive_qa` | (none beyond name/description) | `question_field`, `passage_field`, `allow_unanswerable`, `highlight_color` | SQuAD-style extractive question answering with answer span highlighting |
@@ -3720,7 +3724,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `soft_label` | `labels` | `total`, `min_per_label`, `show_distribution_chart` | Probability distribution across labels via constrained sliders |
 | `span` | `labels` | `sequential_key_binding`, `bad_text_label`, `title`, `allow_discontinuous`, `entity_linking`, ... | Text span annotation/highlighting with optional entity linking to knowledge bases |
 | `span_link` | `link_types`, `span_schema` | `visual_display` | Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION) |
-| `spatial_annotation` | `tools`, `labels` | `source_field`, `color_mode`, `point_size`, `max_points`, `min_annotations`, ... | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments |
+| `spatial_annotation` | `tools`, `labels` | `source_field`, `calibration_field`, `color_mode`, `point_size`, `max_points`, ... | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments |
 | `speech_transcript` | (none beyond name/description) | `segments_key`, `audio_key`, `error_types`, `allow_correction` | Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction |
 | `table_grid` | (none beyond name/description) | `image_key`, `rows_key`, `cols_key`, `default_rows`, `default_cols`, ... | Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty) |
 | `temporal_grounding` | (none beyond name/description) | `video_key`, `events_key`, `duration` | Video temporal grounding: mark gold event intervals with live IoU vs predicted |
@@ -8489,6 +8493,7 @@ instance_display:
 | `audio` | Audio player | No |
 | `audio_dialogue` | **Diarized transcript synced to audio**: speaker bubbles, per-turn playback, per-turn ratings, spans, cross-turn linking | Yes |
 | `gallery` | Scrollable image gallery with captions | No |
+| `depth_map` | **Depth map**: near/far window, colormap, overlay on RGB, and the distance in metres under the cursor | No |
 | `dialogue` | Conversation turns | Yes |
 | `conversation_tree` | Conversation tree with collapsible branching nodes | No |
 | `multi_agent_discussion` | Multi-agent discussion with agent legend, colors, addressees, and filtering | Yes |
@@ -16151,20 +16156,57 @@ min/max, because a single stray return from a reflective surface otherwise
 compresses everything else into one colour and the cloud renders as a flat
 sheet.
 
-## Large clouds are thinned, and the viewer says so
+## Large clouds: detail where the camera is looking
+
+By default the cloud is served as an **octree**, and the viewer loads density
+where you are looking rather than a thin sample of everywhere.
+
+That distinction is the difference between a usable viewer and a decorative
+one. Uniform thinning of a 20-million-point aerial scan to 500,000 points is
+2.5% density *everywhere*: the whole scene is visible and nothing in it is
+annotatable, because the car you are boxing is now nine returns. Raising the cap
+does not help — WebGL will allocate the buffer and then render at 3 fps, which
+reads as a broken page.
+
+The structure is additive, so the union of what is loaded is always a
+uniform-density sampling of the whole scene. A partially loaded cloud looks
+*coarse*, never *incomplete* — a viewer that renders half-loaded data as missing
+geometry teaches annotators to distrust it.
+
+The status line under the viewport says what is on screen:
+
+> Showing 412,000 of 2,100,000 points. More detail loads as you zoom in.
+
+| Option | Default | Effect |
+|---|---|---|
+| `lod` | `true` | Octree loading. `false` falls back to one uniformly thinned buffer. |
+| `point_budget` | 2,000,000 | Points held at once. Lower it for weak GPUs. |
+| `min_screen_size` | 120 | Projected pixels below which a node is not fetched. Lower means more detail and more requests. |
+| `max_loaded_nodes` | 512 | Cache size before least-recently-visible nodes are released. |
+| `max_points` | 500,000 | **Only used when `lod: false`.** |
+
+The octree is built once per file and cached, so the first request for a very
+large scan is slow and every later one is not.
+
+### With `lod: false`
 
 Anything above `max_points` is reduced by **uniform stride** — every Nth point —
 not truncated. A lidar file is written in scan order, so keeping the first N
 points keeps one contiguous slice of the sweep and drops the rest of the scene,
 which looks like a sensor failure rather than a decimation.
 
-The status line under the viewport reports both numbers:
+### Per-point labels stay stable
 
-> Showing 400,000 of 2,100,000 points (evenly sampled to keep the viewer
-> responsive).
+`segment_3d` stores **point indices**, and those indices are into the source
+file, not into whatever subset the viewer has loaded. Every served buffer
+carries an index channel to make that true.
 
-An annotator who does not know a cloud was thinned will draw boxes around gaps
-that are artefacts of the sampling, so this is stated rather than implied.
+This was a real defect rather than a hypothetical one. `max_points` is a schema
+option, so lowering it — exactly what you do when a machine struggles — changed
+the stride and silently re-pointed every stored per-point segment at different
+points. Nothing errored; the labels just moved. If you have `segment_3d`
+annotations from before this change and the `max_points` value has been edited
+since, they are suspect.
 
 ## Controls
 
@@ -16203,6 +16245,66 @@ did not see, and fitting to nothing would be fabricating a measurement.
 
 Yaw is not part of the drag; `q` and `e` rotate the selected box afterwards, in
 the world frame, so the key always turns it the same way on screen.
+
+## The slab views
+
+Under the viewport are three orthographic panels — **top** (X-Y), **front**
+(Y-Z) and **side** (X-Z) — each showing a slab of the scene a couple of metres
+thick, centred on whatever is selected.
+
+They are there because a perspective view is systematically misleading in one
+direction: the projection compresses the extent along the view axis, so boxes
+placed by eye come out short in depth, and the error is invisible from the
+camera that drew them. In a slab a metre is a metre in both screen directions,
+and the returns behind a face are not hidden by the ones in front of it.
+
+| Action | Result |
+|---|---|
+| Drag inside the box | Move it in that plane |
+| Drag an edge | Move **that face**, leaving the opposite one fixed |
+| Scroll | Thicken or thin the slab |
+
+Dragging one edge deliberately does *not* resize symmetrically: the point of a
+slab is aligning one boundary against the returns behind it, and a symmetric
+resize would move the far face away from wherever you had just put it.
+
+### From the keyboard
+
+Tab to a panel and the same three actions are available without a pointer. This
+is not a courtesy: the panels exist *because* placing a box by eye in
+perspective is imprecise in depth, so "adjust it in the 3D view instead" would
+hand a keyboard user exactly the imprecision the panels remove.
+
+| Key | Result |
+|---|---|
+| `,` / `.` | Previous / next annotation — how you select an existing box without a mouse |
+| Arrow | Move the selected box 10 cm in that direction, within the focused plane |
+| `Shift` + arrow | Move the face **on that side** 5 cm outward |
+| `Alt` + arrow | Move that same face 5 cm inward |
+| `[` / `]` | Thin or thicken the slab |
+
+The arrow names the *face*, not the direction of travel — a scheme where it
+named the direction would leave two of the four faces unreachable. Each press
+is its own undo step, unlike a drag, which undoes as one.
+
+Every edit is announced to a screen reader with the box's new size and centre,
+since the panels themselves are pixels. The status line under the viewport is
+deliberately *not* a live region: level-of-detail loading rewrites it several
+times a second while the camera moves.
+
+The panels centre and scale themselves on the selection, so selecting a
+pedestrian does not leave them four pixels wide in a view framed for the street.
+With nothing selected they follow the camera target.
+
+| Option | Default | Effect |
+|---|---|---|
+| `mpr` | on when `cuboid_3d` is a tool | Show the panels. |
+| `slab_thickness` | `2.0` | Metres of depth each slab shows. The wheel changes it live. |
+
+A **tilted** box — one with pitch or roll, not just yaw — is edited through its
+axis-aligned envelope here, which is an approximation rather than a frame-exact
+edit. That is stated rather than hidden: use the perspective view and `q`/`e`
+for a rotated box, and the slabs for its extent.
 
 ## Coordinates are metres, not fractions
 
@@ -16455,6 +16557,486 @@ centres are in the sensor frame and in metres.
 - [Point Cloud Annotation](point_cloud.md) — the 3D surface itself
 - [Media Ingest](../multimedia/media_ingest.md) — camera formats browsers cannot display
 - [Geometry Agreement](../../advanced/geometry_agreement.md) — agreement over shapes
+
+
+---
+
+<!-- source: docs/annotation-types/spatial/depth_maps.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/spatial/depth_maps/
+
+# Depth Maps
+
+Runnable example: `examples/spatial/depth-eval/`.
+
+Depth is how monocular estimators, stereo rigs and RGB-D sensors deliver 3D, and
+it is the format most robot datasets ship alongside their video. Potato reads
+it, makes it legible, reports the distance under the cursor **in metres**, and
+— given intrinsics — turns it into a point cloud you can put 3D boxes on.
+
+## The three things that make depth different from an image
+
+A depth map opened as an image is a black rectangle, and if it were not, you
+would still be looking at colours with no idea what distance any of them means.
+
+**1. The file does not know its own unit.** Millimetres for RealSense, Azure
+Kinect and NYU-Depth; 1/256 m for the KITTI completion benchmark; metres for
+anything written from a float array. `depth_scale` is metres per stored unit and
+defaults to `0.001`. Getting it wrong is silent — the picture looks the same,
+because the window rescales — which is exactly why the readout exists.
+
+**2. Zero is not a distance.** It is the near-universal "no return" code. Read as
+depth it paints a bright wall across every hole in the sensor's coverage. Potato
+carries non-measurements as NaN and paints them **magenta**, a colour that
+appears in none of the colormaps, so a hole cannot be mistaken for near or far
+depth. The info line reports what fraction of the map is holes: a stereo rig on
+a textureless wall really does return 80%, and an annotator who cannot see that
+will read the holes as geometry.
+
+**3. The interesting range is almost never the full range.** The near/far window
+defaults to the 2nd and 98th percentile of the *valid* pixels.
+
+## Configuration
+
+```yaml
+instance_display:
+  fields:
+    - key: rgb
+      type: image
+      label: "RGB frame"
+    - key: depth
+      type: depth_map
+      label: "Predicted depth"
+      display_options:
+        depth_scale: 0.001      # metres per stored unit; 1/256 for KITTI
+        colormap: turbo         # turbo | viridis | magma | gray
+        invert: false           # true puts near at the bright end
+        rgb_field: rgb          # underlay this field's image
+        overlay_opacity: 0.85
+        show_controls: true
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `depth_scale` | `0.001` | Metres per stored unit. Float formats (NPY, PFM, EXR) default to `1.0` — they are already metres. |
+| `colormap` | `turbo` | `turbo`, `viridis`, `magma`, `gray`. |
+| `invert` | `false` | Swap which end of the ramp is near. |
+| `rgb_field` | — | Another display field whose image is underlaid, so the overlay slider cross-fades. |
+| `overlay_opacity` | `0.75` | Starting opacity of the depth over the RGB. |
+| `show_controls` | `true` | Hide the window/colormap controls for a fixed presentation. |
+
+## Formats
+
+| Format | Read | Notes |
+|---|---|---|
+| 16-bit PNG | ✅ | The RGB-D and KITTI convention. Set `depth_scale`. |
+| 16-bit TIFF | ✅ | Same. |
+| NumPy `.npy` / `.npz` | ✅ | Float metres. An `.npz` with several arrays reads the first and logs which. |
+| PFM | ✅ | Middlebury and optical-flow. Rows are stored **bottom-up** and are flipped back. |
+| EXR | ⚠️ | Needs `pip install imageio[openexr]`. The error names the command. |
+| Colour PNG/JPEG | ❌ | Refused with a reason: a colourised preview has already lost the values. |
+
+## Turning depth into geometry
+
+With camera intrinsics, a depth map becomes a point cloud:
+
+```
+GET /media/depth/<path>?pointcloud=1&fx=525&fy=525&cx=319.5&cy=239.5
+```
+
+The result is the same `PNT1` buffer the lidar viewer consumes, so a depth item
+can be annotated with the existing `cuboid_3d` tools. That is deliberately the
+whole integration — a depth display that could only be looked at would be a
+second, weaker image viewer.
+
+**Axes.** `frame=z_up` (the default) gives X forward, Y left, Z up, matching
+every lidar format Potato reads and what the viewer assumes. `frame=camera`
+gives the optical frame: X right, Y **down**, Z forward. The distinction is not
+cosmetic — the optical frame has Y pointing down, so getting it wrong puts the
+sky underground and every fitted box height comes out negative.
+
+Each unprojected point carries its **source pixel index**, so a `segment_3d`
+drawn on the cloud maps back to pixels in the original image.
+
+## The endpoints
+
+| Request | Returns |
+|---|---|
+| `/media/depth/<path>` | Colourised PNG |
+| `?info=1` | Range, percentiles, and the hole fraction |
+| `?raw=1` | `DPT1` float32 metres, for the cursor readout |
+| `?pointcloud=1&fx=..&fy=..&cx=..&cy=..` | `PNT1` point cloud |
+
+Renders are cached by every parameter that changes them, so dragging the window
+does not re-colourise the same view twice, and changing it does not serve back
+the previous one.
+
+## Why the readout is not optional
+
+A colormap is not injective at 8 bits: the picture cannot be inverted back to
+metres. So the raw floats travel separately and the cursor position indexes
+them directly.
+
+This is what makes a **scale error findable**. A depth map whose values are all
+30% short looks completely normal once the window rescales — same structure,
+same colours, same everything. The only way to catch it is to point at something
+whose distance you know and read the number. The bundled example
+(`examples/spatial/depth-eval/`) has exactly that failure injected into its
+second scene for this reason.
+
+## Troubleshooting
+
+**Everything is one colour.** The window is wider than the content. Press
+*Reset window*, or check `depth_scale` — a millimetre file read as metres puts
+the whole scene between 1000 and 9000.
+
+**Large magenta regions.** Those are non-measurements, not annotations. The
+info line reports the fraction; above 50% the display says so explicitly.
+
+**"needs Pillow" or "needs imageio".** PNG and TIFF depth need Pillow; EXR needs
+imageio with its OpenEXR plugin. The error message carries the install command.
+
+**The readout says "Loading depth values…" and stays there.** The raw buffer is
+fetched after the picture so the picture is not delayed; on a very large map
+this takes a moment. If it never resolves, the `?raw=1` request failed — check
+the browser console.
+
+## Related documentation
+
+- [Point cloud annotation](point_cloud.md) — the 3D viewer unprojected depth feeds
+- [Calibration](calibration.md) — where `fx`, `fy`, `cx`, `cy` come from
+- [Media ingest](../multimedia/media_ingest.md) — the same cache and transcode path
+
+
+---
+
+<!-- source: docs/annotation-types/embodied/episodes.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/embodied/episodes/
+
+# Embodied Episode Annotation
+
+Runnable example: `examples/embodied/lerobot-episode/`.
+
+A robot demonstration is several synchronized camera streams plus several
+numeric time series — joint positions, gripper state, force-torque, reward —
+all indexed by frame. The questions worth asking about one are all temporal:
+*when* did the grasp start, *when* did it fail, *how well* was it going at each
+moment.
+
+So the interface is a timeline: streams above it, the arm's own signals as lanes
+beneath it, and every annotation layer drawn onto the same time axis.
+
+```yaml
+annotation_schemes:
+  - annotation_type: episode_annotation
+    name: episode_review
+    description: "Mark the phases, judge the outcome, and draw the progress."
+    source_field: episode
+    layers: [phases, outcome, reward]
+    phases:
+      - {name: reach,     color: "#4ECDC4", key_value: "1"}
+      - {name: grasp,     color: "#FFD93D", key_value: "2"}
+      - {name: transport, color: "#6C8AE4", key_value: "3"}
+    outcomes: [success, partial, failure]
+    failure_causes: [missed grasp, object slipped, collision]
+    reward_range: [0.0, 1.0]
+    series_shown: [gripper, wrist_force]
+```
+
+## Four layers, because they answer different questions
+
+| Layer | Question | Stored as |
+|---|---|---|
+| `phases` | What was the robot doing, and when? | Temporal segments over your taxonomy |
+| `outcome` | Did it work? | One label per episode, plus a failure cause |
+| `reward` | How well was it going at each moment? | A scalar curve along the timeline |
+| `instruction` | What was it asked to do? | Text, optionally aligned to a segment |
+
+Each is independently enableable because they cost very different amounts of
+annotator time. Dense reward is minutes per episode; phase segmentation is
+seconds.
+
+**Three outcomes, not two.** "Partial" is the modal result in real robot data,
+and forcing it into success-or-failure destroys the signal that makes the
+dataset worth annotating.
+
+## Controls
+
+| Action | Result |
+|---|---|
+| `p` then drag on the phase lane | Draw a phase segment |
+| `1`–`5` (or your `key_value`s) | Pick a phase class |
+| `r` then drag on the reward lane | Draw the progress curve |
+| Click anywhere else on the timeline | Seek |
+| Drag a phase edge | Move that boundary only |
+| `Space` | Play / pause every stream together |
+| `←` / `→` | Step one **frame** |
+| `Delete` | Remove the selected phase |
+
+Phases are a **segmentation**: at any instant the robot was doing one thing. A
+new segment truncates whatever it overlaps, and one that covers another
+entirely removes it. Overlap would make "what was it doing at *t*?" ambiguous
+and would silently break the temporal-IoU agreement, which assumes a partition.
+
+Dragging one edge deliberately does not push its neighbour — the point of the
+gesture is aligning one boundary against the signal behind it, and shoving the
+next segment along would undo an alignment you had already made.
+
+## Time on screen, frames on disk
+
+Everything you see is in seconds, because that is what the video element
+exposes and what a person reads. Everything stored is in seconds too, so the
+agreement statistics need no conversion.
+
+The **export** converts to frame indices, because that is what a training
+pipeline joins on: `dataset[i]` is a frame. Doing it once, with the fps the
+episode manifest actually carried, removes a conversion the consumer would
+otherwise do against an fps they have to go and find.
+
+The transport shows both, live.
+
+## Series lanes
+
+| Option | Default | Effect |
+|---|---|---|
+| `series_shown` | — | Draw these channels, by name, in this order |
+| `max_lanes` | `8` | Cap when `series_shown` is not set |
+
+A fourteen-joint arm with velocities is twenty-eight channels. Drawing them all
+makes each lane twelve pixels tall and none of them legible, so the rest are
+dropped — and the status line **says how many**, because silently dropping half
+the signals is how an annotator concludes the data does not contain something
+it does.
+
+Series are downsampled for transport, min/max-preserving. A one-frame force
+spike is the most diagnostic event in a manipulation log, and plain striding
+drops it: a collision would become invisible in the very lane drawn to show it.
+
+## Agreement
+
+An episode annotation is three kinds of answer, so it gets three measures.
+Blending them would hide which one the annotators disagreed about, and they
+have completely different remedies.
+
+| Layer | Measure |
+|---|---|
+| phases | Temporal IoU, through the same matching the video segments use |
+| outcome | Krippendorff's α, nominal |
+| reward | ICC(2,1) and Pearson *r*, on a common grid |
+
+"They agree it failed but not when the grasp started" and "they agree on the
+phases but not on whether it worked" are different problems.
+
+**The reward curves are resampled** onto a common grid before comparison — two
+annotators drag at different rates and their samples never line up — and only
+over the range **both** of them drew. Comparing a region one labelled against
+one they did not is comparing a judgement to an absence. The report includes
+`reward_coverage` for that reason: a high correlation over 5% of a timeline is
+not evidence about the other 95%.
+
+Outside the drawn range the curve is **nothing**, not zero. "Did not say" and
+"said zero" are different, and a reward model trained on the second when the
+first was true learns that unlabelled regions are bad.
+
+## Export
+
+`episode_jsonl` writes one row per frame:
+
+```json
+{"episode_id": "episode_0000", "frame_index": 34, "timestamp": 1.7,
+ "phase": "grasp", "progress_reward": 0.42,
+ "outcome": "success", "failure_cause": null}
+```
+
+A **sidecar**, not a rewrite. The dataset you annotated is usually read-only —
+a public HuggingFace repo, a shared mount, a tree nobody wants a second copy
+of. `potato.episodes.export.append_to_lerobot` will add the columns to the
+source parquet when the dataset really is yours, and is deliberately not the
+default.
+
+Rows are emitted for **every** frame, including unannotated ones, with nulls.
+A sidecar with holes forces every consumer to decide what a missing frame
+means, and they will not all decide the same thing.
+
+## Troubleshooting
+
+**"No episode for this item"** — the item has no field by the name
+`source_field` gives. The path is looked up in the item's own data, not on the
+page, because an episode path is a data field and `text_key` usually points at
+something human-readable.
+
+**"needs pyarrow" / "needs h5py"** — the format needs an optional dependency and
+the message names it. See [robot formats](robot_formats.md).
+
+**Lanes but no video** — normal for a state-only dataset, and for one whose
+frames were never downloaded. Each missing stream says so under its own
+placeholder rather than collapsing to nothing.
+
+**The lanes disagree about where a frame is** — the status line reports a
+ragged series (`series 'x' has 380 samples but the episode has 400 frames`).
+That is a defect in the source log, not in the reader, and it is reported
+rather than raised because the episode is still mostly usable.
+
+## Related documentation
+
+- [Robot dataset formats](robot_formats.md) — LeRobot, HDF5, RLDS, and Potato's own manifest
+- [Video annotation](../multimedia/video_annotation.md) — for single-stream video
+- [Geometry agreement](../../advanced/geometry_agreement.md) — the matching the phase measure reuses
+
+
+---
+
+<!-- source: docs/annotation-types/embodied/robot_formats.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/embodied/robot_formats/
+
+# Robot Dataset Formats
+
+Every robot-learning dataset stores the same thing — synchronized video plus
+per-frame signals — and no two agree on how. Potato reads four layouts into one
+shape, [`Episode`](episodes.md), and everything downstream speaks only that.
+
+| Format | Needs | Detected by |
+|---|---|---|
+| Potato episode manifest | nothing | `episode.json` with `streams` or `series` |
+| LeRobot v2 | `pyarrow` | `meta/info.json` |
+| HDF5 (RoboMimic / ALOHA) | `h5py` | `.h5` / `.hdf5` |
+| RLDS / TFDS (Open X-Embodiment) | `tensorflow_datasets` | by dataset **name**, not path |
+
+Detection is by content and layout, not extension: `.h5` is claimed by half of
+scientific computing, and a LeRobot dataset is a directory with no
+distinguishing suffix at all.
+
+## What is deliberately not normalized
+
+**Units and semantics.** The reader records what the file said — a field name,
+a stated unit — and does not convert. A joint angle in radians and one in
+degrees look identical to a normalizer and differ by 57× to an annotator, so
+guessing is worse than carrying the label through and letting the config say.
+
+## Potato's own manifest
+
+The one that needs no dependency. Use it for your own logs, or convert into it.
+
+```json
+{
+  "episode_id": "pick_place_0007",
+  "fps": 20,
+  "num_frames": 240,
+  "instruction": "pick up the red block and put it in the bowl",
+  "streams": [{"name": "wrist", "url": "video/wrist.webm", "kind": "wrist"}],
+  "series": [{"name": "gripper", "unit": "m", "values": [0.06, 0.058, ...]}]
+}
+```
+
+`num_frames` may be omitted and is then taken from the longest series — the
+frame count is a property of the data, and repeating it is one more thing to
+get out of step.
+
+Stream URLs are resolved relative to the manifest and served through `/media`.
+Absolute URLs are left alone.
+
+## LeRobot v2
+
+The de-facto standard, and the format most new datasets ship in.
+
+```
+meta/info.json                          fps, features, path templates
+meta/tasks.jsonl                        task_index -> language instruction
+data/chunk-000/episode_000000.parquet   one row per frame
+videos/chunk-000/observation.images.wrist/episode_000000.mp4
+```
+
+Potato reads the **path templates** out of `info.json` rather than assuming the
+layout. Chunk size is configurable, and a dataset with more than `chunks_size`
+episodes really does put the next one in `chunk-001`; a hardcoded path reads the
+right file for episode 0 and nothing after it.
+
+Vector columns are flattened to one series per component, named from
+`features[col]["names"]` where the dataset provides them — `joint_0` tells an
+annotator nothing, `shoulder_pan` tells them where to look. Index columns
+(`frame_index`, `episode_index`, `timestamp`, `task_index`) get no lane: they
+are straight lines by construction and would waste the only vertical space
+there is.
+
+Pointing an item at one episode:
+
+```yaml
+# in your data file
+{"id": "ep_0", "episode": "lerobot_ds", "episode_index": 0}
+```
+
+```yaml
+# in the schema
+source_field: episode
+episode_field: episode_index
+```
+
+## HDF5
+
+Two conventions dominate and they disagree about almost everything, so the
+reader detects which it is rather than requiring you to say.
+
+**ALOHA / ACT** — one file per episode:
+
+```
+/observations/qpos          (T, 14)
+/observations/images/<cam>  (T, H, W, 3)
+/action                     (T, 14)
+```
+
+**RoboMimic** — one file for a whole dataset:
+
+```
+/data/demo_0/obs/<key>      (T, ...)
+/data/demo_0/actions        (T, A)
+/data/demo_0/rewards        (T,)
+```
+
+Demo keys sort **numerically**, so `demo_10` does not come between `demo_1` and
+`demo_2`, and they are treated as keys rather than indices — a filtered dataset
+has holes, and indexing would read the wrong demonstration.
+
+**Frames stay in the file.** ALOHA stores raw RGB arrays; extracting 500 frames
+into an MP4 is an ffmpeg job with its own failure modes, and doing it inside a
+reader would make opening an episode arbitrarily slow with no progress shown.
+The episode reports which image datasets exist and the timeline draws the
+series lanes.
+
+## RLDS / TFDS
+
+The Open X-Embodiment collection, and the heaviest to read.
+
+TensorFlow is hundreds of megabytes and pulls CUDA on many platforms, which
+would triple Potato's install for a format most projects never touch. So it is
+imported inside the reader, never at module scope, and its absence produces a
+message naming the install command **and the offline alternative**:
+
+> Reading RLDS/TFDS datasets needs tensorflow_datasets, which Potato does not
+> install by default… Or convert: many Open X-Embodiment datasets are also
+> published in LeRobot v2 form on the HuggingFace hub, which Potato reads with
+> pyarrow alone.
+
+RLDS says an observation is a dict; it does not say what is in it. So the
+reader takes whatever numeric per-step fields it finds and names them by their
+path, rather than looking for a fixed set and returning an empty episode when
+the dataset does not use those names.
+
+**Frame rate is a parameter, not data.** RLDS records steps, not time, and most
+Open X-Embodiment datasets do not state their control frequency anywhere
+machine-readable. The default of 10 Hz is documented as a guess, and the
+episode's metadata carries `fps_is_assumed: true`. A timeline built on a wrong
+frame rate is still correctly *ordered*, which is what phase annotation needs —
+but the exported frame indices would be wrong, so set it if you know it.
+
+## Adding a format
+
+A `detect` and a `read` in a new module, and one line in
+`potato/episodes/registry.py`. The same shape as the importer, exporter, schema
+and display registries, so someone who has added one of those already knows how.
+
+## Related documentation
+
+- [Episode annotation](episodes.md)
+- [Format matrix](../../data-export/format_matrix.md)
 
 
 ---
@@ -41023,6 +41605,7 @@ format supports is what survives.
 | `cityscapes` | ✅ as 4-gon | ✅ | ⚠️ traced | ❌ | Painter's order preserved — it **is** the occlusion |
 | `davis` | ✅ rasterized | ✅ rasterized | ✅ | ❌ | Indexed PNG; pixel values are object ids |
 | `mask_png` | — | ✅ | ✅ | — | Rasterized indexed PNGs |
+| `episode_jsonl` | — | — | — | — | Per-frame phase, progress reward and outcome for embodied episodes, keyed by `(episode_id, frame_index)` ¹³ |
 
 ⁶ CVAT 1.1's `<mask>` uses its own RLE dialect with an offset origin. Emitting
 an untested approximation of someone else's binary format would be worse than
@@ -41032,6 +41615,11 @@ saying it is unsupported, so masks are reported and you are pointed at COCO.
 visibility flag, so unlabelled joints are dropped rather than written at (0, 0)
 where they would read back as real points in the corner; LabelMe loses joint
 identity entirely. Both report it. Use COCO to keep keypoints intact.
+
+¹³ Not a geometry format: an episode annotation is temporal, so the spatial
+columns do not apply. It is a **sidecar** rather than a rewrite of the source
+dataset, because the dataset being annotated is usually read-only — see
+`docs/annotation-types/embodied/episodes.md`.
 
 ¹² Darwin stores masks as `raster_layer`, a dense encoding tied to V7's own
 layer model. Rather than write a plausible guess into a file you would upload to

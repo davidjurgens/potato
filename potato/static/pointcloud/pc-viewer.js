@@ -35,6 +35,10 @@
         || (typeof require !== 'undefined' ? require('./pc-wire.js') : null);
     const calib = (root && root.PointCloudCalibration)
         || (typeof require !== 'undefined' ? require('./pc-calibration.js') : null);
+    const octree = (root && root.PointCloudOctree)
+        || (typeof require !== 'undefined' ? require('./pc-octree.js') : null);
+    const mpr = (root && root.PointCloudMPR)
+        || (typeof require !== 'undefined' ? require('./pc-mpr.js') : null);
 
     /** Edges of a cuboid, as index pairs into `cuboid_corners` order. */
     const BOX_EDGES = [
@@ -42,6 +46,31 @@
         [4, 5], [5, 6], [6, 7], [7, 4],   // high-z face
         [0, 4], [1, 5], [2, 6], [3, 7],   // verticals
     ];
+
+    /**
+     * Arrow keys, as a panel axis and a screen direction.
+     *
+     * Screen, not world: `flipV` decides which way the world runs on the
+     * vertical axis and the caller applies it. Keeping that conversion in one
+     * place is what stops the up arrow moving the box down.
+     */
+    const SLAB_ARROWS = {
+        ArrowLeft:  { axis: 'u', screen: -1 },
+        ArrowRight: { axis: 'u', screen: 1 },
+        ArrowUp:    { axis: 'v', screen: -1 },
+        ArrowDown:  { axis: 'v', screen: 1 },
+    };
+
+    /**
+     * Keyboard step sizes, in metres.
+     *
+     * Deliberately different: repositioning a whole box is a coarse action and
+     * 5 cm per press would take forty presses to cross a car, while adjusting
+     * a face against the returns behind it is the fine work the slab views
+     * exist for. A single step for both would be wrong for one of them.
+     */
+    const SLAB_MOVE_STEP = 0.1;
+    const SLAB_RESIZE_STEP = 0.05;
 
     class PointCloudAnnotationManager {
         constructor(canvasId, inputId, config) {
@@ -54,8 +83,26 @@
             this.scene = null;
             this.camera = null;
             this.renderer = null;
-            this.cloud = null;          // THREE.Points
-            this.parsed = null;         // pc-wire parse result
+            this.cloud = null;          // THREE.Points (non-LOD path)
+            this.parsed = null;         // pc-wire parse result (root, under LOD)
+
+            // Level-of-detail state. `lodIndex` is the octree manifest;
+            // `lodNodes` maps a node key to its THREE.Points; `_lodSeen` is the
+            // tick at which each was last selected, which drives eviction.
+            this.lodIndex = null;
+            this.lodNodes = new Map();
+            this.lodParsed = new Map();
+            this._lodSeen = {};
+            this._lodTick = 0;
+            this._lodPending = new Set();
+            this._lodTimer = null;
+            this._colorRange = null;
+
+            // Orthographic slab panels. `mprPanels` maps a plane name to its
+            // figure/canvas; `_slabDrag` is the in-flight edge or move drag.
+            this.mprPanels = null;
+            this._slabDrag = null;
+            this._mprObserver = null;
 
             this.annotations = [];      // client-contract objects
             this.meshes = [];           // one THREE.Object3D per annotation
@@ -101,11 +148,16 @@
             this._bindToolbar();
             this._bindKeys();
             this._restoreFromInput();
+            this._buildMprPanels();
             this._loadCloud();
             this._loadCalibration();
         }
 
         destroy() {
+            if (this._mprObserver) {
+                this._mprObserver.disconnect();
+                this._mprObserver = null;
+            }
             if (this._resizeObserver) {
                 this._resizeObserver.disconnect();
                 this._resizeObserver = null;
@@ -160,6 +212,10 @@
             this.camera.updateProjectionMatrix();
             this.renderer.setSize(w, h, false);
             this._render();
+            // A taller viewport means every node projects to more pixels, so
+            // the detail threshold moves. Resizing without this leaves the
+            // cloud at the old window's level of detail.
+            this._scheduleLodUpdate();
         }
 
         _render() {
@@ -219,6 +275,38 @@
                 : '';
         }
 
+        /**
+         * Every THREE.Points currently holding cloud geometry.
+         *
+         * One object on the single-buffer path, one per loaded node under LOD.
+         * Public because "is the cloud on screen?" is a question the test
+         * harness and any future overlay both need to ask, and reaching into
+         * `this.cloud` gives the wrong answer as soon as LOD is on — which is
+         * exactly how enabling LOD broke seventeen tests that were checking a
+         * field rather than a fact.
+         */
+        cloudObjects() {
+            if (this.lodIndex) return Array.from(this.lodNodes.values());
+            return this.cloud ? [this.cloud] : [];
+        }
+
+        /** True once at least one buffer of points is in the scene. */
+        hasCloud() {
+            return this.cloudObjects().length > 0;
+        }
+
+        /** Points currently in the scene, across every loaded buffer. */
+        loadedPointCount() {
+            return this._loadedPositions()
+                .reduce((n, p) => n + Math.floor(p.length / 3), 0);
+        }
+
+        /** True when this viewer loads the cloud as an octree. */
+        _lodEnabled() {
+            return this.config.lod !== false
+                && typeof root.PointCloudOctree !== 'undefined';
+        }
+
         async _loadCloud() {
             const url = this._cloudUrl();
             if (!url) {
@@ -228,6 +316,8 @@
                     'error');
                 return;
             }
+
+            if (this._lodEnabled()) return this._loadOctree(url);
 
             this._status('Loading point cloud…');
             let response;
@@ -262,6 +352,75 @@
             this._status(wire.describeCloud(parsed.header));
         }
 
+        /**
+         * A THREE.Points for one parsed buffer.
+         *
+         * Shared by the single-buffer path and by every octree node, so that
+         * point size, colour mode and the colour range cannot drift between
+         * them — a node coloured on a different scale from its neighbours shows
+         * as a hard seam along an octree boundary.
+         */
+        _pointsObject(parsed) {
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position',
+                new THREE.BufferAttribute(parsed.positions, 3));
+
+            const mode = this._colorMode(parsed);
+            let colors = wire.colorize(mode, parsed, null, this._colorRange);
+            if (!colors) colors = wire.colorize('height', parsed, null,
+                                                this._colorRange);
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            return new THREE.Points(geometry, new THREE.PointsMaterial({
+                size: this.config.pointSize || 1.5,
+                sizeAttenuation: false,
+                vertexColors: true,
+            }));
+        }
+
+        /**
+         * The colour mode this cloud can actually satisfy.
+         *
+         * Warns once, on the first buffer, rather than per octree node: a
+         * hundred identical "no intensity data" messages would bury whatever
+         * the status line said next.
+         */
+        _colorMode(parsed) {
+            const requested = this.config.colorMode || 'height';
+            if (requested === 'uniform') return requested;
+            if (requested === 'rgb' && !parsed.colors) {
+                this._warnColorFallback(requested);
+                return 'height';
+            }
+            if (requested === 'intensity' && !parsed.intensity) {
+                this._warnColorFallback(requested);
+                return 'height';
+            }
+            return requested;
+        }
+
+        _warnColorFallback(mode) {
+            if (this._colorWarned) return;
+            this._colorWarned = true;
+            // Falling back silently would leave the annotator wondering why
+            // "colour by intensity" looks like "colour by height".
+            this._status(
+                `This cloud has no ${mode} data; colouring by height instead.`,
+                'warn');
+        }
+
+        /** Pin the ramp's [lo, hi] from a representative buffer. */
+        _setColorRange(parsed) {
+            const mode = this._colorMode(parsed);
+            if (mode === 'rgb' || mode === 'uniform') {
+                this._colorRange = null;
+                return;
+            }
+            const values = wire.scalarFor(mode, parsed);
+            this._colorRange = values
+                ? wire.percentileRange(values, parsed.count) : null;
+        }
+
         _buildPoints(parsed) {
             if (this.cloud) {
                 this.scene.remove(this.cloud);
@@ -269,27 +428,8 @@
                 this.cloud.material.dispose();
             }
 
-            const geometry = new THREE.BufferGeometry();
-            geometry.setAttribute('position',
-                new THREE.BufferAttribute(parsed.positions, 3));
-
-            let mode = this.config.colorMode || 'height';
-            let colors = wire.colorize(mode, parsed);
-            if (!colors) {
-                // Falling back silently would leave the annotator wondering why
-                // "colour by intensity" looks like "colour by height".
-                this._status(
-                    `This cloud has no ${mode} data; colouring by height instead.`,
-                    'warn');
-                colors = wire.colorize('height', parsed);
-            }
-            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-            this.cloud = new THREE.Points(geometry, new THREE.PointsMaterial({
-                size: this.config.pointSize || 1.5,
-                sizeAttenuation: false,
-                vertexColors: true,
-            }));
+            this._setColorRange(parsed);
+            this.cloud = this._pointsObject(parsed);
             this.scene.add(this.cloud);
 
             this.groundZ = groundLevel(parsed.positions);
@@ -308,6 +448,229 @@
             this._orbit.radius = Math.max(
                 2.0, frame.radius / Math.tan(halfFov) * 0.7);
             this._applyCamera();
+        }
+
+        // -------------------------------------------------------------
+        // Level of detail
+        //
+        // Uniform decimation caps the cloud at 500k points, which for a
+        // 20-million-point scan is 2.5% density everywhere: the scene is
+        // visible and nothing in it is annotatable. LOD spends that budget
+        // where the camera is pointed instead. The selection arithmetic lives
+        // in pc-octree.js, free of three.js so it can be unit-tested.
+        // -------------------------------------------------------------
+
+        async _loadOctree(baseUrl) {
+            this._disposeLod();
+            this._status('Loading point cloud…');
+
+            const manifestUrl = withParam(baseUrl, 'lod', '1');
+            let manifest;
+            try {
+                const response = await fetch(manifestUrl,
+                                             { credentials: 'same-origin' });
+                if (!response.ok) {
+                    let detail = `HTTP ${response.status}`;
+                    try {
+                        detail = (await response.json()).error || detail;
+                    } catch (_e) { /* not JSON; keep the status */ }
+                    this._status(detail, 'error');
+                    return;
+                }
+                manifest = await response.json();
+            } catch (err) {
+                this._status(`Could not fetch the point cloud: ${err.message}`,
+                             'error');
+                return;
+            }
+
+            this.lodIndex = new octree.OctreeIndex(manifest);
+            this._lodBaseUrl = baseUrl;
+            if (!this.lodIndex.root) {
+                this._status('This point cloud is empty.', 'warn');
+                return;
+            }
+
+            // Frame from the manifest's bounds, before a single point has
+            // arrived. Framing after the root loads would show the scene from
+            // the default camera for one paint, which reads as a jump.
+            this._frameOn(wire.framing({ bounds: this.lodIndex.bounds }, null));
+
+            await this._fetchNode('r');
+            const rootParsed = this.lodParsed.get('r');
+            if (rootParsed) {
+                // The root of an additive octree is a uniform sample of the
+                // whole scene, so it is the right buffer both for the shared
+                // colour range and for the ground estimate — a deep node would
+                // give a ground level for one corner of the scene.
+                this.parsed = rootParsed;
+                this.groundZ = groundLevel(rootParsed.positions);
+            }
+            this._updateLod();
+        }
+
+        _frameOn(frame) {
+            this._orbit.target.set(frame.center[0], frame.center[1],
+                                   frame.center[2]);
+            const halfFov = (this.camera.fov * Math.PI / 180) / 2;
+            this._orbit.radius = Math.max(
+                2.0, frame.radius / Math.tan(halfFov) * 0.7);
+            this._applyCamera();
+        }
+
+        async _fetchNode(key) {
+            if (this.lodNodes.has(key) || this._lodPending.has(key)) return;
+            this._lodPending.add(key);
+            try {
+                const response = await fetch(
+                    withParam(withParam(this._lodBaseUrl, 'lod', '1'),
+                              'node', key),
+                    { credentials: 'same-origin' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const parsed = wire.parseWire(await response.arrayBuffer());
+                if (key === 'r') this._setColorRange(parsed);
+                this.lodParsed.set(key, parsed);
+                const points = this._pointsObject(parsed);
+                this.lodNodes.set(key, points);
+                this.scene.add(points);
+                this._render();
+            } catch (err) {
+                // One node failing is a gap in the scene, not a dead viewer.
+                // Saying so is the difference between "the network dropped a
+                // request" and "this area really has no returns" — and an
+                // annotator cannot tell those apart by looking.
+                this._status(
+                    `Part of the cloud could not be loaded (${err.message}); `
+                    + `the view may be missing detail in places.`, 'warn');
+            } finally {
+                this._lodPending.delete(key);
+            }
+        }
+
+        /**
+         * Six frustum planes, normals pointing inward.
+         *
+         * three.js `Plane` is `normal · x + constant = 0` with the inside
+         * positive, which is exactly the convention `intersectsFrustum` wants —
+         * so this is a repack, not a conversion. Flipping it would cull the
+         * visible half of the scene and look like sparse data.
+         */
+        _frustumPlanes() {
+            if (typeof THREE === 'undefined' || !this.camera) return null;
+            this.camera.updateMatrixWorld();
+            const m = new THREE.Matrix4().multiplyMatrices(
+                this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+            const frustum = new THREE.Frustum().setFromProjectionMatrix(m);
+            return frustum.planes.map(
+                (p) => [p.normal.x, p.normal.y, p.normal.z, p.constant]);
+        }
+
+        /** Recompute the visible node set. Debounced by `_scheduleLodUpdate`. */
+        _updateLod() {
+            if (!this.lodIndex || !this.camera || !octree) return;
+            this._lodTick += 1;
+
+            const selection = this.lodIndex.select({
+                position: [this.camera.position.x, this.camera.position.y,
+                           this.camera.position.z],
+                planes: this._frustumPlanes(),
+                fovRadians: this.camera.fov * Math.PI / 180,
+                viewportHeight: this.canvas.clientHeight || 600,
+                pointBudget: this.config.pointBudget,
+                minScreenSize: this.config.minScreenSize,
+            });
+
+            const want = new Set(selection.keys);
+            selection.keys.forEach((k) => { this._lodSeen[k] = this._lodTick; });
+
+            let loadedPoints = 0;
+            this.lodNodes.forEach((obj, key) => {
+                obj.visible = want.has(key);
+                if (obj.visible) {
+                    const parsed = this.lodParsed.get(key);
+                    loadedPoints += parsed ? parsed.count : 0;
+                }
+            });
+
+            selection.keys.forEach((k) => {
+                if (!this.lodNodes.has(k)) this._fetchNode(k);
+            });
+
+            octree.evictionOrder(Array.from(this.lodNodes.keys()),
+                                 this._lodSeen, selection.keys,
+                                 this.config.maxLoadedNodes)
+                .forEach((k) => this._disposeNode(k));
+
+            // Reports what is *loaded*, not what was selected: a node that has
+            // been requested but not arrived is not on screen, and counting it
+            // would tell the annotator they are looking at detail they are not.
+            const summary = octree.describeLod(this.lodIndex, {
+                points: loadedPoints, budgetHit: selection.budgetHit });
+            this._status(summary);
+            // Announced once, on the first pass. The count changes constantly
+            // as the camera moves; what a screen-reader user needs is to know
+            // the cloud arrived and roughly how much of it is on screen, not a
+            // running commentary on the loader.
+            if (!this._lodAnnounced && loadedPoints > 0) {
+                this._lodAnnounced = true;
+                this._announce(summary);
+            }
+            this._render();
+        }
+
+        _scheduleLodUpdate() {
+            if (!this.lodIndex) return;
+            // Coalesced: an orbit drag fires dozens of camera updates a second
+            // and each one would otherwise re-sort the whole node list and
+            // possibly start fetches that the next frame invalidates.
+            if (this._lodTimer) clearTimeout(this._lodTimer);
+            this._lodTimer = setTimeout(() => {
+                this._lodTimer = null;
+                this._updateLod();
+            }, 120);
+        }
+
+        _disposeNode(key) {
+            const obj = this.lodNodes.get(key);
+            if (obj) {
+                this.scene.remove(obj);
+                obj.geometry.dispose();
+                obj.material.dispose();
+            }
+            this.lodNodes.delete(key);
+            this.lodParsed.delete(key);
+            delete this._lodSeen[key];
+        }
+
+        _disposeLod() {
+            Array.from(this.lodNodes.keys()).forEach((k) => this._disposeNode(k));
+            this.lodIndex = null;
+            this._lodPending.clear();
+            this._colorRange = null;
+            this._colorWarned = false;
+            if (this._lodTimer) {
+                clearTimeout(this._lodTimer);
+                this._lodTimer = null;
+            }
+        }
+
+        /**
+         * Every loaded position buffer, coarsest first.
+         *
+         * An array of arrays rather than one concatenation: under LOD the
+         * loaded set can be two million points, and copying it into a single
+         * buffer every time a box is drawn would cost 24 MB per drag.
+         */
+        _loadedPositions() {
+            if (this.lodIndex) {
+                const out = [];
+                this.lodNodes.forEach((obj, key) => {
+                    const parsed = this.lodParsed.get(key);
+                    if (parsed && obj.visible) out.push(parsed.positions);
+                });
+                return out;
+            }
+            return this.parsed ? [this.parsed.positions] : [];
         }
 
         // -------------------------------------------------------------
@@ -422,8 +785,12 @@
                 // is the bug the image canvas was checked for in Wave 0.8.
                 return;
             }
-            if (this.config.fitBoxHeight !== false && this.parsed) {
-                coords = fitHeightToPoints(coords, this.parsed.positions,
+            if (this.config.fitBoxHeight !== false) {
+                // Every loaded buffer, not just the root: under LOD the dense
+                // points near the camera are exactly the ones the annotator
+                // drew around, and fitting to the coarse root sample would
+                // give a shorter box the closer you zoomed in.
+                coords = fitHeightToPoints(coords, this._loadedPositions(),
                                            this.groundZ);
             }
             this.addAnnotation({ type: 'cuboid_3d', label: this.currentLabel,
@@ -475,6 +842,30 @@
             }
         }
 
+        /**
+         * Move the selection `step` places, wrapping.
+         *
+         * Wraps rather than stopping at the ends: there is no visible list to
+         * tell you where in it you are, so a key that silently stops working
+         * reads as the control being broken.
+         */
+        cycleSelection(step) {
+            const n = this.annotations.length;
+            if (!n) return;
+            const from = this.selectedIndex < 0
+                ? (step > 0 ? -1 : 0) : this.selectedIndex;
+            this.selectedIndex = ((from + step) % n + n) % n;
+            this._highlightSelection();
+            this._drawOverlays();
+            const obj = this.annotations[this.selectedIndex];
+            const where = obj.type === 'cuboid_3d' && obj.coordinates
+                ? ` ${describeBox(obj.coordinates)}` : '';
+            const message = `${this.selectedIndex + 1} of ${n}: `
+                + `${obj.label}.${where}`;
+            this._status(message);
+            this._announce(message);
+        }
+
         _highlightSelection() {
             this.meshes.forEach((mesh, i) => {
                 if (!mesh || !mesh.material) return;
@@ -485,6 +876,9 @@
                 mesh.material.transparent = mesh.material.opacity < 1.0;
             });
             this._render();
+            // The slabs centre and size themselves on the selection, so a
+            // selection change is a full redraw, not a highlight.
+            this._drawMpr();
         }
 
         /** Rotate the selected cuboid about its own centre. */
@@ -611,6 +1005,366 @@
             // _updateAnnotationData, which fires on every mutation including
             // ones that happen before the calibration fetch has returned.
             (this.cameras || []).forEach((_cam, i) => this._drawOverlay(i));
+            this._drawMpr();
+        }
+
+        // -------------------------------------------------------------
+        // Orthographic slab views
+        //
+        // A perspective view compresses the extent along the view axis, so a
+        // box placed by eye comes out short in depth and the error is
+        // invisible from the camera that drew it. In a slab, a metre is a
+        // metre in both screen directions and the returns behind a face are
+        // not hidden by the ones in front. The arithmetic is in pc-mpr.js,
+        // free of three.js so it can be unit-tested.
+        // -------------------------------------------------------------
+
+        _buildMprPanels() {
+            const holder = this.container
+                && this.container.querySelector('.pc-mpr');
+            if (!holder || !mpr || this.config.mpr === false) return;
+
+            holder.innerHTML = '';
+            this.mprPanels = {};
+
+            const help = this.container.querySelector('.pc-mpr-help');
+            const helpId = help ? help.id : null;
+
+            mpr.PLANE_ORDER.forEach((plane) => {
+                const panel = document.createElement('figure');
+                panel.className = 'pc-slab';
+                panel.dataset.plane = plane;
+
+                const canvas = document.createElement('canvas');
+                canvas.className = 'pc-slab-canvas';
+                // NOT aria-hidden. These panels take pointer input and, below,
+                // keyboard input; hiding an interactive control from the
+                // accessibility tree removes the only way a screen-reader user
+                // could know it exists (WCAG 4.1.2). The camera overlay next
+                // door IS decorative and keeps its aria-hidden — the
+                // difference is whether the element does anything when you
+                // press it.
+                canvas.setAttribute('role', 'application');
+                canvas.setAttribute('aria-label',
+                                    `${mpr.PLANES[plane].label} slab view`);
+                // Looked up rather than string-built from the schema name: the
+                // element's id is HTML-escaped server-side and the config's
+                // copy of the name is not, so building it here would drift for
+                // any name the escaper touches.
+                if (helpId) canvas.setAttribute('aria-describedby', helpId);
+                // Focusable, because the pointer path below is otherwise the
+                // only way to adjust a face — and the panels exist precisely
+                // because placing a box by eye in perspective is imprecise, so
+                // "use the 3D view instead" is not an equivalent alternative.
+                canvas.tabIndex = 0;
+
+                const caption = document.createElement('figcaption');
+                caption.textContent = mpr.PLANES[plane].label;
+
+                panel.appendChild(canvas);
+                panel.appendChild(caption);
+                holder.appendChild(panel);
+
+                this.mprPanels[plane] = { panel, canvas, caption };
+                this._bindSlab(plane, canvas);
+            });
+
+            if (typeof ResizeObserver !== 'undefined' && !this._mprObserver) {
+                this._mprObserver = new ResizeObserver(() => this._drawMpr());
+                this._mprObserver.observe(holder);
+            }
+            this._drawMpr();
+        }
+
+        /** The view for one panel, or null when there is nothing to show. */
+        _slabView(plane) {
+            const entry = this.mprPanels && this.mprPanels[plane];
+            if (!entry || !mpr) return null;
+            const rect = entry.canvas.getBoundingClientRect();
+            const width = Math.max(1, Math.round(rect.width));
+            const height = Math.max(1, Math.round(rect.height));
+
+            const selection = this.annotations[this.selectedIndex] || null;
+            const target = this._orbit && this._orbit.target;
+            const center = mpr.focusPoint(
+                selection, target ? [target.x, target.y, target.z] : [0, 0, 0]);
+            const extent = mpr.extentFor(selection, this._sceneExtent());
+            return mpr.makeView(plane, center, extent, width, height);
+        }
+
+        _sceneExtent() {
+            const bounds = this.lodIndex
+                ? this.lodIndex.bounds
+                : (this.parsed && this.parsed.header
+                   && this.parsed.header.bounds);
+            if (!bounds) return 20;
+            const [lo, hi] = bounds;
+            return Math.max(
+                2, Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2);
+        }
+
+        _drawMpr() {
+            if (!this.mprPanels || !mpr) return;
+            mpr.PLANE_ORDER.forEach((plane) => this._drawSlab(plane));
+        }
+
+        _drawSlab(plane) {
+            const entry = this.mprPanels[plane];
+            if (!entry) return;
+            const view = this._slabView(plane);
+            if (!view) return;
+
+            const canvas = entry.canvas;
+            const dpr = window.devicePixelRatio || 1;
+            // Sized in device pixels and scaled back: a canvas sized in CSS
+            // pixels renders soft on a retina display, and a slab view exists
+            // to be read precisely.
+            canvas.width = Math.round(view.width * dpr);
+            canvas.height = Math.round(view.height * dpr);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            ctx.fillStyle = '#11151c';
+            ctx.fillRect(0, 0, view.width, view.height);
+
+            const thickness = this.config.slabThickness || mpr.DEFAULT_SLAB;
+            ctx.fillStyle = 'rgba(200, 214, 230, 0.85)';
+            this._loadedPositions().forEach((positions) => {
+                // Strided for dense clouds: a slab of a two-million point
+                // cloud is still hundreds of thousands of points, and drawing
+                // every one costs more than the extra density is worth in a
+                // 240-pixel panel.
+                const count = Math.floor(positions.length / 3);
+                const stride = Math.max(1, Math.floor(count / 40000));
+                mpr.slabIndices(positions, view, thickness, stride)
+                    .forEach((i) => {
+                        const p = mpr.worldToPanel(
+                            view, [positions[i * 3], positions[i * 3 + 1],
+                                   positions[i * 3 + 2]]);
+                        ctx.fillRect(p.x, p.y, 1.5, 1.5);
+                    });
+            });
+
+            this._drawSlabCrosshair(ctx, view);
+            this.annotations.forEach((obj, index) => {
+                if (this._hiddenLabels && this._hiddenLabels.has(obj.label)) {
+                    return;
+                }
+                this._drawSlabAnnotation(ctx, view, obj,
+                                         index === this.selectedIndex);
+            });
+
+            entry.caption.textContent =
+                `${mpr.PLANES[plane].label} — ${thickness.toFixed(1)} m slab`;
+        }
+
+        _drawSlabCrosshair(ctx, view) {
+            ctx.strokeStyle = 'rgba(120, 140, 170, 0.35)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(view.width / 2, 0);
+            ctx.lineTo(view.width / 2, view.height);
+            ctx.moveTo(0, view.height / 2);
+            ctx.lineTo(view.width, view.height / 2);
+            ctx.stroke();
+        }
+
+        _drawSlabAnnotation(ctx, view, obj, selected) {
+            const color = obj.color || '#ff6b6b';
+            if (obj.type === 'cuboid_3d' && obj.coordinates) {
+                const env = mpr.boxEnvelope(view, obj.coordinates);
+                const a = mpr.worldToPanel(
+                    view, _slabPoint(view, env.uMin, env.vMin));
+                const b = mpr.worldToPanel(
+                    view, _slabPoint(view, env.uMax, env.vMax));
+                ctx.strokeStyle = color;
+                ctx.lineWidth = selected ? 2 : 1;
+                ctx.setLineDash(selected ? [] : [4, 3]);
+                ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y),
+                               Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+                ctx.setLineDash([]);
+                return;
+            }
+            if (obj.type === 'point_3d' && Array.isArray(obj.coordinates)) {
+                const p = mpr.worldToPanel(view, obj.coordinates);
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, selected ? 5 : 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        _bindSlab(plane, canvas) {
+            canvas.addEventListener('mousedown', (e) => {
+                const view = this._slabView(plane);
+                const selection = this.annotations[this.selectedIndex];
+                if (!view || !selection || selection.type !== 'cuboid_3d') return;
+
+                const point = _canvasPoint(canvas, e);
+                const handle = mpr.handleAt(
+                    view, selection.coordinates, point.x, point.y);
+                if (!handle) return;
+
+                e.preventDefault();
+                const world = mpr.panelToWorld(view, point.x, point.y);
+                const center = selection.coordinates.center;
+                this._slabDrag = {
+                    plane, handle,
+                    offset: [world[0] - center[0], world[1] - center[1],
+                             world[2] - center[2]],
+                };
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                const view = this._slabView(plane);
+                if (!view) return;
+                const point = _canvasPoint(canvas, e);
+
+                if (!this._slabDrag || this._slabDrag.plane !== plane) {
+                    // The cursor is the only affordance a slab panel has: an
+                    // edge that can be dragged and one that cannot look
+                    // identical until you try.
+                    const selection = this.annotations[this.selectedIndex];
+                    const handle = (selection && selection.type === 'cuboid_3d')
+                        ? mpr.handleAt(view, selection.coordinates,
+                                       point.x, point.y)
+                        : null;
+                    canvas.style.cursor = _cursorFor(handle);
+                    return;
+                }
+
+                const selection = this.annotations[this.selectedIndex];
+                if (!selection) return;
+                const world = mpr.panelToWorld(view, point.x, point.y);
+                selection.coordinates = mpr.applyDrag(
+                    view, selection.coordinates, this._slabDrag.handle, world,
+                    this._slabDrag.offset);
+                this._rebuildMesh(this.selectedIndex);
+                this._updateAnnotationData();
+            });
+
+            const end = () => {
+                if (!this._slabDrag) return;
+                this._slabDrag = null;
+                // One history entry per drag, not per mousemove: undo has to
+                // step back to before the drag, not through sixty intermediate
+                // sizes.
+                this._saveState();
+            };
+            canvas.addEventListener('mouseup', end);
+            canvas.addEventListener('mouseleave', end);
+
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                this._nudgeSlabThickness(e.deltaY > 0 ? 1.15 : 1 / 1.15);
+            }, { passive: false });
+
+            canvas.addEventListener('keydown', (e) => this._slabKey(plane, e));
+        }
+
+        /**
+         * Keyboard equivalent of a slab drag.
+         *
+         * The pointer path can do three things — move the box in the plane,
+         * push one face out, pull one face in — and all three have to be
+         * reachable from the keyboard (WCAG 2.1.1). The arrow names the side,
+         * so the modifier only has to say which direction that side moves:
+         * Shift outward, Alt inward. A scheme where the arrow named the
+         * direction instead would leave two of the four faces unreachable.
+         */
+        _slabKey(plane, e) {
+            if (e.key === '[' || e.key === ']') {
+                e.preventDefault();
+                // The document-level handler is still listening; a label whose
+                // key_value happened to be a bracket would otherwise fire too.
+                e.stopPropagation();
+                this._nudgeSlabThickness(e.key === ']' ? 1.15 : 1 / 1.15);
+                this._announce(
+                    `Slab thickness ${this.config.slabThickness.toFixed(1)} m`);
+                return;
+            }
+
+            const dir = SLAB_ARROWS[e.key];
+            if (!dir) return;
+            // Ctrl/Cmd is the browser's and the OS's; claiming it here would
+            // shadow real shortcuts for the one class of user who cannot fall
+            // back to the mouse.
+            if (e.ctrlKey || e.metaKey) return;
+            e.stopPropagation();
+
+            const view = this._slabView(plane);
+            const selection = this.annotations[this.selectedIndex];
+            if (!view || !selection || selection.type !== 'cuboid_3d') {
+                this._announce('Select a box first.');
+                return;
+            }
+            e.preventDefault();
+
+            const spec = view.spec;
+            const axis = dir.axis === 'u' ? spec.u : spec.v;
+            // Screen-up is world-positive on a flipped axis. Without this the
+            // box moves the opposite way from the arrow in every panel, which
+            // reads as the control being broken rather than inverted.
+            const sign = (dir.axis === 'v' && spec.flipV)
+                ? -dir.screen : dir.screen;
+            const step = e.shiftKey || e.altKey
+                ? SLAB_RESIZE_STEP : SLAB_MOVE_STEP;
+
+            let handle = 'move';
+            let target = selection.coordinates.center[axis] + sign * step;
+            if (e.shiftKey || e.altKey) {
+                const env = mpr.boxEnvelope(view, selection.coordinates);
+                const lo = dir.axis === 'u' ? env.uMin : env.vMin;
+                const hi = dir.axis === 'u' ? env.uMax : env.vMax;
+                // The face on the side the arrow points to, in world terms.
+                const atMax = sign > 0;
+                handle = `${dir.axis}-${atMax ? 'max' : 'min'}`;
+                // Shift pushes it away from the box, Alt pulls it in.
+                const outward = e.shiftKey ? sign : -sign;
+                target = (atMax ? hi : lo) + outward * step;
+            }
+
+            const world = selection.coordinates.center.slice();
+            world[axis] = target;
+            const before = JSON.stringify(selection.coordinates);
+            selection.coordinates = mpr.applyDrag(
+                view, selection.coordinates, handle, world, [0, 0, 0]);
+
+            if (JSON.stringify(selection.coordinates) === before) {
+                // applyDrag refuses a degenerate result. Saying so beats a key
+                // that silently does nothing, which reads as a dropped input.
+                this._announce('Box is already at its minimum size.');
+                return;
+            }
+            this._rebuildMesh(this.selectedIndex);
+            // _updateAnnotationData redraws the slabs and the camera overlays,
+            // so there is no separate redraw here.
+            this._updateAnnotationData();
+            // One history entry per keypress, unlike a drag: each press is a
+            // discrete, deliberate edit and should undo on its own.
+            this._saveState();
+            this._announce(describeBox(selection.coordinates));
+        }
+
+        _nudgeSlabThickness(factor) {
+            const next = (this.config.slabThickness || mpr.DEFAULT_SLAB)
+                * factor;
+            this.config.slabThickness = Math.min(200, Math.max(0.1, next));
+            this._drawMpr();
+        }
+
+        /** Rebuild one annotation's mesh in place after an edit. */
+        _rebuildMesh(index) {
+            const old = this.meshes[index];
+            if (old) this.scene.remove(old);
+            // `_buildMesh` appends, so build and then move the result into the
+            // same slot. Index IS identity here — the hidden input, the
+            // annotation list and `getAnnotationHandles()` all key on array
+            // position, so letting it shift would relabel every later box.
+            this._buildMesh(this.annotations[index]);
+            this.meshes[index] = this.meshes.pop();
+            this._render();
         }
 
         /**
@@ -732,6 +1486,9 @@
                 target.z + radius * Math.cos(phi));
             this.camera.lookAt(target);
             this._render();
+            // Detail follows the camera. Debounced, so an orbit drag does not
+            // start a fetch per frame.
+            this._scheduleLodUpdate();
         }
 
         // -------------------------------------------------------------
@@ -772,6 +1529,20 @@
                     return;
                 }
                 if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+                // Cycling the selection. Until this existed, selectedIndex was
+                // set only by drawing a box or by clicking one, so a keyboard
+                // user could never reach an annotation they had not just made
+                // — which made every selection-dependent key below, and the
+                // slab panels, unreachable (WCAG 2.1.1). `,`/`.` rather than
+                // Tab, which belongs to focus, and matching the prev/next
+                // convention the video timeline already uses.
+                if (e.key === ',' || e.key === '.') {
+                    if (!this.annotations.length) return;
+                    e.preventDefault();
+                    this.cycleSelection(e.key === '.' ? 1 : -1);
+                    return;
+                }
 
                 // Adjusting the selected box. Yaw is the one dimension a
                 // drag cannot express, and a box that is the right size but
@@ -940,6 +1711,10 @@
             // and q/e would silently rotate the wrong box.
             this.selectedIndex = -1;
             this._drag = null;
+            // The slab drag is annotation-editing state as much as `_drag` is.
+            // Left set across an instance switch, the next mousemove over a
+            // panel would resize whatever ended up at the old selected index.
+            this._slabDrag = null;
             this._clearPreview();
             this._render();
             this._updateAnnotationData();
@@ -1084,6 +1859,29 @@
                 el.textContent = message;
                 el.dataset.kind = kind || 'info';
             }
+            // .pc-status is not a live region — level-of-detail loading
+            // rewrites it about eight times a second while the camera moves.
+            // Anything that is not that routine chatter is announced, so a
+            // screen-reader user still hears every error and warning.
+            if (kind === 'error' || kind === 'warn') this._announce(message);
+        }
+
+        /**
+         * Say something once, to assistive tech only.
+         *
+         * The viewport and the slab panels are pixels: an edit that only
+         * redraws them is otherwise completely silent.
+         */
+        _announce(message) {
+            const el = this.container
+                && this.container.querySelector('.pc-announce[aria-live]');
+            if (!el) return;
+            // An identical string is not re-announced by most screen readers,
+            // and nudging a box repeatedly in one direction produces runs of
+            // them. The zero-width space makes each one a distinct value
+            // without changing what is read out.
+            el.textContent = (el.textContent === message)
+                ? `${message}${'\u200B'}` : message;
         }
     }
 
@@ -1153,13 +1951,67 @@
      * Sampled with a stride rather than sorting two million floats, which
      * would take longer than loading the cloud did.
      */
+    /**
+     * One position buffer, or several, as a list.
+     *
+     * Under level-of-detail loading the cloud is many buffers rather than one,
+     * and the geometry helpers have to read all of them. Accepting either shape
+     * here means the single-buffer path keeps calling them unchanged rather
+     * than every call site growing an `Array.isArray` branch of its own.
+     */
+    function asChunks(positions) {
+        if (!positions) return [];
+        if (Array.isArray(positions)) {
+            return positions.filter((p) => p && p.length);
+        }
+        return positions.length ? [positions] : [];
+    }
+
+    /** A world point on a slab's centre plane, at in-plane (u, v). */
+    function _slabPoint(view, u, v) {
+        const out = view.center.slice();
+        out[view.spec.u] = u;
+        out[view.spec.v] = v;
+        return out;
+    }
+
+    /**
+     * Pointer position in CSS pixels relative to a canvas.
+     *
+     * From `getBoundingClientRect`, not `offsetX`: the canvas is sized in
+     * device pixels and scaled by CSS, so `offsetX` is in a different unit
+     * from the coordinates the view was built with and every hit test would be
+     * off by the device pixel ratio.
+     */
+    function _canvasPoint(canvas, event) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    }
+
+    /** The cursor that says what a handle will do. */
+    function _cursorFor(handle) {
+        if (!handle) return 'default';
+        if (handle === 'move') return 'move';
+        return handle.startsWith('u-') ? 'ew-resize' : 'ns-resize';
+    }
+
+    /** Add or replace a query parameter on a URL that may already have one. */
+    function withParam(url, name, value) {
+        const sep = url.indexOf('?') === -1 ? '?' : '&';
+        return `${url}${sep}${encodeURIComponent(name)}=${encodeURIComponent(value)}`;
+    }
+
     function groundLevel(positions, percentile) {
-        if (!positions || !positions.length) return 0;
+        const chunks = asChunks(positions);
+        if (!chunks.length) return 0;
         const q = (percentile === undefined) ? 0.02 : percentile;
-        const count = Math.floor(positions.length / 3);
-        const stride = Math.max(1, Math.floor(count / 20000));
+        const total = chunks.reduce((n, c) => n + Math.floor(c.length / 3), 0);
+        const stride = Math.max(1, Math.floor(total / 20000));
         const zs = [];
-        for (let i = 0; i < count; i += stride) zs.push(positions[i * 3 + 2]);
+        chunks.forEach((chunk) => {
+            const count = Math.floor(chunk.length / 3);
+            for (let i = 0; i < count; i += stride) zs.push(chunk[i * 3 + 2]);
+        });
         if (!zs.length) return 0;
         zs.sort((a, b) => a - b);
         return zs[Math.min(zs.length - 1,
@@ -1199,7 +2051,8 @@
      * a fitted height would be a fabrication.
      */
     function fitHeightToPoints(coords, positions, groundZ, minPoints) {
-        if (!coords || !positions || !positions.length) return coords;
+        const chunks = asChunks(positions);
+        if (!coords || !chunks.length) return coords;
         const need = (minPoints === undefined) ? 5 : minPoints;
         const inv = invertYaw(coords.rotation);
         const cx = coords.center[0], cy = coords.center[1];
@@ -1208,22 +2061,25 @@
         let lo = Infinity;
         let hi = -Infinity;
         let hits = 0;
-        const count = Math.floor(positions.length / 3);
-        for (let i = 0; i < count; i++) {
-            const dx = positions[i * 3] - cx;
-            const dy = positions[i * 3 + 1] - cy;
-            // Rotate into the box's own frame, so a yawed footprint tests
-            // against its true extent rather than its bounding rectangle.
-            const rx = dx * inv.c - dy * inv.s;
-            const ry = dx * inv.s + dy * inv.c;
-            if (Math.abs(rx) > hx || Math.abs(ry) > hy) continue;
-            const z = positions[i * 3 + 2];
-            // Points at or below the ground are the road surface, not the
-            // object; including them stretches every box down to the tarmac.
-            if (z < groundZ + 0.05) continue;
-            if (z < lo) lo = z;
-            if (z > hi) hi = z;
-            hits++;
+        for (let c = 0; c < chunks.length; c++) {
+            const buffer = chunks[c];
+            const count = Math.floor(buffer.length / 3);
+            for (let i = 0; i < count; i++) {
+                const dx = buffer[i * 3] - cx;
+                const dy = buffer[i * 3 + 1] - cy;
+                // Rotate into the box's own frame, so a yawed footprint tests
+                // against its true extent rather than its bounding rectangle.
+                const rx = dx * inv.c - dy * inv.s;
+                const ry = dx * inv.s + dy * inv.c;
+                if (Math.abs(rx) > hx || Math.abs(ry) > hy) continue;
+                const z = buffer[i * 3 + 2];
+                // Points at or below the ground are the road surface, not the
+                // object; including them stretches every box down to the tarmac.
+                if (z < groundZ + 0.05) continue;
+                if (z < lo) lo = z;
+                if (z > hi) hi = z;
+                hits++;
+            }
         }
         if (hits < need || !(hi > lo)) return coords;
 
@@ -1357,6 +2213,8 @@
     PointCloudAnnotationManager.composeYaw = composeYaw;
     PointCloudAnnotationManager.invertYaw = invertYaw;
     PointCloudAnnotationManager.annotationCenter = annotationCenter;
+    PointCloudAnnotationManager.asChunks = asChunks;
+    PointCloudAnnotationManager.withParam = withParam;
 
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = PointCloudAnnotationManager;

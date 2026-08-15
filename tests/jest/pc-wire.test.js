@@ -11,11 +11,12 @@
 const wire = require('../../potato/static/pointcloud/pc-wire.js');
 
 /** Build a PNT1 buffer the way potato/media/pointcloud.py:to_wire does. */
-function buildWire(header, positions, colors, intensity) {
+function buildWire(header, positions, colors, intensity, indices) {
     const json = new TextEncoder().encode(JSON.stringify(header));
     const n = header.count;
     const size = 8 + json.length + n * 12
-        + (colors ? n * 3 : 0) + (intensity ? n * 4 : 0);
+        + (colors ? n * 3 : 0) + (intensity ? n * 4 : 0)
+        + (indices ? n * 4 : 0);
     const buf = new ArrayBuffer(size);
     const bytes = new Uint8Array(buf);
     const view = new DataView(buf);
@@ -36,6 +37,12 @@ function buildWire(header, positions, colors, intensity) {
     if (intensity) {
         for (let i = 0; i < intensity.length; i++) {
             view.setFloat32(off + i * 4, intensity[i], true);
+        }
+        off += n * 4;
+    }
+    if (indices) {
+        for (let i = 0; i < indices.length; i++) {
+            view.setUint32(off + i * 4, indices[i], true);
         }
     }
     return buf;
@@ -271,5 +278,80 @@ describe('framing', () => {
         const frame = wire.framing({ bounds: [[5, 5, 5], [5, 5, 5]] }, null);
         expect(frame.center).toEqual([5, 5, 5]);
         expect(frame.radius).toBeGreaterThan(0);
+    });
+});
+
+describe('the index channel', () => {
+    test('reads source indices when the header declares them', () => {
+        const buf = buildWire(
+            simpleHeader(3, { has_indices: true }),
+            [0, 0, 0, 1, 1, 1, 2, 2, 2], null, null, [7, 19, 4000000000]);
+        const parsed = wire.parseWire(buf);
+        expect(Array.from(parsed.indices)).toEqual([7, 19, 4000000000]);
+    });
+
+    test('is positioned after intensity, not before it', () => {
+        // Getting this order wrong reads intensity floats as indices and
+        // produces plausible-looking garbage rather than an error.
+        const buf = buildWire(
+            simpleHeader(2, { has_intensity: true, has_indices: true }),
+            [0, 0, 0, 1, 1, 1], null, [0.25, 0.5], [11, 22]);
+        const parsed = wire.parseWire(buf);
+        expect(Array.from(parsed.intensity)).toEqual([0.25, 0.5]);
+        expect(Array.from(parsed.indices)).toEqual([11, 22]);
+    });
+
+    test('absent indices mean the identity mapping', () => {
+        const parsed = wire.parseWire(buildWire(simpleHeader(2), [0, 0, 0, 1, 1, 1]));
+        expect(parsed.indices).toBeNull();
+        expect(wire.sourceIndex(parsed, 0)).toBe(0);
+        expect(wire.sourceIndex(parsed, 1)).toBe(1);
+    });
+
+    test('sourceIndex resolves through the channel when present', () => {
+        // This is what a segment_3d annotation stores. Falling back to the
+        // buffer position when a mapping exists would offset every per-point
+        // label by the decimation stride.
+        const buf = buildWire(simpleHeader(2, { has_indices: true }),
+                              [0, 0, 0, 1, 1, 1], null, null, [500, 1000]);
+        const parsed = wire.parseWire(buf);
+        expect(wire.sourceIndex(parsed, 0)).toBe(500);
+        expect(wire.sourceIndex(parsed, 1)).toBe(1000);
+    });
+});
+
+describe('a shared colour range', () => {
+    function heightCloud(zs) {
+        const positions = [];
+        zs.forEach((z, i) => positions.push(i, 0, z));
+        return wire.parseWire(buildWire(simpleHeader(zs.length), positions));
+    }
+
+    test('two buffers with different spreads colour consistently', () => {
+        // Under level-of-detail loading each node is coloured on its own. With
+        // per-node percentiles a flat node and a tall node would map the SAME
+        // height to different colours, showing as a hard seam along the octree
+        // boundary that reads as a rendering fault.
+        const range = [0, 10];
+        const flat = wire.colorize('height', heightCloud([5, 5, 5]), null, range);
+        const tall = wire.colorize('height', heightCloud([0, 5, 10]), null, range);
+        expect(Array.from(flat.slice(0, 3)))
+            .toEqual(Array.from(tall.slice(3, 6)));
+    });
+
+    test('without a shared range they disagree', () => {
+        // The control: the same two buffers, the same point at height 5,
+        // colours differently when each computes its own percentiles. Without
+        // this the assertion above could pass on a ramp that ignored its input.
+        const flat = wire.colorize('height', heightCloud([5, 5, 5]));
+        const tall = wire.colorize('height', heightCloud([0, 5, 10]));
+        expect(Array.from(flat.slice(0, 3)))
+            .not.toEqual(Array.from(tall.slice(3, 6)));
+    });
+
+    test('scalarFor exposes what the ramp reads', () => {
+        expect(Array.from(wire.scalarFor('height', heightCloud([1, 2, 3]))))
+            .toEqual([1, 2, 3]);
+        expect(wire.scalarFor('intensity', heightCloud([1]))).toBeNull();
     });
 });

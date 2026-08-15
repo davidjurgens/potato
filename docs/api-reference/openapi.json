@@ -3146,6 +3146,56 @@
         ]
       }
     },
+    "/api/episode/{filepath}": {
+      "get": {
+        "operationId": "get_episode_manifest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Read an episode and return the manifest the timeline consumes.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/api/episodes/{filepath}": {
+      "get": {
+        "operationId": "get_episode_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "What is inside a multi-episode source, without reading any of it.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/api/events/{instance_id}": {
       "get": {
         "operationId": "get_get_event_annotations",
@@ -6316,6 +6366,31 @@
           }
         },
         "summary": "Handle user logout requests.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/depth/{filepath}": {
+      "get": {
+        "operationId": "get_media_depth",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "``GET /media/depth/<path>`` \u2014 a depth map, in whichever form is asked for.",
         "tags": [
           "core"
         ]

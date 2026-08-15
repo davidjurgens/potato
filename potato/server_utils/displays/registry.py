@@ -333,6 +333,7 @@ def _register_builtin_displays():
     Called automatically when this module is imported.
     """
     from .text_display import TextDisplay
+    from .depth_display import DepthDisplay
     from .image_display import ImageDisplay
     from .video_display import VideoDisplay
     from .audio_display import AudioDisplay
@@ -391,6 +392,22 @@ def _register_builtin_displays():
             },
             supports_span_target=False,
             description="Image display with optional zoom"
+        ),
+        DisplayDefinition(
+            name="depth_map",
+            renderer=DepthDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "depth_scale": None,
+                "colormap": "turbo",
+                "invert": False,
+                "rgb_field": None,
+                "overlay_opacity": 0.75,
+                "max_height": None,
+                "show_controls": True,
+            },
+            supports_span_target=False,
+            description="Depth map with windowing, colormap and a metre readout"
         ),
         DisplayDefinition(
             name="video",

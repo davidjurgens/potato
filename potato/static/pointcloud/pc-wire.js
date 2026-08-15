@@ -17,6 +17,7 @@
  *     positions     float32 * 3N   (x, y, z interleaved)
  *     colors        uint8   * 3N   (optional)
  *     intensity     float32 * N    (optional)
+ *     indices       uint32  * N    (optional, source-file index per point)
  */
 (function (root) {
     'use strict';
@@ -68,9 +69,32 @@
         let intensity = null;
         if (header.has_intensity) {
             intensity = readFloat32(buffer, offset, count);
+            offset += count * 4;
         }
 
-        return { header, count, positions, colors, intensity };
+        // Source-file index per point. Absent means the identity mapping — see
+        // the "why there is an index channel" note in the Python module. This
+        // is what a `segment_3d` annotation stores, so that a per-point label
+        // still means the same points after the decimation cap changes or the
+        // viewer switches to level-of-detail loading.
+        let indices = null;
+        if (header.has_indices) {
+            indices = readUint32(buffer, offset, count);
+        }
+
+        return { header, count, positions, colors, intensity, indices };
+    }
+
+    /**
+     * The source index of the `i`-th point of a parsed buffer.
+     *
+     * One function rather than `parsed.indices ? parsed.indices[i] : i` spelled
+     * out at every call site, because getting that fallback wrong produces
+     * annotations that are off by a stride and look plausible.
+     */
+    function sourceIndex(parsed, i) {
+        if (!parsed) return i;
+        return parsed.indices ? parsed.indices[i] : i;
     }
 
     /** A Float32Array view, copying only when the offset is not 4-aligned. */
@@ -80,6 +104,15 @@
         const copy = new Uint8Array(length * 4);
         copy.set(new Uint8Array(buffer, offset, length * 4));
         return new Float32Array(copy.buffer);
+    }
+
+    /** As `readFloat32`, for the uint32 index channel. */
+    function readUint32(buffer, offset, length) {
+        if (length <= 0) return new Uint32Array(0);
+        if (offset % 4 === 0) return new Uint32Array(buffer, offset, length);
+        const copy = new Uint8Array(length * 4);
+        copy.set(new Uint8Array(buffer, offset, length * 4));
+        return new Uint32Array(copy.buffer);
     }
 
     /**
@@ -107,8 +140,16 @@
      * "rgb", no intensity for "intensity" — so the caller can fall back and say
      * why, instead of rendering a uniformly black cloud that looks like a
      * failed load.
+     *
+     * `range` pins the [lo, hi] the ramp normalizes against. Under
+     * level-of-detail loading each node is coloured separately, and letting
+     * every node compute its own percentiles would give neighbouring nodes
+     * different colour scales — visible as hard seams along octree boundaries
+     * that read as a rendering fault rather than as an artefact of the scale.
+     * The caller derives one range from the root node, which is itself a
+     * uniform sample of the whole scene, and passes it to every node.
      */
-    function colorize(mode, parsed, uniform) {
+    function colorize(mode, parsed, uniform, range) {
         const { count, positions, colors, intensity } = parsed;
         const out = new Float32Array(count * 3);
 
@@ -128,16 +169,25 @@
             return out;
         }
 
-        if (mode === 'intensity') {
-            if (!intensity) return null;
-            return rampFrom(intensity, count, out);
-        }
+        const values = scalarFor(mode, parsed);
+        if (!values) return null;
+        return rampFrom(values, count, out, range);
+    }
 
+    /**
+     * The scalar a colour mode ramps over, or null when the data is absent.
+     *
+     * Exposed so a caller can compute a shared percentile range before
+     * colouring anything.
+     */
+    function scalarFor(mode, parsed) {
+        const { count, positions, intensity } = parsed;
+        if (mode === 'intensity') return intensity || null;
         // height: the default, and the one that always works. Z is up in every
         // format we read.
         const heights = new Float32Array(count);
         for (let i = 0; i < count; i++) heights[i] = positions[i * 3 + 2];
-        return rampFrom(heights, count, out);
+        return heights;
     }
 
     /**
@@ -148,8 +198,9 @@
      * sensor origin, otherwise compresses the entire useful range into one
      * colour and the cloud renders as a flat sheet.
      */
-    function rampFrom(values, count, out) {
-        const [lo, hi] = percentileRange(values, count);
+    function rampFrom(values, count, out, range) {
+        const [lo, hi] = (range && range.length === 2)
+            ? range : percentileRange(values, count);
         const span = hi - lo || 1;
         for (let i = 0; i < count; i++) {
             const t = Math.min(1, Math.max(0, (values[i] - lo) / span));
@@ -246,8 +297,8 @@
     }
 
     const api = {
-        MAGIC, parseWire, describeCloud, colorize, ramp, percentileRange,
-        hexToRgb01, framing,
+        MAGIC, parseWire, describeCloud, colorize, scalarFor, ramp,
+        percentileRange, hexToRgb01, framing, sourceIndex,
     };
 
     if (typeof module !== 'undefined' && module.exports) module.exports = api;

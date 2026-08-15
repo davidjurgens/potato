@@ -272,6 +272,7 @@ def _register_builtin_schemas():
     from .pure_display import generate_pure_display_layout
     from .video import generate_video_layout
     from .image_annotation import generate_image_annotation_layout
+    from .episode_annotation import generate_episode_annotation_layout
     from .spatial_annotation import generate_spatial_annotation_layout
     from .audio_annotation import generate_audio_annotation_layout
     from .video_annotation import generate_video_annotation_layout
@@ -420,9 +421,17 @@ def _register_builtin_schemas():
             name="spatial_annotation",
             generator=generate_spatial_annotation_layout,
             required_fields=["name", "description", "tools", "labels"],
-            optional_fields=["source_field", "color_mode", "point_size", "max_points", "min_annotations", "max_annotations"],
+            optional_fields=["source_field", "calibration_field", "color_mode", "point_size", "max_points", "lod", "point_budget", "min_screen_size", "max_loaded_nodes", "mpr", "slab_thickness", "default_box_height", "fit_box_height", "min_annotations", "max_annotations"],
             supports_keybindings=True,
             description="3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments"
+        ),
+        SchemaDefinition(
+            name="episode_annotation",
+            generator=generate_episode_annotation_layout,
+            required_fields=["name", "description"],
+            optional_fields=["source_field", "episode_field", "layers", "phases", "outcomes", "failure_causes", "reward_range", "series_shown", "max_lanes", "min_phases", "max_phases"],
+            supports_keybindings=True,
+            description="Embodied robot episode: synchronized video streams and time-series lanes with phase, outcome and dense-reward annotation"
         ),
         SchemaDefinition(
             name="audio_annotation",

@@ -465,3 +465,101 @@ class TestDefaults:
         path = write(tmp_path, "a.xyz",
                      "\n".join(f"{x} {y} {z}" for x, y, z in points).encode())
         assert read_point_cloud(path).count == 1000  # under the cap
+
+
+class TestStablePointIndices:
+    """
+    ``segment_3d`` stores point indices, so what index *i* refers to has to be
+    a property of the file rather than of the decimation that happened to be
+    cached. It was not: ``max_points`` is a schema option, and changing it
+    changed the stride and therefore every stored per-point label — silently,
+    because nothing about the annotation looks wrong afterwards.
+    """
+
+    def _cloud(self, n=1000):
+        from array import array
+
+        from potato.media.pointcloud import PointCloud
+        positions = array("f")
+        for i in range(n):
+            positions.extend([float(i), 0.0, 0.0])
+        return PointCloud(positions=positions, source_format="test",
+                          original_count=n)
+
+    def test_decimation_records_source_indices(self):
+        from potato.media.pointcloud import decimate
+
+        thinned = decimate(self._cloud(1000), 100)
+        assert thinned.indices is not None
+        # x was set to the source index, so this checks the mapping against
+        # the data rather than against the stride arithmetic that produced it.
+        for i in range(thinned.count):
+            assert thinned.positions[i * 3] == pytest.approx(thinned.indices[i])
+
+    def test_two_caps_agree_about_which_point_is_which(self):
+        from potato.media.pointcloud import decimate
+
+        cloud = self._cloud(1000)
+        coarse = decimate(cloud, 100)
+        fine = decimate(cloud, 250)
+
+        # Index 40 of the coarse cloud and index 100 of the fine one are the
+        # same source point (stride 10 vs stride 4). Positionally they are not
+        # comparable at all; through the index channel they are.
+        assert coarse.indices[40] == fine.indices[100] == 400
+        assert coarse.positions[40 * 3] == fine.positions[100 * 3]
+
+    def test_composed_decimation_still_points_at_the_file(self):
+        from potato.media.pointcloud import decimate
+
+        once = decimate(self._cloud(1000), 200)
+        twice = decimate(once, 50)
+        for i in range(twice.count):
+            assert twice.positions[i * 3] == pytest.approx(twice.indices[i])
+
+    def test_an_undecimated_cloud_carries_no_index_channel(self):
+        """
+        Absent means identity. Emitting a redundant 4 bytes per point for the
+        common small-cloud case would cost more than the ambiguity it removes.
+        """
+        from potato.media.pointcloud import decimate, to_wire
+
+        cloud = self._cloud(100)
+        assert decimate(cloud, 500).indices is None
+        assert b'"has_indices":false' in to_wire(cloud)[:400]
+
+    def test_indices_survive_the_wire(self):
+        from potato.media.pointcloud import decimate, from_wire, to_wire
+
+        thinned = decimate(self._cloud(1000), 100)
+        header, recovered = from_wire(to_wire(thinned))
+        assert header["has_indices"] is True
+        assert list(recovered.indices) == list(thinned.indices)
+
+    def test_indices_survive_alongside_colours_and_intensity(self):
+        """
+        The index block is last, so a missing offset bump on the block before
+        it would misread it. That was a real gap: ``from_wire`` did not advance
+        past intensity, because nothing came after it until now.
+        """
+        from array import array
+
+        from potato.media.pointcloud import (PointCloud, decimate, from_wire,
+                                             to_wire)
+
+        n = 400
+        positions = array("f")
+        colors = bytearray()
+        intensity = array("f")
+        for i in range(n):
+            positions.extend([float(i), 0.0, 0.0])
+            colors.extend([i % 256, 0, 0])
+            intensity.append(i / n)
+        cloud = decimate(
+            PointCloud(positions=positions, colors=colors,
+                       intensity=intensity, original_count=n), 50)
+
+        _header, recovered = from_wire(to_wire(cloud))
+        assert list(recovered.indices) == list(cloud.indices)
+        assert list(recovered.intensity) == pytest.approx(list(cloud.intensity))
+        assert bytes(recovered.colors) == bytes(cloud.colors)

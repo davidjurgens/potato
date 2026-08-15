@@ -91,9 +91,13 @@ def open_viewer(test, page, server):
     page.goto(f"{server.base_url}/annotate")
     wait_for_manager(page)
     page.wait_for_function(
+        # `hasCloud()`, not `.cloud`: under level-of-detail loading the points
+        # live in one THREE.Points per octree node and `.cloud` stays null.
+        # Gating on the field rather than the fact is what made every test in
+        # this file time out the day LOD was switched on.
         """() => {
             const c = document.querySelector('.pointcloud-annotation-container');
-            return c.annotationManager.cloud;
+            return c.annotationManager.hasCloud();
         }""", timeout=30000)
 
 
@@ -117,9 +121,12 @@ class TestTheViewerActuallyRuns(BasePlaywrightTest):
                                                          page):
         open_viewer(self, page, spatial_server)
         count = manager_eval(
-            page, "m.cloud.geometry.getAttribute('position').count")
+            page,
+            "m.cloudObjects().reduce((n, o) => "
+            "n + o.geometry.getAttribute('position').count, 0)")
         assert count > 5000, "the whole scan should have been parsed"
-        assert manager_eval(page, "m.scene.children.includes(m.cloud)")
+        assert manager_eval(
+            page, "m.cloudObjects().every(o => m.scene.children.includes(o))")
 
     def test_the_status_line_describes_what_is_shown(self, spatial_server, page):
         open_viewer(self, page, spatial_server)
@@ -382,3 +389,513 @@ class TestPersistence(BasePlaywrightTest):
 
         assert json.loads(page.input_value("#input-objects") or "[]") == []
         assert manager_eval(page, "m.selectedIndex") == -1
+
+
+# ---------------------------------------------------------------------------
+# Level of detail
+# ---------------------------------------------------------------------------
+
+def _schemes_with(**overrides):
+    scheme = dict(SCHEMES[0])
+    scheme.update(overrides)
+    return [scheme]
+
+
+@pytest.fixture
+def single_buffer_server(make_server):
+    """A viewer with `lod: false`, so the one-buffer path stays exercised."""
+    if not MEDIA.is_dir():
+        pytest.skip("run examples/spatial/kitti-cuboids/generate_scene.py first")
+    return make_server(
+        _schemes_with(lod=False),
+        items=scene_items(),
+        extra_config={
+            "media_directory": str(MEDIA),
+            "item_properties": {"id_key": "id", "text_key": "point_cloud"},
+        },
+    )
+
+
+class TestLevelOfDetail(BasePlaywrightTest):
+    """
+    The octree path, driven end to end.
+
+    These assert against the scene graph and the network, never a screenshot:
+    a half-loaded octree and a fully loaded one look similar in a still frame
+    and differ entirely in what the annotator can actually see.
+    """
+
+    def test_the_cloud_arrives_as_several_nodes(self, spatial_server, page):
+        open_viewer(self, page, spatial_server)
+        assert manager_eval(page, "!!m.lodIndex"), "LOD should be the default"
+        assert manager_eval(page, "m.lodNodes.size") > 1, (
+            "the example scene should subdivide into more than a root node")
+        assert manager_eval(page, "m.cloudObjects().length") == manager_eval(
+            page, "m.lodNodes.size")
+
+    def test_the_manifest_describes_the_whole_scan(self, spatial_server, page):
+        open_viewer(self, page, spatial_server)
+        total = manager_eval(page, "m.lodIndex.totalCount")
+        loaded = manager_eval(page, "m.loadedPointCount()")
+        assert total > 0
+        assert loaded > 0
+        assert loaded <= total
+
+    def test_the_status_line_reports_loaded_not_selected(self, spatial_server,
+                                                         page):
+        # A node that has been requested but has not arrived is not on screen.
+        # Counting it would tell the annotator they are looking at detail they
+        # are not.
+        open_viewer(self, page, spatial_server)
+        page.wait_for_timeout(500)
+        status = page.text_content(".pc-status")
+        assert "point" in status.lower()
+        loaded = manager_eval(page, "m.loadedPointCount()")
+        assert f"{loaded:,}" in status
+
+    def test_nodes_carry_source_indices(self, spatial_server, page):
+        # Without this a segment_3d annotation means "the i-th point currently
+        # loaded", which changes meaning as the camera moves.
+        open_viewer(self, page, spatial_server)
+        assert manager_eval(
+            page, "Array.from(m.lodParsed.values()).every(p => !!p.indices)")
+        assert manager_eval(
+            page,
+            "Math.max(...Array.from(m.lodParsed.values())"
+            ".map(p => Math.max(...Array.from(p.indices))))") > 0
+
+    def test_lowering_the_detail_threshold_fetches_more_nodes(
+            self, spatial_server, page):
+        """
+        The traversal-to-network loop, driven deterministically.
+
+        Zooming and asserting "more nodes appeared" would be a vacuous test on
+        the bundled scene, which is small enough that every node clears the
+        threshold at the starting camera. Moving the threshold instead proves
+        the same mechanism — select, fetch, add to the scene — on any scene.
+        """
+        open_viewer(self, page, spatial_server)
+
+        # Threshold so high nothing can clear it, and the camera pulled far
+        # enough back that it is not inside any node's bounding sphere — a node
+        # containing the camera loads regardless of the threshold, deliberately,
+        # because that is the case where you have zoomed right into it.
+        page.evaluate(
+            """() => {
+                const m = document.querySelector(
+                    '.pointcloud-annotation-container').annotationManager;
+                m.lodNodes.forEach((_o, k) => m._disposeNode(k));
+                m._orbit.radius = 5000;
+                m._applyCamera();
+                m.config.minScreenSize = 1e9;
+                m._updateLod();
+            }""")
+        page.wait_for_timeout(400)
+        coarse = manager_eval(page, "m.lodNodes.size")
+        assert coarse == 1, "only the root should clear an impossible threshold"
+
+        page.evaluate(
+            """() => {
+                const m = document.querySelector(
+                    '.pointcloud-annotation-container').annotationManager;
+                m.config.minScreenSize = 1;
+                m._updateLod();
+            }""")
+        page.wait_for_timeout(1500)
+
+        fine = manager_eval(page, "m.lodNodes.size")
+        assert fine > coarse, "lowering the threshold must fetch more nodes"
+        assert manager_eval(page, "m.loadedPointCount()") > 0
+
+    def test_evicted_nodes_release_their_geometry(self, spatial_server, page):
+        # A viewer that only ever adds buffers runs a scene out of GPU memory
+        # on a large scan, and the symptom is a browser tab dying rather than
+        # anything that points at the cause.
+        open_viewer(self, page, spatial_server)
+        page.evaluate(
+            """() => {
+                const m = document.querySelector(
+                    '.pointcloud-annotation-container').annotationManager;
+                m.config.maxLoadedNodes = 1;
+                m.config.minScreenSize = 1e9;
+                m._updateLod();
+            }""")
+        page.wait_for_timeout(500)
+        assert manager_eval(page, "m.lodNodes.size") <= 2
+        assert manager_eval(page, "m.lodParsed.size") == manager_eval(
+            page, "m.lodNodes.size"), (
+            "parsed buffers must be released with their scene objects")
+
+    def test_a_box_fits_against_every_loaded_buffer(self, spatial_server, page):
+        # The regression this guards: fitting to the coarse root sample alone
+        # gives a shorter box the closer you zoom in, which reads as the fit
+        # being unreliable rather than as a bug.
+        open_viewer(self, page, spatial_server)
+        chunks = manager_eval(page, "m._loadedPositions().length")
+        assert chunks > 1
+
+    def test_drawing_still_works_with_the_single_buffer_path(
+            self, single_buffer_server, page):
+        """`lod: false` must keep working — it is the fallback we document."""
+        open_viewer(self, page, single_buffer_server)
+        assert manager_eval(page, "!m.lodIndex")
+        assert manager_eval(page, "!!m.cloud")
+        assert manager_eval(page, "m.cloudObjects().length") == 1
+        assert manager_eval(page, "m.loadedPointCount()") > 1000
+
+
+class TestSlabViews(BasePlaywrightTest):
+    """
+    The orthographic slab panels.
+
+    A perspective view compresses the extent along the view axis, so a box
+    placed by eye is short in depth and the error is invisible from the camera
+    that drew it. These check the panels exist, follow the selection, and edit
+    the annotation the drag was aimed at.
+    """
+
+    def _draw_a_box(self, page):
+        page.keyboard.press("c")
+        canvas = page.locator(".pc-canvas")
+        box = canvas.bounding_box()
+        page.mouse.move(box["x"] + box["width"] * 0.42,
+                        box["y"] + box["height"] * 0.62)
+        page.mouse.down()
+        page.mouse.move(box["x"] + box["width"] * 0.58,
+                        box["y"] + box["height"] * 0.74, steps=8)
+        page.mouse.up()
+        page.wait_for_timeout(250)
+
+    def test_three_panels_are_built(self, spatial_server, page):
+        open_viewer(self, page, spatial_server)
+        assert page.locator(".pc-slab").count() == 3
+        planes = page.eval_on_selector_all(
+            ".pc-slab", "els => els.map(e => e.dataset.plane)")
+        assert planes == ["top", "front", "side"]
+
+    def test_each_canvas_is_actually_painted(self, spatial_server, page):
+        # A blank canvas and a correctly drawn one are the same size and the
+        # same colour to every selector-based check, so this reads pixels.
+        open_viewer(self, page, spatial_server)
+        page.wait_for_timeout(600)
+        painted = page.evaluate(
+            """() => {
+                const c = document.querySelector('.pc-slab-canvas');
+                const ctx = c.getContext('2d');
+                const data = ctx.getImageData(0, 0, c.width, c.height).data;
+                const first = [data[0], data[1], data[2]];
+                for (let i = 4; i < data.length; i += 4) {
+                    if (data[i] !== first[0] || data[i + 1] !== first[1]
+                        || data[i + 2] !== first[2]) return true;
+                }
+                return false;
+            }""")
+        assert painted, "the top slab should contain points, not just its fill"
+
+    def test_the_caption_reports_the_slab_thickness(self, spatial_server, page):
+        open_viewer(self, page, spatial_server)
+        page.wait_for_timeout(400)
+        caption = page.text_content(".pc-slab figcaption")
+        assert "slab" in caption
+        assert "m" in caption
+
+    def test_the_wheel_changes_the_thickness(self, spatial_server, page):
+        open_viewer(self, page, spatial_server)
+        before = manager_eval(page, "m.config.slabThickness")
+        canvas = page.locator(".pc-slab-canvas").first
+        # The panels sit below a 500px viewport, so without this the pointer
+        # lands outside the window and the wheel goes nowhere -- a test that
+        # fails for a reason that has nothing to do with the feature.
+        canvas.scroll_into_view_if_needed()
+        box = canvas.bounding_box()
+        page.mouse.move(box["x"] + box["width"] / 2,
+                        box["y"] + box["height"] / 2)
+        page.mouse.wheel(0, 240)
+        page.wait_for_timeout(200)
+        assert manager_eval(page, "m.config.slabThickness") > before
+
+    def test_the_slab_follows_the_selection(self, spatial_server, page):
+        # Centring anywhere but the selected box puts its own returns outside
+        # the slab, which is the one thing that must not happen while editing.
+        open_viewer(self, page, spatial_server)
+        self._draw_a_box(page)
+        assert manager_eval(page, "m.selectedIndex") >= 0
+
+        focus = page.evaluate(
+            """() => {
+                const m = document.querySelector(
+                    '.pointcloud-annotation-container').annotationManager;
+                return m._slabView('top').center;
+            }""")
+        centre = manager_eval(page, "m.annotations[m.selectedIndex]"
+                                    ".coordinates.center")
+        assert focus == pytest.approx(centre, abs=1e-6)
+
+    def test_dragging_an_edge_resizes_the_stored_annotation(self, spatial_server,
+                                                            page):
+        open_viewer(self, page, spatial_server)
+        self._draw_a_box(page)
+        before = manager_eval(
+            page, "m.annotations[m.selectedIndex].coordinates.size.slice()")
+
+        # Grab the box's left edge in the top panel and pull it outward. The
+        # panel has to be on screen first: bounding rects are viewport-relative
+        # and a pointer aimed below the fold hits nothing.
+        page.locator('.pc-slab[data-plane="top"] .pc-slab-canvas'
+                     ).scroll_into_view_if_needed()
+        page.wait_for_timeout(200)
+        moved = page.evaluate(
+            """() => {
+                const m = document.querySelector(
+                    '.pointcloud-annotation-container').annotationManager;
+                const view = m._slabView('top');
+                const sel = m.annotations[m.selectedIndex];
+                const env = window.PointCloudMPR.boxEnvelope(
+                    view, sel.coordinates);
+                const p = window.PointCloudMPR.worldToPanel(
+                    view, [env.uMin, sel.coordinates.center[1],
+                           sel.coordinates.center[2]]);
+                const canvas = document.querySelector(
+                    '.pc-slab[data-plane="top"] .pc-slab-canvas');
+                const rect = canvas.getBoundingClientRect();
+                return {x: rect.left + p.x, y: rect.top + p.y};
+            }""")
+
+        page.mouse.move(moved["x"], moved["y"])
+        page.mouse.down()
+        page.mouse.move(moved["x"] - 25, moved["y"], steps=6)
+        page.mouse.up()
+        page.wait_for_timeout(250)
+
+        after = manager_eval(
+            page, "m.annotations[m.selectedIndex].coordinates.size.slice()")
+        assert after[0] > before[0] + 0.1, "dragging the edge should widen it"
+        # Height is not in this plane and must be untouched.
+        assert after[2] == pytest.approx(before[2], abs=1e-6)
+
+    def test_the_edit_reaches_the_hidden_input(self, spatial_server, page):
+        # The panel could redraw convincingly while writing nothing: every
+        # subsystem downstream reads the input, not the canvas.
+        open_viewer(self, page, spatial_server)
+        self._draw_a_box(page)
+        page.evaluate(
+            """() => {
+                const m = document.querySelector(
+                    '.pointcloud-annotation-container').annotationManager;
+                const view = m._slabView('top');
+                const sel = m.annotations[m.selectedIndex];
+                const world = sel.coordinates.center.slice();
+                world[0] += 3;
+                sel.coordinates = window.PointCloudMPR.applyDrag(
+                    view, sel.coordinates, 'move', world, [0, 0, 0]);
+                m._updateAnnotationData();
+            }""")
+        stored = json.loads(page.input_value("input.annotation-data-input"))
+        assert stored, "the slab edit must reach the hidden input"
+
+    def test_an_undo_steps_back_past_the_whole_drag(self, spatial_server, page):
+        # One history entry per drag, not per mousemove: otherwise undo walks
+        # back through sixty intermediate sizes.
+        open_viewer(self, page, spatial_server)
+        self._draw_a_box(page)
+        before = manager_eval(page, "m.history.length")
+        page.evaluate(
+            """() => {
+                const m = document.querySelector(
+                    '.pointcloud-annotation-container').annotationManager;
+                m._slabDrag = {plane: 'top', handle: 'move', offset: [0, 0, 0]};
+                const canvas = document.querySelector('.pc-slab-canvas');
+                canvas.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+            }""")
+        after = manager_eval(page, "m.history.length")
+        assert after == before + 1
+
+    def test_switching_items_clears_the_in_flight_drag(self, spatial_server,
+                                                       page):
+        # Left set across an instance switch, the next mousemove over a panel
+        # would resize whatever ended up at the old selected index.
+        open_viewer(self, page, spatial_server)
+        self._draw_a_box(page)
+        page.evaluate(
+            """() => {
+                const m = document.querySelector(
+                    '.pointcloud-annotation-container').annotationManager;
+                m._slabDrag = {plane: 'top', handle: 'u-min', offset: [0, 0, 0]};
+                m.clearAnnotations();
+            }""")
+        assert manager_eval(page, "m._slabDrag") is None
+
+
+class TestSlabKeyboardAccess(BasePlaywrightTest):
+    """
+    The slab panels, driven entirely from the keyboard.
+
+    These panels exist because a perspective view compresses the extent along
+    the view axis, so a box placed by eye comes out short in depth. That makes
+    "adjust it in the 3D view instead" not an equivalent alternative for a
+    keyboard user — it is exactly the imprecision the panels remove. Until this
+    landed there was no keyboard path to them at all (WCAG 2.1.1).
+
+    The arithmetic is tested in Jest; what a real browser adds is that the
+    events actually reach the handler — that focus lands on the canvas, that
+    the page does not scroll instead, and that nothing between here and the
+    manager swallows the key.
+    """
+
+    def _draw_a_box(self, page, x0=0.42, y0=0.62, x1=0.58, y1=0.74):
+        page.keyboard.press("c")
+        canvas = page.locator(".pc-canvas")
+        box = canvas.bounding_box()
+        page.mouse.move(box["x"] + box["width"] * x0,
+                        box["y"] + box["height"] * y0)
+        page.mouse.down()
+        page.mouse.move(box["x"] + box["width"] * x1,
+                        box["y"] + box["height"] * y1, steps=8)
+        page.mouse.up()
+        page.wait_for_timeout(250)
+
+    def _focus_slab(self, page):
+        canvas = page.locator(".pc-slab-canvas").first
+        canvas.scroll_into_view_if_needed()
+        canvas.focus()
+        return canvas
+
+    def test_the_panels_are_reachable_by_tab(self, spatial_server, page):
+        open_viewer(self, page, spatial_server)
+        canvas = self._focus_slab(page)
+        # tabIndex 0 is what puts it in the tab order at all; a positive value
+        # would also work but reorders the whole page, which is its own bug.
+        assert canvas.evaluate("c => c.tabIndex") == 0
+        assert page.evaluate(
+            "() => document.activeElement.classList.contains('pc-slab-canvas')")
+
+    def test_an_interactive_canvas_is_not_hidden_from_assistive_tech(
+            self, spatial_server, page):
+        open_viewer(self, page, spatial_server)
+        page.wait_for_timeout(400)
+        hidden = page.evaluate(
+            """() => [...document.querySelectorAll('.pc-slab-canvas')]
+                     .map(c => c.getAttribute('aria-hidden'))""")
+        assert hidden == [None, None, None], (
+            "the slab canvases take pointer and keyboard input, so "
+            "aria-hidden removes the only way a screen-reader user could know "
+            "they exist (WCAG 4.1.2)")
+
+    def test_each_panel_is_named_by_its_plane(self, spatial_server, page):
+        open_viewer(self, page, spatial_server)
+        page.wait_for_timeout(400)
+        labels = page.evaluate(
+            """() => [...document.querySelectorAll('.pc-slab-canvas')]
+                     .map(c => c.getAttribute('aria-label'))""")
+        assert len(set(labels)) == 3, labels
+        assert all(label and "slab view" in label for label in labels)
+
+    def test_the_keys_are_described_on_the_page(self, spatial_server, page):
+        # Visible, not screen-reader-only: a sighted keyboard user needs them
+        # too, and "shift grows, alt shrinks" is not guessable from the
+        # pointer affordances.
+        open_viewer(self, page, spatial_server)
+        page.wait_for_timeout(400)
+        help_id = page.get_attribute(".pc-slab-canvas", "aria-describedby")
+        assert help_id
+        target = page.locator(f"#{help_id}")
+        assert target.is_visible()
+        assert "Shift" in target.text_content()
+
+    def test_an_arrow_moves_the_selected_box(self, spatial_server, page):
+        open_viewer(self, page, spatial_server)
+        self._draw_a_box(page)
+        before = json.loads(page.input_value("#input-objects"))[0]["coordinates"]
+
+        self._focus_slab(page)
+        page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(150)
+
+        after = json.loads(page.input_value("#input-objects"))[0]["coordinates"]
+        assert after["center"] != before["center"]
+        assert after["size"] == before["size"]
+
+    def test_shift_and_alt_resize_one_face(self, spatial_server, page):
+        open_viewer(self, page, spatial_server)
+        self._draw_a_box(page)
+        self._focus_slab(page)
+        before = json.loads(page.input_value("#input-objects"))[0]["coordinates"]
+
+        page.keyboard.press("Shift+ArrowRight")
+        page.wait_for_timeout(150)
+        grown = json.loads(page.input_value("#input-objects"))[0]["coordinates"]
+        assert grown["size"][0] > before["size"][0]
+
+        page.keyboard.press("Alt+ArrowRight")
+        page.wait_for_timeout(150)
+        shrunk = json.loads(page.input_value("#input-objects"))[0]["coordinates"]
+        assert shrunk["size"][0] == pytest.approx(before["size"][0], abs=1e-6)
+
+    def test_brackets_change_the_slab_thickness(self, spatial_server, page):
+        open_viewer(self, page, spatial_server)
+        self._focus_slab(page)
+        before = manager_eval(page, "m.config.slabThickness")
+        page.keyboard.press("BracketRight")
+        page.wait_for_timeout(150)
+        assert manager_eval(page, "m.config.slabThickness") > before
+
+    def test_an_edit_is_announced(self, spatial_server, page):
+        # The panels are pixels. Without a live region an edit that only
+        # redraws them is completely silent.
+        open_viewer(self, page, spatial_server)
+        self._draw_a_box(page)
+        self._focus_slab(page)
+        page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(150)
+        region = page.locator(".pc-announce[aria-live]")
+        assert region.count() == 1
+        assert region.text_content().strip()
+
+    def test_a_keyboard_edit_is_one_undo_step(self, spatial_server, page):
+        open_viewer(self, page, spatial_server)
+        self._draw_a_box(page)
+        self._focus_slab(page)
+        before = manager_eval(page, "m.history.length")
+        page.keyboard.press("ArrowRight")
+        page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(200)
+        assert manager_eval(page, "m.history.length") == before + 2
+
+    def test_an_existing_box_is_reachable_without_a_mouse(self, spatial_server,
+                                                          page):
+        # selectedIndex used to be set only by drawing a box or clicking one,
+        # so every selection-dependent key -- and the whole slab surface --
+        # was unreachable for anything the annotator had not just drawn.
+        open_viewer(self, page, spatial_server)
+        self._draw_a_box(page)
+        # The second box goes in through addAnnotation rather than a second
+        # drag: what is under test is reaching an annotation you did not just
+        # make, and a drag that lands on the first box picks it up instead.
+        page.evaluate(
+            """() => {
+                const m = document.querySelector(
+                    '.pointcloud-annotation-container').annotationManager;
+                m.addAnnotation({type: 'cuboid_3d', label: 'truck',
+                                 color: '#4ECDC4',
+                                 coordinates: {center: [12, 3, -1],
+                                               size: [6, 2.4, 2.8],
+                                               rotation: [0, 0, 0, 1]}});
+            }""")
+        assert len(json.loads(page.input_value("#input-objects"))) == 2
+
+        page.locator(".pc-canvas").focus()
+        page.keyboard.press("Comma")
+        page.wait_for_timeout(150)
+        first = manager_eval(page, "m.selectedIndex")
+        page.keyboard.press("Period")
+        page.wait_for_timeout(150)
+        assert manager_eval(page, "m.selectedIndex") != first
+
+    def test_the_status_line_is_not_a_live_region(self, spatial_server, page):
+        # Level-of-detail loading rewrites it about eight times a second while
+        # the camera moves; an aria-live element that changes that often is a
+        # screen reader that never stops talking.
+        open_viewer(self, page, spatial_server)
+        page.wait_for_timeout(400)
+        assert page.get_attribute(".pc-status", "aria-live") is None
+        assert page.get_attribute(".pc-status", "role") is None

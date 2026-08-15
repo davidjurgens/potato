@@ -67,9 +67,16 @@ annotation_schemes:
     # useful default; intensity works too and often separates road markings.
     color_mode: height
     point_size: 2.0
-    # Clouds larger than this are thinned by uniform stride before being sent,
-    # and the viewer says so. Raise it on a fast machine.
+    # Level of detail: the cloud is served as an octree and density follows
+    # the camera. `max_points` applies only with `lod: false`, where the cloud
+    # is thinned by uniform stride instead and the viewer says so.
+    lod: true
     max_points: 400000
+    # The three orthographic slab panels. On by default whenever cuboid_3d is
+    # among the tools -- a perspective view compresses the extent along the
+    # view axis, so a box placed by eye is short in depth and the error is
+    # invisible from the camera that drew it.
+    slab_thickness: 2.0
     # Item field holding the camera calibration. Omit it (or leave the field
     # empty) and the camera panels simply do not appear — a lidar-only project
     # is a normal thing to have, not a misconfiguration.

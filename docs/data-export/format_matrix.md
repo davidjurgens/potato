@@ -87,6 +87,7 @@ format supports is what survives.
 | `cityscapes` | ✅ as 4-gon | ✅ | ⚠️ traced | ❌ | Painter's order preserved — it **is** the occlusion |
 | `davis` | ✅ rasterized | ✅ rasterized | ✅ | ❌ | Indexed PNG; pixel values are object ids |
 | `mask_png` | — | ✅ | ✅ | — | Rasterized indexed PNGs |
+| `episode_jsonl` | — | — | — | — | Per-frame phase, progress reward and outcome for embodied episodes, keyed by `(episode_id, frame_index)` ¹³ |
 
 ⁶ CVAT 1.1's `<mask>` uses its own RLE dialect with an offset origin. Emitting
 an untested approximation of someone else's binary format would be worse than
@@ -96,6 +97,11 @@ saying it is unsupported, so masks are reported and you are pointed at COCO.
 visibility flag, so unlabelled joints are dropped rather than written at (0, 0)
 where they would read back as real points in the corner; LabelMe loses joint
 identity entirely. Both report it. Use COCO to keep keypoints intact.
+
+¹³ Not a geometry format: an episode annotation is temporal, so the spatial
+columns do not apply. It is a **sidecar** rather than a rewrite of the source
+dataset, because the dataset being annotated is usually read-only — see
+`docs/annotation-types/embodied/episodes.md`.
 
 ¹² Darwin stores masks as `raster_layer`, a dense encoding tied to V7's own
 layer model. Rather than write a plausible guess into a file you would upload to

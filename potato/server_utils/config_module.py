@@ -5684,6 +5684,7 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
             "gallery", "conversation_tree", "interactive_chat", "web_agent_trace",
             "live_agent", "coding_trace", "live_coding_agent",
             "multi_agent_discussion", "cot_trace", "audio_dialogue",
+            "depth_map",
         ]
 
     for i, field in enumerate(fields):

@@ -8315,6 +8315,14 @@ def configure_routes(flask_app, app_config):
         register_media_routes(app, config)
     except Exception as e:
         logger.warning("Could not register media proxy routes: %s", e)
+    # Embodied episode manifests. Imported here for the same reason: the
+    # readers pull pyarrow / h5py lazily and a server annotating text must not
+    # pay for either at boot.
+    try:
+        from potato.episodes.routes import register_episode_routes
+        register_episode_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register episode routes: %s", e)
     app.add_url_rule(
         "/screenshots/<path:filepath>",
         "serve_trace_screenshot",

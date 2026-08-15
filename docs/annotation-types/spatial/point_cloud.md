@@ -63,20 +63,57 @@ min/max, because a single stray return from a reflective surface otherwise
 compresses everything else into one colour and the cloud renders as a flat
 sheet.
 
-## Large clouds are thinned, and the viewer says so
+## Large clouds: detail where the camera is looking
+
+By default the cloud is served as an **octree**, and the viewer loads density
+where you are looking rather than a thin sample of everywhere.
+
+That distinction is the difference between a usable viewer and a decorative
+one. Uniform thinning of a 20-million-point aerial scan to 500,000 points is
+2.5% density *everywhere*: the whole scene is visible and nothing in it is
+annotatable, because the car you are boxing is now nine returns. Raising the cap
+does not help — WebGL will allocate the buffer and then render at 3 fps, which
+reads as a broken page.
+
+The structure is additive, so the union of what is loaded is always a
+uniform-density sampling of the whole scene. A partially loaded cloud looks
+*coarse*, never *incomplete* — a viewer that renders half-loaded data as missing
+geometry teaches annotators to distrust it.
+
+The status line under the viewport says what is on screen:
+
+> Showing 412,000 of 2,100,000 points. More detail loads as you zoom in.
+
+| Option | Default | Effect |
+|---|---|---|
+| `lod` | `true` | Octree loading. `false` falls back to one uniformly thinned buffer. |
+| `point_budget` | 2,000,000 | Points held at once. Lower it for weak GPUs. |
+| `min_screen_size` | 120 | Projected pixels below which a node is not fetched. Lower means more detail and more requests. |
+| `max_loaded_nodes` | 512 | Cache size before least-recently-visible nodes are released. |
+| `max_points` | 500,000 | **Only used when `lod: false`.** |
+
+The octree is built once per file and cached, so the first request for a very
+large scan is slow and every later one is not.
+
+### With `lod: false`
 
 Anything above `max_points` is reduced by **uniform stride** — every Nth point —
 not truncated. A lidar file is written in scan order, so keeping the first N
 points keeps one contiguous slice of the sweep and drops the rest of the scene,
 which looks like a sensor failure rather than a decimation.
 
-The status line under the viewport reports both numbers:
+### Per-point labels stay stable
 
-> Showing 400,000 of 2,100,000 points (evenly sampled to keep the viewer
-> responsive).
+`segment_3d` stores **point indices**, and those indices are into the source
+file, not into whatever subset the viewer has loaded. Every served buffer
+carries an index channel to make that true.
 
-An annotator who does not know a cloud was thinned will draw boxes around gaps
-that are artefacts of the sampling, so this is stated rather than implied.
+This was a real defect rather than a hypothetical one. `max_points` is a schema
+option, so lowering it — exactly what you do when a machine struggles — changed
+the stride and silently re-pointed every stored per-point segment at different
+points. Nothing errored; the labels just moved. If you have `segment_3d`
+annotations from before this change and the `max_points` value has been edited
+since, they are suspect.
 
 ## Controls
 
@@ -115,6 +152,66 @@ did not see, and fitting to nothing would be fabricating a measurement.
 
 Yaw is not part of the drag; `q` and `e` rotate the selected box afterwards, in
 the world frame, so the key always turns it the same way on screen.
+
+## The slab views
+
+Under the viewport are three orthographic panels — **top** (X-Y), **front**
+(Y-Z) and **side** (X-Z) — each showing a slab of the scene a couple of metres
+thick, centred on whatever is selected.
+
+They are there because a perspective view is systematically misleading in one
+direction: the projection compresses the extent along the view axis, so boxes
+placed by eye come out short in depth, and the error is invisible from the
+camera that drew them. In a slab a metre is a metre in both screen directions,
+and the returns behind a face are not hidden by the ones in front of it.
+
+| Action | Result |
+|---|---|
+| Drag inside the box | Move it in that plane |
+| Drag an edge | Move **that face**, leaving the opposite one fixed |
+| Scroll | Thicken or thin the slab |
+
+Dragging one edge deliberately does *not* resize symmetrically: the point of a
+slab is aligning one boundary against the returns behind it, and a symmetric
+resize would move the far face away from wherever you had just put it.
+
+### From the keyboard
+
+Tab to a panel and the same three actions are available without a pointer. This
+is not a courtesy: the panels exist *because* placing a box by eye in
+perspective is imprecise in depth, so "adjust it in the 3D view instead" would
+hand a keyboard user exactly the imprecision the panels remove.
+
+| Key | Result |
+|---|---|
+| `,` / `.` | Previous / next annotation — how you select an existing box without a mouse |
+| Arrow | Move the selected box 10 cm in that direction, within the focused plane |
+| `Shift` + arrow | Move the face **on that side** 5 cm outward |
+| `Alt` + arrow | Move that same face 5 cm inward |
+| `[` / `]` | Thin or thicken the slab |
+
+The arrow names the *face*, not the direction of travel — a scheme where it
+named the direction would leave two of the four faces unreachable. Each press
+is its own undo step, unlike a drag, which undoes as one.
+
+Every edit is announced to a screen reader with the box's new size and centre,
+since the panels themselves are pixels. The status line under the viewport is
+deliberately *not* a live region: level-of-detail loading rewrites it several
+times a second while the camera moves.
+
+The panels centre and scale themselves on the selection, so selecting a
+pedestrian does not leave them four pixels wide in a view framed for the street.
+With nothing selected they follow the camera target.
+
+| Option | Default | Effect |
+|---|---|---|
+| `mpr` | on when `cuboid_3d` is a tool | Show the panels. |
+| `slab_thickness` | `2.0` | Metres of depth each slab shows. The wheel changes it live. |
+
+A **tilted** box — one with pitch or roll, not just yaw — is edited through its
+axis-aligned envelope here, which is an approximation rather than a frame-exact
+edit. That is stated rather than hidden: use the perspective view and `q`/`e`
+for a rotated box, and the slabs for its extent.
 
 ## Coordinates are metres, not fractions
 

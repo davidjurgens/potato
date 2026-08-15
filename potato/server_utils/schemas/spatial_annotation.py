@@ -75,7 +75,18 @@ def generate_spatial_annotation_layout(annotation_scheme):
               turns on the 2D verification panels (default: "calibration")
             - color_mode: height | intensity | rgb | uniform
             - point_size: Rendered point size in pixels (default 1.5)
-            - max_points: Decimation cap requested from the server
+            - lod: Load the cloud as an octree, densifying where the camera
+              looks (default true). Set false to fall back to one uniformly
+              decimated buffer capped at ``max_points``.
+            - max_points: Decimation cap, used only when ``lod: false``
+            - point_budget: Points held in memory at once under LOD
+            - min_screen_size: Projected pixels below which a node is not
+              fetched — lower means more detail and more requests
+            - max_loaded_nodes: Cache size before least-recently-visible
+              nodes are evicted
+            - mpr: Show the three orthographic slab views (default: on when
+              cuboid_3d is among the tools)
+            - slab_thickness: Metres of depth each slab shows (default 2.0)
             - default_box_height: Height a new box starts at, in metres
               (default 1.7 — roughly a person, and a sane default for traffic)
             - fit_box_height: Snap a new box's vertical extent to the points
@@ -129,6 +140,20 @@ def _generate_internal(annotation_scheme):
         "colorMode": color_mode,
         "pointSize": float(annotation_scheme.get("point_size", 1.5)),
         "maxPoints": annotation_scheme.get("max_points"),
+        # Level of detail is on by default, and a cloud too small to subdivide
+        # yields a single root node the viewer loads exactly as it loads a
+        # non-LOD cloud. There is deliberately no size threshold: one path that
+        # degenerates correctly beats two that have to agree with each other.
+        "lod": annotation_scheme.get("lod", True) is not False,
+        "pointBudget": annotation_scheme.get("point_budget"),
+        "minScreenSize": annotation_scheme.get("min_screen_size"),
+        "maxLoadedNodes": annotation_scheme.get("max_loaded_nodes"),
+        # Orthographic slab views. On by default when boxes are being drawn,
+        # off when they are not — a project placing only points has nothing to
+        # resize in a slab and the panels would be three empty rectangles.
+        "mpr": annotation_scheme.get(
+            "mpr", "cuboid_3d" in tools) is not False,
+        "slabThickness": float(annotation_scheme.get("slab_thickness", 2.0)),
         "defaultBoxHeight": float(
             annotation_scheme.get("default_box_height", 1.7)),
         "fitBoxHeight": annotation_scheme.get("fit_box_height", True),
@@ -156,13 +181,52 @@ def _generate_internal(annotation_scheme):
                         aria-label="Point cloud viewer. Drag to orbit, right-drag
                                     to pan, scroll to zoom. Use the tool buttons
                                     above, or their keyboard shortcuts, to
-                                    annotate."></canvas>
+                                    annotate. Comma and period step through
+                                    existing annotations; q and e rotate the
+                                    selected box."></canvas>
                 <!-- The viewer reports what it is showing here. A decimated
                      cloud presented without saying so is a cloud the annotator
-                     believes is complete. -->
-                <p class="pc-status" id="pc-status-{escaped_name}"
-                   aria-live="polite"></p>
+                     believes is complete.
+
+                     NOT a live region: level-of-detail loading rewrites this
+                     line roughly every 120 ms while the camera moves, and an
+                     aria-live element that changes eight times a second is a
+                     screen reader that never stops talking. Discrete events go
+                     to .pc-announce below instead. -->
+                <p class="pc-status" id="pc-status-{escaped_name}"></p>
             </div>
+
+            <!-- Everything a screen reader needs to hear: errors, warnings,
+                 and the result of any keyboard edit. The canvases are pixels,
+                 so an edit that only redraws them is otherwise silent. -->
+            <p class="pc-announce" id="pc-announce-{escaped_name}"
+               role="status" aria-live="polite"></p>
+
+            <!-- Orthographic slab views. A perspective projection compresses
+                 the extent along the view axis, so boxes placed by eye come
+                 out systematically short in depth and the error is invisible
+                 from the camera that drew them. In a slab a metre is a metre
+                 in both screen directions. -->
+            <!-- Described once and referenced by all three panels rather than
+                 repeated in each aria-label: the keys are identical, and a
+                 screen reader reading the same paragraph three times as you
+                 tab across is worse than not describing them at all.
+
+                 Outside .pc-mpr because the viewer clears that container's
+                 innerHTML when it builds the panels.
+
+                 Visible rather than screen-reader-only: a sighted keyboard
+                 user needs these keys just as much, and the modifier semantics
+                 (shift grows, alt shrinks) are not guessable from the pointer
+                 affordances. It hides itself when no panel is rendered. -->
+            <div class="pc-mpr" data-schema="{escaped_name}"
+                 role="group" aria-label="Orthographic slab views"></div>
+            <p class="pc-mpr-help" id="pc-mpr-help-{escaped_name}">
+                Arrow keys move the selected box within the focused plane.
+                <kbd>Shift</kbd> + arrow moves the face on that side outward,
+                <kbd>Alt</kbd> + arrow moves it inward.
+                <kbd>[</kbd> and <kbd>]</kbd> change the slab thickness.
+            </p>
 
             <!-- Camera verification panels, filled in only when the item
                  carries calibration. A box placed on a few dozen lidar returns
@@ -195,7 +259,26 @@ def _generate_internal(annotation_scheme):
                     'input-{escaped_name}',
                     {json.dumps(config)});
                 container.annotationManager = manager;
-                manager.init();
+                try {{
+                    manager.init();
+                }} catch (err) {{
+                    // The manager is attached BEFORE init so a re-entrant call
+                    // cannot build a second one -- which means a throw inside
+                    // init leaves a half-built manager that every readiness
+                    // check still accepts. Surfacing it here turns a viewer
+                    // that is silently dead into one that says why; a missing
+                    // sibling module cost an afternoon before this existed.
+                    var status = document.getElementById(
+                        'pc-status-{escaped_name}');
+                    if (status) {{
+                        status.textContent =
+                            '3D viewer failed to start: ' + err.message;
+                        // data-kind, not a class: that is what pc-viewer.css
+                        // styles, in both the light and dark treatments.
+                        status.setAttribute('data-kind', 'error');
+                    }}
+                    console.error('[pointcloud] init failed', err);
+                }}
             }}
             if (document.readyState === 'loading') {{
                 document.addEventListener('DOMContentLoaded', initWhenReady);
@@ -270,5 +353,12 @@ def _keybindings(labels, tools, schema_name):
                 "button instead.", schema_name, label["name"], key)
         taken.add(key)
         bindings.append({"key": key, "description": f'Select {label["name"]}'})
+
+    # Published so they appear in the instructions panel with everything else.
+    # Selection cycling in particular is not discoverable — nothing on screen
+    # suggests the annotations form an ordered list you can step through — and
+    # it is the only route to an existing box without a mouse.
+    bindings.append({"key": ", / .", "description": "Previous / next annotation"})
+    bindings.append({"key": "q / e", "description": "Rotate selected box"})
 
     return bindings

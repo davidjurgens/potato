@@ -88,6 +88,7 @@ class TestRoutesAreRegistered:
         assert "/media/proxy/<path:filepath>" in app.rules
         assert "/media/info/<path:filepath>" in app.rules
         assert "/media/pointcloud/<path:filepath>" in app.rules
+        assert "/media/depth/<path:filepath>" in app.rules
 
     def test_configure_routes_wires_the_media_proxy(self):
         """The registration must actually be called, not merely exist."""

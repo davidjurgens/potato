@@ -57,6 +57,9 @@ over prose when writing a config or calling the API.
 - [Image Annotation Formats](annotation-types/multimedia/image_formats.md) - Import COCO (polygons, RLE masks, crowd regions) with no preprocessing, and export back
 - [Point Cloud Annotation (3D)](annotation-types/spatial/point_cloud.md) - Oriented 3D boxes on lidar: KITTI, PCD, PLY and LAS, converted server-side
 - [Calibration and 2D Verification](annotation-types/spatial/calibration.md) - Project 3D boxes into the camera images, so a box is checkable rather than a guess
+- [Depth Maps](annotation-types/spatial/depth_maps.md) - 16-bit PNG, NPY, PFM and EXR depth with a near/far window and a readout in metres
+- [Embodied Episode Annotation](annotation-types/embodied/episodes.md) - Robot demonstrations: synchronized video, signal lanes, phases, outcomes and dense reward
+- [Robot Dataset Formats](annotation-types/embodied/robot_formats.md) - LeRobot v2, RoboMimic/ALOHA HDF5, RLDS/TFDS, and Potato's own manifest
 - [Audio Annotation](annotation-types/multimedia/audio_annotation.md) - Audio segmentation with waveform visualization
 - [Audio Dialogue](annotation-types/multimedia/audio_dialogue.md) - Podcast/interview turn annotation: speaker bubbles, per-turn audio playback, ratings, spans, and cross-turn linking
 - [Video Annotation](annotation-types/multimedia/video_annotation.md) - Frame-by-frame video labeling

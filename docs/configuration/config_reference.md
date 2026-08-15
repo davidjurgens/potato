@@ -313,6 +313,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `context_attribution` | (none beyond name/description) | `turns_key`, `acts`, `linked_acts`, `hint` | Tag how each turn uses earlier context (used correctly / hallucinated / ignored) with links to the source turn |
 | `coreference` | `span_schema` | `entity_types`, `allow_singletons`, `visual_display` | Coreference chain annotation for grouping mentions of the same entity |
 | `emergent_behavior` | (none beyond name/description) | `steps_key`, `agent_key`, `behaviors`, `allow_note` | Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift |
+| `episode_annotation` | (none beyond name/description) | `source_field`, `episode_field`, `layers`, `phases`, `outcomes`, ... | Embodied robot episode: synchronized video streams and time-series lanes with phase, outcome and dense-reward annotation |
 | `error_span` | `error_types` | `severities`, `show_score`, `max_score` | MQM-style error span annotation with typed severity for quality evaluation |
 | `event_annotation` | `event_types`, `span_schema` | `visual_display` | N-ary event annotation with triggers and typed arguments |
 | `extractive_qa` | (none beyond name/description) | `question_field`, `passage_field`, `allow_unanswerable`, `highlight_color` | SQuAD-style extractive question answering with answer span highlighting |
@@ -340,7 +341,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `soft_label` | `labels` | `total`, `min_per_label`, `show_distribution_chart` | Probability distribution across labels via constrained sliders |
 | `span` | `labels` | `sequential_key_binding`, `bad_text_label`, `title`, `allow_discontinuous`, `entity_linking`, ... | Text span annotation/highlighting with optional entity linking to knowledge bases |
 | `span_link` | `link_types`, `span_schema` | `visual_display` | Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION) |
-| `spatial_annotation` | `tools`, `labels` | `source_field`, `color_mode`, `point_size`, `max_points`, `min_annotations`, ... | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments |
+| `spatial_annotation` | `tools`, `labels` | `source_field`, `calibration_field`, `color_mode`, `point_size`, `max_points`, ... | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments |
 | `speech_transcript` | (none beyond name/description) | `segments_key`, `audio_key`, `error_types`, `allow_correction` | Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction |
 | `table_grid` | (none beyond name/description) | `image_key`, `rows_key`, `cols_key`, `default_rows`, `default_cols`, ... | Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty) |
 | `temporal_grounding` | (none beyond name/description) | `video_key`, `events_key`, `duration` | Video temporal grounding: mark gold event intervals with live IoU vs predicted |

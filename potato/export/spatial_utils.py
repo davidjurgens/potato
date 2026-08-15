@@ -54,10 +54,16 @@ conversion is lossy in one direction and :func:`quaternion_to_yaw` says so.
 ## Why segment_3d stores indices
 
 Per-point labels over a million-point cloud cannot round-trip as a coordinate
-list — it would be larger than the cloud. Indices are stable because the served
-cloud is a fixed decimation of the source (see ``potato/media/pointcloud.py``),
-and the decimation is part of the cache key, so a given item always yields the
-same points in the same order.
+list — it would be larger than the cloud.
+
+The indices are into the **source file**, not into whatever subset the viewer
+happens to have loaded. That distinction is the whole correctness of the type.
+The first version of this note claimed the served cloud was "a fixed decimation,
+so index *i* always means the same point"; it is not fixed, because
+``max_points`` is a schema option and lowering it changes the stride. Every
+served buffer now carries an index channel — see the "why there is an index
+channel" note in ``potato/media/pointcloud.py`` — so a stored segment survives a
+change of ``max_points``, a switch to octree level-of-detail, and a re-export.
 """
 
 from __future__ import annotations

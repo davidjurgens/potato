@@ -153,6 +153,9 @@ class TestBuiltinExportersRegistered:
             # Drawing-dynamics streams, the geometry counterpart. Same JSONL
             # fallback, so also no hard dependency.
             "annotation_telemetry",
+            # Embodied episodes: a per-frame sidecar. Plain JSON Lines, so no
+            # hard dependency either.
+            "episode_jsonl",
         }
         # HuggingFace exporter is optional (depends on datasets/huggingface_hub)
         optional = {"huggingface"}

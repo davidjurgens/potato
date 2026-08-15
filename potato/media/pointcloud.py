@@ -27,6 +27,7 @@ formats browsers cannot display, and reuses the same content-addressed cache.
     positions    float32 * 3N   (x, y, z interleaved)
     colors       uint8 * 3N     (optional, r, g, b interleaved)
     intensity    float32 * N    (optional)
+    indices      uint32 * N     (optional, source-file index per point)
 
 Interleaved XYZ is what a three.js ``BufferGeometry`` position attribute wants,
 so the client does ``new Float32Array(buffer, offset, 3 * n)`` and hands it
@@ -35,6 +36,21 @@ straight over — no per-point JavaScript loop anywhere in the path.
 Everything is little-endian. Big-endian machines are not a realistic target for
 a WebGL viewer, and pretending to support them without a machine to test on
 would be worse than saying so.
+
+## Why there is an index channel
+
+``segment_3d`` stores **point indices**, and the spatial contract originally
+justified that with "the served cloud is a fixed decimation, so index *i* always
+means the same point". It is not fixed. ``max_points`` is a schema option, so
+lowering it — exactly what an admin does when a machine struggles — changes the
+stride and silently re-points every stored per-point segment at different
+points. Nothing errors; the labels just move.
+
+So whenever the served set is not the whole file in file order, each point
+carries its index **into the source file**. Absent indices means the identity
+mapping, which keeps the common small-cloud case a byte-for-byte no-op. Octree
+LOD (:mod:`potato.media.octree`) needs the same channel for the same reason:
+there, the set of loaded points changes as the camera moves.
 """
 
 from __future__ import annotations
@@ -60,6 +76,12 @@ DEFAULT_MAX_POINTS = 500_000
 #: Extensions we can read. LAZ is deliberately absent; see read_point_cloud.
 SUPPORTED_SUFFIXES = (".pcd", ".ply", ".bin", ".las", ".xyz", ".pts")
 
+#: Typecode for a 4-byte unsigned int. ``array('I')`` is C ``unsigned int``,
+#: which is 4 bytes everywhere that matters but is not guaranteed to be — and
+#: the index channel is read on the client as a Uint32Array, so a 2- or 8-byte
+#: itemsize would produce silently misaligned garbage rather than an error.
+U32 = "I" if array("I").itemsize == 4 else "L"
+
 
 class PointCloudError(RuntimeError):
     """A point cloud could not be read. The message names the next action."""
@@ -81,6 +103,10 @@ class PointCloud:
     source_format: str = ""
     #: Points in the file before decimation, so the UI can say what it dropped.
     original_count: int = 0
+    #: Source-file index per point ('I', length N), or None for the identity
+    #: mapping. See the module docstring: this is what makes ``segment_3d``
+    #: survive a change of ``max_points`` or a switch to octree LOD.
+    indices: Optional[array] = None
 
     @property
     def count(self) -> int:
@@ -187,6 +213,11 @@ def decimate(cloud: PointCloud, max_points: int) -> PointCloud:
     scene — which looks like a sensor failure, not like decimation. Every Nth
     point keeps the whole scene at lower density, which looks like exactly what
     it is.
+
+    The kept points carry their **source index**, so a stored ``segment_3d``
+    still means the same points after ``max_points`` changes. Without that, the
+    thinning silently relabels: at stride 4 index 10 is source point 40, at
+    stride 5 it is source point 50.
     """
     n = cloud.count
     if max_points <= 0 or n <= max_points:
@@ -209,10 +240,18 @@ def decimate(cloud: PointCloud, max_points: int) -> PointCloud:
     if cloud.intensity is not None:
         intensity = array("f", (cloud.intensity[i] for i in keep))
 
+    # Compose rather than overwrite: decimating an already-decimated cloud must
+    # still yield indices into the original file, not into the intermediate.
+    if cloud.indices is not None:
+        indices = array(U32, (cloud.indices[i] for i in keep))
+    else:
+        indices = array(U32, keep)
+
     return PointCloud(
         positions=positions, colors=colors, intensity=intensity,
         source_format=cloud.source_format,
         original_count=cloud.original_count or n,
+        indices=indices,
     )
 
 
@@ -228,6 +267,7 @@ def to_wire(cloud: PointCloud, extra: Optional[Dict[str, Any]] = None) -> bytes:
         "count": n,
         "has_colors": cloud.colors is not None,
         "has_intensity": cloud.intensity is not None,
+        "has_indices": cloud.indices is not None,
         "source_format": cloud.source_format,
         "original_count": cloud.original_count or n,
         "bounds": cloud.bounds(),
@@ -244,6 +284,8 @@ def to_wire(cloud: PointCloud, extra: Optional[Dict[str, Any]] = None) -> bytes:
         out += bytes(cloud.colors)
     if cloud.intensity is not None:
         out += _to_le_bytes(cloud.intensity)
+    if cloud.indices is not None:
+        out += _to_le_bytes(cloud.indices)
     return bytes(out)
 
 
@@ -271,11 +313,19 @@ def from_wire(data: bytes) -> Tuple[Dict[str, Any], PointCloud]:
         intensity = array("f")
         intensity.frombytes(data[offset:offset + n * 4])
         _from_le(intensity)
+        offset += n * 4
+
+    indices = None
+    if header.get("has_indices"):
+        indices = array(U32)
+        indices.frombytes(data[offset:offset + n * 4])
+        _from_le(indices)
 
     return header, PointCloud(
         positions=positions, colors=colors, intensity=intensity,
         source_format=header.get("source_format", ""),
         original_count=int(header.get("original_count", n)),
+        indices=indices,
     )
 
 

@@ -139,6 +139,7 @@ def _register_builtin_exporters():
     from .convokit_exporter import ConvoKitExporter
     from .keystroke_exporter import KeystrokeExporter
     from .annotation_telemetry_exporter import AnnotationTelemetryExporter
+    from .episode_exporter import EpisodeJsonlExporter
 
     exporters = [
         COCOExporter(),
@@ -163,6 +164,10 @@ def _register_builtin_exporters():
         EAFExporter(),
         TextGridExporter(),
         AgentEvalExporter(),
+        # Embodied episodes: a per-frame sidecar keyed by
+        # (episode_id, frame_index), so the read-only source
+        # dataset is never rewritten.
+        EpisodeJsonlExporter(),
         CodingEvalExporter(),
         TrajectoryCorrectionExporter(),
         ParquetExporter(),

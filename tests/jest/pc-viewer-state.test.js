@@ -349,3 +349,51 @@ describe('finding the cloud for an item', () => {
         expect(Manager.looksLikeCloud(value)).toBe(expected);
     });
 });
+
+describe('sibling modules', () => {
+    /**
+     * The viewer resolves pc-wire, pc-calibration, pc-octree and pc-mpr into
+     * module-level consts. Forgetting one is a plain ReferenceError at first
+     * use — and because the schema attaches the manager to the container
+     * BEFORE calling init(), a throw in init leaves a half-built manager that
+     * every readiness check still accepts. The viewer then sits there silently
+     * dead: no cloud, no panels, no error.
+     *
+     * Adding the MPR panels shipped exactly that. These tests make a missing
+     * sibling a two-second failure instead.
+     */
+    test('every sibling module is loadable from the viewer directory', () => {
+        ['pc-wire.js', 'pc-calibration.js', 'pc-octree.js', 'pc-mpr.js']
+            .forEach((name) => {
+                const mod = require(`../../potato/static/pointcloud/${name}`);
+                expect(mod).toBeTruthy();
+            });
+    });
+
+    test('the viewer names each of them', () => {
+        // Source-level, because the consts are closed over by the IIFE and are
+        // not reachable from the exported class.
+        const fs = require('fs');
+        const src = fs.readFileSync(
+            require.resolve('../../potato/static/pointcloud/pc-viewer.js'),
+            'utf8');
+        ['PointCloudWire', 'PointCloudCalibration', 'PointCloudOctree',
+         'PointCloudMPR'].forEach((global) => {
+            expect(src).toContain(global);
+        });
+    });
+
+    test('every global the viewer reads is declared as a const', () => {
+        // The actual defect: `root.PointCloudMPR` was referenced through a
+        // local name that was never declared, so the global existing was not
+        // enough.
+        const fs = require('fs');
+        const src = fs.readFileSync(
+            require.resolve('../../potato/static/pointcloud/pc-viewer.js'),
+            'utf8');
+        ['wire', 'calib', 'octree', 'mpr'].forEach((name) => {
+            expect(src).toMatch(
+                new RegExp(`const ${name} = \\(root && root\\.PointCloud`));
+        });
+    });
+});

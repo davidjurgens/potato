@@ -41,7 +41,15 @@ GEOMETRY_TYPES = {"image_annotation"}
 #: label}]}`` payload through the same ``annotation-data-input`` convention as
 #: image annotation, so they share this module's gathering and distance paths
 #: and differ only in the similarity function.
-TEMPORAL_TYPES = {"audio_annotation", "video_annotation"}
+TEMPORAL_TYPES = {"audio_annotation", "video_annotation", "episode_annotation"}
+
+#: Temporal schemas whose blob is a **dict of layers** rather than a bare
+#: ``{"segments": [...]}``. An episode carries phases, a reward curve, an
+#: outcome and instructions in one value; only the phases are a segmentation,
+#: and the others are scored by their own machinery (the reward curve through
+#: the continuous path, the outcome as a nominal label). Reading the whole blob
+#: as segments would silently score zero segments for every episode.
+LAYERED_TEMPORAL_KEYS = {"episode_annotation": "phases"}
 
 #: Types with no defined notion of agreement between two annotators. Free text
 #: is excluded deliberately: two people never type the same sentence, and
@@ -148,23 +156,76 @@ def temporal_segments(scheme: Any, stored: Any) -> List[dict]:
     if not supports_temporal(scheme):
         return []
 
+    layer_key = LAYERED_TEMPORAL_KEYS.get(_annotation_type(scheme))
     blobs = _parse_blob(stored)
     segments: List[dict] = []
     for blob in blobs:
-        raw = blob.get("segments") if isinstance(blob, dict) else None
+        if not isinstance(blob, dict):
+            continue
+        raw = blob.get(layer_key) if layer_key else blob.get("segments")
         for seg in raw or []:
             if not isinstance(seg, dict):
                 continue
             try:
-                start = float(seg.get("start_time"))
-                end = float(seg.get("end_time"))
-            except (TypeError, ValueError):
+                # Two spellings, because the timeline schemas grew separately:
+                # audio and video write start_time/end_time, the episode
+                # timeline writes start/end. Accepting both here beats making
+                # one of them wrong on disk for the sake of tidiness.
+                start = float(seg["start_time"] if "start_time" in seg
+                              else seg["start"])
+                end = float(seg["end_time"] if "end_time" in seg
+                            else seg["end"])
+            except (TypeError, ValueError, KeyError):
                 continue
             if end < start:
                 start, end = end, start
             segments.append({"start": start, "end": end,
                              "label": seg.get("label")})
     return segments
+
+
+def reward_curve(scheme: Any, stored: Any) -> List[dict]:
+    """
+    The dense reward samples of an episode annotation, as ``{"t", "value"}``.
+
+    Separate from :func:`temporal_segments` because a curve is not a
+    segmentation: it has no labels, it does not partition the timeline, and
+    temporal IoU is meaningless on it. It is scored by resampling both
+    annotators onto a common grid and running the continuous measures — see
+    :mod:`potato.server_utils.iaa.episodes`.
+    """
+    if _annotation_type(scheme) != "episode_annotation":
+        return []
+    out: List[dict] = []
+    for blob in _parse_blob(stored):
+        for point in (blob.get("reward") or []) if isinstance(blob, dict) else []:
+            if not isinstance(point, dict):
+                continue
+            try:
+                out.append({"t": float(point["t"]),
+                            "value": float(point["value"])})
+            except (TypeError, ValueError, KeyError):
+                continue
+    return sorted(out, key=lambda p: p["t"])
+
+
+def episode_outcome(scheme: Any, stored: Any) -> Optional[str]:
+    """
+    The per-episode outcome label, or None when the annotator did not say.
+
+    None rather than "" so that "not answered" and "answered as empty" stay
+    distinguishable — an unanswered outcome must be excluded from the nominal
+    agreement rather than counted as a category everyone agreed on.
+    """
+    if _annotation_type(scheme) != "episode_annotation":
+        return None
+    for blob in _parse_blob(stored):
+        if not isinstance(blob, dict):
+            continue
+        outcome = blob.get("outcome")
+        if isinstance(outcome, dict) and outcome.get("result"):
+            return str(outcome["result"])
+    return None
 
 
 def _parse_blob(stored: Any) -> List[dict]:

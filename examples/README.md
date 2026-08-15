@@ -112,6 +112,13 @@ nothing large is committed. See [ConvoKit integration](../docs/integrations/conv
 | Example | Description |
 |---------|-------------|
 | `kitti-cuboids/` | Oriented 3D boxes on a lidar scan — KITTI `.bin`, PCD, PLY and LAS all load |
+| `depth-eval/` | Review a monocular depth prediction: window, colormap, and the distance under the cursor in metres |
+
+### `embodied/` — robot demonstrations
+
+| Example | What it shows |
+|---|---|
+| `lerobot-episode/` | Phases, outcome and dense progress reward on a multi-stream robot episode |
 
 ### [advanced/](advanced/) - Complex Features & Workflows
 

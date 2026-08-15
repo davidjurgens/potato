@@ -83,6 +83,14 @@
     "sha256": "02c79d937977c083",
     "version": "1"
   },
+  "depth-viewer.css": {
+    "sha256": "fba4e9cc595e46ff",
+    "version": "1"
+  },
+  "depth-viewer.js": {
+    "sha256": "4591a6d46ec2d689",
+    "version": "1"
+  },
   "device-routing.js": {
     "sha256": "f52d7fbb29b8ca21",
     "version": "2"
@@ -97,6 +105,14 @@
   },
   "entity-linking.js": {
     "sha256": "4dbfcbde35120f8e",
+    "version": "1"
+  },
+  "episode-timeline.css": {
+    "sha256": "31e19017a6869be5",
+    "version": "1"
+  },
+  "episode-timeline.js": {
+    "sha256": "ef0e60f89afd0413",
     "version": "1"
   },
   "event-annotation.js": {
@@ -187,17 +203,25 @@
     "sha256": "c592330881d09edc",
     "version": "1"
   },
+  "pointcloud/pc-mpr.js": {
+    "sha256": "7b9ff3d7f69f9dc4",
+    "version": "1"
+  },
+  "pointcloud/pc-octree.js": {
+    "sha256": "11e79ec8beef3418",
+    "version": "1"
+  },
   "pointcloud/pc-viewer.css": {
-    "sha256": "f5780dac68d9ac05",
-    "version": "2"
+    "sha256": "f9a65ca3f7c043a7",
+    "version": "4"
   },
   "pointcloud/pc-viewer.js": {
-    "sha256": "447e7243fcc06a9e",
-    "version": "2"
+    "sha256": "54adfd418d488a0d",
+    "version": "5"
   },
   "pointcloud/pc-wire.js": {
-    "sha256": "f5a96c567e101d02",
-    "version": "1"
+    "sha256": "482b899ec60b7947",
+    "version": "2"
   },
   "run-tree.js": {
     "sha256": "074d3ccc44b64809",

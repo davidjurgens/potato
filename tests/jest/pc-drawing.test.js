@@ -360,3 +360,58 @@ describe('annotationCenter', () => {
         expect(annotationCenter(null)).toBeNull();
     });
 });
+
+describe('multiple position buffers (level of detail)', () => {
+    // Under LOD the cloud is many buffers, not one. Every geometry helper that
+    // reads points has to see all of them, or a box fitted while zoomed in
+    // uses only the coarse root sample and comes out short.
+    const manager = require('../../potato/static/pointcloud/pc-viewer.js');
+
+    test('asChunks accepts one buffer or several', () => {
+        const one = new Float32Array([0, 0, 1]);
+        expect(manager.asChunks(one)).toEqual([one]);
+        expect(manager.asChunks([one, one]).length).toBe(2);
+        expect(manager.asChunks(null)).toEqual([]);
+        expect(manager.asChunks(new Float32Array(0))).toEqual([]);
+    });
+
+    test('asChunks drops empty buffers', () => {
+        // An evicted node leaves an empty buffer behind; letting it through
+        // would make the "no points at all" guard in fitHeightToPoints think
+        // it had data.
+        const real = new Float32Array([0, 0, 1]);
+        expect(manager.asChunks([real, new Float32Array(0), null]))
+            .toEqual([real]);
+    });
+
+    test('groundLevel reads across buffers', () => {
+        const low = new Float32Array([0, 0, -1.7, 1, 1, -1.7]);
+        const high = new Float32Array([2, 2, 3, 3, 3, 4]);
+        expect(manager.groundLevel([low, high])).toBeCloseTo(-1.7, 6);
+    });
+
+    test('fitHeightToPoints finds a roof that is only in the second buffer', () => {
+        // The failure this prevents: the tall returns live in a dense child
+        // node while the coarse root has only the ground, so fitting to the
+        // root alone produces a box the height of the kerb.
+        const coords = {
+            center: [0, 0, 0], size: [4, 4, 1.7], rotation: [0, 0, 0, 1] };
+        const ground = new Float32Array([0, 0, 0, 0.1, 0.1, 0, 0.2, 0.2, 0]);
+        const roof = new Float32Array([
+            0, 0, 1.5, 0.1, 0, 1.6, 0, 0.1, 1.55, -0.1, 0, 1.5, 0, -0.1, 1.52]);
+
+        const rootOnly = manager.fitHeightToPoints(coords, ground, 0);
+        expect(rootOnly.size[2]).toBeCloseTo(1.7, 6);   // unchanged: no hits
+
+        const withDetail = manager.fitHeightToPoints(coords, [ground, roof], 0);
+        expect(withDetail.size[2]).toBeGreaterThan(1.55);
+        expect(withDetail.size[2]).toBeLessThan(1.7);
+    });
+
+    test('withParam appends to a URL that already has a query', () => {
+        expect(manager.withParam('/media/pointcloud/a.bin', 'lod', '1'))
+            .toBe('/media/pointcloud/a.bin?lod=1');
+        expect(manager.withParam('/media/pointcloud/a.bin?lod=1', 'node', 'r03'))
+            .toBe('/media/pointcloud/a.bin?lod=1&node=r03');
+    });
+});

@@ -65,6 +65,10 @@ nav:
         - Spatial (3D):
             - Point Cloud Annotation: annotation-types/spatial/point_cloud.md
             - Calibration and 2D Verification: annotation-types/spatial/calibration.md
+            - Depth Maps: annotation-types/spatial/depth_maps.md
+        - Embodied:
+            - Episode Annotation: annotation-types/embodied/episodes.md
+            - Robot Dataset Formats: annotation-types/embodied/robot_formats.md
         - Measurement:
             - Visual Analog Scale: annotation-types/measurement/vas.md
             - Range Slider: annotation-types/measurement/range_slider.md

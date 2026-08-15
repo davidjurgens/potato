@@ -33,19 +33,31 @@
     {% set frontend_assets = frontend_assets | default({}) %}
 
     <!-- Image Annotation Styles.
-         Also loaded for spatial_annotation: that schema renders the SAME
-         .tool-btn / .label-btn markup on purpose (so per-class show/hide works
-         with no new wiring), and those buttons are styled here. Gating this on
-         image_annotation alone left a point-cloud page with unstyled
-         toolbars. -->
+         Also loaded for spatial_annotation and episode_annotation: both render
+         the SAME .tool-btn / .label-btn markup on purpose (so per-class
+         show/hide works with no new wiring), and those buttons are styled
+         here. Gating this on image_annotation alone left a point-cloud page
+         with unstyled toolbars -- and then, exactly the same way, an episode
+         page whose phase buttons had no colour swatch. -->
     {% if frontend_assets.image_annotation | default(false)
-          or frontend_assets.spatial_annotation | default(false) %}
+          or frontend_assets.spatial_annotation | default(false)
+          or frontend_assets.episode_annotation | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=15">
     {% endif %}
 
     <!-- Point cloud viewer styles -->
     {% if frontend_assets.spatial_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='pointcloud/pc-viewer.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pointcloud/pc-viewer.css') }}?v=4">
+    {% endif %}
+
+    <!-- Depth map display styles -->
+    {% if frontend_assets.depth_map | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='depth-viewer.css') }}?v=1">
+    {% endif %}
+
+    <!-- Embodied episode timeline styles -->
+    {% if frontend_assets.episode_annotation | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='episode-timeline.css') }}?v=1">
     {% endif %}
 
     <!-- Audio Annotation Styles -->
@@ -799,9 +811,22 @@
          an import map and would not work from a file:// mirror. -->
     {% if frontend_assets.spatial_annotation | default(false) %}
     <script src="{{ url_for('static', filename='vendor/three-0.160.0.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='pointcloud/pc-wire.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-wire.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='pointcloud/pc-calibration.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-octree.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-mpr.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=5"></script>
+    {% endif %}
+
+    <!-- Depth maps. A display type, so it is gated on the display's wrapper
+         class rather than on a schema. -->
+    {% if frontend_assets.depth_map | default(false) %}
+    <script src="{{ url_for('static', filename='depth-viewer.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- Embodied episode timeline -->
+    {% if frontend_assets.episode_annotation | default(false) %}
+    <script src="{{ url_for('static', filename='episode-timeline.js') }}?v=1"></script>
     {% endif %}
 
     <!-- Per-class show/hide, shared by image and video annotation -->

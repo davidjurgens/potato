@@ -62,6 +62,7 @@ instance_display:
 | `audio` | Audio player | No |
 | `audio_dialogue` | **Diarized transcript synced to audio**: speaker bubbles, per-turn playback, per-turn ratings, spans, cross-turn linking | Yes |
 | `gallery` | Scrollable image gallery with captions | No |
+| `depth_map` | **Depth map**: near/far window, colormap, overlay on RGB, and the distance in metres under the cursor | No |
 | `dialogue` | Conversation turns | Yes |
 | `conversation_tree` | Conversation tree with collapsible branching nodes | No |
 | `multi_agent_discussion` | Multi-agent discussion with agent legend, colors, addressees, and filtering | Yes |

@@ -214,3 +214,103 @@
         transition: none;
     }
 }
+
+/* ---------------------------------------------------------------------------
+   Orthographic slab views (multi-planar reconstruction)
+
+   Three panels showing the same scene down each axis, each restricted to a
+   slab of a couple of metres. A perspective view compresses the extent along
+   the view axis, so a box placed by eye is short in depth and the error is
+   invisible from the camera that drew it; in a slab, a metre is a metre in
+   both screen directions.
+   --------------------------------------------------------------------------- */
+
+.pointcloud-annotation-container .pc-mpr {
+    display: grid;
+    /* `min(240px, 100%)` for the same reason the camera grid uses it: a bare
+       240px track stays 240px wide in a narrower container and the PAGE
+       scrolls sideways, which is WCAG 1.4.10 (Reflow). Three panels fit above
+       ~760px and stack below it. */
+    grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+/* An empty labelled group is announced as a region containing nothing, and
+   takes grid gap besides. */
+.pointcloud-annotation-container .pc-mpr:empty {
+    display: none;
+}
+
+.pointcloud-annotation-container .pc-slab {
+    margin: 0;
+    /* Grid items default to `min-width: auto` — at least as wide as their
+       content's minimum — which inflates the track back past the container. */
+    min-width: 0;
+}
+
+.pointcloud-annotation-container .pc-slab-canvas {
+    display: block;
+    width: 100%;
+    /* A square panel: the view is isotropic in world units, so a square canvas
+       shows the same extent in both directions and the eye can compare them.
+       aspect-ratio rather than a fixed height so it tracks the column width. */
+    aspect-ratio: 1 / 1;
+    background: #11151c;
+    border: 1px solid #2a3140;
+    border-radius: 4px;
+    /* The panels are draggable, so they must not also scroll the page under a
+       touch gesture. */
+    touch-action: none;
+}
+
+.pointcloud-annotation-container .pc-slab-canvas:focus-visible {
+    outline: 2px solid #6ea8fe;
+    outline-offset: 2px;
+}
+
+/* The keyboard hint under the slab panels. Hidden along with the panels when
+   MPR is switched off — an instruction for controls that are not on the page
+   is worse than no instruction. */
+.pointcloud-annotation-container .pc-mpr:empty + .pc-mpr-help {
+    display: none;
+}
+
+.pointcloud-annotation-container .pc-mpr-help {
+    margin: 6px 0 0;
+    font-size: 0.78rem;
+    color: #5a6472;
+}
+
+.pointcloud-annotation-container .pc-mpr-help kbd {
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    padding: 0 0.25em;
+    border: 1px solid #c8cdd6;
+    border-radius: 3px;
+    background: #f5f6f8;
+    color: #3a4250;
+}
+
+/* Live region for edits that only redraw canvas pixels. Clipped rather than
+   display:none — hidden content is not announced. */
+.pointcloud-annotation-container .pc-announce {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.pointcloud-annotation-container .pc-slab figcaption {
+    font-size: 0.78rem;
+    color: #5a6472;
+    margin-top: 3px;
+    /* Reports the slab thickness, which the wheel changes. Tabular figures so
+       the caption does not jitter as the number scrolls. */
+    font-variant-numeric: tabular-nums;
+}

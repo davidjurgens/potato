@@ -146,6 +146,14 @@ VISION_SCHEMAS = {
     "pdf_bbox": "examples/image/pdf-bbox/config.yaml",
     "document_bbox": "examples/image/document-bbox/config.yaml",
     "pdf_annotation": "examples/image/pdf-annotation/config.yaml",
+    # Spatial. The point cloud shot is layout-only: a hidden-tab WebGL context
+    # freezes at t=0, so the canvas may be blank in the image even when the
+    # scene graph is correct. The toolbar, labels and camera panels around it
+    # are what this is checking.
+    "spatial_kitti_cuboids": "examples/spatial/kitti-cuboids/config.yaml",
+    "spatial_depth_eval": "examples/spatial/depth-eval/config.yaml",
+    # Embodied episodes. Video plus signal lanes on one timeline.
+    "embodied_episode": "examples/embodied/lerobot-episode/config.yaml",
 }
 
 # Combined

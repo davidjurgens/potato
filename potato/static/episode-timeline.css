@@ -1,0 +1,278 @@
+/*
+ * Embodied episode annotation.
+ *
+ * Streams above, transport in the middle, timeline below. The order is not
+ * arbitrary: the annotator watches, then marks what they saw, and a timeline
+ * above the video would put the thing being edited further from the pointer
+ * than the thing being read.
+ */
+
+.episode-annotation-container fieldset {
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.episode-instruction {
+    margin: 0 0 0.5rem;
+    padding: 0.4rem 0.6rem;
+    background: #eef3fb;
+    border-left: 3px solid #2f6fd0;
+    font-size: 0.92rem;
+    color: #1f2a3a;
+}
+
+.episode-instruction:empty {
+    display: none;
+}
+
+/* Streams -------------------------------------------------------------- */
+
+.episode-streams {
+    display: grid;
+    /* `min(320px, 100%)` rather than a bare 320px: a fixed minimum keeps the
+       track wider than its container on a narrow viewport and the PAGE scrolls
+       sideways, which is WCAG 1.4.10 (Reflow). */
+    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.episode-streams:empty {
+    display: none;
+}
+
+.episode-stream {
+    margin: 0;
+    /* Grid items default to `min-width: auto` — at least as wide as their
+       content — which inflates the track back past the container. */
+    min-width: 0;
+}
+
+.episode-video {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #11151c;
+    border-radius: 4px;
+}
+
+.episode-stream figcaption {
+    font-size: 0.78rem;
+    color: #5a6472;
+    margin-top: 2px;
+}
+
+.episode-stream-broken .episode-video {
+    /* A missing stream is a real and common state — a state-only dataset, or
+       frames that were never downloaded. It gets a visible placeholder rather
+       than a zero-height element that reads as a layout fault. */
+    min-height: 120px;
+    border: 1px dashed #8a94a6;
+}
+
+/* Transport ------------------------------------------------------------ */
+
+.episode-transport {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+}
+
+.episode-play {
+    border: 1px solid #c8cdd6;
+    background: #f5f6f8;
+    border-radius: 4px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.episode-play:hover {
+    background: #e9ebef;
+}
+
+.episode-time,
+.episode-frame {
+    font-size: 0.82rem;
+    color: #465060;
+    /* Tabular figures and a floor on the width: these update every animation
+       frame during playback, and proportional digits make the whole toolbar
+       jitter as the numbers change. */
+    font-variant-numeric: tabular-nums;
+    min-width: 5.5rem;
+}
+
+.episode-phase-buttons {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-left: auto;
+}
+
+/* Timeline ------------------------------------------------------------- */
+
+.episode-timeline {
+    width: 100%;
+    /* Never scrolls sideways: the whole episode is always in view, because a
+       timeline you have to scroll to see the end of cannot show you where a
+       phase sits relative to the whole demonstration. */
+    overflow: hidden;
+    border: 1px solid #dfe3ea;
+    border-radius: 4px;
+}
+
+.episode-canvas {
+    display: block;
+    width: 100%;
+    /* The lanes are drag targets, so a touch gesture on them must not also
+       scroll the page. */
+    touch-action: none;
+}
+
+.episode-canvas:focus-visible {
+    outline: 2px solid #2f6fd0;
+    outline-offset: 2px;
+}
+
+/* Outcome -------------------------------------------------------------- */
+
+.episode-outcome {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    padding: 6px 8px;
+    background: #f6f7f9;
+    border-radius: 4px;
+}
+
+.episode-outcome-legend {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #333;
+}
+
+.episode-outcome-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.88rem;
+    /* 44px is the WCAG 2.5.5 target size; radios are small and the label is
+       the real target, so the padding is what makes it reachable. */
+    min-height: 44px;
+}
+
+.episode-cause-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.82rem;
+    color: #555;
+}
+
+.episode-cause {
+    padding: 0.25rem 0.4rem;
+    border: 1px solid #c8cdd6;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.episode-cause:disabled {
+    /* Present but inert rather than absent: a control that materialises on
+       selection shifts the layout under the pointer and the annotator has to
+       re-find where they were. */
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* Status --------------------------------------------------------------- */
+
+.episode-status {
+    margin: 6px 0 0;
+    font-size: 0.82rem;
+    color: #5a6472;
+    min-height: 1.2em;
+}
+
+.episode-status[data-kind="warn"] {
+    color: #6b4a00;
+    background: #fff6e0;
+    border-left: 3px solid #d9a406;
+    padding: 0.3rem 0.55rem;
+}
+
+.episode-status[data-kind="error"] {
+    color: #7a1414;
+    background: #fdecec;
+    border-left: 3px solid #c62828;
+    padding: 0.3rem 0.55rem;
+}
+
+@media (max-width: 640px) {
+    .episode-phase-buttons {
+        margin-left: 0;
+        width: 100%;
+    }
+}
+
+/* Hindsight relabelling ------------------------------------------------ */
+
+.episode-instruction-edit {
+    margin-top: 8px;
+    padding: 6px 8px;
+    background: #f6f7f9;
+    border-radius: 4px;
+}
+
+.episode-instruction-edit label {
+    display: block;
+    font-size: 0.82rem;
+    color: #465060;
+    margin-bottom: 3px;
+}
+
+.episode-relabel {
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid #c8cdd6;
+    border-radius: 4px;
+    font: inherit;
+    font-size: 0.9rem;
+    resize: vertical;
+}
+
+.episode-relabel-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.episode-relabel-align {
+    border: 1px solid #c8cdd6;
+    background: #fff;
+    border-radius: 4px;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.episode-relabel-align:hover {
+    background: #eef1f5;
+}
+
+.episode-relabel-span {
+    font-size: 0.8rem;
+    color: #5a6472;
+    font-variant-numeric: tabular-nums;
+}
+
+.episode-relabel:focus-visible,
+.episode-relabel-align:focus-visible {
+    outline: 2px solid #2f6fd0;
+    outline-offset: 1px;
+}

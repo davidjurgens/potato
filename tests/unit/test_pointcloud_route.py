@@ -161,3 +161,130 @@ class TestFailures:
         resp = c.get("/media/pointcloud/scan.bin")
         assert resp.status_code == 415
         assert "multiple of 16" in json.loads(resp.data)["error"]
+
+
+class TestLevelOfDetail:
+    """``?lod=1`` — the manifest, then nodes by key."""
+
+    def _scene(self, media, n=3000):
+        import random
+        rng = random.Random(3)
+        points = [(rng.uniform(-20, 20), rng.uniform(-20, 20),
+                   rng.uniform(-2, 3), rng.uniform(0, 1)) for _ in range(n)]
+        (media / "scene.bin").write_bytes(kitti(points))
+        return points
+
+    def test_manifest_is_json_and_names_its_nodes(self, client):
+        c, media = client
+        self._scene(media)
+
+        resp = c.get("/media/pointcloud/scene.bin?lod=1&min_points=500&grid=8")
+        assert resp.status_code == 200
+        assert resp.mimetype == "application/json"
+
+        manifest = resp.get_json()
+        assert manifest["total_count"] == 3000
+        assert manifest["nodes"]
+        assert manifest["nodes"][0]["key"] == "r"
+
+    def test_manifest_does_not_leak_cache_file_offsets(self, client):
+        c, media = client
+        self._scene(media)
+
+        manifest = c.get(
+            "/media/pointcloud/scene.bin?lod=1&min_points=500&grid=8"
+        ).get_json()
+        for node in manifest["nodes"]:
+            assert "offset" not in node
+            assert "length" not in node
+
+    def test_a_node_comes_back_as_a_pnt_buffer_with_indices(self, client):
+        c, media = client
+        self._scene(media)
+
+        query = "lod=1&min_points=500&grid=8"
+        manifest = c.get(f"/media/pointcloud/scene.bin?{query}").get_json()
+        key = manifest["nodes"][0]["key"]
+
+        resp = c.get(f"/media/pointcloud/scene.bin?{query}&node={key}")
+        assert resp.status_code == 200
+        assert resp.mimetype == "application/octet-stream"
+
+        header, cloud = from_wire(resp.data)
+        assert header["has_indices"] is True
+        assert cloud.count == manifest["nodes"][0]["count"]
+        # Indices are into the source file, so they can exceed this node's own
+        # point count. That is the whole point of the channel.
+        assert max(cloud.indices) < 3000
+
+    def test_every_node_together_is_the_whole_cloud(self, client):
+        c, media = client
+        self._scene(media)
+
+        query = "lod=1&min_points=500&grid=8"
+        manifest = c.get(f"/media/pointcloud/scene.bin?{query}").get_json()
+
+        seen = set()
+        for node in manifest["nodes"]:
+            resp = c.get(
+                f"/media/pointcloud/scene.bin?{query}&node={node['key']}")
+            _header, cloud = from_wire(resp.data)
+            seen.update(cloud.indices)
+        assert seen == set(range(3000))
+
+    def test_an_unknown_node_is_a_404_not_a_500(self, client):
+        c, media = client
+        self._scene(media)
+        query = "lod=1&min_points=500&grid=8"
+        c.get(f"/media/pointcloud/scene.bin?{query}")
+
+        resp = c.get(f"/media/pointcloud/scene.bin?{query}&node=r7777")
+        assert resp.status_code == 404
+        assert "node" in resp.get_json()["error"]
+
+    def test_a_malformed_node_key_is_rejected(self, client):
+        c, media = client
+        self._scene(media)
+
+        resp = c.get("/media/pointcloud/scene.bin?lod=1&node=../../etc/passwd")
+        assert resp.status_code == 400
+
+    def test_traversal_is_still_refused_under_lod(self, client):
+        c, _media = client
+        resp = c.get("/media/pointcloud/..%2f..%2fetc%2fpasswd?lod=1")
+        assert resp.status_code in (403, 404)
+
+    def test_the_octree_is_built_once_and_cached(self, client, tmp_path):
+        c, media = client
+        self._scene(media)
+
+        query = "lod=1&min_points=500&grid=8"
+        c.get(f"/media/pointcloud/scene.bin?{query}")
+        cached = list((tmp_path / "out" / ".media_cache").glob("*.oct"))
+        assert len(cached) == 1
+
+        c.get(f"/media/pointcloud/scene.bin?{query}")
+        assert len(list((tmp_path / "out" / ".media_cache").glob("*.oct"))) == 1
+
+    def test_build_parameters_are_part_of_the_cache_key(self, client, tmp_path):
+        # Otherwise lowering min_points would serve back the previous, coarser
+        # octree -- the same class of bug the max_points key exists to avoid.
+        c, media = client
+        self._scene(media)
+
+        c.get("/media/pointcloud/scene.bin?lod=1&min_points=500&grid=8")
+        c.get("/media/pointcloud/scene.bin?lod=1&min_points=200&grid=8")
+        assert len(list((tmp_path / "out" / ".media_cache").glob("*.oct"))) == 2
+
+    def test_lod_ignores_max_points(self, client):
+        """
+        LOD must build from the undecimated cloud. Decimating first would
+        promise detail that was thrown away before the structure was built.
+        """
+        c, media = client
+        self._scene(media)
+
+        manifest = c.get(
+            "/media/pointcloud/scene.bin?lod=1&max_points=100&min_points=500"
+        ).get_json()
+        assert manifest["total_count"] == 3000

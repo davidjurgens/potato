@@ -40,6 +40,9 @@ PERSISTENCE_TEST_MAP = {
     "span": "tests/selenium/test_format_span_ui.py",
     "image_annotation": "tests/selenium/test_annotation_persistence.py",
     "spatial_annotation": "tests/jest/pc-viewer-state.test.js",
+    # Navigate-away-and-back, never a refresh: browsers cache form state
+    # across reload and produce false positives (invariant 2).
+    "episode_annotation": "tests/playwright/test_episode_annotation.py",
     "audio_annotation": "tests/selenium/test_audio_annotation_ui.py",
     "video_annotation": "tests/selenium/test_annotation_persistence.py",
     "pairwise": "tests/selenium/test_pairwise_ui.py",

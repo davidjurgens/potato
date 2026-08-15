@@ -1,0 +1,179 @@
+/*
+ * Depth map display.
+ *
+ * The stage stacks an optional RGB frame under the colourised depth so the two
+ * can be cross-faded. They are absolutely positioned over one another rather
+ * than blended in a canvas because the depth image is served at the source
+ * resolution and the browser's own scaling keeps them registered without any
+ * arithmetic here to get wrong.
+ */
+
+.depth-display {
+    margin: 0.75rem 0;
+}
+
+.depth-stage {
+    position: relative;
+    display: block;
+    /* Fills the column but stops growing at a readable size. A 320x240 Kinect
+       frame stretched to a 1100px column is a 3.5x upscale of a pixelated
+       render, which reads as a rendering fault rather than as a small image;
+       a 1242x375 KITTI strip still shrinks to fit. */
+    width: 100%;
+    max-width: min(100%, 760px);
+    /* Not a fixed aspect ratio: depth maps come in every shape from a 640x480
+       Kinect frame to a 1242x375 KITTI strip, and forcing one letterboxes or
+       crops depending on which. */
+    background: #1a1d23;
+    border: 1px solid #d5d9e0;
+    border-radius: 6px;
+    overflow: hidden;
+    min-height: 120px;
+}
+
+.depth-rgb,
+.depth-overlay {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+}
+
+.depth-rgb {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.depth-overlay {
+    position: relative;
+    z-index: 1;
+    /* Nearest-neighbour: a depth map is a measurement per pixel, and bilinear
+       smoothing invents intermediate distances across the edge of an object —
+       exactly where the annotator is looking. */
+    image-rendering: pixelated;
+}
+
+.depth-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    color: #e8ebf0;
+    font-size: 0.9rem;
+    padding: 1rem;
+    text-align: center;
+}
+
+.depth-loading.depth-error {
+    background: rgba(120, 20, 20, 0.85);
+    color: #fff;
+}
+
+.depth-readout {
+    margin: 0.4rem 0 0;
+    font-variant-numeric: tabular-nums;
+    /* Tabular figures and a reserved width: the value updates on every mouse
+       move, and proportional digits make the whole line jitter as it changes. */
+    min-height: 1.4em;
+    color: #333;
+    font-size: 0.95rem;
+}
+
+.depth-readout-value {
+    font-weight: 600;
+}
+
+.depth-note {
+    margin: 0.3rem 0 0;
+    font-size: 0.85rem;
+    color: #6b4a00;
+    background: #fff6e0;
+    border-left: 3px solid #d9a406;
+    padding: 0.35rem 0.6rem;
+}
+
+.depth-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-end;
+    margin-top: 0.5rem;
+}
+
+.depth-control {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.8rem;
+    color: #555;
+    /* min-width: 0 so a flex item cannot be inflated past its track by its
+       own content — the reflow bug the camera panels had at 360px. */
+    min-width: 0;
+}
+
+.depth-control input[type="number"] {
+    width: 6.5rem;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid #c8cdd6;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.depth-control select {
+    padding: 0.25rem 0.4rem;
+    border: 1px solid #c8cdd6;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.depth-control input[type="range"] {
+    width: 8rem;
+}
+
+.depth-reset {
+    border: 1px solid #c8cdd6;
+    background: #f5f6f8;
+    border-radius: 4px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.depth-reset:hover {
+    background: #e9ebef;
+}
+
+.depth-reset:focus-visible,
+.depth-control input:focus-visible,
+.depth-control select:focus-visible {
+    outline: 2px solid #2f6fd0;
+    outline-offset: 1px;
+}
+
+.depth-placeholder {
+    padding: 1rem;
+    border: 1px dashed #c8cdd6;
+    border-radius: 6px;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+@media (max-width: 560px) {
+    .depth-controls {
+        gap: 0.5rem;
+    }
+
+    .depth-control input[type="number"],
+    .depth-control input[type="range"] {
+        width: 100%;
+    }
+
+    .depth-control {
+        flex: 1 1 45%;
+    }
+}

@@ -28,6 +28,7 @@ class SchemaKind(str, Enum):
     SPAN = "span"
     GEOMETRY = "geometry"    # 2D shapes: boxes, polygons, masks, points
     TEMPORAL = "temporal"    # labelled time ranges: audio and video segments
+    EPISODE = "episode"      # robot demonstrations: phases + outcome + reward
     TEXT = "text"            # free-form text, no automatic IAA
     UNSUPPORTED = "unsupported"
 
@@ -74,6 +75,7 @@ _KIND_BY_TYPE = {
     "image_annotation": SchemaKind.GEOMETRY,
     "audio_annotation": SchemaKind.TEMPORAL,
     "video_annotation": SchemaKind.TEMPORAL,
+    "episode_annotation": SchemaKind.EPISODE,
     # Skipped
     "pure_display": SchemaKind.UNSUPPORTED,
     "video": SchemaKind.UNSUPPORTED,
@@ -114,6 +116,16 @@ def metrics_for_schema(scheme: Dict[str, Any]) -> List[str]:
         SchemaKind.TEMPORAL: [
             "mean_agreement", "mean_matched_iou", "detection_f1",
             "mean_object_count_diff",
+        ],
+        # Three groups rather than a flat list, because an episode annotation
+        # is three different kinds of answer and blending them would hide which
+        # one the annotators disagreed about -- and they have different fixes.
+        SchemaKind.EPISODE: [
+            "phases.mean_agreement", "phases.mean_matched_iou",
+            "phases.detection_f1",
+            "outcome.outcome_alpha",
+            "reward.reward_icc", "reward.reward_pearson_r",
+            "reward.reward_coverage",
         ],
         SchemaKind.TEXT: [],
         SchemaKind.UNSUPPORTED: [],
@@ -242,6 +254,30 @@ def _gather_blobs(
             # An empty list is a real answer ("nothing here"), so it is kept:
             # two annotators who both find nothing agree.
             per_user[uid] = objects
+        if len(per_user) >= 2:
+            rows[iid] = per_user
+    return rows
+
+
+def _gather_raw(
+    instance_ids: Iterable[str],
+    user_states: Dict[str, Any],
+    schema_name: str,
+):
+    """
+    Per item, ``{user_id: stored_value}`` with no interpretation at all.
+
+    For schemas whose blob holds several independent layers, where deciding
+    what "the value" is belongs to the measure rather than to the gatherer.
+    """
+    rows: Dict[str, Dict[str, Any]] = {}
+    for iid in instance_ids:
+        per_user = {}
+        for uid, ustate in user_states.items():
+            values = _schema_values(ustate, iid, schema_name)
+            if values is None:
+                continue
+            per_user[uid] = values
         if len(per_user) >= 2:
             rows[iid] = per_user
     return rows
@@ -708,6 +744,13 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
         if kind == SchemaKind.SPAN:
             rows = _gather_spans(overlap_items, user_states, name)
             metrics = _aggregate_span(rows, item_state_manager.instance_id_to_instance)
+        elif kind == SchemaKind.EPISODE:
+            from potato.server_utils.iaa import episodes as episode_iaa
+            # The raw stored blob, not a pre-parsed one: the episode report
+            # parses each layer itself so it cannot drift from what the
+            # timeline wrote.
+            rows = _gather_raw(overlap_items, user_states, name)
+            metrics = episode_iaa.episode_report(rows, scheme)
         elif kind in (SchemaKind.GEOMETRY, SchemaKind.TEMPORAL):
             rows = _gather_blobs(overlap_items, user_states, name, scheme)
             metrics = _aggregate_blobs(rows, scheme)
