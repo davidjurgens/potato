@@ -14,6 +14,26 @@
  * What is genuinely specific to 3D: the viewport is a dark WebGL surface
  * rather than a light image canvas, and it has a status line that an image
  * canvas has no equivalent of.
+ *
+ * ## Which values are tokens and which are not
+ *
+ * Structure — borders, radii, surfaces, the focus ring — comes from the `:root`
+ * block in styles.css, in the `var(--token, fallback)` form the rest of the
+ * annotation stylesheets use.
+ *
+ * Three kinds of value deliberately stay literal, because substituting a token
+ * would make something worse rather than more consistent:
+ *
+ * - **The viewport fill (`#11151c`)** is also set in `pc-viewer.js` as the
+ *   three.js scene background and as the slab canvases' 2D fill. It is not a
+ *   UI surface and the light token palette has no equivalent; if it ever moves
+ *   it has to move in both places at once.
+ * - **Status text (`#495057`)** is darker than `--muted-foreground` on purpose.
+ *   That token is `#71717a`, which is 4.40:1 on `--muted` — *below* AA — and
+ *   this line carries the "showing N of M points" caveat.
+ * - **Warning and error text (`#8a5a00`, `#b02a37`)** have no token. The
+ *   closest, `--destructive` (`#ef4444`), is 3.76:1 on white and fails AA for
+ *   body text; it is a fill colour, not a text colour.
  */
 
 .pointcloud-annotation-container .pc-toolbar,
@@ -38,8 +58,8 @@
     /* The scene background is set in JS; this matches it so there is no flash
        of white before the first frame. */
     background: #11151c;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
     cursor: grab;
     /* The viewer owns the wheel and drag gestures. Without this, a scroll over
        the canvas zooms the cloud AND scrolls the page. */
@@ -54,14 +74,14 @@
    that the viewer is focused before the tool shortcuts do anything. */
 .pointcloud-annotation-container .pc-canvas:focus-visible,
 .pointcloud-annotation-container .pc-canvas:focus {
-    outline: 3px solid #0d6efd;
+    outline: 3px solid var(--ring, #6e56cf);
     outline-offset: 2px;
 }
 
 .pointcloud-annotation-container .pc-status {
     margin: 6px 0 0;
-    font-size: 12px;
-    /* Not #6c757d: on the white form background that is 4.68:1, which passes,
+    font-size: var(--text-xs, 0.75rem);
+    /* Not --muted-foreground (#71717a): on the white form background that is 4.68:1, which passes,
        but this line carries the "showing N of M points" caveat and is the one
        piece of text an annotator must not skim past. */
     color: #495057;
@@ -157,8 +177,8 @@
        exactly the point the column stops being able to hold it. */
     min-width: 380px;
     height: auto;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
     background: #11151c;
 }
 
@@ -172,7 +192,7 @@
 }
 
 .pointcloud-annotation-container .pc-camera figcaption {
-    font-size: 12px;
+    font-size: var(--text-xs, 0.75rem);
     color: #495057;
     padding-top: 4px;
     line-height: 1.3;
@@ -257,15 +277,15 @@
        aspect-ratio rather than a fixed height so it tracks the column width. */
     aspect-ratio: 1 / 1;
     background: #11151c;
-    border: 1px solid #2a3140;
-    border-radius: 4px;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
     /* The panels are draggable, so they must not also scroll the page under a
        touch gesture. */
     touch-action: none;
 }
 
 .pointcloud-annotation-container .pc-slab-canvas:focus-visible {
-    outline: 2px solid #6ea8fe;
+    outline: 3px solid var(--ring, #6e56cf);
     outline-offset: 2px;
 }
 
@@ -278,18 +298,20 @@
 
 .pointcloud-annotation-container .pc-mpr-help {
     margin: 6px 0 0;
-    font-size: 0.78rem;
-    color: #5a6472;
+    font-size: var(--text-sm, 0.8125rem);
+    color: #5a6472;   /* see the .pc-status note */
 }
 
 .pointcloud-annotation-container .pc-mpr-help kbd {
     font: inherit;
     font-variant-numeric: tabular-nums;
     padding: 0 0.25em;
-    border: 1px solid #c8cdd6;
-    border-radius: 3px;
-    background: #f5f6f8;
-    color: #3a4250;
+    border: 1px solid var(--border, #e4e4e7);
+    /* Half the panel radius: a key cap that is as round as the panel it
+       sits in reads as a button rather than a key. */
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+    background: var(--muted, #f4f4f5);
+    color: var(--text-color, #374151);
 }
 
 /* Live region for edits that only redraw canvas pixels. Clipped rather than
@@ -307,8 +329,8 @@
 }
 
 .pointcloud-annotation-container .pc-slab figcaption {
-    font-size: 0.78rem;
-    color: #5a6472;
+    font-size: var(--text-sm, 0.8125rem);
+    color: #5a6472;   /* see the .pc-status note */
     margin-top: 3px;
     /* Reports the slab thickness, which the wheel changes. Tabular figures so
        the caption does not jitter as the number scrolls. */

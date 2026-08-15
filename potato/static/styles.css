@@ -9,6 +9,13 @@
   --text-xs: 0.75rem;     /* 12px — badges, fine print */
   --text-sm: 0.8125rem;   /* 13px — help text, captions */
   --text-base: 1rem;      /* 16px — body, labels, UI text */
+  /* 14px — dense expert chrome: annotation toolbars, timeline transports,
+     slab captions. Added because the gap between 13px and 16px was being
+     filled ad hoc: 0.85 / 0.875 / 0.88 / 0.9 / 0.92 / 0.95rem and a bare 14px
+     all appear across the stylesheets, ~170 declarations of the same
+     intention at seven different sizes. New dense surfaces use this; the
+     existing call sites are a separate sweep. */
+  --text-dense: 0.875rem;
   --text-md: 1.0625rem;   /* 17px — schema titles */
   --text-lg: 1.1875rem;   /* 19px — instance text to annotate */
   --text-xl: 1.25rem;     /* 20px — page headings */

@@ -84,12 +84,12 @@
     "version": "1"
   },
   "depth-viewer.css": {
-    "sha256": "fba4e9cc595e46ff",
-    "version": "1"
+    "sha256": "42db20efa77dca28",
+    "version": "2"
   },
   "depth-viewer.js": {
-    "sha256": "4591a6d46ec2d689",
-    "version": "1"
+    "sha256": "dd95701e4bf3ead7",
+    "version": "2"
   },
   "device-routing.js": {
     "sha256": "f52d7fbb29b8ca21",
@@ -108,8 +108,8 @@
     "version": "1"
   },
   "episode-timeline.css": {
-    "sha256": "31e19017a6869be5",
-    "version": "1"
+    "sha256": "f938355bab7209db",
+    "version": "2"
   },
   "episode-timeline.js": {
     "sha256": "ef0e60f89afd0413",
@@ -212,11 +212,11 @@
     "version": "1"
   },
   "pointcloud/pc-viewer.css": {
-    "sha256": "f9a65ca3f7c043a7",
-    "version": "4"
+    "sha256": "dfef3a4d86b1da61",
+    "version": "5"
   },
   "pointcloud/pc-viewer.js": {
-    "sha256": "54adfd418d488a0d",
+    "sha256": "a6650e0634eecfaa",
     "version": "5"
   },
   "pointcloud/pc-wire.js": {
@@ -256,8 +256,8 @@
     "version": "5"
   },
   "styles.css": {
-    "sha256": "1cff0aaa08df0c53",
-    "version": "8"
+    "sha256": "574a85b68a93ab42",
+    "version": "9"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",

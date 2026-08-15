@@ -448,6 +448,10 @@
             this._orbit.radius = Math.max(
                 2.0, frame.radius / Math.tan(halfFov) * 0.7);
             this._applyCamera();
+            // Same reason as the LOD path: the panels were built before this
+            // buffer existed and nothing else redraws them until the annotator
+            // interacts.
+            this._drawMpr();
         }
 
         // -------------------------------------------------------------
@@ -534,6 +538,13 @@
                 this.lodNodes.set(key, points);
                 this.scene.add(points);
                 this._render();
+                // The slabs read from the loaded buffers, and this node is the
+                // first data some of them have. Without this the panels stay
+                // at whatever they were drawn with -- which, on first load, is
+                // an empty scene: _buildMprPanels runs before the fetch, and
+                // nothing else redrew them until the annotator interacted.
+                // They looked like three broken canvases.
+                this._drawMpr();
             } catch (err) {
                 // One node failing is a gap in the scene, not a dead viewer.
                 // Saying so is the difference between "the network dropped a

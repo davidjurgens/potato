@@ -86,12 +86,17 @@ class DepthDisplay(BaseDisplay):
                           distance under the cursor.">
                 <div class="depth-loading">Loading depth…</div>
             </div>
-            <!-- Live, because the value changes as the pointer moves and a
-                 sighted user reads it continuously. polite rather than
-                 assertive: it must not interrupt. -->
-            <p class="depth-readout" aria-live="polite">
+            <!-- NOT a live region. It was one, and it updated on every
+                 mousemove — several announcements a second, which is a screen
+                 reader that never stops talking. It is also a pointer-only
+                 affordance: nobody samples depths by moving a mouse they are
+                 not using. The information a non-pointer user needs is the
+                 map's range and how much of it has no return, and that goes to
+                 .depth-announce below, once, when the map loads. -->
+            <p class="depth-readout">
                 <span class="depth-readout-value">—</span>
             </p>
+            <p class="depth-announce" role="status" aria-live="polite"></p>
             {self._controls(safe_id, config) if config["showControls"] else ""}
         </div>
         """

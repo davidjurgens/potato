@@ -6,6 +6,13 @@
  * than blended in a canvas because the depth image is served at the source
  * resolution and the browser's own scaling keeps them registered without any
  * arithmetic here to get wrong.
+ *
+ * Structure — borders, radii, surfaces, the focus ring — uses the tokens from
+ * the `:root` block in styles.css. Two families deliberately stay literal:
+ * the stage fill (`#11151c`, shared with the point-cloud viewport, and no
+ * light-palette token means "dark measurement surface"), and the warning
+ * treatment (`#6b4a00` on `#fff6e0`), which has no token at all — the nearest,
+ * `--destructive`, is 3.76:1 on white and fails AA for text.
  */
 
 .depth-display {
@@ -24,9 +31,11 @@
     /* Not a fixed aspect ratio: depth maps come in every shape from a 640x480
        Kinect frame to a 1242x375 KITTI strip, and forcing one letterboxes or
        crops depending on which. */
-    background: #1a1d23;
-    border: 1px solid #d5d9e0;
-    border-radius: 6px;
+    /* The same dark surface as the point-cloud viewport, which is the other
+       place in the app where pixels carry measurements rather than design. */
+    background: #11151c;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
     overflow: hidden;
     min-height: 120px;
 }
@@ -63,8 +72,8 @@
     align-items: center;
     justify-content: center;
     z-index: 2;
-    color: #e8ebf0;
-    font-size: 0.9rem;
+    color: #e8ebf0;   /* on the dark stage, not on a token surface */
+    font-size: var(--text-dense, 0.875rem);
     padding: 1rem;
     text-align: center;
 }
@@ -80,8 +89,10 @@
     /* Tabular figures and a reserved width: the value updates on every mouse
        move, and proportional digits make the whole line jitter as it changes. */
     min-height: 1.4em;
-    color: #333;
-    font-size: 0.95rem;
+    /* The largest text in the display, because the distance under the cursor
+       is the whole reason the display exists. */
+    color: var(--foreground, #09090b);
+    font-size: var(--text-base, 1rem);
 }
 
 .depth-readout-value {
@@ -90,7 +101,7 @@
 
 .depth-note {
     margin: 0.3rem 0 0;
-    font-size: 0.85rem;
+    font-size: var(--text-dense, 0.875rem);
     color: #6b4a00;
     background: #fff6e0;
     border-left: 3px solid #d9a406;
@@ -109,8 +120,8 @@
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
-    font-size: 0.8rem;
-    color: #555;
+    font-size: var(--text-sm, 0.8125rem);
+    color: var(--muted-foreground, #71717a);
     /* min-width: 0 so a flex item cannot be inflated past its track by its
        own content — the reflow bug the camera panels had at 360px. */
     min-width: 0;
@@ -119,16 +130,16 @@
 .depth-control input[type="number"] {
     width: 6.5rem;
     padding: 0.25rem 0.4rem;
-    border: 1px solid #c8cdd6;
-    border-radius: 4px;
-    font-size: 0.9rem;
+    border: 1px solid var(--input, #e4e4e7);
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+    font-size: var(--text-dense, 0.875rem);
 }
 
 .depth-control select {
     padding: 0.25rem 0.4rem;
-    border: 1px solid #c8cdd6;
-    border-radius: 4px;
-    font-size: 0.9rem;
+    border: 1px solid var(--input, #e4e4e7);
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+    font-size: var(--text-dense, 0.875rem);
 }
 
 .depth-control input[type="range"] {
@@ -136,31 +147,33 @@
 }
 
 .depth-reset {
-    border: 1px solid #c8cdd6;
-    background: #f5f6f8;
-    border-radius: 4px;
+    border: 1px solid var(--border, #e4e4e7);
+    background: var(--muted, #f4f4f5);
+    border-radius: calc(var(--radius, 0.5rem) / 2);
     padding: 0.3rem 0.7rem;
-    font-size: 0.85rem;
+    font-size: var(--text-dense, 0.875rem);
     cursor: pointer;
 }
 
 .depth-reset:hover {
-    background: #e9ebef;
+    /* One step darker on the same neutral ramp, rather than a hover colour
+       invented for this button alone. */
+    background: var(--border, #e4e4e7);
 }
 
 .depth-reset:focus-visible,
 .depth-control input:focus-visible,
 .depth-control select:focus-visible {
-    outline: 2px solid #2f6fd0;
+    outline: 2px solid var(--ring, #6e56cf);
     outline-offset: 1px;
 }
 
 .depth-placeholder {
     padding: 1rem;
-    border: 1px dashed #c8cdd6;
-    border-radius: 6px;
-    color: #666;
-    font-size: 0.9rem;
+    border: 1px dashed var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
+    color: var(--muted-foreground, #71717a);
+    font-size: var(--text-dense, 0.875rem);
 }
 
 @media (max-width: 560px) {
@@ -176,4 +189,18 @@
     .depth-control {
         flex: 1 1 45%;
     }
+}
+
+/* Live region for the map summary and for control changes that only repaint
+   pixels. Clipped rather than display:none — hidden content is not announced. */
+.depth-announce {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }

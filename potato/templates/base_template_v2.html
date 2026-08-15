@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=8">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=9">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}">
@@ -47,17 +47,17 @@
 
     <!-- Point cloud viewer styles -->
     {% if frontend_assets.spatial_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='pointcloud/pc-viewer.css') }}?v=4">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pointcloud/pc-viewer.css') }}?v=5">
     {% endif %}
 
     <!-- Depth map display styles -->
     {% if frontend_assets.depth_map | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='depth-viewer.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='depth-viewer.css') }}?v=2">
     {% endif %}
 
     <!-- Embodied episode timeline styles -->
     {% if frontend_assets.episode_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='episode-timeline.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='episode-timeline.css') }}?v=2">
     {% endif %}
 
     <!-- Audio Annotation Styles -->
@@ -821,7 +821,7 @@
     <!-- Depth maps. A display type, so it is gated on the display's wrapper
          class rather than on a schema. -->
     {% if frontend_assets.depth_map | default(false) %}
-    <script src="{{ url_for('static', filename='depth-viewer.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='depth-viewer.js') }}?v=2"></script>
     {% endif %}
 
     <!-- Embodied episode timeline -->

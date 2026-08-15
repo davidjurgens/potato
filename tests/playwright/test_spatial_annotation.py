@@ -899,3 +899,117 @@ class TestSlabKeyboardAccess(BasePlaywrightTest):
         page.wait_for_timeout(400)
         assert page.get_attribute(".pc-status", "aria-live") is None
         assert page.get_attribute(".pc-status", "role") is None
+
+
+@pytest.fixture
+def lidar_only_server(make_server):
+    """
+    The same scenes with the calibration stripped out.
+
+    Not a contrived fixture: a lidar-only project is the documented normal
+    case, and it is the one where the slab panels' first-load bug is visible.
+    With calibration present the camera image finishes loading, the page
+    reflows, `.pc-mpr` changes width, and its ResizeObserver redraws the panels
+    — so the bug hides behind an accident of this example having a photograph.
+    """
+    if not MEDIA.is_dir():
+        pytest.skip("run examples/spatial/kitti-cuboids/generate_scene.py first")
+    schemes = [dict(SCHEMES[0])]
+    schemes[0].pop("calibration_field", None)
+    return make_server(
+        schemes,
+        items=[{"id": s["id"], "point_cloud": s["point_cloud"]}
+               for s in scene_items()],
+        extra_config={
+            "media_directory": str(MEDIA),
+            "item_properties": {"id_key": "id", "text_key": "point_cloud"},
+        },
+    )
+
+
+class TestSlabPanelsOnFirstLoad(BasePlaywrightTest):
+    """
+    The slabs must be drawn by the time the cloud is on screen.
+
+    `_buildMprPanels` runs during `init()`, before the first byte of the cloud
+    has been fetched, so the panels' first draw is of an empty scene. Nothing
+    used to redraw them until the annotator selected something, resized the
+    window, or scrolled the wheel over one — three blank rectangles under a
+    populated viewport.
+
+    `test_each_canvas_is_actually_painted` does not catch it, and neither did
+    the first version of the test below: with calibration in the fixture the
+    camera image's reflow fires the ResizeObserver and repaints the panels for
+    unrelated reasons. Confirmed by reverting the fix and watching both pass.
+    The lidar-only fixture removes that accident.
+    """
+
+    def test_the_panels_are_painted_without_relying_on_a_resize(
+            self, lidar_only_server, page):
+        # ResizeObserver is neutered for this test, which is the whole point:
+        # the panels were being repainted only because some later layout change
+        # -- a camera image finishing, a font settling -- happened to resize
+        # `.pc-mpr`. Depending on that is depending on an accident. Verified to
+        # fail when the redraw-on-node-arrival is removed.
+        page.add_init_script(
+            "window.ResizeObserver = class { observe() {} unobserve() {} "
+            "disconnect() {} };")
+        open_viewer(self, page, lidar_only_server)
+        # Long enough for every octree node to arrive; the assertion is about
+        # what is on screen once loading settles, not about timing.
+        page.wait_for_function(
+            """() => {
+                const m = document.querySelector(
+                    '.pointcloud-annotation-container').annotationManager;
+                return m && m.loadedPointCount() > 0;
+            }""", timeout=15000)
+        page.wait_for_timeout(500)
+
+        painted = page.evaluate(
+            """() => [...document.querySelectorAll('.pc-slab-canvas')].map(c => {
+                if (!c.width) return 'unsized';
+                const d = c.getContext('2d').getImageData(
+                    0, 0, c.width, c.height).data;
+                const f = [d[0], d[1], d[2]];
+                for (let i = 4; i < d.length; i += 4) {
+                    if (d[i] !== f[0] || d[i+1] !== f[1] || d[i+2] !== f[2]) {
+                        return true;
+                    }
+                }
+                return false;
+            })""")
+        assert painted == [True, True, True], (
+            f"slab panels {painted} — a panel that is uniformly its own "
+            f"background is showing the annotator an empty scene under a "
+            f"viewport full of points")
+
+    def test_the_keyboard_focus_ring_is_the_product_ring(self, spatial_server,
+                                                         page):
+        # Driven with a real Tab, not element.focus(): a scripted focus does
+        # not set :focus-visible in Chromium, so a probe that focuses
+        # programmatically reads the UA default and says nothing about the
+        # rule. This measured `outline-style: none` before it was corrected.
+        open_viewer(self, page, spatial_server)
+        canvas = page.locator(".pc-slab-canvas").first
+        canvas.scroll_into_view_if_needed()
+        page.locator(".pc-canvas").focus()
+        for _ in range(12):
+            page.keyboard.press("Tab")
+            if page.evaluate(
+                    "() => document.activeElement.classList"
+                    ".contains('pc-slab-canvas')"):
+                break
+        else:
+            pytest.fail("Tab never reached a slab canvas")
+
+        ring = page.evaluate(
+            """() => {
+                const s = getComputedStyle(document.activeElement);
+                return [s.outlineStyle, s.outlineWidth, s.outlineColor];
+            }""")
+        style, width, color = ring
+        assert style not in ("none", ""), f"no focus ring at all: {ring}"
+        # rgb(110, 86, 207) is --ring / --primary. The panels shipped with a
+        # Bootstrap blue that appears nowhere else in the product.
+        assert color == "rgb(110, 86, 207)", ring
+        assert width == "3px", ring

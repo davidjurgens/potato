@@ -173,6 +173,7 @@
                     `${Math.round(this.info.invalid_fraction * 100)}% of this `
                     + `map has no measurement (shown in magenta).`);
             }
+            this._describeMap();
         }
 
         async _loadRaw() {
@@ -225,7 +226,15 @@
                 if (el) el.addEventListener('input', () => this._scheduleRender());
             });
             const cmap = this.element.querySelector('.depth-colormap');
-            if (cmap) cmap.addEventListener('change', () => this._render());
+            if (cmap) {
+                cmap.addEventListener('change', () => {
+                    this._render();
+                    // Repainting an image is silent. The colormap is a
+                    // keyboard-reachable select whose whole effect is on
+                    // pixels, so the change has to be said out loud.
+                    this._announce(`Colormap ${cmap.value}.`);
+                });
+            }
 
             const opacity = this.element.querySelector('.depth-opacity');
             if (opacity) {
@@ -244,6 +253,7 @@
                     if (near && this.info) near.value = round(this.info.p2);
                     if (far && this.info) far.value = round(this.info.p98);
                     this._render();
+                    this._describeMap();
                 });
             }
         }
@@ -298,6 +308,40 @@
                 this.loading.textContent = message;
                 this.loading.classList.add('depth-error');
             }
+        }
+
+        /**
+         * Say something once, to assistive tech only.
+         *
+         * Separate from `.depth-readout`, which used to be the live region and
+         * updated on every mousemove. A pointer readout is a pointer
+         * affordance; what a non-pointer user needs is the range the map
+         * covers and how much of it is missing, said once.
+         */
+        _announce(message) {
+            const el = this.element.querySelector('.depth-announce');
+            if (!el) return;
+            el.textContent = (el.textContent === message)
+                ? `${message}${'​'}` : message;
+        }
+
+        /**
+         * What the map contains, for someone who cannot sample it by hand.
+         *
+         * The percentiles rather than min/max, because those are what the
+         * window opens on — quoting the raw extremes would describe a picture
+         * the annotator is not looking at.
+         */
+        _describeMap() {
+            if (!this.info || this.info.p2 === null) {
+                this._announce('Depth map loaded; its range could not be read.');
+                return;
+            }
+            const missing = Math.round((this.info.invalid_fraction || 0) * 100);
+            this._announce(
+                `Depth map loaded. Showing ${round(this.info.p2)} to `
+                + `${round(this.info.p98)} metres`
+                + (missing > 0 ? `, ${missing}% with no return.` : '.'));
         }
 
         _note(message) {

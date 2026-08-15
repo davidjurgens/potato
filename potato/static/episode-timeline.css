@@ -5,6 +5,12 @@
  * arbitrary: the annotator watches, then marks what they saw, and a timeline
  * above the video would put the thing being edited further from the pointer
  * than the thing being read.
+ *
+ * Structure — borders, radii, surfaces, the focus ring — uses the tokens from
+ * the `:root` block in styles.css. Two families stay literal on purpose: the
+ * video letterbox (`#11151c`, the same dark measurement surface the point
+ * cloud and depth displays use) and the warning/error text treatments, which
+ * have no token — `--destructive` is 3.76:1 on white and fails AA for text.
  */
 
 .episode-annotation-container fieldset {
@@ -16,10 +22,10 @@
 .episode-instruction {
     margin: 0 0 0.5rem;
     padding: 0.4rem 0.6rem;
-    background: #eef3fb;
-    border-left: 3px solid #2f6fd0;
-    font-size: 0.92rem;
-    color: #1f2a3a;
+    background: var(--muted, #f4f4f5);
+    border-left: 3px solid var(--primary, #6e56cf);
+    font-size: var(--text-dense, 0.875rem);
+    color: var(--foreground, #09090b);
 }
 
 .episode-instruction:empty {
@@ -54,11 +60,13 @@
     width: 100%;
     height: auto;
     background: #11151c;
-    border-radius: 4px;
+    border-radius: calc(var(--radius, 0.5rem) / 2);
 }
 
 .episode-stream figcaption {
-    font-size: 0.78rem;
+    font-size: var(--text-sm, 0.8125rem);
+    /* Deliberately darker than --muted-foreground (#71717a), which is 4.40:1
+       on --muted and below AA. Captions here sit on both surfaces. */
     color: #5a6472;
     margin-top: 2px;
 }
@@ -68,7 +76,10 @@
        frames that were never downloaded. It gets a visible placeholder rather
        than a zero-height element that reads as a layout fault. */
     min-height: 120px;
-    border: 1px dashed #8a94a6;
+    /* #8a94a6 was 2.85:1 against the page — below the 3:1 that WCAG 1.4.11
+       requires of a boundary that carries meaning, and this dashed edge is the
+       only thing saying "this stream is missing" rather than "still loading". */
+    border: 1px dashed #6b7486;
 }
 
 /* Transport ------------------------------------------------------------ */
@@ -82,22 +93,23 @@
 }
 
 .episode-play {
-    border: 1px solid #c8cdd6;
-    background: #f5f6f8;
-    border-radius: 4px;
+    border: 1px solid var(--border, #e4e4e7);
+    background: var(--muted, #f4f4f5);
+    border-radius: calc(var(--radius, 0.5rem) / 2);
     padding: 0.3rem 0.7rem;
-    font-size: 0.85rem;
+    font-size: var(--text-dense, 0.875rem);
     cursor: pointer;
 }
 
 .episode-play:hover {
-    background: #e9ebef;
+    /* One step along the same neutral ramp, not a hover colour of its own. */
+    background: var(--border, #e4e4e7);
 }
 
 .episode-time,
 .episode-frame {
-    font-size: 0.82rem;
-    color: #465060;
+    font-size: var(--text-sm, 0.8125rem);
+    color: var(--text-color, #374151);
     /* Tabular figures and a floor on the width: these update every animation
        frame during playback, and proportional digits make the whole toolbar
        jitter as the numbers change. */
@@ -120,8 +132,8 @@
        timeline you have to scroll to see the end of cannot show you where a
        phase sits relative to the whole demonstration. */
     overflow: hidden;
-    border: 1px solid #dfe3ea;
-    border-radius: 4px;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: calc(var(--radius, 0.5rem) / 2);
 }
 
 .episode-canvas {
@@ -133,7 +145,7 @@
 }
 
 .episode-canvas:focus-visible {
-    outline: 2px solid #2f6fd0;
+    outline: 2px solid var(--ring, #6e56cf);
     outline-offset: 2px;
 }
 
@@ -146,21 +158,21 @@
     gap: 10px;
     margin-top: 8px;
     padding: 6px 8px;
-    background: #f6f7f9;
-    border-radius: 4px;
+    background: var(--muted, #f4f4f5);
+    border-radius: calc(var(--radius, 0.5rem) / 2);
 }
 
 .episode-outcome-legend {
     font-weight: 600;
-    font-size: 0.85rem;
-    color: #333;
+    font-size: var(--text-dense, 0.875rem);
+    color: var(--foreground, #09090b);
 }
 
 .episode-outcome-option {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 0.88rem;
+    font-size: var(--text-dense, 0.875rem);
     /* 44px is the WCAG 2.5.5 target size; radios are small and the label is
        the real target, so the padding is what makes it reachable. */
     min-height: 44px;
@@ -170,15 +182,15 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 0.82rem;
-    color: #555;
+    font-size: var(--text-sm, 0.8125rem);
+    color: var(--muted-foreground, #71717a);
 }
 
 .episode-cause {
     padding: 0.25rem 0.4rem;
-    border: 1px solid #c8cdd6;
-    border-radius: 4px;
-    font-size: 0.85rem;
+    border: 1px solid var(--input, #e4e4e7);
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+    font-size: var(--text-dense, 0.875rem);
 }
 
 .episode-cause:disabled {
@@ -193,8 +205,8 @@
 
 .episode-status {
     margin: 6px 0 0;
-    font-size: 0.82rem;
-    color: #5a6472;
+    font-size: var(--text-sm, 0.8125rem);
+    color: #5a6472;   /* see the .episode-stream figcaption note */
     min-height: 1.2em;
 }
 
@@ -224,24 +236,24 @@
 .episode-instruction-edit {
     margin-top: 8px;
     padding: 6px 8px;
-    background: #f6f7f9;
-    border-radius: 4px;
+    background: var(--muted, #f4f4f5);
+    border-radius: calc(var(--radius, 0.5rem) / 2);
 }
 
 .episode-instruction-edit label {
     display: block;
-    font-size: 0.82rem;
-    color: #465060;
+    font-size: var(--text-sm, 0.8125rem);
+    color: var(--text-color, #374151);
     margin-bottom: 3px;
 }
 
 .episode-relabel {
     width: 100%;
     padding: 0.35rem 0.5rem;
-    border: 1px solid #c8cdd6;
-    border-radius: 4px;
+    border: 1px solid var(--input, #e4e4e7);
+    border-radius: calc(var(--radius, 0.5rem) / 2);
     font: inherit;
-    font-size: 0.9rem;
+    font-size: var(--text-dense, 0.875rem);
     resize: vertical;
 }
 
@@ -253,26 +265,26 @@
 }
 
 .episode-relabel-align {
-    border: 1px solid #c8cdd6;
-    background: #fff;
-    border-radius: 4px;
+    border: 1px solid var(--border, #e4e4e7);
+    background: var(--card, #ffffff);
+    border-radius: calc(var(--radius, 0.5rem) / 2);
     padding: 0.25rem 0.6rem;
-    font-size: 0.8rem;
+    font-size: var(--text-sm, 0.8125rem);
     cursor: pointer;
 }
 
 .episode-relabel-align:hover {
-    background: #eef1f5;
+    background: var(--muted, #f4f4f5);
 }
 
 .episode-relabel-span {
-    font-size: 0.8rem;
-    color: #5a6472;
+    font-size: var(--text-sm, 0.8125rem);
+    color: #5a6472;   /* see the .episode-stream figcaption note */
     font-variant-numeric: tabular-nums;
 }
 
 .episode-relabel:focus-visible,
 .episode-relabel-align:focus-visible {
-    outline: 2px solid #2f6fd0;
+    outline: 2px solid var(--ring, #6e56cf);
     outline-offset: 1px;
 }
