@@ -300,8 +300,8 @@
     "version": "5"
   },
   "styles.css": {
-    "sha256": "574a85b68a93ab42",
-    "version": "9"
+    "sha256": "f77e00c3807d13f1",
+    "version": "10"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",
@@ -316,8 +316,8 @@
     "version": "2"
   },
   "tracking-ui.js": {
-    "sha256": "3c11574c3a7d5406",
-    "version": "4"
+    "sha256": "0206d81480029d19",
+    "version": "11"
   },
   "triage.js": {
     "sha256": "65c15915212fc2a8",
@@ -340,8 +340,8 @@
     "version": "3"
   },
   "video-annotation.js": {
-    "sha256": "5903597d57b150df",
-    "version": "17"
+    "sha256": "c8428bba348ac52b",
+    "version": "18"
   },
   "visual_ai_assistant.js": {
     "sha256": "66eb1e15fcc9d23a",

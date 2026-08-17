@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=9">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=10">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}">
@@ -899,7 +899,17 @@
     {% if (ai_enabled or frontend_assets.text_prompt | default(false))
           and ((frontend_assets.image_annotation | default(false)) or (frontend_assets.video_annotation | default(false))) %}
     <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=5"></script>
-    <!-- Option Highlight Manager for dimming less-likely options -->
+    {% endif %}
+
+    <!-- Option highlighting dims the less-likely *discrete options* of a radio,
+         multiselect, likert or select scheme. Nothing about it is visual, but it
+         used to be loaded inside the condition above purely because it was added
+         next to visual_ai_assistant.js — so it required the project to also have
+         an image or video scheme. examples/advanced/option-highlight is a plain
+         text radio task, which meant the feature was dead in the very example
+         that ships to demonstrate it: /api/option_highlights answered correctly
+         and no client ever asked. Gate it on ai_support alone. -->
+    {% if ai_enabled %}
     <script src="{{ url_for('static', filename='option_highlight_manager.js') }}?v=2"></script>
     {% endif %}
 
@@ -924,7 +934,7 @@
     {% endif %}
     <!-- Video annotation manager -->
     {% if frontend_assets.video_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=17"></script>
+    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=18"></script>
     {% endif %}
 
     <!-- Span link manager -->
@@ -958,7 +968,7 @@
     <!-- Video tracking interpolation and UI -->
     {% if frontend_assets.tracking | default(false) %}
     <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=11"></script>
     {% endif %}
 
     <!-- Triage annotation manager -->

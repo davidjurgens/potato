@@ -434,7 +434,24 @@ class VideoAnnotationManager {
      * Get current frame number
      */
     getCurrentFrame() {
-        return Math.floor(this.videoEl.currentTime * this.videoMetadata.fps);
+        // The epsilon is not a rounding preference; it is the whole point.
+        //
+        // `seekToFrame(n)` sets currentTime = n / fps, and the browser stores
+        // that as a float a hair BELOW the exact value: asking for frame 14 of
+        // a 12 fps clip gives back 1.166666, and 1.166666 * 12 is 13.999992.
+        // A plain floor therefore answers 13 — so seeking to a frame and
+        // drawing on it filed the annotation one frame early, every time, for
+        // every annotator. Measured in a real browser at frames 14, 26 and 40.
+        //
+        // Floor is still right for a time in the MIDDLE of a frame, which is
+        // where playback leaves it; only the representation error is absorbed.
+        // The tolerance is in FRAMES and has to clear the browser's own
+        // rounding: currentTime comes back truncated to six decimal places, so
+        // the error in frames is fps * 1e-6 — 1.2e-5 at 12 fps, 3e-5 at 30.
+        // A thousandth of a frame is far above that and far below any time a
+        // seek or playback actually lands on (33 microseconds at 30 fps).
+        const fps = this.videoMetadata.fps;
+        return Math.floor(this.videoEl.currentTime * fps + 1e-3);
     }
 
     /**

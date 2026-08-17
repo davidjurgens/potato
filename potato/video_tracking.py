@@ -63,6 +63,13 @@ class PropagationResult:
     visible: bool
     score: float
     rle: Optional[Dict[str, Any]] = None
+    #: Normalized {x, y, width, height} around the mask.
+    #:
+    #: Sent alongside the RLE rather than left for the client to derive,
+    #: because the timeline, the label placement and the overlay renderer all
+    #: read a bbox — and a keyframe without one draws NOTHING. That failure
+    #: reports "30 frames tracked" over a video where nothing changed.
+    bbox: Optional[Dict[str, float]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -70,6 +77,7 @@ class PropagationResult:
             "visible": self.visible,
             "score": round(self.score, 4),
             "rle": self.rle,
+            "bbox": self.bbox,
         }
 
 
@@ -126,9 +134,21 @@ def _frame_paths(video_path: Path, start: int, count: int,
 
     temp_dir = Path(tempfile.mkdtemp(prefix="potato-track-"))
     rate = fps
-    if rate is None:
+    if not rate:
         info = probe_video(str(video_path))
-        rate = float(info.get("fps") or 0) or 25.0
+        rate = float(info.get("fps") or 0)
+    if not rate:
+        # Refusing beats guessing. Frame indices returned from here have to
+        # line up with the client's, and the client counts frames at the rate
+        # ITS config declares. Extracting at an invented 25 fps against a
+        # 12 fps clip returns masks that are correct for a frame nobody asked
+        # about, drawn on the wrong one — which looks like a tracker that
+        # nearly works rather than a mismatch.
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise TrackingUnavailable(
+            "This video's frame rate could not be read, so frame numbers "
+            "would not line up. Set `video_fps` on the schema, which is also "
+            "what the annotator's timeline counts in.")
 
     try:
         extract_frames(str(video_path), str(temp_dir), fps=rate)
@@ -156,7 +176,7 @@ def propagate(request: PropagationRequest) -> Dict[str, Any]:
     from PIL import Image
 
     from potato.ai.sam2_video import SAM2VideoTracker
-    from potato.export.cv_utils import bitmap_to_rle
+    from potato.export.cv_utils import bitmap_to_rle, rle_bbox
 
     model_dir = _require_model(request.model_dir)
 
@@ -174,6 +194,7 @@ def propagate(request: PropagationRequest) -> Dict[str, Any]:
         results: List[PropagationResult] = []
         for offset, item in enumerate(tracked):
             rle = None
+            bbox = None
             if item.mask is not None:
                 height, width = item.mask.shape
                 # `bitmap_to_rle` takes a flat 0/1 bitmap, which is also what
@@ -181,11 +202,20 @@ def propagate(request: PropagationRequest) -> Dict[str, Any]:
                 # shape the rest of Potato stores.
                 flat = item.mask.astype("uint8").reshape(-1).tolist()
                 rle = bitmap_to_rle(flat, height, width)
+                box = rle_bbox(flat, width, height)
+                if box and box[2] > 0 and box[3] > 0:
+                    bbox = {
+                        "x": box[0] / width,
+                        "y": box[1] / height,
+                        "width": box[2] / width,
+                        "height": box[3] / height,
+                    }
             results.append(PropagationResult(
                 frame=int(request.start_frame) + offset,
                 visible=item.visible,
                 score=item.object_score,
                 rle=rle,
+                bbox=bbox,
             ))
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)

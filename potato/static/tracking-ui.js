@@ -191,8 +191,9 @@
                 return null;
             }
 
-            var video = options.video || this.config.videoPath
-                || (this.video && this.video.currentSrc) || '';
+            var video = this._mediaRelativePath(
+                options.video || this.config.videoPath
+                || (this.video && this.video.currentSrc) || '');
             if (!video) {
                 this._propagationStatus(
                     'This project does not say where the video file is, so the '
@@ -200,11 +201,34 @@
                 return null;
             }
 
+            // THREE COORDINATE SPACES MEET HERE, and mixing them produces a
+            // tracker that runs, reports success, and tracks the wrong thing:
+            //
+            //   canvas pixels  - what keyframes hold, because the drawing path
+            //                    builds them from mouse coords on the overlay
+            //   video pixels   - what the model is prompted in
+            //   normalized     - what the server returns, and what every other
+            //                    part of Potato stores
+            //
+            // The canvas is NOT the video's natural size, so the ratio is real
+            // rather than 1.
+            var content = this.videoContentRect();
+            if (!content) {
+                this._propagationStatus(
+                    'The video is still loading. Try again in a moment.', 'warn');
+                return null;
+            }
+
             // The centre of the drawn box is the prompt. A box prompt would be
             // more precise, but this export takes points, and the centre of a
             // hand-drawn box is on the object by construction.
             var box = keyframe.bbox;
-            var point = [box.x + box.width / 2, box.y + box.height / 2, 1];
+            var point = [
+                (box.x + box.width / 2 - content.left) / content.scale,
+                (box.y + box.height / 2 - content.top) / (content.scaleY
+                                                          || content.scale),
+                1,
+            ];
 
             this._propagationStatus('Tracking…', 'busy');
             var response;
@@ -217,6 +241,10 @@
                         points: [point],
                         start_frame: frame,
                         frames: options.frames || 30,
+                        // The rate THIS timeline counts in. Without it the
+                        // server extracts at whatever it can probe, and every
+                        // returned frame number refers to a different moment.
+                        fps: this.config.videoFps || this.config.fps || null,
                         schema: this.config.schemaName
                     })
                 });
@@ -242,6 +270,20 @@
                     time: result.frame / (this.config.fps || 25),
                     type: 'mask',
                     rle: result.rle,
+                    // Converted into CANVAS pixels, which is the space the
+                    // overlay draws in. Two failures live here: a keyframe
+                    // with no bbox draws nothing at all, and a normalized one
+                    // draws a sub-pixel rectangle in the corner. Both report
+                    // "30 frames tracked" over a video where nothing changed.
+                    bbox: result.bbox ? {
+                        x: content.left + result.bbox.x * content.width,
+                        y: content.top + result.bbox.y * content.height,
+                        width: result.bbox.width * content.width,
+                        height: result.bbox.height * content.height,
+                    } : null,
+                    // Kept as the model gave it, because normalized is what
+                    // gets stored and exported.
+                    bboxNorm: result.bbox || null,
                     // Marked so the annotator can tell a model's answer from
                     // their own, and so a later pass can count how many were
                     // accepted unchanged.
@@ -268,6 +310,100 @@
             this._propagationStatus(message + '. Scrub through and correct '
                                     + 'anything wrong.');
             return payload;
+        }
+
+        /**
+         * Where the video's PICTURE sits inside the overlay canvas.
+         *
+         * The canvas covers the whole player element; the picture inside it is
+         * letterboxed, because a 480x320 clip in a 828x355 player leaves black
+         * bars either side. Treating canvas coordinates as video coordinates
+         * therefore lands every prompt and every returned box tens of pixels
+         * off, in a way that looks like a tracker that almost works.
+         *
+         * Returns {left, top, width, height, scale} in CANVAS pixels, or null
+         * while the video has no dimensions yet.
+         */
+        videoContentRect() {
+            var canvasWidth = (this.canvas && this.canvas.width) || 0;
+            var canvasHeight = (this.canvas && this.canvas.height) || 0;
+            var element = this.video || {};
+            var videoWidth = element.videoWidth || 0;
+            var videoHeight = element.videoHeight || 0;
+            if (!canvasWidth || !canvasHeight || !videoWidth || !videoHeight) {
+                return null;
+            }
+
+            // The picture is fitted inside the VIDEO ELEMENT's box, then
+            // expressed in the canvas's coordinates.
+            //
+            // Both steps are needed and neither is obvious. The video is
+            // letterboxed inside its element (`object-fit: contain`), so the
+            // picture is narrower than the element. And the overlay canvas is
+            // inset 45px from the bottom of that element to clear the native
+            // controls, so canvas (0,0) is the element's (0,0) but the two
+            // boxes are different heights. Skipping either step draws every
+            // propagated box beside the object rather than on it.
+            var canvasRect = (this.canvas && this.canvas.getBoundingClientRect)
+                ? this.canvas.getBoundingClientRect() : null;
+            var videoRect = element.getBoundingClientRect
+                ? element.getBoundingClientRect() : null;
+            if (!canvasRect || !videoRect || !videoRect.width) {
+                // Without layout, fall back to fitting inside the canvas. It
+                // is right whenever the canvas covers the whole element.
+                var plain = Math.min(canvasWidth / videoWidth,
+                                     canvasHeight / videoHeight);
+                return {
+                    left: (canvasWidth - videoWidth * plain) / 2,
+                    top: (canvasHeight - videoHeight * plain) / 2,
+                    width: videoWidth * plain,
+                    height: videoHeight * plain,
+                    scale: plain,
+                    scaleY: plain,
+                };
+            }
+
+            var fit = Math.min(videoRect.width / videoWidth,
+                               videoRect.height / videoHeight);
+            var shownWidth = videoWidth * fit;
+            var shownHeight = videoHeight * fit;
+            // Page coordinates of the picture's top-left corner.
+            var pictureLeft = videoRect.left + (videoRect.width - shownWidth) / 2;
+            var pictureTop = videoRect.top + (videoRect.height - shownHeight) / 2;
+            // Into the canvas's backing store.
+            var toBackingX = canvasWidth / (canvasRect.width || canvasWidth);
+            var toBackingY = canvasHeight / (canvasRect.height || canvasHeight);
+            return {
+                left: (pictureLeft - canvasRect.left) * toBackingX,
+                top: (pictureTop - canvasRect.top) * toBackingY,
+                width: shownWidth * toBackingX,
+                height: shownHeight * toBackingY,
+                // Backing pixels per video pixel, per axis: a stretched canvas
+                // makes these differ.
+                scale: (shownWidth * toBackingX) / videoWidth,
+                scaleY: (shownHeight * toBackingY) / videoHeight,
+            };
+        }
+
+        /**
+         * A `<video>` src is a URL; the server wants a path inside the media
+         * directory.
+         *
+         * Sending `http://host/media/clip.webm` gets refused by the traversal
+         * guard, which is correct of it and looks to the annotator like a
+         * missing file. Strip the origin and the /media/ prefix so what
+         * arrives is what the guard expects to resolve.
+         */
+        _mediaRelativePath(source) {
+            if (!source) return '';
+            var path = String(source);
+            try {
+                if (/^https?:\/\//.test(path)) path = new URL(path).pathname;
+            } catch (error) {
+                // A malformed URL is a caller problem, not a crash: fall
+                // through and let the server refuse whatever this is.
+            }
+            return path.replace(/^\/?media\//, '').replace(/^\//, '');
         }
 
         _propagationStatus(message, kind) {

@@ -151,3 +151,30 @@ class TestUnavailableMessage:
         with pytest.raises(TrackingUnavailable) as raised:
             _require_model(tmp_path / "nothing-here")
         assert "potato download-models sam2_video_tiny" in str(raised.value)
+
+
+class TestFrameRate:
+    """Frame numbers are only meaningful in a stated rate."""
+
+    def test_an_unreadable_rate_is_refused_rather_than_guessed(self, tmp_path):
+        """Guessing 25 fps against a 12 fps clip misaligns every index.
+
+        The masks come back correct for frames nobody asked about and get
+        drawn on the wrong ones, which reads as a tracker that nearly works.
+        """
+        from potato import video_tracking
+
+        if not video_tracking.model_available():
+            pytest.skip("needs sam2_video_tiny")
+
+        video = tmp_path / "clip.webm"
+        video.write_bytes(b"not really a video")
+        request = video_tracking.PropagationRequest(
+            video_path=video, points=[(1.0, 1.0, 1)], frames=2, fps=None)
+        with pytest.raises(video_tracking.TrackingUnavailable) as raised:
+            video_tracking.propagate(request)
+        message = str(raised.value)
+        # Either ffmpeg refuses the file or the rate is missing; both name
+        # what to do, and neither invents a number.
+        assert "video_fps" in message or "Could not extract" in message \
+            or "frame rate" in message

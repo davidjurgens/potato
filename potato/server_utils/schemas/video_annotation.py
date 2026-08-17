@@ -662,9 +662,22 @@ def _generate_html(
 
                                 // Sync canvas size with video
                                 function syncTrackingCanvasSize() {{
-                                    // Use clientWidth/clientHeight for display size
-                                    var w = videoEl.clientWidth || videoEl.offsetWidth || 640;
-                                    var h = videoEl.clientHeight || videoEl.offsetHeight || 360;
+                                    // The backing store has to match the
+                                    // canvas's OWN displayed box, not the
+                                    // video's.
+                                    //
+                                    // The stylesheet insets the overlay by
+                                    // 45px to clear the native video controls,
+                                    // so sizing the backing to the video's
+                                    // height made a 400-tall buffer display in
+                                    // a 355-tall box: everything drawn on it,
+                                    // including boxes drawn by hand, appeared
+                                    // squashed by 11% and sat above the object
+                                    // it belonged to.
+                                    var w = trackingCanvas.clientWidth
+                                        || videoEl.clientWidth || videoEl.offsetWidth || 640;
+                                    var h = trackingCanvas.clientHeight
+                                        || videoEl.clientHeight || videoEl.offsetHeight || 360;
                                     if (w > 0 && h > 0) {{
                                         trackingCanvas.width = w;
                                         trackingCanvas.height = h;
