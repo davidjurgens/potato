@@ -3065,10 +3065,15 @@ def admin_iaa():
 
     if (request.args.get("format") or "json").lower() == "html":
         try:
-            return render_template("admin/iaa.html", report=report)
+            # Only the HTML path is presented. The JSON body stays the nested
+            # report every downstream analysis script reads; flattening it for
+            # the benefit of a table would be a breaking API change.
+            from potato.server_utils.iaa.presentation import present
+
+            return render_template("admin/iaa.html", report=present(report))
         except Exception:
             # Template optional; fall back to JSON if missing.
-            pass
+            logger.exception("Falling back to JSON: IAA page failed to render")
     # NaN is not valid JSON, and an undefined metric is genuinely common here
     # (fewer than two annotators, no overlap items yet). Emit null instead, or
     # the browser's JSON.parse rejects the whole response.
@@ -3177,6 +3182,71 @@ def admin_judge_alignment_run():
         logger.exception("Failed to run judge batch")
         return jsonify({"error": str(exc)}), 500
     return jsonify(summary)
+
+
+@app.route("/admin/api/rollout/judge-batch", methods=["POST"])
+def admin_rollout_judge_batch():
+    """Run the rollout judge over every rollout item in the project.
+
+    Optional JSON body: {"schemas": [name], "max_items": N, "streams": [id],
+    "prompt_version": "v2"}.
+
+    Costs one model call per stream and an ffmpeg seek per sampled frame, so
+    ``max_items`` exists and the summary names everything it skipped —
+    an alignment number computed over a silently truncated sample is worse
+    than no number.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    body = request.get_json(silent=True) or {}
+    try:
+        from potato.rollouts.batch import run_judge_batch
+
+        summary = run_judge_batch(
+            config,
+            schema_names=body.get("schemas"),
+            max_items=body.get("max_items"),
+            stream_ids=body.get("streams"),
+            prompt_version=body.get("prompt_version", ""),
+        )
+    except Exception as exc:
+        logger.exception("Failed to run the rollout judge batch")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(summary)
+
+
+@app.route("/admin/api/rollout/alignment", methods=["GET"])
+def admin_rollout_alignment():
+    """Score the recorded rollout-judge predictions against the human consensus.
+
+    Query: ?schema=<name>&tolerance=0.5&prompt_version=<v>.
+
+    Separate from the batch so the alignment can be recomputed at a different
+    tolerance, or after more people annotate, without paying for the model
+    calls again.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        tolerance = float(request.args.get("tolerance") or 0.5)
+    except ValueError:
+        return jsonify({"error": "tolerance must be a number of seconds"}), 400
+
+    try:
+        from potato.rollouts.batch import alignment_report
+        from potato.server_utils.iaa.dispatcher import json_safe
+
+        report = alignment_report(
+            config, schema_name=request.args.get("schema"),
+            tolerance=tolerance, version=request.args.get("prompt_version"))
+    except Exception as exc:
+        logger.exception("Failed to compute rollout judge alignment")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(json_safe(report))
 
 
 @app.route("/admin/api/judge-alignment/autocalibrate", methods=["POST"])
@@ -3447,7 +3517,7 @@ def admin_api_step_agreement():
         ism = get_item_state_manager()
         # Collect step-level annotations from all instances
         annotations = {}
-        for instance_id, item in ism.instance_id_to_instance.items():
+        for instance_id, item in ism.iter_items():
             annotator_data = {}
             for annotator_id, ann in item.get_annotations().items():
                 if scheme_name in ann:
@@ -4801,7 +4871,7 @@ def get_span_data(instance_id):
             else:
                 logger.error(f"Instance not found with either original or decoded ID")
                 # Debug: list all available instance IDs
-                all_instance_ids = list(item_state_manager.instance_id_to_instance.keys())
+                all_instance_ids = item_state_manager.get_instance_ids()
                 logger.debug(f"Available instance IDs: {all_instance_ids[:5]}...")  # Show first 5
                 logger.debug(f"Total available instances: {len(all_instance_ids)}")
                 return jsonify({"error": "Instance not found"}), 404
@@ -8331,6 +8401,12 @@ def configure_routes(flask_app, app_config):
         register_rollout_routes(app, config)
     except Exception as e:
         logger.warning("Could not register rollout routes: %s", e)
+    # Grounding evaluation: the current item's referring expressions.
+    try:
+        from potato.grounding.routes import register_grounding_routes
+        register_grounding_routes(app, config)
+    except Exception as e:
+        logger.warning("Could not register grounding routes: %s", e)
     app.add_url_rule(
         "/screenshots/<path:filepath>",
         "serve_trace_screenshot",
@@ -8444,6 +8520,8 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/judge-alignment", "admin_judge_alignment", admin_judge_alignment, methods=["GET"])
     app.add_url_rule("/admin/api/judge-alignment/run", "admin_judge_alignment_run", admin_judge_alignment_run, methods=["POST"])
     app.add_url_rule("/admin/api/judge-alignment/autocalibrate", "admin_judge_alignment_autocalibrate", admin_judge_alignment_autocalibrate, methods=["POST"])
+    app.add_url_rule("/admin/api/rollout/judge-batch", "admin_rollout_judge_batch", admin_rollout_judge_batch, methods=["POST"])
+    app.add_url_rule("/admin/api/rollout/alignment", "admin_rollout_alignment", admin_rollout_alignment, methods=["GET"])
     app.add_url_rule("/admin/triage-queue", "admin_triage_queue", admin_triage_queue, methods=["GET"])
     app.add_url_rule("/admin/api/step_agreement", "admin_api_step_agreement", admin_api_step_agreement, methods=["GET"])
     app.add_url_rule("/admin/api/step_quality", "admin_api_step_quality", admin_api_step_quality, methods=["GET"])

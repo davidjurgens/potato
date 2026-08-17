@@ -88,6 +88,77 @@
     background: white;
   }
 
+  /* A note travels in the value cell of the row it explains, so it must read
+     as prose next to a number, not as another number. */
+  /* The denominators behind a coefficient. Subordinate to it — a coefficient
+     over four judgements and one over four hundred are different claims — but
+     never the same weight as the number they qualify. */
+  .iaa-metric-context {
+    display: block;
+    font-weight: 400;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .iaa-metric-note,
+  .iaa-metric-text {
+    display: block;
+    font-weight: 400;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--muted-foreground);
+    white-space: normal;
+    max-width: 46ch;
+    margin-left: auto;
+    text-align: left;
+  }
+
+  .iaa-metric-text {
+    color: var(--text-color);
+  }
+
+  .iaa-sweep-title {
+    margin: 2rem 0 0.25rem 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--heading-color);
+  }
+
+  .iaa-sweep-table th[scope="row"] {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    white-space: nowrap;
+    text-align: left;
+  }
+
+  /* The headline row is one of several, not a summary of them: it is tinted
+     rather than pulled out, so the curve either side of it stays readable. */
+  .iaa-sweep-headline > * {
+    background-color: color-mix(in srgb, var(--primary) 7%, transparent);
+  }
+
+  .iaa-sweep-headline .iaa-band {
+    color: var(--primary);
+    margin-left: 0.375rem;
+  }
+
+  .iaa-footnote-ref {
+    font-size: 0.6875rem;
+    color: var(--muted-foreground);
+    margin-left: 0.125rem;
+  }
+
+  .iaa-footnotes {
+    margin: 0.5rem 0 0 0;
+    padding-left: 1.25rem;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: var(--muted-foreground);
+    max-width: 70ch;
+  }
+
   .iaa-scale-note {
     font-size: 0.75rem;
     color: var(--muted-foreground);
@@ -159,70 +230,101 @@
       {% endif %}
 
       {% for schema_name, schema in report.schemas.items() %}
-        {# Detect which scales appear in this schema so we can show a single
-           explanatory note per card instead of repeating it on every row. #}
-        {% set ns = namespace(has_kappa=false, has_correlation=false, has_raw=false, has_span=false, has_lower=false) %}
-        {% for metric, value in schema.metrics.items() %}
-          {% if metric not in ('n_items', 'n_annotators', 'n_aligned_items') %}
-            {% if metric.endswith('kappa') or metric.startswith('alpha') or metric == 'gamma_mathet' %}{% set ns.has_kappa = true %}{% endif %}
-            {% if metric in ('pearson_r', 'spearman_rho', 'kendall_tau', 'icc_2_k') %}{% set ns.has_correlation = true %}{% endif %}
-            {% if metric in ('percent_agreement', 'mean_jaccard') %}{% set ns.has_raw = true %}{% endif %}
-            {% if metric in ('span_f1_exact', 'span_f1_partial', 'token_level_kappa') %}{% set ns.has_span = true %}{% endif %}
-            {% if metric in ('mae', 'rmse', 'spearman_footrule') %}{% set ns.has_lower = true %}{% endif %}
-          {% endif %}
-        {% endfor %}
         <section class="dashboard-card iaa-schema-card">
           <div class="iaa-schema-header">
             <h2>{{ schema_name }}<span class="iaa-kind-tag">{{ schema.kind }} &middot; {{ schema.annotation_type }}</span></h2>
           </div>
-          {% if ns.has_kappa %}
-          <p class="iaa-scale-note"><strong>{{ ui_lang.iaa_scale_kappa_label|default('κ-family scale (κ, α, γ):') }}</strong>
+          {# Scales, and which metrics belong to them, are classified in
+             potato/server_utils/iaa/presentation.py. Doing it here meant the
+             page inferred what a metric was from its value, which is how a
+             count of skipped items came to be labelled "weak agreement". #}
+          {% for scale in schema.scales %}
+            {% if scale == 'kappa' %}
+          <p class="iaa-scale-note"><strong>{{ ui_lang.iaa_scale_kappa_label|default('κ-family scale (κ, α, γ, σ):') }}</strong>
             &lt;0.2 {{ ui_lang.iaa_band_poor|default('poor') }} &middot; 0.2&ndash;0.4 {{ ui_lang.iaa_band_fair|default('fair') }} &middot; 0.4&ndash;0.6 {{ ui_lang.iaa_band_moderate|default('moderate') }} &middot; 0.6&ndash;0.8 {{ ui_lang.iaa_band_substantial|default('substantial') }} &middot; &gt;0.8 {{ ui_lang.iaa_band_strong|default('strong') }}.</p>
-          {% endif %}
-          {% if ns.has_correlation %}
+            {% elif scale == 'correlation' %}
           <p class="iaa-scale-note"><strong>{{ ui_lang.iaa_scale_correlation_label|default('Correlation / ICC:') }}</strong> {{ ui_lang.iaa_scale_correlation_note|default('ranges −1 to 1; closer to 1 is stronger agreement.') }}</p>
-          {% endif %}
-          {% if ns.has_raw %}
-          <p class="iaa-scale-note"><strong>{{ ui_lang.iaa_scale_raw_label|default('Raw agreement (% agreement, Jaccard):') }}</strong> {{ ui_lang.iaa_scale_raw_note|default('0 to 1; no chance correction.') }}</p>
-          {% endif %}
-          {% if ns.has_span %}
+            {% elif scale == 'raw' %}
+          <p class="iaa-scale-note"><strong>{{ ui_lang.iaa_scale_raw_label|default('Raw agreement (% agreement, Jaccard, F1):') }}</strong> {{ ui_lang.iaa_scale_raw_note|default('0 to 1; no chance correction.') }}</p>
+            {% elif scale == 'span' %}
           <p class="iaa-scale-note"><strong>{{ ui_lang.iaa_scale_span_label|default('Span F1 / token κ:') }}</strong> {{ ui_lang.iaa_scale_span_note_pre|default('0 to 1 (κ can be negative);') }} <em>span_f1_partial</em> {{ ui_lang.iaa_scale_span_note_post|default('is the conventional reporting metric.') }}</p>
-          {% endif %}
-          {% if ns.has_lower %}
-          <p class="iaa-scale-note"><strong>{{ ui_lang.iaa_scale_lower_label|default('MAE / RMSE / Spearman footrule:') }}</strong> {{ ui_lang.iaa_scale_lower_note|default('lower is better; 0 means perfect agreement.') }}</p>
-          {% endif %}
+            {% elif scale == 'lower' %}
+          <p class="iaa-scale-note"><strong>{{ ui_lang.iaa_scale_lower_label|default('Error and offset metrics (MAE, RMSE, mean offset):') }}</strong> {{ ui_lang.iaa_scale_lower_note|default('lower is better; 0 means perfect agreement. Not colour-banded, because the strong/weak bands would be inverted.') }}</p>
+            {% elif scale == 'distribution' %}
+          <p class="iaa-scale-note"><strong>{{ ui_lang.iaa_scale_distribution_label|default('Kolmogorov–Smirnov statistic:') }}</strong> {{ ui_lang.iaa_scale_distribution_note|default('0 to 1; how far the within-item offset distribution sits from the between-item one. A separation measure, not an agreement coefficient.') }}</p>
+            {% elif scale == 'coverage' %}
+          <p class="iaa-scale-note"><strong>{{ ui_lang.iaa_scale_coverage_label|default('Coverage:') }}</strong> {{ ui_lang.iaa_scale_coverage_note|default('0 to 1; the share of the task that was answered at all. Not agreement — full coverage says everyone answered, not that they answered the same. Read it as the denominator behind the scores above.') }}</p>
+            {% endif %}
+          {% endfor %}
           <div class="admin-table-container">
             <table class="admin-table">
               <thead><tr><th>{{ ui_lang.iaa_th_metric|default('Metric') }}</th><th>{{ ui_lang.iaa_th_value|default('Value') }}</th></tr></thead>
               <tbody>
-                {% for metric, value in schema.metrics.items() %}
-                  {% if metric not in ('n_items', 'n_annotators', 'n_aligned_items') %}
-                  {% set is_num = value is number and value == value %}
-                  {% set band = '' %}
-                  {% if is_num %}
-                    {% if value >= 0.6 %}{% set band = 'strong' %}
-                    {% elif value < 0.2 %}{% set band = 'weak' %}
-                    {% endif %}
-                  {% endif %}
+                {% for row in schema.rows %}
+                  {% if row.name not in ('n_items', 'n_annotators', 'n_aligned_items') %}
                   <tr>
-                    <td>{{ metric }}</td>
+                    <td>{{ row.name }}</td>
                     <td class="iaa-metric-value
-                        {% if band == 'strong' %}iaa-metric-good{% elif band == 'weak' %}iaa-metric-poor{% endif %}">
-                      {% if is_num %}{{ "%.3f"|format(value) }}{% else %}{{ ui_lang.iaa_na|default('n/a') }}{% endif %}
-                      {% if band %}{% set band_label = ui_lang.iaa_band_strong|default('strong') if band == 'strong' else ui_lang.iaa_band_weak|default('weak') %}<span class="iaa-band" aria-hidden="true">{{ band_label }}</span><span class="sr-only"> &mdash; {{ band_label }} {{ ui_lang.iaa_agreement|default('agreement') }}</span>{% endif %}
+                        {% if row.band == 'strong' %}iaa-metric-good{% elif row.band == 'weak' %}iaa-metric-poor{% endif %}">
+                      {% if row.is_text %}<span class="iaa-metric-text">{{ row.display }}</span>{% elif row.display %}{{ row.display }}{% endif %}
+                      {% if row.band %}{% set band_label = ui_lang.iaa_band_strong|default('strong') if row.band == 'strong' else ui_lang.iaa_band_weak|default('weak') %}<span class="iaa-band" aria-hidden="true">{{ band_label }}</span><span class="sr-only"> &mdash; {{ band_label }} {{ ui_lang.iaa_agreement|default('agreement') }}</span>{% endif %}
+                      {% if row.context %}<span class="iaa-metric-context">{{ row.context }}</span>{% endif %}
+                      {% if row.note %}<span class="iaa-metric-note">{{ row.note }}</span>{% endif %}
                     </td>
                   </tr>
                   {% endif %}
                 {% endfor %}
                 <tr class="iaa-schema-footer">
                   <td colspan="2">
-                    {{ schema.metrics.n_items }} {{ ui_lang.iaa_items|default('items') }} &middot; {{ schema.metrics.n_annotators }} {{ ui_lang.iaa_annotators|default('annotators') }}
-                    {% if schema.metrics.n_aligned_items is defined %} &middot; {{ schema.metrics.n_aligned_items }} {{ ui_lang.iaa_fully_aligned_items|default('fully-aligned items') }}{% endif %}
+                    {{ schema.n_items }} {{ ui_lang.iaa_items|default('items') }}
+                    {% if schema.n_annotators is not none %} &middot; {{ schema.n_annotators }} {{ ui_lang.iaa_annotators|default('annotators') }}{% endif %}
+                    {% if schema.n_aligned_items is not none %} &middot; {{ schema.n_aligned_items }} {{ ui_lang.iaa_fully_aligned_items|default('fully-aligned items') }}{% endif %}
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
+
+          {% if schema.sweep %}
+          {# The sweep is the finding, not an appendix: agreement flat across
+             the parameter means annotators identify the same instant, and
+             agreement that appears only at the loosest setting means the most
+             anyone can claim is that something is wrong somewhere. Neither is
+             visible from a single headline number. #}
+          <h3 class="iaa-sweep-title">{{ ui_lang.iaa_sweep_title|default('Sensitivity to the matching window') }}</h3>
+          <p class="iaa-scale-note">{{ ui_lang.iaa_sweep_note|default('Every measure below depends on how far apart two marks may be and still count as the same event. The highlighted row is the headline setting; read down a column to see whether agreement survives a tighter window.') }}</p>
+          <div class="admin-table-container">
+            <table class="admin-table iaa-sweep-table">
+              <thead>
+                <tr>
+                  <th scope="col">{{ schema.sweep.parameter_label }}</th>
+                  {% for column in schema.sweep.columns %}<th scope="col">{{ column }}</th>{% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in schema.sweep.rows %}
+                <tr {% if row.is_headline %}class="iaa-sweep-headline"{% endif %}>
+                  <th scope="row">
+                    {% if row.parameter is number %}{{ "%g"|format(row.parameter) }}{% else %}{{ row.parameter }}{% endif %}
+                    {% if row.is_headline %}<span class="iaa-band">{{ ui_lang.iaa_sweep_headline|default('headline') }}</span>{% endif %}
+                  </th>
+                  {% for cell in row.cells %}
+                  <td class="iaa-metric-value
+                      {% if cell.band == 'strong' %}iaa-metric-good{% elif cell.band == 'weak' %}iaa-metric-poor{% endif %}">
+                    {{ cell.display }}{% if cell.footnote %}<sup class="iaa-footnote-ref">{{ cell.footnote }}</sup><span class="sr-only"> &mdash; {{ cell.note }}</span>{% endif %}
+                  </td>
+                  {% endfor %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if schema.sweep.footnotes %}
+          <ol class="iaa-footnotes">
+            {% for note in schema.sweep.footnotes %}<li>{{ note }}</li>{% endfor %}
+          </ol>
+          {% endif %}
+          {% endif %}
         </section>
       {% endfor %}
 

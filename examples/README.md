@@ -103,6 +103,8 @@ nothing large is committed. See [ConvoKit integration](../docs/integrations/conv
 | `image-ai-detection/` | AI-generated image detection |
 | `image-vllm-rationale/` | Image annotation with vLLM rationale |
 | `annotation-critique/` | A vision model reviews the regions you drew: wrong label, loose boundary, missed object |
+| `region-captioning/` | One description per region, with agreement over the captions themselves — needs `python generate_images.py` first |
+| `deep-zoom/` | Gigapixel images through a tile pyramid, with masks at full source resolution — needs `python generate_image.py` first |
 | `pdf-annotation/` | PDF document annotation |
 | `pdf-bbox/` | PDF bounding box annotation |
 | `document-bbox/` | Document bounding box annotation |

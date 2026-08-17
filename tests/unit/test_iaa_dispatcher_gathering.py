@@ -63,11 +63,24 @@ class FakeItem:
 
 class FakeISM:
     def __init__(self, iids, annotators):
-        self.instance_id_to_instance = {i: FakeItem() for i in iids}
+        self._items = {i: FakeItem() for i in iids}
+        self.instance_id_to_instance = self._items
         self.instance_annotators = {i: set(annotators) for i in iids}
 
     def _get_annotator_cap_for_item(self, iid):
         return 2
+
+    # The accessor API the dispatcher uses. See potato/item_store.py: consumers
+    # go through these so a paged backend is possible, and a fake that only
+    # exposed the dict would be testing an interface nothing calls any more.
+    def find_item(self, iid):
+        return self._items.get(iid)
+
+    def iter_items(self):
+        return iter(self._items.items())
+
+    def get_instance_ids(self):
+        return list(self._items)
 
 
 def run_report(per_user_items, scheme):

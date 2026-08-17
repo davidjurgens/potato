@@ -30,6 +30,8 @@ class SchemaKind(str, Enum):
     TEMPORAL = "temporal"    # labelled time ranges: audio and video segments
     EPISODE = "episode"      # robot demonstrations: phases + outcome + reward
     ROLLOUT = "rollout"      # world-model rollouts: break-points + preference
+    CAPTION = "caption"      # free text about a region: agreement over meaning
+    GROUNDING = "grounding"  # referring expression -> region: detection + where
     TEXT = "text"            # free-form text, no automatic IAA
     UNSUPPORTED = "unsupported"
 
@@ -78,6 +80,8 @@ _KIND_BY_TYPE = {
     "video_annotation": SchemaKind.TEMPORAL,
     "episode_annotation": SchemaKind.EPISODE,
     "rollout_evaluation": SchemaKind.ROLLOUT,
+    "region_caption": SchemaKind.CAPTION,
+    "grounding_eval": SchemaKind.GROUNDING,
     # Skipped
     "pure_display": SchemaKind.UNSUPPORTED,
     "video": SchemaKind.UNSUPPORTED,
@@ -138,6 +142,26 @@ def metrics_for_schema(scheme: Dict[str, Any]) -> List[str]:
             "localization.sigma", "localization.ks",
             "category.alpha", "severity.alpha",
             "preference.alpha", "counterfactual.alpha",
+            "coverage.answered_fraction",
+        ],
+        # Alpha plus the RAW mean distance, because alpha is chance-corrected
+        # and this is not: a corpus whose captions are all near-identical can
+        # have an undefined or negative alpha alongside excellent raw
+        # agreement, and only the pair explains what happened.
+        SchemaKind.CAPTION: [
+            "alpha", "mean_pairwise_distance",
+            "matching.n_matched_regions", "matching.n_unmatched_regions",
+        ],
+        # Three groups, because "is it there", "where is it" and "did anyone
+        # answer" are separate findings with separate fixes: a low detection
+        # alpha means the expression is ambiguous, a low localization score
+        # means the drawing is sloppy, and low coverage means neither number
+        # rests on much. `pointing` appears only for `region_type: point`,
+        # where IoU is meaningless and distance replaces it.
+        SchemaKind.GROUNDING: [
+            "detection.alpha", "detection.percent_agreement",
+            "localization.mean_iou", "localization.median_iou",
+            "pointing.mean_pairwise_distance",
             "coverage.answered_fraction",
         ],
         SchemaKind.TEXT: [],
@@ -581,7 +605,41 @@ def _aggregate_blobs(rows, scheme: Dict[str, Any], match_threshold: float = 0.5)
     return result
 
 
-def _aggregate_span(span_rows, item_lookup):
+def _parse_caption_rows(rows):
+    """
+    ``{item: {annotator: [{"region", "caption"}]}}`` from the stored blobs.
+
+    Parsed here rather than in the measure because the measure is also called
+    directly with already-parsed data by tests and by analysis scripts, and a
+    function that accepted both shapes would have to guess which it got.
+    """
+    import json as _json
+
+    parsed = {}
+    for item_id, per_user in rows.items():
+        entries = {}
+        for user_id, stored in per_user.items():
+            value = stored
+            if isinstance(value, dict):
+                value = next(iter(value.values()), None)
+            if isinstance(value, str):
+                try:
+                    value = _json.loads(value)
+                except ValueError:
+                    continue
+            if isinstance(value, dict):
+                captions = value.get("captions")
+                if isinstance(captions, list):
+                    entries[user_id] = captions
+        if len(entries) >= 2:
+            parsed[item_id] = entries
+    return parsed
+
+
+def _aggregate_span(span_rows, find_item):
+    """``find_item`` is a ``id -> Item or None`` callable, not a mapping: the
+    span length has to come from the item, and a mapping would have to be
+    materialized first — see potato/item_store.py."""
     token_kappas = []
     f1_exact = []
     f1_partial = []
@@ -592,7 +650,7 @@ def _aggregate_span(span_rows, item_lookup):
     for iid, per_user in span_rows.items():
         if len(per_user) < 2:
             continue
-        item = item_lookup.get(iid)
+        item = find_item(iid)
         length = _text_length_for_item(item)
         if length <= 0:
             continue
@@ -722,7 +780,7 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
 
     # Overlap items: per-item cap >= 2 AND saturated.
     overlap_items = []
-    for iid, item in item_state_manager.instance_id_to_instance.items():
+    for iid, item in item_state_manager.iter_items():
         cap = item_state_manager._get_annotator_cap_for_item(iid)
         if cap is None or cap < 2:
             continue
@@ -756,7 +814,7 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
             continue
         if kind == SchemaKind.SPAN:
             rows = _gather_spans(overlap_items, user_states, name)
-            metrics = _aggregate_span(rows, item_state_manager.instance_id_to_instance)
+            metrics = _aggregate_span(rows, item_state_manager.find_item)
         elif kind == SchemaKind.EPISODE:
             from potato.server_utils.iaa import episodes as episode_iaa
             # The raw stored blob, not a pre-parsed one: the episode report
@@ -764,6 +822,20 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
             # timeline wrote.
             rows = _gather_raw(overlap_items, user_states, name)
             metrics = episode_iaa.episode_report(rows, scheme)
+        elif kind == SchemaKind.CAPTION:
+            from potato.server_utils.iaa import captions as caption_iaa
+
+            rows = _gather_raw(overlap_items, user_states, name)
+            metrics = caption_iaa.region_caption_report(
+                _parse_caption_rows(rows),
+                distance=(scheme.get("agreement_distance") or "token"))
+        elif kind == SchemaKind.GROUNDING:
+            from potato.server_utils.iaa import grounding as grounding_iaa
+            # Raw, like the episode and rollout reports: the blob holds three
+            # independent layers and the measure that scores each one parses it,
+            # so the report cannot drift from what the client wrote.
+            rows = _gather_raw(overlap_items, user_states, name)
+            metrics = grounding_iaa.grounding_report(rows, scheme)
         elif kind == SchemaKind.ROLLOUT:
             from potato.server_utils.iaa import rollouts as rollout_iaa
             # Raw for the same reason the episode report takes it raw: the four

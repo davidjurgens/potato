@@ -1,0 +1,109 @@
+/*
+ * Region captioning.
+ *
+ * The list follows the canvas, so each row has to be matchable to a shape at a
+ * glance: the label carries the region's position and label, and the described
+ * / undescribed state is a fill so the remaining work is scannable.
+ */
+
+.region-caption-container {
+    margin: var(--space-md, 1rem) 0;
+}
+
+.region-caption-fieldset {
+    border: 1px solid var(--border, #dee2e6);
+    border-radius: var(--radius, 6px);
+    padding: var(--space-md, 1rem);
+    margin: 0;
+}
+
+.region-caption-legend {
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 0 0.5rem;
+    color: var(--heading-color, #212529);
+}
+
+.region-caption-help {
+    margin: 0 0 var(--space-md, 1rem) 0;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: #495057;
+    max-width: 70ch;
+}
+
+.region-caption-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.region-caption-item {
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border, #dee2e6);
+    border-radius: var(--radius, 6px);
+}
+
+.region-caption-item.described {
+    background: #e6f4ea;
+}
+
+.region-caption-item.undescribed {
+    background: #fdf6e7;
+}
+
+.region-caption-label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 0.25rem;
+}
+
+.region-caption-input {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 0.5rem;
+    border: 1px solid var(--border, #dee2e6);
+    border-radius: var(--radius, 6px);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    font-family: inherit;
+    resize: vertical;
+}
+
+/* styles.css covers .annotation-form input/textarea for :focus-visible, but
+   this fieldset is outside that scope in some layouts. */
+.region-caption-container textarea:focus-visible,
+.region-caption-container button:focus-visible {
+    outline: 3px solid var(--ring, #6e56cf);
+    outline-offset: 2px;
+}
+
+.region-caption-progress {
+    margin: var(--space-md, 1rem) 0 0 0;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: #495057;
+}
+
+.region-caption-container.error .region-caption-progress {
+    color: #b02a37;
+}
+
+.region-caption-announce.sr-only,
+.region-caption-container .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

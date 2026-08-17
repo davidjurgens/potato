@@ -275,6 +275,19 @@ unfalsifiable, because the reader cannot tell a tight agreement from a generous
 window. The headline tolerance (0.5 s by default) is reported alongside the
 full sweep, never instead of it.
 
+`/admin/iaa?format=html` draws the sweep as its own table — one row per window,
+one column per measure, the headline row tinted — under the flat metric list.
+Read a column downwards: that is the curve. The JSON at `/admin/iaa` carries
+the same sweep under `schemas.<name>.metrics.sweep`, unflattened, which is what
+an analysis script should read.
+
+Where a coefficient is undefined the report says why rather than printing a
+blank. "Every annotator marked the same breaks, so there is no variation for
+alpha to correct against" is perfect agreement; "fewer than two judgements to
+compare" is no data. Both are α = `null` in the JSON and they are opposite
+findings, so the reason travels with the value — inline in the metric list, and
+as a numbered footnote under the sweep table.
+
 `localization.sigma` is **conditional on a match**, so it is bounded by the
 tolerance by construction and rises as the tolerance falls. That is not a
 defect to correct for; it is why the sweep exists. For a number to quote
@@ -284,9 +297,9 @@ directly, use `mean_offset_frames`.
 
 ## VLM-as-judge over rollouts
 
-`POST /api/rollout/judge` samples frames from each rollout, assembles them into
-a numbered contact sheet, and asks a vision endpoint for the first frame at
-which the scene stops being coherent, plus a category.
+The judge samples frames from a rollout, assembles them into a numbered contact
+sheet, and asks a vision endpoint for the first frame at which the scene stops
+being coherent, plus a category.
 
 The point is not to replace the annotator. It is to make automated world-model
 benchmarks **checkable**: the judge's break-point is scored against the human
@@ -296,6 +309,58 @@ an assertion.
 
 Requires ffmpeg (to sample frames), Pillow (to assemble the sheet), and a
 vision-capable AI endpoint.
+
+### Running it
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/rollout/judge` | Judge the annotator's **current** item. One interactive check. |
+| `POST /admin/api/rollout/judge-batch` | Judge **every** rollout in the project and persist the predictions. |
+| `GET /admin/api/rollout/alignment` | Score the persisted predictions against the human consensus. |
+
+```bash
+# judge at most 50 items, one model call per stream
+curl -X POST localhost:8000/admin/api/rollout/judge-batch \
+     -H "X-API-Key: $POTATO_ADMIN_KEY" -H 'Content-Type: application/json' \
+     -d '{"max_items": 50, "streams": ["gen_a"]}'
+
+# then score it — as often as you like, at any tolerance, for free
+curl "localhost:8000/admin/api/rollout/alignment?tolerance=0.5" \
+     -H "X-API-Key: $POTATO_ADMIN_KEY"
+```
+
+The batch is **not** free: one model call per stream plus an ffmpeg seek per
+sampled frame, so a four-panel comparison over 500 items is 2000 calls. Hence
+`max_items`, `streams`, and a summary that lists everything it skipped and why
+— an alignment number computed over a silently truncated sample is worse than
+no number at all. Scoring is a separate call because it costs nothing, so the
+tolerance can be varied and the report re-run as more people annotate.
+
+Predictions are stored per prompt version in `rollout_predictions.json`, so
+re-running after changing the prompt compares like with like instead of
+overwriting the previous run's evidence.
+
+### There is no single human answer, so one is built
+
+The judge is scored against a **consensus** derived per stream from every
+annotator who answered about it:
+
+- more annotators marked it **clean** than marked a break → the consensus is
+  "no break", a real answer the judge can be right or wrong about;
+- more marked a break → the consensus time is the **median** of their marks and
+  the category is the modal one. Median, so one annotator who marked the wrong
+  moment entirely moves the answer by one position rather than dragging it
+  across the clip;
+- **nobody answered** → the stream contributes nothing. Counting silence as
+  "clean" would manufacture agreement with a judge that also found nothing.
+
+Where several marks sit on one stream, the earliest counts: the question is
+where the rollout *stops* making sense, and a later mark is a further failure,
+not a competing answer.
+
+Unlike the agreement report, one annotator is enough. A single person's answer
+is a perfectly good thing for a judge to be right or wrong about; the
+two-annotator floor exists because a person cannot agree with themselves.
 
 **Why a contact sheet.** Almost every vision endpoint takes one image per call.
 Asking "is this frame wrong?" about a single frame cannot be answered — a

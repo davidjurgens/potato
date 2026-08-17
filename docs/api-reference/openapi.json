@@ -1226,6 +1226,34 @@
         ]
       }
     },
+    "/admin/api/rollout/alignment": {
+      "get": {
+        "operationId": "get_admin_rollout_alignment",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Score the recorded rollout-judge predictions against the human consensus.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/admin/api/rollout/judge-batch": {
+      "post": {
+        "operationId": "post_admin_rollout_judge_batch",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Run the rollout judge over every rollout item in the project.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/admin/api/search": {
       "get": {
         "operationId": "get_search_admin_search",
@@ -3260,6 +3288,20 @@
             "description": "Success"
           }
         },
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/api/grounding/expressions": {
+      "get": {
+        "operationId": "get_grounding_expressions",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "The current item's referring expressions, and any model predictions.",
         "tags": [
           "core"
         ]
@@ -6424,6 +6466,88 @@
         ]
       }
     },
+    "/media/iiif/{filepath}/info.json": {
+      "get": {
+        "operationId": "get_media_iiif_info",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "IIIF Image API 3.0 ``info.json`` over the same pyramid.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/iiif/{filepath}/{region}/{size}/{rotation}/{quality_format}": {
+      "get": {
+        "operationId": "get_media_iiif_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "region",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "size",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "rotation",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quality_format",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "A IIIF ``{region}/{size}/{rotation}/{quality}.{format}`` request.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/media/info/{filepath}": {
       "get": {
         "operationId": "get_media_info",
@@ -6494,6 +6618,87 @@
           }
         },
         "summary": "Serve a transcoded rendering of ``filepath``, caching the result.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/tiles/{filepath}.dzi": {
+      "get": {
+        "operationId": "get_media_tile_descriptor",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "The DZI descriptor, plus the same geometry as JSON for the client.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/tiles/{filepath}_files/{level}/{column}_{row}.{ext}": {
+      "get": {
+        "operationId": "get_media_tile_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "level",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "column",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ext",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
         "tags": [
           "core"
         ]

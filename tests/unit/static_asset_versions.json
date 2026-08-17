@@ -83,6 +83,10 @@
     "sha256": "02c79d937977c083",
     "version": "1"
   },
+  "deepzoom-viewer.js": {
+    "sha256": "3460c245a4e260fe",
+    "version": "1"
+  },
   "depth-viewer.css": {
     "sha256": "42db20efa77dca28",
     "version": "2"
@@ -123,13 +127,21 @@
     "sha256": "eb167cefe58fea77",
     "version": "4"
   },
+  "grounding-eval.css": {
+    "sha256": "0913d758fc309574",
+    "version": "1"
+  },
+  "grounding-eval.js": {
+    "sha256": "883d7b4f342a1b9d",
+    "version": "1"
+  },
   "image-annotation.css": {
-    "sha256": "5b3129f38c8adbab",
+    "sha256": "11648eb2429ca22d",
     "version": "15"
   },
   "image-annotation.js": {
-    "sha256": "de6296c2f5429f7d",
-    "version": "24"
+    "sha256": "5b7be0693146e10f",
+    "version": "26"
   },
   "instance-display.js": {
     "sha256": "44f86cac34ef4ab1",
@@ -222,6 +234,14 @@
   "pointcloud/pc-wire.js": {
     "sha256": "482b899ec60b7947",
     "version": "2"
+  },
+  "region-caption.css": {
+    "sha256": "8f898abad57c7a4b",
+    "version": "1"
+  },
+  "region-caption.js": {
+    "sha256": "1c2867b49084ce91",
+    "version": "1"
   },
   "rollout-eval.css": {
     "sha256": "ba9d2abeb5a3da52",

@@ -149,7 +149,7 @@ def _instance_text_lengths(manager) -> Dict[str, int]:
         from potato.item_state_management import get_item_state_manager
         ism = get_item_state_manager()
         text_key = (manager.app_config.get("item_properties", {}) or {}).get("text_key")
-        for iid, item in ism.instance_id_to_instance.items():
+        for iid, item in ism.iter_items():
             data = item.get_data()
             if isinstance(data, dict) and text_key and text_key in data:
                 lengths[iid] = len(str(data[text_key]))

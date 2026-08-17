@@ -60,6 +60,7 @@ nav:
             - Tiered Annotation: annotation-types/multimedia/tiered_annotation.md
             - Image Annotation Formats: annotation-types/multimedia/image_formats.md
             - Media Ingest (TIFF, HEIC, RAW, video): annotation-types/multimedia/media_ingest.md
+            - Deep Zoom & Tiling: annotation-types/multimedia/deep_zoom.md
             - Video Annotation Formats: annotation-types/multimedia/video_formats.md
             - Transcript Formats: annotation-types/multimedia/transcript_formats.md
         - Spatial (3D):
@@ -107,6 +108,7 @@ nav:
         - CI Evaluation: agent-evaluation/ci_evaluation.md
         - Judge Alignment: agent-evaluation/judge_alignment.md
         - World-Model & Rollout Evaluation: agent-evaluation/world_model_eval.md
+        - VLM Grounding & Pointing: agent-evaluation/vlm_grounding.md
         - Semantic Curation: agent-evaluation/semantic_curation.md
         - Model Arena: agent-evaluation/model_arena.md
         - Trace Analytics & Alerts: agent-evaluation/trace_analytics.md

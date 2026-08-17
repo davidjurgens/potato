@@ -270,7 +270,7 @@ class AdjudicationManager:
             scheme_names = [s.get("name", "") for s in annotation_schemes]
 
             # Iterate over all items
-            for instance_id, item in ism.instance_id_to_instance.items():
+            for instance_id, item in ism.iter_items():
                 instance_id_str = str(instance_id)
 
                 # Skip if already decided
@@ -401,7 +401,7 @@ class AdjudicationManager:
             instance_id_str = str(instance_id)
             if instance_id_str in self.decisions:
                 return False
-            item = ism.instance_id_to_instance.get(instance_id)
+            item = ism.find_item(instance_id)
             if item is None:
                 return False
 
@@ -661,7 +661,7 @@ class AdjudicationManager:
         from potato.item_state_management import get_item_state_manager
 
         ism = get_item_state_manager()
-        item = ism.instance_id_to_instance.get(instance_id)
+        item = ism.find_item(instance_id)
         if item:
             # Use text_key from config if available
             text_key = self.config.get("item_properties", {}).get("text_key", "text")
@@ -676,7 +676,7 @@ class AdjudicationManager:
         from potato.item_state_management import get_item_state_manager
 
         ism = get_item_state_manager()
-        item = ism.instance_id_to_instance.get(instance_id)
+        item = ism.find_item(instance_id)
         if item:
             data = item.get_data()
             if isinstance(data, dict):
@@ -790,7 +790,7 @@ class AdjudicationManager:
         try:
             ism = get_item_state_manager()
             item_texts = {}
-            for instance_id, item in ism.instance_id_to_instance.items():
+            for instance_id, item in ism.iter_items():
                 text = self.get_item_text(str(instance_id))
                 if text:
                     item_texts[str(instance_id)] = text
@@ -1175,7 +1175,7 @@ class AdjudicationManager:
         scheme_names = [s.get("name", "") for s in annotation_schemes]
         results = []
 
-        for instance_id, item in ism.instance_id_to_instance.items():
+        for instance_id, item in ism.iter_items():
             instance_id_str = str(instance_id)
             result = {
                 "instance_id": instance_id_str,

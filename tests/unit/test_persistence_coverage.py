@@ -44,6 +44,8 @@ PERSISTENCE_TEST_MAP = {
     # across reload and produce false positives (invariant 2).
     "episode_annotation": "tests/playwright/test_episode_annotation.py",
     "rollout_evaluation": "tests/playwright/test_rollout_evaluation.py",
+    "grounding_eval": "tests/playwright/test_grounding_eval.py",
+    "region_caption": "tests/playwright/test_region_caption.py",
     "audio_annotation": "tests/selenium/test_audio_annotation_ui.py",
     "video_annotation": "tests/selenium/test_annotation_persistence.py",
     "pairwise": "tests/selenium/test_pairwise_ui.py",

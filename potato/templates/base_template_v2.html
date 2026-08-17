@@ -65,6 +65,16 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='rollout-eval.css') }}?v=3">
     {% endif %}
 
+    <!-- Grounding evaluation styles -->
+    {% if frontend_assets.grounding_eval | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='grounding-eval.css') }}?v=1">
+    {% endif %}
+
+    <!-- Region captioning styles -->
+    {% if frontend_assets.region_caption | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='region-caption.css') }}?v=1">
+    {% endif %}
+
     <!-- Audio Annotation Styles -->
     {% if frontend_assets.audio_annotation | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='audio-annotation.css') }}?v=4">
@@ -797,7 +807,30 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=24"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=26"></script>
+    {% endif %}
+
+    <!-- Deep zoom, for images too large to send to a browser as one file.
+         Gated on the schema's own `viewer: deepzoom`, because OpenSeadragon is
+         a 277 KB download that a project annotating ordinary photographs must
+         not pay for. Vendored for the same reason as fabric: without it the
+         viewer does not degrade, it simply has no image. -->
+    <!-- Grounding evaluation: binds referring expressions to regions drawn on
+         the image annotation canvas beside it. Gated on its own container so a
+         plain image project does not load it. -->
+    {% if frontend_assets.grounding_eval | default(false) %}
+    <script src="{{ url_for('static', filename='grounding-eval.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- Region captioning: a description per region drawn on the image
+         annotation canvas beside it. -->
+    {% if frontend_assets.region_caption | default(false) %}
+    <script src="{{ url_for('static', filename='region-caption.js') }}?v=1"></script>
+    {% endif %}
+
+    {% if frontend_assets.deepzoom | default(false) %}
+    <script src="{{ url_for('static', filename='vendor/openseadragon-5.0.1.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='deepzoom-viewer.js') }}?v=1"></script>
     {% endif %}
 
     <!-- Interactive segmentation. Loaded only when a schema configures the

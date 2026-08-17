@@ -506,6 +506,10 @@ KNOWN_CONFIG_KEYS = {
     "assignment_strategy": None,
     "reclaim_stale_assignments": None,
     "instance_reclaim": None,
+    # Where item payloads live. In-memory by default; see potato/item_store.py
+    # for the measurement that makes that the right default and the scale at
+    # which "paged" starts to pay for itself.
+    "item_store": {"backend", "path", "cache_size"},
     "max_session_seconds": None,
     "env_substitution": None,
 
@@ -2515,6 +2519,40 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                     f"{path}.fill_mode must be one of {valid_fill_modes}, "
                     f"got '{scheme['fill_mode']}'")
 
+        if 'viewer' in scheme:
+            # Imported rather than duplicated: a second list here is how
+            # `VALID_TOOLS` came to exist in two places (invariant 9).
+            from potato.server_utils.schemas.image_annotation import VALID_VIEWERS
+            if scheme['viewer'] not in VALID_VIEWERS:
+                raise ConfigValidationError(
+                    f"{path}.viewer must be one of {VALID_VIEWERS}, got "
+                    f"'{scheme['viewer']}'. Use 'deepzoom' for images too "
+                    f"large to send to a browser as one file.")
+
+        if 'tiles' in scheme:
+            tiles = scheme['tiles']
+            if not isinstance(tiles, dict):
+                raise ConfigValidationError(
+                    f"{path}.tiles must be a mapping of tile options "
+                    f"(tile_size, overlap, max_pixels, page, navigator)")
+            for key in ('tile_size', 'overlap', 'max_pixels', 'page'):
+                if key in tiles and (not isinstance(tiles[key], int)
+                                     or isinstance(tiles[key], bool)
+                                     or tiles[key] < 0):
+                    raise ConfigValidationError(
+                        f"{path}.tiles.{key} must be a non-negative integer")
+            if tiles.get('tile_size') is not None and tiles['tile_size'] < 32:
+                raise ConfigValidationError(
+                    f"{path}.tiles.tile_size must be at least 32; smaller "
+                    f"tiles cost more requests than they save bytes.")
+            if scheme.get('viewer') != 'deepzoom':
+                # Not an error — the options are harmless — but silently
+                # ignored options are how a project concludes the feature does
+                # not work.
+                logger.warning(
+                    "%s.tiles is set but viewer is not 'deepzoom', so the tile "
+                    "options are ignored.", path)
+
         if 'carry_over' in scheme:
             valid_carry_over = [False, True, 'prompt', 'auto']
             if scheme['carry_over'] not in valid_carry_over:
@@ -2537,6 +2575,53 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                 raise ConfigValidationError(
                     f"{path}.fill_tolerance must be an integer 0-255 "
                     f"(per-channel colour distance)")
+
+    elif annotation_type == 'region_caption':
+        for key in ('min_length', 'max_length'):
+            if key in scheme and (not isinstance(scheme[key], int)
+                                  or isinstance(scheme[key], bool)
+                                  or scheme[key] < 0):
+                raise ConfigValidationError(
+                    f"{path}.{key} must be a non-negative integer")
+        if (scheme.get('min_length') and scheme.get('max_length')
+                and scheme['min_length'] > scheme['max_length']):
+            raise ConfigValidationError(
+                f"{path}.min_length is greater than {path}.max_length, so no "
+                f"caption could ever be valid")
+        distance = scheme.get('agreement_distance', 'token')
+        if distance not in ('token', 'embedding'):
+            raise ConfigValidationError(
+                f"{path}.agreement_distance must be 'token' or 'embedding', "
+                f"got '{distance}'. 'embedding' needs sentence-transformers "
+                f"and falls back to 'token' with a stated warning if it is "
+                f"not installed.")
+
+    elif annotation_type == 'grounding_eval':
+        # Imported rather than duplicated, so a new region type or expression
+        # source is valid in exactly one place (invariant 9).
+        from potato.server_utils.schemas.grounding_eval import (
+            VALID_EXPRESSION_SOURCES, VALID_REGION_TYPES)
+
+        if 'region_type' in scheme and scheme['region_type'] not in VALID_REGION_TYPES:
+            raise ConfigValidationError(
+                f"{path}.region_type must be one of {list(VALID_REGION_TYPES)}, "
+                f"got '{scheme['region_type']}'. Use 'point' for Molmo-style "
+                f"pointing evaluation.")
+
+        source = scheme.get('expression_source', 'field')
+        if source not in VALID_EXPRESSION_SOURCES:
+            raise ConfigValidationError(
+                f"{path}.expression_source must be one of "
+                f"{list(VALID_EXPRESSION_SOURCES)}, got '{source}'. Use "
+                f"'spans' to select phrases out of a caption.")
+
+        if source == 'spans' and 'expressions_field' in scheme:
+            # Not an error, but silently ignored options are how a project
+            # concludes a feature does not work.
+            logger.warning(
+                "%s.expressions_field is set but expression_source is 'spans', "
+                "so the phrases come from the caption and the field is ignored.",
+                path)
 
     elif annotation_type == 'audio_annotation':
         # Validate mode

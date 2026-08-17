@@ -75,6 +75,11 @@ def _segmentation_config(annotation_scheme, tools):
     }
 
 
+#: Viewers an image_annotation schema can use. `fabric` draws the whole image
+#: on the canvas; `deepzoom` serves a tile pyramid and is what makes a source
+#: larger than a browser can hold annotatable at all.
+VALID_VIEWERS = ["fabric", "deepzoom"]
+
 VALID_TOOLS = ["bbox", "polygon", "polyline", "ellipse", "freeform", "landmark",
                "keypoint_set", "cuboid_2d", "fill", "eraser", "brush",
                # Interactive segmentation. Needs a downloaded model; the tool
@@ -235,6 +240,24 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
         "keybinding_profile", DEFAULT_KEYBINDING_PROFILE)
     tool_keys = get_tool_keys(keybinding_profile)
 
+    # viewer: "fabric" (default) draws the whole image on the canvas;
+    # "deepzoom" serves a tile pyramid through OpenSeadragon, which is the only
+    # way to annotate a source too large to send to a browser as one file.
+    viewer = str(annotation_scheme.get("viewer", "fabric")).lower()
+    if viewer not in VALID_VIEWERS:
+        raise ValueError(
+            f"Invalid viewer {viewer!r} in schema {schema_name!r}. "
+            f"Valid viewers are: {VALID_VIEWERS}")
+    tiles_cfg = annotation_scheme.get("tiles") or {}
+    tile_options = {
+        "tileSize": int(tiles_cfg.get("tile_size") or 254),
+        "overlap": int(tiles_cfg.get("overlap")
+                       if tiles_cfg.get("overlap") is not None else 1),
+        "maxPixels": int(tiles_cfg.get("max_pixels") or 640000000),
+        "page": int(tiles_cfg.get("page") or 0),
+        "showNavigator": bool(tiles_cfg.get("navigator", True)),
+    }
+
     # carry_over: false | "prompt" | "auto"
     #   false   - no carry-over at all (default; the previous item is arbitrary
     #             unless the data is a sequence)
@@ -264,6 +287,8 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
         # The client reads its shortcuts from here rather than hardcoding a
         # switch, so a profile change is a config change and the two can never
         # drift from the tooltips and the docs table.
+        "viewer": viewer,
+        "tiles": tile_options,
         "keybindingProfile": keybinding_profile,
         "toolKeys": tool_keys,
         "commonKeys": COMMON_KEYBINDINGS,
@@ -326,6 +351,16 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
     Generate the HTML for the image annotation interface.
     """
     escaped_name = escape_html_content(schema_name)
+
+    # Read from js_config rather than the scheme: the validation and the
+    # defaulting both happened there, and re-reading the raw scheme here is how
+    # a template and its client config come to disagree about which viewer is
+    # in use.
+    viewer = (js_config or {}).get("viewer", "fabric")
+    deepzoom_class = " deepzoom" if viewer == "deepzoom" else ""
+    deepzoom_host_html = (
+        f'<div id="deepzoom-{escaped_name}" class="deepzoom-host"'
+        f' aria-hidden="true"></div>' if viewer == "deepzoom" else "")
     description = escape_html_content(annotation_scheme.get('description', ''))
     config_json = json.dumps(js_config)
 
@@ -429,7 +464,11 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                 {ai_toolbar_html}
 
                 <!-- Canvas wrapper -->
-                <div class="canvas-wrapper">
+                <div class="canvas-wrapper{deepzoom_class}">
+                    <!-- The tiled image renders here, BEHIND the fabric canvas.
+                         Present only under `viewer: deepzoom`; the ordinary
+                         viewer draws its image on the canvas itself. -->
+                    {deepzoom_host_html}
                     <!-- role/aria-label/tabindex give the drawing surface an
                          identity: without them the entire annotation area is
                          unreachable by keyboard and unannounced by assistive

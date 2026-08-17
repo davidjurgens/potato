@@ -73,6 +73,7 @@ over prose when writing a config or calling the API.
 - [Conditional Logic](configuration/conditional_logic.md) - Show/hide questions based on prior answers
 - [Image Annotation](annotation-types/multimedia/image_annotation.md) - Bounding boxes, polygons, and landmarks
 - [Image Annotation Formats](annotation-types/multimedia/image_formats.md) - Import COCO (polygons, RLE masks, crowd regions) with no preprocessing, and export back
+- [Deep Zoom & Tiling](annotation-types/multimedia/deep_zoom.md) - Annotate images too large to send to a browser as one file, with masks painted at the source's full resolution and no GPU texture limit
 - [Point Cloud Annotation (3D)](annotation-types/spatial/point_cloud.md) - Oriented 3D boxes on lidar: KITTI, PCD, PLY and LAS, converted server-side
 - [Calibration and 2D Verification](annotation-types/spatial/calibration.md) - Project 3D boxes into the camera images, so a box is checkable rather than a guess
 - [Depth Maps](annotation-types/spatial/depth_maps.md) - 16-bit PNG, NPY, PFM and EXR depth with a near/far window and a readout in metres
@@ -146,6 +147,7 @@ over prose when writing a config or calling the API.
 
 - **[Coding Agent Annotation](agent-evaluation/coding_agent_annotation.md)** - Evaluate agentic coding systems (Claude Code, SWE-Agent, Aider) with diff rendering, PRM annotation, and code review
 - **[CoT Process Reward (LLM pre-label + verify)](agent-evaluation/process_reward_cot.md)** - Segment a long chain-of-thought into steps, have an LLM pre-label each step's reward, and have a human verify — fast PRM data collection
+- **[VLM Grounding & Pointing](agent-evaluation/vlm_grounding.md)** - Bind referring expressions to regions or points, with an explicit not-present answer, and localize what a caption says that is not there
 - **[World-Model & Rollout Evaluation](agent-evaluation/world_model_eval.md)** - Frame-locked video panels; mark the frame where a generated rollout stops making sense, and measure whether annotators agree on *when*
 - [Agent Traces](agent-evaluation/agent_traces.md) - Evaluate AI agent traces and trajectories
 - [Turn-Level Annotation](agent-evaluation/turn_level_annotation.md) - Bind any rating/tagging/comment schema per-turn with declarative filters (by speaker, agent, step type, tool)
@@ -3545,7 +3547,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `layout` |  | object | `breakpoints`, `grid`, `groups`, `order`, `styling` |
 | `instance_display` |  | object | `fields`, `layout`, `resizable` |
 | `format_handling` |  | object | `default_format`, `enabled`, `pdf`, `spreadsheet` |
-| `ui_language` |  | object | `_base`, `adjudicate`, `admin_btn_computing`, `admin_btn_generate_scores`, `admin_btn_reload`, `admin_btn_save_changes`, `admin_err_annotators`, `admin_err_behavioral`, `admin_err_config`, `admin_err_crowdsourcing`, `admin_err_instances`, `admin_err_mace_load`, `admin_err_mace_trigger`, `admin_err_overview`, `admin_err_questions`, `admin_filter_all`, `admin_filter_completed`, `admin_filter_incomplete`, `admin_hint_unlimited`, `admin_label_assignment_strategy`, `admin_label_max_per_item`, `admin_label_max_per_user`, `admin_login_help`, `admin_login_key_label`, `admin_login_key_placeholder`, `admin_login_submit`, `admin_login_title`, `admin_mace_predicted_help`, `admin_mace_run_predictions`, `admin_mode_badge`, `admin_ok_config_saved`, `admin_opt_color_mace`, `admin_opt_color_majority`, `admin_opt_per_page`, `admin_opt_scoring_counting`, `admin_opt_strat_active_learning`, `admin_opt_strat_fixed_order`, `admin_opt_strat_least_annotated`, `admin_opt_strat_llm_confidence`, `admin_opt_strat_max_diversity`, `admin_opt_strat_random`, `admin_order_asc`, `admin_order_desc`, `admin_page_title`, `admin_section_ai_usage`, `admin_section_bws_scores`, `admin_section_competence`, `admin_section_predicted_labels`, `admin_section_quality`, `admin_section_system_config`, `admin_section_system_info`, `admin_sort_annotations`, `admin_sort_avg_time`, `admin_sort_completion`, `admin_sort_disagreement`, `admin_sort_id`, `admin_tab_annotators`, `admin_tab_behavioral`, `admin_tab_bws`, `admin_tab_configuration`, `admin_tab_crowdsourcing`, `admin_tab_datasets`, `admin_tab_embeddings`, `admin_tab_instances`, `admin_tab_mace`, `admin_tab_overview`, `admin_tab_questions`, `admin_th_ai_accept_rate`, `admin_th_ai_requests`, `admin_th_annotations`, `admin_th_annotator`, `admin_th_annotators`, `admin_th_appearances`, `admin_th_assignment_id`, `admin_th_avg_time`, `admin_th_avg_time_per_annotation`, `admin_th_avg_time_s`, `admin_th_best_count`, `admin_th_changes`, `admin_th_competence`, `admin_th_completion`, `admin_th_completion_pct`, `admin_th_disagreement`, `admin_th_instance`, `admin_th_instance_id`, `admin_th_instances`, `admin_th_interactions`, `admin_th_item_id`, `admin_th_last_activity`, `admin_th_max_instances`, `admin_th_most_frequent_label`, `admin_th_num_ai_used`, `admin_th_phase`, `admin_th_predicted_label`, `admin_th_rank`, `admin_th_reliability`, `admin_th_score`, `admin_th_session_id`, `admin_th_speed`, `admin_th_speed_per_hour`, `admin_th_status`, `admin_th_suspicion`, `admin_th_text`, `admin_th_text_preview`, `admin_th_time`, `admin_th_uncertainty`, `admin_th_user_id`, `admin_th_worker_id`, `admin_th_working_time`, `admin_th_worst_count`, `arena_empty`, `arena_enter_prompt`, `arena_error_prefix`, `arena_export`, `arena_export_title`, `arena_failed`, `arena_heading`, `arena_lb_note`, `arena_leaderboard_heading`, `arena_lede`, `arena_models_label`, `arena_ms`, `arena_no_dpo_pairs`, `arena_page_title`, `arena_pick_as_best`, `arena_picked`, `arena_prompt_heading`, `arena_prompt_placeholder`, `arena_responses_heading`, `arena_run`, `arena_running`, `arena_sent_to`, `arena_th_bt`, `arena_th_comparisons`, `arena_th_elo`, `arena_th_model`, `arena_th_win_rate`, `arena_th_wins`, `audio_to_annotate`, `automation_actions_error`, `automation_actions_ok`, `automation_actions_skipped`, `automation_activity`, `automation_col_action`, `automation_col_actions`, `automation_col_detail`, `automation_col_enabled`, `automation_col_item`, `automation_col_rule`, `automation_col_sample_rate`, `automation_col_status`, `automation_configured_rules`, `automation_heading`, `automation_items_processed`, `automation_latest`, `automation_lede_1`, `automation_lede_2`, `automation_lede_3`, `automation_no`, `automation_no_actions`, `automation_no_rules`, `automation_page_title`, `automation_recent_outcomes`, `automation_reload`, `automation_rules_fired`, `automation_snapshot_title`, `automation_yes`, `catalog_all_placeholder`, `catalog_anchor_label`, `catalog_anchor_placeholder`, `catalog_build_index`, `catalog_clusters_label`, `catalog_discover_button`, `catalog_discover_desc`, `catalog_discover_heading`, `catalog_embeddings_warn_1`, `catalog_embeddings_warn_2`, `catalog_heading`, `catalog_index_heading`, `catalog_items_indexed`, `catalog_lede_1`, `catalog_lede_2`, `catalog_lede_3`, `catalog_lede_slices`, `catalog_lede_what`, `catalog_more_traces_suffix`, `catalog_no_matches`, `catalog_no_slices`, `catalog_page_title`, `catalog_prompt_curate_prefix`, `catalog_prompt_curate_suffix`, `catalog_query_text_label`, `catalog_query_text_placeholder`, `catalog_resolve_button`, `catalog_save_slice_button`, `catalog_search_button`, `catalog_search_heading`, `catalog_slice_name_label`, `catalog_slice_query_label`, `catalog_slice_query_placeholder`, `catalog_slice_threshold_label`, `catalog_slices_heading`, `catalog_status_building`, `catalog_status_candidate_modes`, `catalog_status_clustering`, `catalog_status_curating`, `catalog_status_failed`, `catalog_status_imported_mid`, `catalog_status_imported_prefix`, `catalog_status_imported_suffix`, `catalog_status_indexed_prefix`, `catalog_status_indexed_suffix`, `catalog_status_matching_instances`, `catalog_status_name_required`, `catalog_status_results_suffix`, `catalog_status_saved`, `catalog_status_searching`, `catalog_th_actions`, `catalog_th_instance`, `catalog_th_query_anchor`, `catalog_th_similarity`, `catalog_th_slice`, `catalog_th_threshold`, `catalog_threshold_label`, `catalog_to_dataset_button`, `catalog_topk_label`, `catalog_traces_suffix`, `catalog_unlabeled`, `choose_username_placeholder`, `cite_us`, `codebook`, `continue_button`, `create_password_placeholder`, `dash_assigned_completed`, `dash_back_to_annotating`, `dash_error`, `dash_items_started_pct`, `dash_loading`, `dash_no_items_assigned`, `dash_no_items_project`, `dash_project_progress`, `dash_readonly`, `dash_stat_active_annotators`, `dash_stat_annotated`, `dash_stat_annotations`, `dash_stat_assigned`, `dash_stat_complete`, `dash_stat_items_started`, `dash_stat_total_items`, `dash_subtitle`, `dash_your_progress`, `datasets_annotation_process`, `datasets_assignment_active`, `datasets_assignment_paused`, `datasets_col_cmp`, `datasets_col_created`, `datasets_col_dataset`, `datasets_col_examples`, `datasets_col_experiment`, `datasets_col_scores`, `datasets_col_version`, `datasets_compare_selected`, `datasets_create_dataset_btn`, `datasets_created`, `datasets_creating`, `datasets_dataset_label`, `datasets_datasets_heading`, `datasets_description_label`, `datasets_done`, `datasets_evaluators_label`, `datasets_example_label`, `datasets_examples_label`, `datasets_experiments_heading`, `datasets_failed`, `datasets_heading`, `datasets_lede`, `datasets_llm_judge_note`, `datasets_loading_status`, `datasets_name_hint`, `datasets_name_label`, `datasets_new_dataset`, `datasets_no_datasets`, `datasets_no_experiments`, `datasets_optional_placeholder`, `datasets_page_title`, `datasets_pause_assignment`, `datasets_pick_dataset_evaluator`, `datasets_resume_assignment`, `datasets_run_btn`, `datasets_run_experiment`, `datasets_running`, `datasets_select_dataset`, `datasets_select_label`, `datasets_stat_annotated`, `datasets_stat_annotators`, `datasets_stat_datasets`, `datasets_stat_experiments`, `datasets_stat_ingested`, `datasets_stat_instances`, `datasets_stat_multi_annotated`, `datasets_stat_remaining`, `datasets_status_unavailable`, `datasets_version_label`, `datasets_versions_label`, `dsdetail_back_link`, `dsdetail_col_created`, `dsdetail_col_examples`, `dsdetail_col_experiment`, `dsdetail_col_id`, `dsdetail_col_inputs`, `dsdetail_col_note`, `dsdetail_col_reference`, `dsdetail_col_scores`, `dsdetail_col_split`, `dsdetail_col_tags`, `dsdetail_col_version`, `dsdetail_examples_heading`, `dsdetail_examples_subtitle`, `dsdetail_experiments_heading`, `dsdetail_export_dpo`, `dsdetail_export_dpo_title`, `dsdetail_export_sft`, `dsdetail_export_sft_title`, `dsdetail_import_instances`, `dsdetail_import_instances_title`, `dsdetail_import_traces`, `dsdetail_import_traces_title`, `dsdetail_include_annotations`, `dsdetail_no_examples`, `dsdetail_no_experiments`, `dsdetail_no_versions`, `dsdetail_status_import_failed`, `dsdetail_status_imported`, `dsdetail_status_imported_suffix`, `dsdetail_status_importing`, `dsdetail_tag_button`, `dsdetail_tag_input_label`, `dsdetail_tag_placeholder`, `dsdetail_versions_heading`, `error_heading`, `evalanalytics_alerts_heading`, `evalanalytics_col_avg_latency`, `evalanalytics_col_cost`, `evalanalytics_col_errors`, `evalanalytics_col_model`, `evalanalytics_col_tokens`, `evalanalytics_col_traces`, `evalanalytics_empty`, `evalanalytics_lede_after`, `evalanalytics_lede_before`, `evalanalytics_lede_tail`, `evalanalytics_permodel_aria`, `evalanalytics_permodel_heading`, `evalanalytics_stat_avg_latency`, `evalanalytics_stat_error_rate`, `evalanalytics_stat_p95_latency`, `evalanalytics_stat_total_cost`, `evalanalytics_stat_total_tokens`, `evalanalytics_stat_traces`, `evalanalytics_title`, `expcompare_back_link`, `expcompare_baseline`, `expcompare_ci_label`, `expcompare_col_metric`, `expcompare_empty`, `expcompare_heading`, `expcompare_lede_part1`, `expcompare_lede_part2`, `expcompare_lede_strong`, `expcompare_not_significant`, `expcompare_page_title`, `expcompare_row_examples`, `expcompare_sig_title`, `expcompare_significant`, `forgot_password`, `go_button`, `html_dir`, `html_lang`, `iaa_admin_dashboard`, `iaa_agreement`, `iaa_annotators`, `iaa_at_cap`, `iaa_band_fair`, `iaa_band_moderate`, `iaa_band_poor`, `iaa_band_strong`, `iaa_band_substantial`, `iaa_band_weak`, `iaa_empty_state`, `iaa_fully_aligned_items`, `iaa_items`, `iaa_meta_scored`, `iaa_na`, `iaa_overlap_sample`, `iaa_per_item_breakdown`, `iaa_scale_correlation_label`, `iaa_scale_correlation_note`, `iaa_scale_kappa_label`, `iaa_scale_lower_label`, `iaa_scale_lower_note`, `iaa_scale_raw_label`, `iaa_scale_raw_note`, `iaa_scale_span_label`, `iaa_scale_span_note_post`, `iaa_scale_span_note_pre`, `iaa_th_annotators`, `iaa_th_cap`, `iaa_th_instance`, `iaa_th_metric`, `iaa_th_value`, `iaa_title`, `iaa_title_overlap_sample`, `in_progress_badge`, `instructions_heading`, `integrity_annotators_suffix`, `integrity_col_annotator`, `integrity_col_ca_score`, `integrity_col_flags`, `integrity_col_items`, `integrity_col_llm_alignment`, `integrity_col_residual`, `integrity_col_suspicion`, `integrity_correlated_agreement`, `integrity_heading`, `integrity_lede`, `integrity_lede_ca_desc`, `integrity_lede_residual_desc`, `integrity_lede_with_low`, `integrity_lede_without_ground_truth`, `integrity_llm_alignment`, `integrity_llm_labels_available`, `integrity_no_annotations`, `integrity_no_llm_labels`, `integrity_page_title`, `integrity_residual`, `judge_above`, `judge_agreement`, `judge_autocalibrate`, `judge_autocalibrate_intro_1`, `judge_autocalibrate_intro_2`, `judge_autocalibrate_intro_3`, `judge_autocalibrate_intro_4`, `judge_autocalibrate_intro_5`, `judge_bias_robustness`, `judge_chars`, `judge_cohens_kappa`, `judge_col_conf`, `judge_col_human`, `judge_col_instance`, `judge_col_judge`, `judge_col_reasoning`, `judge_compared_n`, `judge_confusion_caption`, `judge_confusion_caption_2`, `judge_confusion_label`, `judge_corrected`, `judge_current_paren`, `judge_current_prompt_version`, `judge_disagreements`, `judge_empty_1`, `judge_empty_2`, `judge_empty_3`, `judge_eval_cards`, `judge_eval_cards_intro`, `judge_heading`, `judge_human_vs_judge`, `judge_intro`, `judge_length_bias`, `judge_mean_kappa`, `judge_mean_kappa_drift`, `judge_over_versions`, `judge_page_title`, `judge_predictions`, `judge_prompt_versions`, `jump_next_unannotated`, `jump_prev_unannotated`, `labeled_badge`, `loading`, `login_subtitle_password`, `login_subtitle_username`, `login_title`, `logout`, `next_button`, `not_labeled_badge`, `or_divider`, `password_label`, `powered_by`, `previous_button`, `progress_label`, `register_button`, `register_tab`, `retry_button`, `sign_in_button`, `sign_in_tab`, `sign_in_with`, `submit_button`, `text_to_annotate`, `triage_col_annotations`, `triage_col_assigned`, `triage_col_instance`, `triage_col_priority`, `triage_col_reason`, `triage_empty_queue`, `triage_flagged`, `triage_heading`, `triage_intro_before`, `triage_intro_served`, `triage_intro_signal`, `triage_items_remaining`, `triage_no`, `triage_not_enabled_after`, `triage_not_enabled_before`, `triage_not_enabled_rank`, `triage_page_title`, `triage_priority_label`, `triage_summary_aria`, `triage_table_caption`, `triage_yes`, `username_label`, `username_placeholder`, `video_to_annotate` |
+| `ui_language` |  | object | `_base`, `adjudicate`, `admin_btn_computing`, `admin_btn_generate_scores`, `admin_btn_reload`, `admin_btn_save_changes`, `admin_err_annotators`, `admin_err_behavioral`, `admin_err_config`, `admin_err_crowdsourcing`, `admin_err_instances`, `admin_err_mace_load`, `admin_err_mace_trigger`, `admin_err_overview`, `admin_err_questions`, `admin_filter_all`, `admin_filter_completed`, `admin_filter_incomplete`, `admin_hint_unlimited`, `admin_label_assignment_strategy`, `admin_label_max_per_item`, `admin_label_max_per_user`, `admin_login_help`, `admin_login_key_label`, `admin_login_key_placeholder`, `admin_login_submit`, `admin_login_title`, `admin_mace_predicted_help`, `admin_mace_run_predictions`, `admin_mode_badge`, `admin_ok_config_saved`, `admin_opt_color_mace`, `admin_opt_color_majority`, `admin_opt_per_page`, `admin_opt_scoring_counting`, `admin_opt_strat_active_learning`, `admin_opt_strat_fixed_order`, `admin_opt_strat_least_annotated`, `admin_opt_strat_llm_confidence`, `admin_opt_strat_max_diversity`, `admin_opt_strat_random`, `admin_order_asc`, `admin_order_desc`, `admin_page_title`, `admin_section_ai_usage`, `admin_section_bws_scores`, `admin_section_competence`, `admin_section_predicted_labels`, `admin_section_quality`, `admin_section_system_config`, `admin_section_system_info`, `admin_sort_annotations`, `admin_sort_avg_time`, `admin_sort_completion`, `admin_sort_disagreement`, `admin_sort_id`, `admin_tab_annotators`, `admin_tab_behavioral`, `admin_tab_bws`, `admin_tab_configuration`, `admin_tab_crowdsourcing`, `admin_tab_datasets`, `admin_tab_embeddings`, `admin_tab_instances`, `admin_tab_mace`, `admin_tab_overview`, `admin_tab_questions`, `admin_th_ai_accept_rate`, `admin_th_ai_requests`, `admin_th_annotations`, `admin_th_annotator`, `admin_th_annotators`, `admin_th_appearances`, `admin_th_assignment_id`, `admin_th_avg_time`, `admin_th_avg_time_per_annotation`, `admin_th_avg_time_s`, `admin_th_best_count`, `admin_th_changes`, `admin_th_competence`, `admin_th_completion`, `admin_th_completion_pct`, `admin_th_disagreement`, `admin_th_instance`, `admin_th_instance_id`, `admin_th_instances`, `admin_th_interactions`, `admin_th_item_id`, `admin_th_last_activity`, `admin_th_max_instances`, `admin_th_most_frequent_label`, `admin_th_num_ai_used`, `admin_th_phase`, `admin_th_predicted_label`, `admin_th_rank`, `admin_th_reliability`, `admin_th_score`, `admin_th_session_id`, `admin_th_speed`, `admin_th_speed_per_hour`, `admin_th_status`, `admin_th_suspicion`, `admin_th_text`, `admin_th_text_preview`, `admin_th_time`, `admin_th_uncertainty`, `admin_th_user_id`, `admin_th_worker_id`, `admin_th_working_time`, `admin_th_worst_count`, `arena_empty`, `arena_enter_prompt`, `arena_error_prefix`, `arena_export`, `arena_export_title`, `arena_failed`, `arena_heading`, `arena_lb_note`, `arena_leaderboard_heading`, `arena_lede`, `arena_models_label`, `arena_ms`, `arena_no_dpo_pairs`, `arena_page_title`, `arena_pick_as_best`, `arena_picked`, `arena_prompt_heading`, `arena_prompt_placeholder`, `arena_responses_heading`, `arena_run`, `arena_running`, `arena_sent_to`, `arena_th_bt`, `arena_th_comparisons`, `arena_th_elo`, `arena_th_model`, `arena_th_win_rate`, `arena_th_wins`, `audio_to_annotate`, `automation_actions_error`, `automation_actions_ok`, `automation_actions_skipped`, `automation_activity`, `automation_col_action`, `automation_col_actions`, `automation_col_detail`, `automation_col_enabled`, `automation_col_item`, `automation_col_rule`, `automation_col_sample_rate`, `automation_col_status`, `automation_configured_rules`, `automation_heading`, `automation_items_processed`, `automation_latest`, `automation_lede_1`, `automation_lede_2`, `automation_lede_3`, `automation_no`, `automation_no_actions`, `automation_no_rules`, `automation_page_title`, `automation_recent_outcomes`, `automation_reload`, `automation_rules_fired`, `automation_snapshot_title`, `automation_yes`, `catalog_all_placeholder`, `catalog_anchor_label`, `catalog_anchor_placeholder`, `catalog_build_index`, `catalog_clusters_label`, `catalog_discover_button`, `catalog_discover_desc`, `catalog_discover_heading`, `catalog_embeddings_warn_1`, `catalog_embeddings_warn_2`, `catalog_heading`, `catalog_index_heading`, `catalog_items_indexed`, `catalog_lede_1`, `catalog_lede_2`, `catalog_lede_3`, `catalog_lede_slices`, `catalog_lede_what`, `catalog_more_traces_suffix`, `catalog_no_matches`, `catalog_no_slices`, `catalog_page_title`, `catalog_prompt_curate_prefix`, `catalog_prompt_curate_suffix`, `catalog_query_text_label`, `catalog_query_text_placeholder`, `catalog_resolve_button`, `catalog_save_slice_button`, `catalog_search_button`, `catalog_search_heading`, `catalog_slice_name_label`, `catalog_slice_query_label`, `catalog_slice_query_placeholder`, `catalog_slice_threshold_label`, `catalog_slices_heading`, `catalog_status_building`, `catalog_status_candidate_modes`, `catalog_status_clustering`, `catalog_status_curating`, `catalog_status_failed`, `catalog_status_imported_mid`, `catalog_status_imported_prefix`, `catalog_status_imported_suffix`, `catalog_status_indexed_prefix`, `catalog_status_indexed_suffix`, `catalog_status_matching_instances`, `catalog_status_name_required`, `catalog_status_results_suffix`, `catalog_status_saved`, `catalog_status_searching`, `catalog_th_actions`, `catalog_th_instance`, `catalog_th_query_anchor`, `catalog_th_similarity`, `catalog_th_slice`, `catalog_th_threshold`, `catalog_threshold_label`, `catalog_to_dataset_button`, `catalog_topk_label`, `catalog_traces_suffix`, `catalog_unlabeled`, `choose_username_placeholder`, `cite_us`, `codebook`, `continue_button`, `create_password_placeholder`, `dash_assigned_completed`, `dash_back_to_annotating`, `dash_error`, `dash_items_started_pct`, `dash_loading`, `dash_no_items_assigned`, `dash_no_items_project`, `dash_project_progress`, `dash_readonly`, `dash_stat_active_annotators`, `dash_stat_annotated`, `dash_stat_annotations`, `dash_stat_assigned`, `dash_stat_complete`, `dash_stat_items_started`, `dash_stat_total_items`, `dash_subtitle`, `dash_your_progress`, `datasets_annotation_process`, `datasets_assignment_active`, `datasets_assignment_paused`, `datasets_col_cmp`, `datasets_col_created`, `datasets_col_dataset`, `datasets_col_examples`, `datasets_col_experiment`, `datasets_col_scores`, `datasets_col_version`, `datasets_compare_selected`, `datasets_create_dataset_btn`, `datasets_created`, `datasets_creating`, `datasets_dataset_label`, `datasets_datasets_heading`, `datasets_description_label`, `datasets_done`, `datasets_evaluators_label`, `datasets_example_label`, `datasets_examples_label`, `datasets_experiments_heading`, `datasets_failed`, `datasets_heading`, `datasets_lede`, `datasets_llm_judge_note`, `datasets_loading_status`, `datasets_name_hint`, `datasets_name_label`, `datasets_new_dataset`, `datasets_no_datasets`, `datasets_no_experiments`, `datasets_optional_placeholder`, `datasets_page_title`, `datasets_pause_assignment`, `datasets_pick_dataset_evaluator`, `datasets_resume_assignment`, `datasets_run_btn`, `datasets_run_experiment`, `datasets_running`, `datasets_select_dataset`, `datasets_select_label`, `datasets_stat_annotated`, `datasets_stat_annotators`, `datasets_stat_datasets`, `datasets_stat_experiments`, `datasets_stat_ingested`, `datasets_stat_instances`, `datasets_stat_multi_annotated`, `datasets_stat_remaining`, `datasets_status_unavailable`, `datasets_version_label`, `datasets_versions_label`, `dsdetail_back_link`, `dsdetail_col_created`, `dsdetail_col_examples`, `dsdetail_col_experiment`, `dsdetail_col_id`, `dsdetail_col_inputs`, `dsdetail_col_note`, `dsdetail_col_reference`, `dsdetail_col_scores`, `dsdetail_col_split`, `dsdetail_col_tags`, `dsdetail_col_version`, `dsdetail_examples_heading`, `dsdetail_examples_subtitle`, `dsdetail_experiments_heading`, `dsdetail_export_dpo`, `dsdetail_export_dpo_title`, `dsdetail_export_sft`, `dsdetail_export_sft_title`, `dsdetail_import_instances`, `dsdetail_import_instances_title`, `dsdetail_import_traces`, `dsdetail_import_traces_title`, `dsdetail_include_annotations`, `dsdetail_no_examples`, `dsdetail_no_experiments`, `dsdetail_no_versions`, `dsdetail_status_import_failed`, `dsdetail_status_imported`, `dsdetail_status_imported_suffix`, `dsdetail_status_importing`, `dsdetail_tag_button`, `dsdetail_tag_input_label`, `dsdetail_tag_placeholder`, `dsdetail_versions_heading`, `error_heading`, `evalanalytics_alerts_heading`, `evalanalytics_col_avg_latency`, `evalanalytics_col_cost`, `evalanalytics_col_errors`, `evalanalytics_col_model`, `evalanalytics_col_tokens`, `evalanalytics_col_traces`, `evalanalytics_empty`, `evalanalytics_lede_after`, `evalanalytics_lede_before`, `evalanalytics_lede_tail`, `evalanalytics_permodel_aria`, `evalanalytics_permodel_heading`, `evalanalytics_stat_avg_latency`, `evalanalytics_stat_error_rate`, `evalanalytics_stat_p95_latency`, `evalanalytics_stat_total_cost`, `evalanalytics_stat_total_tokens`, `evalanalytics_stat_traces`, `evalanalytics_title`, `expcompare_back_link`, `expcompare_baseline`, `expcompare_ci_label`, `expcompare_col_metric`, `expcompare_empty`, `expcompare_heading`, `expcompare_lede_part1`, `expcompare_lede_part2`, `expcompare_lede_strong`, `expcompare_not_significant`, `expcompare_page_title`, `expcompare_row_examples`, `expcompare_sig_title`, `expcompare_significant`, `forgot_password`, `go_button`, `html_dir`, `html_lang`, `iaa_admin_dashboard`, `iaa_agreement`, `iaa_annotators`, `iaa_at_cap`, `iaa_band_fair`, `iaa_band_moderate`, `iaa_band_poor`, `iaa_band_strong`, `iaa_band_substantial`, `iaa_band_weak`, `iaa_empty_state`, `iaa_fully_aligned_items`, `iaa_items`, `iaa_meta_scored`, `iaa_na`, `iaa_overlap_sample`, `iaa_per_item_breakdown`, `iaa_scale_correlation_label`, `iaa_scale_correlation_note`, `iaa_scale_coverage_label`, `iaa_scale_coverage_note`, `iaa_scale_distribution_label`, `iaa_scale_distribution_note`, `iaa_scale_kappa_label`, `iaa_scale_lower_label`, `iaa_scale_lower_note`, `iaa_scale_raw_label`, `iaa_scale_raw_note`, `iaa_scale_span_label`, `iaa_scale_span_note_post`, `iaa_scale_span_note_pre`, `iaa_sweep_headline`, `iaa_sweep_note`, `iaa_sweep_title`, `iaa_th_annotators`, `iaa_th_cap`, `iaa_th_instance`, `iaa_th_metric`, `iaa_th_value`, `iaa_title`, `iaa_title_overlap_sample`, `in_progress_badge`, `instructions_heading`, `integrity_annotators_suffix`, `integrity_col_annotator`, `integrity_col_ca_score`, `integrity_col_flags`, `integrity_col_items`, `integrity_col_llm_alignment`, `integrity_col_residual`, `integrity_col_suspicion`, `integrity_correlated_agreement`, `integrity_heading`, `integrity_lede`, `integrity_lede_ca_desc`, `integrity_lede_residual_desc`, `integrity_lede_with_low`, `integrity_lede_without_ground_truth`, `integrity_llm_alignment`, `integrity_llm_labels_available`, `integrity_no_annotations`, `integrity_no_llm_labels`, `integrity_page_title`, `integrity_residual`, `judge_above`, `judge_agreement`, `judge_autocalibrate`, `judge_autocalibrate_intro_1`, `judge_autocalibrate_intro_2`, `judge_autocalibrate_intro_3`, `judge_autocalibrate_intro_4`, `judge_autocalibrate_intro_5`, `judge_bias_robustness`, `judge_chars`, `judge_cohens_kappa`, `judge_col_conf`, `judge_col_human`, `judge_col_instance`, `judge_col_judge`, `judge_col_reasoning`, `judge_compared_n`, `judge_confusion_caption`, `judge_confusion_caption_2`, `judge_confusion_label`, `judge_corrected`, `judge_current_paren`, `judge_current_prompt_version`, `judge_disagreements`, `judge_empty_1`, `judge_empty_2`, `judge_empty_3`, `judge_eval_cards`, `judge_eval_cards_intro`, `judge_heading`, `judge_human_vs_judge`, `judge_intro`, `judge_length_bias`, `judge_mean_kappa`, `judge_mean_kappa_drift`, `judge_over_versions`, `judge_page_title`, `judge_predictions`, `judge_prompt_versions`, `jump_next_unannotated`, `jump_prev_unannotated`, `labeled_badge`, `loading`, `login_subtitle_password`, `login_subtitle_username`, `login_title`, `logout`, `next_button`, `not_labeled_badge`, `or_divider`, `password_label`, `powered_by`, `previous_button`, `progress_label`, `register_button`, `register_tab`, `retry_button`, `sign_in_button`, `sign_in_tab`, `sign_in_with`, `submit_button`, `text_to_annotate`, `triage_col_annotations`, `triage_col_assigned`, `triage_col_instance`, `triage_col_priority`, `triage_col_reason`, `triage_empty_queue`, `triage_flagged`, `triage_heading`, `triage_intro_before`, `triage_intro_served`, `triage_intro_signal`, `triage_items_remaining`, `triage_no`, `triage_not_enabled_after`, `triage_not_enabled_before`, `triage_not_enabled_rank`, `triage_page_title`, `triage_priority_label`, `triage_summary_aria`, `triage_table_caption`, `triage_yes`, `username_label`, `username_placeholder`, `video_to_annotate` |
 | `base_css` |  |  |  |
 | `ui_debug` |  |  |  |
 | `hide_navbar` |  |  |  |
@@ -3676,6 +3678,7 @@ Recognized keys not yet sorted into a category above. They are valid configurati
 | Key | Required | Type | Sub-keys |
 |-----|----------|------|----------|
 | `export_include_annotation_changes` |  |  |  |
+| `item_store` |  | object | `backend`, `cache_size`, `path` |
 
 ## Annotation Types
 
@@ -3702,6 +3705,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `event_annotation` | `event_types`, `span_schema` | `visual_display` | N-ary event annotation with triggers and typed arguments |
 | `extractive_qa` | (none beyond name/description) | `question_field`, `passage_field`, `allow_unanswerable`, `highlight_color` | SQuAD-style extractive question answering with answer span highlighting |
 | `failure_attribution` | (none beyond name/description) | `steps_key`, `agent_key`, `agents` | Multi-agent failure attribution: responsible agent + decisive step + reason |
+| `grounding_eval` | (none beyond name/description) | `region_type`, `expression_source`, `expressions_field`, `caption_field`, `predictions_field`, ... | Grounding evaluation: bind referring expressions to image regions or points, with an explicit not-present answer |
 | `gui_trajectory` | (none beyond name/description) | `steps_key`, `screenshot_key`, `action_key`, `coord_space`, `verdict_options` | Computer-use/GUI agent step review: per-step screenshot + action correctness + click grounding |
 | `handoff_review` | (none beyond name/description) | `steps_key`, `agent_key`, `flags`, `quality_scale` | Annotate agent-to-agent handoffs: inter-agent misalignment flags + quality |
 | `hierarchical_multiselect` | `taxonomy` | `auto_select_children`, `auto_select_parent`, `show_search`, `max_selections` | Hierarchical tree-structured multi-label selection |
@@ -3718,6 +3722,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `radio` | `labels` | `horizontal`, `label_requirement`, `sequential_key_binding`, `has_free_response`, `option_randomization`, ... | Single-choice radio button selection |
 | `range_slider` | (none beyond name/description) | `min_value`, `max_value`, `step`, `left_label`, `right_label`, ... | Dual-thumb slider for selecting an acceptable range |
 | `ranking` | `labels` | `allow_ties` | Drag-and-drop ranking of items by preference or relevance |
+| `region_caption` | (none beyond name/description) | `placeholder`, `min_length`, `max_length`, `require_all`, `agreement_distance` | Region captioning: a free-text description per region drawn on the image, with caption agreement over matched regions |
 | `rollout_evaluation` | (none beyond name/description) | `streams`, `manifest_field`, `prompt_field`, `intervention_field`, `intervention_time_field`, ... | World-model rollout evaluation: frame-locked video panels with temporal violation localization, preference and counterfactual plausibility |
 | `rubric_eval` | `criteria` | `scale_points`, `scale_labels`, `show_overall` | Multi-criteria rubric evaluation grid for LLM and text quality assessment |
 | `select` | `labels` | `label_requirement`, `option_randomization`, `dynamic_options`, `dynamic_options_field` | Dropdown selection |
@@ -13294,6 +13299,35 @@ The toolbar provides:
 - Zoom with the toolbar buttons or `+` / `-` / `0`
 - Hold `Space` (or `Alt`) and drag to pan
 
+### Tablets and stylus input
+
+The canvas works on a touch device, and a stylus is a genuinely good surface for
+tracing a boundary — often better than a mouse.
+
+| Gesture | Does |
+|---|---|
+| One finger or stylus, drag | Draws with the armed tool — the same as a mouse |
+| **Two fingers, drag** | Pans |
+| **Two fingers, pinch** | Zooms about the point between them |
+
+Two fingers rather than one, because a tablet annotator's primary action is to
+draw: taking the single-touch gesture for panning would fix one problem by
+creating a worse one. The pinch is clamped to the same 0.1×–10× range as the
+toolbar buttons, so the two paths cannot disagree about the limits.
+
+Panning used to require holding `Space` or `Alt` — keyboard state that a tablet
+held in two hands does not have — so an annotator who zoomed in had no way to
+reach the rest of the image. If you are running a study on tablets, this needs
+Potato 2.7 or later.
+
+Under **deep zoom** (`viewer: deepzoom`) OpenSeadragon supplies its own pinch and
+drag handling and Potato's gestures stand aside, so the behaviour is the same
+without two implementations fighting over one viewport.
+
+Note that phones are still excluded from [Pocket Mode](../../advanced/pocket_mode.md)
+for image tasks — the issue there is screen size, not input, and it is a separate
+decision from whether the desktop canvas accepts touch.
+
 ## Importing existing annotations
 
 You do not have to start from a blank image. A COCO file — polygons,
@@ -15733,6 +15767,190 @@ bolted on.
 - [Image annotation](image_annotation.md)
 - [Video annotation](video_annotation.md)
 - [Import CLI](../../tools/import_cli.md)
+
+
+---
+
+<!-- source: docs/annotation-types/multimedia/deep_zoom.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedia/deep_zoom/
+
+# Deep Zoom & Tiling
+
+Annotating an image that is too large to send to a browser as one file — an
+aerial survey, a stitched microscopy mosaic, a scanned map. Potato serves a
+**tile pyramid** and layers the annotation canvas over it, so boxes, polygons
+and masks all work at any magnification.
+
+```yaml
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: structures
+    description: "Mark every structure"
+    source_field: image
+    viewer: deepzoom          # the default is `fabric`
+    tools: [bbox, polygon, brush, eraser]
+    labels:
+      - {name: building, color: "#c0392b"}
+```
+
+`media_directory` is where the tile routes read from; paths in your data file
+are relative to it.
+
+Runnable example: [`examples/image/deep-zoom/`](https://github.com/davidjurgens/potato/tree/master/examples/image/deep-zoom).
+
+---
+
+## When to use it
+
+| | `viewer: fabric` (default) | `viewer: deepzoom` |
+|---|---|---|
+| How the image arrives | one file | tiles, on demand |
+| Extra download | none | 277 KB (OpenSeadragon) |
+| Server work per item | none | one decode per magnification visited |
+| Good for | photographs, screenshots, ordinary images | tens of megapixels and up |
+
+**Deep zoom is worse than the default for an ordinary image.** It adds a
+library, a build cost and a request per screenful to solve a problem a
+2-megapixel photograph does not have. Turn it on when the browser struggles
+with the source as a single file.
+
+---
+
+## Configuration
+
+```yaml
+    viewer: deepzoom
+    tiles:
+      tile_size: 254        # DZI's default; 254 + 1px overlap = a 256px tile
+      overlap: 1            # pixels of neighbour included on each side
+      max_pixels: 640000000 # refuse to build a level larger than this
+      page: 0               # which page of a multi-page TIFF
+      navigator: true       # the thumbnail overview, bottom right
+```
+
+**Overlap is not optional padding.** Without it, bilinear filtering at a tile's
+edge samples beyond the tile and the browser draws a visible grid over your
+image — which annotators read as image content.
+
+---
+
+## What the server does
+
+Three routes, registered alongside the other media routes:
+
+| Route | Purpose |
+|---|---|
+| `GET /media/tiles/<path>.dzi` | The DZI descriptor. `?format=json` returns the same geometry as JSON. |
+| `GET /media/tiles/<path>_files/<level>/<col>_<row>.jpg` | One tile. |
+| `GET /media/iiif/<path>/info.json` and `/<region>/<size>/<rotation>/<quality>.<fmt>` | The same pyramid over the IIIF Image API 3.0, for Mirador and other IIIF clients. |
+
+### Levels are built whole, and lazily
+
+Two obvious designs are both wrong here:
+
+- **Pre-generate everything on first request.** A 4-gigapixel source is ~60,000
+  tiles and several minutes of blank screen, most of it for magnifications
+  nobody will visit.
+- **Generate each tile on demand.** Pillow has no cheap random access into most
+  formats, so cropping one 254 px tile decodes the whole image — and a
+  screenful is ~30 tiles.
+
+So a **level** is built as a unit the first time any of its tiles is requested:
+the source is decoded once, resized, and every tile of that level written in one
+pass. Zooming to a magnification costs one decode; panning around at that
+magnification costs nothing; a level nobody visits is never built.
+
+Tiles live in the media cache under `<output_dir>/.media_cache/`, keyed by the
+source's path, size and mtime plus the tile parameters — so editing the source
+produces a new key and the stale render is never served. Deleting the cache
+costs a rebuild and nothing else.
+
+### Level numbering
+
+DZI numbers levels from **0 = smallest**: level 0 is a single tile of at most
+`tile_size` pixels and each level doubles, so the top level is the image at full
+resolution. A 40000×30000 image has 16 levels. This is inverted from how most
+people describe zoom, and it is where tile-server off-by-ones live.
+
+### The pixel ceiling refuses rather than downgrades
+
+Building a level holds that level's image in memory. Above `tiles.max_pixels`
+the build is refused with a message naming the limit and the setting.
+
+The alternative — quietly serving a lower level — would let the annotator draw
+on a blurred approximation and produce coordinates that are wrong in a way
+nothing downstream can detect. The ceiling governs *building*: a level already
+on disk is still served if you lower the setting afterwards.
+
+---
+
+## How annotation works over tiles
+
+There is no single image object to draw against — there are thousands of tiles
+that appear and vanish as you move. So the mode inverts the usual arrangement:
+
+- **the annotation canvas draws in image-pixel coordinates**, and
+- the whole canvas is transformed by OpenSeadragon's viewport.
+
+The upshot is that a box drawn zoomed in stays glued to the same part of the
+image at every other magnification, and every existing coordinate calculation —
+normalization, mask indexing, the export contract — is correct without a second
+implementation for the tiled case.
+
+**Masks work, and they do not depend on the GPU.** The mask buffer indexes
+*image pixels*, at the source's full resolution rather than at whatever size the
+image happened to be displayed at, so a mask painted zoomed in is directly
+comparable with one painted zoomed out — and nothing about it is bounded by a
+texture limit.
+
+That last part is the practical difference from a WebGL-backed painter. V7, for
+example, tiles automatically above 10,000 px and lets you annotate a tiled file
+as one image, but its masking is
+[disabled once the image exceeds what the device's WebGL implementation
+supports](https://docs.v7labs.com/docs/introducing-masks) — commonly
+16,384 × 16,384 — and shows a warning instead. That is a device limit rather
+than a product decision, which is exactly why it is not something a user can
+work around.
+
+### The pointer
+
+OpenSeadragon and the annotation canvas both want the mouse, so the overlay
+follows the armed tool: a drawing tool takes the pointer, select/move (`v`)
+gives it back so you can pan. The scroll wheel always zooms, even with a brush
+selected.
+
+---
+
+## Limits
+
+- **Whole-slide formats (SVS, NDPI) are not handled.** They carry their own
+  pyramids and should be read through `openslide` rather than rebuilt. That is
+  the deferred medical-imaging track.
+- **Region-aware fill falls back to `empty` mode.** The `region` fill reads the
+  source's pixels to grow across similar colours, and in this mode there is no
+  single source image in the page to read.
+- **Pillow is required.** Without it the viewer reports what is missing and
+  suggests `viewer: fabric`; it does not fail silently.
+
+---
+
+## Air-gapped deployments
+
+OpenSeadragon is **vendored** (`potato/static/vendor/`), like fabric.js and
+three.js, and is loaded only for schemas that ask for `viewer: deepzoom`. No
+part of deep zoom reaches the internet.
+
+Note that the rest of the application is not yet fully air-gap clean — see
+[Air-gapped deployment](../../deployment/air_gap.md) for what still is not.
+
+---
+
+## Related
+
+- [Image annotation](image_annotation.md)
+- [Media ingest](media_ingest.md) — TIFF, HEIC and RAW conversion
+- [Scaling & large datasets](../../deployment/scaling.md)
+- [Air-gapped deployment](../../deployment/air_gap.md)
 
 
 ---
@@ -24676,6 +24894,19 @@ unfalsifiable, because the reader cannot tell a tight agreement from a generous
 window. The headline tolerance (0.5 s by default) is reported alongside the
 full sweep, never instead of it.
 
+`/admin/iaa?format=html` draws the sweep as its own table — one row per window,
+one column per measure, the headline row tinted — under the flat metric list.
+Read a column downwards: that is the curve. The JSON at `/admin/iaa` carries
+the same sweep under `schemas.<name>.metrics.sweep`, unflattened, which is what
+an analysis script should read.
+
+Where a coefficient is undefined the report says why rather than printing a
+blank. "Every annotator marked the same breaks, so there is no variation for
+alpha to correct against" is perfect agreement; "fewer than two judgements to
+compare" is no data. Both are α = `null` in the JSON and they are opposite
+findings, so the reason travels with the value — inline in the metric list, and
+as a numbered footnote under the sweep table.
+
 `localization.sigma` is **conditional on a match**, so it is bounded by the
 tolerance by construction and rises as the tolerance falls. That is not a
 defect to correct for; it is why the sweep exists. For a number to quote
@@ -24685,9 +24916,9 @@ directly, use `mean_offset_frames`.
 
 ## VLM-as-judge over rollouts
 
-`POST /api/rollout/judge` samples frames from each rollout, assembles them into
-a numbered contact sheet, and asks a vision endpoint for the first frame at
-which the scene stops being coherent, plus a category.
+The judge samples frames from a rollout, assembles them into a numbered contact
+sheet, and asks a vision endpoint for the first frame at which the scene stops
+being coherent, plus a category.
 
 The point is not to replace the annotator. It is to make automated world-model
 benchmarks **checkable**: the judge's break-point is scored against the human
@@ -24697,6 +24928,58 @@ an assertion.
 
 Requires ffmpeg (to sample frames), Pillow (to assemble the sheet), and a
 vision-capable AI endpoint.
+
+### Running it
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/rollout/judge` | Judge the annotator's **current** item. One interactive check. |
+| `POST /admin/api/rollout/judge-batch` | Judge **every** rollout in the project and persist the predictions. |
+| `GET /admin/api/rollout/alignment` | Score the persisted predictions against the human consensus. |
+
+```bash
+# judge at most 50 items, one model call per stream
+curl -X POST localhost:8000/admin/api/rollout/judge-batch \
+     -H "X-API-Key: $POTATO_ADMIN_KEY" -H 'Content-Type: application/json' \
+     -d '{"max_items": 50, "streams": ["gen_a"]}'
+
+# then score it — as often as you like, at any tolerance, for free
+curl "localhost:8000/admin/api/rollout/alignment?tolerance=0.5" \
+     -H "X-API-Key: $POTATO_ADMIN_KEY"
+```
+
+The batch is **not** free: one model call per stream plus an ffmpeg seek per
+sampled frame, so a four-panel comparison over 500 items is 2000 calls. Hence
+`max_items`, `streams`, and a summary that lists everything it skipped and why
+— an alignment number computed over a silently truncated sample is worse than
+no number at all. Scoring is a separate call because it costs nothing, so the
+tolerance can be varied and the report re-run as more people annotate.
+
+Predictions are stored per prompt version in `rollout_predictions.json`, so
+re-running after changing the prompt compares like with like instead of
+overwriting the previous run's evidence.
+
+### There is no single human answer, so one is built
+
+The judge is scored against a **consensus** derived per stream from every
+annotator who answered about it:
+
+- more annotators marked it **clean** than marked a break → the consensus is
+  "no break", a real answer the judge can be right or wrong about;
+- more marked a break → the consensus time is the **median** of their marks and
+  the category is the modal one. Median, so one annotator who marked the wrong
+  moment entirely moves the answer by one position rather than dragging it
+  across the clip;
+- **nobody answered** → the stream contributes nothing. Counting silence as
+  "clean" would manufacture agreement with a judge that also found nothing.
+
+Where several marks sit on one stream, the earliest counts: the question is
+where the rollout *stops* making sense, and a later mark is a further failure,
+not a competing answer.
+
+Unlike the agreement report, one annotator is enough. A single person's answer
+is a perfectly good thing for a judge to be right or wrong about; the
+two-annotator floor exists because a person cannot agree with themselves.
 
 **Why a contact sheet.** Almost every vision endpoint takes one image per call.
 Asking "is this frame wrong?" about a single frame cannot be answered — a
@@ -24770,6 +25053,377 @@ annotating. The timeline runs to the longest.
 - [Embodied Episodes](../annotation-types/embodied/episodes.md) — multi-stream
   video with time-series lanes
 - [Video Annotation](../annotation-types/multimedia/video_annotation.md)
+
+
+---
+
+<!-- source: docs/agent-evaluation/vlm_grounding.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/vlm_grounding/
+
+# VLM Grounding, Pointing & Hallucination Localization
+
+Three questions about vision-language models that are constantly confused,
+separated here because they have different right answers:
+
+| | The question | Scored by |
+|---|---|---|
+| **Grounding** | "The man in the red shirt" — where is he? | IoU against the annotator's region, at a stated threshold |
+| **Pointing** | The model emitted a *point*. Did it land on the thing? | point-in-region hit rate |
+| **Ungroundedness** | The caption names something that is not there. | an explicit not-present answer, counted separately |
+
+Runnable example:
+[`examples/ai-assisted/grounding-eval/`](https://github.com/davidjurgens/potato/tree/master/examples/ai-assisted/grounding-eval).
+
+---
+
+## The schema
+
+`grounding_eval` binds each referring expression to a region drawn on an
+`image_annotation` canvas beside it.
+
+```yaml
+annotation_schemes:
+  # The canvas. grounding_eval owns the phrase-to-region mapping, not the
+  # drawing, so it needs an image schema alongside it.
+  - annotation_type: image_annotation
+    name: region
+    description: "Draw the region for the selected phrase"
+    source_field: image
+    tools: [bbox, polygon, landmark]
+    labels: [{name: referent, color: "#6e56cf"}]
+
+  - annotation_type: grounding_eval
+    name: grounding
+    description: "What does each phrase refer to?"
+    region_type: box            # box | polygon | mask | point
+    expressions_field: expressions
+```
+
+Items carry their phrases:
+
+```json
+{"id": "img1", "image": "/media/img1.jpg",
+ "expressions": [{"id": "e1", "text": "the man in the red shirt"}]}
+```
+
+A bare list of strings works too — ids fall back to position, which is worth
+knowing because reordering the list then re-points existing annotations. A
+source with stable ids should use them.
+
+### Options
+
+| Key | Default | Meaning |
+|---|---|---|
+| `region_type` | `box` | `box`, `polygon`, `mask` or `point` |
+| `expression_source` | `field` | `field` reads the item; `spans` selects phrases out of a caption |
+| `expressions_field` | `expressions` | Where the phrases live |
+| `caption_field` | `caption` | The text to ground, in `spans` mode |
+| `predictions_field` | — | Model predictions to review; enables the verdict control |
+| `require_all` | `false` | Warn once before advancing with phrases unanswered |
+
+---
+
+## Why the expressions are a list on one item
+
+RefCOCO-style data has several phrases per image, answered against the same
+picture. One item per phrase would make the annotator reload and re-read the
+image for every one, and would destroy the comparison that matters most: "the
+leftmost cup" and "the cup behind the kettle" only mean anything next to each
+other.
+
+## Three states, and why the third exists
+
+Each phrase is **located**, **not present**, or **not answered**.
+
+The third is not a kind of the second. An annotator who judged that nothing in
+the picture matches a phrase and one who simply has not reached it support
+*opposite* conclusions about a model that also produced nothing — a correct
+refusal versus no evidence at all. Without an explicit "not present in the
+image" control the two are indistinguishable in storage, so the control exists
+and every measure keeps them apart.
+
+## One phrase on the canvas at a time
+
+The canvas holds only the selected phrase's region; switching captures, clears
+and restores. The alternative — draw everything and tag each shape with its
+phrase — needs the image manager to carry a foreign field through serialize,
+restore, undo, copy-from-previous and every exporter, and the first path that
+drops it silently re-attributes an annotation to the wrong phrase.
+
+The cost is that you cannot see all the regions at once. That is a real loss,
+taken deliberately: seeing them all is a display problem, mis-attributing one is
+a data problem.
+
+---
+
+## Pointing is not grounding with a small box
+
+Molmo-style models emit points. Set `region_type: point` and the annotator
+places a landmark.
+
+The scoring is genuinely different, and this is the part people get wrong: **a
+point has no area, so every IoU against it is 0.** Scoring points the way boxes
+are scored reports total failure for a model that is pointing perfectly. The
+question a point answers is "is it *in* the thing", which is a hit rate:
+
+```python
+from potato.grounding import pointing_accuracy
+
+pointing_accuracy([
+    {"truth": human_region, "point": {"x": 0.42, "y": 0.31}},
+])
+# {"point_in_region": 0.83, "n_hits": 5, "mean_miss_distance": 0.21, ...}
+```
+
+`mean_miss_distance` is over the **misses only**. Averaged over hits as well it
+would mostly measure how large the objects are, not how badly the model missed.
+
+A 0.83 point-in-region rate and a 0.83 grounding accuracy at IoU 0.5 mean
+different things and belong in different columns.
+
+---
+
+## Grounding accuracy
+
+```python
+from potato.grounding import grounding_accuracy
+
+grounding_accuracy([
+    {"truth": human_region, "prediction": model_region},
+    {"truth": None, "truth_absent": True, "prediction_absent": True},
+])
+```
+
+Reported at **several IoU thresholds** — 0.25, 0.5, 0.75, 0.9 — for the same
+reason a break-point report sweeps its tolerance: one number cannot distinguish
+"nearly right" from "nowhere near", and a model tuned to clear 0.5 exactly looks
+identical to one that is genuinely tight.
+
+The absent cases are counted separately rather than folded into the mean,
+because none of them is an IoU:
+
+| Count | Meaning |
+|---|---|
+| `correctly_declined` | Nothing matched, and the model pointed at nothing |
+| `hallucinated_a_location` | Nothing matched, and the model pointed anyway |
+| `missed_a_present_referent` | Something matched, and the model declined |
+
+An expression the annotator never answered is **excluded** from the
+denominator, not counted as a miss. Counting it would make a model look worse
+the more phrases were skipped, which is a statement about the annotator.
+
+---
+
+## Agreement between annotators
+
+`grounding_accuracy` above scores a *model* against ground truth. The prior
+question — is the ground truth itself reliable? — is answered on
+**`/admin/iaa`**, automatically, for any grounding schema with two or more
+annotators per item. No configuration is needed beyond
+`num_annotators_per_item`.
+
+Unlike free-form image annotation, grounding needs no shape matching: the
+expression id says which region corresponds to which. What is left splits into
+three findings that have different fixes.
+
+| Group | Question | Metrics |
+|---|---|---|
+| `detection` | Do they agree the referent is *there*? | `alpha`, `percent_agreement` |
+| `localization` | Given both found it, do they agree *where*? | `mean_iou`, `median_iou`, plus an IoU-threshold sweep |
+| `coverage` | Did anyone answer at all? | `answered_fraction` |
+
+Reporting one blended number would hide which went wrong. "The annotators
+disagree about the red mug" means something different when one of them says
+there is no red mug (an ambiguous *expression*) than when both found it and drew
+different boxes (a sloppy *drawing*).
+
+`detection` reports alpha **and** raw percent agreement because either alone
+misleads: in most corpora nearly every expression is present, so an annotator
+who never presses "not present" scores near 1.0 on raw agreement — while alpha,
+which corrects for that, is undefined when every answer is identical, a
+perfectly normal corpus. When alpha is undefined the report says so in words
+rather than printing a bare `n/a`.
+
+### Pointing is measured as distance, not overlap
+
+With `region_type: point`, agreement is reported under `pointing` as the mean
+and median **distance** between the annotators' points, in normalized image
+units — 0 is perfect.
+
+This is not a stylistic choice. A point has no area, so the region measure falls
+back to a distance-derived score compressed into the top of its range: two
+annotators pointing at *opposite corners of the image* still score about 0.86,
+which the page would band as strong agreement in green. A pointing corpus scored
+that way looks near-perfect regardless of what the annotators did. The distance
+has no ceiling to saturate against, and is named a distance so nothing bands it
+as a coefficient.
+
+---
+
+## Hallucination localization
+
+When the phrases are whatever a model happened to say, they cannot be listed in
+advance. Select them out of the caption instead:
+
+```yaml
+  - annotation_type: grounding_eval
+    name: grounding
+    description: "Ground each phrase of the caption"
+    expression_source: spans
+    caption_field: caption
+```
+
+The caption is displayed; the annotator selects a phrase, presses **Ground the
+selected phrase**, and then either marks its region or says it is not present.
+Grounded and ungrounded phrases are marked in the caption itself — with
+different underlines as well as different fills, so they are distinguishable
+without relying on hue.
+
+The stored value carries per-caption coverage:
+
+```json
+{"coverage": {"caption_chars": 58, "grounded_chars": 11,
+              "ungrounded_chars": 11, "grounded_fraction": 0.19,
+              "ungrounded_fraction": 0.19}}
+```
+
+**Characters, not tokens.** Tokenization is the model's business and two
+tokenizers disagree; character offsets are what the annotator actually selected.
+A consumer that wants token rates can map them from the offsets, and the reverse
+is not possible.
+
+Phrase ids encode their offsets (`span:12-27`), which is what makes an answer
+reload-safe and what lets two annotators who selected the same phrase produce
+the same id — necessary for any agreement over these answers.
+
+### Why this is not built on `span_link`
+
+The roadmap proposed extending `span_link`'s target type to a geometry object.
+On inspection that understates it: `span_link` is span-oriented throughout — it
+stores pairs of span ids, draws arcs between two spans in one text, and has its
+own link-save API. Targeting a region means a link whose second end is on a
+different rendering surface, arcs that cross from text to canvas, and a changed
+link shape in storage.
+
+Building it on the grounding machinery instead reuses the phrase→region→absent
+model exactly, and the only new part is where the phrases come from. `span_link`
+is unchanged.
+
+---
+
+## Region captioning
+
+The inverse task: the annotator draws the regions and supplies the language.
+
+```yaml
+  - annotation_type: image_annotation
+    name: region
+    tools: [bbox, polygon]
+    labels: [{name: object, color: "#6e56cf"}]
+
+  - annotation_type: region_caption
+    name: descriptions
+    description: "Describe each region"
+    placeholder: "Describe this region…"
+    agreement_distance: token     # or `embedding`
+```
+
+The caption list follows the canvas and is rebuilt from it on every change,
+with captions carried across by **matching the region they were written about**
+rather than by index. That is the part that has to be right: deleting the
+second of three regions must carry the third region's caption up with it, and a
+parallel list would leave it attached to the wrong shape — silently, and looking
+exactly like a correct caption of a different object.
+
+### Caption agreement
+
+Two annotators describing the same thing rarely use the same words. "a man in a
+red shirt" and "person wearing a crimson top" are the same answer and share no
+content word, so every exact-match coefficient scores them as total
+disagreement. That is why caption agreement is almost never reported.
+
+Potato reports it via Krippendorff's alpha with a **pluggable text distance** —
+the alpha implementation already accepts a callable, so no new coefficient was
+needed:
+
+| `agreement_distance` | What it measures | Cost |
+|---|---|---|
+| `token` (default) | 1 − Jaccard over content tokens | none |
+| `embedding` | cosine distance between sentence embeddings | needs `sentence-transformers` |
+
+**The default is a poor proxy and says so.** It scores the paraphrase above as
+complete disagreement, so an alpha computed with it is a *lower bound* on
+semantic agreement rather than a measure of it. When `embedding` is requested
+and the library is missing, the report falls back **and states which distance it
+actually used**, because an alpha of 0.3 under a lexical distance and an alpha
+of 0.3 under embeddings are different findings — the first may be entirely an
+artifact of vocabulary.
+
+**And `embedding` is better, not good.** Measured against `all-MiniLM-L6-v2`:
+
+| pair | `embedding` | `token` |
+|---|---|---|
+| "a man in a red shirt" / "person wearing a crimson top" | **0.598** | 1.000 |
+| "a small dog on the grass" / "a puppy in the lawn" | 0.358 | 1.000 |
+| "two people talking" / "a pair of individuals conversing" | 0.127 | 1.000 |
+| "a man in a red shirt" / "an empty parking lot at night" | 1.000 | 1.000 |
+
+The headline paraphrase — the one this section opens with — still scores 0.6,
+nowhere near "the same sentence": swapping both the colour word and the garment
+word defeats a small model. What holds robustly is the **separation**, every
+paraphrase below every unrelated pair by a wide margin, and that is the property
+alpha depends on. Treat a single distance as a rough ordering rather than a
+semantic verdict, and choose a larger model for long or domain-specific
+captions.
+
+These numbers come from a test that runs on request rather than in the suite,
+because the suite must not download a model:
+
+```bash
+POTATO_TEST_EMBEDDINGS=1 pytest tests/unit/test_caption_embedding_distance.py -v
+```
+
+Captions are compared **within regions that matched geometrically**, not by
+position: two annotators who each wrote three captions did not necessarily write
+them about the same three things, and comparing caption *k* with caption *k*
+would measure the order they happened to draw in. A region only one annotator
+drew is a **detection** disagreement and is counted as one, rather than being
+scored as a caption disagreement, which would blame the wrong thing.
+
+`mean_pairwise_distance` is reported beside alpha because alpha is
+chance-corrected and it is not: a corpus whose captions are all near-identical
+can have an undefined or negative alpha alongside excellent raw agreement, and
+only the pair explains what happened.
+
+---
+
+## Reviewing a model's predictions
+
+Set `predictions_field` and the item's predictions travel to the client, which
+adds a verdict control:
+
+```yaml
+    predictions_field: model_regions
+    verdicts:
+      - {name: correct}
+      - {name: wrong_object}
+      - {name: partial}
+      - {name: not_present}
+```
+
+Predictions are labelled as predictions all the way through and are **never
+merged into the annotator's own regions**. A prediction the annotator has not
+accepted is evidence about the model, and folding it into the ground truth
+destroys the only thing it is for.
+
+---
+
+## Related
+
+- [Image annotation](../annotation-types/multimedia/image_annotation.md)
+- [Geometry agreement](../advanced/geometry_agreement.md)
+- [World-model evaluation](world_model_eval.md) — the same absent/answered
+  reasoning applied to time rather than space
 
 
 ---
@@ -47814,6 +48468,7 @@ of the interface still reaches out to public CDNs and will degrade without them.
 | Peaks.js (audio/video waveforms) | ✅ Vendored at `potato/static/peaks.min.js` |
 | PDF.js (PDF display) | ✅ Vendored at `potato/static/vendor/pdfjs/` |
 | Bootstrap CSS + Font Awesome on the **adjudication** page | ✅ Vendored |
+| OpenSeadragon (deep-zoom viewer) | ✅ Vendored |
 | All of Potato's own CSS and JavaScript | ✅ Served locally |
 
 Fabric.js matters most: image annotation is entirely non-functional without it —
@@ -47837,9 +48492,40 @@ copies used here. Pointing the main template at them is therefore a version bump
 needs a full-application regression pass rather than a one-line edit. Bootstrap's
 JavaScript bundle is not vendored at all.
 
-**If you are deploying air-gapped now**, mirror those three files onto a host
-your network can reach and override the template, or accept the degradation
-above. Text annotation in particular should be tested before you rely on it.
+### Other pages
+
+The three above are the main annotation interface. Auditing every source
+template turned up three more external hosts, on pages the annotation flow does
+not use but an administrator does:
+
+| Asset | Host | Pages | Effect when unreachable |
+|-------|------|-------|-------------------------|
+| Bootstrap 4.x (CSS + JS) | `stackpath.bootstrapcdn.com` | `header.html`, the legacy Likert template | A *second*, older Bootstrap than the main template loads. Layout degrades on those pages only. |
+| d3 v7 | `d3js.org` | Solo-mode status page | Its charts do not render. |
+
+A favicon on the login and signup pages pointed at `colorlib.com` — the site
+those templates were adapted from. It has been **removed**: a decorative icon is
+not worth a third-party request from the page where users type their
+credentials, and it broke air-gapped along with everything else.
+
+**If you are deploying air-gapped now**, mirror those files onto a host your
+network can reach and override the templates, or accept the degradation above.
+Text annotation in particular should be tested before you rely on it.
+
+## What is checked automatically
+
+Three guards, each catching a different failure:
+
+| Test | Catches |
+|---|---|
+| `tests/unit/test_no_new_cdn_assets.py` | A new external asset in the main template, and an allowlist entry that has gone stale |
+| `tests/unit/test_air_gap_assets.py` | A template referencing a static file that is **not in the tree**, a truncated vendored bundle, and a new external host in *any* source template |
+| `tests/server/test_air_gap_page.py` | A rendered page referencing a local asset the server does not actually serve |
+
+The last is the strongest and the only one that catches an asset which is
+vendored, committed and referenced but never enabled by
+`FRONTEND_ASSET_MARKERS` for the schema in question — a failure invisible to any
+static scan, and visible only to the project type that triggers it.
 
 ## Managing vendored assets
 
@@ -47887,10 +48573,9 @@ works.
 
 ## How items are stored and looked up
 
-Potato does **not** scan un-indexed files to find items. On load, every item is
-placed into an in-memory, ID-keyed `OrderedDict`
-(`ItemStateManager.instance_id_to_instance`). Lookups by instance ID are **O(1)**
-hash lookups (`get_item()`), not linear scans. On top of that primary index,
+Potato does **not** scan un-indexed files to find items. On load, every item
+goes into an ID-keyed store behind `ItemStateManager`. Lookups by instance ID
+are **O(1)** hash lookups, not linear scans. On top of that primary index,
 Potato maintains secondary indexes:
 
 - a **category → instance IDs** index (`category_to_instance_ids`) for category
@@ -47928,6 +48613,42 @@ Two guards protect it:
   ```bash
   POTATO_BENCH_N=50000 POTATO_BENCH_RSS=1 pytest tests/performance -q
   ```
+
+### Per-item memory, measured
+
+Steady-state resident bytes per item, reproducible with
+`python scripts/benchmark_item_store.py --items 50000`:
+
+| Item shape | Default (in memory) | `backend: paged` | 1M items, default | 1M items, paged |
+|---|---|---|---|---|
+| Vision (`image_url` + two fields) | 932 B | 675 B | 0.93 GB | 0.68 GB |
+| Text (~540 unique characters) | 1430 B | 695 B | 1.43 GB | 0.70 GB |
+
+## Paging item payloads to disk
+
+For corpora where half a gigabyte matters — Open Images is about 9M items, so
+roughly 8.4 GB resident against 6.1 GB paged — item payloads can live in a
+SQLite file with a small in-memory cache:
+
+```yaml
+item_store:
+  backend: paged      # default: memory
+  cache_size: 2048    # payloads kept resident
+  # path: ...         # defaults to <output_annotation_dir>/.item_cache.sqlite
+```
+
+The file is a **cache**: it is rebuilt from your data files on every boot, is
+never read from a previous run, and can be deleted at any time.
+
+Read the table above before turning this on. **Paging saves 28% on vision items
+and 51% on text — not an order of magnitude.** Once the payload is out of
+memory, what remains is the item object and the id bookkeeping, and those do not
+page. In exchange, loading the corpus takes about 2.5× as long and a full scan
+about 6×; a single item read goes from ~1 µs to ~6 µs, which is nothing against
+a request.
+
+Below a million items this buys a slower server and no benefit. The default is
+the right choice for almost every project.
 
 ## Practical guidance for large projects
 

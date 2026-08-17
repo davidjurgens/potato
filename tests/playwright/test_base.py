@@ -176,17 +176,29 @@ class BasePlaywrightTest:
         The image is scaled to fit and centred, so canvas (0, 0) is usually
         *outside* it. Drawing there produces negative normalized coordinates —
         correct behaviour, but rarely what a test means.
+
+        Goes through the viewport transform, which is not a refinement: under
+        `viewer: deepzoom` the image object is a placeholder at (0, 0) with
+        scale 1 and the transform carries the whole of the scaling, so reading
+        `img.left`/`img.scaleX` alone would report image-pixel coordinates as
+        though they were canvas pixels and every drag would land somewhere
+        else. It is the same calculation `_renderAllMasks` uses, for the same
+        reason.
         """
         return page.evaluate(
             """(schema) => {
                 const c = document.querySelector(
                     `.image-annotation-container[data-schema="${schema}"]`);
-                const img = c && c.annotationManager && c.annotationManager.image;
+                const manager = c && c.annotationManager;
+                const img = manager && manager.image;
                 if (!img) return null;
+                const vpt = manager.canvas.viewportTransform;
+                const zoom = manager.canvas.getZoom();
                 return {
-                    left: img.left, top: img.top,
-                    width: img.width * img.scaleX,
-                    height: img.height * img.scaleY,
+                    left: img.left * zoom + vpt[4],
+                    top: img.top * zoom + vpt[5],
+                    width: img.width * img.scaleX * zoom,
+                    height: img.height * img.scaleY * zoom,
                 };
             }""",
             arg=schema,

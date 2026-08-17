@@ -357,6 +357,50 @@
     background: #f8f9fa !important;
 }
 
+/* ---------------------------------------------------------------------------
+   Deep zoom: three layers in one wrapper.
+
+   OpenSeadragon paints the tiles at the bottom, fabric draws the shapes over
+   it, and the mask overlay sits on top of both. The stacking is explicit
+   rather than left to source order because fabric inserts its own
+   .canvas-container wrapper at runtime, so the DOM order here is not the order
+   the browser ends up with.
+
+   The fabric layer must NOT be opaque in this mode. In the ordinary viewer the
+   canvas holds the image and a background is correct; here a background would
+   hide the tiles completely, and the symptom is a viewer that reports itself
+   loaded and shows nothing.
+   --------------------------------------------------------------------------- */
+.canvas-wrapper.deepzoom .deepzoom-host {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: #f8f9fa;
+}
+
+.canvas-wrapper.deepzoom .canvas-container {
+    position: absolute !important;
+    inset: 0;
+    z-index: 1;
+    background: transparent !important;
+}
+
+.canvas-wrapper.deepzoom .annotation-canvas,
+.canvas-wrapper.deepzoom .upper-canvas,
+.canvas-wrapper.deepzoom .lower-canvas {
+    background: transparent !important;
+}
+
+.canvas-wrapper.deepzoom .mask-canvas {
+    z-index: 2;
+}
+
+/* The checkerboard is a transparency cue for a single image with an alpha
+   channel. Under the tiles it is just noise behind a photograph. */
+.canvas-wrapper.deepzoom::before {
+    display: none;
+}
+
 .annotation-canvas {
     display: block;
     width: 100%;

@@ -529,6 +529,7 @@
           "agent_dimensions": {},
           "agent_key": {},
           "agents": {},
+          "agreement_distance": {},
           "ai_support": {},
           "allow_annotator_create": {},
           "allow_correction": {},
@@ -619,6 +620,10 @@
                 "description": "Multi-agent failure attribution: responsible agent + decisive step + reason"
               },
               {
+                "const": "grounding_eval",
+                "description": "Grounding evaluation: bind referring expressions to image regions or points, with an explicit not-present answer"
+              },
+              {
                 "const": "gui_trajectory",
                 "description": "Computer-use/GUI agent step review: per-step screenshot + action correctness + click grounding"
               },
@@ -681,6 +686,10 @@
               {
                 "const": "ranking",
                 "description": "Drag-and-drop ranking of items by preference or relevance"
+              },
+              {
+                "const": "region_caption",
+                "description": "Region captioning: a free-text description per region drawn on the image, with caption agreement over matched regions"
               },
               {
                 "const": "rollout_evaluation",
@@ -798,6 +807,7 @@
           "brush_size": {},
           "calibration_field": {},
           "calls_key": {},
+          "caption_field": {},
           "carry_over": {},
           "cf_verdicts": {},
           "collapsed_tiers": {},
@@ -830,6 +840,8 @@
           "error_types": {},
           "event_types": {},
           "events_key": {},
+          "expression_source": {},
+          "expressions_field": {},
           "failure_causes": {},
           "fallback_text": {},
           "file_rating_dimensions": {},
@@ -851,12 +863,14 @@
           "image_key": {},
           "inline_with_trace": {},
           "input_type": {},
+          "instance_masks": {},
           "intervention_field": {},
           "intervention_time_field": {},
           "items": {},
           "items_field": {},
           "items_key": {},
           "keybinding_profile": {},
+          "label": {},
           "label_requirement": {},
           "labels": {},
           "layers": {},
@@ -871,6 +885,7 @@
           "max_annotations": {},
           "max_label": {},
           "max_lanes": {},
+          "max_length": {},
           "max_loaded_nodes": {},
           "max_phases": {},
           "max_points": {},
@@ -884,6 +899,7 @@
           "min": {},
           "min_annotations": {},
           "min_label": {},
+          "min_length": {},
           "min_per_item": {},
           "min_per_label": {},
           "min_phases": {},
@@ -912,14 +928,17 @@
           "playback_rate_control": {},
           "point_budget": {},
           "point_size": {},
+          "predictions_field": {},
           "profiles_field": {},
           "profiles_per_set": {},
           "prompt_field": {},
           "quality_scale": {},
           "question_field": {},
           "rating_scale": {},
+          "region_type": {},
           "reject_key": {},
           "reject_label": {},
+          "require_all": {},
           "require_clean": {},
           "require_reason_on_edit": {},
           "resource_key": {},
@@ -935,6 +954,7 @@
           "scale_type": {},
           "screenshot_key": {},
           "segment_schemes": {},
+          "segmentation": {},
           "segments_key": {},
           "sequential_key_binding": {},
           "series_shown": {},
@@ -974,6 +994,7 @@
           "tie_label": {},
           "tier_height": {},
           "tiers": {},
+          "tiles": {},
           "timeline_height": {},
           "title": {},
           "tools": {},
@@ -985,10 +1006,12 @@
           "type_key": {},
           "user_speakers": {},
           "verdict_options": {},
+          "verdicts": {},
           "video_as_label": {},
           "video_fps": {},
           "video_key": {},
           "video_path": {},
+          "viewer": {},
           "violation_types": {},
           "visual_display": {},
           "worst_description": {},
@@ -1576,6 +1599,15 @@
         "id_key",
         "text_key"
       ],
+      "type": "object"
+    },
+    "item_store": {
+      "additionalProperties": true,
+      "properties": {
+        "backend": {},
+        "cache_size": {},
+        "path": {}
+      },
       "type": "object"
     },
     "judge_alignment": {
@@ -2345,6 +2377,10 @@
         "iaa_per_item_breakdown": {},
         "iaa_scale_correlation_label": {},
         "iaa_scale_correlation_note": {},
+        "iaa_scale_coverage_label": {},
+        "iaa_scale_coverage_note": {},
+        "iaa_scale_distribution_label": {},
+        "iaa_scale_distribution_note": {},
         "iaa_scale_kappa_label": {},
         "iaa_scale_lower_label": {},
         "iaa_scale_lower_note": {},
@@ -2353,6 +2389,9 @@
         "iaa_scale_span_label": {},
         "iaa_scale_span_note_post": {},
         "iaa_scale_span_note_pre": {},
+        "iaa_sweep_headline": {},
+        "iaa_sweep_note": {},
+        "iaa_sweep_title": {},
         "iaa_th_annotators": {},
         "iaa_th_cap": {},
         "iaa_th_instance": {},

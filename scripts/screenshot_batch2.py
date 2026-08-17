@@ -146,6 +146,17 @@ VISION_SCHEMAS = {
     "pdf_bbox": "examples/image/pdf-bbox/config.yaml",
     "document_bbox": "examples/image/document-bbox/config.yaml",
     "pdf_annotation": "examples/image/pdf-annotation/config.yaml",
+    # Deep zoom. The image is generated rather than committed, so this entry
+    # needs `python examples/image/deep-zoom/generate_image.py` first; without
+    # it the viewer reports a missing source, which is itself worth seeing.
+    "image_deep_zoom": "examples/image/deep-zoom/config.yaml",
+    # Grounding evaluation: the expression list beside the drawing canvas.
+    "grounding_eval": "examples/ai-assisted/grounding-eval/config.yaml",
+    # Region captioning: a caption row per region, below the canvas. The rows
+    # only exist once something is drawn, so an empty-canvas shot is checking
+    # the empty state ("Draw one on the image to describe it"), which is the
+    # state most annotators see first.
+    "region_caption": "examples/image/region-captioning/config.yaml",
     # Spatial. The point cloud shot is layout-only: a hidden-tab WebGL context
     # freezes at t=0, so the canvas may be blank in the image even when the
     # scene graph is correct. The toolbar, labels and camera panels around it
@@ -271,6 +282,33 @@ def take_screenshot(driver, port, schema_name, output_dir):
             print(f"  Warning: main-content not visible, taking screenshot anyway")
 
     time.sleep(1)  # Let animations settle
+
+    # Deep zoom builds its first tile level on demand, so the usual settle
+    # point catches an initialised-but-empty viewer. Wait for tiles to have
+    # been FETCHED rather than for pixels to appear: OpenSeadragon 5 draws
+    # through WebGL, and a WebGL canvas in an automated browser reports no
+    # readable pixels regardless of what it is showing — the same limitation
+    # the point-cloud entry above is annotated with.
+    #
+    # So this shot, like that one, is LAYOUT-ONLY: the toolbar, labels and
+    # panels around the viewer are what it verifies. That tiles actually load
+    # is proven by tests/playwright/test_deepzoom_canvas.py, which asserts on
+    # real tile requests.
+    try:
+        if driver.find_elements(By.CLASS_NAME, "deepzoom-host"):
+            WebDriverWait(driver, 20).until(
+                lambda d: d.execute_script(
+                    "return performance.getEntriesByType('resource')"
+                    "  .some(e => e.name.includes('_files/'));"))
+            time.sleep(1.0)
+            tiles = driver.execute_script(
+                "return performance.getEntriesByType('resource')"
+                "  .filter(e => e.name.includes('_files/')).length;")
+            print(f"  Deep zoom: {tiles} tiles fetched "
+                  f"(the canvas itself is WebGL and will look blank here)")
+    except Exception:
+        print("  WARNING: no deep-zoom tiles were requested — the viewer did "
+              "not open. This is a real failure, not a screenshot artifact.")
 
     # Take full page screenshot
     full_path = os.path.join(output_dir, f"{schema_name}_full.png")

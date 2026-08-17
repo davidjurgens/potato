@@ -70,6 +70,19 @@ ASSETS = [
               "an air-gapped machine.",
     ),
     Asset(
+        name="openseadragon",
+        url="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/5.0.1/openseadragon.min.js",
+        path="openseadragon-5.0.1.min.js",
+        sri="sha512-gPZzE+sKmE0kvcjMxW431ef5b5T5QOADV9Gij0isPw2oLATd1IZW7dmDmKh7F2e5BfwjQyAfFp3/OF0fVMOF7Q==",
+        used_by="base_template_v2.html (deep-zoom image viewer)",
+        notes="The JS only. OpenSeadragon also ships ~20 PNG button sprites, "
+              "which are NOT vendored: the viewer runs with "
+              "showNavigationControl:false and Potato draws its own controls, "
+              "so the sprites would be 20 more files to keep air-gapped for "
+              "buttons nobody sees. Setting showNavigationControl:true without "
+              "vendoring images/ gives broken-image icons, not missing ones.",
+    ),
+    Asset(
         name="bootstrap-css",
         url="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css",
         path="bootstrap-5.3.3.min.css",

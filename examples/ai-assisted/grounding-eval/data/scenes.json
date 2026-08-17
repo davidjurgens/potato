@@ -1,0 +1,17 @@
+[
+  {"id": "scene_a",
+   "image": "/media/scene_a.png",
+   "expressions": [
+     {"id": "a1", "text": "the red square on the left"},
+     {"id": "a2", "text": "the blue square on the right"},
+     {"id": "a3", "text": "the small green square near the bottom"},
+     {"id": "a4", "text": "the yellow circle"}
+   ]},
+  {"id": "scene_b",
+   "image": "/media/scene_b.png",
+   "expressions": [
+     {"id": "b1", "text": "the purple rectangle in the upper left"},
+     {"id": "b2", "text": "the orange rectangle in the lower right"},
+     {"id": "b3", "text": "the person standing between them"}
+   ]}
+]

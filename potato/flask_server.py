@@ -326,6 +326,10 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     # Gated separately from image_annotation because the ONNX runtime is a
     # 13 MB fetch that a project drawing only boxes should never pay for.
     "segmentation": ('data-tool="sam"',),
+    # Deep zoom. Gated separately from image_annotation because OpenSeadragon
+    # is a 277 KB download that a project annotating ordinary photographs must
+    # not pay for.
+    "deepzoom": ("deepzoom-host",),
     # 3D point cloud annotation. Gated separately from image_annotation
     # because three.js is a 670 KB download that a 2D project must not pay for.
     "spatial_annotation": ("pointcloud-annotation-container",),
@@ -336,6 +340,11 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "episode_annotation": ("episode-annotation-container",),
     # World-model rollout evaluation: frame-locked video panels.
     "rollout_evaluation": ("rollout-eval-container",),
+    # Grounding evaluation. Needs the image annotation assets too, but those
+    # are gated on their own marker and a grounding project always renders an
+    # image_annotation schema beside this one.
+    "grounding_eval": ("grounding-eval-container",),
+    "region_caption": ("region-caption-container",),
     "audio_annotation": ("audio-annotation-container",),
     "video_annotation": ("video-annotation-container",),
     "span_link": ("span-link-container",),
@@ -982,10 +991,10 @@ def load_user_data(config: dict):
         user_state = usm.get_user_state(user_id)
         if user_state:
             for instance_id in user_state.instance_id_to_label_to_value:
-                if instance_id in ism.instance_id_to_instance:
+                if ism.has_item(instance_id):
                     ism.register_annotator(instance_id, user_id)
             for instance_id in user_state.instance_id_to_span_to_value:
-                if instance_id in ism.instance_id_to_instance:
+                if ism.has_item(instance_id):
                     ism.register_annotator(instance_id, user_id)
             # Collect assigned + annotated items so auto-batch cohort pins can be
             # reconstructed below (they are otherwise in-memory only and reset on

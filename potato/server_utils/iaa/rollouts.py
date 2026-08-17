@@ -386,6 +386,11 @@ def rollout_report(rows: Dict[str, Dict[str, Any]],
                                            level="ordinal"),
         })
     report["sweep"] = sweep
+    # Named rather than inferred: a presenter that guessed which key of a sweep
+    # row was the parameter would guess wrong the first time a report sweeps
+    # over something else.
+    report["sweep_parameter"] = "tolerance"
+    report["sweep_parameter_label"] = "matching window (s)"
 
     at_headline = next((row for row in sweep
                         if abs(row["tolerance"] - headline) < 1e-9), sweep[0])

@@ -38,6 +38,12 @@ class ImageAnnotationManager {
 
         this.canvas = null;
         this.image = null;
+        // Set when `viewer: deepzoom` is configured. In that mode
+        // OpenSeadragon owns the viewport and fabric draws in IMAGE-pixel
+        // coordinates over the top; see potato/static/deepzoom-viewer.js for
+        // why that inversion makes every existing coordinate calculation work
+        // unchanged rather than needing a parallel set for tiled sources.
+        this.deepZoom = null;
         this.currentTool = null;
         this.currentLabel = null;
         this.currentColor = '#FF6B6B';
@@ -59,7 +65,14 @@ class ImageAnnotationManager {
         this.annotations = [];
 
         // Callback for annotation count changes
+        // A single assignable slot, kept because the schema's own bootstrap and
+        // older code assign it directly. Use addAnnotationChangeListener()
+        // instead: a plain assignment silently discards whatever was there,
+        // which made companion schemas (grounding_eval, region_caption)
+        // order-dependent — whichever attached first stopped receiving events,
+        // and the symptom was captions that never saved.
         this.onAnnotationChange = null;
+        this._annotationChangeListeners = [];
 
         // Segmentation mask state
         this.maskCanvas = null;
@@ -268,6 +281,16 @@ class ImageAnnotationManager {
             evt.preventDefault();
             evt.stopPropagation();
 
+            // Under deep zoom the overlay swallows the wheel whenever a
+            // drawing tool is armed. Forwarding it keeps scroll-to-zoom working
+            // with a brush selected, which is the normal way these images are
+            // worked on; without this the wheel silently does nothing and reads
+            // as a broken input device.
+            if (this.deepZoom) {
+                this.deepZoom.forwardWheel(evt);
+                return;
+            }
+
             // deltaY is device- and OS-dependent; exponentiating a small factor
             // gives smooth, symmetric zoom for both trackpads and wheels.
             let zoom = this.canvas.getZoom() * Math.pow(0.999, evt.deltaY);
@@ -362,6 +385,8 @@ class ImageAnnotationManager {
                 this._finishDrawing();
             }
         });
+
+        this._initTouchGestures();
 
         // Double click - complete polygon
         this.canvas.on('mouse:dblclick', (opt) => {
@@ -602,6 +627,11 @@ class ImageAnnotationManager {
     loadImage(imageUrl) {
         if (!this.canvas) return;
 
+        if (this.config.viewer === 'deepzoom') {
+            this._loadTiledImage(imageUrl);
+            return;
+        }
+
         // Get the container element for status updates
         const container = document.querySelector(`.image-annotation-container[data-schema="${this.config.schemaName}"]`);
 
@@ -665,6 +695,87 @@ class ImageAnnotationManager {
                 this.copyFromPrevious(false);
             }
         }, { crossOrigin: 'anonymous' });
+    }
+
+    /**
+     * Open a tiled source through OpenSeadragon and stand fabric over it.
+     *
+     * `this.image` becomes an invisible placeholder at (0,0) with scale 1 and
+     * the source's natural size. That is the whole adaptation: with it,
+     * `_screenToImageCoords`, `_renderAllMasks` and the coordinate
+     * normalization all read the same values they would for an untiled image
+     * displayed at 1:1, and the actual scaling is done once by the viewport
+     * transform OpenSeadragon drives.
+     */
+    _loadTiledImage(imageUrl) {
+        const container = document.querySelector(
+            `.image-annotation-container[data-schema="${this.config.schemaName}"]`);
+        const host = container
+            ? container.querySelector('.deepzoom-host') : null;
+
+        if (typeof DeepZoomBackend === 'undefined' || !host) {
+            this._showCanvasMessage(
+                'The deep-zoom viewer did not load. Set `viewer: fabric` on ' +
+                'this schema to use the single-image viewer.');
+            if (container) container.classList.add('error');
+            return;
+        }
+
+        if (container) {
+            container.classList.add('loading');
+            container.classList.remove('error');
+        }
+
+        if (this.deepZoom) this.deepZoom.destroy();
+        this.deepZoom = new DeepZoomBackend(this, host, this.config.tiles || {});
+
+        const url = DeepZoomBackend.descriptorUrl(imageUrl, this.config.tiles || {});
+        this.deepZoom.open(url).then((size) => {
+            if (container) container.classList.remove('loading');
+
+            // A rectangle rather than a bare object: `opt.target !== this.image`
+            // and `canvas.remove(this.image)` are load-bearing in the drawing
+            // and clearing paths, and both need a real fabric object.
+            const placeholder = new fabric.Rect({
+                left: 0, top: 0, width: size.width, height: size.height,
+                scaleX: 1, scaleY: 1,
+                fill: 'transparent', selectable: false, evented: false,
+                visible: false, excludeFromExport: true,
+            });
+            this.image = placeholder;
+            this.imageOriginalWidth = size.width;
+            this.imageOriginalHeight = size.height;
+            this.imageScale = 1;
+            this.imageLeft = 0;
+            this.imageTop = 0;
+
+            // Region-aware fill reads the source's pixels, and there is no
+            // single source image here to read. Fill falls back to "empty"
+            // mode, which is a real behaviour rather than a failure — but it
+            // must be said, not discovered.
+            this._sourcePixels = null;
+            this._sourcePixelsChecked = true;
+
+            this.canvas.add(placeholder);
+            this.canvas.sendToBack(placeholder);
+            this.deepZoom.syncTransform();
+
+            this._resizeMaskCanvas();
+            this._loadExistingAnnotations();
+            this._loadExistingMasks();
+            this.deepZoom.setInteractive(!!this.currentTool);
+
+            if (this.config.carryOver === 'auto' && this.getAnnotationCount() === 0) {
+                this.copyFromPrevious(false);
+            }
+        }).catch((error) => {
+            if (container) {
+                container.classList.remove('loading');
+                container.classList.add('error');
+            }
+            this._showCanvasMessage(error && error.message
+                ? error.message : 'The tiled image could not be opened.');
+        });
     }
 
     /**
@@ -759,7 +870,13 @@ class ImageAnnotationManager {
 
         this.canvas.setWidth(width);
 
-        if (this.image) {
+        if (this.deepZoom) {
+            // OpenSeadragon lays itself out; the placeholder must NOT be
+            // refitted, because in this mode it is the image's natural size at
+            // the origin and refitting it would rescale every coordinate.
+            this.deepZoom.resize(width, this.canvas.getHeight());
+            this._resizeMaskCanvas();
+        } else if (this.image) {
             this._fitImageToCanvas();
             this._resizeMaskCanvas();
         }
@@ -801,6 +918,12 @@ class ImageAnnotationManager {
             this._resizeObserver = null;
         }
         clearTimeout(this._resizeTimer);
+        // Bound on the DOM element rather than through fabric, so fabric's own
+        // teardown does not remove them.
+        if (this._touchGestureCleanup) {
+            this._touchGestureCleanup();
+            this._touchGestureCleanup = null;
+        }
     }
 
     /**
@@ -814,6 +937,12 @@ class ImageAnnotationManager {
             this._telemetry('tool', { meta: { tool: tool || 'select' } });
         }
         this.currentTool = tool;
+
+        // Under deep zoom the two libraries compete for the pointer. A drawing
+        // tool takes it; select/move gives it back, or OpenSeadragon never
+        // sees a drag and the image cannot be panned at all.
+        if (this.deepZoom) this.deepZoom.setInteractive(!!tool);
+
         this.isDrawing = false;
         this.drawingObject = null;
         this.polygonPoints = [];
@@ -2593,8 +2722,167 @@ class ImageAnnotationManager {
      * Zoom the canvas.
      * @param {number} factor - Zoom factor (>1 to zoom in, <1 to zoom out)
      */
+    /**
+     * Two-finger pinch to zoom and drag to pan.
+     *
+     * ## Without this, a tablet cannot pan at all
+     *
+     * Panning is gated on `evt.altKey || this._spaceKeyDown` (see the
+     * `mouse:down` handler). Both are keyboard state, and a tablet held in two
+     * hands has no keyboard — so once an annotator zoomed in, there was no way
+     * to reach the rest of the image. Not "awkward on touch": no gesture, no
+     * modifier, no button. Zoom had the toolbar's +/-/Fit as an escape hatch;
+     * pan had nothing.
+     *
+     * That matters more than it sounds, because a stylus on a tablet is a
+     * genuinely good segmentation surface — better than a mouse for tracing a
+     * boundary — and drawing already worked. Pan was the single missing piece.
+     *
+     * ## Two fingers, not one
+     *
+     * One-finger drag stays as drawing. A tablet annotator's primary action is
+     * to draw, and stealing the single-touch gesture for panning would trade a
+     * missing feature for a broken one. Two fingers is also what every map and
+     * photo viewer trains people to expect.
+     *
+     * ## Bound to the DOM, not to fabric
+     *
+     * Fabric 5 normalizes the FIRST touch into its mouse events and ignores the
+     * second, so there is no fabric event carrying both points. The raw
+     * `touchmove` also has to be `preventDefault`ed to stop the page scrolling
+     * under the canvas, which needs a non-passive listener that fabric does not
+     * provide.
+     */
+    _initTouchGestures() {
+        const element = this.canvas && this.canvas.upperCanvasEl;
+        if (!element || typeof window === 'undefined' || !('ontouchstart' in window)) {
+            return;
+        }
+
+        const spread = (touches) => {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            return Math.hypot(dx, dy);
+        };
+        const midpoint = (touches) => ({
+            x: (touches[0].clientX + touches[1].clientX) / 2,
+            y: (touches[0].clientY + touches[1].clientY) / 2,
+        });
+
+        const start = (event) => {
+            if (event.touches.length !== 2) return;
+            // Deep zoom: OpenSeadragon owns the viewport AND has its own pinch
+            // handling. Two implementations fighting over one transform is the
+            // bug this whole mode was designed to avoid.
+            if (this.deepZoom) return;
+
+            // The first finger already told fabric a drag had begun. Abandon it
+            // rather than leaving a stray one-pixel shape behind every pinch.
+            if (this.isDrawing) this._abortDrawing();
+            this.isPanning = false;
+
+            this._gesture = {
+                spread: spread(event.touches),
+                midpoint: midpoint(event.touches),
+                zoom: this.canvas.getZoom(),
+                moved: 0,
+            };
+            event.preventDefault();
+        };
+
+        const move = (event) => {
+            if (!this._gesture || event.touches.length !== 2) return;
+            event.preventDefault();
+
+            const nowSpread = spread(event.touches);
+            const nowMidpoint = midpoint(event.touches);
+            const previous = this._gesture.midpoint;
+
+            if (nowSpread > 0 && this._gesture.spread > 0) {
+                const scale = nowSpread / this._gesture.spread;
+                // Same clamp as zoom(), so a pinch cannot reach a magnification
+                // the buttons refuse.
+                const zoom = Math.max(0.1, Math.min(10, this.canvas.getZoom() * scale));
+                // About the fingers, not the canvas centre: pinching zooms what
+                // you are pinching, which is the whole reason to use the gesture.
+                const rect = element.getBoundingClientRect();
+                this.canvas.zoomToPoint(
+                    new fabric.Point(nowMidpoint.x - rect.left, nowMidpoint.y - rect.top),
+                    zoom);
+            }
+
+            const dx = nowMidpoint.x - previous.x;
+            const dy = nowMidpoint.y - previous.y;
+            const transform = this.canvas.viewportTransform;
+            transform[4] += dx;
+            transform[5] += dy;
+            this.canvas.requestRenderAll();
+
+            this._gesture.spread = nowSpread;
+            this._gesture.midpoint = nowMidpoint;
+            this._gesture.moved += Math.hypot(dx, dy);
+
+            // Masks are painted into their own canvas positioned from the
+            // viewport transform, so they detach from the image unless this
+            // runs on every change — the defect fixed in Wave 1.3 for wheel
+            // zoom, which a new viewport path would otherwise reintroduce.
+            this._renderAllMasks();
+        };
+
+        const end = (event) => {
+            if (!this._gesture) return;
+            // Still pinching with the remaining fingers? Re-seed rather than
+            // ending, or lifting one of three fingers jumps the viewport.
+            if (event.touches.length === 2) {
+                this._gesture.spread = spread(event.touches);
+                this._gesture.midpoint = midpoint(event.touches);
+                return;
+            }
+            const moved = Math.round(this._gesture.moved);
+            this._gesture = null;
+            if (moved > 2) this._telemetry('pan', { value: moved });
+            this._telemetry('zoom', { value: Math.round(this.canvas.getZoom() * 100) });
+        };
+
+        element.addEventListener('touchstart', start, { passive: false });
+        element.addEventListener('touchmove', move, { passive: false });
+        element.addEventListener('touchend', end);
+        element.addEventListener('touchcancel', end);
+        this._touchGestureCleanup = () => {
+            element.removeEventListener('touchstart', start);
+            element.removeEventListener('touchmove', move);
+            element.removeEventListener('touchend', end);
+            element.removeEventListener('touchcancel', end);
+        };
+    }
+
+    /**
+     * Drop a half-drawn shape without committing it.
+     *
+     * `_finishDrawing()` is the wrong call here: it commits whatever the first
+     * finger managed to draw, so every pinch would leave a speck of an
+     * annotation behind.
+     */
+    _abortDrawing() {
+        this.isDrawing = false;
+        if (this.drawingObject) {
+            this.canvas.remove(this.drawingObject);
+            this.drawingObject = null;
+        }
+        this.canvas.requestRenderAll();
+    }
+
     zoom(factor) {
         if (!this.canvas) return;
+
+        // Deep zoom: OpenSeadragon owns the viewport, so changing fabric's own
+        // transform would move the annotations off the image until the next
+        // viewport event snapped them back.
+        if (this.deepZoom) {
+            this.deepZoom.zoomBy(factor);
+            this._telemetry('zoom', { value: Math.round(factor * 100) });
+            return;
+        }
 
         const center = this.canvas.getCenter();
         let zoom = this.canvas.getZoom() * factor;
@@ -2617,6 +2905,11 @@ class ImageAnnotationManager {
      */
     zoomFit() {
         if (!this.canvas || !this.image) return;
+
+        if (this.deepZoom) {
+            this.deepZoom.zoomFit();
+            return;
+        }
 
         const canvasWidth = this.canvas.getWidth();
         const canvasHeight = this.canvas.getHeight();
@@ -2643,6 +2936,16 @@ class ImageAnnotationManager {
      */
     zoomReset() {
         if (!this.canvas) return;
+
+        // "100%" means one image pixel per screen pixel. For an untiled image
+        // that is the identity transform; for a tiled one it is a real zoom
+        // level, because the image is usually far larger than the viewport.
+        if (this.deepZoom) {
+            this.deepZoom.zoomActual();
+            this._telemetry('zoom', { value: 100 });
+            return;
+        }
+
         this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
 
         // Re-render masks to match new viewport
@@ -3495,9 +3798,35 @@ class ImageAnnotationManager {
             input.value = this._serializeAnnotations();
         }
 
+        const count = this.getAnnotationCount();
         if (this.onAnnotationChange) {
-            this.onAnnotationChange(this.getAnnotationCount());
+            this.onAnnotationChange(count);
         }
+        // Listeners are separate from the slot above precisely so that an
+        // assignment to it cannot remove them.
+        for (const listener of this._annotationChangeListeners) {
+            try {
+                listener(count);
+            } catch (error) {
+                console.warn('An annotation-change listener failed:', error);
+            }
+        }
+    }
+
+    /**
+     * Subscribe to annotation changes without clobbering anyone else.
+     *
+     * The public way for a companion schema to follow this canvas. Unlike
+     * `onAnnotationChange`, several listeners coexist and none can be removed
+     * by another component's assignment.
+     */
+    addAnnotationChangeListener(listener) {
+        if (typeof listener !== 'function') return () => {};
+        this._annotationChangeListeners.push(listener);
+        return () => {
+            const index = this._annotationChangeListeners.indexOf(listener);
+            if (index >= 0) this._annotationChangeListeners.splice(index, 1);
+        };
     }
 
     /**

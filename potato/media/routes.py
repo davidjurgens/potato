@@ -165,6 +165,140 @@ def media_info(filepath: str):
         return jsonify({"error": str(exc)}), 415
 
 
+def _tile_spec(filepath: str, args):
+    """
+    ``(resolved_path, spec, settings, page, None)`` or ``(..., error_response)``.
+
+    Shared by all four tile routes so the descriptor and the tiles are computed
+    from the same arithmetic. A descriptor that disagreed with the tiles by one
+    pixel renders correctly until the last column and then 404s across it.
+    """
+    from flask import jsonify
+
+    from potato.media.tiles import DEFAULT_MAX_PIXELS, TileError, describe
+
+    _media_dir, resolved = _resolve_media_path(_config(), filepath)
+    if resolved is None:
+        return None, None, None, 0, (jsonify({"error": "forbidden"}), 403)
+    if not os.path.isfile(resolved):
+        return None, None, None, 0, (
+            jsonify({"error": f"{Path(filepath).name} not found"}), 404)
+
+    def _int(name, default):
+        try:
+            return int(args.get(name) or default)
+        except (TypeError, ValueError):
+            return default
+
+    settings = {
+        "tile_size": _int("tile_size", 254),
+        "overlap": _int("overlap", 1),
+        "max_pixels": _int("max_pixels", DEFAULT_MAX_PIXELS),
+    }
+    page = _int("page", 0)
+    try:
+        spec = describe(resolved, tile_size=settings["tile_size"],
+                        overlap=settings["overlap"], page=page)
+    except TileError as exc:
+        # 415, not 500: the request is well formed and the *source* cannot be
+        # tiled, and the message names what to do about it.
+        return None, None, None, 0, (jsonify({"error": str(exc)}), 415)
+    return resolved, spec, settings, page, None
+
+
+def tile_descriptor(filepath: str):
+    """The DZI descriptor, plus the same geometry as JSON for the client."""
+    from flask import Response, jsonify, request
+
+    resolved, spec, _settings, _page, error = _tile_spec(filepath, request.args)
+    if error is not None:
+        return error
+
+    if (request.args.get("format") or "dzi").lower() == "json":
+        return jsonify(spec.to_json())
+    return Response(spec.dzi(), mimetype="application/xml")
+
+
+def tile_image(filepath: str, level: int, column: int, row: int):
+    """
+    One tile. Builds its whole level on first touch — see potato/media/tiles.py.
+
+    The first request into a level is slow and the rest are not, which is the
+    intended shape: zooming in costs one decode, panning around costs nothing.
+    """
+    from flask import jsonify, request, send_file
+
+    from potato.media.cache import get_media_cache
+    from potato.media.tiles import TileError, tile_file
+
+    resolved, spec, settings, page, error = _tile_spec(filepath, request.args)
+    if error is not None:
+        return error
+
+    cache = get_media_cache(_config().get("output_annotation_dir"))
+    try:
+        path = tile_file(cache.ensure_dir(), Path(resolved), spec, int(level),
+                         int(column), int(row), page=page,
+                         max_pixels=settings["max_pixels"])
+    except TileError as exc:
+        return jsonify({"error": str(exc)}), 415
+
+    response = send_file(str(path))
+    # A tile is derived from an immutable (path, size, mtime) key, so it can be
+    # cached hard. Deep zoom fetches dozens per pan and re-validating each one
+    # would put the network back in the interaction it exists to remove.
+    response.headers["Cache-Control"] = "public, max-age=604800"
+    return response
+
+
+def iiif_info(filepath: str):
+    """IIIF Image API 3.0 ``info.json`` over the same pyramid."""
+    from flask import jsonify, request
+
+    _resolved, spec, _settings, _page, error = _tile_spec(filepath, request.args)
+    if error is not None:
+        return error
+
+    base = request.url_root.rstrip("/") + "/media/iiif"
+    response = jsonify(spec.iiif_info(filepath, base))
+    # The IIIF spec asks for this so a viewer on another origin can read it.
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
+def iiif_image(filepath: str, region: str, size: str, rotation: str,
+               quality_format: str):
+    """A IIIF ``{region}/{size}/{rotation}/{quality}.{format}`` request."""
+    from flask import Response, jsonify, request
+
+    from potato.media.cache import get_media_cache
+    from potato.media.tiles import TileError, iiif_region
+
+    resolved, spec, settings, page, error = _tile_spec(filepath, request.args)
+    if error is not None:
+        return error
+
+    quality, _dot, fmt = quality_format.partition(".")
+    fmt = (fmt or "jpg").lower()
+    if fmt not in ("jpg", "jpeg", "png"):
+        return jsonify({"error": f"'{fmt}' is not a supported IIIF format; "
+                                 f"use jpg or png."}), 400
+
+    cache = get_media_cache(_config().get("output_annotation_dir"))
+    try:
+        payload, mimetype = iiif_region(
+            cache.ensure_dir(), Path(resolved), spec, region, size, rotation,
+            quality or "default", "png" if fmt == "png" else "jpg", page=page,
+            max_pixels=settings["max_pixels"])
+    except TileError as exc:
+        return jsonify({"error": str(exc)}), 415
+
+    response = Response(payload, mimetype=mimetype)
+    response.headers["Cache-Control"] = "public, max-age=604800"
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
 def serve_model_file(filepath: str):
     """
     Serve a downloaded segmentation model or the ONNX runtime.
@@ -455,6 +589,24 @@ def register_media_routes(app, config: dict) -> None:
     # Depth maps: colourised, described, raw, or unprojected. See depth_map.
     app.add_url_rule("/media/depth/<path:filepath>", "media_depth",
                      depth_map, methods=["GET"])
+    # Deep zoom. The descriptor is registered before the tile route because
+    # Flask matches in registration order and `<path:filepath>` would otherwise
+    # swallow `.../<level>/<col>_<row>.jpg` whole.
+    app.add_url_rule("/media/tiles/<path:filepath>.dzi", "media_tile_descriptor",
+                     tile_descriptor, methods=["GET"])
+    app.add_url_rule(
+        "/media/tiles/<path:filepath>_files/<int:level>/<int:column>_<int:row>.<ext>",
+        "media_tile_image",
+        lambda filepath, level, column, row, ext: tile_image(
+            filepath, level, column, row),
+        methods=["GET"])
+    # IIIF over the same pyramid, for viewers that speak it (Mirador, and
+    # OpenSeadragon's IIIF tile source).
+    app.add_url_rule("/media/iiif/<path:filepath>/info.json", "media_iiif_info",
+                     iiif_info, methods=["GET"])
+    app.add_url_rule(
+        "/media/iiif/<path:filepath>/<region>/<size>/<rotation>/<quality_format>",
+        "media_iiif_image", iiif_image, methods=["GET"])
     # Segmentation weights and the ONNX runtime, downloaded per install.
     app.add_url_rule("/models/<path:filepath>", "serve_model_file",
                      serve_model_file, methods=["GET"])

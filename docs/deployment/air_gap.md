@@ -15,6 +15,7 @@ of the interface still reaches out to public CDNs and will degrade without them.
 | Peaks.js (audio/video waveforms) | ✅ Vendored at `potato/static/peaks.min.js` |
 | PDF.js (PDF display) | ✅ Vendored at `potato/static/vendor/pdfjs/` |
 | Bootstrap CSS + Font Awesome on the **adjudication** page | ✅ Vendored |
+| OpenSeadragon (deep-zoom viewer) | ✅ Vendored |
 | All of Potato's own CSS and JavaScript | ✅ Served locally |
 
 Fabric.js matters most: image annotation is entirely non-functional without it —
@@ -38,9 +39,40 @@ copies used here. Pointing the main template at them is therefore a version bump
 needs a full-application regression pass rather than a one-line edit. Bootstrap's
 JavaScript bundle is not vendored at all.
 
-**If you are deploying air-gapped now**, mirror those three files onto a host
-your network can reach and override the template, or accept the degradation
-above. Text annotation in particular should be tested before you rely on it.
+### Other pages
+
+The three above are the main annotation interface. Auditing every source
+template turned up three more external hosts, on pages the annotation flow does
+not use but an administrator does:
+
+| Asset | Host | Pages | Effect when unreachable |
+|-------|------|-------|-------------------------|
+| Bootstrap 4.x (CSS + JS) | `stackpath.bootstrapcdn.com` | `header.html`, the legacy Likert template | A *second*, older Bootstrap than the main template loads. Layout degrades on those pages only. |
+| d3 v7 | `d3js.org` | Solo-mode status page | Its charts do not render. |
+
+A favicon on the login and signup pages pointed at `colorlib.com` — the site
+those templates were adapted from. It has been **removed**: a decorative icon is
+not worth a third-party request from the page where users type their
+credentials, and it broke air-gapped along with everything else.
+
+**If you are deploying air-gapped now**, mirror those files onto a host your
+network can reach and override the templates, or accept the degradation above.
+Text annotation in particular should be tested before you rely on it.
+
+## What is checked automatically
+
+Three guards, each catching a different failure:
+
+| Test | Catches |
+|---|---|
+| `tests/unit/test_no_new_cdn_assets.py` | A new external asset in the main template, and an allowlist entry that has gone stale |
+| `tests/unit/test_air_gap_assets.py` | A template referencing a static file that is **not in the tree**, a truncated vendored bundle, and a new external host in *any* source template |
+| `tests/server/test_air_gap_page.py` | A rendered page referencing a local asset the server does not actually serve |
+
+The last is the strongest and the only one that catches an asset which is
+vendored, committed and referenced but never enabled by
+`FRONTEND_ASSET_MARKERS` for the schema in question — a failure invisible to any
+static scan, and visible only to the project type that triggers it.
 
 ## Managing vendored assets
 

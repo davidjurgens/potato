@@ -474,6 +474,35 @@ The toolbar provides:
 - Zoom with the toolbar buttons or `+` / `-` / `0`
 - Hold `Space` (or `Alt`) and drag to pan
 
+### Tablets and stylus input
+
+The canvas works on a touch device, and a stylus is a genuinely good surface for
+tracing a boundary — often better than a mouse.
+
+| Gesture | Does |
+|---|---|
+| One finger or stylus, drag | Draws with the armed tool — the same as a mouse |
+| **Two fingers, drag** | Pans |
+| **Two fingers, pinch** | Zooms about the point between them |
+
+Two fingers rather than one, because a tablet annotator's primary action is to
+draw: taking the single-touch gesture for panning would fix one problem by
+creating a worse one. The pinch is clamped to the same 0.1×–10× range as the
+toolbar buttons, so the two paths cannot disagree about the limits.
+
+Panning used to require holding `Space` or `Alt` — keyboard state that a tablet
+held in two hands does not have — so an annotator who zoomed in had no way to
+reach the rest of the image. If you are running a study on tablets, this needs
+Potato 2.7 or later.
+
+Under **deep zoom** (`viewer: deepzoom`) OpenSeadragon supplies its own pinch and
+drag handling and Potato's gestures stand aside, so the behaviour is the same
+without two implementations fighting over one viewport.
+
+Note that phones are still excluded from [Pocket Mode](../../advanced/pocket_mode.md)
+for image tasks — the issue there is screen size, not input, and it is a separate
+decision from whether the desktop canvas accepts touch.
+
 ## Importing existing annotations
 
 You do not have to start from a blank image. A COCO file — polygons,

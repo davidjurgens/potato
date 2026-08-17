@@ -83,14 +83,14 @@ class JudgeCalibrationManager:
         from potato.item_state_management import get_item_state_manager
 
         ism = get_item_state_manager()
-        all_ids = list(ism.instance_id_to_instance.keys())
+        all_ids = ism.get_instance_ids()
         cap = self._resolve_cap(len(all_ids))
         selected = all_ids[:cap]
 
         text_key = (self.app_config.get("item_properties", {}) or {}).get("text_key")
         items: List[Tuple[str, str]] = []
         for iid in selected:
-            item = ism.instance_id_to_instance[iid]
+            item = ism.get_item(iid)
             data = item.get_data()
             if isinstance(data, dict) and text_key and text_key in data:
                 text = data[text_key]
@@ -196,7 +196,7 @@ class JudgeCalibrationManager:
             ism = get_item_state_manager()
 
             def by_field(iid):
-                item = ism.instance_id_to_instance.get(iid)
+                item = ism.find_item(iid)
                 data = item.get_data() if item else None
                 return data.get(field) if isinstance(data, dict) else None
             return by_field

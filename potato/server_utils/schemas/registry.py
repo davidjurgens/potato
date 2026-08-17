@@ -274,6 +274,8 @@ def _register_builtin_schemas():
     from .image_annotation import generate_image_annotation_layout
     from .episode_annotation import generate_episode_annotation_layout
     from .rollout_evaluation import generate_rollout_evaluation_layout
+    from .grounding_eval import generate_grounding_eval_layout
+    from .region_caption import generate_region_caption_layout
     from .spatial_annotation import generate_spatial_annotation_layout
     from .audio_annotation import generate_audio_annotation_layout
     from .video_annotation import generate_video_annotation_layout
@@ -414,7 +416,7 @@ def _register_builtin_schemas():
             name="image_annotation",
             generator=generate_image_annotation_layout,
             required_fields=["name", "description", "tools", "labels"],
-            optional_fields=["zoom_enabled", "pan_enabled", "min_annotations", "max_annotations", "freeform_brush_size", "freeform_simplify", "brush_size", "eraser_size", "mask_opacity", "fill_mode", "fill_tolerance", "fill_max_pixels", "source_field", "ai_support", "keybinding_profile", "carry_over"],
+            optional_fields=["zoom_enabled", "pan_enabled", "min_annotations", "max_annotations", "freeform_brush_size", "freeform_simplify", "brush_size", "eraser_size", "mask_opacity", "fill_mode", "fill_tolerance", "fill_max_pixels", "source_field", "ai_support", "keybinding_profile", "carry_over", "viewer", "tiles", "segmentation", "instance_masks"],
             supports_keybindings=True,
             description="Image annotation with bounding boxes, polygons, freeform drawing, and landmarks"
         ),
@@ -441,6 +443,26 @@ def _register_builtin_schemas():
             optional_fields=["streams", "manifest_field", "prompt_field", "intervention_field", "intervention_time_field", "fps", "layers", "violation_types", "severities", "cf_verdicts", "rubric", "blind", "shuffle", "require_clean", "max_violations"],
             supports_keybindings=True,
             description="World-model rollout evaluation: frame-locked video panels with temporal violation localization, preference and counterfactual plausibility"
+        ),
+        SchemaDefinition(
+            name="grounding_eval",
+            generator=generate_grounding_eval_layout,
+            required_fields=["name", "description"],
+            optional_fields=["region_type", "expression_source",
+                             "expressions_field", "caption_field",
+                             "predictions_field", "label", "verdicts",
+                             "require_all"],
+            supports_keybindings=False,
+            description="Grounding evaluation: bind referring expressions to image regions or points, with an explicit not-present answer"
+        ),
+        SchemaDefinition(
+            name="region_caption",
+            generator=generate_region_caption_layout,
+            required_fields=["name", "description"],
+            optional_fields=["placeholder", "min_length", "max_length",
+                             "require_all", "agreement_distance"],
+            supports_keybindings=False,
+            description="Region captioning: a free-text description per region drawn on the image, with caption agreement over matched regions"
         ),
         SchemaDefinition(
             name="audio_annotation",

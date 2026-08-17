@@ -55,6 +55,7 @@ over prose when writing a config or calling the API.
 - [Conditional Logic](configuration/conditional_logic.md) - Show/hide questions based on prior answers
 - [Image Annotation](annotation-types/multimedia/image_annotation.md) - Bounding boxes, polygons, and landmarks
 - [Image Annotation Formats](annotation-types/multimedia/image_formats.md) - Import COCO (polygons, RLE masks, crowd regions) with no preprocessing, and export back
+- [Deep Zoom & Tiling](annotation-types/multimedia/deep_zoom.md) - Annotate images too large to send to a browser as one file, with masks painted at the source's full resolution and no GPU texture limit
 - [Point Cloud Annotation (3D)](annotation-types/spatial/point_cloud.md) - Oriented 3D boxes on lidar: KITTI, PCD, PLY and LAS, converted server-side
 - [Calibration and 2D Verification](annotation-types/spatial/calibration.md) - Project 3D boxes into the camera images, so a box is checkable rather than a guess
 - [Depth Maps](annotation-types/spatial/depth_maps.md) - 16-bit PNG, NPY, PFM and EXR depth with a near/far window and a readout in metres
@@ -128,6 +129,7 @@ over prose when writing a config or calling the API.
 
 - **[Coding Agent Annotation](agent-evaluation/coding_agent_annotation.md)** - Evaluate agentic coding systems (Claude Code, SWE-Agent, Aider) with diff rendering, PRM annotation, and code review
 - **[CoT Process Reward (LLM pre-label + verify)](agent-evaluation/process_reward_cot.md)** - Segment a long chain-of-thought into steps, have an LLM pre-label each step's reward, and have a human verify — fast PRM data collection
+- **[VLM Grounding & Pointing](agent-evaluation/vlm_grounding.md)** - Bind referring expressions to regions or points, with an explicit not-present answer, and localize what a caption says that is not there
 - **[World-Model & Rollout Evaluation](agent-evaluation/world_model_eval.md)** - Frame-locked video panels; mark the frame where a generated rollout stops making sense, and measure whether annotators agree on *when*
 - [Agent Traces](agent-evaluation/agent_traces.md) - Evaluate AI agent traces and trajectories
 - [Turn-Level Annotation](agent-evaluation/turn_level_annotation.md) - Bind any rating/tagging/comment schema per-turn with declarative filters (by speaker, agent, step type, tool)
