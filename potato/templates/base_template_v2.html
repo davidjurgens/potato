@@ -807,7 +807,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=26"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=28"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.
@@ -838,9 +838,23 @@
          project should pay for. The runtime itself is fetched lazily on first
          use, not here. -->
     {% if frontend_assets.segmentation | default(false) %}
+    <script src="{{ url_for('static', filename='segmentation/model-session.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='segmentation/sam-preprocess.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='segmentation/sam-session.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='segmentation/sam-session.js') }}?v=5"></script>
     <script src="{{ url_for('static', filename='segmentation/sam-tool.js') }}?v=2"></script>
+    {% endif %}
+
+    <!-- Open-vocabulary detection from a typed phrase. Gated separately from
+         the magic wand: the two models are independent, and this one is a
+         145 MB download. `model-session.js` is shared, so it loads for either
+         and the condition covers both. -->
+    {% if frontend_assets.text_prompt | default(false) %}
+    {% if not frontend_assets.segmentation | default(false) %}
+    <script src="{{ url_for('static', filename='segmentation/model-session.js') }}?v=1"></script>
+    {% endif %}
+    <script src="{{ url_for('static', filename='segmentation/wordpiece.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='segmentation/gdino-session.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='segmentation/text-prompt-tool.js') }}?v=2"></script>
     {% endif %}
 
     <!-- 3D point cloud annotation. three.js is vendored, not CDN-loaded, and
@@ -877,9 +891,14 @@
     <script src="{{ url_for('static', filename='label-visibility.js') }}?v=2"></script>
     {% endif %}
 
-    <!-- Visual AI Assistant for image/video annotation (loaded conditionally) -->
-    {% if ai_enabled and ((frontend_assets.image_annotation | default(false)) or (frontend_assets.video_annotation | default(false))) %}
-    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=4"></script>
+    <!-- Visual AI Assistant for image/video annotation (loaded conditionally).
+         Also loaded for text prompting, which has no server endpoint at all:
+         the model runs in the browser, but the accept/reject review panel it
+         needs lives here. Gating this on `ai_enabled` alone left text-prompt
+         projects finding objects with nowhere to show them. -->
+    {% if (ai_enabled or frontend_assets.text_prompt | default(false))
+          and ((frontend_assets.image_annotation | default(false)) or (frontend_assets.video_annotation | default(false))) %}
+    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=5"></script>
     <!-- Option Highlight Manager for dimming less-likely options -->
     <script src="{{ url_for('static', filename='option_highlight_manager.js') }}?v=2"></script>
     {% endif %}
@@ -939,7 +958,7 @@
     <!-- Video tracking interpolation and UI -->
     {% if frontend_assets.tracking | default(false) %}
     <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=4"></script>
     {% endif %}
 
     <!-- Triage annotation manager -->

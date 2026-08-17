@@ -711,6 +711,9 @@ for _type, _module, _class, _hint in [
     # import loads the whole ML stack at boot for every user who happens
     # to have torch installed, whether or not they use segmentation.
     ("sam", ".sam_endpoint", "SAMEndpoint", "potato[vision]"),
+    # Text-prompt segmentation, server-side. Weights are user-supplied and
+    # licence-gated; nothing is bundled or downloaded. See sam3_endpoint.py.
+    ("sam3", ".sam3_endpoint", "SAM3Endpoint", "onnxruntime"),
     # Alias kept for configs written against the old AICacheManager name.
     ("open_router", ".openrouter_endpoint", "OpenRouterEndpoint", None),
 ]:

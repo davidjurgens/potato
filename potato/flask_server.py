@@ -326,6 +326,10 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     # Gated separately from image_annotation because the ONNX runtime is a
     # 13 MB fetch that a project drawing only boxes should never pay for.
     "segmentation": ('data-tool="sam"',),
+    # Text-prompt detection, keyed on the prompt box. Separate from
+    # `segmentation` because the two models are independent — a project can
+    # have either, both, or neither — and this one is a 145 MB fetch.
+    "text_prompt": ("data-text-prompt",),
     # Deep zoom. Gated separately from image_annotation because OpenSeadragon
     # is a 277 KB download that a project annotating ordinary photographs must
     # not pay for.

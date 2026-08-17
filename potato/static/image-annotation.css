@@ -962,3 +962,74 @@
     white-space: nowrap;
     border: 0;
 }
+
+/* ------------------------------------------------------------------
+   Text-prompt detection: type a phrase, get suggestions.
+
+   Sits in the toolbar beside the tools rather than in a panel of its own,
+   because it IS a way of drawing: the annotator is asking for boxes, and the
+   result arrives as suggestions they accept or reject like any other.
+   ------------------------------------------------------------------ */
+.text-prompt-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.text-prompt-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #495057;
+}
+
+.text-prompt-input {
+    /* Wide enough for two or three phrases without pushing the count group
+       onto a second toolbar row at 1024px. */
+    width: 190px;
+    padding: 3px 6px;
+    font-size: 13px;
+    border: 1px solid #b9c4d4;
+    border-radius: 4px;
+}
+
+.text-prompt-run {
+    padding: 3px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid #b9c4d4;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.text-prompt-run:disabled {
+    cursor: progress;
+    opacity: 0.7;
+}
+
+.text-prompt-status {
+    font-size: 12px;
+    color: #495057;
+    /* Bounded so a long message cannot reflow the toolbar mid-run. */
+    max-width: 320px;
+}
+
+.text-prompt-status[data-kind="warn"] {
+    color: #8a6100;
+}
+
+.text-prompt-status[data-kind="error"] {
+    color: #a02020;
+}
+
+/* Visually hidden but still announced, which display:none would prevent. */
+.image-annotation-container .text-prompt-help {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

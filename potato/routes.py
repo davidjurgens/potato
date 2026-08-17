@@ -4600,6 +4600,90 @@ def _critique_image_reference(item_data, scheme: dict):
     return ""
 
 
+@app.route('/api/track/propagate', methods=['POST'])
+def propagate_video_track():
+    """
+    Track one object forward from a prompted frame.
+
+    SAM 2 keeps a memory bank of what the object looked like on earlier frames
+    and conditions each new frame on it, which is what makes this different
+    from carrying a mask forward by re-prompting: the model can lose sight of
+    an object behind an occluder and pick it up again, and it says which
+    frames those were rather than guessing a mask for them.
+
+    Request JSON::
+
+        {"schema": "<video_annotation scheme name>",
+         "video": "<media path>",          # optional: defaults to the item
+         "points": [[x, y, 1], ...],       # ORIGINAL frame pixels
+         "start_frame": 0,
+         "frames": 30}
+
+    Responds with one entry per frame carrying a Potato RLE mask, the model's
+    own visibility score, and — when the frame budget cut the run short —
+    `truncated: true` with the numbers, because a short answer that reads as
+    complete is worse than a refusal.
+
+    Nothing here writes an annotation. The client shows the result for the
+    annotator to accept, exactly as it does for any other model output.
+    """
+    from potato import video_tracking
+
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    data = request.get_json(silent=True) or {}
+    points = data.get("points")
+    if not isinstance(points, list) or not points:
+        return jsonify({"error": "points is required"}), 400
+    try:
+        parsed_points = [(float(p[0]), float(p[1]),
+                          int(p[2]) if len(p) > 2 else 1) for p in points]
+    except (TypeError, ValueError, IndexError):
+        return jsonify({"error": "points must be [[x, y, label], ...]"}), 400
+
+    media = data.get("video")
+    if not media:
+        return jsonify({"error": "video is required"}), 400
+
+    from pathlib import Path
+
+    from potato.media.paths import resolve_media_path
+    _, resolved = resolve_media_path(config, str(media), context="video")
+    if not resolved:
+        # The traversal guard refused it. Same answer as a missing file, on
+        # purpose: distinguishing them tells a prober which paths exist.
+        return jsonify({"error": "That video could not be found"}), 404
+    video_path = Path(resolved)
+    if not video_path.exists():
+        return jsonify({"error": "That video could not be found"}), 404
+
+    scheme = _find_scheme_by_name(data.get("schema")) if data.get("schema") else None
+    options = ((scheme or {}).get("propagation") or {}) if scheme else {}
+    max_frames = int(options.get("max_frames", video_tracking.DEFAULT_MAX_FRAMES))
+
+    payload = video_tracking.PropagationRequest(
+        video_path=video_path,
+        points=parsed_points,
+        start_frame=int(data.get("start_frame", 0) or 0),
+        frames=int(data.get("frames", 30) or 30),
+        fps=float(data["fps"]) if data.get("fps") else None,
+        max_frames=max_frames,
+    )
+
+    try:
+        result = video_tracking.propagate(payload)
+    except video_tracking.TrackingUnavailable as exc:
+        # 503 rather than 500: the service is fine, this capability is not
+        # installed, and the message says exactly what to run.
+        return jsonify({"error": str(exc), "available": False}), 503
+    except Exception as exc:  # noqa: BLE001 - surfaced, not swallowed
+        logger.exception("Video propagation failed")
+        return jsonify({"error": f"Propagation failed: {exc}"}), 500
+
+    return jsonify(result)
+
+
 @app.route('/api/critique_annotations', methods=['POST'])
 def critique_annotations():
     """
@@ -8438,6 +8522,8 @@ def configure_routes(flask_app, app_config):
                      get_item_calibration, methods=["GET"])
     app.add_url_rule("/api/critique_annotations", "critique_annotations",
                      critique_annotations, methods=["POST"])
+    app.add_url_rule("/api/track/propagate", "propagate_video_track",
+                     propagate_video_track, methods=["POST"])
     app.add_url_rule("/poststudy", "poststudy", poststudy, methods=["GET", "POST"])
     app.add_url_rule("/done", "done", done, methods=["GET", "POST"])
     app.add_url_rule("/admin", "admin", admin, methods=["GET"])

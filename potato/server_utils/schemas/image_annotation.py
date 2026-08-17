@@ -12,6 +12,8 @@ Uses Fabric.js for canvas-based annotation with zoom/pan support.
 
 import logging
 import json
+
+from potato import model_zoo
 from .identifier_utils import (
     safe_generate_layout,
     escape_html_content
@@ -34,12 +36,24 @@ DEFAULT_COLORS = [
 ]
 
 # Valid annotation tools
-#: Segmentation models the schema will accept. Kept here rather than imported
-#: from models_cli so that validating a config never pulls in the download
-#: machinery — config validation runs on every boot, downloads do not.
-VALID_SEGMENTATION_MODELS = ("mobile_sam", "edge_sam", "sam2_hiera_tiny")
+#: Segmentation models the schema will accept, straight from the model zoo.
+#: Sourced rather than duplicated: a second hand-maintained list is how
+#: `VALID_TOOLS` ended up defined in two files disagreeing with each other.
+#: The zoo imports nothing heavier than dataclasses, so config validation —
+#: which runs on every boot — pays nothing for this.
+VALID_SEGMENTATION_MODELS = tuple(
+    spec.key for spec in model_zoo.by_task(
+        model_zoo.ModelTask.INTERACTIVE_SEGMENTATION))
 
-DEFAULT_SEGMENTATION_MODEL = "mobile_sam"
+DEFAULT_SEGMENTATION_MODEL = model_zoo.DEFAULT_BY_TASK[
+    model_zoo.ModelTask.INTERACTIVE_SEGMENTATION]
+
+#: Detectors the text-prompt box will accept.
+VALID_TEXT_PROMPT_MODELS = tuple(
+    spec.key for spec in model_zoo.by_task(model_zoo.ModelTask.TEXT_DETECTION))
+
+DEFAULT_TEXT_PROMPT_MODEL = model_zoo.DEFAULT_BY_TASK[
+    model_zoo.ModelTask.TEXT_DETECTION]
 
 
 def _segmentation_config(annotation_scheme, tools):
@@ -72,6 +86,60 @@ def _segmentation_config(annotation_scheme, tools):
         # How many image embeddings to keep. Each is ~4 MB, so the default
         # trades ~16 MB for never re-encoding an image the annotator revisits.
         "embeddingLimit": int(raw.get("embedding_limit", 4)),
+    }
+
+
+def _text_prompt_config(annotation_scheme):
+    """
+    Client config for the text-prompt box, or None when it is off.
+
+    Off by default and returning None rather than a disabled dict, for the same
+    reason segmentation does: the client uses presence to decide whether to
+    fetch 145 MB of detector. A project that never asked for open-vocabulary
+    labelling must never pay for it.
+    """
+    raw = annotation_scheme.get("text_prompt")
+    if not raw:
+        return None
+    if isinstance(raw, bool):
+        raw = {}
+    if raw.get("enabled") is False:
+        return None
+
+    model = raw.get("model", DEFAULT_TEXT_PROMPT_MODEL)
+    if model not in VALID_TEXT_PROMPT_MODELS:
+        logger.warning(
+            "Unknown text-prompt model %r; falling back to %s. Valid models: %s",
+            model, DEFAULT_TEXT_PROMPT_MODEL,
+            ", ".join(VALID_TEXT_PROMPT_MODELS))
+        model = DEFAULT_TEXT_PROMPT_MODEL
+
+    # Everything the browser needs to run this model comes from the zoo, so a
+    # model swap is one registry edit rather than a hunt through JavaScript.
+    config = model_zoo.client_config(
+        model, raw.get("model_base_url", "/models"))
+
+    # A project may override the thresholds; the model's own defaults stand
+    # otherwise. Named `box_threshold` / `text_threshold` because that is what
+    # the Grounding DINO literature calls them, and an annotator reading a
+    # paper should find the same words in the config.
+    for key in ("box_threshold", "text_threshold"):
+        if key in raw:
+            config[key] = float(raw[key])
+
+    return {
+        "model": model,
+        "config": config,
+        # Phrases the prompt box starts with. Handy for a study where every
+        # annotator should search the same vocabulary.
+        "phrases": [str(p) for p in (raw.get("phrases") or [])],
+        # When true, an accepted box is handed to the SAM decoder and stored as
+        # a mask instead. Needs the `sam` tool, so it is refused without it —
+        # silently storing boxes when a project asked for masks would be worse.
+        "segment": bool(raw.get("segment", False)),
+        "runtimeUrl": raw.get("runtime_url",
+                              "/models/onnxruntime/ort.wasm.min.js"),
+        "wasmBaseUrl": raw.get("wasm_base_url", "/models/onnxruntime/"),
     }
 
 
@@ -302,7 +370,19 @@ def _generate_image_annotation_layout_internal(annotation_scheme):
         # configured; the client checks that before loading anything, so a
         # project without it never fetches the runtime.
         "segmentation": _segmentation_config(annotation_scheme, tools),
+        # Open-vocabulary detection from a typed phrase. Independent of the
+        # `sam` tool: a project can have text prompting without click-to-
+        # segment, or both, and asking for masks needs both.
+        "textPrompt": _text_prompt_config(annotation_scheme),
     }
+
+    if js_config["textPrompt"] and js_config["textPrompt"]["segment"] \
+            and "sam" not in tools:
+        logger.warning(
+            "text_prompt.segment is on but the 'sam' tool is not configured, "
+            "so there is no decoder to turn a box into a mask. Detections will "
+            "be stored as boxes. Add 'sam' to tools to get masks.")
+        js_config["textPrompt"]["segment"] = False
 
     # Generate HTML
     html = _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_enabled, ai_support)
@@ -372,6 +452,8 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
     tool_buttons = _generate_tool_buttons(tools, js_config.get("toolKeys"))
     segmentation_html = _generate_segmentation_controls(
         js_config.get("segmentation"), escaped_name)
+    text_prompt_html = _generate_text_prompt_controls(
+        js_config.get("textPrompt"), escaped_name)
 
     # Carry-over ("copy from previous image") is off unless asked for: on an
     # unordered image set the previous item is arbitrary and the button would
@@ -389,12 +471,18 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
     # Generate label selector
     label_selector = _generate_label_selector(labels)
 
-    # Generate AI toolbar if enabled
+    # Generate AI toolbar if enabled.
+    #
+    # The TOOLBAR is server-backed — every button on it calls an endpoint — so
+    # it appears only when this project configured one. The INIT SCRIPT is not:
+    # it builds the accept/reject review panel, which text prompting needs even
+    # with no server-side AI anywhere, because that model runs in the browser.
     ai_toolbar_html = ""
     ai_init_script = ""
     if ai_enabled:
         ai_features = ai_support.get("features", {}) if ai_support else {}
         ai_toolbar_html = _generate_ai_toolbar(ai_features)
+    if ai_enabled or js_config.get("textPrompt"):
         ai_init_script = _generate_ai_init_script(escaped_name)
 
     html = f'''
@@ -451,6 +539,8 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                     </div>
 
                     {segmentation_html}
+
+                    {text_prompt_html}
 
                     <!-- Annotation count -->
                     <div class="count-group">
@@ -822,15 +912,22 @@ def _generate_ai_init_script(escaped_name):
     Generate JavaScript initialization code for AI assistant.
     """
     return f'''
-                        // Initialize AI assistant if enabled and VisualAIAssistantManager is available
-                        if (config.aiSupport && typeof VisualAIAssistantManager !== 'undefined') {{
+                        // The assistant owns the accept/reject review panel, so
+                        // text prompting needs it even when no server-side AI is
+                        // configured at all — the model runs in the browser.
+                        if ((config.aiSupport || config.textPrompt)
+                            && typeof VisualAIAssistantManager !== 'undefined') {{
                             var annotationId = Array.from(document.querySelectorAll('.annotation-form')).indexOf(
                                 document.getElementById('{escaped_name}')
                             );
                             container.aiAssistant = new VisualAIAssistantManager({{
                                 annotationType: 'image_annotation',
                                 annotationId: annotationId >= 0 ? annotationId : 0,
-                                annotationManager: manager
+                                annotationManager: manager,
+                                // Without a configured endpoint the server-backed
+                                // buttons can only produce an error, so they are
+                                // left out and the review controls stay.
+                                serverAssists: !!config.aiSupport
                             }});
                         }}
     '''
@@ -865,6 +962,7 @@ TOOL_ICONS = {
     "brush": "🖌️",
     "fill": "🪣",
     "eraser": "⌫",
+    "sam": "🪄",
 }
 
 #: Short button labels.
@@ -880,6 +978,7 @@ TOOL_LABELS = {
     "brush": "Brush",
     "fill": "Fill",
     "eraser": "Eraser",
+    "sam": "Magic wand",
 }
 
 
@@ -905,6 +1004,43 @@ def _generate_segmentation_controls(segmentation, escaped_name):
                         <button type="button" class="segmentation-cancel"
                                 disabled
                                 title="Discard this mask (Escape)">Discard</button>
+                    </div>"""
+
+
+def _generate_text_prompt_controls(text_prompt, escaped_name):
+    """
+    The prompt box: type a phrase, get every match boxed as a suggestion.
+
+    Rendered only when configured, and marked with `data-text-prompt` so the
+    asset gate can see it — the detector is a 145 MB download that no other
+    project should pay for.
+
+    The results are SUGGESTIONS, never annotations. They go through the same
+    accept/reject path as any other model output, because a model that labels
+    an image wholesale produces a dataset that agrees with itself, and every
+    quality measure Potato has looks better rather than worse when that
+    happens.
+    """
+    if not text_prompt:
+        return ""
+    phrases = ", ".join(text_prompt.get("phrases") or [])
+    return f"""
+                    <div class="text-prompt-group" data-text-prompt="{escaped_name}">
+                        <label class="text-prompt-label"
+                               for="{escaped_name}_text_prompt">Find</label>
+                        <input type="text" class="text-prompt-input"
+                               id="{escaped_name}_text_prompt"
+                               value="{escape_html_content(phrases)}"
+                               placeholder="traffic cone, person"
+                               aria-describedby="{escaped_name}_text_prompt_help">
+                        <button type="button" class="text-prompt-run"
+                                title="Find these in the image">Find</button>
+                        <span class="text-prompt-help visually-hidden"
+                              id="{escaped_name}_text_prompt_help">Separate
+                              several things with commas. Results appear as
+                              suggestions you accept or reject.</span>
+                        <span class="text-prompt-status" role="status"
+                              aria-live="polite" aria-atomic="true"></span>
                     </div>"""
 
 

@@ -157,6 +157,14 @@ VISION_SCHEMAS = {
     # the empty state ("Draw one on the image to describe it"), which is the
     # state most annotators see first.
     "region_caption": "examples/image/region-captioning/config.yaml",
+    # Text prompting: the Find box sits in the toolbar with the drawing tools,
+    # because asking for a box by name IS a way of drawing one. The photographs
+    # come from `python examples/image/text-prompt-labeling/fetch_images.py`.
+    "text_prompt_labeling": "examples/image/text-prompt-labeling/config.yaml",
+    # Model-assisted video tracking: the Track forward button and its status
+    # line, beside the interpolation controls. Needs
+    # `python examples/video/mask-propagation/make_clip.py` first.
+    "video_mask_propagation": "examples/video/mask-propagation/config.yaml",
     # Spatial. The point cloud shot is layout-only: a hidden-tab WebGL context
     # freezes at t=0, so the canvas may be blank in the image even when the
     # scene graph is correct. The toolbar, labels and camera panels around it

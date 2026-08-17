@@ -89,6 +89,7 @@ nothing large is committed. See [ConvoKit integration](../docs/integrations/conv
 | `video-classification/` | Video file classification |
 | `video-frame-annotation/` | Frame-by-frame annotation |
 | `video-tracking/` | Object tracking in video |
+| `mask-propagation/` | Draw once, then let SAM 2 track through an occlusion — needs `python make_clip.py` and ffmpeg |
 | `video-as-label/` | Video clips as label options |
 
 ### [image/](image/) - Image & Document Annotation
@@ -104,6 +105,7 @@ nothing large is committed. See [ConvoKit integration](../docs/integrations/conv
 | `image-vllm-rationale/` | Image annotation with vLLM rationale |
 | `annotation-critique/` | A vision model reviews the regions you drew: wrong label, loose boundary, missed object |
 | `region-captioning/` | One description per region, with agreement over the captions themselves — needs `python generate_images.py` first |
+| `text-prompt-labeling/` | Type what to look for and the browser finds it — Grounding DINO, no GPU; needs `python fetch_images.py` first |
 | `deep-zoom/` | Gigapixel images through a tile pyramid, with masks at full source resolution — needs `python generate_image.py` first |
 | `pdf-annotation/` | PDF document annotation |
 | `pdf-bbox/` | PDF bounding box annotation |

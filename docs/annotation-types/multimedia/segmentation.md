@@ -324,6 +324,5 @@ the build rather than shipping.
 
 ## Related
 
-- [Image annotation](image_annotation.md)
-- [Geometry types](geometry_types.md)
+- [Image annotation](image_annotation.md) — including every drawing tool and geometry type
 - [Format matrix](../../data-export/format_matrix.md)

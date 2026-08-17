@@ -387,6 +387,7 @@ class ImageAnnotationManager {
         });
 
         this._initTouchGestures();
+        this._initTextPromptControls();
 
         // Double click - complete polygon
         this.canvas.on('mouse:dblclick', (opt) => {
@@ -3204,8 +3205,9 @@ class ImageAnnotationManager {
 
         this.canvas.setActiveObject(handle.object);
         this.canvas.requestRenderAll();
-        if (this.container && this.container.scrollIntoView) {
-            this.container.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        const container = this._schemaContainer();
+        if (container && container.scrollIntoView) {
+            container.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         }
         return true;
     }
@@ -3804,7 +3806,14 @@ class ImageAnnotationManager {
         }
         // Listeners are separate from the slot above precisely so that an
         // assignment to it cannot remove them.
-        for (const listener of this._annotationChangeListeners) {
+        //
+        // Defaulted rather than assumed present: this method is reachable from
+        // paths that never ran the constructor — `clearAnnotations`,
+        // `_restoreState` and the instance-switch counters are all exercised
+        // against a partially built manager — and an unguarded `for...of`
+        // there throws "not iterable" and takes the whole save path down with
+        // it, which is a far worse failure than a missing listener.
+        for (const listener of (this._annotationChangeListeners || [])) {
             try {
                 listener(count);
             } catch (error) {
@@ -4043,6 +4052,99 @@ class ImageAnnotationManager {
     }
 
     /**
+     * Bind the prompt box, which has to work BEFORE the detector exists.
+     *
+     * Pressing Find is what triggers the download that builds the tool, so the
+     * listener cannot live on the tool. It lives here, loads the model, and
+     * then delegates.
+     */
+    _initTextPromptControls() {
+        if (!this.config.textPrompt) return;
+        const container = this._schemaContainer();
+        if (!container) return;
+        const button = container.querySelector('.text-prompt-run');
+        const input = container.querySelector('.text-prompt-input');
+        if (!button) return;
+
+        const run = async () => {
+            if (!this.textPromptTool) {
+                this._textPromptStatus(
+                    'Loading the detector (145 MB, once per session)…', 'busy');
+            }
+            if (!(await this.ensureTextPrompt())) return;
+            await this.textPromptTool.run();
+        };
+
+        button.addEventListener('click', run);
+        if (input) {
+            input.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter') return;
+                // Without this the form submits and the annotator navigates
+                // away mid-prompt.
+                event.preventDefault();
+                run();
+            });
+        }
+    }
+
+    /**
+     * Bring up the text-prompt detector, on first use only.
+     *
+     * Same bargain as the magic wand and for a bigger number: the detector is
+     * a 145 MB download, so nothing is fetched until someone types a phrase
+     * and presses Find.
+     */
+    async ensureTextPrompt() {
+        const config = this.config.textPrompt;
+        if (!config) return false;
+        if (this.textPromptTool && this.textPromptTool.session.isReady()) {
+            return true;
+        }
+
+        if (!this.textPromptTool) {
+            if (typeof GroundingDinoSession === 'undefined'
+                || typeof TextPromptTool === 'undefined') {
+                this._textPromptStatus(
+                    'Text prompting did not load on this page.', 'error');
+                return false;
+            }
+            const session = new GroundingDinoSession({
+                model: config.model,
+                modelBaseUrl: (config.config && config.config.baseUrl)
+                    ? config.config.baseUrl.replace(/\/[^/]+$/, '')
+                    : '/models',
+                config: config.config || {},
+            });
+            // The assistant is attached to the schema's container by the
+            // bootstrap, not to the manager — looked up at USE time rather
+            // than cached, because the bootstrap builds the manager first and
+            // the assistant a few lines later.
+            const container = this._schemaContainer();
+            this.textPromptTool = new TextPromptTool({
+                container: container,
+                manager: this,
+                session: session,
+                assistant: container ? container.aiAssistant : null,
+                segment: !!config.segment,
+            });
+            this.textPromptTool.attach();
+        }
+
+        if (!(await this._loadOnnxRuntime(config))) return false;
+        this.textPromptTool.session.runtime = window.ort;
+        return true;
+    }
+
+    /** Status line for the prompt box, which is its own control group. */
+    _textPromptStatus(message, kind = 'info') {
+        const container = this._schemaContainer();
+        const el = container && container.querySelector('.text-prompt-status');
+        if (!el) return;
+        el.textContent = message;
+        el.dataset.kind = kind;
+    }
+
+    /**
      * Inject the ONNX runtime script once.
      *
      * `ort.env.wasm.numThreads = 1` is not a performance choice: multi-threaded
@@ -4115,14 +4217,24 @@ class ImageAnnotationManager {
         if (this.samTool) this.samTool.clear();
     }
 
-    _segmentationStatus(message, kind) {
-        // Scoped by schema, the way every other DOM lookup in this class is.
-        // `this.container` does not exist -- an earlier version used it and the
-        // status line was silently never written, so the model download, the
-        // "nothing found there" message and every error state were invisible
-        // while the unit tests passed against the callback.
-        const container = document.querySelector(
+    /**
+     * This schema's root element.
+     *
+     * There is NO `this.container` on this class, and every attempt to use one
+     * has failed the same silent way: the lookup returns undefined, the guard
+     * takes the early exit, and the feature does nothing while its unit tests
+     * pass against a callback. It has happened three times — the segmentation
+     * status line, the reveal-annotation scroll, and the text-prompt controls.
+     * So the lookup lives here once, scoped by schema because a page can carry
+     * several image schemas at once.
+     */
+    _schemaContainer() {
+        return document.querySelector(
             `.image-annotation-container[data-schema="${this.config.schemaName}"]`);
+    }
+
+    _segmentationStatus(message, kind) {
+        const container = this._schemaContainer();
         const el = container
             ? container.querySelector('.segmentation-status') : null;
         if (el) {

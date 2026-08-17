@@ -156,6 +156,128 @@
         }
 
         /**
+         * Ask the server to track this object through the following frames.
+         *
+         * WHY THE SERVER RUNS THIS AND THE BROWSER RUNS CLICK-TO-SEGMENT
+         * -------------------------------------------------------------
+         * SAM 2's video path is five graphs and 181 MB, and its cost is per
+         * FRAME rather than per click. A hundred frames in WebAssembly is
+         * minutes of a frozen tab; the same loop server-side is seconds on a
+         * GPU. The frames are already on the server, so nothing has to be
+         * uploaded either.
+         *
+         * The result arrives as keyframes on the active track, which the
+         * annotator then scrubs through and corrects. Frames the model reports
+         * as OCCLUDED are left empty rather than filled with a guess — that
+         * distinction is the whole reason to use a model with a memory instead
+         * of carrying a mask forward by re-prompting.
+         *
+         * @param {Object} [options] {frames, video}
+         * @returns {Promise<Object|null>} the server's payload, or null
+         */
+        async propagateForward(options) {
+            options = options || {};
+            if (!this.activeTrackId) {
+                this._propagationStatus('Select a track first.', 'warn');
+                return null;
+            }
+            var track = this.tracks[this.activeTrackId];
+            var frame = this._getCurrentFrame();
+            var keyframe = track && track.keyframes[frame];
+            if (!keyframe || !keyframe.bbox) {
+                this._propagationStatus(
+                    'Draw the object on this frame first — propagation needs '
+                    + 'somewhere to start.', 'warn');
+                return null;
+            }
+
+            var video = options.video || this.config.videoPath
+                || (this.video && this.video.currentSrc) || '';
+            if (!video) {
+                this._propagationStatus(
+                    'This project does not say where the video file is, so the '
+                    + 'server cannot read its frames.', 'error');
+                return null;
+            }
+
+            // The centre of the drawn box is the prompt. A box prompt would be
+            // more precise, but this export takes points, and the centre of a
+            // hand-drawn box is on the object by construction.
+            var box = keyframe.bbox;
+            var point = [box.x + box.width / 2, box.y + box.height / 2, 1];
+
+            this._propagationStatus('Tracking…', 'busy');
+            var response;
+            try {
+                response = await fetch('/api/track/propagate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video: video,
+                        points: [point],
+                        start_frame: frame,
+                        frames: options.frames || 30,
+                        schema: this.config.schemaName
+                    })
+                });
+            } catch (error) {
+                this._propagationStatus(
+                    'Could not reach the server to track this object.', 'error');
+                return null;
+            }
+
+            var payload = await response.json().catch(function () { return {}; });
+            if (!response.ok) {
+                this._propagationStatus(
+                    payload.error || 'Tracking failed.', 'error');
+                return null;
+            }
+
+            var added = 0;
+            var occluded = 0;
+            (payload.frames || []).forEach(function (result) {
+                if (!result.visible || !result.rle) { occluded += 1; return; }
+                track.keyframes[result.frame] = {
+                    frame: result.frame,
+                    time: result.frame / (this.config.fps || 25),
+                    type: 'mask',
+                    rle: result.rle,
+                    // Marked so the annotator can tell a model's answer from
+                    // their own, and so a later pass can count how many were
+                    // accepted unchanged.
+                    source: 'sam2'
+                };
+                added += 1;
+            }, this);
+
+            this._updateTrackRange(track);
+            this._renderTrackPanel();
+            this.renderOverlay();
+
+            var message = added + ' frame' + (added === 1 ? '' : 's') + ' tracked';
+            if (occluded) {
+                message += ', ' + occluded + ' where the object was hidden';
+            }
+            if (payload.truncated) {
+                // Said out loud: a short answer that reads as complete is the
+                // failure this codebase keeps finding.
+                message += ' (stopped at the ' + payload.max_frames
+                         + '-frame limit of ' + payload.requested_frames
+                         + ' requested)';
+            }
+            this._propagationStatus(message + '. Scrub through and correct '
+                                    + 'anything wrong.');
+            return payload;
+        }
+
+        _propagationStatus(message, kind) {
+            var el = document.querySelector('.tracking-propagate-status');
+            if (!el) return;
+            el.textContent = message;
+            el.dataset.kind = kind || 'info';
+        }
+
+        /**
          * Pin the current frame's interpolated shape as a real keyframe.
          *
          * The "yes, this one is right" action: an annotator scrubbing through

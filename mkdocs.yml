@@ -54,6 +54,7 @@ nav:
         - Multimedia:
             - Image Annotation: annotation-types/multimedia/image_annotation.md
             - Interactive Segmentation: annotation-types/multimedia/segmentation.md
+            - Text Prompting: annotation-types/multimedia/text_prompting.md
             - Audio Annotation: annotation-types/multimedia/audio_annotation.md
             - Audio Dialogue: annotation-types/multimedia/audio_dialogue.md
             - Video Annotation: annotation-types/multimedia/video_annotation.md
@@ -130,6 +131,7 @@ nav:
     - AI & Intelligence:
         - AI Support: ai-intelligence/ai_support.md
         - Visual AI Support: ai-intelligence/visual_ai_support.md
+        - The Model Zoo: ai-intelligence/model_zoo.md
         - Annotation Critique: ai-intelligence/annotation_critique.md
         - Chat Support: ai-intelligence/chat_support.md
         - AI Integration Internals: ai-intelligence/ai_integration_internals.md

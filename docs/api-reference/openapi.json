@@ -4580,6 +4580,20 @@
         "x-potato-requires-config": "trace_ingestion configured"
       }
     },
+    "/api/track/propagate": {
+      "post": {
+        "operationId": "post_propagate_video_track",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Track one object forward from a prompted frame.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/api/track_ai_usage": {
       "post": {
         "operationId": "post_track_ai_usage",

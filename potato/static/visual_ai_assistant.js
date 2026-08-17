@@ -19,6 +19,15 @@ class VisualAIAssistantManager {
         this.annotationType = options.annotationType;
         this.annotationId = options.annotationId;
         this.annotationManager = options.annotationManager;
+        // Review-only mode: keep the suggestion controls, drop the buttons
+        // that call the server.
+        //
+        // Text prompting runs its model in the BROWSER, so a project can have
+        // suggestions to review with no AI endpoint configured anywhere.
+        // Rendering Detect / Auto / Hint there gives the annotator three
+        // buttons whose only possible outcome is an error, which is worse than
+        // not offering them.
+        this.serverAssists = options.serverAssists !== false;
 
         // Suggestion storage
         this.suggestions = [];
@@ -66,7 +75,7 @@ class VisualAIAssistantManager {
         // Create AI toolbar
         this.toolbar = document.createElement('div');
         this.toolbar.className = 'ai-toolbar';
-        this.toolbar.innerHTML = `
+        const serverButtons = this.serverAssists ? `
             <div class="ai-toolbar-group">
                 <span class="ai-toolbar-label">AI Assist:</span>
                 <button type="button" class="ai-btn" data-action="detect" title="Detect objects">
@@ -78,7 +87,9 @@ class VisualAIAssistantManager {
                 <button type="button" class="ai-btn" data-action="hint" title="Get a hint">
                     <span class="ai-btn-icon">💡</span> Hint
                 </button>
-            </div>
+            </div>` : '';
+        this.toolbar.innerHTML = `
+            ${serverButtons}
             <div class="ai-suggestion-controls" style="display: none;">
                 <span class="suggestion-count">0 suggestions</span>
                 <button type="button" class="ai-btn ai-btn-accept" data-action="accept-all" title="Accept all suggestions">

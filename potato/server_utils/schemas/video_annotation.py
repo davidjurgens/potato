@@ -273,6 +273,11 @@ def _generate_html(
                     <option value="cubic">Cubic (smooth)</option>
                     <option value="constant">Constant (hold)</option>
                 </select>
+                <button type="button" class="tracking-btn tracking-propagate-btn"
+                        data-action="propagate"
+                        title="Track this object through the following frames">Track forward</button>
+                <span class="tracking-propagate-status" role="status"
+                      aria-live="polite" aria-atomic="true"></span>
             </div>
         '''
 
@@ -700,6 +705,18 @@ def _generate_html(
                                                     this.disabled = true;
                                                 }}
                                             }}
+                                        }} else if (action === 'propagate') {{
+                                            // Disabled for the duration: the
+                                            // request takes seconds per frame,
+                                            // and a second press would start a
+                                            // second run over the same frames.
+                                            var button = this;
+                                            button.disabled = true;
+                                            Promise.resolve(
+                                                trackingManager.propagateForward()
+                                            ).finally(function() {{
+                                                button.disabled = false;
+                                            }});
                                         }}
                                     }});
                                 }});

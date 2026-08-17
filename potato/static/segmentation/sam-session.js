@@ -32,6 +32,11 @@
 (function (global) {
     'use strict';
 
+    const isNode = (typeof require === 'function' && typeof module !== 'undefined');
+    const base = isNode
+        ? require('./model-session.js')
+        : { ModelSession: global.ModelSession, MODEL_ERROR: global.MODEL_ERROR };
+
     const SAM_STATE = {
         IDLE: 'idle',
         LOADING_RUNTIME: 'loading-runtime',
@@ -41,19 +46,26 @@
         ERROR: 'error',
     };
 
-    /** Errors the UI is expected to render differently. */
+    /**
+     * Errors the UI is expected to render differently.
+     *
+     * The first two are the shared ones, by value as well as by name: a
+     * missing model and a dead runtime mean the same thing whichever model is
+     * loading, and the base class classifies them. The last two are SAM's own
+     * pipeline stages.
+     */
     const SAM_ERROR = {
-        RUNTIME_UNAVAILABLE: 'runtime-unavailable',
-        MODEL_MISSING: 'model-missing',
+        RUNTIME_UNAVAILABLE: base.MODEL_ERROR.RUNTIME_UNAVAILABLE,
+        MODEL_MISSING: base.MODEL_ERROR.MODEL_MISSING,
         ENCODE_FAILED: 'encode-failed',
         DECODE_FAILED: 'decode-failed',
     };
 
-    const preprocess = (typeof require === 'function' && typeof module !== 'undefined')
+    const preprocess = isNode
         ? require('./sam-preprocess.js')
         : (global && global.SAMPreprocess);
 
-    class SAMSession {
+    class SAMSession extends base.ModelSession {
         /**
          * @param {object} options
          * @param {string} options.model         model key, e.g. 'mobile_sam'
@@ -62,18 +74,10 @@
          * @param {function} [options.onStateChange] called with (state, detail)
          */
         constructor(options = {}) {
-            this.model = options.model || 'mobile_sam';
-            this.modelBaseUrl = (options.modelBaseUrl || '/static/models')
-                .replace(/\/+$/, '');
-            this.runtime = options.runtime || null;
-            this.onStateChange = options.onStateChange || null;
+            super(Object.assign(
+                { modelBaseUrl: '/static/models' }, options,
+                { model: options.model || 'mobile_sam' }));
 
-            this.state = SAM_STATE.IDLE;
-            this.error = null;
-            this.errorKind = null;
-
-            this._encoder = null;
-            this._decoder = null;
             // Embeddings are keyed by image URL, not by index: an annotator who
             // navigates back to an image should not pay to encode it twice.
             this._embeddings = new Map();
@@ -90,42 +94,27 @@
             this._lastLowResMask = null;
         }
 
-        _setState(state, detail) {
-            this.state = state;
-            if (this.onStateChange) this.onStateChange(state, detail);
-        }
-
-        _fail(kind, message) {
-            this.errorKind = kind;
-            this.error = message;
-            this._setState(SAM_STATE.ERROR, { kind, message });
-            return null;
-        }
-
-        /** True once both sessions are loaded and a decode could run. */
-        isReady() {
-            return !!(this._encoder && this._decoder);
-        }
-
         /**
-         * A message the UI can show verbatim. Each names the next action,
-         * because "segmentation unavailable" tells the annotator nothing.
+         * The two graphs SAM needs. Named `encoder`/`decoder` because the
+         * split between them is the reason clicking feels instant: the encoder
+         * runs once per image, the decoder once per click.
          */
-        statusMessage() {
-            switch (this.errorKind) {
-                case SAM_ERROR.RUNTIME_UNAVAILABLE:
-                    // Covers both "the browser cannot" and "the runtime files
-                    // are missing", because from here they are indistinguishable
-                    // and the two fixes are both worth naming.
-                    return 'The segmentation runtime could not start. An '
-                         + 'administrator can install it with:  '
-                         + 'potato download-models onnxruntime  — if it is '
-                         + 'already installed, this browser has WebAssembly '
-                         + 'disabled; the brush and polygon tools still work.';
-                case SAM_ERROR.MODEL_MISSING:
-                    return `The ${this.model} model is not installed. An `
-                         + `administrator can add it with:  `
-                         + `potato download-models ${this.model}`;
+        graphFiles() {
+            return { encoder: 'encoder.onnx', decoder: 'decoder.onnx' };
+        }
+
+        get _encoder() { return this.graphs.encoder; }
+
+        get _decoder() { return this.graphs.decoder; }
+
+        /** Say what still works, which for segmentation is the manual tools. */
+        fallbackHint() {
+            return ' The brush and polygon tools still work.';
+        }
+
+        /** SAM's own pipeline stages; the shared errors come from the base. */
+        extraStatusMessage(kind) {
+            switch (kind) {
                 case SAM_ERROR.ENCODE_FAILED:
                     return 'This image could not be prepared for segmentation. '
                          + 'The brush and polygon tools still work.';
@@ -135,72 +124,6 @@
                 default:
                     return '';
             }
-        }
-
-        /** Resolve the ONNX runtime, preferring an injected or global one. */
-        async _getRuntime() {
-            if (this.runtime) return this.runtime;
-            if (typeof global !== 'undefined' && global.ort) {
-                this.runtime = global.ort;
-                return this.runtime;
-            }
-            return this._fail(
-                SAM_ERROR.RUNTIME_UNAVAILABLE,
-                'ONNX Runtime Web is not loaded');
-        }
-
-        /**
-         * Load encoder and decoder. Safe to call repeatedly.
-         */
-        async load() {
-            if (this.isReady()) return true;
-
-            this._setState(SAM_STATE.LOADING_RUNTIME);
-            const runtime = await this._getRuntime();
-            if (!runtime) return false;
-
-            this._setState(SAM_STATE.LOADING_MODEL, { model: this.model });
-            const base = `${this.modelBaseUrl}/${this.model}`;
-            try {
-                this._encoder = await runtime.InferenceSession.create(
-                    `${base}/encoder.onnx`);
-                this._decoder = await runtime.InferenceSession.create(
-                    `${base}/decoder.onnx`);
-            } catch (err) {
-                this._encoder = null;
-                this._decoder = null;
-                const message = (err && err.message) || String(err);
-                return !!this._fail(this._classifyLoadError(message), message);
-            }
-
-            this.errorKind = null;
-            this.error = null;
-            this._setState(SAM_STATE.READY);
-            return true;
-        }
-
-        /**
-         * Decide whether a load failure is the MODEL's fault or the RUNTIME's.
-         *
-         * This distinction is the whole value of the error: the two have
-         * different fixes and a wrong guess sends an administrator to run the
-         * wrong command. A naive "failed to fetch means the model is missing"
-         * did exactly that — a missing ORT wasm glue module reported
-         * "the mobile_sam model is not installed", which is false and
-         * unfixable by the suggested command.
-         *
-         * The runtime's own failures name its internals (backend, wasm,
-         * initWasm, .mjs), so they are checked FIRST and win.
-         */
-        _classifyLoadError(message) {
-            const text = String(message || '');
-            if (/no available backend|initWasm|ort-wasm|\.mjs|wasm/i.test(text)) {
-                return SAM_ERROR.RUNTIME_UNAVAILABLE;
-            }
-            if (/404|not found|failed to fetch/i.test(text)) {
-                return SAM_ERROR.MODEL_MISSING;
-            }
-            return SAM_ERROR.RUNTIME_UNAVAILABLE;
         }
 
         /**

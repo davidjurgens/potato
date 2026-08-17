@@ -156,6 +156,36 @@ For object tracking across video frames with keyframe-based bounding box annotat
 | `tracking_options.interpolation` | string | `"linear"` | Interpolation method between keyframes |
 | `tracking_options.auto_advance_frames` | integer | `5` | Frames to auto-advance after placing keyframe |
 
+**Model-assisted tracking**
+
+Draw the object once, press **Track forward**, and SAM 2 follows it through the
+frames that follow. Each result arrives as a keyframe you can scrub through and
+correct.
+
+```bash
+potato download-models sam2_video_tiny   # 181 MB, once per install
+```
+
+The model keeps a memory of what the object looked like on earlier frames and
+conditions each new frame on it, so it can lose an object behind an occluder and
+pick it up again on the other side. It also decides for itself when the object
+is hidden, and hands back an empty frame when it is. That is the answer you want
+while correcting: a guessed mask on an occluded frame is work to undo.
+
+Measured on a moving object against known ground truth: per-frame IoU of 0.974
+to 0.979 across the sequence, with no decay from the first frame to the last.
+Roughly 1.3 seconds per frame on a CPU; considerably faster on a GPU.
+
+Segmentation and text prompting run in the browser; this one runs on the
+server. You pay the cost once per frame instead of once per prompt, the model is
+five graphs, and the video file is already sitting on the server. A hundred
+frames in the browser would be minutes of a frozen tab. A run is capped at 120
+frames by default, and says so when it stops early.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `propagation.max_frames` | integer | `120` | Upper bound on one request |
+
 **Interpolation Methods:**
 - `linear` - Linear interpolation between keyframes (smooth movement)
 - `cubic` - Cubic/smooth interpolation (natural motion curves)
