@@ -1389,6 +1389,7 @@
       },
       "type": "object"
     },
+    "embeddings": {},
     "env_substitution": {},
     "event_template": {
       "additionalProperties": true,

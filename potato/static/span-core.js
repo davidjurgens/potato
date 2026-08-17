@@ -649,6 +649,10 @@ class UnifiedPositioningStrategy {
                 const label = document.createElement('div');
                 label.className = 'span-label';
                 label.textContent = span.label;
+                label.title = span.label;
+                // Read by the compact (dot) form, so a collapsed chip still
+                // says which code it is by colour.
+                label.style.setProperty('--span-colour', color);
                 // Override CSS positioning to work in flex container
                 label.style.position = 'static';
                 label.style.top = 'auto';
@@ -722,9 +726,48 @@ class UnifiedPositioningStrategy {
 }
 
 /**
+ * A stable colour for a label the server never assigned one to.
+ *
+ * Module-level and exposed on `window` because two very different surfaces
+ * need it: span overlays here, and the drawing palettes that codebook.js
+ * extends with runtime codes. A code minted during open coding has to look the
+ * same wherever it appears, and two hash functions would guarantee it did not.
+ *
+ * @param {string} label
+ * @returns {string} an "(r, g, b)" triple, the shape /api/colors uses
+ */
+function paletteColorFor(label) {
+    const key = String(label == null ? '' : label);
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) {
+        hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
+    }
+    const palette = SpanManager.FALLBACK_PALETTE;
+    return palette[Math.abs(hash) % palette.length];
+}
+
+if (typeof window !== 'undefined') {
+    window.potatoPaletteColor = paletteColorFor;
+}
+
+/**
  * Frontend Span Manager for Potato Annotation Platform
  */
 class SpanManager {
+    /**
+     * Mirrors SPAN_COLOR_PALETTE in potato/server_utils/schemas/span.py, so a
+     * label coloured here is indistinguishable from one the server coloured.
+     * Kept in step by tests/unit/test_span_palette_parity.py.
+     */
+    static FALLBACK_PALETTE = [
+        '(110, 86, 207)', '(239, 68, 68)', '(113, 113, 122)', '(245, 158, 11)',
+        '(16, 185, 129)', '(59, 130, 246)', '(220, 38, 38)', '(139, 92, 246)',
+        '(156, 163, 175)', '(107, 114, 128)', '(55, 65, 81)', '(249, 115, 22)',
+        '(6, 182, 212)', '(236, 72, 153)', '(5, 150, 105)', '(124, 58, 237)',
+        '(22, 163, 74)', '(234, 88, 12)', '(37, 99, 235)', '(127, 29, 29)',
+        '(168, 85, 247)', '(34, 197, 94)',
+    ];
+
     constructor() {
         this.annotations = { spans: [] };
         this.colors = {};
@@ -1063,6 +1106,11 @@ class SpanManager {
             // Set up event listeners early (before async strategy init that might block)
             this.setupEventListeners();
 
+            // Before any strategy measures the text: opening the label gutter
+            // changes line-height, and positions taken beforehand would be
+            // stale the moment it applied.
+            this.applyLabelGutter();
+
             // Check for instance_display span target fields first
             const spanTargetFields = document.querySelectorAll('.display-field[data-span-target="true"]');
             console.log('[SpanManager] init: found', spanTargetFields.length, 'span target fields');
@@ -1358,27 +1406,47 @@ class SpanManager {
         return this.annotations?.spans || [];
     }
 
+    /**
+     * A stable colour for a label the server never assigned one to.
+     *
+     * Codes minted at runtime (codebook `open` mode) are not in /api/colors,
+     * and every one of them used to come back as the same default purple —
+     * so in an open-coding project, where minting codes IS the workflow, every
+     * new code highlighted identically and its palette chip had no colour at
+     * all. codebook.js already assumed this existed ("color is hash-derived in
+     * SpanManager (getSpanColor)"); it did not.
+     *
+     * Hash-derived rather than counter-derived so the same code gets the same
+     * colour for every annotator and after every reload, matching how the
+     * server assigns colours from the same palette.
+     *
+     * @returns {string} an "(r, g, b)" triple, the shape /api/colors uses
+     */
+    paletteColorFor(label) {
+        return paletteColorFor(label);
+    }
+
     getSpanColor(label) {
         // Diagnostic logging for color lookup failures
         if (!this.currentSchema) {
             console.warn(`[SpanManager] getSpanColor: No currentSchema set for label '${label}'. Using fallback color.`);
-            return 'rgba(110, 86, 207, 0.15)';
+            return `rgba${this.paletteColorFor(label).replace(')', ', 0.15)')}`;
         }
 
         if (!this.colors || Object.keys(this.colors).length === 0) {
             console.warn(`[SpanManager] getSpanColor: Colors not loaded for label '${label}'. Using fallback color.`);
-            return 'rgba(110, 86, 207, 0.15)';
+            return `rgba${this.paletteColorFor(label).replace(')', ', 0.15)')}`;
         }
 
         if (!this.colors[this.currentSchema]) {
             console.warn(`[SpanManager] getSpanColor: Schema '${this.currentSchema}' not found in colors. Available schemas: ${Object.keys(this.colors).join(', ')}. Using fallback color.`);
-            return 'rgba(110, 86, 207, 0.15)';
+            return `rgba${this.paletteColorFor(label).replace(')', ', 0.15)')}`;
         }
 
         const schemaColors = this.colors[this.currentSchema];
         if (!schemaColors[label]) {
-            console.warn(`[SpanManager] getSpanColor: Label '${label}' not found in schema '${this.currentSchema}'. Available labels: ${Object.keys(schemaColors).join(', ')}. Using fallback color.`);
-            return 'rgba(110, 86, 207, 0.15)';
+            // Not a failure: codes minted at runtime are never in /api/colors.
+            return `rgba${this.paletteColorFor(label).replace(')', ', 0.15)')}`;
         }
 
         const color = schemaColors[label];
@@ -1434,6 +1502,11 @@ class SpanManager {
                     this.renderSpanOverlay(span, index, null, overlaysEl, strategy);
                 }
             });
+
+            for (const fieldKey of Object.keys(this.fieldStrategies)) {
+                this.applyControlCompaction(
+                    document.getElementById(`span-overlays-${fieldKey}`));
+            }
         } else {
             // Legacy single-field mode
             const textContent = document.getElementById('text-content');
@@ -1456,7 +1529,71 @@ class SpanManager {
             sortedSpans.forEach((span, index) => {
                 this.renderSpanOverlay(span, index, textContent, spanOverlays);
             });
+            this.applyControlCompaction(spanOverlays);
         }
+    }
+
+    /**
+     * Decide which label chips have to collapse to a dot.
+     *
+     * Chips sit in the gutter above the text they label, anchored at the span's
+     * start. Overlapping codes therefore pile up in the same strip: five codes
+     * on one sentence rendered five wide black chips across it, and the text
+     * underneath was unreadable. Overlapping codes are not an edge case in
+     * qualitative work — they are the point of it.
+     *
+     * The first chip in any collision keeps its text; the rest become colour
+     * dots that name themselves on hover and focus. Pure function over boxes so
+     * it can be tested without a layout engine.
+     *
+     * @param {Array<{left:number,right:number,top:number,bottom:number}>} boxes
+     *        chip rectangles, in render order
+     * @returns {boolean[]} true where that chip must collapse
+     */
+    static planControlCompaction(boxes) {
+        const kept = [];
+        const hits = (a, b) => !(a.right <= b.left || a.left >= b.right ||
+                                 a.bottom <= b.top || a.top >= b.bottom);
+        return (boxes || []).map((box) => {
+            if (!box) return false;
+            if (kept.some((k) => hits(k, box))) return true;
+            kept.push(box);
+            return false;
+        });
+    }
+
+    /**
+     * Open a gutter above each line when chips are being drawn into it.
+     *
+     * Applied to the text container rather than baked into the stylesheet so a
+     * span task that has switched labels off keeps the tighter line spacing.
+     */
+    applyLabelGutter() {
+        const showLabels = !document.querySelector(
+            '.annotation-form.span[data-show-span-labels="false"]');
+        const containers = [document.getElementById('instance-text')]
+            .concat(Array.from(document.querySelectorAll('[id^="text-content-"]')));
+        containers.forEach((el) => {
+            if (el) el.classList.toggle('span-labels-on', showLabels);
+        });
+    }
+
+    /** Measure the rendered chips and collapse the ones that collide. */
+    applyControlCompaction(overlaysEl) {
+        if (!overlaysEl) return;
+        const controls = Array.from(
+            overlaysEl.querySelectorAll('.span-controls'));
+        if (controls.length < 2) {
+            controls.forEach((c) => c.classList.remove('is-compact'));
+            return;
+        }
+        // Measure everything expanded first, or an earlier collapse changes
+        // the boxes the later ones are compared against.
+        controls.forEach((c) => c.classList.remove('is-compact'));
+        const boxes = controls.map((c) => c.getBoundingClientRect());
+        SpanManager.planControlCompaction(boxes).forEach((compact, i) => {
+            controls[i].classList.toggle('is-compact', compact);
+        });
     }
 
     renderSpanOverlay(span, layerIndex, textContent, spanOverlays, strategy = null) {

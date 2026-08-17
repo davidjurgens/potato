@@ -351,7 +351,7 @@ python -m potato.trace_converter --list-formats
 | `multi_agent` | CrewAI, AutoGen, LangGraph | Auto-detected: `agents`+`steps[].agent`, `messages[].sender`, `events[].node` |
 | `mcp` | Model Context Protocol | `interactions[].method` (tools/call, resources/read, prompts/get) |
 | `aider` | Aider code editing | Chat history with edit blocks and file changes |
-| `claude_code` | Claude Code CLI | Session traces with tool calls and file edits |
+| `claude_code` | Claude Code CLI | `~/.claude/projects/*/*.jsonl` session transcripts (`uuid` + `sessionId` rows), plus Anthropic Messages API payloads |
 | `web_agent` | Generic web agent | `actions[].action_type` with DOM selectors and screenshots |
 | `swe_agent_trajectory` | SWE-Agent trajectory | Full trajectory with `history[].action/observation` pairs |
 

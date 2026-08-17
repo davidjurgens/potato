@@ -573,6 +573,33 @@ class EmbeddingVizManager {
         <span class="stat-value">${stats.unique_labels || 0}</span>
         <span class="stat-label">Labels</span>
       </div>
+      ${this.embedderCard(stats.embedder)}
+    `;
+  }
+
+  /**
+   * What produced these points.
+   *
+   * A map is uninterpretable without it, and the way this used to be wrong —
+   * embedding each item's instance id, because `get_text()` falls back to an
+   * item's first string value — produced a plausible-looking cloud. Naming the
+   * backend, the model and the field makes that impossible to miss again.
+   */
+  embedderCard(embedder) {
+    if (!embedder) return "";
+    const escape = (value) => String(value == null ? "" : value)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const field = embedder.source_field
+      ? ` · <code>${escape(embedder.source_field)}</code>` : "";
+    return `
+      <div class="stat-item" title="${escape(embedder.chosen_because || "")}">
+        <span class="stat-value" style="font-size: 0.95rem;">
+          ${escape(embedder.modality)}${field}
+        </span>
+        <span class="stat-label">
+          ${escape(embedder.backend)} · ${escape(embedder.model)}
+        </span>
+      </div>
     `;
   }
 

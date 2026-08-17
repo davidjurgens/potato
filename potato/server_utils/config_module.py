@@ -168,6 +168,11 @@ KNOWN_CONFIG_KEYS = {
         "enabled", "sample_size", "include_all_annotated",
         "embedding_model", "image_embedding_model", "umap", "label_source",
     },
+    # The project-wide embedder (corpus map, diversity ordering, duplicate
+    # detection). Backend-specific extras (entrypoint, endpoint, headers,
+    # batch_size, modality, frames…) are passed through to the backend, so this
+    # block deliberately does not enumerate them.
+    "embeddings": None,
     "adjudication": {
         "enabled", "adjudicator_users", "min_annotations",
         "agreement_threshold", "fast_decision_warning_ms",
@@ -1582,6 +1587,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate embedding visualization configuration if present
     validate_embedding_visualization_config(config_data)
+
+    # Validate the project-wide embedder if present
+    validate_embeddings_config(config_data)
 
     # Validate adjudication configuration if present
     if 'adjudication' in config_data:
@@ -4651,6 +4659,55 @@ def validate_diversity_config(config_data: Dict[str, Any]) -> None:
             raise ConfigValidationError(
                 "diversity_ordering.cache_dir must be a non-empty string or null"
             )
+
+
+def validate_embeddings_config(config_data: Dict[str, Any]) -> None:
+    """Validate the project-wide ``embeddings`` block.
+
+    Deliberately shallow: backend-specific keys belong to the backend, and a
+    validator that enumerates them here goes stale the first time someone adds
+    one. What is checked is what silently misbehaves — an unknown backend name
+    (which would otherwise be discovered only when the corpus map came up
+    empty) and a 'custom' backend with nothing to call.
+
+    Raises:
+        ConfigValidationError: if the block cannot produce an embedder.
+    """
+    if 'embeddings' not in config_data:
+        return
+
+    block = config_data['embeddings']
+    if not isinstance(block, dict):
+        raise ConfigValidationError("embeddings must be a dictionary")
+
+    backend = block.get('backend', 'auto')
+    if not isinstance(backend, str):
+        raise ConfigValidationError("embeddings.backend must be a string")
+
+    from potato.embedders import backend_names
+    known = set(backend_names()) | {'auto'}
+    if backend not in known:
+        raise ConfigValidationError(
+            f"embeddings.backend '{backend}' is not a known backend. "
+            f"Available: {', '.join(sorted(known))}")
+
+    if backend == 'custom' and not (block.get('entrypoint')
+                                    or block.get('endpoint')):
+        raise ConfigValidationError(
+            "embeddings.backend is 'custom' but neither embeddings.entrypoint "
+            "('module.path:callable') nor embeddings.endpoint (an HTTP URL) "
+            "was set")
+
+    entrypoint = block.get('entrypoint')
+    if entrypoint is not None and (not isinstance(entrypoint, str)
+                                   or ':' not in entrypoint):
+        raise ConfigValidationError(
+            "embeddings.entrypoint must look like 'module.path:callable', "
+            f"got {entrypoint!r}")
+
+    for key in ('model', 'source_field', 'cache_dir', 'media_root'):
+        if key in block and block[key] is not None and not isinstance(block[key], str):
+            raise ConfigValidationError(f"embeddings.{key} must be a string")
 
 
 def validate_embedding_visualization_config(config_data: Dict[str, Any]) -> None:

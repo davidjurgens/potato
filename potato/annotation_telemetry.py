@@ -509,7 +509,12 @@ def summarize(
                 summary.shapes_drawn += 1
                 shape_times.append(e.t_ms)
             if summary.time_to_first_shape_ms is None:
-                summary.time_to_first_shape_ms = max(0, e.t_ms - ordered[0].t_ms)
+                # From when the instance appeared, which is where `t_ms` is
+                # measured from. Subtracting the first event's offset (as this
+                # did) reported zero whenever the first event WAS the shape —
+                # so the look-before-you-draw interval this exists to measure
+                # was the one interval it could never see.
+                summary.time_to_first_shape_ms = max(0, e.t_ms)
 
         elif e.action == "shape_edit":
             summary.shapes_edited += 1

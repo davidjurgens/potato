@@ -9,6 +9,7 @@ import sys
 import time
 import tempfile
 import json
+import warnings
 import yaml
 import threading
 import requests
@@ -160,7 +161,29 @@ def clear_all_global_state():
         pass
 
 class FlaskTestServer:
-    """A test server that can be started and stopped for integration tests."""
+    """A test server that can be started and stopped for integration tests.
+
+    **One at a time.** The server runs in a thread inside the pytest process,
+    not as a subprocess, so every instance shares the same process-wide
+    singletons — `get_item_state_manager()`, `get_user_state_manager()` and the
+    config module. Starting a second server while a first is still serving
+    silently rebinds all three to the second project, and from that moment both
+    ports answer with the second project's data.
+
+    That is not hypothetical. A dashboard test that started an "annotators
+    agree" project and an "annotators disagree" project, then compared the two
+    rendered reports, got byte-identical pages: both showed the disagreeing
+    numbers, while the JSON fetched from each server at its own setup time was
+    correct. The bug was in the test, and nothing in the harness said so.
+
+    Sequence them instead — start, use, `stop_server()`, then start the next.
+    Overlap is detected at `start_server()` and reported; set
+    `POTATO_STRICT_TEST_SERVERS=1` to turn that report into a failure.
+    """
+
+    #: Every instance currently serving, so an overlap can be named rather than
+    #: silently producing wrong data.
+    _live: "list[FlaskTestServer]" = []
 
     def __init__(self, app_factory=None, config=None, debug=False, port=None, config_file=None, test_data_file=None):
         # Support both old and new constructor patterns
@@ -348,8 +371,41 @@ class FlaskTestServer:
         """Alias for start() method for backward compatibility."""
         return self._start_server(config_dir)
 
+    def _warn_if_another_server_is_live(self):
+        """Name an overlap rather than letting it corrupt the results.
+
+        See the class docstring: two live servers share one set of singletons,
+        and the newer one wins for both.
+        """
+        # Only servers still holding a WSGI server count. A test that lets its
+        # server fall out of scope without calling stop_server() leaves an
+        # entry behind, and counting those turned a real signal into 1039
+        # errors across the suite — a guard that cries wolf is worse than none.
+        for stale in [s for s in FlaskTestServer._live
+                      if getattr(s, "_wsgi_server", None) is None]:
+            FlaskTestServer._live.remove(stale)
+
+        others = [s for s in FlaskTestServer._live if s is not self]
+        if not others:
+            return
+        detail = ", ".join(
+            f"port {s.port} ({getattr(s, 'temp_config_file', None) or 'config'})"
+            for s in others)
+        message = (
+            f"FlaskTestServer on port {self.port} is starting while "
+            f"{len(others)} other server(s) are still serving: {detail}. "
+            f"They share this process's item/user state and config singletons, "
+            f"so BOTH ports will now answer with THIS project's data. "
+            f"Stop the previous server before starting this one.")
+        if os.environ.get("POTATO_STRICT_TEST_SERVERS") == "1":
+            raise RuntimeError(message)
+        warnings.warn(message, RuntimeWarning, stacklevel=3)
+
     def _start_server(self, config_dir=None):
         """Internal method to start the Flask server in a separate thread."""
+        self._warn_if_another_server_is_live()
+        if self not in FlaskTestServer._live:
+            FlaskTestServer._live.append(self)
         # Handle config_dir parameter for backward compatibility
         if config_dir is not None:
             # This is the old pattern - we need to handle config file creation
@@ -1194,6 +1250,9 @@ class FlaskTestServer:
 
     def stop_server(self):
         """Stop the Flask server."""
+        if self in FlaskTestServer._live:
+            FlaskTestServer._live.remove(self)
+
         # Shutdown the WSGI server if it exists
         if hasattr(self, '_wsgi_server') and self._wsgi_server is not None:
             try:

@@ -8,8 +8,6 @@ Focused on agent trace evaluation schemas to match production
 annotation workloads.
 """
 
-import json
-import os
 import pytest
 
 try:
@@ -22,23 +20,25 @@ from tests.playwright.test_base import BasePlaywrightTest
 
 
 def _make_scale_server(make_server):
-    """Create server with enough instances for 10+ annotators."""
-    from tests.helpers.test_utils import create_test_directory
+    """Create server with enough instances for 10+ annotators.
 
-    test_dir = create_test_directory("pw_scale")
-    data_file = os.path.join(test_dir, "data.jsonl")
-    items = []
-    for i in range(50):
-        items.append({
+    The items must be handed to ``make_server``. An earlier version wrote them
+    to a data file in its own directory and then called ``make_server(schemes)``,
+    which builds a *different* directory with the default text-only rows — so
+    the server served items with no ``steps``, the client rendered no step
+    cards, and every test in this file waited 10s for a selector that could
+    never appear.
+    """
+    items = [
+        {
             "id": f"trace_{i:03d}",
             "text": f"Agent trace {i}: evaluate this trajectory",
             "steps": [
                 {"action": f"step_{j}_of_{i}"} for j in range(2)
             ],
-        })
-    with open(data_file, "w") as f:
-        for item in items:
-            f.write(json.dumps(item) + "\n")
+        }
+        for i in range(50)
+    ]
 
     schemes = [
         {
@@ -51,7 +51,7 @@ def _make_scale_server(make_server):
             "severities": [{"name": "minor", "weight": -1}],
         }
     ]
-    return make_server(schemes)
+    return make_server(schemes, items=items)
 
 
 @pytest.mark.playwright

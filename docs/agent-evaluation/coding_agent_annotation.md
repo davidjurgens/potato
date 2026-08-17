@@ -94,9 +94,49 @@ python -m potato.trace_converter -i traces.json --auto-detect -o data/converted.
 ```
 
 The `claude_code` converter handles:
+- Claude Code's own session transcripts (`~/.claude/projects/<project>/<session>.jsonl`)
 - Anthropic Messages API format (content blocks with `tool_use`/`tool_result`)
 - Pre-structured `structured_turns` format
 - Generic `turns` or `steps` format with tool calls
+
+### Annotating your own Claude Code sessions
+
+Claude Code writes one JSONL file per session under
+`~/.claude/projects/<slugified-working-directory>/<session-id>.jsonl`. Point the
+converter straight at one:
+
+```bash
+python -m potato.trace_converter \
+  -i ~/.claude/projects/-home-me-myrepo/3c853f0f-....jsonl \
+  --auto-detect -o data/session.jsonl
+```
+
+One session becomes one trace, not one per line. What you get:
+
+| In the transcript | In the trace |
+|---|---|
+| `user` / `assistant` messages | conversation turns |
+| `tool_use` + matching `tool_result` | a tool call with its output, typed for the display |
+| `parentUuid` chain | only the surviving path — rewound attempts are dropped and counted |
+| `isSidechain` messages | `sidechain_runs`, kept out of the main turns |
+| `cwd`, `gitBranch`, `version`, `usage` | the metadata table |
+| slash commands (`/clear` and friends) | dropped; they are the CLI talking to itself |
+
+Two things to know before planning a study around this:
+
+- **Thinking text is not on disk.** Transcripts keep the `thinking` block and its
+  signature and drop the content — measured at 6393 blocks across 40 local
+  sessions, none with text. The trace reports the count so the gap is visible.
+  If you need reasoning to annotate, capture it live with
+  `claude -p --output-format stream-json` or the Agent SDK instead.
+- **The on-disk shape belongs to the CLI, not to a published API.** Every row
+  carries a `version`. Treat the reader as best-effort across upgrades: it
+  ignores record types it does not know, and raises rather than handing back an
+  empty trace if a file stops parsing into messages.
+
+Transcripts also carry absolute paths, branch names, environment details and
+whatever source the session read. Redact before sharing a dataset, and get
+consent from whoever's sessions they are.
 
 ## Configuration
 

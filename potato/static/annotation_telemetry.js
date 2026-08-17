@@ -80,11 +80,15 @@ class AnnotationTelemetryTracker {
         it.setInstanceId = function (instanceId) {
             self.endAllSessions('instance_change');
             self.currentInstanceId = instanceId;
+            // When this instance came up on screen. A session starts from here
+            // rather than from its first event — see `_session`.
+            self.instanceShownAt = Date.now();
             self.flush(false);
             return original(instanceId);
         };
         it.__telemetryHooked = true;
         this.currentInstanceId = it.currentInstanceId;
+        this.instanceShownAt = Date.now();
     }
 
     /**
@@ -128,12 +132,21 @@ class AnnotationTelemetryTracker {
     _session(schema) {
         if (!this.sessions[schema]) {
             const now = Date.now();
+            // The clock starts when the instance appeared, not at the first
+            // event. Starting it lazily made `time_to_first_shape_ms` — which
+            // is measured from the first event — structurally zero whenever
+            // the annotator's first act was drawing, which is the common case.
+            // The interval it is meant to capture is exactly the one spent
+            // looking before drawing, and that was the interval being thrown
+            // away. Sessions are still created only when an event arrives, so
+            // an instance that was opened and skipped still writes no row.
+            const startedAt = this.instanceShownAt || now;
             this.sessions[schema] = {
                 schema: schema,
                 // Captured at session start, NOT at flush: the instance may
                 // have changed by then, and this is the id the work belongs to.
                 instanceId: this.currentInstanceId,
-                startedAt: now,
+                startedAt: startedAt,
                 lastAt: now,
                 truncated: false,
                 events: [],

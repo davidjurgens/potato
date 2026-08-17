@@ -2121,6 +2121,19 @@ class ImageAnnotationManager {
     _completePolygon() {
         const isPolyline = this.currentTool === 'polyline';
         const minPoints = isPolyline ? 2 : 3;
+
+        // A double-click is how you finish a shape, and a real double-click is
+        // mousedown/up, mousedown/up, THEN dblclick. Both of those downs have
+        // already run through _addPolygonPoint by the time we get here, so a
+        // triangle drawn by an annotator arrives as five vertices: the last one
+        // three times over. Synthetic tests that dispatch a bare `dblclick`
+        // never saw it, which is why it shipped.
+        //
+        // Trimmed here rather than refused at push time: clicking twice in the
+        // same spot mid-path is the annotator's business, but a run of them at
+        // the very end is always the closing gesture.
+        this.polygonPoints = this._withoutTrailingDuplicates(this.polygonPoints);
+
         if (this.polygonPoints.length < minPoints) return;
 
         // Remove temporary markers and lines
@@ -2154,6 +2167,27 @@ class ImageAnnotationManager {
         this.polygonPoints = [];
         this._saveState();
         this._updateAnnotationData();
+    }
+
+    /**
+     * Drop the repeats of the final vertex left behind by a double-click.
+     *
+     * Two canvas pixels of tolerance: the mouse can drift a little between the
+     * two clicks of a double-click, so exact equality would miss most of them.
+     * Only a run at the END is removed, and never the vertex itself.
+     */
+    _withoutTrailingDuplicates(points, tolerance = 2) {
+        const trimmed = points.slice();
+        const last = trimmed[trimmed.length - 1];
+        if (!last) return trimmed;
+        while (trimmed.length > 1) {
+            const previous = trimmed[trimmed.length - 2];
+            if (Math.abs(previous.x - last.x) > tolerance
+                || Math.abs(previous.y - last.y) > tolerance) break;
+            // Drop the earlier of the pair, keeping the final position.
+            trimmed.splice(trimmed.length - 2, 1);
+        }
+        return trimmed;
     }
 
     /**
@@ -3798,6 +3832,18 @@ class ImageAnnotationManager {
         const input = document.getElementById(this.inputId);
         if (input) {
             input.value = this._serializeAnnotations();
+            // Assigning `.value` fires nothing, so the shared autosave in
+            // annotation.js could never see a shape being drawn: until the
+            // annotator pressed Next or Previous, the work existed only in
+            // this tab. Announce it.
+            //
+            // Suppressed while restoring, because that path writes the value
+            // the server just sent back. Saving there would be harmless in
+            // itself, but it marks an untouched instance as answered, and
+            // `/annotate` ends the task as soon as nothing is unanswered.
+            if (!this._hydrating) {
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
         }
 
         const count = this.getAnnotationCount();
@@ -3843,17 +3889,24 @@ class ImageAnnotationManager {
      */
     _loadExistingAnnotations() {
         const input = document.getElementById(this.inputId);
-        if (input && input.value) {
-            try {
-                this._deserializeAnnotations(input.value);
-                this._saveState();
-                this._updateAnnotationData();  // Update count display after loading
-            } catch (e) {
-                console.warn('Failed to load existing annotations:', e);
+        // Same meaning as in deserialize(): this is the server's answer being
+        // put back, not the annotator drawing.
+        this._hydrating = true;
+        try {
+            if (input && input.value) {
+                try {
+                    this._deserializeAnnotations(input.value);
+                    this._saveState();
+                    this._updateAnnotationData();  // Update count display after loading
+                } catch (e) {
+                    console.warn('Failed to load existing annotations:', e);
+                }
+            } else {
+                // No existing annotations - still update count to show 0
+                this._updateAnnotationData();
             }
-        } else {
-            // No existing annotations - still update count to show 0
-            this._updateAnnotationData();
+        } finally {
+            this._hydrating = false;
         }
     }
 

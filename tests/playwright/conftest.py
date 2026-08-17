@@ -26,6 +26,11 @@ except ImportError:
 
 from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
+from tests.helpers.teardown_watchdog import (
+    TEST_TEARDOWN_TIMEOUT_SECONDS,
+    bounded_teardown,
+    use_capture_manager,
+)
 from tests.helpers.test_utils import create_test_directory, create_test_data_file, create_test_config
 
 
@@ -33,6 +38,8 @@ from tests.helpers.test_utils import create_test_directory, create_test_data_fil
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "playwright: mark test as requiring Playwright browser")
+    # So a teardown hang's stack dump survives pytest's fd-level capture.
+    use_capture_manager(config.pluginmanager.getplugin("capturemanager"))
 
 
 #: Browser tests need longer than the 30s global timeout in pytest.ini: a
@@ -74,8 +81,9 @@ def browser_instance():
         args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
     )
     yield browser
-    browser.close()
-    pw.stop()
+    with bounded_teardown("browser_instance"):
+        browser.close()
+        pw.stop()
 
 
 @pytest.fixture
@@ -86,7 +94,10 @@ def context(browser_instance):
         ignore_https_errors=True,
     )
     yield ctx
-    ctx.close()
+    # Silent: this runs after every test, and one banner per test is noise.
+    with bounded_teardown("context", seconds=TEST_TEARDOWN_TIMEOUT_SECONDS,
+                             announce=False):
+        ctx.close()
 
 
 @pytest.fixture
@@ -94,7 +105,8 @@ def page(context):
     """Single page within the isolated context."""
     pg = context.new_page()
     yield pg
-    pg.close()
+    with bounded_teardown("page", seconds=TEST_TEARDOWN_TIMEOUT_SECONDS, announce=False):
+        pg.close()
 
 
 # ---------- server fixtures ----------
@@ -147,7 +159,8 @@ def _default_server():
     ]
     srv = _make_server(schemes)
     yield srv
-    srv.stop()
+    with bounded_teardown("_default_server"):
+        srv.stop()
 
 
 @pytest.fixture
@@ -174,5 +187,7 @@ def make_server():
 
     yield _factory
 
-    for s in servers:
-        s.stop()
+    with bounded_teardown("make_server", seconds=TEST_TEARDOWN_TIMEOUT_SECONDS,
+                             announce=False):
+        for s in servers:
+            s.stop()

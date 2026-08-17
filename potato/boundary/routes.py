@@ -87,6 +87,32 @@ def _scheme_labels(manager, schema_name):
     return None
 
 
+#: Fields and extensions that make an item an image. Kept in step with the
+#: rooms and embedder detection by the same test.
+_IMAGE_FIELDS = ("image_url", "image", "image_path", "img", "photo", "picture")
+_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp",
+                     ".avif", ".tif", ".tiff")
+
+
+def _image_reference(item_data):
+    """The image this item shows, or None.
+
+    Boundary Lab could not probe an image item at all: `_instance_text` fell
+    back to `get_text()`, which for a media item is its instance id, and the
+    rule transforms find no handle on "img_01" — so the panel silently never
+    appeared on a vision project.
+    """
+    if not isinstance(item_data, dict):
+        return None
+    for key, value in item_data.items():
+        if not isinstance(value, str) or not value.strip():
+            continue
+        base = value.split("?", 1)[0].lower()
+        if key.lower() in _IMAGE_FIELDS or base.endswith(_IMAGE_EXTENSIONS):
+            return value
+    return None
+
+
 def _instance_text(manager, item):
     """Extract the annotatable text using the configured text_key."""
     text_key = (manager.app_config.get("item_properties") or {}).get("text_key", "text")
@@ -127,13 +153,23 @@ def probe():
     if not ism.has_item(instance_id):
         return jsonify({"error": f"Unknown instance '{instance_id}'"}), 404
     item = ism.get_item(instance_id)
-    text = _instance_text(manager, item)
-    if not text or not text.strip():
-        return jsonify({"probes": [], "labels": labels, "responses": {}})
+    item_data = item.get_data()
+    media_reference = _image_reference(item_data)
+    text = "" if media_reference else _instance_text(manager, item)
+    if not media_reference and (not text or not text.strip()):
+        # Neither text to edit nor a picture to transform. Say so, rather than
+        # returning an empty list that reads as "no probes were needed".
+        return jsonify({
+            "probes": [], "labels": labels, "responses": {},
+            "unsupported": (
+                "This item has no text and no image, so its decision boundary "
+                "cannot be probed. Boundary Lab supports text and image items."),
+        })
 
     try:
         probes = manager.get_or_generate_probes(
-            instance_id, schema, label, labels, text, item_data=item.get_data()
+            instance_id, schema, label, labels, text, item_data=item_data,
+            media_reference=media_reference,
         )
     except Exception:
         logger.exception("Boundary probe generation failed for instance %s", instance_id)
@@ -142,12 +178,14 @@ def probe():
     responses = manager.get_user_responses(session["username"], instance_id, schema, label)
     return jsonify({
         "probes": [
-            {k: p[k] for k in ("probe_id", "kind", "text", "edit_hint", "source")}
+            {k: p.get(k) for k in ("probe_id", "kind", "text", "edit_hint",
+                                   "source", "media")}
             for p in probes
         ],
         "labels": labels,
         "original_label": label,
         "original_text": text,
+        "original_media": media_reference,
         "responses": responses,
         "rationale_on_flip": manager.boundary_config.rationale_on_flip,
     })

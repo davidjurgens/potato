@@ -291,6 +291,7 @@ Recognized keys not yet sorted into a category above. They are valid configurati
 
 | Key | Required | Type | Sub-keys |
 |-----|----------|------|----------|
+| `embeddings` |  |  |  |
 | `export_include_annotation_changes` |  |  |  |
 | `item_store` |  | object | `backend`, `cache_size`, `path` |
 

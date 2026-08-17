@@ -17,8 +17,10 @@
 (function () {
     'use strict';
 
-    var cfg = window.boundaryConfig;
-    if (!cfg || !cfg.schema) return;
+    // Defining the helpers is side-effect free, so the "not configured" guard
+    // sits on the listener registration at the bottom instead of here. That
+    // keeps the rendering helpers reachable from tests without a live server.
+    var cfg = window.boundaryConfig || {};
 
     var state = {
         probes: [],
@@ -67,13 +69,16 @@
             var joined = buf.join('');
             if (!joined) return;
             if (joined.trim() === '') { out.push(esc(joined)); return; }
+            changed += joined.trim().split(/\s+/).length;
             out.push('<' + tag + '>' + esc(joined) + '</' + tag + '>');
         }
+        var changed = 0, kept = 0;
         var delBuf = [], insBuf = [];
         while (x < n && y < m) {
             if (aw[x] === bw[y]) {
                 flush(delBuf, 'del'); delBuf = [];
                 flush(insBuf, 'ins'); insBuf = [];
+                if (aw[x].trim() !== '') kept++;
                 out.push(esc(aw[x]));
                 x++; y++;
             } else if (dp[x + 1][y] >= dp[x][y + 1]) {
@@ -86,7 +91,122 @@
         while (y < m) insBuf.push(bw[y++]);
         flush(delBuf, 'del');
         flush(insBuf, 'ins');
-        return out.join('');
+        return {
+            html: out.join(''),
+            // Share of words the edit touched. 0 = identical, 1 = nothing survived.
+            churn: (changed + kept) ? changed / (changed + kept) : 0
+        };
+    }
+
+    /** Above this share of words touched, a word diff stops being readable. */
+    var DIFF_CHURN_LIMIT = 0.4;
+
+    /**
+     * How to show a probe's text.
+     *
+     * A word diff is the right presentation for a *minimal* edit: the one
+     * phrase that moved is exactly what the annotator has to weigh. It is the
+     * wrong presentation for a paraphrase, where nearly every word is replaced
+     * and the diff interleaves original and replacement into an unreadable
+     * run — `HiHello Sam, couldwould you be able to send meover the Q3 report`.
+     * Invariance probes are always paraphrases, and a "flip" probe can be
+     * rewritten heavily too, so the churn measure decides rather than the kind
+     * alone. When the diff would be noise, both versions are shown whole.
+     */
+    /**
+     * An image probe: the original beside the transformed version.
+     *
+     * The transform is applied by the browser to the same image — a filter, a
+     * mirror, an inset clip, a rectangle over it — so nothing is rendered
+     * server-side and remote media is never fetched by Potato. Built with DOM
+     * nodes rather than a template string because the src comes from an item
+     * field.
+     */
+    function probeImage(probe) {
+        var media = probe.media || {};
+        var style = media.style || {};
+
+        function frame(src, caption, transformed) {
+            var block = document.createElement('div');
+            block.className = 'boundary-imgblock' +
+                (transformed ? ' is-edited' : ' is-original');
+
+            var label = document.createElement('span');
+            label.className = 'boundary-textlabel';
+            label.textContent = caption;
+            block.appendChild(label);
+
+            var stage = document.createElement('div');
+            stage.className = 'boundary-imgstage';
+
+            var img = document.createElement('img');
+            img.src = src;
+            img.alt = transformed
+                ? 'The item, ' + (probe.edit_hint || 'altered')
+                : 'The item as you labelled it';
+            img.loading = 'lazy';
+            if (transformed) {
+                if (style.filter) img.style.filter = style.filter;
+                if (style.mirror) img.style.transform = 'scaleX(-1)';
+                if (style.inset) {
+                    var pct = style.inset.map(function (v) {
+                        return (v * 100).toFixed(1) + '%';
+                    }).join(' ');
+                    img.style.clipPath = 'inset(' + pct + ')';
+                }
+            }
+            stage.appendChild(img);
+
+            if (transformed && style.occlude) {
+                var box = document.createElement('div');
+                box.className = 'boundary-occluder';
+                box.style.left = (style.occlude[0] * 100) + '%';
+                box.style.top = (style.occlude[1] * 100) + '%';
+                box.style.width = (style.occlude[2] * 100) + '%';
+                box.style.height = (style.occlude[3] * 100) + '%';
+                stage.appendChild(box);
+            }
+
+            block.appendChild(stage);
+            return block;
+        }
+
+        var pair = document.createElement('div');
+        pair.className = 'boundary-imgpair';
+        pair.appendChild(frame(media.src, 'Original', false));
+        pair.appendChild(frame(media.src,
+            probe.kind === 'invariance' ? 'Same image, changed' : 'Changed',
+            true));
+        return { node: pair, minimal: false };
+    }
+
+    function probeText(probe) {
+        if (probe && probe.media && probe.media.src) return probeImage(probe);
+        var original = probe.original_text || state.originalText || '';
+        var edited = probe.text || '';
+        var d = diffWords(original, edited);
+        var readable = probe.kind !== 'invariance' && d.churn <= DIFF_CHURN_LIMIT;
+        if (readable) {
+            return {
+                html: '<div class="boundary-diff">' + d.html + '</div>',
+                minimal: true
+            };
+        }
+        return {
+            html:
+                '<div class="boundary-textpair">' +
+                '  <div class="boundary-textblock is-original">' +
+                '    <span class="boundary-textlabel">Original</span>' +
+                '    <span class="boundary-textbody">' + esc(original) + '</span>' +
+                '  </div>' +
+                '  <div class="boundary-textblock is-edited">' +
+                '    <span class="boundary-textlabel">' +
+                (probe.kind === 'invariance' ? 'Reworded' : 'Edited') + '</span>' +
+                '    <span class="boundary-textbody">' + esc(edited) + '</span>' +
+                '  </div>' +
+                '</div>',
+            minimal: false
+        };
     }
 
     // --------------------------------------------------------------- panel --
@@ -142,8 +262,13 @@
         }).length;
     }
 
+    //: Set by render() when the current probe is visual; consumed immediately
+    //: after innerHTML is written, since a DOM node cannot be concatenated in.
+    var pendingMediaNode = null;
+
     function render() {
         var panel = ensurePanel();
+        pendingMediaNode = null;
         var total = state.probes.length;
         if (!total) { hidePanel(); return; }
 
@@ -188,14 +313,28 @@
                 '   added to your dataset</div>' +
                 '</div>';
         } else {
-            var kindChip = current.kind === 'invariance'
+            var shown = probeText(current);
+            var isMedia = !!shown.node;
+            // Nodes cannot go in a string; a slot is filled in after render.
+            if (isMedia) {
+                pendingMediaNode = shown.node;
+                shown = { html: '<div class="boundary-mediaslot"></div>' };
+            }
+            // "minimal edit" would be a lie on a probe we could not diff.
+            var kindChip = isMedia
+                ? '<span class="boundary-kind ' +
+                  (current.kind === 'invariance' ? 'invariance">same picture'
+                                                 : 'flip">altered picture') +
+                  '</span>'
+                : current.kind === 'invariance'
                 ? '<span class="boundary-kind invariance">paraphrase</span>'
-                : '<span class="boundary-kind flip">minimal edit</span>';
+                : '<span class="boundary-kind flip">' +
+                  (shown.minimal ? 'minimal edit' : 'rewrite') + '</span>';
             body =
                 '<div class="boundary-body">' +
                 '  <div class="boundary-question">You said <strong>' + esc(state.originalLabel) +
                 '</strong>. Would that survive this ' + kindChip + '?</div>' +
-                '  <div class="boundary-diff">' + diffWords(current.original_text || state.originalText || '', current.text) + '</div>' +
+                shown.html +
                 (current.edit_hint ? '<div class="boundary-hint">' + esc(current.edit_hint) + '</div>' : '') +
                 '  <div class="boundary-actions">' +
                 '    <button type="button" class="boundary-btn holds" data-verdict="holds">Still ' + esc(state.originalLabel) + '</button>' +
@@ -224,6 +363,11 @@
 
         panel.innerHTML = header + body +
             '<div class="boundary-footer">Mapping your decision boundary &middot; builds the contrast set</div>';
+        if (pendingMediaNode) {
+            var slot = panel.querySelector('.boundary-mediaslot');
+            if (slot) slot.appendChild(pendingMediaNode);
+            pendingMediaNode = null;
+        }
         wireEvents(panel, current);
         showPanel();
     }
@@ -348,6 +492,20 @@
             el.matches('input.annotation-input') &&
             el.getAttribute('schema') === cfg.schema;
     }
+
+    // Presentation helpers, exposed for tests. The rendering decision this
+    // exports — diff or whole text — was wrong for every paraphrase probe and
+    // nothing could see it, because nothing could call it.
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = {
+            diffWords: diffWords,
+            probeText: probeText,
+            DIFF_CHURN_LIMIT: DIFF_CHURN_LIMIT,
+            _setOriginalText: function (t) { state.originalText = t; }
+        };
+    }
+
+    if (!cfg.schema) return;   // probing not configured for this project
 
     document.addEventListener('change', function (e) {
         if (isProbedInput(e.target)) scheduleProbe();

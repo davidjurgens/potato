@@ -1561,6 +1561,10 @@ class AudioAnnotationManager {
         };
 
         this.inputEl.value = JSON.stringify(data);
+        // Assigning `.value` fires nothing, so without this the shared autosave
+        // in annotation.js never learns the segments changed and the work
+        // reaches the server only when the annotator navigates.
+        this.inputEl.dispatchEvent(new Event('change', { bubbles: true }));
         audioDebugLog('Saved audio annotation data:', data);
     }
 

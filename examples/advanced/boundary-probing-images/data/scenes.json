@@ -1,0 +1,7 @@
+[
+  {"id": "scene_01", "image_url": "media/park.jpg"},
+  {"id": "scene_02", "image_url": "media/street.jpg"},
+  {"id": "scene_03", "image_url": "media/desk_scene.png"},
+  {"id": "scene_04", "image_url": "media/shelf_scene.png"},
+  {"id": "scene_05", "image_url": "media/street_scene.png"}
+]

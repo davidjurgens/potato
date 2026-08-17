@@ -184,7 +184,13 @@ class TestMissingDependencies:
         assert "umap_available" in stats
 
     def test_manager_works_without_diversity_manager(self):
-        """Test that manager handles missing DiversityManager gracefully."""
+        """No DiversityManager is no longer a reason to refuse.
+
+        The map used to read its vectors out of diversity ordering and told
+        anyone without that feature to go and enable it. It now embeds for
+        itself; with no items loaded it reports having nothing to show, which
+        is a different and truthful message.
+        """
         from potato.embedding_visualization import (
             EmbeddingVisualizationManager, EmbeddingVizConfig
         )
@@ -192,13 +198,13 @@ class TestMissingDependencies:
         config = EmbeddingVizConfig(enabled=True)
         manager = EmbeddingVisualizationManager(config, {})
 
-        # Mock diversity manager to return None
         with patch.object(manager, '_get_diversity_manager', return_value=None):
             result = manager.get_visualization_data()
 
-        # Should return error, not crash
+        # Reports rather than crashing…
         assert "error" in result.stats
-        assert "diversity" in result.stats["error"].lower()
+        # …and does not send the admin off to configure an unrelated feature.
+        assert "diversity" not in result.stats["error"].lower()
 
 
 # =============================================================================

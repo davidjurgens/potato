@@ -240,9 +240,11 @@ def _generate_internal(
 
             container.innerHTML = '';
             steps.forEach(function(step, idx) {{
+                /* _appendStepCard attaches this card's handlers itself; a
+                   sweep over the container afterwards bound every one of them
+                   a second time. */
                 _appendStepCard(container, step, idx);
             }});
-            attachStepHandlers();
         }}
 
         /* ---- render a single step card ---- */
@@ -309,6 +311,16 @@ def _generate_internal(
 
         /* ---- event handlers ---- */
         function _attachSingleCardHandlers(card, idx) {{
+            /* Bind once per card. The correctness handler is a TOGGLE: it
+               clears the value when clicked on the value already stored. So a
+               card whose handlers were bound twice ran set-then-clear on a
+               single click and recorded nothing at all — the button never even
+               kept its `selected` class. That is what a second bind did here
+               for real, so the guard stays even though the duplicate call it
+               was covering has been removed. */
+            if (card.dataset.trajHandlersBound === 'true') return;
+            card.dataset.trajHandlersBound = 'true';
+
             card.querySelectorAll('.traj-correctness-btn').forEach(function(btn) {{
                 btn.addEventListener('click', function() {{
                     var value = btn.getAttribute('data-value');
@@ -362,15 +374,6 @@ def _generate_internal(
                     state.steps[idx].rationale = ta.value;
                     saveState();
                 }});
-            }});
-        }}
-
-        function attachStepHandlers() {{
-            var container = document.getElementById(SCHEMA + '-steps');
-            if (!container) return;
-            container.querySelectorAll('.traj-step-card').forEach(function(card) {{
-                var idx = parseInt(card.getAttribute('data-step-index'), 10);
-                _attachSingleCardHandlers(card, idx);
             }});
         }}
 

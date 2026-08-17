@@ -87,6 +87,21 @@
     }
     .item-progress { letter-spacing: 0.14em; }
     .item-progress .done { color: var(--spruce); }
+    .item-media {
+      margin: 0 0 0.9rem;
+    }
+    .item-media img,
+    .item-media video {
+      max-width: 100%;
+      max-height: 46vh;
+      border-radius: 10px;
+      display: block;
+      background: #f4f4f6;
+    }
+    .item-media audio {
+      width: 100%;
+    }
+
     .item-text {
       font-family: Charter, Georgia, "Times New Roman", serif;
       font-size: 1.35rem; line-height: 1.55;
@@ -273,6 +288,7 @@
           <span id="item-counter">Item — of —</span>
           <span class="item-progress" id="item-progress" aria-hidden="true"></span>
         </div>
+        <div class="item-media" id="item-media" hidden></div>
         <div class="item-text" id="item-text"></div>
         <div class="shadow-note" id="shadow-note" hidden></div>
 
@@ -443,6 +459,33 @@
     }
 
     // ---- rendering ----------------------------------------------------
+    /**
+     * Show the item itself when it is an image, a clip or a recording.
+     *
+     * Built with DOM calls rather than innerHTML: the source is an item field,
+     * and a filename is the last place you want to find markup.
+     */
+    function renderItemMedia(media) {
+      const host = $("item-media");
+      if (!host) return;
+      host.textContent = "";
+      if (!media || !media.src) { host.hidden = true; return; }
+
+      let node;
+      if (media.kind === "image") {
+        node = document.createElement("img");
+        node.alt = "The item being annotated";
+        node.loading = "lazy";
+      } else {
+        node = document.createElement(media.kind === "audio" ? "audio" : "video");
+        node.controls = true;
+        node.preload = "metadata";
+      }
+      node.src = media.src;
+      host.appendChild(node);
+      host.hidden = false;
+    }
+
     function render() {
       if (!state) return;
       renderHeader();
@@ -501,9 +544,14 @@
         dots.push(i < index ? '<span class="done">●</span>' : (i === index ? "●" : "○"));
       }
       $("item-progress").innerHTML = dots.join(" ");
+      renderItemMedia(state.item_media);
       const textEl = $("item-text");
-      textEl.textContent = state.item_text || "(no text)";
+      // "(no text)" only when there is genuinely nothing to show. A media item
+      // used to land here and the room asked people to vote on that string.
+      const fallback = state.item_media ? "" : "(no text)";
+      textEl.textContent = state.item_text || fallback;
       textEl.dataset.raw = state.item_text || "";
+      textEl.hidden = !textEl.textContent;
       const shadowNote = $("shadow-note");
       if (state.room_type === "shadow") {
         shadowNote.hidden = false;

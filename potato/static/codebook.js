@@ -279,6 +279,36 @@
     // palette must still gain runtime codes so they are usable as span
     // labels; span *persistence* itself is overlay-based and independent
     // of the palette.
+    /**
+     * The palette chip's fill for a runtime code.
+     *
+     * Built-in codes are rendered server-side at 0.4 alpha over their assigned
+     * colour; runtime codes were left transparent, so a minted code was a
+     * colourless chip that then highlighted in the same default purple as
+     * every other minted code. Both now come from the same hash.
+     */
+    function paletteTriple(name) {
+        if (typeof window.potatoPaletteColor === "function") {
+            return window.potatoPaletteColor(name);
+        }
+        var mgr = window.spanManager;
+        if (mgr && typeof mgr.paletteColorFor === "function") {
+            return mgr.paletteColorFor(name);
+        }
+        return "";
+    }
+
+    function chipColor(name) {
+        var triple = paletteTriple(name);
+        return triple ? "rgba" + triple.replace(")", ", 0.4)") : "";
+    }
+
+    /** Solid colour for a drawing palette button and its swatch. */
+    function chipColour(name) {
+        var triple = paletteTriple(name);
+        return triple ? "rgb" + triple : "";
+    }
+
     function reconcileSpanForm(form, tmpl, labels) {
         var schema = form.getAttribute("data-schema-name") || form.id;
         var have = optionValues(form);
@@ -298,8 +328,11 @@
             input.id = newId;
             input.checked = false;
             input.removeAttribute("data-key");
-            // label/title carry the code name; color is hash-derived in
-            // SpanManager (getSpanColor) so '' here is correct.
+            // The colour is hash-derived by SpanManager.paletteColorFor, so
+            // the chip below and the highlight this label draws agree without
+            // either side inventing a colour. '' here is right: the inline
+            // handler's colour argument is only a hint, and passing a stale
+            // one would override the resolved colour.
             input.setAttribute(
                 "onclick",
                 "onlyOne(this); changeSpanLabel(this, "
@@ -310,7 +343,7 @@
             var swatch = label.querySelector("span");
             if (swatch) {
                 swatch.textContent = name;
-                swatch.style.backgroundColor = "";   // no borrowed color
+                swatch.style.backgroundColor = chipColor(name);
             } else {
                 label.textContent = name;
             }
@@ -319,9 +352,50 @@
         });
     }
 
+    /**
+     * Drawing palettes (image, spatial, episode) render `.label-btn` buttons,
+     * not option inputs, and were skipped entirely — so in an image project
+     * you could mint a code and never draw with it. The buttons are wired by
+     * a delegated handler on the container, so a cloned button works with no
+     * extra binding; it needs the same dataset and colour the server emits.
+     */
+    function reconcileLabelButtons(form, tmpl, labels) {
+        var parent = tmpl.parentElement;
+        if (!parent) return;
+        var have = {};
+        parent.querySelectorAll(".label-btn").forEach(function (b) {
+            have[b.dataset.label] = true;
+        });
+
+        labels.forEach(function (name) {
+            if (have[name]) return;
+            var colour = chipColour(name) || "";
+            var node = tmpl.cloneNode(true);
+            node.dataset.label = name;
+            node.dataset.color = colour;
+            node.classList.remove("active");
+            node.setAttribute("aria-pressed", "false");
+            node.setAttribute("title", name);
+            node.style.setProperty("--label-color", colour);
+            var dot = node.querySelector(".label-color-dot");
+            if (dot) dot.style.backgroundColor = colour;
+            // textContent would drop the swatch; replace only the text node.
+            var text = null;
+            node.childNodes.forEach(function (child) {
+                if (child.nodeType === 3) text = child;
+            });
+            if (text) text.nodeValue = name;
+            else node.appendChild(document.createTextNode(name));
+            parent.appendChild(node);
+            have[name] = true;
+        });
+    }
+
     function reconcileForm(form, labels) {
         var span = form.querySelector(".shadcn-span-option");
         if (span) return reconcileSpanForm(form, span, labels);
+        var labelBtn = form.querySelector(".label-btn");
+        if (labelBtn) return reconcileLabelButtons(form, labelBtn, labels);
         var radio = form.querySelector(".shadcn-radio-option");
         var multi = form.querySelector(".shadcn-multiselect-item");
         var tmpl = radio || multi;

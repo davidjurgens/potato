@@ -1314,6 +1314,14 @@ class VideoAnnotationManager {
         if (this.inputEl) {
             this.inputEl.value = JSON.stringify(data);
             console.log('[VideoAnnotation] Set input value, length:', this.inputEl.value.length);
+            // Assigning `.value` fires nothing; without this the shared
+            // autosave in annotation.js cannot see the timeline change and the
+            // work reaches the server only when the annotator navigates.
+            // Suppressed while hydrating so restoring the server's own answer
+            // does not mark an untouched instance as answered.
+            if (!this._hydrating) {
+                this.inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+            }
         } else {
             console.error('[VideoAnnotation] ERROR: inputEl is null, cannot save data!');
         }

@@ -154,6 +154,7 @@ nav:
         - Keystroke Logging Ethics: advanced/keystroke_logging_ethics.md
         - Annotation Telemetry: advanced/annotation_telemetry.md
         - Qualitative Data Analysis (QDA): advanced/qda.md
+        - Embeddings and the Corpus Map: advanced/embeddings.md
         - Geometry Agreement: advanced/geometry_agreement.md
         - Codebook: advanced/codebook.md
         - Memos: advanced/memos.md

@@ -41,8 +41,12 @@ class Probe:
     original_text: str
     text: str
     kind: str  # "flip" (edit intended to cross the boundary) or "invariance"
-    source: str  # "precomputed" | "llm" | "rules"
+    source: str  # "precomputed" | "llm" | "rules" | "image"
     edit_hint: str = ""
+    #: For image probes: {"src": ..., "style": {...}}. The transform is applied
+    #: by the browser to the original image, so nothing is rendered server-side
+    #: and remote media never has to be fetched.
+    media: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -345,12 +349,19 @@ class ProbeGenerator:
     # -- Public API ------------------------------------------------------------
     def generate(self, instance_id: str, schema: str, label: str,
                  labels: List[str], text: str,
-                 item_data: Optional[Dict[str, Any]] = None) -> List[Probe]:
+                 item_data: Optional[Dict[str, Any]] = None,
+                 media_reference: Optional[str] = None) -> List[Probe]:
         """Generate up to ``probes_per_item`` probes for (instance, schema, label)."""
         bc = self.boundary_config
         budget = bc.probes_per_item
         n_invariance = 1 if (bc.include_invariance and budget > 1) else 0
         n_flip = budget - n_invariance
+
+        # An image item has no text to edit. Probe the picture instead: the
+        # same two kinds, applied to what the annotator is actually looking at.
+        if media_reference:
+            return self._image_probes(instance_id, schema, label,
+                                      media_reference, n_flip, n_invariance)
 
         # Each candidate is (text, kind, edit_hint, source).
         candidates: List[Tuple[str, str, str, str]] = []
@@ -397,3 +408,32 @@ class ProbeGenerator:
             )
             for probe_text, kind, hint, source in ordered
         ]
+
+    def _image_probes(self, instance_id: str, schema: str, label: str,
+                      reference: str, n_flip: int, n_invariance: int
+                      ) -> List[Probe]:
+        """Probes that transform the image rather than the text."""
+        from potato.boundary.image_probes import (
+            generate_image_probes, to_style, transform_id,
+        )
+
+        probes = []
+        for transform, kind, hint in generate_image_probes(
+                reference, n_flip, n_invariance):
+            probes.append(Probe(
+                # Keyed on the transform, so re-wording a hint does not orphan
+                # the verdicts already recorded against it.
+                probe_id=make_probe_id(
+                    instance_id, schema, label,
+                    f"image:{transform_id(reference, transform)}"),
+                instance_id=str(instance_id),
+                schema=schema,
+                original_label=label,
+                original_text="",
+                text="",
+                kind=kind,
+                source="image",
+                edit_hint=hint,
+                media={"src": reference, "style": to_style(transform)},
+            ))
+        return probes

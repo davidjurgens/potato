@@ -186,6 +186,10 @@
             if (!this.input) return;
             this.input.value = JSON.stringify(this.serialize());
             this.input.setAttribute('data-modified', 'true');
+            // Assigning `.value` fires nothing; the shared autosave in
+            // annotation.js listens for this, and without it the captions
+            // reach the server only when the annotator navigates.
+            this.input.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
         _restoreFromInput() {

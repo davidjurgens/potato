@@ -539,17 +539,55 @@ class AIAssistantManager {
         const text = textContent.textContent || textContent.innerText;
         console.log('[AIAssistant] Text content length:', text.length);
 
-        // Parse the new label_keywords format
+        // Get the annotation form to find the schema name
+        // The form's id attribute is the schema name (e.g., "sentiment")
+        const annotationForm = document.querySelector(`.annotation-form[data-annotation-id="${CSS.escape(String(annotationId))}"]`);
+        const schemaName = annotationForm?.id || annotationForm?.dataset.schemaName || 'default';
+
+        // /api/get_ai_suggestion returns a bare ARRAY of spans
+        // ({label, start, end, text, reasoning}). This function only understood
+        // the older {label_keywords: [{label, keywords: [...]}]} shape, so every
+        // real response was rejected as "Invalid label_keywords format" and the
+        // feature drew nothing at all.
+        //
+        // The server's start/end are offsets into the RAW item text. Overlays
+        // are positioned against #text-content, whose textContent is a
+        // different string (120 chars here for a 76-char message, once the
+        // display's own whitespace is counted), so those offsets do not
+        // transfer — using them directly produced 0x0 overlays. Locate the
+        // span's text in the DOM string instead, which is what the legacy
+        // branch below has always done.
+        if (Array.isArray(data)) {
+            const resolved = [];
+            data.forEach(s => {
+                if (!s || typeof s.text !== 'string' || !s.text.trim()) return;
+                const at = text.toLowerCase().indexOf(s.text.toLowerCase().trim());
+                if (at === -1) {
+                    console.log('[AIAssistant] keyword not found in displayed text:', s.text);
+                    return;
+                }
+                resolved.push({
+                    label: s.label,
+                    start: at,
+                    end: at + s.text.trim().length,
+                    text: text.substring(at, at + s.text.trim().length),
+                    schema: schemaName,
+                });
+            });
+            if (resolved.length === 0) {
+                console.log('[AIAssistant] No usable keyword spans in response:', data);
+                return;
+            }
+            this.insertKeywordHighlights(resolved, annotationId);
+            return;
+        }
+
+        // Legacy shape: labels with bare keyword strings, offsets found here.
         const labelKeywords = data.label_keywords;
         if (!labelKeywords || !Array.isArray(labelKeywords)) {
             console.error('[AIAssistant] Invalid label_keywords format:', data);
             return;
         }
-
-        // Get the annotation form to find the schema name
-        // The form's id attribute is the schema name (e.g., "sentiment")
-        const annotationForm = document.querySelector(`.annotation-form[data-annotation-id="${CSS.escape(String(annotationId))}"]`);
-        const schemaName = annotationForm?.id || annotationForm?.dataset.schemaName || 'default';
 
         // Find keywords in text and create highlight data
         const highlights = [];
@@ -593,8 +631,19 @@ class AIAssistantManager {
             return;
         }
 
-        // Always use spanManager for keyword highlighting
-        // This ensures consistent positioning and z-index with other overlays
+        this.insertKeywordHighlights(highlights, annotationId);
+    }
+
+    /**
+     * Hand resolved keyword spans to the span manager.
+     *
+     * Always goes through spanManager so AI keyword overlays share the
+     * positioning and z-index of every other overlay. Note the dependency this
+     * makes explicit: keyword highlighting needs a span-capable display, so a
+     * project with `ai_support` but no span scheme has no spanManager and the
+     * feature cannot draw, however good the model's answer was.
+     */
+    insertKeywordHighlights(highlights, annotationId) {
         if (window.spanManager && typeof window.spanManager.insertAiKeywordHighlights === 'function') {
             window.spanManager.insertAiKeywordHighlights(highlights, annotationId);
         } else {

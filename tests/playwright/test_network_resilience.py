@@ -6,7 +6,6 @@ evaluation schemas to ensure annotation data isn't silently lost.
 """
 
 import json
-import os
 import time
 import pytest
 
@@ -20,23 +19,25 @@ from tests.playwright.test_base import BasePlaywrightTest
 
 
 def _make_trajectory_server(make_server):
-    """Create server with trajectory_eval schema for resilience testing."""
-    from tests.helpers.test_utils import create_test_directory
+    """Create server with trajectory_eval schema for resilience testing.
 
-    test_dir = create_test_directory("pw_resilience")
-    data_file = os.path.join(test_dir, "data.jsonl")
-    items = []
-    for i in range(10):
-        items.append({
+    The items must be handed to ``make_server``. An earlier version wrote them
+    to a data file in its own directory and then called ``make_server(schemes)``,
+    which builds a *different* directory with the default text-only rows — so
+    the server served items with no ``steps``, the client rendered no step
+    cards, and every test in this file waited 10s for a selector that could
+    never appear.
+    """
+    items = [
+        {
             "id": f"trace_{i:03d}",
             "text": f"Task {i}: Evaluate this agent trace",
             "steps": [
                 {"action": f"step_{j}_of_trace_{i}"} for j in range(3)
             ],
-        })
-    with open(data_file, "w") as f:
-        for item in items:
-            f.write(json.dumps(item) + "\n")
+        }
+        for i in range(10)
+    ]
 
     schemes = [
         {
@@ -55,7 +56,7 @@ def _make_trajectory_server(make_server):
             "show_score": True,
         }
     ]
-    return make_server(schemes)
+    return make_server(schemes, items=items)
 
 
 @pytest.mark.playwright

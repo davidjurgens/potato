@@ -77,6 +77,7 @@ function flushPendingSave() {
             labelAnnotations[`${schema}:${label}`] = value;
         }
     }
+    collectAnnotationDataInputs(labelAnnotations);
 
     const payload = JSON.stringify({
         instance_id: currentInstance.id,
@@ -86,6 +87,25 @@ function flushPendingSave() {
 
     navigator.sendBeacon('/updateinstance',
         new Blob([payload], {type: 'application/json'}));
+}
+
+/**
+ * Fold the blob schemas' hidden inputs into a `/updateinstance` payload.
+ *
+ * Shared by `saveAnnotations()` and `flushPendingSave()` because they build
+ * their payloads separately, and only the first one collected these — so the
+ * unload path posted an answer with the canvas schemas missing from it, which
+ * on the server reads as "the annotator cleared them" rather than "this
+ * message does not mention them".
+ */
+function collectAnnotationDataInputs(labelAnnotations) {
+    document.querySelectorAll('.annotation-data-input').forEach(input => {
+        if (input.name && input.value) {
+            // ::: is the separator the other annotation types use.
+            labelAnnotations[`${input.name}:::_data`] = input.value;
+        }
+    });
+    return labelAnnotations;
 }
 
 window.addEventListener('beforeunload', flushPendingSave);
@@ -807,18 +827,13 @@ function setupSpanLabelSelector() {
                 // Add stack trace to see what's calling this
                 debugLog('🔍 [DEBUG] setupSpanLabelSelector() - Change event stack trace:', new Error().stack);
 
-                // Check if this change event was triggered by programmatic setting
-                // If the checkbox was just set to checked by onlyOne, don't interfere
-                if (this.checked && this.hasAttribute('data-just-checked')) {
-                    debugLog('🔍 [DEBUG] setupSpanLabelSelector() - Ignoring change event for just-checked checkbox');
-                    this.removeAttribute('data-just-checked');
-                    return;
-                }
-
                 // Note: We don't manage checkbox state here anymore because the onclick
                 // handler (onlyOne function) already handles this correctly.
                 // This change event is just for logging and any additional functionality
                 // that might be needed in the future.
+                //
+                // The `data-just-checked` guard that used to sit here is gone with
+                // the forced re-check in onlyOne() that it existed to mask.
             });
 
             // Mark as set up
@@ -1424,7 +1439,19 @@ function generateAnnotationForms() {
     validateRequiredFields();
 }
 
-async function saveAnnotations() {
+/**
+ * Send the current answers to the server.
+ *
+ * `background` marks a save the annotator did not ask for — the debounced
+ * autosave that fires while they are still working. A network failure there
+ * must not call showError(), because showError() sets `#main-content` to
+ * `display: none`: one dropped request and the entire annotation UI vanishes
+ * mid-task, taking the visible work with it. Measured, not theorised — with
+ * `/updateinstance` aborted, every step card's button reported a 0×0 rect and
+ * a null offsetParent. A save the annotator triggered by navigating still
+ * blocks, because there the failure is the thing they need to know about.
+ */
+async function saveAnnotations({ background = false } = {}) {
     if (!currentInstance || !currentInstance.id) {
         return;
     }
@@ -1460,16 +1487,7 @@ async function saveAnnotations() {
             }
         }
         // Also collect data from hidden annotation inputs (image/audio/video annotations)
-        const hiddenInputs = document.querySelectorAll('.annotation-data-input');
-        hiddenInputs.forEach(input => {
-            if (input.name && input.value) {
-                // Store the raw JSON value with schema name as key
-                // Use ::: separator to match the format used by other annotation types
-                const key = `${input.name}:::_data`;
-                labelAnnotations[key] = input.value;
-                debugLog('[DEBUG] saveAnnotations: collected hidden input:', input.name, '=', input.value.substring(0, 100) + '...');
-            }
-        });
+        collectAnnotationDataInputs(labelAnnotations);
 
         const response = await fetch('/updateinstance', {
             method: 'POST',
@@ -1502,7 +1520,15 @@ async function saveAnnotations() {
 
     } catch (error) {
         console.error('Error saving annotations:', error);
-        showError(true, 'Failed to save annotations: ' + error.message);
+        if (background) {
+            // Keep the work on screen. The next edit reschedules a save, and
+            // the unload flush is still there as a backstop.
+            showNotification(
+                'Could not save just now — your work is still here and will be sent again.',
+                'error');
+        } else {
+            showError(true, 'Failed to save annotations: ' + error.message);
+        }
         return false;
     }
 }
@@ -2265,7 +2291,112 @@ function setupInputEventListeners() {
             debugLog(`Set up event listener for hidden input:`, input.id);
         }
     });
+
+    setupAnnotationDataAutosave();
 }
+
+/**
+ * Autosave for the blob schemas — image, video, audio, tiered, spatial,
+ * episode, grounding_eval, region_caption, rollout_evaluation.
+ *
+ * These do not post through `handleInputChange`: they own a canvas or a
+ * timeline, serialize the whole answer into one `.annotation-data-input`, and
+ * are collected wholesale inside `saveAnnotations()`. That collection was the
+ * ONLY thing that read them, and it runs on navigation — so until an annotator
+ * pressed Next or Previous, nothing they drew had reached the server.
+ *
+ * Measured before this existed: four shapes drawn, five seconds elapsed,
+ * `/get_annotations` empty and no save timer pending, so the `beforeunload`
+ * flush (which returns early unless `textSaveTimer` is set) had nothing to
+ * flush either. Closing the tab lost the work.
+ *
+ * It stayed invisible because every persistence test navigates, and navigation
+ * saves explicitly — and because a project that also has a radio or text
+ * schema saves on those, sweeping the blob inputs up as a side effect.
+ */
+function setupAnnotationDataAutosave() {
+    // Only `.annotation-data-input`: the mask input is legacy and is not
+    // collected into the payload — mask RLE already travels inside the main
+    // blob, whose write dispatches this same event.
+    document.querySelectorAll('input.annotation-data-input')
+        .forEach(input => {
+            // `setupInputEventListeners()` runs from both render paths and can
+            // run twice in one document. Re-wiring would re-read the baseline
+            // below from a value the annotator had already changed, and then
+            // suppress the save that value needs.
+            if (input.dataset.autosaveWired === 'true') return;
+            input.dataset.autosaveWired = 'true';
+
+            // What the instance arrived holding. A manager that writes the
+            // same thing back while setting itself up has not been edited, and
+            // must not be saved: an empty answer still counts as an answer, so
+            // an init-time save marks an untouched instance as done, and
+            // `/annotate` ends the task as soon as nothing is left unanswered.
+            const arrivedWith = input.value;
+            input.addEventListener('change', function () {
+                if (!annotationDataChanged(input, arrivedWith)) return;
+                scheduleAnnotationDataSave();
+            });
+            debugLog('Set up autosave for annotation data input:', input.id);
+        });
+}
+
+/**
+ * Has this input moved away from what the instance arrived holding?
+ *
+ * Guards the autosave centrally rather than trusting each of the nine managers
+ * to know when it is hydrating. Two cases are "no": the value is byte-identical
+ * to what arrived, or it went from nothing to an empty answer — `[]`, `{}` and
+ * the empty string all mean "the annotator has drawn nothing yet".
+ */
+function annotationDataChanged(input, arrivedWith) {
+    const now = input.value;
+    if (now === arrivedWith) return false;
+    return !(isEmptyAnnotationData(now) && isEmptyAnnotationData(arrivedWith));
+}
+
+function isEmptyAnnotationData(value) {
+    if (!value) return true;
+    const trimmed = value.trim();
+    if (trimmed === '[]' || trimmed === '{}') return true;
+    try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.length === 0;
+        if (parsed && typeof parsed === 'object') {
+            // A timeline serializes to {segments: [], tracking: {}} when empty,
+            // so an object counts as empty when every value it holds is.
+            return Object.values(parsed).every(
+                v => v == null
+                    || (Array.isArray(v) && v.length === 0)
+                    || (typeof v === 'object' && Object.keys(v).length === 0));
+        }
+        return false;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Debounce a save of the canvas/timeline schemas.
+ *
+ * Deliberately shares `textSaveTimer` rather than owning a second timer: that
+ * is the handle `flushPendingSave()` checks on beforeunload and on tab hide,
+ * so using it is what makes a closed tab flush instead of returning early.
+ *
+ * The delay is longer than the 500 ms used for a click on a radio button
+ * because drawing arrives in bursts — a mask stroke fires on every path, and
+ * dragging a box fires on every modify.
+ */
+function scheduleAnnotationDataSave() {
+    if (!currentInstance) return;
+    clearTimeout(textSaveTimer);
+    textSaveTimer = setTimeout(() => {
+        textSaveTimer = null;
+        saveAnnotations({ background: true });
+    }, 800);
+}
+
+window.scheduleAnnotationDataSave = scheduleAnnotationDataSave;
 
 function handleInputChange(element) {
     const schema = element.getAttribute('schema');
@@ -2349,7 +2480,7 @@ function handleInputChange(element) {
             // Auto-save the removal
             clearTimeout(textSaveTimer);
             textSaveTimer = setTimeout(() => {
-                saveAnnotations();
+                saveAnnotations({ background: true });
             }, 500);
             return;
         }
@@ -2375,7 +2506,7 @@ function handleInputChange(element) {
     // Auto-save
     clearTimeout(textSaveTimer);
     textSaveTimer = setTimeout(() => {
-        saveAnnotations();
+        saveAnnotations({ background: true });
     }, 500);
 
     // Hotkey review mode: auto-advance once the instance is complete
@@ -3022,7 +3153,21 @@ function updateAllCharCounters() {
     });
 }
 
-// Span annotation functions
+/**
+ * Enforce single-select across a group of same-class inputs.
+ *
+ * Called from the inline onclick of radio, likert, confidence and span-label
+ * inputs. It unchecks the siblings; it must NOT touch the clicked input.
+ *
+ * It used to end with `checkbox.checked = true`, which is a no-op for the
+ * `type="radio"` schemas but made the `type="checkbox"` span palette one-way:
+ * the browser untoggled the box correctly, this put it straight back, and an
+ * armed code could never be disarmed. Since applying a code consumes the text
+ * selection, that also made the in-vivo `i` shortcut — which needs a live
+ * selection — unreachable for the rest of the page's life. Measured with a
+ * capture-phase listener: `checked` was false on the way in, true by the time
+ * the change event fired.
+ */
 function onlyOne(checkbox) {
     debugLog('🔍 [DEBUG] onlyOne() called with checkbox:', {
         id: checkbox.id,
@@ -3049,18 +3194,10 @@ function onlyOne(checkbox) {
             x[i].checked = false;
         }
     }
-    // Ensure the clicked checkbox is checked
-    debugLog('🔍 [DEBUG] onlyOne() - Setting clicked checkbox to checked:', checkbox.id);
-    checkbox.setAttribute('data-just-checked', 'true'); // Flag to prevent change event interference
-    checkbox.checked = true;
-
-    // Remove the flag after a short delay in case the change event doesn't fire
-    setTimeout(() => {
-        if (checkbox.hasAttribute('data-just-checked')) {
-            debugLog('🔍 [DEBUG] onlyOne() - Removing data-just-checked flag after timeout');
-            checkbox.removeAttribute('data-just-checked');
-        }
-    }, 100);
+    // The clicked input keeps whatever the browser's own toggle just gave it:
+    // checked when arming, unchecked when the annotator clicks it again.
+    debugLog('🔍 [DEBUG] onlyOne() - Leaving clicked input as the browser set it:',
+        { id: checkbox.id, checked: checkbox.checked });
 }
 
 function extractSpanAnnotationsFromDOM() {

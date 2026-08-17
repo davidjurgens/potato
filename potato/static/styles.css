@@ -345,10 +345,36 @@ body {
   white-space: normal;
   margin-top: 0.5rem;
   border: 1px solid #e5e7eb;
+  /* A per-label rationale set runs to ~700px, and the panel is absolutely
+     positioned inside `.shadcn-card`, which sets `overflow: hidden` to keep the
+     media canvas inside its rounded corners. Unbounded, the panel was simply
+     sliced off mid-sentence at the card edge. Bounding it here keeps it a
+     self-contained, scrollable component instead of relying on the card to
+     clip it, without touching the card's own overflow. */
+  max-height: 22rem;
+  overflow-y: auto;
 }
 
 .tooltip.active {
   display: block;
+  /* Bootstrap ships `.tooltip { ... opacity: 0 }` for its own JS tooltips, which
+     it fades in by adding `.show`. Potato's AI assistant panels reuse the class
+     name `.tooltip` and toggle `.active` instead, and never restored the
+     opacity — so hint, keyword and rationale panels opened, laid out, filled
+     with model output, and painted nothing at all. `.tooltip.active` outranks
+     Bootstrap's single-class rule, so this is where it has to be set. */
+  opacity: 1;
+}
+
+/* The card and its content pane both clip (`overflow: hidden` / `overflow-y:
+   auto`) to keep the media canvas inside the rounded corners and to let long
+   forms scroll. An AI panel is absolutely positioned *inside* that context, so
+   a rationale set taller than the remaining card was sliced off mid-sentence —
+   the model's answer was on the page and unreadable. Lift the clip only while a
+   panel is actually open, so the normal scrolling behaviour is untouched. */
+.shadcn-card:has(.tooltip.active),
+.shadcn-card-content:has(.tooltip.active) {
+  overflow: visible;
 }
 
 /* Close button for tooltip */

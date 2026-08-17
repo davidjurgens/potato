@@ -4,28 +4,28 @@
     "version": "1"
   },
   "ai_assistant_manager.js": {
-    "sha256": "4bcdd4cb3dcfcee0",
-    "version": "1"
+    "sha256": "7e827f3f06c33283",
+    "version": "2"
   },
   "annotation.js": {
-    "sha256": "c29f4164a9d55034",
-    "version": "27"
+    "sha256": "ef1da9fb348f6efc",
+    "version": "30"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
     "version": "4"
   },
   "annotation_telemetry.js": {
-    "sha256": "b7305aa27ec84338",
-    "version": "1"
+    "sha256": "4f6d34d46702ff1f",
+    "version": "2"
   },
   "audio-annotation.css": {
     "sha256": "9f06d0fad872c3e9",
     "version": "4"
   },
   "audio-annotation.js": {
-    "sha256": "f8e0daff34582540",
-    "version": "4"
+    "sha256": "685b9a723f114db5",
+    "version": "5"
   },
   "audio-dialogue.css": {
     "sha256": "14b56e9a134afacb",
@@ -36,12 +36,12 @@
     "version": "3"
   },
   "boundary-probe.js": {
-    "sha256": "ecdbc705ae87802d",
-    "version": "4"
+    "sha256": "75c624a0f877f90e",
+    "version": "6"
   },
   "codebook.js": {
-    "sha256": "b5e096772c213c97",
-    "version": "12"
+    "sha256": "2a6086ea9e2cdef1",
+    "version": "14"
   },
   "conversation-tree.js": {
     "sha256": "9181c59ed2b15736",
@@ -52,8 +52,8 @@
     "version": "1"
   },
   "css/boundary.css": {
-    "sha256": "102a53ccb9b2cbfc",
-    "version": "3"
+    "sha256": "f53c04d1f22adff3",
+    "version": "5"
   },
   "css/codebook.css": {
     "sha256": "a84f8ac6393636dc",
@@ -124,8 +124,8 @@
     "version": "1"
   },
   "floating-panel-utils.js": {
-    "sha256": "eb167cefe58fea77",
-    "version": "4"
+    "sha256": "0c81c4cfae319503",
+    "version": "5"
   },
   "grounding-eval.css": {
     "sha256": "0913d758fc309574",
@@ -140,8 +140,8 @@
     "version": "15"
   },
   "image-annotation.js": {
-    "sha256": "148c9e80a133a219",
-    "version": "28"
+    "sha256": "d0e4962bf7a9f2ea",
+    "version": "29"
   },
   "instance-display.js": {
     "sha256": "44f86cac34ef4ab1",
@@ -172,8 +172,8 @@
     "version": "1"
   },
   "memos.js": {
-    "sha256": "56bacfdafb15372f",
-    "version": "1"
+    "sha256": "a3b146e4e0ca01c9",
+    "version": "2"
   },
   "multi-agent-discussion.css": {
     "sha256": "276ac528ca3f2b51",
@@ -240,8 +240,8 @@
     "version": "1"
   },
   "region-caption.js": {
-    "sha256": "1c2867b49084ce91",
-    "version": "1"
+    "sha256": "9fb776bd08350f28",
+    "version": "2"
   },
   "rollout-eval.css": {
     "sha256": "ba9d2abeb5a3da52",
@@ -288,8 +288,8 @@
     "version": "1"
   },
   "span-core.js": {
-    "sha256": "b68555fb3437bde1",
-    "version": "15"
+    "sha256": "a3124907afb07101",
+    "version": "17"
   },
   "span-link-manager.js": {
     "sha256": "643b3403ec23892e",
@@ -298,6 +298,10 @@
   "span-link-styles.css": {
     "sha256": "244fc855ca30f10c",
     "version": "5"
+  },
+  "span-styles.css": {
+    "sha256": "f917576d7ae6c929",
+    "version": "1"
   },
   "styles.css": {
     "sha256": "f77e00c3807d13f1",
@@ -308,8 +312,8 @@
     "version": "2"
   },
   "tiered-annotation.js": {
-    "sha256": "9e981deb290ca5d3",
-    "version": "3"
+    "sha256": "e91d262ff291f6c7",
+    "version": "4"
   },
   "tracking-interpolation.js": {
     "sha256": "da8bd01cf9b79b92",
@@ -340,8 +344,8 @@
     "version": "3"
   },
   "video-annotation.js": {
-    "sha256": "c8428bba348ac52b",
-    "version": "18"
+    "sha256": "0ce3a43000c77b1e",
+    "version": "19"
   },
   "visual_ai_assistant.js": {
     "sha256": "66eb1e15fcc9d23a",

@@ -1333,23 +1333,41 @@ def _prefill_diversity_embeddings(dm, config: dict) -> None:
         config: Application configuration
     """
     from tqdm import tqdm
+    from potato.embedders import resolve
 
     ism = get_item_state_manager()
-    text_key = config.get("item_properties", {}).get("text_key", "text")
-
-    # Collect texts for prefill
     items = list(ism.items())[:dm.config.prefill_count]
-    texts = {}
-
-    for item in items:
-        item_data = item.get_data()
-        text = item_data.get(text_key, item.get_text())
-        texts[item.get_id()] = text
-
-    if not texts:
+    if not items:
         return
 
-    print(f"Prefilling {len(texts)} embeddings for diversity ordering...")
+    # Which field, and which encoder? Asking the project rather than assuming
+    # text: `item.get_text()` falls back to an item's first string value, so a
+    # vision corpus used to embed its own instance ids and say nothing about it.
+    samples = [item.get_data() for item in items[:50]]
+    embedder = resolve(config, samples=samples,
+                       cache_dir=config.get("output_annotation_dir"))
+    if not embedder.available:
+        logger.warning("Diversity embeddings unavailable: %s",
+                       embedder.spec.unavailable_reason)
+        print(f"Skipping embeddings: {embedder.spec.unavailable_reason}")
+        return
+    dm.use_embedder(embedder)
+
+    texts = {}
+    for item in items:
+        reference = embedder.reference_for(item.get_data())
+        if reference is not None:
+            texts[item.get_id()] = reference
+
+    if not texts:
+        logger.warning(
+            "Diversity embeddings: no item carried the field '%s'",
+            embedder.spec.source_field)
+        return
+
+    print(f"Prefilling {len(texts)} embeddings "
+          f"({embedder.spec.backend}/{embedder.spec.model} "
+          f"over '{embedder.spec.source_field}')...")
 
     # Track progress with tqdm
     completed = [0]

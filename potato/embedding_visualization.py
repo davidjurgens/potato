@@ -129,6 +129,11 @@ class EmbeddingVisualizationManager:
         self._projection_cache: Optional[Dict[str, Tuple[float, float]]] = None
         self._cache_hash: Optional[str] = None
         self._label_cache: Dict[str, Optional[str]] = {}
+        #: Vectors the map computed for itself, when diversity ordering is off.
+        self._own_embeddings: Dict[str, Any] = {}
+        self._own_spec = None
+        #: What produced the points on screen, reported with them.
+        self._active_spec = None
 
         # Check dependencies
         if not _NUMPY_AVAILABLE:
@@ -157,9 +162,18 @@ class EmbeddingVisualizationManager:
         return get_diversity_manager()
 
     def _get_item_state_manager(self):
-        """Get the ItemStateManager singleton."""
+        """The ItemStateManager singleton, or None before items are loaded.
+
+        Raises when uninitialised, which is a reasonable contract for the
+        annotation path and a poor one here: the admin dashboard can be asked
+        for a map before a project has finished loading, and that should read
+        as "nothing to show yet", not a 500.
+        """
         from potato.item_state_management import get_item_state_manager
-        return get_item_state_manager()
+        try:
+            return get_item_state_manager()
+        except (ValueError, RuntimeError):
+            return None
 
     def _get_user_state_manager(self):
         """Get the UserStateManager singleton."""
@@ -382,6 +396,51 @@ class EmbeddingVisualizationManager:
 
         return colors
 
+    def _embed_corpus(self, force_refresh: bool = False):
+        """Embed the corpus for the map, independently of diversity ordering.
+
+        Bounded by ``sample_size``: the map is a picture of the corpus, not a
+        job that should encode a million items because someone opened a tab.
+        """
+        if self._own_embeddings and not force_refresh:
+            return self._own_embeddings, self._own_spec
+
+        from potato.embedders import resolve
+
+        ism = self._get_item_state_manager()
+        if not ism:
+            return {}, None
+
+        budget = max(1, int(self.config.sample_size))
+        items = list(ism.items())[:budget]
+        if not items:
+            return {}, None
+
+        samples = [item.get_data() for item in items[:50]]
+        embedder = resolve(self.app_config, samples=samples,
+                           cache_dir=self.app_config.get("output_annotation_dir"))
+        if not embedder.available:
+            self.logger.info("Corpus map cannot embed: %s",
+                             embedder.spec.unavailable_reason)
+            return {}, embedder.spec
+
+        self.logger.info(
+            "Corpus map embedding %d items with %s/%s over '%s'",
+            len(items), embedder.spec.backend, embedder.spec.model,
+            embedder.spec.source_field)
+        try:
+            vectors = embedder.embed_items(
+                {item.get_id(): item.get_data() for item in items})
+        except Exception as exc:
+            self.logger.error("Corpus map embedding failed: %s", exc)
+            spec = embedder.spec
+            spec.unavailable_reason = f"Embedding failed: {exc}"
+            return {}, spec
+
+        self._own_embeddings = vectors
+        self._own_spec = embedder.spec
+        return vectors, embedder.spec
+
     def get_visualization_data(self, force_refresh: bool = False) -> VisualizationData:
         """
         Get complete visualization data for the scatter plot.
@@ -401,18 +460,28 @@ class EmbeddingVisualizationManager:
             dm = self._get_diversity_manager()
             ism = self._get_item_state_manager()
 
-            if not dm or not dm.enabled:
+            # The map used to be parasitic on diversity ordering: no
+            # diversity_ordering block meant no corpus map, for no reason other
+            # than that was where the vectors happened to live. It now embeds
+            # for itself when it has to.
+            source = dm.embeddings if (dm and dm.enabled and dm.embeddings) else None
+            spec = getattr(dm, "embedder_spec", None) if dm else None
+            if source is None:
+                source, spec = self._embed_corpus(force_refresh=force_refresh)
+
+            if not source:
+                reason = (spec.unavailable_reason if spec and spec.unavailable_reason
+                          else "No embeddings available. Ensure items have been loaded.")
                 return VisualizationData(
-                    stats={"error": "Diversity manager not available. Enable diversity_ordering in config."}
+                    stats={"error": reason,
+                           "embedder": spec.to_dict() if spec else None}
                 )
 
-            if not dm.embeddings:
-                return VisualizationData(
-                    stats={"error": "No embeddings available. Ensure items have been loaded."}
-                )
+            self._active_spec = spec
+            dm_embeddings = source
 
             # Get embeddings (possibly sampled)
-            all_embedding_ids = set(dm.embeddings.keys())
+            all_embedding_ids = set(dm_embeddings.keys())
             annotated_ids = set()
 
             # Find annotated instances
@@ -432,9 +501,9 @@ class EmbeddingVisualizationManager:
 
             # Get embeddings for sampled instances
             sampled_embeddings = {
-                iid: dm.embeddings[iid]
+                iid: dm_embeddings[iid]
                 for iid in sample_ids
-                if iid in dm.embeddings
+                if iid in dm_embeddings
             }
 
             # Compute UMAP projection
@@ -472,11 +541,30 @@ class EmbeddingVisualizationManager:
                     except (KeyError, AttributeError):
                         item = None
                     if item:
-                        text = item.get_text()
-                        if text:
-                            preview = text[:200] + "..." if len(text) > 200 else text
-                        # Check for image
-                        if hasattr(item, 'get_image_path'):
+                        data = item.get_data() if hasattr(item, "get_data") else {}
+                        # Show what was embedded. On a media corpus the old
+                        # path fell through to get_text(), whose answer for an
+                        # item with no text key is the instance id — so every
+                        # hover card read "img_01".
+                        reference = None
+                        if self._active_spec and self._active_spec.source_field:
+                            value = (data or {}).get(self._active_spec.source_field)
+                            if isinstance(value, str) and value.strip():
+                                reference = value
+                        modality = (self._active_spec.modality
+                                    if self._active_spec else "text")
+                        if reference and modality in ("image", "video", "audio"):
+                            preview = reference
+                            preview_type = modality
+                        elif reference:
+                            preview = (reference[:200] + "..."
+                                       if len(reference) > 200 else reference)
+                        else:
+                            text = item.get_text()
+                            if text:
+                                preview = text[:200] + "..." if len(text) > 200 else text
+                        # Legacy hook, kept for item types that provide it
+                        if preview_type == "text" and hasattr(item, 'get_image_path'):
                             img_path = item.get_image_path()
                             if img_path:
                                 preview = img_path
@@ -502,14 +590,19 @@ class EmbeddingVisualizationManager:
             # Assign colors
             label_colors = self._assign_label_colors(list(unique_labels))
 
-            # Build stats
+            # Build stats. The embedder rides along with the points: a map is
+            # uninterpretable without knowing what was embedded, and the way
+            # this used to fail — plotting instance ids — looked exactly like
+            # a map of the corpus.
             stats = {
                 "total_instances": len(all_embedding_ids),
                 "visualized_instances": len(points),
                 "annotated_instances": len(annotated_ids),
                 "unannotated_instances": len(all_embedding_ids) - len(annotated_ids),
                 "label_source": self.config.label_source,
-                "unique_labels": len([l for l in unique_labels if l is not None])
+                "unique_labels": len([l for l in unique_labels if l is not None]),
+                "embedder": (self._active_spec.to_dict()
+                             if self._active_spec else None),
             }
 
             return VisualizationData(

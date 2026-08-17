@@ -204,6 +204,26 @@ class BasePlaywrightTest:
             arg=schema,
         )
 
+    def arm(self, page: "Page", schema: str, tool: str, label=None):
+        """Select the label and tool, then let the layout settle.
+
+        Arming CHANGES THE LAYOUT — measured: clicking a tool button took the
+        canvas element from 800 CSS px wide to 858, which fires the manager's
+        ResizeObserver and re-fits the image, moving the picture inside the
+        canvas. So the image rect must be read after this, never before.
+
+        Reading it first is what `draw_bbox_on_image` used to do, and it put
+        every box ~29 px left of where the test asked for. Nothing caught it
+        because the tests that draw do not assert where the result landed.
+        """
+        if label:
+            self.select_label(page, schema, label)
+        if tool:
+            self.select_tool(page, schema, tool)
+        # One rendered frame, so a resize triggered by the click is applied
+        # before anything measures.
+        page.evaluate("() => new Promise(requestAnimationFrame)")
+
     def draw_bbox_on_image(self, page: "Page", schema: str,
                            fx0, fy0, fx1, fy1, label=None):
         """Draw a bbox using IMAGE-relative fractions (0-1), not canvas pixels.
@@ -212,36 +232,101 @@ class BasePlaywrightTest:
         accidentally drawing outside the image just because the canvas is
         larger than the picture.
         """
+        self.arm(page, schema, "bbox", label)
         rect = self.image_rect(page, schema)
         assert rect, f"no image loaded for schema '{schema}'"
         return self.draw_bbox(
             page, schema,
             rect["left"] + fx0 * rect["width"], rect["top"] + fy0 * rect["height"],
             rect["left"] + fx1 * rect["width"], rect["top"] + fy1 * rect["height"],
-            label=label,
+            armed=True,
         )
+
+    def drag_shape_on_image(self, page: "Page", schema: str, tool,
+                            fx0, fy0, fx1, fy1, label=None):
+        """Drag any drag-drawn tool (bbox, ellipse, the cuboid front face).
+
+        Same arm-then-measure order as `draw_bbox_on_image`, for the same
+        reason.
+        """
+        self.arm(page, schema, tool, label)
+        rect = self.image_rect(page, schema)
+        assert rect, f"no image loaded for schema '{schema}'"
+        canvas = page.locator(f"#canvas-{schema}")
+        box = canvas.bounding_box()
+        assert box, f"canvas-{schema} has no layout box"
+
+        def at(fx, fy):
+            return (box["x"] + rect["left"] + fx * rect["width"],
+                    box["y"] + rect["top"] + fy * rect["height"])
+
+        start, end = at(fx0, fy0), at(fx1, fy1)
+        page.mouse.move(*start)
+        page.mouse.down()
+        # Fabric needs an intermediate move to register a drag rather than a
+        # click, and the tools that size themselves while dragging need one to
+        # have any size at all.
+        page.mouse.move((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
+        page.mouse.move(*end)
+        page.mouse.up()
+
+    def click_points_on_image(self, page: "Page", schema: str, tool, points,
+                              label=None, complete=False, arm=True):
+        """Click a sequence of image-relative points with a click-built tool.
+
+        Polygons, polylines and skeletons are built one click at a time. Pass
+        `complete=True` to double-click the last point, which is how a polygon
+        or an unfinished skeleton is committed.
+
+        Pass `arm=False` to continue a shape already in progress. Re-selecting
+        a tool clears `cuboidFront`, `polygonPoints` and `keypointPoints` on
+        purpose — a half-finished shape must not survive a tool switch — so
+        re-arming between the two halves of a cuboid throws the front face away
+        and the second click silently starts a new one.
+        """
+        if arm:
+            self.arm(page, schema, tool, label)
+        rect = self.image_rect(page, schema)
+        assert rect, f"no image loaded for schema '{schema}'"
+        box = page.locator(f"#canvas-{schema}").bounding_box()
+        assert box, f"canvas-{schema} has no layout box"
+
+        last = None
+        for fx, fy in points:
+            last = (box["x"] + rect["left"] + fx * rect["width"],
+                    box["y"] + rect["top"] + fy * rect["height"])
+            page.mouse.click(*last)
+        if complete and last:
+            page.mouse.dblclick(*last)
 
     def paint_stroke_on_image(self, page: "Page", schema: str, points,
                               label=None, tool="brush"):
         """Paint a stroke using IMAGE-relative fractions (0-1)."""
+        self.arm(page, schema, tool, label)
         rect = self.image_rect(page, schema)
         assert rect, f"no image loaded for schema '{schema}'"
         return self.paint_stroke(
             page, schema,
             [(rect["left"] + fx * rect["width"], rect["top"] + fy * rect["height"])
              for fx, fy in points],
-            label=label, tool=tool,
+            tool=tool, armed=True,
         )
 
-    def draw_bbox(self, page: "Page", schema: str, x0, y0, x1, y1, label=None):
+    def draw_bbox(self, page: "Page", schema: str, x0, y0, x1, y1, label=None,
+                  armed=False):
         """Drag a bounding box on the canvas, in CANVAS pixel coordinates.
 
         Uses real mouse events so the manager's own mouse:down/move/up path
         runs — the same code an annotator exercises.
+
+        Pass ``armed=True`` when the caller has already selected the tool and
+        measured afterwards; arming here would move the picture out from under
+        coordinates that were computed against the previous layout.
         """
-        if label:
-            self.select_label(page, schema, label)
-        self.select_tool(page, schema, "bbox")
+        if not armed:
+            if label:
+                self.select_label(page, schema, label)
+            self.select_tool(page, schema, "bbox")
 
         canvas = page.locator(f"#canvas-{schema}")
         box = canvas.bounding_box()
@@ -254,15 +339,20 @@ class BasePlaywrightTest:
         page.mouse.move(box["x"] + x1, box["y"] + y1)
         page.mouse.up()
 
-    def paint_stroke(self, page: "Page", schema: str, points, label=None, tool="brush"):
+    def paint_stroke(self, page: "Page", schema: str, points, label=None,
+                     tool="brush", armed=False):
         """Paint a mask stroke through a list of (x, y) canvas points.
 
         Mask events are bound to the *mask* canvas overlay, not the fabric one,
         so this targets that element deliberately.
+
+        ``armed=True`` when the caller already selected the tool — see
+        ``draw_bbox``.
         """
-        if label:
-            self.select_label(page, schema, label)
-        self.select_tool(page, schema, tool)
+        if not armed:
+            if label:
+                self.select_label(page, schema, label)
+            self.select_tool(page, schema, tool)
 
         mask = page.locator(f"#mask-canvas-{schema}")
         box = mask.bounding_box()
