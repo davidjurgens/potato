@@ -23,16 +23,12 @@ VENDOR_DIR = REPO_ROOT / "potato" / "static" / "vendor"
 
 #: External assets base_template_v2.html is still allowed to load.
 #:
-#: Every entry is tracked work, not an exemption. Bootstrap's CSS and Font
-#: Awesome are ALREADY vendored (for adjudication.html) but at different
-#: versions than the CDN copies here, so switching is a version bump needing a
-#: full-app regression pass -- and Bootstrap's JS bundle is not vendored at all.
-#: See docs/deployment/air_gap.md.
-ALLOWED_EXTERNAL = {
-    "code.jquery.com": "jQuery 3.6.0 — used by span annotation; not yet vendored",
-    "cdn.jsdelivr.net": "Bootstrap 5.1.3 CSS+JS — vendored copy is 5.3.3, needs a version bump",
-    "cdnjs.cloudflare.com": "Font Awesome 6.0.0 — vendored copy is 6.7.2, needs the webfonts moved",
-}
+#: Empty, and meant to stay that way: base_template_v2.html loads no external
+#: asset at all. An entry here is tracked work with a deadline, not a standing
+#: exemption -- the last three (jQuery, Bootstrap, Font Awesome) sat here long
+#: enough that "air-gapped deployment is incomplete" became something the docs
+#: had to warn about. See docs/deployment/air_gap.md.
+ALLOWED_EXTERNAL = {}
 
 ASSET_PATTERN = re.compile(
     r'(?:<script[^>]+src|<link[^>]+href)\s*=\s*["\'](https?://[^"\']+)["\']',
@@ -80,6 +76,55 @@ class TestNoNewExternalAssets:
             f"ALLOWED_EXTERNAL lists host(s) the template no longer loads: {stale}. "
             f"Remove them so the allowlist keeps meaning something."
         )
+
+
+class TestStylesheetsDoNotImportRemotely:
+    """
+    The template guard reads `<script src>` and `<link href>`. A stylesheet can
+    reach the network without either: `styles.css` opened with
+
+        @import url('https://fonts.googleapis.com/css2?family=Outfit...');
+
+    which survived the whole air-gap effort because nothing looked inside CSS.
+    It cost more than typography -- a webfont request sends every annotator's IP
+    and User-Agent to a third party on each page load, which is exactly the kind
+    of quiet egress a self-hosted tool is chosen to avoid.
+    """
+
+    CSS_REMOTE = re.compile(r"""@import\s+(?:url\()?["']?(https?://[^"')\s]+)""", re.IGNORECASE)
+    CSS_URL = re.compile(r"""url\(\s*["']?(https?://[^"')\s]+)""", re.IGNORECASE)
+
+    def _stylesheets(self):
+        static = REPO_ROOT / "potato" / "static"
+        return [p for p in static.rglob("*.css")
+                if "vendor" not in p.parts and not p.name.endswith(".min.css")]
+
+    def test_no_stylesheet_imports_from_the_network(self):
+        offenders = []
+        for path in self._stylesheets():
+            for url in self.CSS_REMOTE.findall(path.read_text(encoding="utf-8", errors="ignore")):
+                offenders.append(f"{path.relative_to(REPO_ROOT)}: {url}")
+        assert not offenders, (
+            "Stylesheet(s) @import from the network, which the template guard "
+            f"cannot see: {offenders}. Vendor the asset under static/vendor/.")
+
+    def test_no_stylesheet_fetches_a_remote_url(self):
+        """`url()` on a font or background image is the same leak without the import."""
+        offenders = []
+        for path in self._stylesheets():
+            for url in self.CSS_URL.findall(path.read_text(encoding="utf-8", errors="ignore")):
+                offenders.append(f"{path.relative_to(REPO_ROOT)}: {url}")
+        assert not offenders, f"Stylesheet(s) reference remote url(): {offenders}"
+
+    def test_the_vendored_font_is_self_contained(self):
+        css = VENDOR_DIR / "outfit" / "outfit.css"
+        assert css.exists(), "vendored Outfit stylesheet is missing"
+        text = css.read_text(encoding="utf-8")
+        assert "https://" not in text, "the vendored font CSS still points at the network"
+        refs = set(re.findall(r"url\((files/[^)]+)\)", text))
+        assert refs, "the vendored font CSS references no font files"
+        missing = [r for r in refs if not (css.parent / r).exists()]
+        assert not missing, f"font files referenced but not vendored: {missing}"
 
 
 class TestFabricIsVendored:

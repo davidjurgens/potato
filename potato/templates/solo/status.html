@@ -1287,7 +1287,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://d3js.org/d3.v7.min.js" defer></script>
+<script src="{{ url_for('static', filename='vendor/d3-7.9.0.min.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/solo-viz.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/solo-dashboard.js') }}" defer></script>
 <script defer>

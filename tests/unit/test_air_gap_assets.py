@@ -120,24 +120,11 @@ class TestNoNewExternalHostAnywhere:
         r'(?:<script[^>]+src|<link[^>]+href)\s*=\s*["\'](https?://[^"\']+)["\']',
         re.IGNORECASE)
 
-    #: Hosts already relied on. Every entry is tracked work with a named
-    #: consequence in docs/deployment/air_gap.md, not an exemption.
-    ALLOWED = {
-        "code.jquery.com":
-            "jQuery 3.6.0 — span annotation is non-functional without it",
-        "cdn.jsdelivr.net":
-            "Bootstrap 5.1.3 CSS+JS — the vendored copy is 5.3.3, so switching "
-            "is a version bump needing a full-app regression pass",
-        "cdnjs.cloudflare.com":
-            "Font Awesome 6.0.0 — the vendored copy is 6.7.2 and its webfonts "
-            "directory has to move with the CSS",
-        "stackpath.bootstrapcdn.com":
-            "Bootstrap 4.x on header.html and the legacy Likert template — a "
-            "second, older Bootstrap than the one base_template_v2 loads",
-        "d3js.org":
-            "d3 v7 on the solo-mode status page; its charts do not render "
-            "without it",
-    }
+    #: Empty. Every asset in every source template is served from
+    #: potato/static/vendor/, so an air-gapped deployment loses nothing. An
+    #: entry here is tracked work with a named consequence in
+    #: docs/deployment/air_gap.md -- never a standing exemption.
+    ALLOWED = {}
 
     def test_no_template_loads_from_an_unlisted_host(self):
         offenders = []

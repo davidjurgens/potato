@@ -191,9 +191,12 @@ output_annotation_format: json
         except Exception as e:
             pytest.skip(f"Server failed to start: {e}")
         finally:
+            # FlaskTestServer runs in a thread, not a subprocess, so it has no
+            # `_process`. Guarding on that attribute meant stop() was never
+            # called and this fixture leaked its server for the rest of the
+            # session -- every later server then shared its singletons.
             try:
-                if hasattr(server, '_process') and server._process is not None:
-                    server.stop()
+                server.stop()
             except Exception:
                 pass
 

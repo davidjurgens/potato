@@ -86,21 +86,103 @@ ASSETS = [
         name="bootstrap-css",
         url="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css",
         path="bootstrap-5.3.3.min.css",
-        sri="",  # vendored before this script existed; hash not recorded upstream-verified
-        used_by="adjudication.html",
-        notes="base_template_v2.html still loads Bootstrap 5.1.3 from a CDN. "
-              "Switching it here is a MAJOR-version-adjacent bump (5.1 -> 5.3 "
-              "adds colour modes and renames variables) and needs a full-app "
-              "regression pass. Bootstrap's JS bundle is not vendored at all.",
+        sri="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH",
+        used_by="base_template_v2.html, adjudication.html",
+        notes="The committed copy was verified byte-identical to upstream 5.3.3 "
+              "when this SRI was recorded, so the earlier unpinned vendoring is "
+              "now checkable.",
+    ),
+    Asset(
+        name="bootstrap-js",
+        url="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js",
+        path="bootstrap-5.3.3.bundle.min.js",
+        sri="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz",
+        used_by="base_template_v2.html (dropdowns, modals, tooltips, collapse)",
+        notes="The bundle, so Popper travels with it -- tooltips and dropdowns "
+              "need Popper and a separate file would be one more thing to keep "
+              "air-gapped. Verified byte-identical across jsDelivr, cdnjs and "
+              "unpkg before pinning.",
+    ),
+    Asset(
+        name="jquery",
+        url="https://code.jquery.com/jquery-3.6.0.min.js",
+        path="jquery-3.6.0.min.js",
+        sri="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=",
+        used_by="base_template_v2.html (span annotation, form handling)",
+        notes="The most load-bearing of the three: without jQuery the span "
+              "annotation surface does not work at all, so an air-gapped "
+              "deployment lost text annotation entirely. The SRI is the one the "
+              "template itself carried while it loaded from the CDN.",
     ),
     Asset(
         name="font-awesome",
         url="https://use.fontawesome.com/releases/v6.7.2/fontawesome-free-6.7.2-web.zip",
         path="font-awesome-6.7.2/css/all.min.css",
         sri="",  # distributed as a zip; verified by upstream release, not per-file SRI
-        used_by="adjudication.html",
-        notes="base_template_v2.html still loads Font Awesome 6.0.0 from a CDN. "
-              "The webfonts directory must move with the CSS.",
+        used_by="base_template_v2.html, adjudication.html",
+        notes="Distributed as a zip because the webfonts directory has to travel "
+              "with the CSS -- the stylesheet references ../webfonts/*.woff2, so "
+              "vendoring all.min.css alone gives an air-gapped deployment a page "
+              "of empty icon boxes rather than a missing stylesheet.",
+    ),
+    # --- legacy pages -------------------------------------------------------
+    # header.html and the Simple-Likert example predate the v2 template and run
+    # on Bootstrap 4 with slim jQuery. They are vendored at the versions they
+    # already used: this is an air-gap fix, not a migration, and changing the
+    # major version under a legacy layout is how you break it silently.
+    Asset(
+        name="d3",
+        url="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js",
+        path="d3-7.9.0.min.js",
+        sri="sha512-vc58qvvBdrDR4etbxMdlTt4GBQk1qjvyORR2nrsPsFPyrs+/u5c3+1Ct6upOgdZoIl7eq6k3a1UPDSNAQi/32A==",
+        used_by="solo/status.html (charts)",
+        notes="Pinned to 7.9.0, the version d3js.org/d3.v7.min.js currently "
+              "serves. The alias URL cannot be pinned by definition, which is "
+              "reason enough to stop using it.",
+    ),
+    Asset(
+        name="jquery-slim",
+        url="https://code.jquery.com/jquery-3.4.1.slim.min.js",
+        path="jquery-3.4.1.slim.min.js",
+        sri="sha512-eHWYortWe2NyxHIiY/wY82nK4RlPIDDDSD5ZvTHrTkiq9tAe++DBhq5rDcC02xqHxh0ctGGMbHKotqtYcYgXZA==",
+        used_by="header.html, Simple-Likert-Scale-Example-base_template.html",
+        notes="A second, older, slim jQuery than the 3.6.0 the v2 template "
+              "loads. Kept as-is: these pages were built against it.",
+    ),
+    Asset(
+        name="popper",
+        url="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js",
+        path="popper-1.16.0.umd.min.js",
+        sri="sha512-hCP3piYGSBPqnXypdKxKPSOzBHF75oU8wQ81a6OiGXHFMeKs9/8ChbgYl7pUvwImXJb03N4bs1o1DzmbokeeFw==",
+        used_by="header.html, Simple-Likert-Scale-Example-base_template.html",
+        notes="Bootstrap 4 needs Popper separately; Bootstrap 5's bundle has it.",
+    ),
+    Asset(
+        name="bootstrap4-css",
+        url="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.1.3/css/bootstrap.min.css",
+        path="bootstrap-4.1.3.min.css",
+        sri="sha512-iQQV+nXtBlmS3XiDrtmL+9/Z+ibux+YuowJjI4rcpO7NYgTzfTOiFNm09kWtfZzEB9fQ6TwOVc8lFVWooFuD/w==",
+        used_by="header.html, Simple-Likert-Scale-Example-base_template.html",
+        notes="Bootstrap 4, not 5. Loading it alongside the v2 template's "
+              "Bootstrap 5 would be a problem, but these pages are standalone.",
+    ),
+    Asset(
+        name="bootstrap4-js-413",
+        url="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.1.3/js/bootstrap.min.js",
+        path="bootstrap-4.1.3.min.js",
+        sri="sha512-n6dYFOG599s4/mGlA6E+YLgtg9uPTOMDUb0IprSMDYVLr0ctiRryPEQ8gpM4DCMlx7M2G3CK+ZcaoOoJolzdCg==",
+        used_by="header.html, Simple-Likert-Scale-Example-base_template.html",
+        notes="These pages load BOTH 4.1.3 and 4.4.1 of Bootstrap's JS. That "
+              "is pre-existing and preserved here rather than tidied, so "
+              "vendoring cannot be blamed for a behaviour change.",
+    ),
+    Asset(
+        name="bootstrap4-js-441",
+        url="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.4.1/js/bootstrap.min.js",
+        path="bootstrap-4.4.1.min.js",
+        sri="sha512-jCaU0Dp3IbMDlZ6f6dSEQSnOrSsugG6F6YigRWnagi7HoOLshF1kwxLT4+xCZRgQsTNqpUKj6WmWOxsu9l3URA==",
+        used_by="header.html, Simple-Likert-Scale-Example-base_template.html",
+        notes="See bootstrap4-js-413.",
     ),
 ]
 

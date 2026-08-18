@@ -170,17 +170,22 @@ class TestExternalDependenciesAreTheKnownOnes:
             f"Vendor them (scripts/vendor_assets.py) or document them in "
             f"docs/deployment/air_gap.md.")
 
-    def test_the_documented_blockers_are_still_the_real_ones(self, page):
+    def test_the_rendered_page_loads_nothing_external(self, page):
         """
-        docs/deployment/air_gap.md names jQuery and Bootstrap as the remaining
-        blockers. If the page stopped loading them, the doc is now wrong in the
-        other direction — telling people air-gap is broken when it is not.
+        The claim docs/deployment/air_gap.md now makes, checked against a real
+        rendered page rather than the template source.
+
+        This assertion used to run the other way: it required jQuery to still
+        come from a CDN, so that the doc could not go stale while it listed
+        jQuery as a blocker. Both directions guard the same thing — the page and
+        the page's documentation agreeing — and the page has since caught up.
         """
         _local, external = _assets(page)
-        hosts = {u.split("//", 1)[1].split("/", 1)[0] for u in external}
-        assert "code.jquery.com" in hosts, (
-            "jQuery is no longer loaded externally — update "
-            "docs/deployment/air_gap.md, which still lists it as a blocker.")
+        hosts = sorted({u.split("//", 1)[1].split("/", 1)[0] for u in external})
+        assert not hosts, (
+            f"The annotation page loads from {hosts}. Either vendor it "
+            f"(scripts/vendor_assets.py) or stop docs/deployment/air_gap.md "
+            f"claiming offline deployment is supported.")
 
 
 class TestTheLoginPageIsSelfContained:

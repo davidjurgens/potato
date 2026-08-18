@@ -4,68 +4,58 @@ Potato is often run on networks with no outbound internet access — secure
 research environments, clinical settings, field deployments, or simply a machine
 behind a strict proxy.
 
-**Status: partially supported.** Read this page before deploying offline; some
-of the interface still reaches out to public CDNs and will degrade without them.
+**Status: supported.** Every stylesheet, script, font and icon Potato serves
+comes from `potato/static/`. A machine with no route to the internet renders the
+same interface as one with a fast connection.
 
-## What works offline today
+## What is served locally
 
-| Asset | Status |
-|-------|--------|
-| **Fabric.js** (image annotation canvas) | ✅ Vendored at `potato/static/vendor/fabric-5.3.1.min.js` |
-| Peaks.js (audio/video waveforms) | ✅ Vendored at `potato/static/peaks.min.js` |
-| PDF.js (PDF display) | ✅ Vendored at `potato/static/vendor/pdfjs/` |
-| Bootstrap CSS + Font Awesome on the **adjudication** page | ✅ Vendored |
-| OpenSeadragon (deep-zoom viewer) | ✅ Vendored |
-| All of Potato's own CSS and JavaScript | ✅ Served locally |
+| Asset | Where |
+|-------|-------|
+| **Fabric.js** (image annotation canvas) | `vendor/fabric-5.3.1.min.js` |
+| **jQuery 3.6.0** | `vendor/jquery-3.6.0.min.js` |
+| **Bootstrap 5.3.3** (CSS + JS bundle, Popper included) | `vendor/bootstrap-5.3.3.*` |
+| **Font Awesome 6.7.2** (CSS + webfonts) | `vendor/font-awesome-6.7.2/` |
+| **Outfit** (the interface typeface) | `vendor/outfit/` |
+| three.js (point cloud viewer) | `vendor/three-0.160.0.min.js` |
+| OpenSeadragon (deep zoom) | `vendor/openseadragon-5.0.1.min.js` |
+| d3 7.9.0 (solo-mode charts) | `vendor/d3-7.9.0.min.js` |
+| Bootstrap 4.1.3/4.4.1 + slim jQuery + Popper (legacy pages) | `vendor/bootstrap-4.*`, `vendor/jquery-3.4.1.slim.min.js`, `vendor/popper-1.16.0.umd.min.js` |
+| Peaks.js (audio/video waveforms) | `static/peaks.min.js` |
+| PDF.js | `vendor/pdfjs/` |
+| All of Potato's own CSS and JavaScript | `static/` |
 
-Fabric.js matters most: image annotation is entirely non-functional without it —
-the canvas never initializes, so the tools render but nothing can be drawn.
+Two of these were load-bearing rather than cosmetic. Without **jQuery**, span
+(text) annotation does not work at all. Without **Fabric.js**, the image canvas
+never initializes, so the drawing tools render but nothing can be drawn.
 
-## What still requires internet access
+### The font was also a privacy leak
 
-`base_template_v2.html` — the template behind the main annotation interface —
-still loads three assets from public CDNs:
+`styles.css` opened with an `@import` of the Outfit family from Google Fonts.
+Beyond breaking offline, that sent every annotator's IP address and User-Agent
+to a third party on every page load — from a tool people self-host precisely so
+their data does not leave their infrastructure. The family is now vendored
+under `vendor/outfit/` (SIL Open Font License 1.1).
 
-| Asset | Host | Effect when unreachable |
-|-------|------|-------------------------|
-| jQuery 3.6.0 | `code.jquery.com` | **Span (text) annotation breaks.** jQuery is a hard dependency there. |
-| Bootstrap 5.1.3 (CSS + JS) | `cdn.jsdelivr.net` | Layout and spacing degrade; dropdowns, modals, and tooltips stop working. |
-| Font Awesome 6.0.0 | `cdnjs.cloudflare.com` | Icons render as empty boxes. Labels remain readable. |
+It survived the earlier air-gap work because the guard read `<script src>` and
+`<link href>` in templates, and an `@import` inside a stylesheet is neither.
+There is now a test for that too.
 
-Bootstrap CSS and Font Awesome are *already vendored* for the adjudication page,
-but at **different versions** (Bootstrap 5.3.3, Font Awesome 6.7.2) than the CDN
-copies used here. Pointing the main template at them is therefore a version bump
-— Bootstrap 5.1 → 5.3 introduces colour modes and renames CSS variables — and
-needs a full-application regression pass rather than a one-line edit. Bootstrap's
-JavaScript bundle is not vendored at all.
+### Legacy pages kept their old versions
 
-### Other pages
-
-The three above are the main annotation interface. Auditing every source
-template turned up three more external hosts, on pages the annotation flow does
-not use but an administrator does:
-
-| Asset | Host | Pages | Effect when unreachable |
-|-------|------|-------|-------------------------|
-| Bootstrap 4.x (CSS + JS) | `stackpath.bootstrapcdn.com` | `header.html`, the legacy Likert template | A *second*, older Bootstrap than the main template loads. Layout degrades on those pages only. |
-| d3 v7 | `d3js.org` | Solo-mode status page | Its charts do not render. |
-
-A favicon on the login and signup pages pointed at `colorlib.com` — the site
-those templates were adapted from. It has been **removed**: a decorative icon is
-not worth a third-party request from the page where users type their
-credentials, and it broke air-gapped along with everything else.
-
-**If you are deploying air-gapped now**, mirror those files onto a host your
-network can reach and override the templates, or accept the degradation above.
-Text annotation in particular should be tested before you rely on it.
+`header.html` and the Simple-Likert example template run on Bootstrap 4 with
+slim jQuery, and they load *two* different Bootstrap 4 JS builds. All of it is
+vendored at the versions those pages already used. Vendoring is an air-gap fix,
+not a migration: changing a major version under a legacy layout is how you break
+it without noticing.
 
 ## What is checked automatically
 
-Three guards, each catching a different failure:
+Four guards, each catching a different failure:
 
 | Test | Catches |
 |---|---|
-| `tests/unit/test_no_new_cdn_assets.py` | A new external asset in the main template, and an allowlist entry that has gone stale |
+| `tests/unit/test_no_new_cdn_assets.py` | A new external asset in the main template, a stale allowlist entry, and — since the Google Fonts import — a stylesheet that `@import`s or `url()`s from the network |
 | `tests/unit/test_air_gap_assets.py` | A template referencing a static file that is **not in the tree**, a truncated vendored bundle, and a new external host in *any* source template |
 | `tests/server/test_air_gap_page.py` | A rendered page referencing a local asset the server does not actually serve |
 
@@ -94,10 +84,12 @@ Vendor it. `tests/unit/test_no_new_cdn_assets.py` fails the build if a new
 external `<script>` or `<link>` appears in the main template, so this is
 enforced rather than remembered.
 
-If a dependency genuinely cannot be vendored yet, add its host to
-`ALLOWED_EXTERNAL` in that test **with a note explaining why**. Each entry is
-tracked work, not an exemption — and the test also fails if an allowlist entry
-becomes stale, so the list keeps meaning something.
+Both allowlists (`ALLOWED_EXTERNAL` and `ALLOWED`) are now **empty**, and the
+guards fail if an entry stops matching anything, so they cannot quietly become
+permanent exemptions. If a dependency genuinely cannot be vendored, add its host
+with a note explaining why and a consequence recorded on this page — then treat
+it as work with a deadline. The last three entries sat there long enough that
+this page had to warn people off deploying offline.
 
 ## Related
 

@@ -459,7 +459,6 @@ So an evaluation does not have to discover these late:
 - **No point-cloud sequence mode.** 3D annotation is per frame; track propagation across a sweep is not implemented.
 - **No DICOM, NIfTI, or WSI formats.** Deep zoom and 16-bit windowing cover large scientific images, not clinical ones.
 - **No managed workforce, SAML/SCIM, or compliance certifications.** Potato is software you run; RBAC and OAuth are supported, enterprise governance is not.
-- **Air-gapped deployment is not complete.** Fabric.js and OpenSeadragon are vendored, but jQuery, Bootstrap, and Font Awesome still load from CDNs. See [Air-Gapped Deployment](deployment/air_gap.md) for exactly which assets are affected and what breaks without them.
 
 ## Getting Started
 
