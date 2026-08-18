@@ -114,14 +114,13 @@ host, export per-cohort or per-batch rather than the entire project at once.
 > regardless of dataset size. Tracked as a follow-up; the current disk-write
 > design is correct and lossless, just memory-proportional to the export.
 
-## The admin dashboard is the exception
+## The admin dashboard
 
-Serving annotations scales with the item store described above. The **admin
-dashboard's Instances tab does not.** `GET /admin/api/instances` builds a row
-for every instance before it filters, sorts and paginates, and each row's
-statistics loop over every annotator, so one page costs
-instances × annotators regardless of `page_size`. Expect the Instances tab to
-be slow on a large project even though annotating it is not. See
+`GET /admin/api/instances` computes a row for every instance before it filters,
+sorts and paginates, which it has to do to sort by disagreement. It gathers the
+per-instance statistics in a single pass over annotators, so the cost follows
+the number of annotations rather than instances × annotators: a page of 25 rows
+takes about 750 ms over 20,000 instances with 20 annotators. See
 [Performance Considerations](../administration/admin_dashboard.md#large-datasets).
 
 ## Related
