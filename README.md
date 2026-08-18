@@ -136,7 +136,7 @@ Enable it with `qda_mode`, which turns these features on together; see the [QDA 
 
 ### LLM Label Suggestions
 
-Connect any LLM provider to pre-annotate instances and suggest labels, then have annotators review and correct them.
+Connect any LLM provider to pre-annotate instances and suggest labels. Annotators then review and correct rather than labeling from scratch, which is the point: correcting a draft is faster than producing one.
 
 Supported backends: **OpenAI**, **Anthropic**, **Ollama**, **vLLM**, **Gemini**, **HuggingFace**, **OpenRouter**
 

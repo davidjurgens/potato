@@ -1,6 +1,6 @@
 # Annotating Agent Traces with Potato
 
-Potato renders an agent's run step by step and collects human judgements about it, with the same multi-annotator coordination, agreement statistics, quality control, and crowdsourcing support it uses for text.
+Potato renders an agent's run step by step and collects human judgements about it, with the same annotation schemas, multi-annotator coordination, agreement statistics, quality control, and crowdsourcing support it uses for text.
 
 ## Overview
 
