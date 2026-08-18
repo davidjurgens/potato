@@ -4,7 +4,7 @@ Likert Scale Layout
 Generates a likert scale rating interface with radio buttons arranged horizontally.
 Each button represents a point on the scale between min_label and max_label.
 
-This module provides functionality for creating HTML-based Likert scale interfaces
+Creating HTML-based Likert scale interfaces
 that can be used for collecting ordinal data responses. The scale supports:
 - Customizable number of points
 - Optional numeric display

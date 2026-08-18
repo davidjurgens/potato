@@ -52,7 +52,7 @@ Molmo-style models emit points, not boxes. Same schema, one line different:
     region_type: point        # the annotator places a landmark
 ```
 
-The scoring is genuinely different and lives in `potato/grounding/metrics.py`:
+Points are scored differently, in `potato/grounding/metrics.py`:
 a point has no area, so IoU against it is always 0 and the measure is
 **point-in-region** — a hit rate, not an overlap. `pointing_accuracy()` reports
 that, plus the mean distance from the region's centre over the misses only

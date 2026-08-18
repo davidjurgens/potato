@@ -3,8 +3,9 @@
 How a bounding box, polygon or mask was *produced* — the drawing-process
 counterpart of [keystroke logging](keystroke_logging.md).
 
-The headline signal is **AI-accept latency**. Everything else on this page is
-supporting context for it.
+The signal that most often changes a decision is **AI-accept latency**: a
+run of sub-500 ms accepts across many items is rubber-stamping, and no other
+figure on this page separates that from careful agreement.
 
 ## The problem it addresses
 

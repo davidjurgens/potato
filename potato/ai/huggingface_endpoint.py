@@ -1,7 +1,7 @@
 """
 Hugging Face AI endpoint implementation.
 
-This module provides integration with Hugging Face's Inference API for LLM inference.
+Integration with Hugging Face's Inference API for LLM inference.
 """
 
 from huggingface_hub import InferenceClient

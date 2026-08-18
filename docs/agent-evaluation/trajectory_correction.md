@@ -20,7 +20,7 @@ python potato/flask_server.py start examples/agent-traces/trajectory-correction/
 
 See `examples/agent-traces/trajectory-correction/` for the full runnable project.
 
-## How it works
+## The correction card
 
 Each agent step renders as a card showing the **Original** text (read-only) and an editable
 **Corrected** box pre-filled with the original. As the annotator types:

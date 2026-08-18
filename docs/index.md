@@ -42,8 +42,8 @@ Generated, machine-checkable specs built from the running code — prefer these
 over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use all four, with editor setup and CI validation
-- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 56 annotation types and 23 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 390 HTTP paths, with per-operation auth and config gating
+- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 61 annotation types and 24 display types
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 419 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -316,7 +316,7 @@ Ready-to-use example configurations are available in the `examples/` directory:
 # Run a simple radio button example
 python potato/flask_server.py start examples/classification/single-choice/config.yaml -p 8000
 
-# Run a sophisticated layout example (content moderation, dialogue QA, medical review)
+# Run a custom layout example (content moderation, dialogue QA, medical review)
 python potato/flask_server.py start examples/custom-layouts/content-moderation/config.yaml -p 8000
 ```
 
@@ -329,7 +329,7 @@ See the [examples](https://github.com/davidjurgens/potato/tree/main/examples) di
 - `audio/` - Audio annotation examples
 - `advanced/` - Advanced features (conditional logic, quality control, etc.)
 - `agent-traces/` - Agent trace evaluation examples (RAG, GUI agents, comparisons)
-- `custom-layouts/` - Sophisticated custom layout examples
+- `custom-layouts/` - Custom layout examples
 
 ---
 

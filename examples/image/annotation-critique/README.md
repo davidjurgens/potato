@@ -40,7 +40,7 @@ It is also much weaker evidence. A verdict is one model's opinion, and the
 panel says so every time it opens. The useful reading of a flag is "look at
 this again", never "the model says change it".
 
-## How it works
+## What the judge is sent
 
 For each annotation, the server crops the region **with surrounding context**
 and draws the annotator's own outline onto the crop in red, then asks the model

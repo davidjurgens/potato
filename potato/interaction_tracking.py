@@ -1,7 +1,7 @@
 """
 Interaction tracking data structures and utilities for behavioral analysis.
 
-This module provides dataclasses for tracking user interactions during annotation,
+Dataclasses for tracking user interactions during annotation,
 including clicks, focus changes, navigation, AI assistance usage, and annotation changes.
 All data is designed to be serializable for persistence and later analysis.
 """

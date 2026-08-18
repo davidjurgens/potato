@@ -53,7 +53,7 @@ Each test inherits from `BaseSeleniumTest` which automatically:
 1. **Creates a unique test user** for each test run
 2. **Registers the user** via the web interface
 3. **Logs in the user** and verifies authentication
-4. **Provides a fresh WebDriver** instance for each test
+4. **Creates a fresh WebDriver** instance for each test
 5. **Cleans up** after each test
 
 ### 2. Test Isolation

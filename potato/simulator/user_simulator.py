@@ -1,7 +1,7 @@
 """
 Core user simulator class.
 
-This module provides the SimulatedUser class that simulates a single
+The SimulatedUser class that simulates a single
 annotator interacting with the Potato annotation platform via its API.
 """
 

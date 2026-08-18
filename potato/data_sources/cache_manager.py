@@ -1,7 +1,7 @@
 """
 Cache manager for remote data sources.
 
-This module provides caching functionality for downloaded remote files,
+Caching functionality for downloaded remote files,
 including TTL-based expiration, ETag support for HTTP caching, and
 thread-safe operations.
 """

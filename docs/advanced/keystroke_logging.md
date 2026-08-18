@@ -21,9 +21,9 @@ keystroke_logging:
   enabled: true
 ```
 
-That is the whole minimum configuration. Every free-text field in the project
-starts producing a content-blind event stream, a ~40-field summary, and a set of
-detection flags.
+Those two lines are the whole minimum configuration. Every free-text field in
+the project starts producing a content-blind event stream, a ~40-field summary,
+and a set of detection flags.
 
 A runnable example lives at `examples/advanced/keystroke-logging/`:
 

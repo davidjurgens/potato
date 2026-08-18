@@ -18,7 +18,7 @@ calibrates a *single* judge with self-reported confidence and shows suggestions
 inline. Judge Calibration uses **multiple** judges, **empirical** confidence
 (the vote fraction across the *k* samples), and keeps the human strictly blind.
 
-## How it works
+## Run states
 
 ```
 SETUP → GENERATING → HUMAN_CALIBRATION → REPORT → COMPLETED

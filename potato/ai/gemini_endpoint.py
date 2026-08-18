@@ -1,7 +1,7 @@
 """
 Google Gemini AI endpoint implementation.
 
-This module provides integration with Google's Gemini API for LLM inference.
+Integration with Google's Gemini API for LLM inference.
 """
 
 from google import genai

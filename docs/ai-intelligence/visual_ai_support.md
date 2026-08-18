@@ -1,6 +1,6 @@
 # Visual AI Support for Image and Video Annotation
 
-Potato provides AI-powered assistance for image and video annotation tasks using various vision models including YOLO for object detection and VLLMs (Vision-Language Models) like GPT-4o, Claude, and Ollama vision models.
+Potato can pre-label image and video tasks with a vision model: YOLO for object detection, or a vision-language model such as GPT-4o, Claude, or an Ollama vision model.
 
 ## Overview
 

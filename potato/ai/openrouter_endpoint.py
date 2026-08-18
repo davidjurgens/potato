@@ -1,6 +1,6 @@
 """
 OpenRouter endpoint implementation.
-This module provides integration with OpenRouter's API for LLM inference.
+integration with OpenRouter's API for LLM inference.
 """
 import requests
 from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError

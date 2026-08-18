@@ -1,6 +1,6 @@
 # Configuration Guide
 
-This document provides a comprehensive guide to configuring Potato annotation tasks using YAML configuration files. Potato uses YAML files to define all aspects of an annotation task, from server settings to annotation schemes and user management.
+Every part of a Potato task lives in one YAML file: server settings, data paths, annotation schemes, users, assignment, and the optional features. This page walks through each section.
 
 > **Looking for a quick lookup?** See the [Configuration Reference](config_reference.md) for a complete table of all config keys, annotation types, and their required fields.
 
@@ -29,7 +29,7 @@ This document provides a comprehensive guide to configuring Potato annotation ta
 
 ```
 my_annotation_project/
-├── config.yaml                    # ✅ Config file in task_dir
+├── config.yaml                    # the config file, inside task_dir
 ├── data/
 │   └── my_data.json
 ├── output/
@@ -53,7 +53,7 @@ Using `task_dir: .` makes your configuration portable because paths are resolved
 
 ```
 my_annotation_project/
-├── config.yaml                    # ✅ Config file with task_dir: .
+├── config.yaml                    # the config file, with task_dir: .
 ├── data/
 │   └── my_data.json
 └── output/
@@ -73,7 +73,7 @@ output_annotation_dir: output/annotations/
 ```
 my_annotation_project/
 ├── configs/
-│   ├── config1.yaml              # ✅ Config files in configs/ subdirectory
+│   ├── config1.yaml              # config files, in a configs/ subdirectory
 │   └── config2.yaml
 ├── data/
 │   └── my_data.json
@@ -307,10 +307,10 @@ instance_display:
 
 ### Example: Image Classification
 
-Previously, to show an image with radio buttons, you had to use a workaround with `image_annotation` schema. Now you can use `instance_display`:
+To show an image and collect a radio answer about it, declare the image under `instance_display` and the question under `annotation_schemes`. The `image_annotation` schema is for drawing on the image, not for displaying it.
 
 ```yaml
-# Clean approach with instance_display
+# Display the image; collect the label separately
 instance_display:
   fields:
     - key: image_url
@@ -322,7 +322,7 @@ annotation_schemes:
     labels: [A, B, C]
 ```
 
-For comprehensive documentation including all display options, span annotation support, and multi-modal examples, see [Instance Display Configuration](../annotation-types/instance_display.md).
+For all display options, span annotation support, and multi-modal examples, see [Instance Display Configuration](../annotation-types/instance_display.md).
 
 ## Annotation Schemes
 
@@ -543,13 +543,13 @@ hide_navbar: true              # Hide navigation bar
 allow_phase_back_navigation: true  # Allow backward navigation across phases (default: false)
 ```
 
-When `allow_phase_back_navigation` is disabled (the default), the Back button is automatically hidden on the first page of the workflow and on the first annotation instance, since there is no valid previous destination. When enabled, the Back button is always shown, allowing users to return to previous phases.
+When `allow_phase_back_navigation` is disabled (the default), the Back button is automatically hidden on the first page of the workflow and on the first annotation instance, since there is no valid previous destination. When enabled, the Back button is always shown and users can return to previous phases.
 
 ## Database Configuration
 
 ### MySQL Database Setup
 
-Potato supports MySQL database backend for improved performance and scalability. To use MySQL:
+Potato can store annotations in MySQL instead of files. To use it:
 
 ```yaml
 database:
@@ -644,12 +644,22 @@ assignment:
 
 ### Available Strategies
 
-- `random`: Assigns items randomly to annotators
-- `fixed_order`: Assigns items in the order they appear in the dataset
-- `least_annotated`: Prioritizes items with the fewest annotations
-- `max_diversity`: Prioritizes items with highest disagreement in existing annotations
-- `active_learning`: Uses ML to prioritize uncertain items (placeholder)
-- `llm_confidence`: Uses LLM confidence scores (placeholder)
+All eleven values of `assignment_strategy`, as defined by `AssignmentStrategy`
+in `potato/item_state_management.py`:
+
+| Strategy | What it does |
+|----------|--------------|
+| `random` | Assigns items randomly to annotators |
+| `fixed_order` | Assigns items in the order they appear in the dataset |
+| `least_annotated` | Prioritizes items with the fewest annotations |
+| `max_diversity` | Prioritizes items with the highest disagreement in existing annotations |
+| `active_learning` | Serves the item pool in its current order. With [`active_learning.enabled`](../ai-intelligence/active_learning_guide.md) set, the manager reorders that pool by query strategy after each retrain, so the most informative unlabeled items come first. Without it, the order is whatever you configured |
+| `category_based` | Assigns items matching the annotator's qualified [categories](../advanced/category_assignment.md) |
+| `diversity_clustering` | Samples items round-robin from embedding clusters ([diversity ordering](../workflow/diversity_ordering.md)) |
+| `batch` | Restricts assignment to configured annotator/item cohorts ([batch assignment](../advanced/task_assignment.md)) |
+| `priority` | Serves items by a triage signal, errors and low scores first ([triage queue](../agent-evaluation/triage_queue.md)) |
+| `psychometric` | Routes items by expected information gain under a live IRT model, so confident items stop consuming annotation budget ([psychometrics](../advanced/psychometrics.md)) |
+| `llm_confidence` | **Not implemented.** Accepted by the config validator, but the assignment code falls back to random selection |
 
 ### Legacy Assignment Configuration
 
@@ -700,7 +710,7 @@ sequential_key_binding: true
 
 ## AI Support
 
-Potato provides integrated AI support to enhance annotation workflows with intelligent hints and keyword highlighting. This feature uses Large Language Models (LLMs) to provide contextual assistance to annotators.
+With `ai_support` on, an LLM suggests labels and highlights keywords in the text while the annotator works. The annotator still makes the call.
 
 ### Basic AI Configuration
 
@@ -761,7 +771,7 @@ prestudy:
 
 ### Active Learning
 
-Active learning uses machine learning to intelligently prioritize annotation tasks. For comprehensive configuration options, see the [Active Learning Guide](../ai-intelligence/active_learning_guide.md).
+Active learning reorders the queue so the instances a model is least sure about come first. The [Active Learning Guide](../ai-intelligence/active_learning_guide.md) covers every option.
 
 ```yaml
 active_learning:
@@ -995,7 +1005,7 @@ item_properties:
   context_key: context
 
 task_dir: output/comprehensive_task/
-output_annotation_format: json
+export_annotation_format: json
 annotation_codebook_url: https://docs.google.com/document/d/...
 
 user_config:
@@ -1100,18 +1110,23 @@ When you start Potato with a configuration file, it will validate the configurat
 
 - Missing required fields
 - Invalid annotation types
-- File paths that dont exist
+- File paths that do not exist
 - Invalid assignment strategies
 - Malformed YAML syntax
 
-## Best Practices
-1. **Start Simple**: Begin with basic configuration and add complexity gradually
-2. **Test Thoroughly**: Always test your configuration with a small dataset first
-3. **Use Descriptive Names**: Choose clear, descriptive names for annotation schemes
-4. **Document Your Choices**: Add comments to explain non-obvious configuration choices
-5. **Version Control**: Keep your configuration files in version control
-6. **Environment Variables**: Use environment variables for sensitive information
-7. **Backup Data**: Always backup your data and configuration before making changes
+## Practical advice
+
+Get a minimal config running against a handful of items before adding schemes,
+because a validation error in a 200-line file is much harder to place than one
+in a 20-line file. Scheme names end up in your exported column headers and in
+every agreement report, so pick names you will still understand in six months,
+and comment anything a reader would otherwise have to reverse-engineer.
+
+Keep configs in version control: they are the record of what annotators
+actually saw, and reviewers will ask. Put API keys and database passwords in
+environment variables and reference them, so the config stays committable. Back
+up the output directory before changing `task_dir`, `output_annotation_dir`, or
+any assignment setting mid-study.
 
 ## Troubleshooting
 

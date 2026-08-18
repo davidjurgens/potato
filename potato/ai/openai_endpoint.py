@@ -1,7 +1,7 @@
 """
 OpenAI AI endpoint implementation.
 
-This module provides integration with OpenAI's API for LLM inference.
+Integration with OpenAI's API for LLM inference.
 """
 
 import os

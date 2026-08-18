@@ -1,7 +1,7 @@
 """
 MySQL-backed UserState implementation for Potato annotation platform.
 
-This module provides a database-backed implementation of the UserState interface,
+A database-backed implementation of the UserState interface,
 storing all user state data in MySQL tables for persistence and scalability.
 """
 

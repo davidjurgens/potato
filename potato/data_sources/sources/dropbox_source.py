@@ -1,7 +1,7 @@
 """
 Dropbox data source.
 
-This module provides data loading from Dropbox files,
+Data loading from Dropbox files,
 supporting both public share links and authenticated access.
 """
 

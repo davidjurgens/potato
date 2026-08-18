@@ -1,9 +1,8 @@
 """
 LLM Labeler for Solo Mode
 
-This module provides background LLM labeling functionality for Solo Mode.
-It manages a thread that continuously labels instances while the human
-annotator works, enabling parallel annotation.
+Background LLM labeling for Solo Mode. A thread labels instances continuously
+while the human annotator works, so the two run in parallel.
 """
 
 import json

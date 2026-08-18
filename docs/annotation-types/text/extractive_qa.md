@@ -1,6 +1,6 @@
 # Extractive QA / Answer Span
 
-The Extractive QA schema provides a streamlined interface for SQuAD-style question answering annotation. A question is displayed prominently above a passage, and annotators highlight the answer span directly in the text.
+The extractive QA schema is the SQuAD-style layout: the question sits above the passage, and the annotator highlights the answer span in the text itself.
 
 ## When to Use Extractive QA
 

@@ -212,4 +212,4 @@ See [MIGRATION.md](MIGRATION.md) for detailed instructions on upgrading from v1.
 
 ## New Features Guide
 
-See [docs/new_features_v2.md](docs/new_features_v2.md) for detailed documentation on new features.
+See the [v2.0.0 release notes](docs/releasenotes/v2.0.0.md) for detailed documentation on new features.

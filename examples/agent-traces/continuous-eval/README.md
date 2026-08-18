@@ -4,8 +4,7 @@ Visualize a single agent trace decomposed into three synchronized side-by-side p
 **Reasoning | Function Calls | Final Answer** — and evaluate runs continuously as new
 traces arrive.
 
-This is the turnkey answer to: *"is there a self-hosted platform that can visualize an AI
-agent's thought traces, function calls, and final answer side-by-side for continuous eval?"*
+It is self-hosted, and it needs no code beyond the config below.
 
 ![Three panes: reasoning, function calls, final answer](../../../docs/img/screenshots/eval_trace.png)
 

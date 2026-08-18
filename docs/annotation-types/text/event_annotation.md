@@ -1,6 +1,6 @@
 # Event Annotation
 
-Event annotation enables the creation of N-ary event structures for information extraction tasks. Events consist of:
+Event annotation builds N-ary event structures for information extraction. An event consists of:
 
 - **Trigger span**: The word or phrase that indicates the event (e.g., "attacked", "hired", "traveled")
 - **Argument spans**: Entity spans with typed semantic roles (e.g., attacker, target, weapon)

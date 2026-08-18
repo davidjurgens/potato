@@ -1,7 +1,7 @@
 """
 Dynamic Category Expertise Manager
 
-This module provides dynamic category-based assignment where annotator expertise
+Dynamic category-based assignment where annotator expertise
 is determined by agreement with other annotators, rather than gold labels.
 
 Key features:

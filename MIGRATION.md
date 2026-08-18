@@ -1,6 +1,6 @@
 # Migration Guide: v1.x to v2.0.0
 
-This guide helps you migrate existing Potato annotation projects from v1.x to v2.0.0.
+Migrating a Potato annotation project from v1.x to v2.0.0.
 
 ## Overview
 
@@ -389,7 +389,7 @@ If you encounter issues not covered here:
 
 ## New Features
 
-After migrating, explore the new v2.0.0 features documented in [docs/new_features_v2.md](docs/new_features_v2.md):
+After migrating, explore the new v2.0.0 features documented in the [v2.0.0 release notes](docs/releasenotes/v2.0.0.md):
 - AI-powered hints
 - Active learning
 - Training phase

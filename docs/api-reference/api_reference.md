@@ -1,6 +1,6 @@
 # Potato API Reference
 
-This document describes the HTTP API endpoints provided by Potato, enabling integration with custom frontends, automation scripts, or external systems.
+Potato's HTTP API. Use it to drive Potato from a custom frontend, an automation script, or another system.
 
 ---
 

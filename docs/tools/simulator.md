@@ -1,6 +1,6 @@
 # User Simulator
 
-The User Simulator enables automated testing of the Potato annotation platform by simulating multiple users with configurable behaviors and competence levels.
+The user simulator drives a running Potato server with synthetic annotators whose behavior and competence you configure.
 
 ## Overview
 

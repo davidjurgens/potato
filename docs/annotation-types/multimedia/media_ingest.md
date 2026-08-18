@@ -9,7 +9,7 @@ annotator concludes the tool is broken. Potato transcodes these on first
 request, caches the result, and when it genuinely cannot, says so with the
 command to run instead.
 
-## How it works
+## Requesting a transcoded file
 
 Reference the file through `/media/proxy/` instead of `/media/`:
 
@@ -53,9 +53,6 @@ with your system package manager (`brew install ffmpeg`,
 `apt install ffmpeg`).
 
 ## 16-bit windowing
-
-This is the part that matters for scientific imagery, and the reason a naive
-conversion is worse than useless.
 
 A 16-bit microscopy or medical TIFF holds values a display cannot show. The
 obvious conversion — an 8-bit cast — divides by 256, so a scan whose structure

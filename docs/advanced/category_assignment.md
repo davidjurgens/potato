@@ -1,6 +1,6 @@
 # Category-Based Assignment
 
-Category-based assignment allows you to automatically match annotators with annotation instances based on their demonstrated expertise. Annotators are assessed during training or prestudy phases on category-specific questions, and only receive instances from categories they have qualified for.
+Category-based assignment matches annotators to instances by demonstrated expertise. Annotators are assessed on category-specific questions during the training or prestudy phase, and afterwards receive instances only from the categories they qualified for.
 
 ## Overview
 
@@ -323,7 +323,7 @@ category_assignment:
 - **`super_majority`**: Consensus requires ≥66% agreement
 - **`unanimous`**: All annotators must agree
 
-### How It Works
+### The expertise update loop
 
 1. **Initial State**: All annotators start with neutral expertise (0.5) for all categories
 

@@ -1,7 +1,7 @@
 """
 Ollama AI endpoint implementation.
 
-This module provides integration with Ollama for local LLM inference.
+Integration with Ollama for local LLM inference.
 """
 
 import json

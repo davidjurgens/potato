@@ -35,7 +35,7 @@ python potato/flask_server.py start \
     examples/image/text-prompt-labeling/config.yaml -p 8000
 ```
 
-## How it works
+## The model behind it
 
 The model is Grounding DINO, an open-vocabulary detector: it takes an image and
 a caption, and scores 900 candidate boxes against every word of that caption.

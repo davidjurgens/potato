@@ -1,6 +1,6 @@
 # Choosing the Right Annotation Type
 
-With 36 annotation schema types, Potato covers virtually every annotation paradigm used in NLP research, LLM evaluation, survey methodology, and crowdsourcing. This guide helps you choose the right schema for your task.
+Potato has 61 annotation schema types, spanning NLP research, LLM evaluation, survey methodology, and crowdsourcing. Picking the right one is the subject of this page.
 
 ## Decision Flowchart
 

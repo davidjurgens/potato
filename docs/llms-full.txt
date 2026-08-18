@@ -60,8 +60,8 @@ Generated, machine-checkable specs built from the running code — prefer these
 over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use all four, with editor setup and CI validation
-- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 56 annotation types and 23 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 390 HTTP paths, with per-operation auth and config gating
+- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 61 annotation types and 24 display types
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 419 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -334,7 +334,7 @@ Ready-to-use example configurations are available in the `examples/` directory:
 # Run a simple radio button example
 python potato/flask_server.py start examples/classification/single-choice/config.yaml -p 8000
 
-# Run a sophisticated layout example (content moderation, dialogue QA, medical review)
+# Run a custom layout example (content moderation, dialogue QA, medical review)
 python potato/flask_server.py start examples/custom-layouts/content-moderation/config.yaml -p 8000
 ```
 
@@ -347,7 +347,7 @@ See the [examples](https://github.com/davidjurgens/potato/tree/main/examples) di
 - `audio/` - Audio annotation examples
 - `advanced/` - Advanced features (conditional logic, quality control, etc.)
 - `agent-traces/` - Agent trace evaluation examples (RAG, GUI agents, comparisons)
-- `custom-layouts/` - Sophisticated custom layout examples
+- `custom-layouts/` - Custom layout examples
 
 ---
 
@@ -383,7 +383,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/quick-start/
 
 # Quick Start Guide
 
-This guide will help you get started with Potato annotation tasks using YAML configuration files.
+A Potato task is a YAML config file, a data file, and a directory to write annotations into. This page builds one from scratch.
 
 ## Installation
 
@@ -405,7 +405,7 @@ pip install -r requirements.txt
 
 ### 1. Create a Task Directory
 
-Start by creating a directory for your annotation task:
+Create a directory for your annotation task:
 
 ```bash
 mkdir my_annotation_task
@@ -515,11 +515,11 @@ python potato/flask_server.py start my_annotation_task/config.yaml -p 8000
 
 ## Project Structure
 
-Your final project structure should look like this:
+The finished project looks like this:
 
 ```
 my_annotation_task/
-├── config.yaml              # ✅ Config file in task_dir
+├── config.yaml              # the config file, inside task_dir
 ├── data/
 │   └── my_data.json         # Your annotation data
 ├── annotation_output/       # Created automatically (per output_annotation_dir)
@@ -531,12 +531,12 @@ my_annotation_task/
 
 ## Alternative: Multiple Config Files
 
-If you want to have multiple configuration files for different experiments, you can use a `configs/` subdirectory:
+For several configuration files across different experiments, put them in a `configs/` subdirectory:
 
 ```
 my_annotation_task/
 ├── configs/
-│   ├── experiment1.yaml     # ✅ Config files in configs/
+│   ├── experiment1.yaml     # config files, inside configs/
 │   └── experiment2.yaml
 ├── data/
 │   └── my_data.json
@@ -603,8 +603,8 @@ URL: https://potatoannotator.readthedocs.io/en/latest/faq/
 
 # Frequently Asked Questions
 
-Short, direct answers to common questions about Potato, annotation, and agent
-(agentic) evaluation. See the linked guides for detail.
+Answers to common questions about Potato, annotation, and agent (agentic)
+evaluation. See the linked guides for detail.
 
 ## What is Potato?
 
@@ -679,7 +679,7 @@ inter-annotator agreement.
 
 ## What annotation types does Potato support?
 
-20+ schemes: radio/checkbox/Likert, span/NER, spans linking, coreference, ranking,
+61 schemes: radio/checkbox/Likert, span/NER, spans linking, coreference, ranking,
 best-worst scaling, pairwise/conjoint comparison, sliders, soft labels, rubric
 grids, and agent-specific schemes (trajectory eval, process-reward, code review).
 See the [Schema Gallery](annotation-types/schemas_and_templates.md).
@@ -814,7 +814,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/comparison/
 
 Potato is a flexible, open-source annotation platform built for NLP and ML researchers. This page compares Potato's capabilities with popular alternatives across text, image, video, 3D, robotics, and model-evaluation annotation. Last updated: August 2026.
 
-Most of the tools below are very good at what they were built for, and several beat Potato inside their own specialty. We say where. The point is to help you pick the right instrument, including when that instrument is something else. Every claim about another product comes from that product's own documentation or changelog, and vendor documentation describes the current version, so re-check anything you plan to rely on.
+Most of the tools below are very good at what they were built for, and several beat Potato inside their own specialty; where that is true, this page says so, because the useful outcome is that you pick the right instrument even when it is not this one. Every claim about another product comes from that product's own documentation or changelog, and vendor documentation describes the current version, so re-check anything you plan to rely on.
 
 ## At a Glance
 
@@ -864,7 +864,7 @@ Most of the tools below are very good at what they were built for, and several b
 
 ## Vision, 3D, and Model Evaluation at a Glance
 
-Potato's computer-vision, spatial, and evaluation surfaces are newer than its text ones. This table is about *where each tool is strong*, not about scoring.
+Potato's computer-vision, spatial, and evaluation surfaces are newer than its text ones. This table records where each tool is strong rather than ranking them.
 
 | Capability | Potato | CVAT | Label Studio | Roboflow | V7 | Supervisely | Segments.ai |
 |---|---|---|---|---|---|---|---|
@@ -890,17 +890,17 @@ Potato's computer-vision, spatial, and evaluation surfaces are newer than its te
 | Generative-video / world-model evaluation | Yes | - | - | - | - | - | - |
 | VLM grounding & pointing evaluation | Yes | - | - | - | - | - | - |
 
-The last four rows are the ones worth reading closely. On the rows above them, the mature CV platforms generally match or beat Potato; on those four, Potato is currently doing something the other tools do not offer.
+On every row except the last four, the mature CV platforms generally match or beat Potato. On those four, Potato is currently doing something the other tools do not offer.
 
-## Where Potato Excels
+## Potato's strengths
 
-### Agreement You Can Publish
+### Chance-corrected agreement
 
 Potato reports **chance-corrected** reliability, and it does so for more than categorical labels. Krippendorff's α accepts any distance function, so the same coefficient machinery covers text spans, temporal segments, geometry, 3D cuboids, captions (through a semantic distance), and world-model break-points. Where α is the wrong tool, Potato says so and uses something else. Geometry localization is reported as σ and a KS statistic against an empirical chance baseline. Mask consensus uses STAPLE. Per-annotator competence uses MACE, for the parts of the problem that are genuinely categorical.
 
 Two design choices matter as much as the coefficients:
 
-- **Undefined values explain themselves.** α is genuinely undefined on a unanimous corpus; a bare `NaN` reads as a broken computation, and a `1.0` would be a lie.
+- **Undefined values explain themselves.** α is undefined on a unanimous corpus; a bare `NaN` reads as a broken computation, and a `1.0` would be a lie.
 - **Nothing is truncated silently.** If a report hits its pairwise budget, it says so and states how many items were included.
 
 Most annotation platforms report agreement as raw IoU, exact match, or percent agreement against a ground-truth job. Those are useful numbers, but they answer a different question. Raw agreement is inflated whenever one answer dominates, which is the normal case in real corpora.
@@ -911,7 +911,7 @@ Potato has 61 annotation schemas and 24 display types in one platform. The list 
 
 ### AI and LLM Integration
 
-Potato integrates with 12 AI endpoint types out of the box: OpenAI, Anthropic, Google Gemini, Ollama, vLLM, HuggingFace, OpenRouter, and YOLO. Features include:
+Potato integrates with 13 AI endpoint types, with no plugin to install: OpenAI, Anthropic, Google Gemini, Ollama, vLLM, HuggingFace, OpenRouter, and YOLO. Features include:
 
 - **Intelligent hints** with suggested labels
 - **Keyword highlighting** using AI-detected terms
@@ -1037,7 +1037,7 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 ### Image and Video Annotation
 
-Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation runs in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped. Fifteen import formats and twenty-nine export formats make it easy to bring existing work in and take it back out.
+Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation runs in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped. Fifteen import formats and twenty-nine export formats let you bring existing work in and take it back out.
 
 **vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, per-object attributes, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
@@ -1065,7 +1065,7 @@ Potato annotates PCD, PLY, LAS, KITTI `.bin`, and `.xyz` clouds with 3D cuboids,
 
 Potato's `episode_annotation` schema puts N synchronized video streams and M robot time-series lanes (joint positions, gripper state, force-torque, reward) on one timeline, with phase segmentation, per-phase outcome, dense progress reward, and instruction relabelling. It imports LeRobot v2, HDF5 (RoboMimic/ALOHA), and RLDS/TFDS, and exports a per-frame JSONL sidecar so a read-only public dataset does not have to be rewritten. Agreement is reported three ways: temporal IoU for phase boundaries, α for outcome labels, and ICC plus Pearson for reward curves. Coverage is stated alongside, because a correlation computed over 5% of a timeline says nothing about the rest.
 
-Related tools worth knowing: **ATLAS** (TU Wien, 2026) is a focused desktop tool for long-horizon action segmentation with native ROS bag and RLDS support, Its published result, that showing proprioceptive time series alongside video cuts boundary error substantially against vision-only tools, is the reason Potato renders those lanes at all. **ELAN** and **BORIS** remain the standards for behavioural coding. **Rerun** and **Foxglove** are the best robotics visualization tools and now carry structured annotations. Potato's distinct contribution is being a *multi-annotator, web-deployed* episode annotator with agreement statistics; for single-annotator boundary precision with ROS bags, ATLAS is purpose-built.
+Related tools worth knowing: **ATLAS** (TU Wien, 2026) is a focused desktop tool for long-horizon action segmentation with native ROS bag and RLDS support. Its published result — that showing proprioceptive time series alongside video cuts boundary error against vision-only tools — is why Potato renders those lanes at all. **ELAN** and **BORIS** remain the standards for behavioural coding. **Rerun** and **Foxglove** are the best robotics visualization tools and now carry structured annotations. Potato's distinct contribution is being a *multi-annotator, web-deployed* episode annotator with agreement statistics; for single-annotator boundary precision with ROS bags, ATLAS is purpose-built.
 
 ### Generative Video and World-Model Evaluation
 
@@ -1087,7 +1087,7 @@ This area is defined by datasets and harnesses (RefCOCO/+/g, PixMo-Points, Point
 
 ### LLM Evaluation and Preference Annotation
 
-Potato's pairwise comparison schema (binary A/B and scale slider modes), conversation tree annotation, and triage schema make it suitable for RLHF data collection and LLM evaluation. Combined with 12 AI endpoint types for model-assisted annotation, Potato handles preference annotation workflows that typically require specialized tools.
+Potato's pairwise comparison schema (binary A/B and scale slider modes), conversation tree annotation, and triage schema make it suitable for RLHF data collection and LLM evaluation. Combined with 13 AI endpoint types for model-assisted annotation, Potato handles preference annotation workflows that typically require specialized tools.
 
 ## Agent-Evaluation Platforms (LangSmith, LabelBox, Braintrust)
 
@@ -1096,19 +1096,19 @@ A newer class of tools focuses on **evaluating AI agents and LLM applications** 
 | Capability | Potato | LangSmith | LabelBox |
 |------------|--------|-----------|----------|
 | License / hosting | Free, open-source, self-hosted | Proprietary SaaS (self-host = Enterprise) | Proprietary SaaS |
-| Programmatic evaluators (trajectory match, tool-use, LLM-judge) | ✅ | ✅ (`agentevals`/`openevals`) | partial |
-| Versioned datasets + experiments | ✅ (file/SQLite) | ✅ | ✅ |
-| Automation rules (filter → sample → actions) | ✅ | ✅ | partial |
-| CI gating (pytest threshold) | ✅ | ✅ (pytest/Vitest) | ❌ |
-| LLM-as-judge ↔ human calibration (κ, ECE) | ✅ (auto-calibration) | ✅ (human-correction few-shot) | partial |
-| Span + free-text judging | ✅ | ✅ | ✅ |
-| Production tracing SDK | ✅ (`potato_trace`, OTel) | ✅ | partial |
-| Semantic search / dynamic slices | ✅ | partial | ✅ (Catalog) |
-| Multi-model arena | ✅ | ❌ | ✅ |
-| Human annotation depth (IAA, training, crowdsourcing) | ✅ | partial | ✅ (Alignerr workforce) |
+| Programmatic evaluators (trajectory match, tool-use, LLM-judge) | Yes | Yes (`agentevals`/`openevals`) | partial |
+| Versioned datasets + experiments | Yes (file/SQLite) | Yes | Yes |
+| Automation rules (filter → sample → actions) | Yes | Yes | partial |
+| CI gating (pytest threshold) | Yes | Yes (pytest/Vitest) | No |
+| LLM-as-judge ↔ human calibration (κ, ECE) | Yes (auto-calibration) | Yes (human-correction few-shot) | partial |
+| Span + free-text judging | Yes | Yes | Yes |
+| Production tracing SDK | Yes (`potato_trace`, OTel) | Yes | partial |
+| Semantic search / dynamic slices | Yes | partial | Yes (Catalog) |
+| Multi-model arena | Yes | No | Yes |
+| Human annotation depth (IAA, training, crowdsourcing) | Yes | partial | Yes (Alignerr workforce) |
 | Per-seat / per-trace cost | None | Yes | Yes |
 
-**Compared to LangSmith/LabelBox/Braintrust:** Potato covers the same capture → automate → curate → evaluate → CI-gate → calibrate loop, but free, self-hosted, and on top of a rigorous human-annotation platform (inter-annotator agreement, training phases, adjudication, crowdsourcing). The trade-off is that the SaaS tools offer managed cloud hosting, large-scale dashboards, and (for LabelBox) an on-demand expert workforce. See the [Agent Evaluation Guide](guides/agent-evaluation-guide.md).
+**Compared to LangSmith/LabelBox/Braintrust:** Potato covers the same capture → automate → curate → evaluate → CI-gate → calibrate loop, but free, self-hosted, and on top of a human-annotation platform (inter-annotator agreement, training phases, adjudication, crowdsourcing). The trade-off is that the SaaS tools offer managed cloud hosting, large-scale dashboards, and (for LabelBox) an on-demand expert workforce. See the [Agent Evaluation Guide](guides/agent-evaluation-guide.md).
 
 **Human review in the observability tools.** LangSmith, Langfuse, Braintrust, W&B Weave, and Arize Phoenix are strong tracing and evaluation platforms, and several have good human-review surfaces. LangSmith's annotation queues support rubric feedback keys, a configurable number of reviewers per run, pairwise queues, and reviewers who cannot see each other's feedback. Where Potato differs is what happens *after* two people disagree: these platforms are built to collect human judgements as scores, and none of them documents a reliability statistic over those judgements. Langfuse notes that a second annotation on the same trace replaces the first, so independent double annotation needs a workaround.
 
@@ -1118,7 +1118,7 @@ If your traces already live in one of these tools, that is a good reason to keep
 
 ## Recent Academic Annotation Systems (2022-2025)
 
-The following tools have been published at ACL, NAACL, EMNLP, or EACL System Demonstrations tracks since 2022. They represent the evolving landscape of annotation tools, particularly the growing emphasis on AI integration.
+The following tools have been published at ACL, NAACL, EMNLP, or EACL System Demonstrations tracks since 2022. Most of them integrate an LLM somewhere in the annotation loop.
 
 ### Human-LLM Collaborative Annotation
 
@@ -1249,24 +1249,24 @@ AWS-integrated annotation with built-in active learning and workforce management
 | Display types | 24 |
 | Export formats | 29 |
 | Import formats | 15 |
-| AI/LLM endpoint types | 12 |
+| AI/LLM endpoint types | 13 |
 | Data source types | 8 |
 | Assignment strategies | 11 |
 | Survey instruments | 55 |
 | Crowdsourcing integrations | 9 |
 | Workflow phases | 8 |
 
-Counts are generated from Potato's own registries. We no longer publish a "best alternative" column: the tools above organise their capabilities differently enough that a single number invites a misleading comparison.
+Counts are generated from Potato's own registries. There is no "best alternative" column, because the tools above organise their capabilities differently enough that a single number invites a misleading comparison.
 
 ---
 
 ## What Potato Does Not Do
 
-Stated plainly, so an evaluation does not have to discover it late:
+So an evaluation does not have to discover these late:
 
 - **No model training.** Potato orders items, pre-labels with existing models, and critiques annotations with a VLM, but it does not train or serve detectors. Roboflow, V7, Supervisely, and Labelbox do.
 - **No text-prompt segmentation.** Interactive segmentation is click- and box-driven. SAM 3 / Grounding DINO-class open-vocabulary labelling is available in Roboflow, V7, Labelbox, and the open-source desktop tool X-AnyLabeling.
-- **Video mask propagation is frame-to-frame re-prompting, not memory-based tracking.** No published SAM 2 ONNX export includes the memory modules, so this is named honestly rather than dressed up.
+- **Video mask propagation is frame-to-frame re-prompting, not memory-based tracking.** No published SAM 2 ONNX export includes the memory modules.
 - **No per-object attributes yet.** Geometry carries a label; occlusion levels, truncation flags, and sub-type attributes need a companion schema.
 - **No point-cloud sequence mode.** 3D annotation is per frame; track propagation across a sweep is not implemented.
 - **No DICOM, NIfTI, or WSI formats.** Deep zoom and 16-bit windowing cover large scientific images, not clinical ones.
@@ -1282,7 +1282,7 @@ pip install potato-annotation
 potato start config.yaml -p 8000
 ```
 
-See the [Quick Start Guide](quick-start.md) for a 5-minute setup, or browse [example projects](https://github.com/davidjurgens/potato/tree/master/project-hub/simple_examples) for ready-to-use configurations.
+See the [Quick Start Guide](quick-start.md) for a 5-minute setup, or browse [example projects](https://github.com/davidjurgens/potato/tree/master/examples) for ready-to-use configurations.
 
 ## Related Documentation
 
@@ -1298,7 +1298,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/guides/getting-started/
 
 # Getting Started Guide
 
-This guide walks you through setting up your first annotation project with Potato.
+Setting up a first annotation project, from install to a running server.
 
 ## Installation
 
@@ -1343,7 +1343,7 @@ See [Configuration Reference](../configuration/configuration.md) for all options
 
 ## Choosing an Annotation Type
 
-Potato supports 30+ annotation types. Start with the decision guide:
+Potato has 61 annotation types. Start with the decision guide:
 
 - **[Choosing the Right Annotation Type](../annotation-types/choosing_annotation_types.md)** - Interactive decision tree
 - **[Schema Gallery](../annotation-types/schemas_and_templates.md)** - Visual gallery of all types with examples
@@ -1384,7 +1384,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/guides/admin-guide/
 
 # Administrator Guide
 
-This guide covers managing annotation campaigns: setting up authentication, monitoring progress, ensuring quality, and exporting results.
+Running an annotation campaign: authentication, progress monitoring, quality control, and getting the results out.
 
 ## Setting Up Authentication
 
@@ -1443,7 +1443,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/guides/developer-guide/
 
 # Developer Guide
 
-This guide covers extending Potato, integrating via API, and customizing the platform.
+Extending Potato, driving it through the API, and customizing it.
 
 ## Architecture Overview
 
@@ -1755,7 +1755,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/guides/crowdsourcing-guide
 
 # Crowdsourcing Guide
 
-This guide walks you through running annotation tasks on crowdsourcing platforms like Prolific and Amazon MTurk.
+Running annotation tasks on Prolific, Amazon MTurk, and the other crowdsourcing platforms.
 
 ## Platform Setup
 
@@ -1812,7 +1812,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/guides/agent-evaluation-gu
 
 # Agent Evaluation Guide
 
-This guide covers evaluating AI agent systems with Potato, including coding agents, web agents, RAG pipelines, and multi-agent systems.
+Evaluating AI agent systems in Potato: coding agents, web agents, RAG pipelines, and multi-agent systems.
 
 ## Overview
 
@@ -1938,7 +1938,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/guides/ai-assisted-annotat
 
 # AI-Assisted Annotation Guide
 
-This guide covers all the ways Potato uses AI and machine learning to speed up annotation.
+Every way Potato puts AI and machine learning in front of an annotator.
 
 ## AI Label Suggestions
 
@@ -2374,7 +2374,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/configuration/configuratio
 
 # Configuration Guide
 
-This document provides a comprehensive guide to configuring Potato annotation tasks using YAML configuration files. Potato uses YAML files to define all aspects of an annotation task, from server settings to annotation schemes and user management.
+Every part of a Potato task lives in one YAML file: server settings, data paths, annotation schemes, users, assignment, and the optional features. This page walks through each section.
 
 > **Looking for a quick lookup?** See the [Configuration Reference](config_reference.md) for a complete table of all config keys, annotation types, and their required fields.
 
@@ -2403,7 +2403,7 @@ This document provides a comprehensive guide to configuring Potato annotation ta
 
 ```
 my_annotation_project/
-├── config.yaml                    # ✅ Config file in task_dir
+├── config.yaml                    # the config file, inside task_dir
 ├── data/
 │   └── my_data.json
 ├── output/
@@ -2427,7 +2427,7 @@ Using `task_dir: .` makes your configuration portable because paths are resolved
 
 ```
 my_annotation_project/
-├── config.yaml                    # ✅ Config file with task_dir: .
+├── config.yaml                    # the config file, with task_dir: .
 ├── data/
 │   └── my_data.json
 └── output/
@@ -2447,7 +2447,7 @@ output_annotation_dir: output/annotations/
 ```
 my_annotation_project/
 ├── configs/
-│   ├── config1.yaml              # ✅ Config files in configs/ subdirectory
+│   ├── config1.yaml              # config files, in a configs/ subdirectory
 │   └── config2.yaml
 ├── data/
 │   └── my_data.json
@@ -2681,10 +2681,10 @@ instance_display:
 
 ### Example: Image Classification
 
-Previously, to show an image with radio buttons, you had to use a workaround with `image_annotation` schema. Now you can use `instance_display`:
+To show an image and collect a radio answer about it, declare the image under `instance_display` and the question under `annotation_schemes`. The `image_annotation` schema is for drawing on the image, not for displaying it.
 
 ```yaml
-# Clean approach with instance_display
+# Display the image; collect the label separately
 instance_display:
   fields:
     - key: image_url
@@ -2696,7 +2696,7 @@ annotation_schemes:
     labels: [A, B, C]
 ```
 
-For comprehensive documentation including all display options, span annotation support, and multi-modal examples, see [Instance Display Configuration](../annotation-types/instance_display.md).
+For all display options, span annotation support, and multi-modal examples, see [Instance Display Configuration](../annotation-types/instance_display.md).
 
 ## Annotation Schemes
 
@@ -2917,13 +2917,13 @@ hide_navbar: true              # Hide navigation bar
 allow_phase_back_navigation: true  # Allow backward navigation across phases (default: false)
 ```
 
-When `allow_phase_back_navigation` is disabled (the default), the Back button is automatically hidden on the first page of the workflow and on the first annotation instance, since there is no valid previous destination. When enabled, the Back button is always shown, allowing users to return to previous phases.
+When `allow_phase_back_navigation` is disabled (the default), the Back button is automatically hidden on the first page of the workflow and on the first annotation instance, since there is no valid previous destination. When enabled, the Back button is always shown and users can return to previous phases.
 
 ## Database Configuration
 
 ### MySQL Database Setup
 
-Potato supports MySQL database backend for improved performance and scalability. To use MySQL:
+Potato can store annotations in MySQL instead of files. To use it:
 
 ```yaml
 database:
@@ -3018,12 +3018,22 @@ assignment:
 
 ### Available Strategies
 
-- `random`: Assigns items randomly to annotators
-- `fixed_order`: Assigns items in the order they appear in the dataset
-- `least_annotated`: Prioritizes items with the fewest annotations
-- `max_diversity`: Prioritizes items with highest disagreement in existing annotations
-- `active_learning`: Uses ML to prioritize uncertain items (placeholder)
-- `llm_confidence`: Uses LLM confidence scores (placeholder)
+All eleven values of `assignment_strategy`, as defined by `AssignmentStrategy`
+in `potato/item_state_management.py`:
+
+| Strategy | What it does |
+|----------|--------------|
+| `random` | Assigns items randomly to annotators |
+| `fixed_order` | Assigns items in the order they appear in the dataset |
+| `least_annotated` | Prioritizes items with the fewest annotations |
+| `max_diversity` | Prioritizes items with the highest disagreement in existing annotations |
+| `active_learning` | Serves the item pool in its current order. With [`active_learning.enabled`](../ai-intelligence/active_learning_guide.md) set, the manager reorders that pool by query strategy after each retrain, so the most informative unlabeled items come first. Without it, the order is whatever you configured |
+| `category_based` | Assigns items matching the annotator's qualified [categories](../advanced/category_assignment.md) |
+| `diversity_clustering` | Samples items round-robin from embedding clusters ([diversity ordering](../workflow/diversity_ordering.md)) |
+| `batch` | Restricts assignment to configured annotator/item cohorts ([batch assignment](../advanced/task_assignment.md)) |
+| `priority` | Serves items by a triage signal, errors and low scores first ([triage queue](../agent-evaluation/triage_queue.md)) |
+| `psychometric` | Routes items by expected information gain under a live IRT model, so confident items stop consuming annotation budget ([psychometrics](../advanced/psychometrics.md)) |
+| `llm_confidence` | **Not implemented.** Accepted by the config validator, but the assignment code falls back to random selection |
 
 ### Legacy Assignment Configuration
 
@@ -3074,7 +3084,7 @@ sequential_key_binding: true
 
 ## AI Support
 
-Potato provides integrated AI support to enhance annotation workflows with intelligent hints and keyword highlighting. This feature uses Large Language Models (LLMs) to provide contextual assistance to annotators.
+With `ai_support` on, an LLM suggests labels and highlights keywords in the text while the annotator works. The annotator still makes the call.
 
 ### Basic AI Configuration
 
@@ -3135,7 +3145,7 @@ prestudy:
 
 ### Active Learning
 
-Active learning uses machine learning to intelligently prioritize annotation tasks. For comprehensive configuration options, see the [Active Learning Guide](../ai-intelligence/active_learning_guide.md).
+Active learning reorders the queue so the instances a model is least sure about come first. The [Active Learning Guide](../ai-intelligence/active_learning_guide.md) covers every option.
 
 ```yaml
 active_learning:
@@ -3369,7 +3379,7 @@ item_properties:
   context_key: context
 
 task_dir: output/comprehensive_task/
-output_annotation_format: json
+export_annotation_format: json
 annotation_codebook_url: https://docs.google.com/document/d/...
 
 user_config:
@@ -3474,18 +3484,23 @@ When you start Potato with a configuration file, it will validate the configurat
 
 - Missing required fields
 - Invalid annotation types
-- File paths that dont exist
+- File paths that do not exist
 - Invalid assignment strategies
 - Malformed YAML syntax
 
-## Best Practices
-1. **Start Simple**: Begin with basic configuration and add complexity gradually
-2. **Test Thoroughly**: Always test your configuration with a small dataset first
-3. **Use Descriptive Names**: Choose clear, descriptive names for annotation schemes
-4. **Document Your Choices**: Add comments to explain non-obvious configuration choices
-5. **Version Control**: Keep your configuration files in version control
-6. **Environment Variables**: Use environment variables for sensitive information
-7. **Backup Data**: Always backup your data and configuration before making changes
+## Practical advice
+
+Get a minimal config running against a handful of items before adding schemes,
+because a validation error in a 200-line file is much harder to place than one
+in a 20-line file. Scheme names end up in your exported column headers and in
+every agreement report, so pick names you will still understand in six months,
+and comment anything a reader would otherwise have to reverse-engineer.
+
+Keep configs in version control: they are the record of what annotators
+actually saw, and reviewers will ask. Put API keys and database passwords in
+environment variables and reference them, so the config stays committable. Back
+up the output directory before changing `task_dir`, `output_annotation_dir`, or
+any assignment setting mid-study.
 
 ## Troubleshooting
 
@@ -3959,10 +3974,10 @@ html tags are used to create two seperate boxes for the finding pairs.
 
 
 ## Displaying a list or a dictionary of instances
-Potato allows you to easily display a list or a dictionary of instance and you could easily set
-`list_as_text` as `True`.
+Potato can display an instance that is a list or a dictionary rather than a string. Set
+`list_as_text` to `True`.
 
-If you are using a list of instances, you could also define whether adding a prefix to the text
+For a list of instances, you can also add a prefix to each line
 ``` yaml
 "list_as_text": {
   "text_list_prefix_type": 'alphabet'
@@ -4106,7 +4121,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/configuration/data_directo
 
 # Loading Data from a Directory
 
-This guide explains how to load annotation instances from all files in a directory, with optional live watching for new or modified files.
+Point Potato at a directory and it loads every file in it as annotation instances, optionally watching for new or modified files while the server runs.
 
 ## Overview
 
@@ -4174,7 +4189,7 @@ The directory watcher supports the same formats as `data_files`:
 
 Each file can contain multiple instances. The `id_key` and `text_key` from `item_properties` determine which fields contain the instance ID and text content.
 
-## How It Works
+## Scan order and watch behavior
 
 ### At Startup
 
@@ -4793,7 +4808,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/configuration/ui_configura
 
 ## Overview
 
-The Potato annotation platform provides extensive configuration options for customizing the user interface. These settings allow administrators to control the appearance, behavior, and functionality of the annotation interface to suit their specific needs.
+The `ui` section of the config controls how the annotation interface looks and behaves. Everything in it is optional; the defaults are what annotators see if you set nothing.
 
 ## Configuration Structure
 
@@ -5278,11 +5293,11 @@ URL: https://potatoannotator.readthedocs.io/en/latest/configuration/form_layout/
 
 # Annotation Form Layout System
 
-This guide explains how to configure the layout of annotation forms using the `layout` configuration section. The layout system provides control over how annotation schemas are arranged on the page.
+The `layout` configuration section controls how annotation schemas are arranged on the page.
 
 ## Overview
 
-The form layout system allows you to:
+The form layout system lets you:
 
 - **Configure grid columns**: Control how many columns forms are arranged in
 - **Control column spanning**: Make forms span multiple columns
@@ -5840,7 +5855,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/configuration/layout_custo
 
 # Layout Customization Guide
 
-This guide explains how to create sophisticated, custom visual layouts for your annotation tasks using custom CSS and HTML templates.
+Custom CSS and HTML templates let you lay out an annotation task however you need, rather than accepting the default stack of schemas.
 
 ## Overview
 
@@ -5936,7 +5951,7 @@ Each annotation scheme needs:
 
 ## Example Layouts
 
-Potato includes three sophisticated example layouts demonstrating advanced customization:
+Potato ships three worked example layouts:
 
 ### 1. Content Moderation Dashboard
 
@@ -6182,7 +6197,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/configuration/conditional_
 
 # Conditional Schema Branching (Display Logic)
 
-Conditional schema branching allows you to show or hide annotation schemas based on user responses to other schemas. This is useful for:
+Conditional schema branching shows or hides annotation schemas according to what the annotator answered elsewhere on the page. This is useful for:
 
 - Follow-up questions when specific answers are selected
 - Branching survey-style annotation flows
@@ -8236,7 +8251,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/choosing_
 
 # Choosing the Right Annotation Type
 
-With 36 annotation schema types, Potato covers virtually every annotation paradigm used in NLP research, LLM evaluation, survey methodology, and crowdsourcing. This guide helps you choose the right schema for your task.
+Potato has 61 annotation schema types, spanning NLP research, LLM evaluation, survey methodology, and crowdsourcing. Picking the right one is the subject of this page.
 
 ## Decision Flowchart
 
@@ -8557,11 +8572,11 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/instance_
 
 # Instance Display Configuration
 
-Instance display is a feature that separates **what content to show annotators** from **what annotations to collect**. This allows you to display any combination of content types (images, videos, audio, text) alongside any annotation schemes (radio buttons, checkboxes, spans, etc.).
+Instance display separates **what content to show annotators** from **what annotations to collect**, so any combination of content types (images, videos, audio, text) can sit alongside any annotation schemes (radio buttons, checkboxes, spans, and the rest).
 
 ## Why Use Instance Display?
 
-Previously, if you wanted to show an image with radio buttons for classification, you had to add an `image_annotation` schema with `min_annotations: 0` just to display the image. This was confusing and semantically incorrect.
+To show an image and classify it with radio buttons, declare the image under `instance_display` and the question under `annotation_schemes`. The `image_annotation` schema is for drawing on an image, not for displaying one.
 
 With `instance_display`, you can explicitly configure what content to display:
 
@@ -9115,7 +9130,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/format_su
 
 # Extended Format Support
 
-Potato supports annotation of various document formats beyond plain text, including PDF documents, Word files, spreadsheets, Markdown, and source code.
+Potato annotates more than plain text: PDF documents, Word files, spreadsheets, Markdown, and source code.
 
 ## Overview
 
@@ -9565,7 +9580,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/triage/
 
 # Triage Annotation Schema
 
-The triage annotation schema provides a Prodigy-style binary accept/reject/skip interface optimized for rapid data curation tasks. This schema is ideal for filtering large datasets quickly, performing data quality checks, or any task requiring quick binary decisions.
+The triage schema is a Prodigy-style accept/reject/skip interface for going through a dataset quickly. Use it to filter a large corpus, spot-check data quality, or make any other one-key binary call.
 
 ## Overview
 
@@ -9856,7 +9871,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/compariso
 
 # Pairwise Comparison Annotation
 
-The pairwise annotation schema allows annotators to compare two items side by side and indicate their preference. It supports two modes:
+The pairwise annotation schema puts two items side by side and asks which one the annotator prefers. It supports two modes:
 
 1. **Binary Mode**: Click on the preferred tile (A or B), with optional tie button
 2. **Scale Mode**: Use a slider to rate how much one option is preferred over the other
@@ -10439,7 +10454,7 @@ Iterative Best-Worst Scaling extends standard BWS with an adaptive, Quicksort-li
 
 Based on: *"Baby Bear: Seeking a Just Right Rating Scale for Scalar Annotations"* ([arxiv 2408.09765](https://arxiv.org/abs/2408.09765))
 
-## How It Works
+## Rounds, and what each one adds
 
 Standard BWS generates all tuples upfront and produces relative rankings. IBWS adds rounds:
 
@@ -10821,7 +10836,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/text/text
 
 # Text Input / Rationale Annotation
 
-The `text` schema provides free-text input for open-ended responses. With the enhanced rationale features, it can also serve as a justification companion to any other annotation schema.
+The `text` schema is a free-text box for open-ended responses. Attached to another schema, it becomes the place an annotator justifies the answer they just gave.
 
 ## Basic Usage
 
@@ -10910,7 +10925,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/text/extr
 
 # Extractive QA / Answer Span
 
-The Extractive QA schema provides a streamlined interface for SQuAD-style question answering annotation. A question is displayed prominently above a passage, and annotators highlight the answer span directly in the text.
+The extractive QA schema is the SQuAD-style layout: the question sits above the passage, and the annotator highlights the answer span in the text itself.
 
 ## When to Use Extractive QA
 
@@ -11004,7 +11019,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/text/core
 
 # Coreference Chain Annotation
 
-Coreference annotation allows annotators to group text spans that refer to the same entity. This is essential for tasks like entity resolution, pronoun resolution, and discourse analysis.
+Coreference annotation lets annotators group text spans that refer to the same entity. This is essential for tasks like entity resolution, pronoun resolution, and discourse analysis.
 
 ## Overview
 
@@ -11353,7 +11368,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/text/enti
 
 # Entity Linking
 
-Entity linking enables annotators to connect span annotations to external knowledge bases (KBs) like Wikidata or UMLS. This creates semantic links between text mentions and canonical entities, which is valuable for tasks like named entity recognition, concept normalization, and knowledge graph construction.
+Entity linking connects span annotations to external knowledge bases (KBs) such as Wikidata or UMLS. This creates semantic links between text mentions and canonical entities, which is valuable for tasks like named entity recognition, concept normalization, and knowledge graph construction.
 
 ## Table of Contents
 
@@ -11476,7 +11491,7 @@ entity_linking:
 
 ### UMLS
 
-The [Unified Medical Language System](https://www.nlm.nih.gov/research/umls/) provides comprehensive medical and biomedical terminology. **Requires a free API key.**
+The [Unified Medical Language System](https://www.nlm.nih.gov/research/umls/) is a medical and biomedical terminology. **Requires a free API key.**
 
 ```yaml
 entity_linking:
@@ -12170,7 +12185,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/text/span
 
 # Span Linking Annotation
 
-Span linking allows annotators to create typed relationships between spans (text segments) that have already been annotated. This is useful for relation extraction tasks where you need to identify how entities relate to each other, such as "PERSON works_for ORGANIZATION" or "PERSON collaborates_with PERSON".
+Span linking lets annotators draw typed relationships between spans (text segments) that have already been annotated. This is useful for relation extraction tasks where you need to identify how entities relate to each other, such as "PERSON works_for ORGANIZATION" or "PERSON collaborates_with PERSON".
 
 ## Overview
 
@@ -12504,7 +12519,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/text/text
 
 # Inline Text Editing / Post-Edit
 
-The Text Edit schema enables annotators to directly edit displayed text while the system tracks changes. It computes a real-time diff showing insertions, deletions, and substitutions, along with edit distance metrics. Used for machine translation post-editing, grammar correction, text simplification, and paraphrase generation.
+The Text Edit schema lets annotators edit the displayed text directly, and records every change. It computes a real-time diff showing insertions, deletions, and substitutions, along with edit distance metrics. Used for machine translation post-editing, grammar correction, text simplification, and paraphrase generation.
 
 ## When to Use Text Edit
 
@@ -12585,7 +12600,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/text/even
 
 # Event Annotation
 
-Event annotation enables the creation of N-ary event structures for information extraction tasks. Events consist of:
+Event annotation builds N-ary event structures for information extraction. An event consists of:
 
 - **Trigger span**: The word or phrase that indicates the event (e.g., "attacked", "hired", "traveled")
 - **Argument spans**: Entity spans with typed semantic roles (e.g., attacker, target, weapon)
@@ -12944,7 +12959,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedi
 
 # Image Annotation
 
-Image annotation allows annotators to mark regions on images using bounding boxes, polygons, freeform drawing, and landmark points. This is useful for object detection, segmentation, and keypoint annotation tasks.
+Image annotation lets annotators mark regions with bounding boxes, polygons, freeform drawing, and landmark points. This is useful for object detection, segmentation, and keypoint annotation tasks.
 
 ![Image Annotation Interface](../../img/screenshots/image_annotation_full.png)
 *The image annotation interface with bounding box and polygon tools*
@@ -13420,8 +13435,8 @@ The toolbar provides:
 
 ### Tablets and stylus input
 
-The canvas works on a touch device, and a stylus is a genuinely good surface for
-tracing a boundary — often better than a mouse.
+The canvas works on a touch device, and a stylus is a good surface for tracing a
+boundary — often better than a mouse.
 
 | Gesture | Does |
 |---|---|
@@ -13855,7 +13870,7 @@ python potato/flask_server.py start \
     examples/image/text-prompt-labeling/config.yaml -p 8000
 ```
 
-## How it works
+## The model behind it
 
 The model is Grounding DINO, an open-vocabulary detector: it takes an image and
 a caption, and scores 900 candidate boxes against every word of that caption.
@@ -13938,7 +13953,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedi
 
 # Audio Annotation
 
-Audio annotation allows annotators to segment audio files and assign labels to time regions. This is useful for speech transcription, speaker diarization, music analysis, and audio event detection.
+Audio annotation lets annotators cut an audio file into time regions and label them. This is useful for speech transcription, speaker diarization, music analysis, and audio event detection.
 
 ![Audio Annotation Interface](../../img/screenshots/audio_annotation_full.png)
 *The audio annotation interface with waveform visualization, segment labels, and playback controls*
@@ -14518,13 +14533,13 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedi
 
 # Video Annotation
 
-This guide covers the video annotation schema in Potato, which allows annotators to mark temporal segments, classify frames, and annotate keyframes in video content.
+The `video_annotation` schema lets annotators mark temporal segments, classify individual frames, and attach notes to keyframes.
 
 > **New in v2.0**: Video annotation with frame-level precision, timeline visualization, and keyboard-driven workflow.
 
 ## Overview
 
-The `video_annotation` schema provides comprehensive video annotation capabilities:
+The schema covers:
 
 - **Temporal Segment Marking**: Mark start and end points to create labeled segments
 - **Frame-by-Frame Navigation**: Step through video frame by frame for precise annotations
@@ -14825,7 +14840,7 @@ annotation_schemes:
 Enables all annotation types in one interface.
 
 - Segment, frame, and keyframe controls all available
-- Useful for comprehensive video analysis tasks
+- Useful when a video needs both segment and frame-level labels
 
 ## Showing and Hiding Classes
 
@@ -15214,7 +15229,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/multimedi
 
 # Tiered Annotation (ELAN-style Hierarchical Annotation)
 
-Tiered annotation provides a hierarchical multi-tier annotation interface for audio and video content. This schema is inspired by [ELAN](https://archive.mpi.nl/tla/elan), a widely-used tool for linguistic annotation, and supports parent-child relationships between annotation tiers.
+Tiered annotation is a stack of time-aligned annotation tiers over audio or video, with parent-child relationships between them. The model follows [ELAN](https://archive.mpi.nl/tla/elan), the standard tool for this in linguistics.
 
 ## Overview
 
@@ -15856,7 +15871,7 @@ annotator concludes the tool is broken. Potato transcodes these on first
 request, caches the result, and when it genuinely cannot, says so with the
 command to run instead.
 
-## How it works
+## Requesting a transcoded file
 
 Reference the file through `/media/proxy/` instead of `/media/`:
 
@@ -15900,9 +15915,6 @@ with your system package manager (`brew install ffmpeg`,
 `apt install ffmpeg`).
 
 ## 16-bit windowing
-
-This is the part that matters for scientific imagery, and the reason a naive
-conversion is worse than useless.
 
 A 16-bit microscopy or medical TIFF holds values a display cannot show. The
 obvious conversion — an 8-bit cast — divides by 256, so a scan whose structure
@@ -16894,8 +16906,8 @@ annotator **edits in 3D and verifies in 2D**: the panels under the viewport
 show each camera's view of the scene with the boxes projected onto it, redrawn
 as the box moves.
 
-Without it, 3D labelling is a guessing game with no feedback. With it, a wrong
-box is visible at a glance.
+Without it, 3D labelling has no feedback loop: a box that looks right from the
+orbit camera can be metres off along the view axis, and nothing says so.
 
 ## Configuring it
 
@@ -17999,7 +18011,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/measureme
 
 # Soft Label / Probability Distribution
 
-The soft label schema allows annotators to distribute probability mass across a set of labels using constrained sliders. Rather than committing to a single category, annotators express graded membership by allocating percentages that must sum to a fixed total (default 100). This captures genuine annotation uncertainty and reflects the natural subjectivity present in many NLP tasks.
+The soft label schema lets annotators spread probability mass across a set of labels with constrained sliders. Rather than committing to a single category, annotators express graded membership by allocating percentages that must sum to a fixed total (default 100). This captures genuine annotation uncertainty and reflects the natural subjectivity present in many NLP tasks.
 
 ## Overview
 
@@ -18122,7 +18134,7 @@ The confidence annotation schema pairs any primary annotation with an explicit c
 
 ## Overview
 
-Annotator confidence is systematically underused in NLP datasets. Recording it explicitly allows researchers to:
+Annotator confidence is systematically underused in NLP datasets. Recording it explicitly lets researchers:
 
 - Filter low-confidence annotations before model training
 - Weight annotations by confidence during aggregation
@@ -18249,7 +18261,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/measureme
 
 # Multi-Criteria Rubric Evaluation
 
-The Rubric Evaluation schema provides a structured grid for rating items on multiple criteria simultaneously. This is the essential schema for LLM evaluation — enabling MT-Bench-style multi-dimensional scoring with configurable criteria and scale points.
+The rubric evaluation schema is a grid: one row per criterion, one column per scale point, filled in one pass. It is what MT-Bench-style multi-dimensional scoring needs, with the criteria and the scale points both configurable.
 
 ## When to Use Rubric Eval
 
@@ -18351,7 +18363,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/structure
 
 # Conversation Tree Annotation
 
-The tree annotation schema enables annotation of hierarchical conversation structures, such as chatbot response trees, dialogue systems, or branching narratives. Annotators can rate individual nodes, select preferred paths, and compare branches at decision points.
+The tree annotation schema annotates hierarchical conversation structures: chatbot response trees, dialogue systems, branching narratives. Annotators can rate individual nodes, select preferred paths, and compare branches at decision points.
 
 ## Overview
 
@@ -19139,7 +19151,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/structure
 
 # Hierarchical Multi-Label Selection
 
-The hierarchical multiselect schema allows annotators to select labels from a tree-structured taxonomy. Parent nodes can be expanded or collapsed, and selecting a parent optionally auto-selects or auto-deselects its children. An optional search box enables rapid navigation of large taxonomies.
+The hierarchical multiselect schema lets annotators pick labels out of a tree-structured taxonomy. Parent nodes can be expanded or collapsed, and selecting a parent optionally auto-selects or auto-deselects its children. An optional search box enables rapid navigation of large taxonomies.
 
 ## Overview
 
@@ -19148,7 +19160,7 @@ Flat multi-label checkboxes become unwieldy when label spaces have hundreds of e
 - Renders the taxonomy as an expandable/collapsible tree
 - Supports arbitrary nesting depth
 - Optionally propagates selections up or down the hierarchy
-- Provides a search/filter box for large taxonomies
+- Has a search/filter box for large taxonomies
 - Enforces an optional maximum selection limit
 
 ## Research Basis
@@ -19282,7 +19294,7 @@ Labels appear in the order they were selected. Both parent and child labels can 
 
 ## Troubleshooting
 
-**Tree is too deep to navigate easily:** Set `show_search: true` and `expand_depth: 0` so the tree starts collapsed and annotators use search to find specific nodes.
+**Tree is too deep to navigate:** Set `show_search: true` and `expand_depth: 0` so the tree starts collapsed and annotators search for the node they want.
 
 **Auto-selection creates unexpected behavior:** When `auto_select_children: true`, deselecting a parent does not automatically deselect its children. Annotators must deselect children manually. Make this behavior explicit in the task instructions.
 
@@ -19303,7 +19315,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/structure
 
 # Card Sorting / Grouping
 
-The Card Sort schema enables drag-and-drop grouping of items into categories. In **closed mode**, groups are predefined by the researcher. In **open mode**, annotators create and name their own groups. This is commonly used in information architecture research, taxonomy development, and content categorization.
+The Card Sort schema groups items into categories by dragging them. In **closed mode**, groups are predefined by the researcher. In **open mode**, annotators create and name their own groups. This is commonly used in information architecture research, taxonomy development, and content categorization.
 
 ## When to Use Card Sort
 
@@ -20046,11 +20058,11 @@ URL: https://potatoannotator.readthedocs.io/en/latest/workflow/training_phase/
 
 # Training Phase Documentation
 
-The training phase is an optional component of the annotation workflow that allows administrators to provide users with practice questions and feedback before they begin the main annotation task. This helps ensure annotation quality and user understanding of the task requirements.
+The training phase is an optional step before the main task, in which annotators answer practice questions and get feedback on their answers. It is where a misunderstanding of the guidelines surfaces cheaply, before it is spread across a corpus.
 
 ## Overview
 
-The training phase provides:
+The training phase gives you:
 - **Practice Questions**: Users answer questions with known correct answers
 - **Immediate Feedback**: Users receive feedback on their answers with explanations
 - **Retry Functionality**: Users can retry incorrect answers until they get them right
@@ -20295,7 +20307,7 @@ GET /admin/user_state/{user_id}
 
 1. **Consistent Format**: Ensure training data matches your annotation schemes
 2. **Clear Examples**: Use unambiguous examples with obvious correct answers
-3. **Comprehensive Coverage**: Include examples for all possible annotation values
+3. **Cover every label**: include at least one training example for each annotation value
 4. **Helpful Explanations**: Provide explanations that help users understand the task
 
 ## Troubleshooting
@@ -20376,7 +20388,7 @@ training:
 
 ## Integration with Existing Workflows
 
-The training phase integrates seamlessly with existing annotation workflows:
+The training phase fits into an existing annotation workflow as follows:
 
 1. **Phase Progression**: Users automatically advance through phases
 2. **State Persistence**: Training progress is saved and restored
@@ -20406,7 +20418,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/workflow/quality_control/
 
 # Quality Control Features
 
-Potato provides comprehensive quality control features to ensure high-quality annotations in your projects. This guide covers five key features:
+Five quality control features, all optional and independent of each other:
 
 1. **Attention Checks** - Verify annotator engagement with known-answer items
 2. **Gold Standards** - Track accuracy against expert-labeled items
@@ -20473,7 +20485,7 @@ Create a JSON file with your attention check items:
 - `text` (required): The text to display to annotators
 - `expected_answer` (required): Dictionary mapping schema names to expected values
 
-### How It Works
+### When a check is injected and what happens next
 
 1. Attention check items are loaded at server startup
 2. Based on `frequency` or `probability`, checks are injected into the annotation flow
@@ -20492,7 +20504,7 @@ View attention check statistics in the admin dashboard at `/admin`:
 
 ## Gold Standards
 
-Gold standards are expert-labeled items used to measure annotator accuracy. By default, gold standards are **silent** - results are recorded for admin review in the dashboard, but annotators don't see feedback. This allows you to track quality without influencing annotator behavior.
+Gold standards are expert-labeled items used to measure annotator accuracy. By default, gold standards are **silent** - results are recorded for admin review in the dashboard, but annotators don't see feedback. You therefore track quality without influencing annotator behavior.
 
 ### Configuration
 
@@ -20659,7 +20671,7 @@ gold_standards:
 
 ## Pre-annotation Support
 
-Pre-annotation allows you to pre-fill annotation forms with model predictions, useful for:
+Pre-annotation pre-fills the form with model predictions, which is useful for:
 - Active learning workflows
 - Correcting model outputs
 - Bootstrapping from existing annotations
@@ -20713,7 +20725,7 @@ For span annotations:
 }
 ```
 
-### How It Works
+### When predictions are applied
 
 1. When an item is loaded, the predictions field is extracted
 2. If the annotator hasn't already annotated this item, predictions are used to pre-fill the form
@@ -20985,7 +20997,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/workflow/annotation_naviga
 
 # Annotation Navigation & Status Indicators
 
-Potato provides navigation tools to help annotators efficiently move through their assigned items, including visual status indicators and skip-to-unannotated navigation buttons.
+Annotators move through their assigned items with previous/next buttons, a status indicator showing whether the current item is labeled, and buttons that skip straight to the next unannotated item.
 
 ## Overview
 
@@ -21176,7 +21188,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/workflow/annotation_filter
 
 # Annotation Filtering
 
-This guide covers how to filter data based on prior annotation decisions. This is useful for multi-phase annotation workflows where the output of one task feeds into another.
+Filtering the item pool by what annotators already decided, so the output of one annotation phase becomes the input to the next.
 
 ## Common Use Cases
 
@@ -21501,7 +21513,7 @@ Maximize annotation variety by presenting items from different topic clusters.
 
 ## Overview
 
-Diversity ordering uses sentence-transformer embeddings to cluster similar items together, then samples items round-robin from different clusters. This ensures annotators see diverse content rather than similar items in sequence, which can:
+Diversity ordering uses sentence-transformer embeddings to cluster similar items together, then samples items round-robin from different clusters. Annotators therefore see varied content rather than runs of near-identical items, which can:
 
 - **Reduce annotator fatigue** from repetitive content
 - **Improve annotation quality** through varied context
@@ -21518,7 +21530,7 @@ diversity_ordering:
   prefill_count: 100
 ```
 
-## How It Works
+## Embedding, clustering, sampling
 
 1. **Startup**: First N items are embedded using sentence-transformers and clustered with k-means
 2. **Assignment**: Items are sampled round-robin from clusters, ensuring variety
@@ -21843,7 +21855,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/agent_tra
 
 # Annotating Agent Traces with Potato
 
-This guide covers how to use Potato for evaluating AI agent traces (trajectories). Potato provides all the infrastructure needed for rigorous agent evaluation: multi-annotator coordination, rich annotation schemas, inter-annotator agreement, quality control, and crowdsourcing support.
+Potato renders an agent's run step by step and collects human judgements about it, with the same multi-annotator coordination, agreement statistics, quality control, and crowdsourcing support it uses for text.
 
 ## Overview
 
@@ -21944,7 +21956,7 @@ instance_display:
 
 ### Rich: Agent Trace Display
 
-The `agent_trace` display type provides purpose-built rendering with step cards:
+The `agent_trace` display renders each step as a card:
 
 ```yaml
 instance_display:
@@ -22432,10 +22444,9 @@ synchronized side-by-side panes:
 
 > **Reasoning** | **Function Calls** | **Final Answer**
 
-This lets an evaluator see, at a glance, *what the agent thought*, *what it did*,
-and *what it produced* — ideal for continuous evaluation where new traces arrive
-and must be judged quickly. It is the purpose-built answer to *"show an agent's
-thought traces, function calls, and final answer side-by-side."*
+The evaluator reads what the agent thought, what it did, and what it produced
+without scrolling between them, which is what makes a stream of incoming traces
+judgeable at the rate they arrive.
 
 Unlike [`agent_trace`](agent_traces.md) (which stacks an interleaved trace
 vertically in a single column) or [`pairwise`](../annotation-types/instance_display.md#pairwise-display)
@@ -22576,11 +22587,11 @@ URL: https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/coding_ag
 
 # Coding Agent Trace Annotation
 
-Potato supports annotation of agentic coding system traces -- sessions from tools like Claude Code, OpenCode, Cursor, Aider, SWE-Agent, and other AI coding assistants. This guide covers how to set up coding agent evaluation projects.
+Potato annotates agentic coding sessions -- traces from Claude Code, OpenCode, Cursor, Aider, SWE-Agent, and other AI coding assistants.
 
 ## Overview
 
-Coding agent traces consist of sequences of tool calls (file reads, edits, terminal commands, searches) interleaved with agent reasoning. Potato renders these with purpose-built formatting:
+Coding agent traces consist of sequences of tool calls (file reads, edits, terminal commands, searches) interleaved with agent reasoning. Potato renders them as:
 
 - **Code diffs** (Edit/Write): Red/green unified diff view
 - **Terminal blocks** (Bash): Dark monospace terminal styling
@@ -22986,7 +22997,7 @@ Potato supports both **reviewing** and **creating** web agent browsing traces th
 
 ## Overview
 
-Web agent annotation provides two modes:
+Web agent annotation has two modes:
 
 1. **Review Mode** — View pre-recorded agent browsing traces step-by-step with screenshot overlays showing clicks, bounding boxes, mouse paths, and scroll indicators. Annotators evaluate agent behavior using per-step and trajectory-level annotation schemes.
 
@@ -23132,7 +23143,7 @@ instance_display:
         max_steps: 50
 ```
 
-### How It Works
+### What gets recorded during a live session
 
 1. The annotator sees a task description and a browser iframe
 2. They browse the website while their interactions are recorded
@@ -23334,7 +23345,7 @@ python potato/flask_server.py start examples/agent-traces/trajectory-correction/
 
 See `examples/agent-traces/trajectory-correction/` for the full runnable project.
 
-## How it works
+## The correction card
 
 Each agent step renders as a card showing the **Original** text (read-only) and an editable
 **Corrected** box pre-filled with the original. As the annotator types:
@@ -23550,9 +23561,9 @@ Multi-Agent System failure taxonomy from Cemri et al. 2025, *"Why Do Multi-Agent
 LLM Systems Fail?"*): **14 failure modes across 3 categories**, empirically derived
 with κ=0.88 human inter-annotator agreement.
 
-Commercial tools *auto-detect* failure modes; Potato gives you a turnkey
-**human** failure-mode annotation workflow — optionally seeded by an LLM-judge
-pre-label that annotators then validate.
+Commercial tools *auto-detect* failure modes. Potato collects **human**
+failure-mode annotations instead, optionally seeded by an LLM-judge pre-label
+that annotators then confirm or overturn.
 
 ## Quick start
 
@@ -23869,7 +23880,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/multimoda
 
 Agents increasingly act in modalities beyond text and static images — they drive
 GUIs, watch video, hold spoken conversations. These schemas (the M-series,
-multimodal half) give human raters surfaces purpose-built for those traces, beyond
+multimodal half) give human raters surfaces built for those traces, beyond
 Potato's existing [image](../annotation-types/multimedia/image_annotation.md), [audio](../annotation-types/multimedia/audio_annotation.md),
 [video](../annotation-types/multimedia/video_annotation.md), and [web-agent](agent_traces.md) displays.
 
@@ -24930,8 +24941,7 @@ annotator finds **the frame at which each rollout stops making sense**, says
 why, picks a winner, and — where the scenario carries an intervention — judges
 whether the divergence follows from it.
 
-Potato then reports whether the annotators agreed, which is the part nobody
-else does.
+Potato then reports whether the annotators agreed on where the break was.
 
 ---
 
@@ -25368,7 +25378,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/agent-evaluation/vlm_groun
 
 # VLM Grounding, Pointing & Hallucination Localization
 
-Three questions about vision-language models that are constantly confused,
+Three questions about vision-language models that are often conflated,
 separated here because they have different right answers:
 
 | | The question | Scored by |
@@ -25467,9 +25477,9 @@ a data problem.
 Molmo-style models emit points. Set `region_type: point` and the annotator
 places a landmark.
 
-The scoring is genuinely different, and this is the part people get wrong: **a
-point has no area, so every IoU against it is 0.** Scoring points the way boxes
-are scored reports total failure for a model that is pointing perfectly. The
+Points are scored differently, and they have to be: **a point has no area, so
+every IoU against it is 0.** Scoring points the way boxes are scored reports
+total failure for a model that is pointing perfectly. The
 question a point answers is "is it *in* the thing", which is a hit rate:
 
 ```python
@@ -25919,7 +25929,7 @@ Each entry maps to an `AIEndpointFactory` config (`endpoint_type`, `model`,
 `base_url`, `temperature`, and an optional `ai_config` for keys/params). When
 enabled, the admin dashboard shows an **Arena** link.
 
-## How it works
+## One arena round
 
 1. Enter a prompt → it's sent to every model **concurrently**. One model failing
    (bad key, provider down) never blocks the others — its card shows the error.
@@ -26169,7 +26179,7 @@ triage:
 assignment_strategy: priority
 ```
 
-If you omit `rules` (and `signal_field`), a turnkey default set is used: error
+If you omit `rules` (and `signal_field`), a default set is used: error
 status (100), negative feedback (80), score < 0.5 (60).
 
 ### Condition operators
@@ -26660,10 +26670,10 @@ Annotate conversations **between multiple agents** — debates, crew
 coordination, agent-to-agent handoffs — with agent identity, message
 addressees, reply threading, and discussion-structure tagging.
 
-Potato treats multi-agent identity as first-class: converters populate
-standardized `agent_id` / `addressee` / `role` keys on conversation turns,
-the `multi_agent_discussion` display renders them, and turn-level bindings
-and analytics can filter on them.
+Agent identity travels with the turn. Converters populate standardized
+`agent_id` / `addressee` / `role` keys on each conversation turn, the
+`multi_agent_discussion` display renders them, and turn-level bindings and
+analytics can filter on them.
 
 ## Quick Start
 
@@ -27365,13 +27375,13 @@ URL: https://potatoannotator.readthedocs.io/en/latest/solo-mode/solo_mode/
 
 # Solo Mode
 
-Solo Mode enables a single annotator to efficiently label large datasets with LLM assistance through collaborative annotation.
+One annotator plus an LLM, labeling a dataset that would normally need a team.
 
 > **Using a HuggingFace model?** See [Using HuggingFace Models in Potato](../ai-intelligence/huggingface_models.md) for wiring `solo_mode.labeling_models[]` to an HF-hosted model.
 
 ## Overview
 
-Solo Mode provides a streamlined workflow where a human annotator works alongside an LLM to annotate data. The system learns from human feedback, progressively improving its predictions until the human can step back and let the LLM complete the remaining annotations autonomously.
+A human annotator and an LLM work the same queue. The LLM proposes, the human corrects, and each correction feeds back into the prompt. As the two converge, the human hands over more of the queue until the LLM finishes the rest on its own.
 
 ### Key Features
 
@@ -27446,7 +27456,9 @@ solo_mode:
 
 ## Workflow Phases
 
-Solo Mode progresses through the following phases:
+Solo Mode progresses through twelve phases, plus a terminal `completed`
+state. The phase machine is `SoloPhase` in `potato/solo_mode/phase_controller.py`;
+not every path visits every phase.
 
 ### 1. Setup
 - Enter task description
@@ -27483,20 +27495,31 @@ Solo Mode progresses through the following phases:
 - Decide on correct label
 - Improve understanding of edge cases
 
-### 8. Periodic Review
+### 8. Active Annotation
+- The main annotation phase
+- The human labels prioritized instances while the LLM labels in the background
+- Returns here from periodic review, rule review, and a failed final validation
+
+### 9. Periodic Review
 - Periodically review low-confidence LLM labels
 - Approve or correct predictions
 - Maintain quality during autonomous phase
 
-### 9. Autonomous Labeling
+### 10. Rule Review
+- Review the edge case rules discovered from low-confidence labels
+- Approve or reject each clustered rule category
+- Send the prompt back for revision if the rules point at a larger problem
+
+### 11. Autonomous Labeling
 - Agreement threshold reached
 - LLM completes remaining instances
 - Human monitors progress
 
-### 10. Final Validation
+### 12. Final Validation
 - Validate sample of LLM-only labels
 - Confirm quality meets standards
 - Export final dataset
+- Failing validation returns the project to active annotation
 
 ## Uncertainty Estimation
 
@@ -27666,13 +27689,13 @@ URL: https://potatoannotator.readthedocs.io/en/latest/solo-mode/solo_mode_advanc
 
 # Solo Mode Advanced Features
 
-This page documents advanced subsystems available in Solo Mode that go beyond the core 10-phase workflow described in the [Solo Mode guide](solo_mode.md). These features enable automated quality improvement, cost optimization, and deeper analysis of annotation patterns.
+Subsystems that sit on top of the core workflow described in the [Solo Mode guide](solo_mode.md): rule discovery, labeling functions, confusion analysis, confidence routing, prompt optimization, and edge-case synthesis. Each one is optional and off by default.
 
 ## Edge Case Rule Discovery
 
 Inspired by the Co-DETECT framework, the edge case rule system automatically discovers annotation rules from instances where the LLM has low confidence. Rules are extracted, clustered into categories, reviewed by the human annotator, and injected back into the annotation prompt.
 
-### How It Works
+### From a low-confidence label to a reviewed rule
 
 1. **Rule extraction**: When the LLM labels an instance with confidence below `confidence_threshold`, it generates a generalizable rule of the form "When \<condition\> → \<action\>".
 2. **Clustering**: Once enough rules accumulate (`min_rules_for_clustering`), they are clustered by semantic similarity using sentence embeddings and K-Means. Each cluster is summarized into a single category by the LLM.
@@ -27724,7 +27747,7 @@ Increase this to route more items from edge case rule clusters to the human anno
 
 Inspired by ALCHEmist (NeurIPS 2024), this system extracts reusable labeling functions from high-confidence LLM predictions. These functions can label new instances via keyword matching and majority voting — without additional API calls.
 
-### How It Works
+### Extraction, voting, acceptance
 
 1. **Extraction**: From predictions where the LLM reports high confidence (`min_confidence`), the system asks the LLM to identify generalizable patterns (keywords, conditions). Falls back to keyword frequency analysis if the LLM is unavailable.
 2. **Application**: For each new instance, all enabled labeling functions vote on a label using confidence-weighted majority voting.
@@ -27764,7 +27787,7 @@ Labeling functions are most effective when your data contains recurring patterns
 
 Enriches the standard confusion matrix with example instances, LLM reasoning, and optional root cause analysis with guideline suggestions.
 
-### How It Works
+### Grouping disagreements into patterns
 
 1. **Pattern detection**: Groups human-LLM disagreements by (predicted, actual) label pairs, filtering to pairs that occur at least `min_instances_for_pattern` times.
 2. **Enrichment**: Each confusion pattern includes up to 5 example instances with the original text, LLM reasoning, and confidence score.
@@ -27803,7 +27826,7 @@ Returns confusion matrix data with heatmap-ready cell values, per-label accuracy
 
 Provides rich aggregated data for visual exploration of human-LLM disagreements, including scatter plots, temporal timelines, per-label breakdowns, and a filterable disagreement list.
 
-### How It Works
+### What the explorer reads
 
 The explorer is read-only — it aggregates data from the validation tracker and predictions without modifying any state.
 
@@ -27841,7 +27864,7 @@ Accepts `?bucket_size=<N>` (clamped to [2, 100], default 10).
 
 Orchestrates an automated cycle of confusion analysis → guideline suggestions → prompt revision → re-annotation. Monitors agreement rate trends and stops when metrics plateau.
 
-### How It Works
+### One refinement cycle
 
 1. **Trigger**: After every `trigger_interval` human annotations, the loop checks whether a refinement cycle should run.
 2. **Analyze**: Runs confusion analysis on current disagreement patterns.
@@ -27910,7 +27933,7 @@ POST /solo/api/refinement/reject      # Reject a pending refinement candidate
 
 Implements cascaded model escalation: a cheap/fast model tries first, and if its confidence is below the tier threshold, the instance escalates to a more expensive/capable model. If all tiers fail, the instance is routed to the human.
 
-### How It Works
+### Escalating through the tiers
 
 For each instance:
 1. The first (cheapest) tier model labels the instance.
@@ -27971,7 +27994,7 @@ enabled. There is no dedicated routing-stats endpoint.
 
 DSPy-style automatic prompt optimization using labeled examples. The optimizer analyzes correct and incorrect predictions to iteratively improve the annotation prompt.
 
-### How It Works
+### One optimization pass
 
 1. **Collect examples**: Gathers labeled instances — both correctly and incorrectly predicted by the LLM.
 2. **Optimize**: Sends the current prompt along with sample correct (up to 5) and incorrect (up to 10) examples to the LLM. The LLM returns an improved prompt with a list of changes and rationale.
@@ -28026,7 +28049,7 @@ the prompt version history including who/what produced each version
 
 Proactively generates synthetic edge case examples to test and refine annotation prompts before large-scale labeling begins. Unlike edge case *rules* (which are discovered reactively from low-confidence predictions), the synthesizer *creates* hypothetical boundary examples.
 
-### How It Works
+### Synthesis, labeling, revision
 
 1. **Synthesis**: The LLM generates examples that lie on label boundaries, have ambiguous signals, require careful interpretation, and test specific guideline aspects.
 2. **Labeling**: The human annotator labels the synthesized examples.
@@ -28238,7 +28261,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/solo-mode/solo_mode_develo
 
 # Solo Mode Developer Guide
 
-This guide covers the architecture, extension points, and development practices for Solo Mode.
+Solo Mode's architecture, its extension points, and the conventions to follow when working on it.
 
 ## Architecture Overview
 
@@ -28812,7 +28835,9 @@ URL: https://potatoannotator.readthedocs.io/en/latest/solo_mode_refinement/
 
 # Solo Mode: Validated Prompt Refinement
 
-This document describes the validated refinement framework for the solo mode pipeline.
+Solo mode rewrites its labeling prompt from human-LLM disagreements. Every
+candidate rewrite is scored on held-out data and rejected unless it beats the
+prompt already in use.
 
 ## Problem
 
@@ -28973,7 +28998,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/ai_support
 
 # AI Support in Potato
 
-Potato provides integrated AI support to enhance annotation workflows with intelligent hints, keyword highlighting, and label suggestions. This feature uses Large Language Models (LLMs) to provide contextual assistance to annotators without revealing the correct answers.
+With AI support on, an LLM writes hints, highlights keywords, and suggests labels while the annotator works. It does not reveal an answer; the annotator still decides.
 
 > **Using a HuggingFace model?** See [Using HuggingFace Models in Potato](huggingface_models.md) for the `huggingface` endpoint and OpenAI-compatible `base_url` setup across hints, solo mode, and judge calibration.
 
@@ -29402,7 +29427,7 @@ export OPENAI_API_KEY="sk-..."
 
 For better security and portability, you can move endpoint-specific details (API keys, server URLs, model names) into a separate `ai-config.yaml` file. This file is gitignored by default, so secrets and environment-specific URLs never get committed to version control.
 
-### How It Works
+### Referencing an external prompt file
 
 Your main `config.yaml` references the external file:
 
@@ -29618,7 +29643,7 @@ ai_support:
       on_prev: 3
 ```
 
-This configuration provides a complete AI-assisted annotation setup with caching, multi-schema support, and automatic pre-generation for optimal user experience.
+That configuration turns on caching, covers several schemas, and pre-generates suggestions for the next few instances so the annotator does not wait on the model.
 
 ## LLM Confidence Methods for Active Learning
 
@@ -29683,7 +29708,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/visual_ai_
 
 # Visual AI Support for Image and Video Annotation
 
-Potato provides AI-powered assistance for image and video annotation tasks using various vision models including YOLO for object detection and VLLMs (Vision-Language Models) like GPT-4o, Claude, and Ollama vision models.
+Potato can pre-label image and video tasks with a vision model: YOLO for object detection, or a vision-language model such as GPT-4o, Claude, or an Ollama vision model.
 
 ## Overview
 
@@ -30498,7 +30523,7 @@ chat_support:
       Focus on helping them understand the text.
 ```
 
-## How It Works
+## The sidebar, from the annotator's side
 
 1. A toggle button appears in the navigation bar (right side)
 2. Clicking it opens a sidebar with a chat interface
@@ -30597,7 +30622,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/ai_integra
 
 # AI Integration Internals
 
-This document describes the internal architecture of Potato's AI support system, intended for developers who need to debug, extend, or modify the AI functionality.
+The internal architecture of Potato's AI support, for developers who need to debug, extend, or modify it.
 
 For user-facing configuration documentation, see [ai_support.md](ai_support.md).
 
@@ -30860,7 +30885,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/option_hig
 
 # Option Highlighting
 
-Option Highlighting is an AI-assisted feature that helps annotators identify the most likely correct options for discrete annotation tasks (radio buttons, checkboxes, likert scales). Using an LLM, the system analyzes the content and task description to predict the top-k most likely options, displaying them at full opacity while dimming less-likely options.
+Option highlighting marks the options an LLM thinks are most likely for a discrete annotation task (radio buttons, checkboxes, likert scales). The LLM reads the content and task description to predict the top-k most likely options, displaying them at full opacity while dimming less-likely options.
 
 ## Overview
 
@@ -31074,7 +31099,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/active_lea
 
 # Active Learning Administrator Guide
 
-This guide provides comprehensive instructions for administrators on how to configure and use active learning in the Potato annotation platform. Active learning uses machine learning to intelligently prioritize annotation tasks, helping you get the most value from your annotation budget.
+Active learning trains a classifier on the annotations you already have and reorders the queue so annotators see the instances it is least sure about first. This page is the administrator's reference for configuring it.
 
 ## Table of Contents
 
@@ -31091,14 +31116,13 @@ This guide provides comprehensive instructions for administrators on how to conf
 
 ## Overview
 
-Active learning in Potato automatically reorders annotation instances based on machine learning predictions, prioritizing items where the model is most uncertain. This helps you:
+Uncertain instances carry more information than confident ones, so a fixed
+annotation budget spent on them produces a better model than the same budget
+spent in dataset order. The cost is that your labeled set is no longer a random
+sample of the corpus, which matters if you intend to report distribution
+statistics over it.
 
-- **Maximize annotation efficiency** by focusing on the most informative instances
-- **Reduce annotation costs** by requiring fewer annotations for the same model performance
-- **Improve model quality** by ensuring diverse and representative training data
-- **Scale annotation workflows** with intelligent instance prioritization
-
-### How It Works
+### The active learning cycle
 
 1. **Training**: A machine learning classifier is trained on existing annotations
 2. **Prediction**: The model predicts confidence scores for unannotated instances
@@ -31315,7 +31339,7 @@ active_learning:
 
 ### Accessing Metrics
 
-Active learning provides comprehensive metrics through the admin interface:
+The admin interface exposes these metrics:
 
 ```python
 # Get active learning statistics
@@ -31560,7 +31584,7 @@ active_learning:
 
 ## Query Strategies
 
-Potato supports multiple query strategies beyond basic uncertainty sampling. For a comprehensive reference with mathematical formulations and citations, see [Active Learning Query Strategies](active_learning_strategies.md).
+Potato supports multiple query strategies beyond basic uncertainty sampling. For the mathematical formulations and citations, see [Active Learning Query Strategies](active_learning_strategies.md).
 
 | Strategy | Description | Config Value |
 |----------|-------------|-------------|
@@ -31645,11 +31669,7 @@ Key source files:
 - `potato/active_learning_manager.py` — Main manager class
 - `potato/ai/llm_active_learning.py` — LLM integration module
 
-## Conclusion
-
-Active learning in Potato provides powerful capabilities for optimizing annotation workflows. By following this guide and best practices, administrators can configure and use active learning effectively to improve annotation efficiency and model quality.
-
-For additional support and advanced configurations, refer to:
+## Where to go next
 - [Active Learning Query Strategies](active_learning_strategies.md) — Detailed strategy reference with citations
 - [AI Support](ai_support.md) — LLM endpoint configuration
 
@@ -31684,7 +31704,7 @@ parallel pipeline:
 | Feature | `item.get_text()` | the item's image reference |
 | Uncertainty / diversity / BADGE / BALD / hybrid | unchanged | **unchanged** |
 
-That is the whole change. If a strategy works on text it works on images.
+Those two rows are the whole change: a strategy that works on text works on images.
 
 ## Setup
 
@@ -31777,7 +31797,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/active_lea
 
 # Active Learning Query Strategies
 
-This document provides a comprehensive reference for all query strategies available in Potato's active learning system.
+Every query strategy Potato's active learning can use, with its formulation and its citation.
 
 ## Overview
 
@@ -32071,7 +32091,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/icl_labeli
 
 # AI-Assisted In-Context Learning (ICL) Labeling
 
-Potato's ICL labeling feature enables AI-assisted annotation by using high-confidence human annotations as in-context examples to guide an LLM in labeling remaining data. The system tracks LLM confidence and routes some predictions back to humans for verification, enabling accuracy assessment and iterative improvement.
+ICL labeling feeds the LLM your highest-confidence human annotations as in-context examples, then has it label the rest of the data. The system tracks LLM confidence and routes some predictions back to humans for verification, enabling accuracy assessment and iterative improvement.
 
 ## Overview
 
@@ -32648,7 +32668,7 @@ calibrates a *single* judge with self-reported confidence and shows suggestions
 inline. Judge Calibration uses **multiple** judges, **empirical** confidence
 (the vote fraction across the *k* samples), and keeps the human strictly blind.
 
-## How it works
+## Run states
 
 ```
 SETUP → GENERATING → HUMAN_CALIBRATION → REPORT → COMPLETED
@@ -32832,7 +32852,7 @@ MACE is useful when you have multiple annotators labeling the same items and wan
 
 MACE works with categorical annotation types: `radio`, `likert`, `select`, and `multiselect`. It does not apply to free-text, span, slider, or numeric annotations.
 
-### How It Works
+### What MACE computes
 
 1. **Data extraction**: Potato collects all annotations for each schema across all annotators, building an items-by-annotators matrix.
 2. **EM algorithm**: MACE runs multiple random restarts of the Variational Bayes EM algorithm, keeping the solution with the best log-likelihood.
@@ -33077,7 +33097,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/advanced/embedding_visuali
 
 # Embedding Dashboard Visualization
 
-The Embedding Visualization feature provides an interactive 2D visualization of your annotation data in the admin dashboard. Using UMAP dimensionality reduction on text embeddings, it allows you to:
+The embedding visualization is a 2D map of your corpus in the admin dashboard. It embeds each instance, reduces the vectors with UMAP, and plots them, so you can:
 
 - **Explore data patterns**: See clustering and distribution of your instances
 - **Track annotation progress**: Visualize annotated vs. unannotated items
@@ -33164,7 +33184,7 @@ Use the Plotly.js selection tools to select instances:
 
 ### Priority Queue
 
-The selection panel allows you to create a priority queue for annotation:
+The selection panel builds a priority queue for annotation:
 
 1. **Make a selection** using lasso or box tool
 2. **Click "Add to Queue"** to add the selection as a priority group
@@ -33640,7 +33660,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/advanced/category_assignme
 
 # Category-Based Assignment
 
-Category-based assignment allows you to automatically match annotators with annotation instances based on their demonstrated expertise. Annotators are assessed during training or prestudy phases on category-specific questions, and only receive instances from categories they have qualified for.
+Category-based assignment matches annotators to instances by demonstrated expertise. Annotators are assessed on category-specific questions during the training or prestudy phase, and afterwards receive instances only from the categories they qualified for.
 
 ## Overview
 
@@ -33963,7 +33983,7 @@ category_assignment:
 - **`super_majority`**: Consensus requires ≥66% agreement
 - **`unanimous`**: All annotators must agree
 
-### How It Works
+### The expertise update loop
 
 1. **Initial State**: All annotators start with neutral expertise (0.5) for all categories
 
@@ -34081,7 +34101,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/advanced/task_assignment/
 
 # Task Assignment
 
-Potato provides flexible task assignment strategies to control how annotation instances are distributed to annotators. This guide covers all available strategies and configuration options.
+Assignment strategies decide which instances each annotator sees and in what order. This page covers every strategy and its configuration.
 
 ## Table of Contents
 
@@ -34566,7 +34586,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/advanced/behavioral_tracki
 
 ## Overview
 
-Potato's behavioral tracking system captures detailed interaction data during annotation sessions, enabling researchers to analyze annotator behavior, timing patterns, AI assistance usage, and decision-making processes. This data is invaluable for understanding annotation quality, identifying problematic annotators, and improving annotation workflows.
+Potato records what annotators do during a session: clicks and focus events, how long each item took, when AI assistance was asked for and whether the suggestion was taken, and every change to an answer. The record is what an audit of annotation quality is built from, and it is the only way to tell a careful annotator from a fast one after the fact.
 
 ## What Gets Tracked
 
@@ -35089,9 +35109,9 @@ keystroke_logging:
   enabled: true
 ```
 
-That is the whole minimum configuration. Every free-text field in the project
-starts producing a content-blind event stream, a ~40-field summary, and a set of
-detection flags.
+Those two lines are the whole minimum configuration. Every free-text field in
+the project starts producing a content-blind event stream, a ~40-field summary,
+and a set of detection flags.
 
 A runnable example lives at `examples/advanced/keystroke-logging/`:
 
@@ -36072,8 +36092,9 @@ URL: https://potatoannotator.readthedocs.io/en/latest/advanced/annotation_teleme
 How a bounding box, polygon or mask was *produced* — the drawing-process
 counterpart of [keystroke logging](keystroke_logging.md).
 
-The headline signal is **AI-accept latency**. Everything else on this page is
-supporting context for it.
+The signal that most often changes a decision is **AI-accept latency**: a
+run of sub-500 ms accepts across many items is rubber-stamping, and no other
+figure on this page separates that from careful agreement.
 
 ## The problem it addresses
 
@@ -36610,8 +36631,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/advanced/geometry_agreemen
 How reliable is a bounding-box or segmentation dataset? This page is the method
 Potato uses to answer that, and what each number does and does not tell you.
 
-It is a research artifact, not marketing copy. Where a measure is weak, that is
-stated.
+Where a measure is weak, this page says so.
 
 ## What everyone else reports, and why it is not enough
 
@@ -36835,11 +36855,10 @@ report = mask_consensus(items, {"image_1": (640, 480)}, label="cell")
 report["mean_sensitivity"]   # {"alice": 0.98, "bob": 0.33}
 ```
 
-### It is not a majority vote
+### Weighted consensus, not a majority vote
 
-That is the whole point. Weighting means a careful annotator's disagreement
-moves the consensus more than a careless one's, and the algorithm works out
-which is which from the data.
+A careful annotator's disagreement moves the consensus more than a careless
+one's, and the algorithm works out which is which from the data.
 
 Measured on two careful annotators outnumbered 3-to-2 by noisy ones:
 
@@ -37470,8 +37489,8 @@ URL: https://potatoannotator.readthedocs.io/en/latest/advanced/psychometrics/
 
 # Psychometrics: Labels with Error Bars
 
-Potato can treat your annotation study as what it actually is — a measurement
-instrument. The psychometrics layer fits an item response theory (IRT) model
+An annotation study is a measurement instrument, and Potato can score it as
+one. The psychometrics layer fits an item response theory (IRT) model
 **live**, as annotations stream in, jointly estimating:
 
 - the **true label of every item as a probability** (not a raw vote count),
@@ -38045,7 +38064,7 @@ Per-cohort schemes also work with `auto_assign_annotators: true`. **Give each
 group a `name`** so the schema binding resolves — unnamed auto-groups fall back
 to the global schemes.
 
-## How it works
+## Template baking and cohort resolution
 
 At startup, Potato bakes one annotation page template per cohort that binds its
 own scheme set (plus the default). At request time, a user's cohort is resolved
@@ -38097,8 +38116,8 @@ For most NLP projects, the right design is the textbook recipe:
 > One annotator handles most items, with two or three annotators overlapping
 > on a 5 to 10 percent sample to monitor quality.
 
-This page explains how to express that and several related patterns through
-the `num_annotators_per_item` and `per_annotator_quota` config blocks.
+That design, and several related ones, are expressed through the
+`num_annotators_per_item` and `per_annotator_quota` config blocks.
 
 ## The canonical config key
 
@@ -38577,9 +38596,9 @@ URL: https://potatoannotator.readthedocs.io/en/latest/advanced/think_aloud/
 
 # Think-Aloud Mode: Voice Rationales, Zero LLM
 
-Before LLMs, the gold standard for understanding judgment was the think-aloud protocol —
-and it never survived contact with annotation tooling. Think-Aloud Mode lets annotators
-just *talk* while they work. The verbatim transcript is stored as the rationale
+The think-aloud protocol is the long-standing method for understanding how someone
+reaches a judgment, and it never made it into annotation tooling. Think-Aloud Mode
+lets annotators just *talk* while they work. The verbatim transcript is stored as the rationale
 (deliberately un-summarized: paraphrasing a think-aloud protocol would contaminate the
 very artifact you're collecting), and labels can be committed by voice using a set
 phrasing detected by a **rule-based parser** — no LLM anywhere in the pipeline.
@@ -38587,7 +38606,7 @@ phrasing detected by a **rule-based parser** — no LLM anywhere in the pipeline
 Speech-to-text runs **fully locally** via faster-whisper (CPU real-time with the 39 MB
 `tiny.en` model). No cloud APIs, no per-token cost, nothing leaves the machine.
 
-## How it works
+## A think-aloud session, start to finish
 
 1. The annotator taps **🎤 Think aloud** (bottom-center pill) and speaks freely.
    Recording carries across Next/Previous — tap once and keep talking for the
@@ -39135,7 +39154,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/auth-users/password_manage
 
 # Password Management
 
-Potato provides a comprehensive password management system with secure per-user password hashing, multiple reset flows, and persistent user storage. This guide covers password security, reset mechanisms, shared credential files, and the database authentication backend.
+Potato hashes each user's password with its own salt, supports several reset flows, and can persist users to a file or a database. This page covers password security, the reset mechanisms, shared credential files, and the database authentication backend.
 
 This documentation applies to the `in_memory` and `database` authentication methods. If you use OAuth/SSO (Google, GitHub, institutional), passwords are managed by the identity provider — see [SSO & OAuth Authentication](sso_authentication.md). In [mixed mode](sso_authentication.md#mixed-mode) (SSO + local login), the features described here apply to local password accounts.
 
@@ -39214,7 +39233,7 @@ This endpoint requires the `admin_api_key` configured in your project (see [Admi
 
 Potato includes a token-based password reset flow for annotators who forget their passwords.
 
-#### How It Works
+#### The self-service reset flow
 
 1. The annotator visits `/forgot-password` and enters their username
 2. The system generates a secure single-use reset token (valid for 24 hours)
@@ -39276,7 +39295,7 @@ When `user_config_path` is explicitly set:
 
 ## Database Authentication Backend
 
-For production deployments or when you need robust user management, use the database backend with SQLite or PostgreSQL.
+For production deployments, or whenever user records need to survive more than a restart, use the database backend with SQLite or PostgreSQL.
 
 ### SQLite (No Dependencies)
 
@@ -39474,7 +39493,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/auth-users/passwordless_lo
 
 # Passwordless Login
 
-Potato supports passwordless authentication for low-stakes annotation tasks where security is less critical than ease of access. This mode allows annotators to log in with just a username, without requiring a password.
+Potato supports passwordless authentication for low-stakes annotation tasks where security is less critical than ease of access. In this mode an annotator logs in with a username and no password.
 
 ## Overview
 
@@ -39545,7 +39564,7 @@ authentication:
   method: clerk
 ```
 
-## How It Works
+## Login with and without passwordless
 
 ### With Passwordless Enabled
 
@@ -39566,7 +39585,7 @@ In passwordless mode:
 Passwordless mode provides minimal security:
 
 - **No identity verification**: Anyone can claim any username
-- **Session hijacking**: Sessions can be easily impersonated
+- **Session hijacking**: nothing stops one person from resuming another's session
 - **No audit trail integrity**: User actions cannot be cryptographically verified
 
 **Recommended uses:**
@@ -40323,11 +40342,11 @@ A: They're separate authentication backends. Clerk is a paid service with its ow
 <!-- source: docs/administration/admin_dashboard.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/administration/admin_dashboard/
 
-# Admin Dashboard Documentation
+# Admin Dashboard
 
 ## Overview
 
-The Admin Dashboard provides comprehensive monitoring and management capabilities for the Potato annotation platform. It offers real-time insights into annotation progress, annotator performance, instance statistics, and system configuration management.
+The admin dashboard is a web view of a running Potato project. It shows annotation progress, per-annotator timing and performance, per-instance statistics, and it lets you change assignment settings without restarting the server.
 
 ## Access and Authentication
 
@@ -40370,7 +40389,7 @@ If you didn't configure an API key explicitly, find it in one of these ways:
 
 ### 1. Overview Tab
 
-The Overview tab provides high-level system statistics and progress indicators.
+The Overview tab holds project-wide counts and progress.
 
 **Key Metrics:**
 - **Total Users**: Number of registered annotators
@@ -40387,7 +40406,7 @@ The Overview tab provides high-level system statistics and progress indicators.
 
 ### 2. Annotators Tab
 
-The Annotators tab provides detailed information about each annotator's performance and timing.
+The Annotators tab lists each annotator with their timing and throughput.
 
 **Annotator Metrics:**
 - **User ID**: Unique identifier for each annotator
@@ -40407,7 +40426,7 @@ The Annotators tab provides detailed information about each annotator's performa
 
 ### 3. Instances Tab
 
-The Instances tab provides a paginated view of all annotation instances with detailed statistics.
+The Instances tab is a paginated list of every annotation instance and its statistics.
 
 **Instance Metrics:**
 - **Instance ID**: Unique identifier for each instance
@@ -40431,7 +40450,7 @@ The Instances tab provides a paginated view of all annotation instances with det
 
 ### 4. Questions Tab
 
-The Questions tab provides aggregate analysis for each annotation schema/question defined in your configuration.
+The Questions tab aggregates responses for each annotation schema in your configuration.
 
 **Analysis by Annotation Type:**
 
@@ -40461,7 +40480,7 @@ For **Span** questions:
 
 ### 5. Behavioral Analytics Tab
 
-The Behavioral Analytics tab provides comprehensive insights into annotator behavior patterns, AI assistance usage, and quality indicators derived from interaction tracking data.
+The Behavioral Analytics tab reports what the interaction tracker recorded: how annotators worked, how they used AI assistance, and which sessions look like low effort.
 
 **Summary Statistics:**
 - **Users with Data**: Number of users with behavioral tracking data
@@ -40473,7 +40492,7 @@ The Behavioral Analytics tab provides comprehensive insights into annotator beha
 
 **AI Assistance Usage Section:**
 
-Displays AI assistance metrics when available:
+AI assistance metrics, shown when there are any:
 - **Total Requests**: Number of times annotators requested AI help
 - **Accepted**: Number of AI suggestions accepted
 - **Rejected**: Number of AI suggestions rejected
@@ -40482,7 +40501,7 @@ Displays AI assistance metrics when available:
 
 **Quality Indicators Section:**
 
-Displays metrics that help identify potential quality issues:
+Metrics that point at possible quality problems:
 - **High Suspicion Users**: Count of users with suspicious behavior patterns
 - **Fast Annotation Rate**: Percentage of annotations completed in under 2 seconds
 - **Low Interaction Rate**: Percentage of instances with minimal interaction
@@ -40490,12 +40509,12 @@ Displays metrics that help identify potential quality issues:
 
 **Interaction Types Breakdown:**
 
-Visual display of interaction types recorded:
+The interaction types recorded:
 - clicks, focus_in, focus_out, navigation, save, keypress, etc.
 
 **Change Sources Breakdown:**
 
-Shows how annotation changes were made:
+How each annotation change was made:
 - `user`: Direct user interaction
 - `ai_accept`: User accepted AI suggestion
 - `keyboard`: Keyboard shortcut used
@@ -40555,7 +40574,7 @@ reinterpret historical scores.
 
 ### 6. Crowdsourcing Tab
 
-The Crowdsourcing tab provides dedicated monitoring for workers from crowdsourcing platforms like Prolific and Amazon Mechanical Turk (MTurk).
+The Crowdsourcing tab breaks the same statistics out by platform for Prolific and Amazon Mechanical Turk (MTurk) workers.
 
 **Summary Statistics:**
 - **Total Workers**: All workers across platforms
@@ -40593,7 +40612,7 @@ This tab is particularly useful for:
 
 ### 7. Configuration Tab
 
-The Configuration tab allows administrators to modify system settings in real-time.
+The Configuration tab changes assignment settings on a running server.
 
 **Configurable Settings:**
 - **Max Annotations per User**: Limit annotations per user (-1 for unlimited)
@@ -40603,8 +40622,12 @@ The Configuration tab allows administrators to modify system settings in real-ti
   - `fixed_order`: Sequential assignment
   - `least_annotated`: Prioritize items with fewest annotations
   - `max_diversity`: Prioritize items with highest disagreement
-  - `active_learning`: ML-based assignment with intelligent instance prioritization
-  - `llm_confidence`: LLM-based assignment (placeholder)
+  - `active_learning`: Serves the pool in active-learning order (needs `active_learning.enabled`)
+  - `llm_confidence`: Not implemented — falls back to random selection
+
+  The dashboard exposes this subset. See
+  [Available Strategies](../configuration/configuration.md#available-strategies)
+  for all eleven.
 
 **Configuration Management:**
 - Real-time updates without server restart
@@ -40619,7 +40642,7 @@ GET /admin/api/overview
 Headers: X-API-Key: admin_api_key
 ```
 
-Returns comprehensive system overview including user statistics, annotation progress, and configuration summary.
+Returns user statistics, annotation progress, and a configuration summary.
 
 ### Annotators Data
 ```
@@ -40700,7 +40723,7 @@ GET /admin/api/behavioral_analytics
 Headers: X-API-Key: admin_api_key
 ```
 
-Returns comprehensive behavioral analytics data for all annotators.
+Returns the behavioral analytics for every annotator.
 
 **Response Structure:**
 ```json
@@ -40824,7 +40847,7 @@ GET /admin/api/suspicious_activity
 Headers: X-API-Key: admin_api_key
 ```
 
-Returns comprehensive suspicious activity analysis including:
+Returns the suspicious-activity analysis:
 - Users with suspicious activity
 - Suspicious actions details (fast actions, burst patterns)
 - Suspicious scores and levels
@@ -40855,7 +40878,7 @@ Updates system configuration with provided values.
 
 ### Annotator Timing Metrics
 
-The dashboard tracks comprehensive timing data for each annotator:
+The dashboard tracks five timing figures for each annotator:
 
 1. **Total Working Time**: Cumulative time spent across all annotations
 2. **Average Time per Annotation**: Mean time per individual annotation
@@ -40882,19 +40905,32 @@ Timing data is extracted from:
 
 ### Large Datasets
 
-For projects with many instances or annotators:
+The dashboard reads the same in-memory item store and per-user state the
+annotation server uses. It issues no SQL of its own, so nothing here is bounded
+by a database index.
 
-1. **Pagination**: Instances are paginated to avoid overwhelming the browser
-2. **Lazy Loading**: Data is loaded only when tabs are accessed
-3. **Caching**: API responses can be cached for better performance
-4. **Efficient Queries**: Database queries are optimized for large datasets
+Two things do help on a large project: the instance list is paginated rather
+than sent to the browser whole, and a tab's data is fetched only when you open
+that tab.
+
+One thing does not, and it is worth knowing before you point the dashboard at a
+large corpus. `GET /admin/api/instances` computes a full row for **every**
+instance — most frequent label, disagreement, average time, AI count — and
+filters, sorts and paginates afterwards. Each of those three statistics loops
+over every annotator's state, so the cost of one page is proportional to
+instances × annotators no matter what `page_size` you ask for. On a 50k-item
+project with 20 annotators, requesting 25 rows still walks the whole corpus
+three times. The Instances tab is the slowest thing in the dashboard for that
+reason; the Overview and Annotators tabs scale with the number of annotators
+only.
+
+The one cache in the admin surface is the remote data-source download cache,
+cleared by `POST /admin/api/cache/clear`. API responses are not cached.
 
 ### Real-time Updates
 
-The dashboard provides:
-- Manual refresh buttons for each section
-- Automatic data loading when switching tabs
-- Real-time configuration updates
+Each section has a manual refresh button, switching tabs reloads that tab's
+data, and configuration changes take effect immediately.
 
 ## Troubleshooting
 
@@ -40930,26 +40966,26 @@ When `debug: true` is set in the configuration:
 
 ## Best Practices
 
-### Monitoring Workflow
+### Monitoring workflow
 
-1. **Regular Check-ins**: Monitor the overview tab regularly for progress
-2. **Annotator Performance**: Review annotator metrics to identify issues
-3. **Instance Analysis**: Use the instances tab to find problematic items
-4. **Configuration Tuning**: Adjust settings based on observed patterns
+Check the Overview tab for progress, the Annotators tab for anyone whose
+metrics have drifted, and the Instances tab for items that are stuck or
+contested. Adjust the assignment settings when a pattern shows up rather than
+in advance.
 
-### Data Analysis
+### Reading the data
 
-1. **Timing Patterns**: Look for unusual timing patterns that might indicate issues
-2. **Disagreement Analysis**: High disagreement scores may indicate unclear instructions
-3. **Completion Tracking**: Monitor completion percentages to ensure even distribution
-4. **Performance Optimization**: Use timing data to optimize assignment strategies
+Unusual timing is worth a look in both directions: too fast suggests low
+effort, too slow suggests a confusing item. A high disagreement score on many
+items usually means the instructions are unclear rather than that the
+annotators are careless. Watch completion percentages so work stays evenly
+spread, and use the timing figures to pick an assignment strategy.
 
 ### Security
 
-1. **API Key Management**: Keep the API key secure and change it if compromised
-2. **Access Control**: Limit access to the admin dashboard to authorized personnel
-3. **Session Management**: Log out when finished to clear session data
-4. **Audit Logging**: Monitor admin actions for security purposes
+Keep the API key secret and replace it if it leaks. Give dashboard access only
+to people who need it, log out when you are done so the session key is cleared,
+and review admin actions periodically.
 
 ## Future Enhancements
 
@@ -41055,9 +41091,9 @@ URL: https://potatoannotator.readthedocs.io/en/latest/administration/adjudicatio
 
 ## Overview
 
-Adjudication is a quality assurance workflow that allows designated reviewers (adjudicators) to resolve disagreements between annotators and produce gold-standard final labels. In any multi-annotator project, annotators will inevitably disagree on some items -- whether due to ambiguous text, gaps in annotation guidelines, or genuine annotator error. Adjudication provides a structured process for a subject-matter expert to review these disagreements, examine each annotator's response alongside timing data and agreement scores, and render a final decision.
+Adjudication is a quality assurance workflow in which designated reviewers (adjudicators) resolve disagreements between annotators and produce gold-standard final labels. In any multi-annotator project some items will be labeled differently by different people, whether because the text is ambiguous, the guidelines have a gap, or an annotator was wrong. A subject-matter expert reviews those disagreements, reads each annotator's response alongside timing data and agreement scores, and makes the final call.
 
-Adjudication in Potato is implemented as a **parallel workflow**, not a phase. Adjudicators access a dedicated `/adjudicate` route with its own interface, separate from the standard annotation flow. This design avoids disrupting the existing phase progression system (consent, instructions, training, annotation, post-study) while giving adjudicators a purpose-built environment for reviewing and resolving conflicts.
+Adjudication in Potato is implemented as a **parallel workflow**, not a phase. Adjudicators access a dedicated `/adjudicate` route with its own interface, separate from the standard annotation flow. That keeps the phase progression (consent, instructions, training, annotation, post-study) untouched and gives adjudicators an interface built for reviewing conflicts.
 
 ### When to Use Adjudication
 
@@ -41192,7 +41228,7 @@ max_annotations_per_item: 3
 
 ---
 
-## How It Works
+## The three stages
 
 The adjudication workflow consists of three stages: annotation, adjudication, and export.
 
@@ -41209,7 +41245,7 @@ When an adjudicator logs in and navigates to `/adjudicate`, the system builds th
 
 Agreement is computed as pairwise percentage agreement: for each annotation schema, the system counts how many annotator pairs chose the same label and divides by the total number of pairs. The overall agreement is the mean across all schemas.
 
-The queue is sorted with pending items first (lowest agreement first), followed by in-progress items, and finally completed items. This ordering ensures adjudicators address the most contentious items first.
+The queue is sorted with pending items first (lowest agreement first), followed by in-progress items, and finally completed items. Adjudicators therefore reach the most contentious items first.
 
 ### Stage 3: Export
 
@@ -41356,7 +41392,7 @@ When you select an item from the queue, the main area displays:
 
 ### Bottom Navigation Bar
 
-The navigation bar provides three actions:
+The navigation bar has three actions:
 
 - **Previous** -- Go to the previous item in the queue.
 - **Skip** -- Mark the current item as skipped and move to the next.
@@ -41543,7 +41579,7 @@ The sample data (`data/adjudication-example.json`) contains items designed to pr
 ]
 ```
 
-Items like `item_001` with mixed sentiment ("amazing food but terrible service") are likely to produce disagreement between annotators, making them good candidates for adjudication.
+Items like `item_001` with mixed sentiment ("amazing food but terrible service") are likely to produce disagreement between annotators, so they are good candidates for adjudication.
 
 ---
 
@@ -41609,7 +41645,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/administration/annotation_
 
 # Annotation History and Timestamps
 
-Potato provides comprehensive tracking of all annotation actions with fine-grained timestamp metadata. This enables performance analysis, quality assurance, and detailed audit trails.
+Potato records every annotation action with a server timestamp and, where the browser supplies one, a client timestamp. The record is what performance analysis, quality checks and audit trails are built from.
 
 ## Overview
 
@@ -41657,7 +41693,7 @@ The system tracks these action types:
 
 ## Configuration
 
-Annotation history tracking is enabled by default. No additional configuration required.
+Annotation history tracking is on by default and has no configuration.
 
 ### Accessing History Data
 
@@ -41907,10 +41943,12 @@ Actions are serialized with ISO 8601 timestamps:
 
 ## Best Practices
 
-1. **Regular monitoring**: Check suspicious activity reports periodically
-2. **Threshold tuning**: Adjust detection thresholds based on your task complexity
-3. **Export backups**: Regularly export history for long-term storage
-4. **Privacy compliance**: Consider data retention policies for timestamps
+Check the suspicious-activity report periodically rather than only at the end
+of a study, and tune `fast_threshold_ms` to your task: 500 ms is far too fast
+for a paragraph and too slow for a one-key triage decision. History lives in
+the user state files, so back those up if you need it long term. Timestamps are
+personal data in most jurisdictions, so decide on a retention policy before you
+collect a study's worth of them.
 
 ## Related Documentation
 
@@ -41933,8 +41971,8 @@ for selecting options. For tasks where there are at most 10 options,
 keybindings can be assigned sequentially by default. When defining your
 annotation scheme, set the `sequential_key_binding` field to `True`.
 
-The first option will correspond to the \"1\" key, the second to the
-\"2\" key, \..., the tenth to the \"0\" key.
+The first option corresponds to the "1" key, the second to the "2" key, and
+so on to the tenth on "0".
 
 *Custom keybindings:* For greater control, custom keybindings can also
 be configured. In this case, pass in objects into the `labels` field of
@@ -42241,7 +42279,7 @@ your mouse over the response option.
 
 ## Active Learning
 
-Active learning uses machine learning to intelligently prioritize annotation tasks, helping you maximize the value of your annotation budget. For comprehensive configuration and usage instructions, see the [Active Learning Guide](../ai-intelligence/active_learning_guide.md).
+Active learning reorders the queue so annotators see the instances a model is least sure about first. The [Active Learning Guide](../ai-intelligence/active_learning_guide.md) covers configuration and use in full.
 
 ### Basic Configuration
 
@@ -42262,14 +42300,15 @@ active_learning:
   random_sample_percent: 20
 ```
 
-### Key Benefits
+### Why reorder at all
 
-- **Maximize annotation efficiency** by focusing on the most informative instances
-- **Reduce annotation costs** by requiring fewer annotations for the same model performance
-- **Improve model quality** by ensuring diverse and representative training data
-- **Scale annotation workflows** with intelligent instance prioritization
+Uncertain instances carry more information than confident ones, so a fixed
+annotation budget spent on them produces a better model than the same budget
+spent in dataset order. The cost is that your labeled set is no longer a
+random sample of the corpus, which matters if you intend to report distribution
+statistics over it.
 
-### How It Works
+### The active learning cycle
 
 1. **Training**: A machine learning classifier is trained on existing annotations
 2. **Prediction**: The model predicts confidence scores for unannotated instances
@@ -42279,14 +42318,13 @@ active_learning:
 
 For advanced features including LLM integration, model persistence, and multi-schema support, refer to the [Active Learning Guide](../ai-intelligence/active_learning_guide.md).
 
-## Automatic task assignent
+## Automatic task assignment
 
-Potato allows you to easily assign annotation tasks to different
-annotators, this is especially userful for crowdsourcing setting where
-you only need one annotator to work on a fixed amount of instances.
+Potato assigns annotation tasks to different annotators for you, which is
+most useful in a crowdsourcing setting where each instance needs only one
+annotator and each annotator gets a fixed amount of work.
 
-You can edit the automatic_assignmetn section in the configureation file
-for this function
+Edit the `automatic_assignment` section of the configuration file:
 
 ``` yaml
 "automatic_assignment": {
@@ -42323,7 +42361,7 @@ types for different schemes.
     ],
 
     # If true, numbers [1-len(labels)] will be bound to each
-    # label. Aannotations with more than 10 are not supported with this
+    # label. Annotations with more than 10 are not supported with this
     # simple keybinding and will need to use the full item specification
     # to bind all labels to keys.
     "sequential_key_binding": True,
@@ -43970,7 +44008,7 @@ authentication:
 
 The `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` environment variables are automatically set by HuggingFace Spaces.
 
-### How It Works
+### The HuggingFace sign-in flow
 
 1. User clicks "Sign in with HuggingFace" on the login page
 2. Redirected to HuggingFace for authentication
@@ -44082,10 +44120,10 @@ Potato has a growing presence on the HuggingFace Hub: **live demo Spaces** you c
 browser, **sample annotation datasets**, and guides for deploying your own. This page is the
 index.
 
-- 🥔 **Website:** [www.potatoannotator.com](https://www.potatoannotator.com)
-- 🗂️ **Collection (all demos):** [Potato Annotation Demos](https://huggingface.co/collections/Blablablab/potato-annotation-demos-6a3753d95427d61a91ecf4fd)
-- 🤗 **Live demo:** [Blablablab/agent-trace-evaluation](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)
-- 📚 **Deploy your own Space:** [deployment guide](huggingface_spaces.md)
+- **Website:** [www.potatoannotator.com](https://www.potatoannotator.com)
+- **Collection (all demos):** [Potato Annotation Demos](https://huggingface.co/collections/Blablablab/potato-annotation-demos-6a3753d95427d61a91ecf4fd)
+- **Live demo:** [Blablablab/agent-trace-evaluation](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)
+- **Deploy your own Space:** [deployment guide](huggingface_spaces.md)
 - 🤖 **Use HF models for AI features:** [Using HuggingFace Models](../ai-intelligence/huggingface_models.md)
 - 📤 **Export annotations to the Hub:** [HuggingFace Hub Export](huggingface_export.md)
 
@@ -44608,7 +44646,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/tools/preview_cli/
 
 # Preview CLI
 
-The Potato Preview CLI allows you to validate annotation configurations and preview how schemas will render without running the full server. This is useful for rapid prototyping, debugging, and CI/CD validation.
+The preview CLI validates an annotation configuration and shows how its schemas will render, without starting the server. Use it while drafting a config, when debugging one, and in CI.
 
 ## Overview
 
@@ -44915,7 +44953,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/tools/migration_cli/
 
 # Configuration Migration Tool
 
-Potato includes a migration tool to help upgrade configuration files from older formats to the current v2 format. This tool automatically detects and applies necessary changes while preserving your existing settings.
+Potato's migration tool upgrades a configuration file from an older format to v2. It detects what needs changing, applies it, and leaves your other settings alone.
 
 ## Usage
 
@@ -45124,7 +45162,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/tools/simulator/
 
 # User Simulator
 
-The User Simulator enables automated testing of the Potato annotation platform by simulating multiple users with configurable behaviors and competence levels.
+The user simulator drives a running Potato server with synthetic annotators whose behavior and competence you configure.
 
 ## Overview
 
@@ -45471,7 +45509,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/tools/debugging_guide/
 
 # Debugging Guide
 
-Potato provides several command-line flags and configuration options to help with debugging and testing annotation projects. These are useful during development and troubleshooting.
+Potato has several command-line flags and config options for debugging and testing an annotation project.
 
 ## Server Configuration
 
@@ -45700,7 +45738,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/integrations/webhooks/
 
 # Webhooks
 
-Potato can send outgoing webhook notifications when annotation events occur, enabling integration with external pipelines, Slack alerts, and custom automation.
+Potato POSTs to a URL of yours when an annotation event happens, so an external pipeline, a Slack channel, or your own automation can react to it.
 
 ## Configuration
 
@@ -46362,7 +46400,7 @@ result = executor.invoke(
 handler.flush()
 ```
 
-## How It Works
+## From callback to trace
 
 1. The callback handler hooks into LangChain's callback system
 2. It collects all run events (chain, LLM, tool, retriever starts/ends)
@@ -46620,19 +46658,19 @@ URL: https://potatoannotator.readthedocs.io/en/latest/deployment/usage/
 
 # Usage
 
-Getting started with Potato is easy! Here's what you need to do:
+Three steps: install Potato, set up the project data, then start the server.
 
 ## Install Potato to your machine
 
 Potato has a Python-based server architecture that can be run locally or
-hosted on any device. In order to install Potato:
+hosted on any device. To install it:
 
 - Make sure you have Python version 3.8+ installed
 - Follow the quickstart instructions in our [Quick Start Guide](../quick-start.md)
 
 ## Set up the project data
 
-In order to input documents and specify annotation preferences:
+To load documents and set annotation preferences:
 
 - [Prepare your input data](../configuration/data_format.md#update-input-data-formats-on-the-yaml-config-file) (CSV, TSV, or JSON) and upload it to your project's `data` folder
 - Specify where and in what format you want the [output data](../configuration/data_format.md#update-output-data-preferences-on-the-yaml-config-file)
@@ -46776,7 +46814,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/deployment/crowdsourcing/
 
 # Crowdsourcing Integration
 
-Potato can be seamlessly deployed online to collect annotations from common crowdsourcing platforms like Prolific and Amazon Mechanical Turk.
+Potato can be deployed online to collect annotations from crowdsourcing platforms such as Prolific and Amazon Mechanical Turk.
 
 ## Setup Potato on a Server
 
@@ -46829,7 +46867,7 @@ platforms fit this model, and
 
 ## Prolific Integration
 
-[Prolific](https://www.prolific.com/) is a platform where you can easily recruit task participants. Potato provides seamless integration with Prolific through:
+[Prolific](https://www.prolific.com/) is a platform for recruiting task participants. Potato integrates with it through:
 
 1. **URL-Direct Login**: Automatic login using Prolific's URL parameters
 2. **Completion Codes**: Built-in support for completion code display and redirect
@@ -47818,7 +47856,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/deployment/connect_integra
 platform and the destination they migrate MTurk Toolkit users to — making it
 the most direct MTurk replacement for research studies.
 
-## How it works
+## The Project Link flow
 
 Connect's "Project Link" model matches Potato's external-URL flow:
 
@@ -47890,7 +47928,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/deployment/sona_integratio
 pools (students participating for course credit). Potato integrates with
 SONA's web-study workflow, including **automatic server-side credit granting**.
 
-## How it works
+## The survey-code flow
 
 1. In SONA, create a web study and set the study URL to your Potato server
    with the `%SURVEY_CODE%` placeholder:
@@ -48134,7 +48172,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/deployment/mturk_integrati
     CloudResearch is also sunsetting its MTurk Toolkit (end of 2026) in favor of
     [Connect](crowdsourcing-platforms.md#cloudresearch-connect).
 
-This guide provides comprehensive instructions for deploying Potato annotation tasks on Amazon Mechanical Turk (MTurk).
+Deploying a Potato annotation task on Amazon Mechanical Turk (MTurk), end to end.
 
 ## Table of Contents
 
@@ -48154,14 +48192,14 @@ This guide provides comprehensive instructions for deploying Potato annotation t
 
 ## Overview
 
-Potato integrates with Amazon Mechanical Turk through the External Question HIT type. This allows you to:
+Potato integrates with Amazon Mechanical Turk through the External Question HIT type, so you can:
 
 - Host your annotation interface on your own server
 - Automatically authenticate workers using their MTurk worker ID
 - Handle HIT preview mode gracefully
-- Submit completed work back to MTurk seamlessly
+- Submit completed work back to MTurk
 
-### How It Works
+### The External Question flow
 
 1. You create an External Question HIT on MTurk pointing to your Potato server
 2. Workers click on your HIT and are redirected to your Potato server with URL parameters
@@ -48729,7 +48767,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/deployment/open-sourcing/
 
 # Contributing to Potato
 
-Potato is fully open-source and welcomes contributions from the community. This guide explains how to contribute effectively.
+Potato is open source and takes contributions. Here is how to make one that lands.
 
 ## Getting Started
 
@@ -48917,7 +48955,7 @@ https://host/app2/  ->  http://127.0.0.1:8001/
 ```
 
 This is common in locked-down environments where opening additional public ports
-is restricted. The catch: the v2.5 annotation UI loads static assets and performs
+is restricted. The v2.5 annotation UI loads static assets and performs
 annotation actions through **root-relative** URLs (`/static/...`, `/updateinstance`,
 `/annotate`, `/api/current_instance`, `/media/...`). When Potato is mounted under
 `/app1`, those URLs resolve against the public *root* instead of the mounted app,
@@ -48931,7 +48969,7 @@ which shows up as:
 Potato can apply a deployment prefix to both server-generated URLs and the
 client-side requests so these deployments work without per-site nginx hacks.
 
-## How it works
+## What SCRIPT_NAME controls
 
 Both options below converge on the WSGI `SCRIPT_NAME`. The app reads
 `SCRIPT_NAME` (surfaced as `request.script_root`) as the single source of truth
@@ -49276,8 +49314,19 @@ host, export per-cohort or per-batch rather than the entire project at once.
 > regardless of dataset size. Tracked as a follow-up; the current disk-write
 > design is correct and lossless, just memory-proportional to the export.
 
+## The admin dashboard is the exception
+
+Serving annotations scales with the item store described above. The **admin
+dashboard's Instances tab does not.** `GET /admin/api/instances` builds a row
+for every instance before it filters, sorts and paginates, and each row's
+statistics loop over every annotator, so one page costs
+instances × annotators regardless of `page_size`. Expect the Instances tab to
+be slow on a large project even though annotating it is not. See
+[Performance Considerations](../administration/admin_dashboard.md#large-datasets).
+
 ## Related
 
+- [Admin Dashboard](../administration/admin_dashboard.md)
 - [Task Assignment](../advanced/task_assignment.md)
 - [Heterogeneous Coverage](../advanced/heterogeneous_coverage.md)
 - [Data Directory & Watching](../configuration/data_directory.md)
@@ -49291,7 +49340,7 @@ URL: https://potatoannotator.readthedocs.io/en/latest/api-reference/api_referenc
 
 # Potato API Reference
 
-This document describes the HTTP API endpoints provided by Potato, enabling integration with custom frontends, automation scripts, or external systems.
+Potato's HTTP API. Use it to drive Potato from a custom frontend, an automation script, or another system.
 
 ---
 
@@ -50773,8 +50822,8 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **154 top-level config keys**, **56 annotation types**, and
-**23 display types**.
+It currently covers **159 top-level config keys**, **61 annotation types**, and
+**24 display types**.
 
 ### Editor validation
 
@@ -50823,7 +50872,7 @@ display types, invalid `assignment_strategy` values, a missing
 
 ## OpenAPI 3.1 spec
 
-An index of Potato's HTTP surface: **390 paths / 427 operations**, generated by
+An index of Potato's HTTP surface: **419 paths / 456 operations**, generated by
 walking the live Flask `url_map`.
 
 Two extensions carry information a plain OpenAPI document cannot:
@@ -51079,8 +51128,8 @@ URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.6.2/
 
 Building on the v2.6.1 agentic-evaluation suite (G1–G10), this release pushes Potato
 **beyond parity** with LangSmith/LabelBox into capabilities no open tool offers: a
-clickable multi-agent interaction graph, cross-agent failure attribution, purpose-built
-multimodal-agent annotation surfaces, statistically rigorous judge–human alignment, and
+clickable multi-agent interaction graph, cross-agent failure attribution,
+multimodal-agent annotation surfaces, judge–human alignment with confidence intervals, and
 reward/optimization export. **13 new annotation schemas**, new evaluators and analytics
 dashboards, and a set of robustness fixes. Every new schema ships with unit + Selenium
 persistence tests, a runnable example, and docs.
@@ -51333,7 +51382,7 @@ A new opt-in `qda_mode` that turns Potato into a collaborative qualitative-codin
 
 - **LLM-as-judge auto-labeling + blind human calibration** — auto-label trajectories with an LLM judge, then calibrate against blind human judgments to measure and tune trustworthiness. See [Judge Calibration](../ai-intelligence/judge_calibration.md).
 - **Judge↔human alignment + signal-based triage queue** — quantify judge/human agreement and route the most informative items to humans first via a signal-based triage queue. See [Judge Alignment](../agent-evaluation/judge_alignment.md) and [Triage Queue](../agent-evaluation/triage_queue.md).
-- **`eval_trace` display** — a three-pane agent-trace display purpose-built for continuous evaluation. See [eval_trace](../agent-evaluation/eval_trace.md).
+- **`eval_trace` display** — a three-pane agent-trace display for continuous evaluation. See [eval_trace](../agent-evaluation/eval_trace.md).
 - **Trajectory editing schemas** — `trajectory_edit` and `trajectory_correction` for capturing edited/corrected agent trajectories as SFT/DPO training data. See [Trajectory Correction](../agent-evaluation/trajectory_correction.md).
 - **Coding-agent eval** — `openai_tool_use` coding backend, a fixed coding-agent eval pipeline and web trace-review UI, and agentic display defect fixes surfaced by screenshot/live verification.
 

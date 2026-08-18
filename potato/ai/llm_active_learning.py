@@ -1,9 +1,8 @@
 """
 LLM Integration for Active Learning
 
-This module provides LLM-based active learning capabilities using VLLM endpoints.
-It implements confidence-based instance selection and prediction using large language
-models, with support for multiple confidence elicitation methods:
+LLM-based active learning over VLLM endpoints: confidence-based instance
+selection and prediction, with several confidence elicitation methods:
 
 - **logprobs**: Extract token-level log probabilities from VLLM/OpenAI-compatible
   endpoints for calibrated confidence scores.

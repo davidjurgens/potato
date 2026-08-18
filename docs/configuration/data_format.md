@@ -48,10 +48,10 @@ html tags are used to create two seperate boxes for the finding pairs.
 
 
 ## Displaying a list or a dictionary of instances
-Potato allows you to easily display a list or a dictionary of instance and you could easily set
-`list_as_text` as `True`.
+Potato can display an instance that is a list or a dictionary rather than a string. Set
+`list_as_text` to `True`.
 
-If you are using a list of instances, you could also define whether adding a prefix to the text
+For a list of instances, you can also add a prefix to each line
 ``` yaml
 "list_as_text": {
   "text_list_prefix_type": 'alphabet'

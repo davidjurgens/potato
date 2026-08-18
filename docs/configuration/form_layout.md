@@ -1,10 +1,10 @@
 # Annotation Form Layout System
 
-This guide explains how to configure the layout of annotation forms using the `layout` configuration section. The layout system provides control over how annotation schemas are arranged on the page.
+The `layout` configuration section controls how annotation schemas are arranged on the page.
 
 ## Overview
 
-The form layout system allows you to:
+The form layout system lets you:
 
 - **Configure grid columns**: Control how many columns forms are arranged in
 - **Control column spanning**: Make forms span multiple columns

@@ -1,6 +1,6 @@
 # Active Learning Administrator Guide
 
-This guide provides comprehensive instructions for administrators on how to configure and use active learning in the Potato annotation platform. Active learning uses machine learning to intelligently prioritize annotation tasks, helping you get the most value from your annotation budget.
+Active learning trains a classifier on the annotations you already have and reorders the queue so annotators see the instances it is least sure about first. This page is the administrator's reference for configuring it.
 
 ## Table of Contents
 
@@ -17,14 +17,13 @@ This guide provides comprehensive instructions for administrators on how to conf
 
 ## Overview
 
-Active learning in Potato automatically reorders annotation instances based on machine learning predictions, prioritizing items where the model is most uncertain. This helps you:
+Uncertain instances carry more information than confident ones, so a fixed
+annotation budget spent on them produces a better model than the same budget
+spent in dataset order. The cost is that your labeled set is no longer a random
+sample of the corpus, which matters if you intend to report distribution
+statistics over it.
 
-- **Maximize annotation efficiency** by focusing on the most informative instances
-- **Reduce annotation costs** by requiring fewer annotations for the same model performance
-- **Improve model quality** by ensuring diverse and representative training data
-- **Scale annotation workflows** with intelligent instance prioritization
-
-### How It Works
+### The active learning cycle
 
 1. **Training**: A machine learning classifier is trained on existing annotations
 2. **Prediction**: The model predicts confidence scores for unannotated instances
@@ -241,7 +240,7 @@ active_learning:
 
 ### Accessing Metrics
 
-Active learning provides comprehensive metrics through the admin interface:
+The admin interface exposes these metrics:
 
 ```python
 # Get active learning statistics
@@ -486,7 +485,7 @@ active_learning:
 
 ## Query Strategies
 
-Potato supports multiple query strategies beyond basic uncertainty sampling. For a comprehensive reference with mathematical formulations and citations, see [Active Learning Query Strategies](active_learning_strategies.md).
+Potato supports multiple query strategies beyond basic uncertainty sampling. For the mathematical formulations and citations, see [Active Learning Query Strategies](active_learning_strategies.md).
 
 | Strategy | Description | Config Value |
 |----------|-------------|-------------|
@@ -571,10 +570,6 @@ Key source files:
 - `potato/active_learning_manager.py` — Main manager class
 - `potato/ai/llm_active_learning.py` — LLM integration module
 
-## Conclusion
-
-Active learning in Potato provides powerful capabilities for optimizing annotation workflows. By following this guide and best practices, administrators can configure and use active learning effectively to improve annotation efficiency and model quality.
-
-For additional support and advanced configurations, refer to:
+## Where to go next
 - [Active Learning Query Strategies](active_learning_strategies.md) — Detailed strategy reference with citations
 - [AI Support](ai_support.md) — LLM endpoint configuration

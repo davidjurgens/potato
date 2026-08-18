@@ -3,8 +3,7 @@
 How reliable is a bounding-box or segmentation dataset? This page is the method
 Potato uses to answer that, and what each number does and does not tell you.
 
-It is a research artifact, not marketing copy. Where a measure is weak, that is
-stated.
+Where a measure is weak, this page says so.
 
 ## What everyone else reports, and why it is not enough
 
@@ -228,11 +227,10 @@ report = mask_consensus(items, {"image_1": (640, 480)}, label="cell")
 report["mean_sensitivity"]   # {"alice": 0.98, "bob": 0.33}
 ```
 
-### It is not a majority vote
+### Weighted consensus, not a majority vote
 
-That is the whole point. Weighting means a careful annotator's disagreement
-moves the consensus more than a careless one's, and the algorithm works out
-which is which from the data.
+A careful annotator's disagreement moves the consensus more than a careless
+one's, and the algorithm works out which is which from the data.
 
 Measured on two careful annotators outnumbered 3-to-2 by noisy ones:
 

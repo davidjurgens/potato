@@ -1,7 +1,7 @@
 """
 Configuration classes for the user simulator.
 
-This module defines all configuration dataclasses used to configure
+All configuration dataclasses used to configure
 the simulator behavior, including user competence, timing, and strategies.
 """
 

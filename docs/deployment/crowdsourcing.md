@@ -1,6 +1,6 @@
 # Crowdsourcing Integration
 
-Potato can be seamlessly deployed online to collect annotations from common crowdsourcing platforms like Prolific and Amazon Mechanical Turk.
+Potato can be deployed online to collect annotations from crowdsourcing platforms such as Prolific and Amazon Mechanical Turk.
 
 ## Setup Potato on a Server
 
@@ -53,7 +53,7 @@ platforms fit this model, and
 
 ## Prolific Integration
 
-[Prolific](https://www.prolific.com/) is a platform where you can easily recruit task participants. Potato provides seamless integration with Prolific through:
+[Prolific](https://www.prolific.com/) is a platform for recruiting task participants. Potato integrates with it through:
 
 1. **URL-Direct Login**: Automatic login using Prolific's URL parameters
 2. **Completion Codes**: Built-in support for completion code display and redirect

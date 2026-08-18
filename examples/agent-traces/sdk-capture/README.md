@@ -23,7 +23,7 @@ only receiving offline dumps.
 
 3. Open the Potato UI — each agent run arrives as an item to evaluate.
 
-## How it works
+## From @traceable to an item in the queue
 
 `agent.py` decorates functions with `@potato_trace.traceable`. Nested calls form
 a run tree; when the outermost call returns, the whole tree is POSTed to

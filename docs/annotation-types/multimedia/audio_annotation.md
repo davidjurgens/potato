@@ -1,6 +1,6 @@
 # Audio Annotation
 
-Audio annotation allows annotators to segment audio files and assign labels to time regions. This is useful for speech transcription, speaker diarization, music analysis, and audio event detection.
+Audio annotation lets annotators cut an audio file into time regions and label them. This is useful for speech transcription, speaker diarization, music analysis, and audio event detection.
 
 ![Audio Annotation Interface](../../img/screenshots/audio_annotation_full.png)
 *The audio annotation interface with waveform visualization, segment labels, and playback controls*

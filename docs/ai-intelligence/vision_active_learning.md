@@ -23,7 +23,7 @@ parallel pipeline:
 | Feature | `item.get_text()` | the item's image reference |
 | Uncertainty / diversity / BADGE / BALD / hybrid | unchanged | **unchanged** |
 
-That is the whole change. If a strategy works on text it works on images.
+Those two rows are the whole change: a strategy that works on text works on images.
 
 ## Setup
 

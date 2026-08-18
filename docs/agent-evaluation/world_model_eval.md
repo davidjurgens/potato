@@ -5,8 +5,7 @@ annotator finds **the frame at which each rollout stops making sense**, says
 why, picks a winner, and — where the scenario carries an intervention — judges
 whether the divergence follows from it.
 
-Potato then reports whether the annotators agreed, which is the part nobody
-else does.
+Potato then reports whether the annotators agreed on where the break was.
 
 ---
 

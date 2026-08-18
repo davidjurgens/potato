@@ -1,6 +1,6 @@
 # Conditional Schema Branching (Display Logic)
 
-Conditional schema branching allows you to show or hide annotation schemas based on user responses to other schemas. This is useful for:
+Conditional schema branching shows or hides annotation schemas according to what the annotator answered elsewhere on the page. This is useful for:
 
 - Follow-up questions when specific answers are selected
 - Branching survey-style annotation flows

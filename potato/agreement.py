@@ -1,10 +1,10 @@
 """
 Inter-Annotator Agreement Calculation Module
 
-This module provides functionality for calculating inter-annotator agreement metrics,
-including Krippendorff's alpha, Cohen's kappa (pairwise), and Fleiss' kappa
-(N raters), from annotation data. It supports both rating agreement (interval
-metric) and skip agreement (nominal metric) calculations.
+Calculates inter-annotator agreement metrics from annotation data:
+Krippendorff's alpha, Cohen's kappa (pairwise), and Fleiss' kappa (N raters).
+Covers both rating agreement (interval metric) and skip agreement (nominal
+metric).
 
 The module processes annotation files in JSON format and outputs agreement statistics
 along with a CSV file containing the processed annotation data.

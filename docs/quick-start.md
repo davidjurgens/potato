@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-This guide will help you get started with Potato annotation tasks using YAML configuration files.
+A Potato task is a YAML config file, a data file, and a directory to write annotations into. This page builds one from scratch.
 
 ## Installation
 
@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 ### 1. Create a Task Directory
 
-Start by creating a directory for your annotation task:
+Create a directory for your annotation task:
 
 ```bash
 mkdir my_annotation_task
@@ -132,11 +132,11 @@ python potato/flask_server.py start my_annotation_task/config.yaml -p 8000
 
 ## Project Structure
 
-Your final project structure should look like this:
+The finished project looks like this:
 
 ```
 my_annotation_task/
-├── config.yaml              # ✅ Config file in task_dir
+├── config.yaml              # the config file, inside task_dir
 ├── data/
 │   └── my_data.json         # Your annotation data
 ├── annotation_output/       # Created automatically (per output_annotation_dir)
@@ -148,12 +148,12 @@ my_annotation_task/
 
 ## Alternative: Multiple Config Files
 
-If you want to have multiple configuration files for different experiments, you can use a `configs/` subdirectory:
+For several configuration files across different experiments, put them in a `configs/` subdirectory:
 
 ```
 my_annotation_task/
 ├── configs/
-│   ├── experiment1.yaml     # ✅ Config files in configs/
+│   ├── experiment1.yaml     # config files, inside configs/
 │   └── experiment2.yaml
 ├── data/
 │   └── my_data.json

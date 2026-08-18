@@ -1,9 +1,8 @@
 """
 Item State Management Module
 
-This module provides the core data structures and management logic for annotation items
-in the Potato platform. It handles item storage, assignment strategies, and tracking
-of annotation progress across users.
+The core data structures and management logic for annotation items: item
+storage, assignment strategies, and annotation progress across users.
 
 The module includes:
 - Item class: Represents individual annotation items with metadata

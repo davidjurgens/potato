@@ -1,7 +1,7 @@
 """
 Data Sources Module
 
-This module provides extensible data loading from various sources including
+Extensible data loading from various sources including
 local files, URLs, cloud storage (Google Drive, Dropbox, S3), databases,
 and other remote sources.
 

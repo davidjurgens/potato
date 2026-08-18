@@ -1,7 +1,7 @@
 """
 Timing models for simulated annotation behavior.
 
-This module provides realistic timing distributions for simulated
+Realistic timing distributions for simulated
 annotations, supporting various statistical distributions.
 """
 

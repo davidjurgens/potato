@@ -1,7 +1,7 @@
 """
 Enhanced Active Learning Manager with Database Persistence
 
-This module provides a comprehensive active learning system with optional
+An active learning system with optional
 database persistence, model saving, LLM integration, and multiple query
 strategies including uncertainty sampling, diversity sampling, BADGE, BALD,
 and hybrid combinations.

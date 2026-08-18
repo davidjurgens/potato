@@ -1,7 +1,7 @@
 """
 Partial/incremental loading for data sources.
 
-This module provides functionality for loading data in chunks, enabling:
+Loading data in chunks, enabling:
 - Initial loading of first K items
 - Batch loading of additional items as annotation progresses
 - Auto-loading when annotation reaches a threshold

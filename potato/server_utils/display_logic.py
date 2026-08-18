@@ -1,9 +1,8 @@
 """
 Display Logic Module for Conditional Schema Branching
 
-This module provides the core validation and evaluation logic for conditional
-annotation schemas. It allows schemas to show/hide based on user responses
-to other schemas.
+Validation and evaluation logic for conditional annotation schemas, which show
+or hide themselves according to the answers given to other schemas.
 
 Key Components:
 - DisplayLogicCondition: Represents a single condition (e.g., "schema X equals 'Yes'")

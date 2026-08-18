@@ -1,6 +1,6 @@
 """Survey Instruments Library - load standard validated questionnaires.
 
-This module provides access to a library of validated survey instruments
+Access to a library of validated survey instruments
 (PHQ-9, TIPI, PANAS, etc.) for use in prestudy and poststudy phases.
 
 Usage in config.yaml:

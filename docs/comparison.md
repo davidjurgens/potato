@@ -2,7 +2,7 @@
 
 Potato is a flexible, open-source annotation platform built for NLP and ML researchers. This page compares Potato's capabilities with popular alternatives across text, image, video, 3D, robotics, and model-evaluation annotation. Last updated: August 2026.
 
-Most of the tools below are very good at what they were built for, and several beat Potato inside their own specialty. We say where. The point is to help you pick the right instrument, including when that instrument is something else. Every claim about another product comes from that product's own documentation or changelog, and vendor documentation describes the current version, so re-check anything you plan to rely on.
+Most of the tools below are very good at what they were built for, and several beat Potato inside their own specialty; where that is true, this page says so, because the useful outcome is that you pick the right instrument even when it is not this one. Every claim about another product comes from that product's own documentation or changelog, and vendor documentation describes the current version, so re-check anything you plan to rely on.
 
 ## At a Glance
 
@@ -52,7 +52,7 @@ Most of the tools below are very good at what they were built for, and several b
 
 ## Vision, 3D, and Model Evaluation at a Glance
 
-Potato's computer-vision, spatial, and evaluation surfaces are newer than its text ones. This table is about *where each tool is strong*, not about scoring.
+Potato's computer-vision, spatial, and evaluation surfaces are newer than its text ones. This table records where each tool is strong rather than ranking them.
 
 | Capability | Potato | CVAT | Label Studio | Roboflow | V7 | Supervisely | Segments.ai |
 |---|---|---|---|---|---|---|---|
@@ -78,17 +78,17 @@ Potato's computer-vision, spatial, and evaluation surfaces are newer than its te
 | Generative-video / world-model evaluation | Yes | - | - | - | - | - | - |
 | VLM grounding & pointing evaluation | Yes | - | - | - | - | - | - |
 
-The last four rows are the ones worth reading closely. On the rows above them, the mature CV platforms generally match or beat Potato; on those four, Potato is currently doing something the other tools do not offer.
+On every row except the last four, the mature CV platforms generally match or beat Potato. On those four, Potato is currently doing something the other tools do not offer.
 
-## Where Potato Excels
+## Potato's strengths
 
-### Agreement You Can Publish
+### Chance-corrected agreement
 
 Potato reports **chance-corrected** reliability, and it does so for more than categorical labels. Krippendorff's α accepts any distance function, so the same coefficient machinery covers text spans, temporal segments, geometry, 3D cuboids, captions (through a semantic distance), and world-model break-points. Where α is the wrong tool, Potato says so and uses something else. Geometry localization is reported as σ and a KS statistic against an empirical chance baseline. Mask consensus uses STAPLE. Per-annotator competence uses MACE, for the parts of the problem that are genuinely categorical.
 
 Two design choices matter as much as the coefficients:
 
-- **Undefined values explain themselves.** α is genuinely undefined on a unanimous corpus; a bare `NaN` reads as a broken computation, and a `1.0` would be a lie.
+- **Undefined values explain themselves.** α is undefined on a unanimous corpus; a bare `NaN` reads as a broken computation, and a `1.0` would be a lie.
 - **Nothing is truncated silently.** If a report hits its pairwise budget, it says so and states how many items were included.
 
 Most annotation platforms report agreement as raw IoU, exact match, or percent agreement against a ground-truth job. Those are useful numbers, but they answer a different question. Raw agreement is inflated whenever one answer dominates, which is the normal case in real corpora.
@@ -99,7 +99,7 @@ Potato has 61 annotation schemas and 24 display types in one platform. The list 
 
 ### AI and LLM Integration
 
-Potato integrates with 12 AI endpoint types out of the box: OpenAI, Anthropic, Google Gemini, Ollama, vLLM, HuggingFace, OpenRouter, and YOLO. Features include:
+Potato integrates with 13 AI endpoint types, with no plugin to install: OpenAI, Anthropic, Google Gemini, Ollama, vLLM, HuggingFace, OpenRouter, and YOLO. Features include:
 
 - **Intelligent hints** with suggested labels
 - **Keyword highlighting** using AI-detected terms
@@ -225,7 +225,7 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 ### Image and Video Annotation
 
-Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation runs in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped. Fifteen import formats and twenty-nine export formats make it easy to bring existing work in and take it back out.
+Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation runs in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped. Fifteen import formats and twenty-nine export formats let you bring existing work in and take it back out.
 
 **vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, per-object attributes, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
@@ -253,7 +253,7 @@ Potato annotates PCD, PLY, LAS, KITTI `.bin`, and `.xyz` clouds with 3D cuboids,
 
 Potato's `episode_annotation` schema puts N synchronized video streams and M robot time-series lanes (joint positions, gripper state, force-torque, reward) on one timeline, with phase segmentation, per-phase outcome, dense progress reward, and instruction relabelling. It imports LeRobot v2, HDF5 (RoboMimic/ALOHA), and RLDS/TFDS, and exports a per-frame JSONL sidecar so a read-only public dataset does not have to be rewritten. Agreement is reported three ways: temporal IoU for phase boundaries, α for outcome labels, and ICC plus Pearson for reward curves. Coverage is stated alongside, because a correlation computed over 5% of a timeline says nothing about the rest.
 
-Related tools worth knowing: **ATLAS** (TU Wien, 2026) is a focused desktop tool for long-horizon action segmentation with native ROS bag and RLDS support, Its published result, that showing proprioceptive time series alongside video cuts boundary error substantially against vision-only tools, is the reason Potato renders those lanes at all. **ELAN** and **BORIS** remain the standards for behavioural coding. **Rerun** and **Foxglove** are the best robotics visualization tools and now carry structured annotations. Potato's distinct contribution is being a *multi-annotator, web-deployed* episode annotator with agreement statistics; for single-annotator boundary precision with ROS bags, ATLAS is purpose-built.
+Related tools worth knowing: **ATLAS** (TU Wien, 2026) is a focused desktop tool for long-horizon action segmentation with native ROS bag and RLDS support. Its published result — that showing proprioceptive time series alongside video cuts boundary error against vision-only tools — is why Potato renders those lanes at all. **ELAN** and **BORIS** remain the standards for behavioural coding. **Rerun** and **Foxglove** are the best robotics visualization tools and now carry structured annotations. Potato's distinct contribution is being a *multi-annotator, web-deployed* episode annotator with agreement statistics; for single-annotator boundary precision with ROS bags, ATLAS is purpose-built.
 
 ### Generative Video and World-Model Evaluation
 
@@ -275,7 +275,7 @@ This area is defined by datasets and harnesses (RefCOCO/+/g, PixMo-Points, Point
 
 ### LLM Evaluation and Preference Annotation
 
-Potato's pairwise comparison schema (binary A/B and scale slider modes), conversation tree annotation, and triage schema make it suitable for RLHF data collection and LLM evaluation. Combined with 12 AI endpoint types for model-assisted annotation, Potato handles preference annotation workflows that typically require specialized tools.
+Potato's pairwise comparison schema (binary A/B and scale slider modes), conversation tree annotation, and triage schema make it suitable for RLHF data collection and LLM evaluation. Combined with 13 AI endpoint types for model-assisted annotation, Potato handles preference annotation workflows that typically require specialized tools.
 
 ## Agent-Evaluation Platforms (LangSmith, LabelBox, Braintrust)
 
@@ -284,19 +284,19 @@ A newer class of tools focuses on **evaluating AI agents and LLM applications** 
 | Capability | Potato | LangSmith | LabelBox |
 |------------|--------|-----------|----------|
 | License / hosting | Free, open-source, self-hosted | Proprietary SaaS (self-host = Enterprise) | Proprietary SaaS |
-| Programmatic evaluators (trajectory match, tool-use, LLM-judge) | ✅ | ✅ (`agentevals`/`openevals`) | partial |
-| Versioned datasets + experiments | ✅ (file/SQLite) | ✅ | ✅ |
-| Automation rules (filter → sample → actions) | ✅ | ✅ | partial |
-| CI gating (pytest threshold) | ✅ | ✅ (pytest/Vitest) | ❌ |
-| LLM-as-judge ↔ human calibration (κ, ECE) | ✅ (auto-calibration) | ✅ (human-correction few-shot) | partial |
-| Span + free-text judging | ✅ | ✅ | ✅ |
-| Production tracing SDK | ✅ (`potato_trace`, OTel) | ✅ | partial |
-| Semantic search / dynamic slices | ✅ | partial | ✅ (Catalog) |
-| Multi-model arena | ✅ | ❌ | ✅ |
-| Human annotation depth (IAA, training, crowdsourcing) | ✅ | partial | ✅ (Alignerr workforce) |
+| Programmatic evaluators (trajectory match, tool-use, LLM-judge) | Yes | Yes (`agentevals`/`openevals`) | partial |
+| Versioned datasets + experiments | Yes (file/SQLite) | Yes | Yes |
+| Automation rules (filter → sample → actions) | Yes | Yes | partial |
+| CI gating (pytest threshold) | Yes | Yes (pytest/Vitest) | No |
+| LLM-as-judge ↔ human calibration (κ, ECE) | Yes (auto-calibration) | Yes (human-correction few-shot) | partial |
+| Span + free-text judging | Yes | Yes | Yes |
+| Production tracing SDK | Yes (`potato_trace`, OTel) | Yes | partial |
+| Semantic search / dynamic slices | Yes | partial | Yes (Catalog) |
+| Multi-model arena | Yes | No | Yes |
+| Human annotation depth (IAA, training, crowdsourcing) | Yes | partial | Yes (Alignerr workforce) |
 | Per-seat / per-trace cost | None | Yes | Yes |
 
-**Compared to LangSmith/LabelBox/Braintrust:** Potato covers the same capture → automate → curate → evaluate → CI-gate → calibrate loop, but free, self-hosted, and on top of a rigorous human-annotation platform (inter-annotator agreement, training phases, adjudication, crowdsourcing). The trade-off is that the SaaS tools offer managed cloud hosting, large-scale dashboards, and (for LabelBox) an on-demand expert workforce. See the [Agent Evaluation Guide](guides/agent-evaluation-guide.md).
+**Compared to LangSmith/LabelBox/Braintrust:** Potato covers the same capture → automate → curate → evaluate → CI-gate → calibrate loop, but free, self-hosted, and on top of a human-annotation platform (inter-annotator agreement, training phases, adjudication, crowdsourcing). The trade-off is that the SaaS tools offer managed cloud hosting, large-scale dashboards, and (for LabelBox) an on-demand expert workforce. See the [Agent Evaluation Guide](guides/agent-evaluation-guide.md).
 
 **Human review in the observability tools.** LangSmith, Langfuse, Braintrust, W&B Weave, and Arize Phoenix are strong tracing and evaluation platforms, and several have good human-review surfaces. LangSmith's annotation queues support rubric feedback keys, a configurable number of reviewers per run, pairwise queues, and reviewers who cannot see each other's feedback. Where Potato differs is what happens *after* two people disagree: these platforms are built to collect human judgements as scores, and none of them documents a reliability statistic over those judgements. Langfuse notes that a second annotation on the same trace replaces the first, so independent double annotation needs a workaround.
 
@@ -306,7 +306,7 @@ If your traces already live in one of these tools, that is a good reason to keep
 
 ## Recent Academic Annotation Systems (2022-2025)
 
-The following tools have been published at ACL, NAACL, EMNLP, or EACL System Demonstrations tracks since 2022. They represent the evolving landscape of annotation tools, particularly the growing emphasis on AI integration.
+The following tools have been published at ACL, NAACL, EMNLP, or EACL System Demonstrations tracks since 2022. Most of them integrate an LLM somewhere in the annotation loop.
 
 ### Human-LLM Collaborative Annotation
 
@@ -437,24 +437,24 @@ AWS-integrated annotation with built-in active learning and workforce management
 | Display types | 24 |
 | Export formats | 29 |
 | Import formats | 15 |
-| AI/LLM endpoint types | 12 |
+| AI/LLM endpoint types | 13 |
 | Data source types | 8 |
 | Assignment strategies | 11 |
 | Survey instruments | 55 |
 | Crowdsourcing integrations | 9 |
 | Workflow phases | 8 |
 
-Counts are generated from Potato's own registries. We no longer publish a "best alternative" column: the tools above organise their capabilities differently enough that a single number invites a misleading comparison.
+Counts are generated from Potato's own registries. There is no "best alternative" column, because the tools above organise their capabilities differently enough that a single number invites a misleading comparison.
 
 ---
 
 ## What Potato Does Not Do
 
-Stated plainly, so an evaluation does not have to discover it late:
+So an evaluation does not have to discover these late:
 
 - **No model training.** Potato orders items, pre-labels with existing models, and critiques annotations with a VLM, but it does not train or serve detectors. Roboflow, V7, Supervisely, and Labelbox do.
 - **No text-prompt segmentation.** Interactive segmentation is click- and box-driven. SAM 3 / Grounding DINO-class open-vocabulary labelling is available in Roboflow, V7, Labelbox, and the open-source desktop tool X-AnyLabeling.
-- **Video mask propagation is frame-to-frame re-prompting, not memory-based tracking.** No published SAM 2 ONNX export includes the memory modules, so this is named honestly rather than dressed up.
+- **Video mask propagation is frame-to-frame re-prompting, not memory-based tracking.** No published SAM 2 ONNX export includes the memory modules.
 - **No per-object attributes yet.** Geometry carries a label; occlusion levels, truncation flags, and sub-type attributes need a companion schema.
 - **No point-cloud sequence mode.** 3D annotation is per frame; track propagation across a sweep is not implemented.
 - **No DICOM, NIfTI, or WSI formats.** Deep zoom and 16-bit windowing cover large scientific images, not clinical ones.
@@ -470,7 +470,7 @@ pip install potato-annotation
 potato start config.yaml -p 8000
 ```
 
-See the [Quick Start Guide](quick-start.md) for a 5-minute setup, or browse [example projects](https://github.com/davidjurgens/potato/tree/master/project-hub/simple_examples) for ready-to-use configurations.
+See the [Quick Start Guide](quick-start.md) for a 5-minute setup, or browse [example projects](https://github.com/davidjurgens/potato/tree/master/examples) for ready-to-use configurations.
 
 ## Related Documentation
 

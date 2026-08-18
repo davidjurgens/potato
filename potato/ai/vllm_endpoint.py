@@ -1,7 +1,7 @@
 """
 VLLM AI endpoint implementation.
 
-This module provides integration with VLLM for local LLM inference.
+Integration with VLLM for local LLM inference.
 """
 
 import requests

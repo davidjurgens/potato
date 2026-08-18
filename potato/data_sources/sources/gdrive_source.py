@@ -1,7 +1,7 @@
 """
 Google Drive data source.
 
-This module provides data loading from Google Drive files,
+Data loading from Google Drive files,
 supporting both public share links and authenticated access
 via service account credentials.
 """

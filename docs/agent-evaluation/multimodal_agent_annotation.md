@@ -2,7 +2,7 @@
 
 Agents increasingly act in modalities beyond text and static images — they drive
 GUIs, watch video, hold spoken conversations. These schemas (the M-series,
-multimodal half) give human raters surfaces purpose-built for those traces, beyond
+multimodal half) give human raters surfaces built for those traces, beyond
 Potato's existing [image](../annotation-types/multimedia/image_annotation.md), [audio](../annotation-types/multimedia/audio_annotation.md),
 [video](../annotation-types/multimedia/video_annotation.md), and [web-agent](agent_traces.md) displays.
 

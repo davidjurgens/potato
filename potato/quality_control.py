@@ -1,7 +1,7 @@
 """
 Quality Control Module
 
-This module provides comprehensive quality control features for annotation projects:
+Quality control features for annotation projects:
 - Attention Checks: Inject known-answer items to verify annotator engagement
 - Gold Standards: Compare annotations against expert-labeled items for accuracy tracking
 - Pre-annotation Support: Pre-fill forms with model predictions

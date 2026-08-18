@@ -1,10 +1,10 @@
 # Coding Agent Trace Annotation
 
-Potato supports annotation of agentic coding system traces -- sessions from tools like Claude Code, OpenCode, Cursor, Aider, SWE-Agent, and other AI coding assistants. This guide covers how to set up coding agent evaluation projects.
+Potato annotates agentic coding sessions -- traces from Claude Code, OpenCode, Cursor, Aider, SWE-Agent, and other AI coding assistants.
 
 ## Overview
 
-Coding agent traces consist of sequences of tool calls (file reads, edits, terminal commands, searches) interleaved with agent reasoning. Potato renders these with purpose-built formatting:
+Coding agent traces consist of sequences of tool calls (file reads, edits, terminal commands, searches) interleaved with agent reasoning. Potato renders them as:
 
 - **Code diffs** (Edit/Write): Red/green unified diff view
 - **Terminal blocks** (Bash): Dark monospace terminal styling

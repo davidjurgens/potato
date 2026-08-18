@@ -1,6 +1,6 @@
 # Conversation Tree Annotation
 
-The tree annotation schema enables annotation of hierarchical conversation structures, such as chatbot response trees, dialogue systems, or branching narratives. Annotators can rate individual nodes, select preferred paths, and compare branches at decision points.
+The tree annotation schema annotates hierarchical conversation structures: chatbot response trees, dialogue systems, branching narratives. Annotators can rate individual nodes, select preferred paths, and compare branches at decision points.
 
 ## Overview
 

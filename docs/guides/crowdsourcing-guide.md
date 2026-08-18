@@ -1,6 +1,6 @@
 # Crowdsourcing Guide
 
-This guide walks you through running annotation tasks on crowdsourcing platforms like Prolific and Amazon MTurk.
+Running annotation tasks on Prolific, Amazon MTurk, and the other crowdsourcing platforms.
 
 ## Platform Setup
 

@@ -1,6 +1,6 @@
 # Configuration Migration Tool
 
-Potato includes a migration tool to help upgrade configuration files from older formats to the current v2 format. This tool automatically detects and applies necessary changes while preserving your existing settings.
+Potato's migration tool upgrades a configuration file from an older format to v2. It detects what needs changing, applies it, and leaves your other settings alone.
 
 ## Usage
 

@@ -66,8 +66,7 @@
 
         <h1 class="potato-page-title">Thank You!</h1>
         <p class="potato-page-subtitle">
-            You have successfully completed the annotation task.
-            {% if completion_code %}Your responses have been recorded.{% endif %}
+            You have completed the annotation task and your responses are saved.
         </p>
 
         {% set has_platform_action = action and action.kind in ['redirect', 'post_form'] %}
@@ -124,7 +123,7 @@
         {% endif %}
 
         <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--muted-foreground);">
-            <i class="fas fa-shield-alt me-1"></i> Your responses have been securely recorded.
+            <i class="fas fa-shield-alt me-1"></i> Your responses are stored on this study's own server.
         </div>
     </div>
 

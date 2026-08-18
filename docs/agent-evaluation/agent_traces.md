@@ -1,6 +1,6 @@
 # Annotating Agent Traces with Potato
 
-This guide covers how to use Potato for evaluating AI agent traces (trajectories). Potato provides all the infrastructure needed for rigorous agent evaluation: multi-annotator coordination, rich annotation schemas, inter-annotator agreement, quality control, and crowdsourcing support.
+Potato renders an agent's run step by step and collects human judgements about it, with the same multi-annotator coordination, agreement statistics, quality control, and crowdsourcing support it uses for text.
 
 ## Overview
 
@@ -101,7 +101,7 @@ instance_display:
 
 ### Rich: Agent Trace Display
 
-The `agent_trace` display type provides purpose-built rendering with step cards:
+The `agent_trace` display renders each step as a card:
 
 ```yaml
 instance_display:

@@ -1,7 +1,7 @@
 """
 Flask Server Driver
 
-This module provides the main Flask server implementation for the annotation platform.
+The main Flask server implementation for the annotation platform.
 Features include:
 - User authentication and session management
 - Annotation state tracking

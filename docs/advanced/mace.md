@@ -12,7 +12,7 @@ MACE is useful when you have multiple annotators labeling the same items and wan
 
 MACE works with categorical annotation types: `radio`, `likert`, `select`, and `multiselect`. It does not apply to free-text, span, slider, or numeric annotations.
 
-### How It Works
+### What MACE computes
 
 1. **Data extraction**: Potato collects all annotations for each schema across all annotators, building an items-by-annotators matrix.
 2. **EM algorithm**: MACE runs multiple random restarts of the Variational Bayes EM algorithm, keeping the solution with the best log-likelihood.

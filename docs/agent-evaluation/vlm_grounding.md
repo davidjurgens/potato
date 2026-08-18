@@ -1,6 +1,6 @@
 # VLM Grounding, Pointing & Hallucination Localization
 
-Three questions about vision-language models that are constantly confused,
+Three questions about vision-language models that are often conflated,
 separated here because they have different right answers:
 
 | | The question | Scored by |
@@ -99,9 +99,9 @@ a data problem.
 Molmo-style models emit points. Set `region_type: point` and the annotator
 places a landmark.
 
-The scoring is genuinely different, and this is the part people get wrong: **a
-point has no area, so every IoU against it is 0.** Scoring points the way boxes
-are scored reports total failure for a model that is pointing perfectly. The
+Points are scored differently, and they have to be: **a point has no area, so
+every IoU against it is 0.** Scoring points the way boxes are scored reports
+total failure for a model that is pointing perfectly. The
 question a point answers is "is it *in* the thing", which is a hit rate:
 
 ```python

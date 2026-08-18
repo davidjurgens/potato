@@ -1,7 +1,7 @@
 """
 Anthropic Vision AI Endpoint
 
-This module provides integration with Anthropic's Claude models for visual
+Integration with Anthropic's Claude models for visual
 analysis using the image content block format.
 """
 

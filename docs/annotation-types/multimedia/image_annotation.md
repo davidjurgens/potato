@@ -1,6 +1,6 @@
 # Image Annotation
 
-Image annotation allows annotators to mark regions on images using bounding boxes, polygons, freeform drawing, and landmark points. This is useful for object detection, segmentation, and keypoint annotation tasks.
+Image annotation lets annotators mark regions with bounding boxes, polygons, freeform drawing, and landmark points. This is useful for object detection, segmentation, and keypoint annotation tasks.
 
 ![Image Annotation Interface](../../img/screenshots/image_annotation_full.png)
 *The image annotation interface with bounding box and polygon tools*
@@ -476,8 +476,8 @@ The toolbar provides:
 
 ### Tablets and stylus input
 
-The canvas works on a touch device, and a stylus is a genuinely good surface for
-tracing a boundary — often better than a mouse.
+The canvas works on a touch device, and a stylus is a good surface for tracing a
+boundary — often better than a mouse.
 
 | Gesture | Does |
 |---|---|

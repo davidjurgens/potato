@@ -1,6 +1,6 @@
 # Annotation History and Timestamps
 
-Potato provides comprehensive tracking of all annotation actions with fine-grained timestamp metadata. This enables performance analysis, quality assurance, and detailed audit trails.
+Potato records every annotation action with a server timestamp and, where the browser supplies one, a client timestamp. The record is what performance analysis, quality checks and audit trails are built from.
 
 ## Overview
 
@@ -48,7 +48,7 @@ The system tracks these action types:
 
 ## Configuration
 
-Annotation history tracking is enabled by default. No additional configuration required.
+Annotation history tracking is on by default and has no configuration.
 
 ### Accessing History Data
 
@@ -298,10 +298,12 @@ Actions are serialized with ISO 8601 timestamps:
 
 ## Best Practices
 
-1. **Regular monitoring**: Check suspicious activity reports periodically
-2. **Threshold tuning**: Adjust detection thresholds based on your task complexity
-3. **Export backups**: Regularly export history for long-term storage
-4. **Privacy compliance**: Consider data retention policies for timestamps
+Check the suspicious-activity report periodically rather than only at the end
+of a study, and tune `fast_threshold_ms` to your task: 500 ms is far too fast
+for a paragraph and too slow for a one-key triage decision. History lives in
+the user state files, so back those up if you need it long term. Timestamps are
+personal data in most jurisdictions, so decide on a retention policy before you
+collect a study's worth of them.
 
 ## Related Documentation
 

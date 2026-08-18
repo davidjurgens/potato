@@ -1,18 +1,18 @@
 # Usage
 
-Getting started with Potato is easy! Here's what you need to do:
+Three steps: install Potato, set up the project data, then start the server.
 
 ## Install Potato to your machine
 
 Potato has a Python-based server architecture that can be run locally or
-hosted on any device. In order to install Potato:
+hosted on any device. To install it:
 
 - Make sure you have Python version 3.8+ installed
 - Follow the quickstart instructions in our [Quick Start Guide](../quick-start.md)
 
 ## Set up the project data
 
-In order to input documents and specify annotation preferences:
+To load documents and set annotation preferences:
 
 - [Prepare your input data](../configuration/data_format.md#update-input-data-formats-on-the-yaml-config-file) (CSV, TSV, or JSON) and upload it to your project's `data` folder
 - Specify where and in what format you want the [output data](../configuration/data_format.md#update-output-data-preferences-on-the-yaml-config-file)

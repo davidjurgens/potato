@@ -1,7 +1,7 @@
 """
 Utility functions for handling Prolific APIs
 
-This module provides wrapper classes for interacting with the Prolific API
+Wrapper classes for interacting with the Prolific API
 (https://api.prolific.com/api/v1/) to manage studies and submissions.
 
 The Prolific API uses token-based authentication and returns JSON responses.

@@ -1,7 +1,7 @@
 """
 OpenAI Vision AI Endpoint
 
-This module provides integration with OpenAI's vision models (GPT-4o, GPT-4o-mini)
+Integration with OpenAI's vision models (GPT-4o, GPT-4o-mini)
 for visual analysis and annotation assistance.
 """
 

@@ -1,9 +1,8 @@
 """
 Instance Selector for Solo Mode
 
-This module implements weighted instance selection for human annotation.
-It combines multiple signals (LLM confidence, diversity, disagreements, random)
-to prioritize which instances the human annotator should see next.
+Weighted instance selection for human annotation, combining LLM confidence,
+diversity, disagreements and randomness to decide what the annotator sees next.
 """
 
 import logging

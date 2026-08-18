@@ -1,6 +1,6 @@
 # Quality Control Features
 
-Potato provides comprehensive quality control features to ensure high-quality annotations in your projects. This guide covers five key features:
+Five quality control features, all optional and independent of each other:
 
 1. **Attention Checks** - Verify annotator engagement with known-answer items
 2. **Gold Standards** - Track accuracy against expert-labeled items
@@ -67,7 +67,7 @@ Create a JSON file with your attention check items:
 - `text` (required): The text to display to annotators
 - `expected_answer` (required): Dictionary mapping schema names to expected values
 
-### How It Works
+### When a check is injected and what happens next
 
 1. Attention check items are loaded at server startup
 2. Based on `frequency` or `probability`, checks are injected into the annotation flow
@@ -86,7 +86,7 @@ View attention check statistics in the admin dashboard at `/admin`:
 
 ## Gold Standards
 
-Gold standards are expert-labeled items used to measure annotator accuracy. By default, gold standards are **silent** - results are recorded for admin review in the dashboard, but annotators don't see feedback. This allows you to track quality without influencing annotator behavior.
+Gold standards are expert-labeled items used to measure annotator accuracy. By default, gold standards are **silent** - results are recorded for admin review in the dashboard, but annotators don't see feedback. You therefore track quality without influencing annotator behavior.
 
 ### Configuration
 
@@ -253,7 +253,7 @@ gold_standards:
 
 ## Pre-annotation Support
 
-Pre-annotation allows you to pre-fill annotation forms with model predictions, useful for:
+Pre-annotation pre-fills the form with model predictions, which is useful for:
 - Active learning workflows
 - Correcting model outputs
 - Bootstrapping from existing annotations
@@ -307,7 +307,7 @@ For span annotations:
 }
 ```
 
-### How It Works
+### When predictions are applied
 
 1. When an item is loaded, the predictions field is extracted
 2. If the annotator hasn't already annotated this item, predictions are used to pre-fill the form

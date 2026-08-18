@@ -1,9 +1,8 @@
 """
 Authentication System Module
 
-This module provides a comprehensive authentication system for the Potato annotation platform.
-It supports multiple authentication backends including in-memory storage, database storage,
-and third-party SSO providers like Clerk.
+The authentication system for the Potato annotation platform, with backends for
+in-memory storage, database storage, and third-party SSO providers such as Clerk.
 
 The system is designed to be extensible and supports both password-based and passwordless
 authentication modes. It includes user management, session validation, and secure

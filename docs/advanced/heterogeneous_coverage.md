@@ -6,8 +6,8 @@ For most NLP projects, the right design is the textbook recipe:
 > One annotator handles most items, with two or three annotators overlapping
 > on a 5 to 10 percent sample to monitor quality.
 
-This page explains how to express that and several related patterns through
-the `num_annotators_per_item` and `per_annotator_quota` config blocks.
+That design, and several related ones, are expressed through the
+`num_annotators_per_item` and `per_annotator_quota` config blocks.
 
 ## The canonical config key
 

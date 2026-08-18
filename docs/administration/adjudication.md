@@ -2,9 +2,9 @@
 
 ## Overview
 
-Adjudication is a quality assurance workflow that allows designated reviewers (adjudicators) to resolve disagreements between annotators and produce gold-standard final labels. In any multi-annotator project, annotators will inevitably disagree on some items -- whether due to ambiguous text, gaps in annotation guidelines, or genuine annotator error. Adjudication provides a structured process for a subject-matter expert to review these disagreements, examine each annotator's response alongside timing data and agreement scores, and render a final decision.
+Adjudication is a quality assurance workflow in which designated reviewers (adjudicators) resolve disagreements between annotators and produce gold-standard final labels. In any multi-annotator project some items will be labeled differently by different people, whether because the text is ambiguous, the guidelines have a gap, or an annotator was wrong. A subject-matter expert reviews those disagreements, reads each annotator's response alongside timing data and agreement scores, and makes the final call.
 
-Adjudication in Potato is implemented as a **parallel workflow**, not a phase. Adjudicators access a dedicated `/adjudicate` route with its own interface, separate from the standard annotation flow. This design avoids disrupting the existing phase progression system (consent, instructions, training, annotation, post-study) while giving adjudicators a purpose-built environment for reviewing and resolving conflicts.
+Adjudication in Potato is implemented as a **parallel workflow**, not a phase. Adjudicators access a dedicated `/adjudicate` route with its own interface, separate from the standard annotation flow. That keeps the phase progression (consent, instructions, training, annotation, post-study) untouched and gives adjudicators an interface built for reviewing conflicts.
 
 ### When to Use Adjudication
 
@@ -139,7 +139,7 @@ max_annotations_per_item: 3
 
 ---
 
-## How It Works
+## The three stages
 
 The adjudication workflow consists of three stages: annotation, adjudication, and export.
 
@@ -156,7 +156,7 @@ When an adjudicator logs in and navigates to `/adjudicate`, the system builds th
 
 Agreement is computed as pairwise percentage agreement: for each annotation schema, the system counts how many annotator pairs chose the same label and divides by the total number of pairs. The overall agreement is the mean across all schemas.
 
-The queue is sorted with pending items first (lowest agreement first), followed by in-progress items, and finally completed items. This ordering ensures adjudicators address the most contentious items first.
+The queue is sorted with pending items first (lowest agreement first), followed by in-progress items, and finally completed items. Adjudicators therefore reach the most contentious items first.
 
 ### Stage 3: Export
 
@@ -303,7 +303,7 @@ When you select an item from the queue, the main area displays:
 
 ### Bottom Navigation Bar
 
-The navigation bar provides three actions:
+The navigation bar has three actions:
 
 - **Previous** -- Go to the previous item in the queue.
 - **Skip** -- Mark the current item as skipped and move to the next.
@@ -490,7 +490,7 @@ The sample data (`data/adjudication-example.json`) contains items designed to pr
 ]
 ```
 
-Items like `item_001` with mixed sentiment ("amazing food but terrible service") are likely to produce disagreement between annotators, making them good candidates for adjudication.
+Items like `item_001` with mixed sentiment ("amazing food but terrible service") are likely to produce disagreement between annotators, so they are good candidates for adjudication.
 
 ---
 

@@ -1,6 +1,6 @@
 # Task Assignment
 
-Potato provides flexible task assignment strategies to control how annotation instances are distributed to annotators. This guide covers all available strategies and configuration options.
+Assignment strategies decide which instances each annotator sees and in what order. This page covers every strategy and its configuration.
 
 ## Table of Contents
 

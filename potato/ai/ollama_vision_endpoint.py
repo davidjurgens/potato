@@ -1,7 +1,7 @@
 """
 Ollama Vision AI Endpoint
 
-This module provides integration with Ollama vision models for local
+Integration with Ollama vision models for local
 visual AI inference. Supports LLaVA, Llama 3.2 Vision, BakLLaVA, and Qwen-VL models.
 """
 

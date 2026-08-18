@@ -1,7 +1,7 @@
 """
 Solo Mode Manager
 
-This module provides the central SoloModeManager class that orchestrates
+The central SoloModeManager class that orchestrates
 all Solo Mode operations including prompt management, LLM labeling,
 instance selection, and validation tracking.
 """

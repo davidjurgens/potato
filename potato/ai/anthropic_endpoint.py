@@ -1,7 +1,7 @@
 """
 Anthropic AI endpoint implementation.
 
-This module provides integration with Anthropic's Claude API for LLM inference.
+Integration with Anthropic's Claude API for LLM inference.
 """
 
 from typing import Dict, List

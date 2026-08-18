@@ -1,8 +1,7 @@
 """
 Flask Routes Module
 
-This module contains all the route handlers for the Flask server.
-It defines the HTTP endpoints and their associated logic for:
+All the route handlers for the Flask server, covering:
 - User authentication and session management
 - Navigation between annotation phases
 - Form handling and validation

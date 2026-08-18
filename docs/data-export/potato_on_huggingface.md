@@ -4,10 +4,10 @@ Potato has a growing presence on the HuggingFace Hub: **live demo Spaces** you c
 browser, **sample annotation datasets**, and guides for deploying your own. This page is the
 index.
 
-- 🥔 **Website:** [www.potatoannotator.com](https://www.potatoannotator.com)
-- 🗂️ **Collection (all demos):** [Potato Annotation Demos](https://huggingface.co/collections/Blablablab/potato-annotation-demos-6a3753d95427d61a91ecf4fd)
-- 🤗 **Live demo:** [Blablablab/agent-trace-evaluation](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)
-- 📚 **Deploy your own Space:** [deployment guide](huggingface_spaces.md)
+- **Website:** [www.potatoannotator.com](https://www.potatoannotator.com)
+- **Collection (all demos):** [Potato Annotation Demos](https://huggingface.co/collections/Blablablab/potato-annotation-demos-6a3753d95427d61a91ecf4fd)
+- **Live demo:** [Blablablab/agent-trace-evaluation](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)
+- **Deploy your own Space:** [deployment guide](huggingface_spaces.md)
 - 🤖 **Use HF models for AI features:** [Using HuggingFace Models](../ai-intelligence/huggingface_models.md)
 - 📤 **Export annotations to the Hub:** [HuggingFace Hub Export](huggingface_export.md)
 

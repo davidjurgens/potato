@@ -1,6 +1,6 @@
 # Debugging Guide
 
-Potato provides several command-line flags and configuration options to help with debugging and testing annotation projects. These are useful during development and troubleshooting.
+Potato has several command-line flags and config options for debugging and testing an annotation project.
 
 ## Server Configuration
 

@@ -1,6 +1,6 @@
 # Developer Guide
 
-This guide covers extending Potato, integrating via API, and customizing the platform.
+Extending Potato, driving it through the API, and customizing it.
 
 ## Architecture Overview
 

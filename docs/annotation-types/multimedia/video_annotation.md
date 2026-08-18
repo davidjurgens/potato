@@ -1,12 +1,12 @@
 # Video Annotation
 
-This guide covers the video annotation schema in Potato, which allows annotators to mark temporal segments, classify frames, and annotate keyframes in video content.
+The `video_annotation` schema lets annotators mark temporal segments, classify individual frames, and attach notes to keyframes.
 
 > **New in v2.0**: Video annotation with frame-level precision, timeline visualization, and keyboard-driven workflow.
 
 ## Overview
 
-The `video_annotation` schema provides comprehensive video annotation capabilities:
+The schema covers:
 
 - **Temporal Segment Marking**: Mark start and end points to create labeled segments
 - **Frame-by-Frame Navigation**: Step through video frame by frame for precise annotations
@@ -307,7 +307,7 @@ annotation_schemes:
 Enables all annotation types in one interface.
 
 - Segment, frame, and keyframe controls all available
-- Useful for comprehensive video analysis tasks
+- Useful when a video needs both segment and frame-level labels
 
 ## Showing and Hiding Classes
 

@@ -5,10 +5,9 @@ synchronized side-by-side panes:
 
 > **Reasoning** | **Function Calls** | **Final Answer**
 
-This lets an evaluator see, at a glance, *what the agent thought*, *what it did*,
-and *what it produced* — ideal for continuous evaluation where new traces arrive
-and must be judged quickly. It is the purpose-built answer to *"show an agent's
-thought traces, function calls, and final answer side-by-side."*
+The evaluator reads what the agent thought, what it did, and what it produced
+without scrolling between them, which is what makes a stream of incoming traces
+judgeable at the rate they arrive.
 
 Unlike [`agent_trace`](agent_traces.md) (which stacks an interleaved trace
 vertically in a single column) or [`pairwise`](../annotation-types/instance_display.md#pairwise-display)

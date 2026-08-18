@@ -1,7 +1,7 @@
 """
 URL data source.
 
-This module provides data loading from HTTP/HTTPS URLs with security
+Data loading from HTTP/HTTPS URLs with security
 protections against SSRF attacks.
 """
 

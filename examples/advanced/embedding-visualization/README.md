@@ -1,6 +1,6 @@
 # Embedding Visualization Demo
 
-This example demonstrates the **Embedding Visualization** feature in the Potato admin dashboard. It includes pre-annotated synthetic data to show how label coloring and clustering works.
+The **embedding visualization** in the Potato admin dashboard, with pre-annotated synthetic data so the label coloring and the clustering have something to show.
 
 ## Features Demonstrated
 
@@ -62,7 +62,7 @@ Three simulated annotators have already labeled ~30 items each:
 This creates a realistic scenario where:
 - Some items have majority vote labels (colored points)
 - Some items are unannotated (gray points)
-- You can see annotation coverage at a glance
+- Annotation coverage is visible as the ratio of colored to gray points
 
 ## Configuration Highlights
 
@@ -108,5 +108,5 @@ embedding_visualization:
 
 ## Related Documentation
 
-- [Embedding Visualization Guide](../../../docs/embedding_visualization.md)
-- [Diversity Ordering](../../../docs/diversity_ordering.md)
+- [Embedding Visualization Guide](../../../docs/advanced/embedding_visualization.md)
+- [Diversity Ordering](../../../docs/workflow/diversity_ordering.md)

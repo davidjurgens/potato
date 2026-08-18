@@ -1,7 +1,7 @@
 """
 Filter Data by Prior Annotations
 
-This module provides functionality to filter data items based on prior annotation
+Filter data items based on prior annotation
 decisions. This is particularly useful for workflows like:
 
 1. Triage -> Full Annotation: Filter items that were "accepted" in triage
@@ -19,7 +19,7 @@ Usage (CLI):
 Usage (Python):
     from potato.filter_by_annotation import filter_items_by_annotation
 
-    filtered = filter_items_by_annotation(
+    Filtered = filter_items_by_annotation(
         annotation_dir="annotation_output/",
         data_file="data/items.json",
         schema_name="data_quality",

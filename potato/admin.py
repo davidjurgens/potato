@@ -1,7 +1,7 @@
 """
 Admin Dashboard Module
 
-This module provides comprehensive admin functionality for the annotation platform,
+Admin functionality for the annotation platform,
 including dashboard data generation, timing analysis, and configuration management.
 
 The admin dashboard offers:

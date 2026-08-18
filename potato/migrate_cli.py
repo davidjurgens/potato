@@ -2,7 +2,7 @@
 """
 Config Migration Tool for Potato
 
-This module provides utilities to migrate Potato configuration files
+Utilities to migrate Potato configuration files
 from older formats to the current v2 format.
 
 Usage:

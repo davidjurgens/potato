@@ -1,6 +1,6 @@
 # Password Management
 
-Potato provides a comprehensive password management system with secure per-user password hashing, multiple reset flows, and persistent user storage. This guide covers password security, reset mechanisms, shared credential files, and the database authentication backend.
+Potato hashes each user's password with its own salt, supports several reset flows, and can persist users to a file or a database. This page covers password security, the reset mechanisms, shared credential files, and the database authentication backend.
 
 This documentation applies to the `in_memory` and `database` authentication methods. If you use OAuth/SSO (Google, GitHub, institutional), passwords are managed by the identity provider — see [SSO & OAuth Authentication](sso_authentication.md). In [mixed mode](sso_authentication.md#mixed-mode) (SSO + local login), the features described here apply to local password accounts.
 
@@ -79,7 +79,7 @@ This endpoint requires the `admin_api_key` configured in your project (see [Admi
 
 Potato includes a token-based password reset flow for annotators who forget their passwords.
 
-#### How It Works
+#### The self-service reset flow
 
 1. The annotator visits `/forgot-password` and enters their username
 2. The system generates a secure single-use reset token (valid for 24 hours)
@@ -141,7 +141,7 @@ When `user_config_path` is explicitly set:
 
 ## Database Authentication Backend
 
-For production deployments or when you need robust user management, use the database backend with SQLite or PostgreSQL.
+For production deployments, or whenever user records need to survive more than a restart, use the database backend with SQLite or PostgreSQL.
 
 ### SQLite (No Dependencies)
 

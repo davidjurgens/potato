@@ -1,9 +1,8 @@
 """
 User State Management Module
 
-This module provides comprehensive user state tracking and management for the Potato
-annotation platform. It handles user progress through annotation phases, instance
-assignments, annotation storage, and state persistence.
+User state tracking and management: progress through annotation phases, instance
+assignments, annotation storage, and persistence.
 
 Key Components:
 - UserStateManager: Singleton manager for all user states

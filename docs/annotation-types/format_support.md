@@ -1,6 +1,6 @@
 # Extended Format Support
 
-Potato supports annotation of various document formats beyond plain text, including PDF documents, Word files, spreadsheets, Markdown, and source code.
+Potato annotates more than plain text: PDF documents, Word files, spreadsheets, Markdown, and source code.
 
 ## Overview
 

@@ -1,7 +1,7 @@
 """
 In-Context Learning (ICL) Labeler Module
 
-This module provides AI-assisted labeling using high-confidence human annotations
+AI-assisted labeling using high-confidence human annotations
 as in-context examples to prompt an LLM to label remaining data.
 
 Key features:

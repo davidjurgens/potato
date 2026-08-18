@@ -1,22 +1,22 @@
 """
 User Simulator for Potato Annotation Platform.
 
-This module provides tools for simulating multiple annotators with varying
+Tools for simulating multiple annotators with varying
 competence levels and behaviors for testing purposes.
 
 Example usage:
     from potato.simulator import SimulatorManager, SimulatorConfig
 
-    config = SimulatorConfig(
+    Config = SimulatorConfig(
         user_count=10,
         strategy="random",
         competence_distribution={"good": 0.5, "average": 0.3, "poor": 0.2}
     )
 
-    manager = SimulatorManager(config, "http://localhost:8000")
+    Manager = SimulatorManager(config, "http://localhost:8000")
     results = manager.run_parallel(max_annotations_per_user=20)
 
-    print(manager.get_summary())
+    Print(manager.get_summary())
 """
 
 from .config import (

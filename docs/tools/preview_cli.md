@@ -1,6 +1,6 @@
 # Preview CLI
 
-The Potato Preview CLI allows you to validate annotation configurations and preview how schemas will render without running the full server. This is useful for rapid prototyping, debugging, and CI/CD validation.
+The preview CLI validates an annotation configuration and shows how its schemas will render, without starting the server. Use it while drafting a config, when debugging one, and in CI.
 
 ## Overview
 

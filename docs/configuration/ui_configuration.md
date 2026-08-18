@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Potato annotation platform provides extensive configuration options for customizing the user interface. These settings allow administrators to control the appearance, behavior, and functionality of the annotation interface to suit their specific needs.
+The `ui` section of the config controls how the annotation interface looks and behaves. Everything in it is optional; the defaults are what annotators see if you set nothing.
 
 ## Configuration Structure
 

@@ -2,7 +2,7 @@
 """
 Unified AI endpoint interface for various LLM providers.
 
-This module provides a common interface for interacting with different LLM providers
+A common interface for interacting with different LLM providers
 including OpenAI, Anthropic, Hugging Face, Ollama, and VLLM endpoints.
 """
 

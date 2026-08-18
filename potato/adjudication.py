@@ -1,7 +1,7 @@
 """
 Adjudication Module
 
-This module provides a comprehensive adjudication system where designated users
+An adjudication system where designated users
 review items with multiple annotations, resolve disagreements, and produce
 gold-standard final decisions.
 

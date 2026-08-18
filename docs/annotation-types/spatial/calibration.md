@@ -25,8 +25,8 @@ annotator **edits in 3D and verifies in 2D**: the panels under the viewport
 show each camera's view of the scene with the boxes projected onto it, redrawn
 as the box moves.
 
-Without it, 3D labelling is a guessing game with no feedback. With it, a wrong
-box is visible at a glance.
+Without it, 3D labelling has no feedback loop: a box that looks right from the
+orbit camera can be metres off along the view axis, and nothing says so.
 
 ## Configuring it
 

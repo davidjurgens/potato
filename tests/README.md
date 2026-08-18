@@ -5,7 +5,7 @@
 > cause real bugs when broken, and the drift tests. This file is the detailed
 > index — the regression table below and the per-directory READMEs go deeper.
 
-This directory contains comprehensive tests for the Potato annotation platform, covering both backend functionality and frontend user interface testing.
+This directory holds Potato's tests, backend and frontend.
 
 ## Recent Bugs and Their Tests
 
@@ -72,9 +72,9 @@ with TestConfigManager("my_test", annotation_schemes) as test_config:
 ### Server Tests (`tests/server/`)
 Server tests use the `FlaskTestServer` class to test against real Flask server instances. These are integration tests that verify actual HTTP endpoints and server behavior.
 
-**📖 [Server Test Documentation](server/README.md)** - Complete guide to server testing
-**📋 [Quick Reference](server/QUICK_REFERENCE.md)** - Common patterns and code snippets
-**📝 [Test Template](server/test_template.py)** - Template for creating new server tests
+**[Server Test Documentation](server/README.md)** - Complete guide to server testing
+**[Quick Reference](server/QUICK_REFERENCE.md)** - Common patterns and code snippets
+**[Test Template](server/test_template.py)** - Template for creating new server tests
 
 **Key Server Test Files:**
 - **`test_backend_state.py`** - User and item state management
@@ -89,7 +89,7 @@ Server tests use the `FlaskTestServer` class to test against real Flask server i
 ### Selenium Tests (`tests/selenium/`)
 Frontend tests using Selenium WebDriver to test the user interface and browser interactions.
 
-**📖 [Selenium Test Documentation](selenium/README.md)** - Complete guide to Selenium testing
+**[Selenium Test Documentation](selenium/README.md)** - Complete guide to Selenium testing
 
 **Key Selenium Test Files:**
 - **`test_frontend_span_system.py`** - Span annotation UI testing
@@ -100,7 +100,7 @@ Frontend tests using Selenium WebDriver to test the user interface and browser i
 ### Unit Tests (`tests/unit/`)
 Pure unit tests that test individual functions and classes without external dependencies. These tests use mocking to isolate components.
 
-**📖 [Unit Test Documentation](unit/README.md)** - Complete guide to unit testing
+**[Unit Test Documentation](unit/README.md)** - Complete guide to unit testing
 
 **Key Unit Test Files:**
 
@@ -149,7 +149,7 @@ Pure unit tests that test individual functions and classes without external depe
 ### Integration Tests (`tests/integration/`)
 End-to-end tests using real Flask servers and Selenium browsers. These tests verify complete user journeys from registration to annotation completion.
 
-**📖 [Integration Test Documentation](integration/README.md)** - Complete guide to integration testing
+**[Integration Test Documentation](integration/README.md)** - Complete guide to integration testing
 
 **Key Integration Test Files:**
 - **`base.py`** - IntegrationTestServer and BaseIntegrationTest classes
@@ -169,13 +169,13 @@ Use them to validate refinement-cycle triggering, prompt-version evolution,
 hybrid-dual-track fallback, and background LLM-labeling throughput when a
 config or strategy change affects the end-to-end flow.
 
-**📖 [Smoke Test Documentation](smoke/README.md)** — usage, expected output,
+**[Smoke Test Documentation](smoke/README.md)** — usage, expected output,
 setup requirements.
 
 ### Jest Frontend Tests (`tests/jest/`)
 JavaScript unit tests for frontend functionality using jsdom.
 
-**📖 [Jest Test Documentation](jest/README.md)** - Complete guide to Jest testing
+**[Jest Test Documentation](jest/README.md)** - Complete guide to Jest testing
 
 **Key Jest Test Files:**
 - **`annotation-functions.test.js`** - Core annotation functions (updateAnnotation, validation)
@@ -432,7 +432,7 @@ The test suite has been partially consolidated to reduce duplication and improve
 
 **Status:** 19 active files (infrastructure issues resolved)
 - `test_frontend_span_system.py` - 11 tests, all passing
-- `test_span_annotation_selenium.py` - 22 tests, comprehensive coverage
+- `test_span_annotation_selenium.py` - 22 tests
 - `test_comprehensive_span_annotation_selenium.py` - 20 tests, pytest fixtures
 - Various overlay, positioning, and persistence tests
 

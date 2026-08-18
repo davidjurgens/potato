@@ -8,7 +8,7 @@ The server tests in `tests/server/` verify the Flask backend functionality using
 
 ### FlaskTestServer Class
 
-The `FlaskTestServer` class provides a complete Flask server environment for testing:
+`FlaskTestServer` starts a real Flask server for a test class:
 
 - **Production Mode**: Server runs in production mode (`debug=False`) by default
 - **Admin Authentication**: Automatically adds admin API key headers for admin endpoints

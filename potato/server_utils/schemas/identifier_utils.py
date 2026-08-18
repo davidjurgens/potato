@@ -1,7 +1,7 @@
 """
 Identifier Utilities for Schema Generation
 
-This module provides centralized functions for generating consistent identifiers
+Centralized functions for generating consistent identifiers
 and validating schema configurations across all annotation schema types.
 """
 

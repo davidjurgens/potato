@@ -1,6 +1,6 @@
 # Active Learning Query Strategies
 
-This document provides a comprehensive reference for all query strategies available in Potato's active learning system.
+Every query strategy Potato's active learning can use, with its formulation and its citation.
 
 ## Overview
 

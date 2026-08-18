@@ -21,7 +21,7 @@ Each entry maps to an `AIEndpointFactory` config (`endpoint_type`, `model`,
 `base_url`, `temperature`, and an optional `ai_config` for keys/params). When
 enabled, the admin dashboard shows an **Arena** link.
 
-## How it works
+## One arena round
 
 1. Enter a prompt → it's sent to every model **concurrently**. One model failing
    (bad key, provider down) never blocks the others — its card shows the error.

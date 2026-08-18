@@ -6,9 +6,9 @@ Multi-Agent System failure taxonomy from Cemri et al. 2025, *"Why Do Multi-Agent
 LLM Systems Fail?"*): **14 failure modes across 3 categories**, empirically derived
 with κ=0.88 human inter-annotator agreement.
 
-Commercial tools *auto-detect* failure modes; Potato gives you a turnkey
-**human** failure-mode annotation workflow — optionally seeded by an LLM-judge
-pre-label that annotators then validate.
+Commercial tools *auto-detect* failure modes. Potato collects **human**
+failure-mode annotations instead, optionally seeded by an LLM-judge pre-label
+that annotators then confirm or overturn.
 
 ## Quick start
 

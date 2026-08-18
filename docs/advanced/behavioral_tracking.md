@@ -2,7 +2,7 @@
 
 ## Overview
 
-Potato's behavioral tracking system captures detailed interaction data during annotation sessions, enabling researchers to analyze annotator behavior, timing patterns, AI assistance usage, and decision-making processes. This data is invaluable for understanding annotation quality, identifying problematic annotators, and improving annotation workflows.
+Potato records what annotators do during a session: clicks and focus events, how long each item took, when AI assistance was asked for and whether the suggestion was taken, and every change to an answer. The record is what an audit of annotation quality is built from, and it is the only way to tell a careful annotator from a fast one after the fact.
 
 ## What Gets Tracked
 

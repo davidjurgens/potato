@@ -1,7 +1,7 @@
 """
 Annotation strategies for simulated users.
 
-This module defines different strategies for generating annotations:
+Different strategies for generating annotations:
 - Random: Uniform random selection
 - Biased: Weighted selection based on label preferences
 - LLM: Use an LLM to generate annotations

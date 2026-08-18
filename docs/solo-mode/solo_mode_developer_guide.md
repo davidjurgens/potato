@@ -1,6 +1,6 @@
 # Solo Mode Developer Guide
 
-This guide covers the architecture, extension points, and development practices for Solo Mode.
+Solo Mode's architecture, its extension points, and the conventions to follow when working on it.
 
 ## Architecture Overview
 

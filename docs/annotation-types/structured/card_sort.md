@@ -1,6 +1,6 @@
 # Card Sorting / Grouping
 
-The Card Sort schema enables drag-and-drop grouping of items into categories. In **closed mode**, groups are predefined by the researcher. In **open mode**, annotators create and name their own groups. This is commonly used in information architecture research, taxonomy development, and content categorization.
+The Card Sort schema groups items into categories by dragging them. In **closed mode**, groups are predefined by the researcher. In **open mode**, annotators create and name their own groups. This is commonly used in information architecture research, taxonomy development, and content categorization.
 
 ## When to Use Card Sort
 

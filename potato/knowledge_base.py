@@ -1,7 +1,7 @@
 """
 Knowledge Base Client Module
 
-This module provides clients for querying external knowledge bases to support
+Clients for querying external knowledge bases to support
 entity linking in span annotations. Supported knowledge bases include:
 
 - Wikidata: Open knowledge graph with millions of entities

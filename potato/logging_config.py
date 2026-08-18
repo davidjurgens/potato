@@ -1,9 +1,8 @@
 """
 Centralized Logging Configuration for Potato
 
-This module provides a unified logging configuration for the entire Potato
-annotation platform. It ensures consistent log formatting, appropriate log
-levels, and optional file logging across all modules.
+One logging configuration for the whole platform, so every module shares the
+same formatting, levels, and optional file logging.
 
 Usage:
     from potato.logging_config import setup_logging, get_logger

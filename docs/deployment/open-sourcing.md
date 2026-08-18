@@ -1,6 +1,6 @@
 # Contributing to Potato
 
-Potato is fully open-source and welcomes contributions from the community. This guide explains how to contribute effectively.
+Potato is open source and takes contributions. Here is how to make one that lands.
 
 ## Getting Started
 

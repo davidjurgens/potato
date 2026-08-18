@@ -1,10 +1,10 @@
 # Instance Display Configuration
 
-Instance display is a feature that separates **what content to show annotators** from **what annotations to collect**. This allows you to display any combination of content types (images, videos, audio, text) alongside any annotation schemes (radio buttons, checkboxes, spans, etc.).
+Instance display separates **what content to show annotators** from **what annotations to collect**, so any combination of content types (images, videos, audio, text) can sit alongside any annotation schemes (radio buttons, checkboxes, spans, and the rest).
 
 ## Why Use Instance Display?
 
-Previously, if you wanted to show an image with radio buttons for classification, you had to add an `image_annotation` schema with `min_annotations: 0` just to display the image. This was confusing and semantically incorrect.
+To show an image and classify it with radio buttons, declare the image under `instance_display` and the question under `annotation_schemes`. The `image_annotation` schema is for drawing on an image, not for displaying one.
 
 With `instance_display`, you can explicitly configure what content to display:
 

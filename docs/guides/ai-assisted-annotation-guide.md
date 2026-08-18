@@ -1,6 +1,6 @@
 # AI-Assisted Annotation Guide
 
-This guide covers all the ways Potato uses AI and machine learning to speed up annotation.
+Every way Potato puts AI and machine learning in front of an annotator.
 
 ## AI Label Suggestions
 
