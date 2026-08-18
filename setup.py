@@ -137,13 +137,11 @@ setup(
         ],
     },
     package_data={
-        # NOTE: All of potato/static/ is shipped via MANIFEST.in
-        # (`recursive-include potato/static/ *`) together with
-        # include_package_data=True above. Do NOT re-add static subdirectories
-        # here — they are already packaged recursively, and per-subdir globs
-        # only invite drift as new static/ folders are added.
+        # Templates and static assets are shipped recursively via MANIFEST.in
+        # together with include_package_data=True above. Do not add per-folder
+        # globs here; new nested asset directories should be included without
+        # requiring packaging changes.
         "potato": [
-            "templates/*.html",
             "i18n/*.yaml",
             # Generated config JSON Schema. Shipped so editors and tooling can
             # resolve it offline from an installed wheel, without reaching the
