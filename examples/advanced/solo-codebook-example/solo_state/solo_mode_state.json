@@ -1,10 +1,238 @@
 {
-  "task_description": "",
-  "current_prompt_version": 0,
-  "prompt_versions": [],
-  "predictions": {},
+  "task_description": "Classify each patient comment by the single primary theme it expresses about getting healthcare: an access barrier, a cost concern, distrust of a provider, or a complaint about wait times. Pick the theme the comment is mostly about.",
+  "current_prompt_version": 1,
+  "prompt_versions": [
+    {
+      "version": 1,
+      "prompt_text": "Label the following text according to this task: Classify each patient comment by the single primary theme it expresses about getting healthcare: an access barrier, a cost concern, distrust of a provider, or a complaint about wait times. Pick the theme the comment is mostly about.",
+      "created_at": "2026-08-18T14:52:51.648454",
+      "created_by": "user_setup",
+      "source_description": "Initial prompt from task description",
+      "parent_version": null,
+      "validation_accuracy": null
+    }
+  ],
+  "predictions": {
+    "11": {
+      "primary_theme": {
+        "instance_id": "11",
+        "schema_name": "primary_theme",
+        "predicted_label": "provider trust",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-18T14:52:53.083692",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The patient expresses doubt about the diagnosis and feels that it was rushed and dismissive, indicating a lack of confidence in their clinician's judgment.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1": {
+      "primary_theme": {
+        "instance_id": "1",
+        "schema_name": "primary_theme",
+        "predicted_label": "access barriers",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-18T14:53:09.074834",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The patient mentions the distance to the clinic and its impact on their ability to reach care, indicating a structural obstacle that prevents them from getting to or booking care.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "12": {
+      "primary_theme": {
+        "instance_id": "12",
+        "schema_name": "primary_theme",
+        "predicted_label": "wait times",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-18T14:53:09.793260",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The comment mentions a long delay in getting a callback to schedule the test, indicating a wait time issue.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "2": {
+      "primary_theme": {
+        "instance_id": "2",
+        "schema_name": "primary_theme",
+        "predicted_label": "cost concerns",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-18T14:53:15.233764",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The patient mentions skipping a follow-up appointment due to the cost, indicating worry about the monetary price of care.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "3": {
+      "primary_theme": {
+        "instance_id": "3",
+        "schema_name": "primary_theme",
+        "predicted_label": "provider trust",
+        "confidence_score": 0.5,
+        "uncertainty_score": 0.5,
+        "prompt_version": 1,
+        "timestamp": "2026-08-18T14:53:38.046771",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The patient expresses distrust of their doctor's judgment, as evidenced by the statement 'My doctor never listens'. This suggests a lack of confidence in the provider's ability to provide accurate advice.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "4": {
+      "primary_theme": {
+        "instance_id": "4",
+        "schema_name": "primary_theme",
+        "predicted_label": "wait times",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-18T14:53:43.117688",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The text mentions a 'four months out' appointment, indicating a long lead time for an available appointment, which aligns with the definition of wait times.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "5": {
+      "primary_theme": {
+        "instance_id": "5",
+        "schema_name": "primary_theme",
+        "predicted_label": "access barriers",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-18T14:53:48.329369",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The comment expresses that the patient cannot find a specialist due to distance, making it impossible for them to access care.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "6": {
+      "primary_theme": {
+        "instance_id": "6",
+        "schema_name": "primary_theme",
+        "predicted_label": "cost concerns",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-18T14:53:54.467271",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The patient mentions fear of debt and bills piling up, indicating worry about the monetary price of care. This does not fit 'access barriers' because they have insurance and can reach the clinic, or 'wait times' because they do not mention delay in receiving care.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "7": {
+      "primary_theme": {
+        "instance_id": "7",
+        "schema_name": "primary_theme",
+        "predicted_label": "provider trust",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-18T14:54:04.533944",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The comment expresses confidence in the provider's judgment and feeling heard, indicating a high level of trust.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "8": {
+      "primary_theme": {
+        "instance_id": "8",
+        "schema_name": "primary_theme",
+        "predicted_label": "wait times",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-18T14:54:09.932966",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The comment specifically mentions waiting in the waiting room for almost two hours past their scheduled time, indicating a delay between seeking care and receiving it.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "9": {
+      "primary_theme": {
+        "instance_id": "9",
+        "schema_name": "primary_theme",
+        "predicted_label": "access barriers",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-18T14:54:16.351172",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The patient mentions being unable to navigate the system due to language barriers, which blocks getting to or booking care.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "10": {
+      "primary_theme": {
+        "instance_id": "10",
+        "schema_name": "primary_theme",
+        "predicted_label": "cost concerns",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-18T14:54:22.035520",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The comment expresses a worry about the monetary price of care, specifically mentioning 'pre-pay the whole procedure' and 'I just don't have that kind of money'. This indicates a concern about affordability and fear of debt, fitting the definition of cost concerns.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    }
+  },
   "human_labeled_ids": [],
-  "llm_labeled_ids": [],
+  "llm_labeled_ids": [
+    "2",
+    "10",
+    "8",
+    "12",
+    "4",
+    "3",
+    "9",
+    "7",
+    "1",
+    "6",
+    "5",
+    "11"
+  ],
   "disagreement_ids": [],
   "validation_sample_ids": [],
   "pending_relabel_ids": [],
@@ -17,12 +245,89 @@
     "disagreements": 0,
     "agreement_rate": 0.0
   },
-  "confidence_history": {},
+  "confidence_history": {
+    "11": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "1": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "12": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "2": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "3": [
+      [
+        1,
+        0.5
+      ]
+    ],
+    "4": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "5": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "6": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "7": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "8": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "9": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "10": [
+      [
+        1,
+        1.0
+      ]
+    ]
+  },
   "reannotation_counts": {},
   "per_version_agreement": {},
   "refinement_consecutive_failures": 0,
   "pending_refinements": [],
   "refinement_log": [],
   "icl_library": null,
-  "last_review_revision": null
+  "last_review_revision": null,
+  "edge_case_rule_data": {
+    "rules": {},
+    "categories": {}
+  }
 }

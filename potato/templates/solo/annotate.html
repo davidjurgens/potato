@@ -303,15 +303,13 @@
     }
 
     /* The `hidden` attribute must win over the explicit `display: flex`
-       rules below (JS toggles both panels via `.hidden = true/false`).
-       Without this, the bare `.prompt-peek-options { display: flex }` /
-       `.prompt-peek-feedback { display: flex }` rules override `[hidden]`
-       (equal specificity, author CSS beats the UA default), so both
-       panels render open with unpopulated/default inputs even when JS
-       thinks they're closed — same bug class already fixed for
-       `.cb-panel` in base_solo.html. */
-    .prompt-peek-options[hidden],
-    .prompt-peek-feedback[hidden] { display: none; }
+       rule below (JS toggles the panel via `.hidden = true/false`).
+       Without this, the bare `.prompt-peek-options { display: flex }`
+       rule overrides `[hidden]` (equal specificity, author CSS beats the
+       UA default), so the panel renders open with unpopulated/default
+       inputs even when JS thinks it's closed — same bug class already
+       fixed for `.cb-panel` in base_solo.html. */
+    .prompt-peek-options[hidden] { display: none; }
 
     /* ── Distill Options (codebook -> prompt rendering knobs) ───── */
     .prompt-peek-options {
@@ -351,36 +349,6 @@
         background: color-mix(in oklab, var(--foreground, #09090b) 8%, transparent);
         padding: 0 4px;
         border-radius: 3px;
-    }
-
-    /* ── Get Feedback panel (LLM critique of the prompt) ─────────── */
-    .prompt-peek-feedback {
-        margin-top: var(--space-sm, 0.5rem);
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-sm, 0.5rem);
-    }
-
-    .feedback-item {
-        padding: var(--space-sm, 0.5rem) var(--space-md, 1rem);
-        border: 1px solid var(--border, #e4e4e7);
-        border-left-width: 3px;
-        border-radius: var(--radius, 0.5rem);
-        font-size: var(--text-xs, 0.75rem);
-    }
-
-    .feedback-item[data-severity="high"] { border-left-color: #dc2626; }
-    .feedback-item[data-severity="medium"] { border-left-color: #d97706; }
-    .feedback-item[data-severity="low"] { border-left-color: #71717a; }
-
-    .feedback-item .feedback-issue {
-        font-weight: 600;
-        color: var(--foreground, #09090b);
-    }
-
-    .feedback-item .feedback-suggestion {
-        margin-top: 2px;
-        color: var(--muted-foreground, #71717a);
     }
 
     /* ── LLM "thinking" placeholder (on-demand suggestion) ──────── */
@@ -587,8 +555,6 @@
                             id="prompt-peek-refresh">Refresh</button>
                     <button type="button" class="btn btn-secondary"
                             id="prompt-peek-options-toggle">Options</button>
-                    <button type="button" class="btn btn-secondary"
-                            id="prompt-peek-feedback-btn">Get Feedback</button>
                     <span class="prompt-peek-hint">
                         Edit a code in the <strong>Codebook</strong> tray, then
                         refresh to see the <code>## Codebook</code> block change.
@@ -623,7 +589,6 @@
                 </div>
                 <pre class="prompt-peek-pre" id="prompt-peek-pre">Loading&hellip;</pre>
                 <p class="prompt-peek-note" id="prompt-peek-note" hidden></p>
-                <div class="prompt-peek-feedback" id="prompt-peek-feedback" hidden></div>
             </div>
         </details>
     </section>
@@ -969,60 +934,6 @@
                         .catch(() => { status.textContent = 'Could not save.'; });
                 });
             }
-        })();
-
-        // ── Get Feedback (LLM critique of the prompt) ─────────────────
-        // Purely advisory: never edits the prompt or codebook, just shows
-        // targeted issues/suggestions for the human to act on manually.
-        (function () {
-            const btn = document.getElementById('prompt-peek-feedback-btn');
-            const panel = document.getElementById('prompt-peek-feedback');
-            if (!btn || !panel) return;
-            const feedbackUrl = "{{ url_for('solo_mode.prompt_feedback') }}";
-
-            function renderFeedback(items) {
-                if (!items || !items.length) {
-                    panel.innerHTML = '<p class="prompt-peek-note">'
-                        + 'No notable issues found.</p>';
-                    return;
-                }
-                panel.innerHTML = items.map(it => (
-                    '<div class="feedback-item" data-severity="'
-                    + (it.severity || 'medium') + '">'
-                    + '<div class="feedback-issue">' + esc(it.issue) + '</div>'
-                    + '<div class="feedback-suggestion">' + esc(it.suggestion)
-                    + '</div></div>'
-                )).join('');
-            }
-
-            function esc(s) {
-                const d = document.createElement('div');
-                d.textContent = s == null ? '' : String(s);
-                return d.innerHTML;
-            }
-
-            btn.addEventListener('click', () => {
-                panel.hidden = false;
-                panel.innerHTML = '<p class="prompt-peek-note">Asking the model'
-                    + ' for feedback…</p>';
-                btn.disabled = true;
-                fetch(feedbackUrl + '?instance_id=' + encodeURIComponent(instanceId))
-                    .then(r => r.json().then(b => ({ ok: r.ok, body: b })))
-                    .then(res => {
-                        btn.disabled = false;
-                        if (!res.ok && res.body && res.body.reason) {
-                            panel.innerHTML = '<p class="prompt-peek-note">'
-                                + esc(res.body.reason) + '</p>';
-                            return;
-                        }
-                        renderFeedback(res.body.feedback);
-                    })
-                    .catch(() => {
-                        btn.disabled = false;
-                        panel.innerHTML = '<p class="prompt-peek-note">'
-                            + 'Could not get feedback.</p>';
-                    });
-            });
         })();
     })();
 

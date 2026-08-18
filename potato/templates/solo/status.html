@@ -1030,9 +1030,12 @@
             edge cases, agreement metrics) for this task, and restarts the workflow at
             setup. Does not touch annotators' actual submitted labels.
         </p>
-        <button class="btn btn-secondary" style="margin-top: 0.5rem; background: #dc2626; color: #fff; border-color: #dc2626;"
+        <button class="btn btn-secondary" id="debug-reset-btn"
+                style="margin-top: 0.5rem; background: #dc2626; color: #fff; border-color: #dc2626; display: inline-flex; align-items: center; gap: 0.5rem;"
                 onclick="soloDashboard.resetCodebookAndState()">
-            Reset Codebook &amp; Solo Mode State
+            <span class="loading-spinner" id="debug-reset-spinner"
+                  style="width: 14px; height: 14px; border-width: 2px; display: none;"></span>
+            <span id="debug-reset-btn-label">Reset Codebook &amp; Solo Mode State</span>
         </button>
     </div>
     {% endif %}

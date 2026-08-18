@@ -823,6 +823,13 @@ class SoloDashboard {
     );
     if (!confirmed) return;
 
+    const btn = document.getElementById('debug-reset-btn');
+    const spinner = document.getElementById('debug-reset-spinner');
+    const label = document.getElementById('debug-reset-btn-label');
+    if (btn) btn.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+    if (label) label.textContent = 'Resetting…';
+
     try {
       const resp = await fetch('/solo/api/debug/full_reset', {
         method: 'POST',
@@ -832,12 +839,16 @@ class SoloDashboard {
       if (data.success) {
         alert('Reset complete (' + data.codes_deleted + ' codebook code(s) removed).');
         window.location.reload();
-      } else {
-        alert('Error: ' + (data.error || 'Unknown error'));
+        return;
       }
+      alert('Error: ' + (data.error || 'Unknown error'));
     } catch (e) {
       alert('Error: ' + e.message);
     }
+
+    if (btn) btn.disabled = false;
+    if (spinner) spinner.style.display = 'none';
+    if (label) label.textContent = 'Reset Codebook & Solo Mode State';
   }
 
   // ── Disagreement Explorer Tab ──────────────────────────
