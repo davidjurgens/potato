@@ -2938,6 +2938,135 @@ class SoloModeManager:
         self._labeling_thread = None
         logger.info("Stopped background LLM labeling")
 
+    # === Debug: full reset ===
+
+    def full_reset(self) -> Dict[str, Any]:
+        """Debug-only: wipe the codebook and all Solo Mode tracking state,
+        then restart the workflow at the SETUP phase.
+
+        Intended for local testing, so a task/project can be re-run from
+        scratch without hand-editing or deleting state files between runs.
+        Does not touch the underlying annotation output storage (item
+        state / user state) — only the codebook and Solo Mode's own
+        bookkeeping (prompts, predictions, edge cases, ICL library, etc.).
+
+        Stops background labeling first (outside the lock, since the
+        labeling thread also acquires ``self._lock`` and a join under
+        lock could stall on it).
+        """
+        self.stop_background_labeling()
+
+        with self._lock:
+            # --- Wipe the codebook, then reseed it from the config file ---
+            #
+            # Deletes every code in a single bulk statement rather than
+            # looping codebook_service.delete_code() per code. The service
+            # call fires a change notification after *each* deletion, and
+            # the codebook/schema_bridge listener reseeds the codebook from
+            # the scheme's *current* label list whenever it sees the
+            # codebook go empty. Deleting one at a time means every
+            # intermediate notify narrows that label list down further, so
+            # the very last code deleted gets immediately resurrected as a
+            # lone surviving code instead of the codebook ending up empty.
+            # Bulk store.delete_codes() skips per-code notification.
+            #
+            # Once empty, we reseed from the *config file on disk* rather
+            # than leaving it empty: schema_bridge treats the DB as the
+            # source of truth after its first seed, so by the time a task
+            # is running, scheme['labels'] already mirrors the codebook —
+            # not the original YAML — and would just reseed nothing (or,
+            # if left stale, whatever codes existed right before the
+            # wipe). Re-reading the YAML gets back the labels the task was
+            # actually configured with, matching what a brand-new task_dir
+            # would start with.
+            codes_deleted = 0
+            try:
+                import yaml as _yaml
+                from potato.codebook import store as codebook_store
+                from potato.codebook.schema_bridge import apply_codebook_to_schemes
+
+                task_dir, project = self._codebook_ids()
+                all_ids = [
+                    c['id']
+                    for c in codebook_store.list_codes(task_dir, project)
+                ]
+                codes_deleted = codebook_store.delete_codes(task_dir, all_ids)
+
+                config_path = (
+                    self.app_config.get('__config_file__')
+                    or self.app_config.get('config_file')
+                )
+                original_labels_by_name: Dict[str, Any] = {}
+                if config_path and os.path.exists(config_path):
+                    with open(config_path, 'r') as f:
+                        file_config = _yaml.safe_load(f) or {}
+                    for s in file_config.get('annotation_schemes', []) or []:
+                        if isinstance(s, dict) and s.get('name'):
+                            original_labels_by_name[s['name']] = s.get('labels', [])
+
+                for scheme in (self.app_config.get('annotation_schemes') or []):
+                    if isinstance(scheme, dict) and scheme.get('codebook'):
+                        scheme['labels'] = original_labels_by_name.get(
+                            scheme.get('name'), []
+                        )
+
+                # Reseeds the now-empty codebook from scheme['labels'] (just
+                # restored above) and re-syncs scheme['labels']/['codebook_prompt']
+                # from the freshly seeded codebook — the same chokepoint used
+                # at server startup.
+                apply_codebook_to_schemes(self.app_config)
+            except Exception as e:
+                logger.warning(f"full_reset: codebook wipe failed: {e}")
+
+            # --- Reset tracking state to __init__ defaults ---
+            self.prompt_versions = []
+            self.current_prompt_version = 0
+            self.task_description = ""
+            self.predictions = {}
+            self.human_labeled_ids = set()
+            self.llm_labeled_ids = set()
+            self.disagreement_ids = set()
+            self.validation_sample_ids = set()
+            self.pending_relabel_ids = set()
+            self.relabel_wave_size = 0
+            self.edge_case_ids = set()
+            self.edge_case_labels = {}
+            self.confidence_history = {}
+            self.agreement_metrics = AgreementMetrics()
+            self._reannotation_counts = {}
+            self._per_version_agreement = {}
+            self._refinement_consecutive_failures = 0
+            self._pending_refinements = []
+            self._refinement_log = []
+            self._icl_library = None
+            self._last_review_revision = None
+
+            # Drop lazy-initialized components so they rebuild fresh from
+            # the (now-empty) state on next access.
+            self._edge_case_synthesizer = None
+            self._edge_case_rule_manager = None
+            self._prompt_manager = None
+            self._instance_selector = None
+            self._validation_tracker = None
+            self._llm_labeling_thread = None
+            self._prompt_optimizer = None
+            self._confidence_router = None
+            self._confusion_analyzer = None
+            self._refinement_loop = None
+            self._labeling_function_manager = None
+            self._disagreement_explorer = None
+
+            # --- Reset phase back to SETUP ---
+            self.phase_controller.reset()
+
+            self._save_state()
+
+        logger.warning(
+            f"Solo Mode full_reset: wiped {codes_deleted} codebook "
+            "code(s) and all tracking state; phase reset to SETUP"
+        )
+        return {'codes_deleted': codes_deleted}
+
     def pause_background_labeling(self) -> bool:
         """Pause the background labeling loop without tearing down the thread.
 

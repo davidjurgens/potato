@@ -815,6 +815,31 @@ class SoloDashboard {
     }
   }
 
+  async resetCodebookAndState() {
+    const confirmed = confirm(
+      'This wipes the codebook, prompts, predictions, and edge cases for ' +
+      'this task and restarts Solo Mode at setup. This cannot be undone. ' +
+      'Continue?'
+    );
+    if (!confirmed) return;
+
+    try {
+      const resp = await fetch('/solo/api/debug/full_reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await resp.json();
+      if (data.success) {
+        alert('Reset complete (' + data.codes_deleted + ' codebook code(s) removed).');
+        window.location.reload();
+      } else {
+        alert('Error: ' + (data.error || 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Error: ' + e.message);
+    }
+  }
+
   // ── Disagreement Explorer Tab ──────────────────────────
 
   async _loadDisagreements(labelFilter) {

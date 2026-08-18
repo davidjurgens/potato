@@ -4,6 +4,7 @@
 task_dir: .
 port: 8000
 verbose: true
+debug: true
 
 annotation_task_name: "sentiment-solo-demo"
 output_annotation_dir: "annotations"
@@ -30,7 +31,7 @@ solo_mode:
       endpoint_url: "http://localhost:11434"
 
   # Uncertainty estimation
-  uncertainty:
+  uncertainty: 
     strategy: "direct_confidence"
 
   # Thresholds

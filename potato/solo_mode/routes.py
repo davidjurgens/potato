@@ -910,6 +910,11 @@ def status():
     """
     manager = get_solo_mode_manager()
 
+    # Lazy import to avoid circular dependencies at module load (same
+    # pattern as admin_required below).
+    from potato.flask_server import config as _config
+    debug_mode = _config.get('debug', False)
+
     # Edge case rule data
     edge_case_rule_stats = None
     pending_categories = []
@@ -945,6 +950,7 @@ def status():
         pending_categories=pending_categories,
         approved_count=approved_count,
         rejected_count=rejected_count,
+        debug_mode=debug_mode,
     )
 
 
@@ -1543,6 +1549,29 @@ def api_refinement_reset():
     if hasattr(manager, '_refinement_consecutive_failures'):
         manager._refinement_consecutive_failures = 0
     return jsonify({'success': True, 'message': 'Refinement loop reset'})
+
+
+@solo_mode_bp.route('/api/debug/full_reset', methods=['POST'])
+@admin_required
+@solo_mode_required
+def api_debug_full_reset():
+    """Debug-only: wipe the codebook and all Solo Mode tracking state and
+    restart the workflow at the SETUP phase, for easier local testing.
+
+    Does not touch underlying annotation output storage. Admin-gated
+    (X-API-Key) since this is destructive.
+    """
+    manager = get_solo_mode_manager()
+    try:
+        result = manager.full_reset()
+    except Exception as e:
+        logger.error("Solo Mode full_reset failed: %s", traceback.format_exc())
+        return jsonify({'error': 'An internal error occurred'}), 500
+    return jsonify({
+        'success': True,
+        'message': 'Codebook and Solo Mode state reset',
+        **result,
+    })
 
 
 @solo_mode_bp.route('/api/refinement/log')

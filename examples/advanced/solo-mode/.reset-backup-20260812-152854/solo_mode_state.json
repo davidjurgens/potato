@@ -158,10 +158,10 @@
         "timestamp": "2026-03-18T15:13:27.157140",
         "model_name": "llama3.2:3b",
         "reasoning": "The review mentions a 'terrible experience' and specific issues with the item's condition and customer service, indicating a strong negative sentiment.",
-        "human_label": "positive",
-        "agrees_with_human": false,
-        "disagreement_resolved": true,
-        "resolution_label": "positive"
+        "human_label": "negative",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
       }
     },
     "4": {
@@ -490,49 +490,52 @@
   },
   "human_labeled_ids": [
     "21",
-    "13",
-    "6",
-    "18",
-    "14",
-    "2",
-    "7",
     "15",
-    "9",
-    "16",
-    "17",
-    "20",
+    "3",
     "12",
-    "19",
-    "8",
-    "11",
-    "10"
-  ],
-  "llm_labeled_ids": [
-    "13",
-    "6",
-    "19",
-    "21",
-    "2",
+    "9",
     "7",
-    "9",
-    "16",
+    "6",
     "1",
-    "5",
-    "20",
-    "12",
-    "8",
-    "11",
     "10",
     "14",
-    "15",
+    "11",
+    "19",
+    "16",
+    "8",
     "17",
+    "2",
+    "13",
+    "4",
+    "20",
+    "5",
+    "18"
+  ],
+  "llm_labeled_ids": [
+    "21",
+    "15",
     "3",
-    "18",
-    "4"
+    "12",
+    "9",
+    "7",
+    "6",
+    "1",
+    "10",
+    "14",
+    "11",
+    "19",
+    "16",
+    "8",
+    "17",
+    "2",
+    "13",
+    "4",
+    "20",
+    "5",
+    "18"
   ],
   "disagreement_ids": [
     "21",
-    "2",
     "8"
   ],
   "validation_sample_ids": [],
@@ -541,10 +544,10 @@
   "edge_case_ids": [],
   "edge_case_labels": {},
   "agreement_metrics": {
-    "total_compared": 19,
+    "total_compared": 18,
     "agreements": 16,
-    "disagreements": 3,
-    "agreement_rate": 0.8421052631578947
+    "disagreements": 2,
+    "agreement_rate": 0.8888888888888888
   },
   "confidence_history": {
     "1": [
@@ -675,12 +678,7 @@
     ]
   },
   "reannotation_counts": {},
-  "per_version_agreement": {
-    "7": {
-      "compared": 1,
-      "agreements": 0
-    }
-  },
+  "per_version_agreement": {},
   "refinement_consecutive_failures": 0,
   "pending_refinements": [],
   "refinement_log": [],
@@ -689,34 +687,5 @@
   "edge_case_rule_data": {
     "rules": {},
     "categories": {}
-  },
-  "validation_tracker": {
-    "metrics": {
-      "total_compared": 1,
-      "agreements": 0,
-      "disagreements": 1,
-      "agreement_rate": 0.0,
-      "label_agreements": {},
-      "label_disagreements": {
-        "positive": 1
-      },
-      "confusion_matrix": {
-        "negative|positive": 1
-      },
-      "recent_agreement_rate": 0.0,
-      "trend": "stable"
-    },
-    "comparison_history": [
-      {
-        "instance_id": "2",
-        "human_label": "positive",
-        "llm_label": "negative",
-        "schema_name": "sentiment",
-        "agrees": false,
-        "timestamp": "2026-08-12T15:40:58.436137"
-      }
-    ],
-    "validation_samples": {},
-    "llm_labels_since_review": 0
   }
 }

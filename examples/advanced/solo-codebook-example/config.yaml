@@ -18,6 +18,7 @@ annotation_task_name: "solo-codebook-demo"
 task_dir: .
 port: 8000
 verbose: true
+debug: true
 
 # Keeps you logged in across server restarts (default behavior generates a
 # fresh random session key on every start, which silently logs everyone

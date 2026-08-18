@@ -1,5 +1,5 @@
 {
-  "current_phase": "edge-case-labeling",
+  "current_phase": "parallel-annotation",
   "transition_history": [
     {
       "from_phase": "setup",
@@ -47,6 +47,48 @@
       "from_phase": "edge-case-synthesis",
       "to_phase": "edge-case-labeling",
       "timestamp": "2026-07-28T13:00:02.819530",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "edge-case-labeling",
+      "to_phase": "prompt-validation",
+      "timestamp": "2026-08-12T15:25:59.350601",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "prompt-validation",
+      "to_phase": "parallel-annotation",
+      "timestamp": "2026-08-12T15:25:59.353373",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "parallel-annotation",
+      "to_phase": "edge-case-synthesis",
+      "timestamp": "2026-08-12T15:31:20.142915",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "edge-case-synthesis",
+      "to_phase": "edge-case-labeling",
+      "timestamp": "2026-08-12T15:31:54.890586",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "edge-case-labeling",
+      "to_phase": "prompt-validation",
+      "timestamp": "2026-08-12T15:37:15.053049",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "prompt-validation",
+      "to_phase": "parallel-annotation",
+      "timestamp": "2026-08-12T15:37:15.060634",
       "reason": "",
       "metadata": {}
     }
