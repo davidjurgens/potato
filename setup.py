@@ -70,6 +70,24 @@ _AUTH_DEPS = [
 _LANGCHAIN_DEPS = [
     "langchain-core>=0.1.0",
 ]
+# Optional server-side vision stack. Browser segmentation needs none of this:
+# ONNX Runtime Web is vendored under potato/static/ and runs the default models
+# with no Python dependency at all. These cover the server endpoints
+# (`ai_type: sam`, `sam3`, SAM 2 video propagation) and decoding the image
+# formats browsers cannot display.
+#
+# segment-anything is deliberately absent. Meta publishes it from GitHub, not
+# PyPI, and the `segment-anything` name on PyPI is an anonymous upload with no
+# homepage -- not something to pull into every `potato[vision]` install. The
+# endpoint's error message names the official source instead.
+_VISION_DEPS = [
+    "onnxruntime>=1.17.0",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "pillow-heif>=0.15.0",
+    "rawpy>=0.19.0",
+    "imageio>=2.31.0",
+]
 # SQL data sources, including live cursor-based ingestion. The driver is
 # separate and backend-specific: psycopg2-binary for PostgreSQL, pymysql for
 # MySQL. SQLite needs nothing beyond the standard library.
@@ -79,7 +97,7 @@ _DB_DEPS = [
 
 setup(
     name="potato-annotation",
-    version='2.7.1',
+    version='2.8.0',
     author="Potato Development Team",
     author_email="jurgens@umich.edu",
     description="A flexible, stand-alone, web-based platform for text annotation tasks",
@@ -123,6 +141,9 @@ setup(
         "auth": _AUTH_DEPS,
         "langchain": _LANGCHAIN_DEPS,
         "db": _DB_DEPS,
+        "vision": _VISION_DEPS,
+        # `all` deliberately excludes `vision`: torch is a multi-gigabyte
+        # install, and nothing in the default experience needs it.
         "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS,
     },
     include_package_data=True,

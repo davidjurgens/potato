@@ -98,8 +98,11 @@ class SAMEndpoint(BaseAIEndpoint):
             from segment_anything import SamPredictor, sam_model_registry
         except ImportError as exc:  # pragma: no cover - depends on optional extra
             raise RuntimeError(
-                "The SAM endpoint needs the optional vision extra: "
-                "pip install 'potato[vision]'"
+                "The SAM endpoint needs torch and segment-anything. Install "
+                "the vision extra for torch: pip install 'potato[vision]'. "
+                "segment-anything is published from GitHub, not PyPI: "
+                "pip install "
+                "'git+https://github.com/facebookresearch/segment-anything.git'"
             ) from exc
 
         model = sam_model_registry[self.model_type](checkpoint=self.checkpoint)

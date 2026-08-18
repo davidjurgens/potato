@@ -5,7 +5,6 @@ graft potato/templates
 # would ship thousands of the maintainer's own task templates.
 prune potato/templates/generated
 include potato/schemas/*.json
-recursive-include potato/base_html/ *
 recursive-include potato/static/ *
 recursive-include potato/i18n/ *.yaml
 global-exclude .DS_Store

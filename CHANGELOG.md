@@ -2,87 +2,51 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
-## [Unreleased] - Threaded Conversations, and ConvoKit Both Ways
+## [2.8.0] - Vision, and the Statistics to Check It
 
-**Threaded conversation annotation.** The `dialogue` display now renders reply
-structure: set `indent_replies: true` and nesting is derived from each turn's
-`reply_to` — nothing has to precompute it, and turn identity is read from
-`turn_id`, `step_id`, or plain `id`, so forum exports, chat logs, and mailing
-lists all work unchanged. Adds per-turn timestamps (`relative`/`absolute`/`epoch`)
-and metadata chips. A threaded conversation supports the full range of annotation
-at once on one field: whole-thread schemes, per-comment radio/likert/select/text,
-spans, and `span_link` between spans in different comments. `conversation_tree`
-gains per-node widgets keyed by node id, making a two-view task possible — a
-branching tree for structure and a flat thread for text — where both views refer
-to the same messages.
+Potato's image, video, 3D, embodied and world-model surfaces were rebuilt from a
+thin layer over the text machinery into the main body of the tool, and the
+agreement statistics were extended to cover them. **Chance-corrected agreement
+over geometry and over time** — detection, localization, classification, a
+geometry scale reported as σ and a KS test, STAPLE for latent mask consensus, and
+temporal boundary agreement reported as a tolerance sweep rather than at one
+threshold. This also fixed adjudication, which compared annotation *keys* and so
+scored every image pair at 1.0: two annotators who agreed on nothing looked
+unanimous and no image was ever routed for review.
 
-**ConvoKit integration, both directions.** `potato convokit <corpus>` imports any
-[ConvoKit](https://convokit.cornell.edu/) corpus (by name, directory, or zip) at
-conversation or utterance granularity, and `--format convokit` exports annotations
-back as corpus metadata — either `info.<field>.jsonl` overlays that drop into an
-existing corpus or a full corpus dump. Each turn carries the real ConvoKit
-utterance id, so per-comment annotations round-trip by direct lookup. Reads every
-format variant in the wild, including the pre-rename `user`/`root`/`users.json`
-layout. No `convokit` dependency — the format is read and written with the
-standard library. Also `--emit-config` to draft a task from a corpus's own
-metadata, `--dry-run`, and `--list-corpora`.
+Everything under it: five new geometry primitives (`polyline`, `keypoint_set`,
+`ellipse`, `cuboid_2d`, `tubelet`) plus instance-keyed masks; **interactive
+segmentation in the browser** with vendored ONNX Runtime Web, so a default
+install segments with no GPU and no network; **text prompting** via Grounding
+DINO and **SAM 2 video mask propagation** (measured at 0.974–0.979 IoU per frame
+with no decay), behind a single model zoo; **deep zoom** with masks at the
+source's full resolution; 15 importers and 29 exporters with a format matrix a
+test keeps honest; media ingest for TIFF, HEIC, RAW, HEVC and ProRes; **point
+clouds** with octree LOD, calibration and 2D projection, **depth maps**, and
+orthographic slab views; **embodied episodes** (LeRobot v2, RLDS, HDF5, ROS
+bags); **world-model rollout evaluation** with break-point agreement; and **VLM
+grounding, pointing and region captioning**.
 
-**Fixes**
+Also: threaded conversation rendering and ConvoKit import/export both ways;
+opt-in keystroke logging with composed/transcribed/pasted detection; live
+database ingestion ([#166](https://github.com/davidjurgens/potato/issues/166));
+machine-checkable config and OpenAPI specs generated from the registries, with CI
+failing on drift; the admin Instances tab de-quadratified (15.1 s → 23 ms at
+2,000 items) with two columns that had never worked; every frontend asset
+vendored, closing an offline break and a per-page-load IP leak to Google; and the
+packaging fix from [#164](https://github.com/davidjurgens/potato/pull/164) —
+**wheels from 2.7.1 and earlier were missing every template in a subdirectory**,
+breaking solo mode, the admin pages, judge calibration and the corpus map for
+anyone who installed from PyPI.
 
-- **Single-select schemas could persist every value the annotator clicked
-  ([#167](https://github.com/davidjurgens/potato/issues/167)).** The stale-label
-  pre-clear in `/updateinstance` keyed off a hardcoded `{'radio', 'multiselect'}`
-  set, so a `likert` (or `confidence`) schema kept `Label(confidence, "5")` when
-  `Label(confidence, "4")` was written and both reached `user_state.json`. The same
-  block only ever touched `instance_id_to_label_to_value`, so on SurveyFlow pages —
-  consent, instructions, training, prestudy, poststudy — *every* type accumulated,
-  radio included. Both CSV exports then reproduced the duplicates with no way to tell
-  which value the annotator settled on. Exclusivity now comes from a `single_select`
-  flag on the schema registry (`radio`, `likert`, `confidence`), resolves SurveyFlow
-  question types via `config['_surveyflow_schemes']`, and is enforced through the new
-  phase-aware `UserState.clear_schema_labels()` plus a write-time invariant in
-  `add_label_annotation()`, so no route can bypass it. A `radio`'s `free_response`
-  companion label is preserved; a likert's `bad_text` is not (it is a real member of
-  the group).
-- Answer revisions remain recoverable. `handleInputChange()` recorded `old_value:
-  null` for every radio/likert change — it read the *new* label's entry, which is
-  always undefined — so the behavioral trail could not show what was superseded. It
-  now captures the previously selected label and value, and `/api/track_annotation_change`
-  stamps the phase and page so changes made on survey pages (which all share the
-  `__phase_page__` bucket) stay attributable. Set `export_include_annotation_changes:
-  true` to write `annotation_changes.csv`.
-- `phase_responses.csv` gains a `sequence` column, so row ordering is documented
-  rather than incidental.
-- New `potato repair-annotations <config>` rewrites state files already corrupted by
-  the above. It resolves each answer from the timestamped `annotation_changes` trail
-  rather than stored order — the label dict serializes in *first-touch* order, so a
-  5 → 4 → 5 revision persists as `["5", "4"]` and "last entry wins" would answer 4.
-  Runs as a dry run by default and reports every value it had to resolve heuristically.
-  See [Single-Select Answer Integrity](docs/data-export/single-select-integrity.md).
-- `MysqlUserState` has no `instance_id_to_label_to_value` attribute, so the same
-  `/updateinstance` block raised `AttributeError` on every save under the MySQL
-  backend. All three direct accesses now go through `UserState` methods.
-- **Dialogue span offsets were wrong.** `reconstruct_dialogue_dom_text()`
-  collapsed whitespace while the client deliberately did not, so every dialogue
-  span was sliced at a drifting offset — a few characters further off per turn,
-  which meant short conversations looked correct and long ones silently returned
-  neighbouring text. Both sides now agree byte for byte, pinned by
-  `tests/unit/test_dialogue_span_contract.py`.
-- `.per-turn-rating` was missing from the client's span-offset skip list, so the
-  legacy `per_turn_ratings` widget shifted every subsequent offset.
-- Removed a stale config warning claiming turn-level widgets break span offsets
-  on the same field. They do not, and the warning discouraged a combination —
-  rate each comment *and* highlight text in it — that is a main reason to
-  annotate conversations.
-- `potato/export/cli.py` read data files line by line only, so a JSON-array data
-  file exported with **zero items**, silently stripping every exporter of the
-  item data it needs.
-- `validate_cli` reported `FAILED — 0 error(s)` for configs that pass with
-  warnings.
-- `ConversationTreeDisplay` ignored its `display_options` block.
+Single-select schemas no longer persist every value clicked
+([#167](https://github.com/davidjurgens/potato/issues/167)), with
+`potato repair-annotations` for already-corrupted state.
 
-New examples under `examples/conversation/`: `threaded-forum` (no ConvoKit),
-`convokit-awry`, `convokit-politeness` (legacy corpus format), `convokit-tree`.
+**Breaking:** image annotation keyboard shortcuts now follow V7 conventions by
+default. Set `keybinding_profile: legacy` to keep the old table.
+
+**[Full Release Notes →](docs/releasenotes/v2.8.0.md)**
 
 ---
 

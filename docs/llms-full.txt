@@ -50920,6 +50920,448 @@ route. See [Testing](../guides/testing.md) for the drift tests that enforce this
 
 ---
 
+<!-- source: docs/releasenotes/v2.8.0.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.8.0/
+
+# Release Notes: v2.8.0 — Vision, and the Statistics to Check It
+
+36 commits, 1,145 files, ~205,000 lines added since v2.7.1. Most of it is one
+project: rebuilding Potato's image, video, 3D, embodied and world-model
+surfaces, which had been a thin layer over the text annotation machinery. The rest is threaded
+conversations and ConvoKit, keystroke logging, live database ingestion,
+machine-readable specs for coding agents, and a repair pass on the packaging,
+performance and offline-install problems found along the way.
+
+Two things to read before upgrading: **image annotation keyboard shortcuts have
+changed by default** (§Upgrading), and if you install from PyPI rather than
+from a checkout, **2.7.1 and earlier shipped a broken wheel** (§Packaging).
+
+## Agreement over geometry and time
+
+The headline, and the part with no equivalent elsewhere: Potato reports
+**chance-corrected agreement over shapes, and over the moment something
+happened**. Existing tools compare geometry with a raw IoU threshold, which
+does not correct for chance and says nothing about polylines, keypoints or
+temporal boundaries.
+
+Agreement decomposes, because the disagreement does. Annotators can differ on
+whether an object is there at all, on what to call it, and on where its edge
+lies, and those have different fixes:
+
+- **detection** — did they find the same objects (nominal α over presence)
+- **localization** — given a match, do they agree where it is
+- **classification** — given a match, do they agree what it is
+- **geometry scale** — reported as a σ (typical disagreement in image widths)
+  and a KS test, rather than a single coefficient that hides the distribution
+
+Masks add STAPLE (Warfield et al. 2004) for a latent consensus boundary with
+per-rater sensitivity and specificity — the medical-imaging analogue of MACE,
+used because MACE models a finite shared label set and a mask does not have
+one. Box and point coordinates go through the random-effects decomposition
+already inside `iaa/continuous.py`, which separates an annotator who
+systematically draws bigger boxes (bias) from one who is noisy (variance).
+
+Temporal agreement uses the same machinery in one dimension, and everything
+that depends on a tolerance window is reported as a **sweep** rather than at a
+single threshold. Annotators who agree to within two seconds may agree on
+nothing at a quarter-second; quoting one number makes the claim
+unfalsifiable. Flat across the sweep means they found the same instant.
+
+This also fixed something that was quietly wrong. Adjudication compared the
+*keys* of an annotation, and an image schema stores everything under one key
+named `_data`, so **every image pair scored 1.0 agreement** — two annotators
+who agreed on nothing looked unanimous, and no image was ever routed for
+review. See [Geometry Agreement](../advanced/geometry_agreement.md).
+
+## Vision: the surface works now
+
+Several shipped vision features did not run. Accepting an AI detection called a
+method that did not exist. The freeform tool drew paths that were never saved.
+Masks leaked between instances, because masks are not fabric objects and every
+canvas-scoped operation missed them — three separate instance-switch
+corruption bugs in one method's blast radius.
+
+Beyond the repairs:
+
+- **Geometry primitives** — `polyline`, `keypoint_set` (COCO visibility flags
+  and declared skeletons), `ellipse`, `cuboid_2d` and `tubelet`, each wired
+  through the whole path from the tool list to the importers. COCO keypoints
+  stop being import-only.
+- **Instance-keyed masks** — two adjacent cats are two instances, not one
+  blob. Bare label keys are read-coerced, so no migration.
+- **Class visibility** — hide or solo a class with `h` / `Shift+H`, persisted
+  per project rather than per file, and shared with video annotation.
+- **Copy from the previous image** (`Ctrl/Cmd+D`), with `carry_over` for
+  automatic pre-fill on items that have no annotations of their own.
+- **Tablet support** — two-finger pan and pinch zoom. Panning was gated on
+  Alt/Space, keyboard state a stylus annotator does not have, so zooming in
+  stranded them.
+- The mask/viewport transform is now one round-trip-tested function pair
+  instead of two implementations that could disagree. They did, which is why
+  masks drifted from the image under zoom.
+
+## Segmentation, text prompts, and video tracking
+
+`pip install potato` gives working interactive segmentation with no GPU, no new
+Python dependency and no network. ONNX Runtime Web is vendored; `mobile_sam` is
+the default.
+
+- **Click to segment** — positive and negative points, box prompts, and
+  refinement from a prior mask. Decode is under 100 ms and entirely local.
+- **Text prompts** (Grounding DINO, Apache-2.0, in the browser) — type a
+  phrase, get every match boxed as a suggestion. `wordpiece.js` implements BERT
+  tokenization directly rather than pulling in 2 MB of transformers.js for one
+  function, checked token-for-token against HuggingFace tokenizers. Quantization
+  is `q4f16` on measurement: against the 686 MB full-precision export it holds
+  box IoU 0.972 where int8 holds 0.874, and is 50 MB smaller.
+- **Video mask propagation** (SAM 2, server-side) — draw a mask on one frame,
+  propagate, correct any frame, re-propagate. Measured against known ground
+  truth: per-frame IoU 0.974–0.979 with no decay, 1.32 s/frame on CPU. Occluded
+  frames come back empty because the model reports occlusion itself.
+- **SAM 3** is available as a licence-gated server endpoint. No weights are
+  bundled and `download-models` refuses without `--accept-licence`.
+- **`potato/model_zoo.py`** is the single registry behind all of it: task,
+  licence, whether that licence needs explicit acceptance, requirements, and
+  the parameters the browser needs. Adding a model is one entry plus one
+  session class. See [Model Zoo](../ai-intelligence/model_zoo.md).
+
+## Import and export formats
+
+15 importers and 29 exporters. COCO (including crowd RLE, read as-is), YOLO,
+Pascal VOC, CVAT, V7 Darwin, Labelbox, LabelMe, Cityscapes, KITTI,
+MOTChallenge, DAVIS/YouTube-VOS, Open Images, HuggingFace, WebDataset and VIA.
+
+`potato import` takes directories and zips, not just single files, and
+auto-detects by signature file. [The format
+matrix](../data-export/format_matrix.md) documents every format against every
+capability with explicit lossiness, and a test asserts the table matches the
+registries, so it cannot lie.
+
+**Media ingest** handles what browsers cannot display: TIFF (multi-page and
+16-bit, with a windowing control), HEIC and camera RAW transcode to WebP;
+HEVC, ProRes, MKV and MOV get an ffmpeg proxy transcode with an
+extracted-frames fallback. ffmpeg and Pillow-SIMD stay optional — missing them
+produces the exact conversion command, never a broken player.
+
+## Deep zoom
+
+`viewer: deepzoom` builds one tile pyramid served as both DZI and IIIF Image
+API 3.0, driven by OpenSeadragon (vendored). The arrangement is inverted from
+the usual: fabric draws in image-pixel coordinates and OpenSeadragon transforms
+the whole canvas, so coordinate conversion and normalization are correct
+unmodified. The transform is read from the library, never recomputed —
+recomputing it is wrong exactly mid-animation. **Masks work at the source's
+full resolution**, which V7 documents as unsupported on tiled images.
+See [Deep Zoom](../annotation-types/multimedia/deep_zoom.md).
+
+## 3D, depth, and embodied episodes
+
+- **Point clouds** — `spatial_annotation` with `cuboid_3d`, `point_3d`,
+  `polyline_3d` and `segment_3d`. PCD, PLY, KITTI `.bin` and LAS readers;
+  KITTI and nuScenes import and export. Calibration is first-class, so a 3D box
+  projects into every camera image and annotators verify in 2D while editing in
+  3D.
+- **Octree level of detail**, on by default: each node keeps the points its
+  ancestors did not claim, so a partially loaded cloud looks coarse rather than
+  incomplete. This uncovered a live data bug — `segment_3d` stores point
+  indices whose stability assumed a fixed decimation, but `max_points` is a
+  schema option, so lowering it silently re-pointed every stored per-point
+  label. Indices now refer to the source file.
+- **Depth maps** — 16-bit PNG/TIFF, NPY, PFM and EXR with a near/far window,
+  colormaps, an RGB underlay and a metres readout under the cursor. The readout
+  is the point: an 8-bit colormap is not injective, and a depth map that is 30%
+  short looks normal once the window rescales. Zero means "no return" and is
+  painted magenta rather than treated as the nearest surface.
+- **Orthographic slab views** — three axis-aligned panels below the viewport. A
+  perspective projection compresses extent along the view axis, so boxes placed
+  by eye come out short in depth and the error is invisible from the camera
+  that drew them.
+- **Embodied episodes** — `episode_annotation` renders N synchronized video
+  streams plus M time series (joint positions, gripper state, force-torque,
+  reward) on one timeline. Action-phase segmentation, success/failure with a
+  cause taxonomy, dense progress-reward curves, hindsight instruction
+  relabelling, and affordance points. Imports LeRobot v2, RLDS/TFDS, HDF5 and
+  ROS bags; exports LeRobot v2 plus a JSONL sidecar that does not require
+  rewriting the source dataset. See
+  [Episodes](../annotation-types/embodied/episodes.md).
+
+## World-model rollout evaluation
+
+`rollout_evaluation` puts several videos of the same scenario side by side,
+frame-locked on one timeline. The annotator finds the frame at which each
+rollout stops making sense, tags why from a physics and consistency taxonomy,
+picks a winner, and — where the scenario carries an intervention — judges
+whether the divergence follows from it.
+
+Rating a generated video 3/5 for "physical plausibility" produces a number that
+cannot be checked or located. A frame plus a category can: a researcher opens
+frame 47, the failure has a place in the tensor, and two annotators' answers
+are two points on a line, so a chance-corrected statistic applies.
+
+Three design decisions:
+
+- **"No breaks" is an explicit act**, not the absence of marks. An unmarked
+  panel is otherwise ambiguous between "watched it, nothing wrong" and "never
+  got to it", and those give opposite detection agreements.
+- **Panel order and blinding are decided server-side**, seeded from
+  (annotator, item) so a revisit shows the same order. A client-side shuffle
+  reshuffles on reload, and the annotator's second look disagrees with their
+  first.
+- **The frame rate is declared, never guessed.** HTML5 video exposes none, and
+  a frame number off by 30/24 is worse than no frame number because it looks
+  right. Without a declared rate, frame numbers are omitted.
+
+See [World-Model Evaluation](../agent-evaluation/world_model_eval.md).
+
+## VLM grounding and pointing
+
+`grounding_eval` and `region_caption`, plus `potato/grounding/`. Grounding,
+pointing and ungroundedness are scored separately, because a point has no area
+and IoU against it is always 0. Grounding accuracy reports four thresholds
+rather than one. Caption agreement needed no new coefficient, only a distance
+over text — α already accepts a callable — and the default token distance is
+documented as a poor proxy, with measured numbers, rather than sold as one.
+See [VLM Grounding](../agent-evaluation/vlm_grounding.md).
+
+## Model-in-the-loop
+
+- **Vision active learning** — `potato/embedders/` puts one project-wide
+  embedder behind a lazy registry, with text, image, audio, video and
+  admin-supplied backends and modality detection from the items. Every existing
+  query strategy (uncertainty, diversity, BADGE, BALD, hybrid) then works on
+  images unchanged. The corpus map uses the same embedder, no longer requires
+  `diversity_ordering`, and reports which backend, model and field produced the
+  points.
+- **VLM critique** — crop each annotated region, ask a vision model whether it
+  contains what it claims, whether the boundary is tight, and what was missed.
+  Renders as a review queue with rationales. This catches the failure IoU
+  cannot: two annotators confidently agreeing on the wrong thing.
+- **Drawing telemetry** — time per shape, vertex count against shape
+  complexity, stroke dynamics, zoom behaviour, revision count, and
+  AI-suggestion accept latency, which is how rubber-stamping shows up. Raw
+  streams go to SQLite, never into `user_state.json`.
+
+## Threaded conversations and ConvoKit, both ways
+
+The `dialogue` display renders reply structure: set `indent_replies: true` and
+nesting is derived from each turn's `reply_to`, with turn identity read from
+`turn_id`, `step_id` or plain `id`, so forum exports, chat logs and mailing
+lists work unchanged. Per-turn timestamps and metadata chips. One field
+supports whole-thread schemes, per-comment radio/likert/select/text, spans, and
+`span_link` between spans in different comments, all at once.
+`conversation_tree` gains per-node widgets keyed by node id, so a branching
+tree and a flat thread can refer to the same messages.
+
+`potato convokit <corpus>` imports any [ConvoKit](https://convokit.cornell.edu/)
+corpus by name, directory or zip, at conversation or utterance granularity, and
+`--format convokit` exports back as corpus metadata — either `info.<field>.jsonl`
+overlays or a full corpus dump. Each turn carries the real utterance id, so
+per-comment annotations round-trip by lookup. Every format variant in the wild
+is read, down to the pre-rename `user`/`root`/`users.json` layout. No
+`convokit` dependency; the format is read and written with the standard library.
+Also `--emit-config`, `--dry-run` and `--list-corpora`.
+See [ConvoKit](../integrations/convokit.md).
+
+## Keystroke logging and typing dynamics
+
+Opt-in via `keystroke_logging.enabled`: content-blind capture of *how* a
+free-text answer was produced, with composed / transcribed / pasted detection.
+Capture keys on `beforeinput` and `InputEvent.inputType`, not `keydown` —
+paste, drop, IME, dictation and autofill all mutate a field without firing
+keydown, so a keydown-only logger is blind to exactly the cases this exists to
+detect. The gap between characters that appeared and keys actually pressed is
+the strongest single signal.
+
+No pre-trained model ships. There is no labelled corpus here, and fitted
+coefficients would be fabricated validation, so detection is six transparent
+rules with visible evidence and per-project percentile calibration. Annotators
+see a recording notice. See [Keystroke
+Logging](../advanced/keystroke_logging.md) and the [ethics
+note](../advanced/keystroke_logging_ethics.md).
+
+## Live database ingestion (#166)
+
+Database sources gain an optional background poller, so rows created after
+startup become assignable within `poll_interval_seconds` with no restart. The
+cursor is read from the raw row before datetimes are ISO-formatted, because
+re-binding an ISO string against a Postgres `timestamptz` is unreliable, and
+keyset predicates use the portable three-term OR rather than row-value
+comparison, which SQL Server lacks.
+
+## Specs coding agents can check
+
+The hand-written API reference described 84 endpoints against 400+ registered
+rules, and the YAML config — the actual product interface — had no contract at
+all. Both are now generated from the registries the server validates against:
+
+- `potato/schemas/potato-config.schema.json` — 159 config keys, 61 annotation
+  types, 24 display types, plus per-type conditionals, so a `constant_sum`
+  scheme is told it needs `labels` before the server rejects it.
+- `docs/api-reference/openapi.json` — 419 paths and 456 operations, walked off
+  the live Flask `url_map`, with config-gated blueprints registered onto scratch
+  apps so they are not silently omitted, and per-endpoint auth recovered by an
+  AST scan of the blueprint decorators.
+
+CI fails when either drifts from the code. `mkdocs build --strict` also passes
+now, on 24 repaired dead links and 15 invented anchors, and runs `--strict` in
+the docs job so the rot cannot recur. See [Machine-Readable
+Specs](../api-reference/machine_readable.md).
+
+## Performance: the admin Instances tab
+
+The tab was quadratic in the corpus. Building one page of 25 rows cost
+instances × annotators × annotations, because each of three per-row helpers
+walked every annotator and one of them rebuilt every annotation that annotator
+had ever made.
+
+| items (5 annotators) | before | after |
+|---|---|---|
+| 250 | 100 ms | 2 ms |
+| 500 | 488 ms | 3 ms |
+| 1,000 | 2.9 s | 9 ms |
+| 2,000 | 15.1 s | 23 ms |
+| 20,000 × 20 annotators | ~100 min (extrapolated) | 753 ms |
+
+Correctness was checked against the old code over 60 query permutations —
+identical, except for two columns that had never worked. The modal-label and
+disagreement columns read a `label_name` attribute `Label` does not have, fell
+through to `str(value)`, and counted `"True"` for everyone, so the modal label
+was always `True` and disagreement was always 0.00.
+
+## Offline and air-gapped installs
+
+Every frontend asset now serves locally. jQuery, Bootstrap (JS and CSS), Font
+Awesome, fabric.js and OpenSeadragon are vendored and checksum-verified against
+the hashes their CDNs publish, across all 14 templates rather than only the
+annotation page. That includes login, signup, password reset and error pages.
+
+Three external hosts were undocumented, one of them a third-party favicon on
+the login and signup pages: a request to another company from the page where
+users type their credentials. `styles.css` also opened with an `@import` of
+Google Fonts, which every existing guard was structurally blind to because they
+scan template tags rather than stylesheet contents. Beyond breaking offline, it
+sent each annotator's IP and user agent to Google on every page load, from a
+tool people self-host so their data does not leave. A new guard covers CSS.
+See [Air-Gapped Deployment](../deployment/air_gap.md).
+
+## Packaging
+
+`setup.py` declared package data as a single-level glob, `templates/*.html`, so
+**every template in a subdirectory was missing from the wheel** — 27 files
+covering solo mode's setup routes, the admin pages, judge calibration and the
+corpus map. Anyone who `pip install`ed Potato hit it; anyone running from a
+checkout never did, which is also why the test suite saw nothing. Reported and
+fixed in [#164](https://github.com/davidjurgens/potato/pull/164) by
+[@0x6362](https://github.com/0x6362).
+
+The fix grafts the whole directory, with a prune for
+`potato/templates/generated/` — runtime output that is gitignored, which
+`MANIFEST.in` does not read, so a release built from a working tree would
+otherwise carry the maintainer's own task templates. A test builds the real
+manifest and fails if either half regresses.
+
+## Other fixes
+
+- **Single-select schemas could persist every value clicked**
+  ([#167](https://github.com/davidjurgens/potato/issues/167)). The stale-label
+  pre-clear keyed off a hardcoded `{'radio', 'multiselect'}` set, so `likert`
+  kept both answers; on SurveyFlow pages every type accumulated, radio
+  included. Exclusivity now comes from a `single_select` flag on the schema
+  registry and is enforced at write time, so no route can bypass it. New
+  `potato repair-annotations` rewrites already-corrupted state, resolving each
+  answer from the timestamped change trail rather than stored order — the label
+  dict serializes in first-touch order, so "last entry wins" answers wrongly.
+- **Dialogue span offsets drifted.** The server collapsed whitespace while the
+  client deliberately did not, so spans were sliced a few characters further
+  off per turn: short conversations looked correct and long ones returned
+  neighbouring text.
+- **`getCurrentFrame` was off by one after every seek**, on every clip, for
+  every annotator — `currentTime` comes back truncated to six decimal places,
+  so frame 14 at 12 fps reads back as 13. Pre-existing, unrelated to tracking.
+- **Rooms accepted any schema with a `labels` list**, which includes every
+  image, video, audio and spatial class palette, and closing an item deleted
+  that annotator's geometry and wrote a class name over it. `create_room` now
+  classifies the schema and refuses.
+- **Four subsystems were operating on filenames.** `Item.get_text()` returns an
+  item's first string value when there is no text key, which on a media corpus
+  is the instance id — so the corpus map plotted a UMAP of `img_01, img_02,
+  …`, Boundary Lab tried to paraphrase `"img_01"`, search indexed the corpus's
+  own ids, and rooms asked people to vote on `(no text)`.
+- `onlyOne()` forced the clicked input checked, so an armed span code could
+  never be disarmed and in-vivo coding was unreachable.
+- `potato/export/cli.py` read data files line by line only, so a JSON-array
+  data file exported zero items.
+- `MysqlUserState` raised `AttributeError` on every save.
+- `ConversationTreeDisplay` ignored its `display_options` block.
+- `validate_cli` reported `FAILED — 0 error(s)` for configs that pass with
+  warnings.
+- Five video coordinate and frame bugs, including mask keyframes that rendered
+  nothing because the overlay skipped any keyframe without a bbox.
+- **`pip install 'potato[vision]'` installed nothing.** The extra was named in
+  the docs and in the SAM endpoint's own error message, but was never declared
+  in `setup.py`, so pip warned and moved on. It is now real. `segment-anything`
+  is deliberately not in it, because Meta publishes it from GitHub and the PyPI
+  name is an anonymous upload. The endpoint names the official source instead.
+- `MANIFEST.in` referenced `potato/base_html/`, a directory that has not existed
+  for years. It warned on every build.
+- Boot no longer eagerly imports the ML stack; AI SDKs sit behind a lazy
+  endpoint registry.
+
+## Upgrading
+
+**Image annotation keyboard shortcuts changed.** The defaults now follow the V7
+conventions annotators arrive with: `b` brush, `r` rectangle, `f` fill, `k`
+keypoint, `v` select, `[` / `]` size. Previously `b` was bbox and `f` was
+freeform. **If you have a study collecting right now**, set
+`keybinding_profile: legacy` on the schema to restore the old table exactly;
+annotators under a rebound profile see a one-time notice listing what moved.
+
+**Everything else is backward compatible.** Masks stored under bare label keys
+are read as instance 0. No data migration is required for any of the geometry
+or agreement work.
+
+**New optional extras.** Vision models, embedders and media transcoding are
+opt-in: `pip install potato[vision]`, and `potato download-models` fetches
+weights on request. A default install adds no new required dependency.
+
+## Documentation
+
+New pages: [Geometry Agreement](../advanced/geometry_agreement.md),
+[Segmentation](../annotation-types/multimedia/segmentation.md), [Text
+Prompting](../annotation-types/multimedia/text_prompting.md), [Deep
+Zoom](../annotation-types/multimedia/deep_zoom.md), [Media
+Ingest](../annotation-types/multimedia/media_ingest.md), [Format
+Matrix](../data-export/format_matrix.md), [Import
+CLI](../tools/import_cli.md), [Point
+Clouds](../annotation-types/spatial/point_cloud.md), [Depth
+Maps](../annotation-types/spatial/depth_maps.md),
+[Calibration](../annotation-types/spatial/calibration.md),
+[Episodes](../annotation-types/embodied/episodes.md), [Robot
+Formats](../annotation-types/embodied/robot_formats.md), [World-Model
+Evaluation](../agent-evaluation/world_model_eval.md), [VLM
+Grounding](../agent-evaluation/vlm_grounding.md), [Model
+Zoo](../ai-intelligence/model_zoo.md), [Vision Active
+Learning](../ai-intelligence/vision_active_learning.md), [Annotation
+Critique](../ai-intelligence/annotation_critique.md), [Annotation
+Telemetry](../advanced/annotation_telemetry.md),
+[Embeddings](../advanced/embeddings.md), [Keystroke
+Logging](../advanced/keystroke_logging.md),
+[ConvoKit](../integrations/convokit.md), [Air-Gapped
+Deployment](../deployment/air_gap.md), [Testing](../guides/testing.md).
+
+24 new example projects, including `image/interactive-segmentation`,
+`image/text-prompt-labeling`, `image/deep-zoom`, `video/mask-propagation`,
+`spatial/kitti-cuboids`, `embodied/lerobot-episode`,
+`agent-traces/world-model-rollouts`, `ai-assisted/grounding-eval` and four
+under `conversation/`.
+
+Also in this release: a register pass over the whole documentation tree, and
+`SECURITY.md` rewritten — it had been telling people to report vulnerabilities
+as public GitHub issues.
+
+
+---
+
 <!-- source: docs/releasenotes/v2.7.1.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.7.1/
 
