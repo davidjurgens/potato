@@ -182,6 +182,13 @@ class SoloModeManager:
 
         # Instance tracking
         self.human_labeled_ids: Set[str] = set()
+        # Which *specific* user labeled which instance. human_labeled_ids
+        # above stays a flat union (it drives instance selection — once
+        # anyone labels an instance, it leaves the pool for everyone, i.e.
+        # a shared work queue) but the union alone can't answer "how much
+        # has *this* user personally done," which is what per-user
+        # progress displays need. Keyed by username.
+        self._labeled_by_user: Dict[str, Set[str]] = {}
         self.llm_labeled_ids: Set[str] = set()
         self.disagreement_ids: Set[str] = set()
         self.validation_sample_ids: Set[str] = set()
@@ -307,7 +314,7 @@ class SoloModeManager:
             # code (and thus can move its instances' labels). recolor /
             # move / create don't alter prompt content for existing
             # instances, so they don't warrant a re-label sweep.
-            prompt_ops = {"rename", "delete", "merge", "split"}
+            prompt_ops = {"rename", "delete", "merge"}
             from potato.codebook.codebook import Codebook
             cb = Codebook.load(task_dir, project)
             affected: Dict[str, str] = {}  # code NAME -> latest change_id
@@ -2190,6 +2197,8 @@ class SoloModeManager:
         self.pending_relabel_ids |= newly_flagged
         self.relabel_wave_size += len(newly_flagged)
         self.human_labeled_ids -= newly_flagged
+        for user_set in self._labeled_by_user.values():
+            user_set -= newly_flagged
         for instance_id in newly_flagged:
             self.llm_labeled_ids.discard(instance_id)
             self.predictions.pop(instance_id, None)
@@ -2383,6 +2392,7 @@ class SoloModeManager:
         """
         with self._lock:
             self.human_labeled_ids.add(instance_id)
+            self._labeled_by_user.setdefault(user_id, set()).add(instance_id)
             self.pending_relabel_ids.discard(instance_id)
 
             prediction = self.get_llm_prediction(instance_id, schema_name)
@@ -2897,6 +2907,111 @@ class SoloModeManager:
                 reason="Agreement threshold reached"
             )
 
+    def _finish_autonomous_labeling(self) -> None:
+        """Called by the background labeling loop once every instance has
+        an LLM label and we're in AUTONOMOUS_LABELING — picks a sample of
+        the LLM-only labels (never seen by a human) for final validation,
+        and advances the phase. If nothing qualifies (every instance
+        already has a human label, so there's nothing LLM-only to check),
+        skips straight to COMPLETED instead of landing on an empty
+        validation screen.
+
+        Runs on the background labeling thread itself, right before it
+        returns — no separate stop/join needed.
+        """
+        import random
+
+        with self._lock:
+            if self.phase_controller.get_current_phase() != SoloPhase.AUTONOMOUS_LABELING:
+                return  # Already handled (e.g. a concurrent call) or moved on
+
+            llm_only = list(self.llm_labeled_ids - self.human_labeled_ids)
+            sample_size = min(
+                self.config.thresholds.minimum_validation_sample,
+                len(llm_only),
+            )
+            sample = (
+                random.sample(llm_only, sample_size) if sample_size else []
+            )
+            self.validation_sample_ids = set(sample)
+
+            if sample:
+                self.phase_controller.transition_to(
+                    SoloPhase.FINAL_VALIDATION,
+                    reason=f"Autonomous labeling complete; {len(sample)} "
+                           f"instance(s) sampled for final validation",
+                )
+                logger.info(
+                    f"[Autonomous Labeling] Complete — {len(sample)} "
+                    f"instance(s) sampled for final validation"
+                )
+            else:
+                # Nothing LLM-only to check (every instance already has a
+                # human label) — pass through final validation (a legal,
+                # near-instant hop since there's no sample to show) rather
+                # than land on a validation screen with nothing in it.
+                self.phase_controller.transition_to(
+                    SoloPhase.FINAL_VALIDATION,
+                    reason="Autonomous labeling complete; nothing LLM-only to validate",
+                )
+                self.phase_controller.transition_to(
+                    SoloPhase.COMPLETED,
+                    reason="No LLM-only labels to validate",
+                )
+                logger.info(
+                    "[Autonomous Labeling] Complete — nothing LLM-only to "
+                    "validate, workflow marked complete"
+                )
+
+            self._save_state()
+
+    def check_autonomous_labeling_progress(self) -> Dict[str, Any]:
+        """Manually check autonomous-labeling progress and finish the
+        phase if it's actually done — same effect as the background
+        thread noticing on its own, but callable directly (and safe to
+        call repeatedly / concurrently with that thread).
+
+        Exists as a safety net for cases where the background thread
+        isn't running for any reason (this is also what backs the
+        dashboard's "waiting on autonomous labeling" indicator, so the
+        user has something concrete instead of a silent wait), and
+        restarts it if it should be running but isn't.
+        """
+        with self._lock:
+            phase = self.phase_controller.get_current_phase()
+            if phase != SoloPhase.AUTONOMOUS_LABELING:
+                return {
+                    'phase': phase.to_str(),
+                    'in_autonomous_labeling': False,
+                    'finished': False,
+                }
+            total = self._get_total_instance_count()
+            remaining = max(0, total - len(self.llm_labeled_ids))
+            thread_running = self.is_background_labeling_running()
+
+        if remaining > 0:
+            if not thread_running:
+                self.start_background_labeling()
+            return {
+                'phase': phase.to_str(),
+                'in_autonomous_labeling': True,
+                'finished': False,
+                'labeled': total - remaining,
+                'remaining': remaining,
+                'total': total,
+            }
+
+        # Nothing left — finish now rather than waiting for the
+        # background thread's own next idle check.
+        self._finish_autonomous_labeling()
+        with self._lock:
+            new_phase = self.phase_controller.get_current_phase()
+        return {
+            'phase': new_phase.to_str(),
+            'in_autonomous_labeling': new_phase == SoloPhase.AUTONOMOUS_LABELING,
+            'finished': new_phase != SoloPhase.AUTONOMOUS_LABELING,
+        }
+
     def should_trigger_periodic_review(self) -> bool:
         """Check if periodic review should be triggered."""
         with self._lock:
@@ -3024,6 +3139,7 @@ class SoloModeManager:
             self.task_description = ""
             self.predictions = {}
             self.human_labeled_ids = set()
+            self._labeled_by_user = {}
             self.llm_labeled_ids = set()
             self.disagreement_ids = set()
             self.validation_sample_ids = set()
@@ -3124,19 +3240,36 @@ class SoloModeManager:
                     self._stop_labeling.wait(2)
                     continue
 
-                # Check if we've hit the max parallel labels
-                with self._lock:
-                    current_count = len(self.llm_labeled_ids - self.human_labeled_ids)
-                    if current_count >= max_labels:
-                        logger.debug(f"Max parallel labels reached ({current_count})")
-                        time.sleep(10)
-                        continue
+                # Check if we've hit the max parallel labels. This cap
+                # exists to keep the LLM from running too far ahead of a
+                # human who's still comparing every label (parallel
+                # annotation); it doesn't apply once we're autonomously
+                # labeling everything with no human review in the loop —
+                # enforcing it there would just stall the background
+                # thread forever once unreviewed count crosses the cap.
+                in_autonomous_phase = (
+                    self.phase_controller.get_current_phase()
+                    == SoloPhase.AUTONOMOUS_LABELING
+                )
+                if not in_autonomous_phase:
+                    with self._lock:
+                        current_count = len(self.llm_labeled_ids - self.human_labeled_ids)
+                        if current_count >= max_labels:
+                            logger.debug(f"Max parallel labels reached ({current_count})")
+                            time.sleep(10)
+                            continue
 
                 # Label a batch of instances
                 labeled_count = self._label_batch(batch_size)
 
                 if labeled_count == 0:
-                    # No more instances to label
+                    # No more instances to label. If we got here during
+                    # autonomous labeling, that phase's job is done —
+                    # hand off to final validation instead of idling
+                    # forever with nothing left to do.
+                    if in_autonomous_phase:
+                        self._finish_autonomous_labeling()
+                        return
                     time.sleep(30)
                 else:
                     logger.info(f"Labeled {labeled_count} instances in background")
@@ -3301,6 +3434,9 @@ class SoloModeManager:
                         for iid, schemas in self.predictions.items()
                     },
                     'human_labeled_ids': list(self.human_labeled_ids),
+                    'labeled_by_user': {
+                        u: list(ids) for u, ids in self._labeled_by_user.items()
+                    },
                     'llm_labeled_ids': list(self.llm_labeled_ids),
                     'disagreement_ids': list(self.disagreement_ids),
                     'validation_sample_ids': list(self.validation_sample_ids),
@@ -3388,6 +3524,10 @@ class SoloModeManager:
                 }
 
                 self.human_labeled_ids = set(state.get('human_labeled_ids', []))
+                self._labeled_by_user = {
+                    u: set(ids)
+                    for u, ids in state.get('labeled_by_user', {}).items()
+                }
                 self.llm_labeled_ids = set(state.get('llm_labeled_ids', []))
                 self.disagreement_ids = set(state.get('disagreement_ids', []))
                 self.validation_sample_ids = set(state.get('validation_sample_ids', []))
@@ -3455,9 +3595,19 @@ class SoloModeManager:
 
             logger.info("Loaded Solo Mode state")
 
-            # Auto-start background labeling if already in an annotation phase
+            # Auto-start background labeling if already in an annotation
+            # phase — AUTONOMOUS_LABELING included, since that phase's only
+            # exit (_finish_autonomous_labeling) is triggered from inside
+            # this same thread. Without resuming it here, a server restart
+            # (e.g. the debug reloader picking up a code change) while
+            # autonomous labeling is in progress permanently strands the
+            # workflow: nothing else ever notices the phase should advance.
             current_phase = self.phase_controller.get_current_phase()
-            if current_phase in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
+            if current_phase in (
+                SoloPhase.PARALLEL_ANNOTATION,
+                SoloPhase.ACTIVE_ANNOTATION,
+                SoloPhase.AUTONOMOUS_LABELING,
+            ):
                 self.start_background_labeling()
 
             return True
@@ -3580,17 +3730,26 @@ class SoloModeManager:
         ))
         return self.get_llm_prediction_for_instance(instance_id)
 
-    def get_annotation_stats(self) -> Dict[str, Any]:
-        """Get annotation statistics for the status display."""
+    def get_annotation_stats(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """Get annotation statistics for the status display.
+
+        ``human_labeled`` stays the task-wide total (everyone combined) —
+        used on the dashboard. Pass ``user_id`` to also get ``my_labeled``,
+        that one user's own count, for screens that show "You labeled: N"
+        (the annotate screen). Without it, ``my_labeled`` is omitted.
+        """
         with self._lock:
             total = self._get_total_instance_count()
-            return {
+            stats = {
                 'human_labeled': len(self.human_labeled_ids),
                 'llm_labeled': len(self.llm_labeled_ids),
                 'remaining': total - len(self.human_labeled_ids | self.llm_labeled_ids),
                 'total': total,
                 'agreement_rate': self.agreement_metrics.agreement_rate,
             }
+            if user_id is not None:
+                stats['my_labeled'] = len(self._labeled_by_user.get(user_id, ()))
+            return stats
 
     def _get_total_instance_count(self) -> int:
         """Get total number of instances."""

@@ -403,9 +403,8 @@
     <div class="annotate-header">
         <h1>Annotate</h1>
         {% if stats %}
-            {% set total = stats.human_labeled + stats.remaining %}
             <span class="annotate-counter" aria-live="polite">
-                Instance {{ stats.human_labeled + 1 }} of {{ total }}
+                Instance {{ (stats.my_labeled or 0) + 1 }} of {{ stats.total }}
             </span>
         {% endif %}
     </div>
@@ -610,7 +609,7 @@
 
         {% if stats %}
         <dl class="completion-stats">
-            <dt>You labeled</dt><dd>{{ stats.human_labeled }}</dd>
+            <dt>You labeled</dt><dd>{{ stats.my_labeled or 0 }}</dd>
             <dt>LLM labeled</dt><dd>{{ stats.llm_labeled }}</dd>
             <dt>Agreement</dt><dd>{{ (stats.agreement_rate * 100)|int }}%</dd>
             <dt>Remaining</dt><dd>{{ stats.remaining }}</dd>
@@ -629,10 +628,9 @@
 {% block stats %}
 {# Drop redundant "Phase" row; lead with progress, which is what the user wants here. #}
 {% if stats %}
-{% set total = stats.human_labeled + stats.remaining %}
 <div class="stat-item">
-    <span class="stat-label">Progress</span>
-    <span class="stat-value">{{ stats.human_labeled }} / {{ total }}</span>
+    <span class="stat-label">Your progress</span>
+    <span class="stat-value">{{ stats.my_labeled or 0 }} / {{ stats.total }}</span>
 </div>
 <div class="stat-item">
     <span class="stat-label">Remaining</span>

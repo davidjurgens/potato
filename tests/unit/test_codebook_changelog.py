@@ -198,31 +198,6 @@ class TestRetroactiveMerge:
                         dst_id=a["id"], actor="admin")
 
 
-class TestRetroactiveSplitByAnnotator:
-    def test_split_moves_only_that_annotator(self, td):
-        from potato.codebook import (create_code, apply_code,
-                                     split_code, codes_on, Codebook)
-        s = create_code(td, project="P", name="trust", created_by="u")
-        apply_code(td, project="P", annotation_id="i1",
-                   code_id=s["id"], created_by="alice")
-        apply_code(td, project="P", annotation_id="i2",
-                   code_id=s["id"], created_by="bob")
-        apply_code(td, project="P", annotation_id="i3",
-                   code_id=s["id"], created_by="alice")
-        res = split_code(td, project="P", src_id=s["id"],
-                         annotator="alice", new_name="trust (alice)",
-                         actor="admin")
-        assert res["moved"] == 2
-        tid = res["target_id"]
-        # alice's instances now on the new code
-        assert [c["code_id"] for c in codes_on(td, "i1")] == [tid]
-        assert [c["code_id"] for c in codes_on(td, "i3")] == [tid]
-        # bob's instance still on the original
-        assert [c["code_id"] for c in codes_on(td, "i2")] == [s["id"]]
-        # src still live (bob uses it) -> not archived
-        assert "trust" in Codebook.load(td, "P").labels()
-
-
 class TestICLIsolation:
     def test_labels_unaffected_by_overlay_tables(self, td):
         """The ICL prompt is built from Codebook.labels(); change-log /

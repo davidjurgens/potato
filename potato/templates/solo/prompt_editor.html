@@ -50,10 +50,42 @@
         border-radius: 3px;
         font-size: 12px;
     }
+
+    .verify-preview {
+        background: #2d2d2d;
+        color: #f8f8f2;
+        border-radius: 4px;
+        padding: 15px;
+        font-family: monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 400px;
+        overflow-y: auto;
+        margin-bottom: 10px;
+    }
+
+    .verify-preview-note {
+        font-size: var(--text-xs, 0.75rem);
+        color: var(--muted-foreground, #71717a);
+        margin: 0 0 10px;
+    }
 </style>
 {% endblock %}
 
 {% block flow_guidance %}
+{% if phase == 'prompt_validation' %}
+<div class="flow-guidance" role="note">
+    <span class="flow-guidance-icon" aria-hidden="true">&rarr;</span>
+    <span>
+        This is what the LLM actually receives &mdash; your base prompt
+        plus the live <code>## Codebook</code> block, which is what your
+        edge case labeling would have changed (via any codebook edits you
+        made), not the base prompt text below. If it looks right, continue
+        to annotation. If something's off, revise the prompt and you can
+        redo edge cases from there.
+    </span>
+</div>
+{% else %}
 <div class="flow-guidance" role="note">
     <span class="flow-guidance-icon" aria-hidden="true">&rarr;</span>
     <span>
@@ -66,9 +98,51 @@
         skip straight to annotation below.
     </span>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block content %}
+{% if phase == 'prompt_validation' %}
+<h1>Verify Prompt</h1>
+<p>Edge cases are labeled. Here's what the LLM will actually see when annotating, codebook included.</p>
+
+{% if preview_instance_id %}
+<div class="form-group">
+    <label>Prompt the LLM sees <span id="verify-rev" style="font-weight: normal; color: var(--muted-foreground, #71717a);"></span></label>
+    <div class="verify-preview" id="verify-preview">Loading&hellip;</div>
+    <p class="verify-preview-note">Previewed against one real instance from your dataset &mdash; the codebook section is the same for every instance.</p>
+</div>
+{% else %}
+<p class="verify-preview-note">No dataset instance available to preview against yet.</p>
+{% endif %}
+
+<details style="margin-bottom: 20px;">
+    <summary style="cursor: pointer; color: var(--muted-foreground, #71717a); font-size: var(--text-sm, 0.8125rem);">Edit base prompt text</summary>
+    <form id="prompt-form" method="POST" action="{{ url_for('solo_mode.prompt_editor') }}" style="margin-top: 10px;">
+        <input type="hidden" name="action" id="form-action" value="update">
+        <div class="form-group">
+            <textarea
+                id="prompt"
+                name="prompt"
+                class="prompt-editor"
+                rows="15"
+            >{{ current_prompt }}</textarea>
+        </div>
+        <div style="margin-bottom: 20px;">
+            <button type="button" class="btn btn-secondary" onclick="savePrompt()">Save Changes</button>
+            <span id="save-status" style="margin-left: 10px; color: #28a745;"></span>
+        </div>
+    </form>
+</details>
+
+<div class="solo-nav">
+    <span></span>
+    <div>
+        <button type="button" class="btn btn-secondary" onclick="revisePrompt()">Revise Prompt</button>
+        <button type="button" class="btn btn-primary" onclick="skipToAnnotation()">Continue to Annotation &rarr;</button>
+    </div>
+</div>
+{% else %}
 <h1>Review Annotation Prompt</h1>
 
 <p>Review and edit the generated annotation prompt. This prompt will guide both you and the LLM during annotation.</p>
@@ -99,6 +173,7 @@
         </div>
     </div>
 </form>
+{% endif %}
 {% endblock %}
 
 {% block sidebar %}
@@ -173,11 +248,43 @@
         document.getElementById('prompt-form').submit();
     }
 
+    function revisePrompt() {
+        document.getElementById('form-action').value = 'revise';
+        document.getElementById('prompt-form').submit();
+    }
+
     function loadVersion(version) {
         const revision = promptHistory.find(r => r.version === version);
         if (revision) {
             document.getElementById('prompt').value = revision.prompt;
         }
     }
+
+    {% if phase == 'prompt_validation' and preview_instance_id %}
+    // "Prompt the LLM sees" — same read-only preview endpoint the
+    // annotate screen's panel uses, so this shows the actual assembled
+    // prompt (base prompt + live ## Codebook block) rather than the raw
+    // prompt text above, which codebook edits never touch.
+    (function () {
+        const pre = document.getElementById('verify-preview');
+        const rev = document.getElementById('verify-rev');
+        if (!pre) return;
+        const url = "{{ url_for('solo_mode.prompt_preview') }}?instance_id="
+            + encodeURIComponent("{{ preview_instance_id }}");
+        fetch(url)
+            .then(r => r.json().then(b => ({ ok: r.ok, body: b })))
+            .then(res => {
+                if (!res.ok) {
+                    pre.textContent = res.body.error || 'Could not load preview.';
+                    return;
+                }
+                pre.textContent = res.body.full_prompt || '(empty prompt)';
+                if (rev && res.body.codebook_revision != null) {
+                    rev.textContent = '(codebook rev. ' + res.body.codebook_revision + ')';
+                }
+            })
+            .catch(() => { pre.textContent = 'Could not load preview.'; });
+    })();
+    {% endif %}
 </script>
 {% endblock %}

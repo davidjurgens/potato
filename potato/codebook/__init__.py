@@ -34,7 +34,6 @@ from .service import (
     register_change_listener,
     remove_code,
     rename_code,
-    split_code,
     update_code_fields,
 )
 from .codebook import Codebook
@@ -65,7 +64,6 @@ __all__ = [
     "move_under",
     "delete_code",
     "merge_codes",
-    "split_code",
     "update_code_fields",
     "touch_instances",
     "apply_code",

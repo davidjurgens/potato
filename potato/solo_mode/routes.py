@@ -218,15 +218,32 @@ def prompt_editor():
             return jsonify({'error': 'Prompt cannot be empty'}), 400
 
         elif action == 'advance':
-            # Move to edge case synthesis
+            # Move to edge case synthesis. Only a legal move from
+            # PROMPT_REVIEW — if this fires from PROMPT_VALIDATION (post
+            # edge cases) the transition is illegal and silently no-ops,
+            # which is exactly the "generate edge cases" button doing
+            # nothing from the verify screen that prompted this comment.
+            # The verify screen no longer offers this action (see 'revise'
+            # below); kept as-is for the initial prompt-review screen.
             try:
                 manager.advance_to_phase(SoloPhase.EDGE_CASE_SYNTHESIS)
             except ValueError:
                 pass  # Already past this phase
             return redirect(url_for('solo_mode.edge_cases'))
 
+        elif action == 'revise':
+            # From the verify screen: the prompt needs more work, go back
+            # and edit it (optionally regenerating edge cases from there).
+            try:
+                manager.advance_to_phase(SoloPhase.PROMPT_REVIEW)
+            except ValueError:
+                pass  # Already in or past this phase
+            return redirect(url_for('solo_mode.prompt_editor'))
+
         elif action == 'skip_to_annotation':
-            # Skip edge cases, go directly to parallel annotation
+            # Skip edge cases (from the initial review), or continue on to
+            # annotation (from the verify screen after edge cases) —
+            # either way the destination is the same.
             try:
                 manager.advance_to_phase(SoloPhase.PARALLEL_ANNOTATION)
             except ValueError:
@@ -243,11 +260,29 @@ def prompt_editor():
             'timestamp': pv.created_at.isoformat(),
         })
 
+    current_phase = manager.get_current_phase()
+
+    # Verifying the prompt post-edge-cases: the thing that actually
+    # changed is the codebook block injected at labeling time, not the
+    # base prompt text above (codebook edits never touch current_prompt).
+    # Give the template a real instance to preview the assembled prompt
+    # against, same mechanism as the annotate screen's "Prompt the LLM
+    # sees" panel.
+    preview_instance_id = None
+    if current_phase == SoloPhase.PROMPT_VALIDATION:
+        try:
+            ism = get_item_state_manager()
+            if ism.instance_id_ordering:
+                preview_instance_id = ism.instance_id_ordering[0]
+        except Exception:
+            pass
+
     return render_template(
         'solo/prompt_editor.html',
         current_prompt=manager.get_current_prompt_text(),
         prompt_history=prompt_history,
-        phase=manager.get_current_phase().name.lower(),
+        phase=current_phase.name.lower(),
+        preview_instance_id=preview_instance_id,
     )
 
 
@@ -414,7 +449,7 @@ def annotate():
             labels=labels,
             message='No more instances available',
             phase=manager.get_current_phase().name.lower(),
-            stats=manager.get_annotation_stats(),
+            stats=manager.get_annotation_stats(user_id),
             nav=nav,
             relabel=manager.get_relabel_progress(),
             existing_label=None,
@@ -472,7 +507,7 @@ def annotate():
         llm_prediction=llm_prediction,
         labels=labels,
         phase=manager.get_current_phase().name.lower(),
-        stats=manager.get_annotation_stats(),
+        stats=manager.get_annotation_stats(user_id),
         nav=nav,
         existing_label=existing_label,
         relabel=manager.get_relabel_progress(),
@@ -973,6 +1008,19 @@ def api_status():
         'validation_progress': manager.get_validation_progress(),
         'should_end_human_annotation': manager.should_end_human_annotation(),
     })
+
+
+@solo_mode_bp.route('/api/autonomous-labeling/check', methods=['POST'])
+@login_required
+@solo_mode_required
+def api_check_autonomous_labeling():
+    """Manually check autonomous-labeling progress and finish the phase
+    if it's actually done. Safe to call repeatedly/on a timer — backs the
+    dashboard's live indicator while this phase runs, and restarts the
+    background thread if it should be running but isn't (e.g. after a
+    server restart)."""
+    manager = get_solo_mode_manager()
+    return jsonify(manager.check_autonomous_labeling_progress())
 
 
 @solo_mode_bp.route('/api/relabel-status')

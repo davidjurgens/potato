@@ -1107,8 +1107,16 @@ def register():
         logger.warning(f"Registration failed for '{username}': {result}")
         return render_template("home.html", login_error=result)
 
-    # Persist user config if explicitly configured
-    user_authenticator.save_user_config()
+    # Persist user config if explicitly configured. The user is already
+    # registered in memory at this point (add_user succeeded above) — a
+    # disk-write failure here (bad path, permissions, disk full) shouldn't
+    # crash the whole request and dump a traceback at the new user; log it
+    # and let them continue. Worst case their account doesn't survive a
+    # restart, which is what happens today anyway when this isn't configured.
+    try:
+        user_authenticator.save_user_config()
+    except OSError as e:
+        logger.error(f"Could not persist user config for '{username}': {e}")
 
     logger.debug("Setting session variables...")
     session['username'] = username

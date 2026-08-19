@@ -317,26 +317,6 @@ def admin_merge():
         actor=user, actor_kind="human")))
 
 
-@codebook_bp.route("/admin/split", methods=["POST"])
-def admin_split():
-    """Split a code by annotator retroactively. Admin only."""
-    td, project, user, err = _admin_ctx()
-    if err:
-        return err
-    from potato.codebook import split_code
-    data = request.get_json(silent=True) or {}
-    src_id = (data.get("src_id") or "").strip()
-    annotator = (data.get("annotator") or "").strip()
-    if not src_id or not annotator:
-        return jsonify({
-            "error": "src_id and annotator are required"}), 400
-    return _handle(lambda: jsonify(split_code(
-        td, project=project, src_id=src_id, annotator=annotator,
-        new_name=(data.get("new_name") or "").strip() or None,
-        target_id=(data.get("target_id") or "").strip() or None,
-        actor=user, actor_kind="human")))
-
-
 @codebook_bp.route("/admin/changes", methods=["GET"])
 def admin_changes():
     """Full change-log for the before->after delta view. Admin only."""
@@ -464,7 +444,7 @@ def submit_proposal(ctx):
     op = (data.get("op") or "").strip()
     payload = data.get("payload") or {}
     actor_kind = (data.get("actor_kind") or "model").strip()
-    if op not in ("merge", "split", "rename", "recolor", "move",
+    if op not in ("merge", "rename", "recolor", "move",
                   "delete", "update_fields"):
         return jsonify({"error": f"unsupported op {op!r}"}), 400
     if actor_kind != "model" and not _can_mutate(ctx, need_open=True):
@@ -490,19 +470,12 @@ def admin_list_proposals():
 def _apply_proposed(td, project, op, payload, actor):
     """Dispatch a confirmed proposal through the audited service path."""
     from potato.codebook import (
-        merge_codes, split_code, rename_code, recolor_code,
+        merge_codes, rename_code, recolor_code,
         move_under, delete_code)
     if op == "merge":
         return merge_codes(
             td, project=project, src_id=payload["src_id"],
             dst_id=payload["dst_id"], actor=actor, actor_kind="model")
-    if op == "split":
-        return split_code(
-            td, project=project, src_id=payload["src_id"],
-            annotator=payload["annotator"],
-            new_name=payload.get("new_name"),
-            target_id=payload.get("target_id"),
-            actor=actor, actor_kind="model")
     if op == "rename":
         return rename_code(
             td, payload["code_id"], new_name=payload["new_name"],

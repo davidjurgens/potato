@@ -239,7 +239,7 @@ def reindex_project(
 # Ops that change a code's prompt-facing TEXT (and thus its embeddings).
 # recolor/move are excluded (no text change); create IS included so a new
 # code becomes retrievable (unlike the re-review, which skips create).
-_TEXT_OPS = {"create", "rename", "delete", "merge", "split"}
+_TEXT_OPS = {"create", "rename", "delete", "merge"}
 
 
 def _affected(changes: List[Dict[str, Any]]) -> Dict[str, str]:
@@ -254,9 +254,6 @@ def _affected(changes: List[Dict[str, Any]]) -> Dict[str, str]:
             # merge archives the source code -> drop its chunks.
             out[cid] = "delete" if op in ("delete", "merge") else \
                 out.get(cid, "reindex")
-        rel = ch.get("related_code_id")
-        if op == "split" and rel:
-            out.setdefault(rel, "reindex")
     return out
 
 

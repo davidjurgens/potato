@@ -584,6 +584,7 @@
             ('setup', 'Setup'),
             ('prompt_review', 'Prompt'),
             ('edge_case_labeling', 'Edge Cases'),
+            ('prompt_validation', 'Verify Prompt'),
             ('parallel_annotation', 'Annotation'),
             ('autonomous_labeling', 'Auto Label'),
             ('final_validation', 'Validation'),
@@ -593,13 +594,14 @@
         {% set current_index = phase_order.index(phase) if phase in phase_order else 0 %}
         {# Map raw phase to the visible step the user is "on". #}
         {% set step_for_phase = {
-            'setup': 1, 'prompt_review': 2, 'prompt_validation': 2,
+            'setup': 1, 'prompt_review': 2,
             'edge_case_synthesis': 3, 'edge_case_labeling': 3, 'rule_review': 3,
-            'parallel_annotation': 4, 'active_annotation': 4,
-            'disagreement_resolution': 4, 'periodic_review': 4,
-            'autonomous_labeling': 5,
-            'final_validation': 6,
-            'completed': 7,
+            'prompt_validation': 4,
+            'parallel_annotation': 5, 'active_annotation': 5,
+            'disagreement_resolution': 5, 'periodic_review': 5,
+            'autonomous_labeling': 6,
+            'final_validation': 7,
+            'completed': 8,
         } %}
         {% set active_step = step_for_phase.get(phase, 1) %}
         <nav class="phase-progress"
@@ -750,9 +752,9 @@
                 <li><strong>Add a code</strong> at the bottom creates a
                     new one.</li>
                 <li><strong>Codebook tools</strong> holds advanced,
-                    occasional actions (merge duplicates, split by
-                    annotator, suggestions from your notes) &mdash; most
-                    people won't need these often.</li>
+                    occasional actions (merge duplicates, suggestions
+                    from your notes) &mdash; most people won't need
+                    these often.</li>
             </ul>
             <button type="button" id="cb-onboarding-dismiss"
                     class="cb-primary">Got it</button>
@@ -798,25 +800,6 @@
                         </div>
                         <button type="button" id="cb-merge-btn"
                                 class="cb-primary">Merge</button>
-                    </div>
-                    <div class="cb-admin-group">
-                        <label class="cb-admin-label"
-                               for="cb-split-src">Split a code by annotator</label>
-                        <p class="cb-admin-hint">
-                            Use when one code is being applied
-                            inconsistently by different annotators.</p>
-                        <div class="cb-admin-row">
-                            <select id="cb-split-src" class="cb-admin-select"
-                                    aria-label="Code to split"></select>
-                            <input type="text" id="cb-split-annotator"
-                                   class="cb-admin-input" placeholder="annotator"
-                                   aria-label="Annotator to split out">
-                        </div>
-                        <input type="text" id="cb-split-name" class="cb-admin-input"
-                               placeholder="New code name&hellip;"
-                               aria-label="New code name">
-                        <button type="button" id="cb-split-btn"
-                                class="cb-primary">Split</button>
                     </div>
                     <div class="cb-admin-group">
                         <span class="cb-admin-label">

@@ -74,12 +74,41 @@ class SoloDashboard {
       if (!resp.ok) return;
       const data = await resp.json();
       this._renderOverview(data);
+      if (data.phase === 'autonomous_labeling') {
+        this._checkAutonomousLabeling();
+      }
     } catch (e) {
       console.warn('Solo dashboard: failed to load overview', e);
     }
     this._loadRefinementStatus();
     this._loadLabelingFunctionStatus();
     this._loadRelabelStatus();
+  }
+
+  // Autonomous labeling has no user-facing screen of its own — the LLM
+  // finishes the dataset on its own, and the only way to know when it's
+  // done is to ask. This runs on the same 30s cycle as the rest of the
+  // overview tab, updates the live "N of M left" text in the action bar,
+  // and reloads the page the moment the phase actually advances so the
+  // user isn't left guessing whether anything is happening.
+  async _checkAutonomousLabeling() {
+    const textEl = document.getElementById('autonomous-status-text');
+    try {
+      const resp = await fetch('/solo/api/autonomous-labeling/check', { method: 'POST' });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (data.finished) {
+        if (textEl) textEl.textContent = 'Done — moving on…';
+        setTimeout(() => window.location.reload(), 800);
+        return;
+      }
+      if (textEl && data.in_autonomous_labeling) {
+        textEl.textContent = data.remaining + ' of ' + data.total
+          + ' instance(s) left — checks automatically, no action needed';
+      }
+    } catch (e) {
+      // best-effort; next 30s cycle will retry
+    }
   }
 
   _renderOverview(data) {

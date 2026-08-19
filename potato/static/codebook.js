@@ -427,7 +427,7 @@
         refreshAdmin();
     }
 
-    // ---- admin curation (Phase 2 C): merge / split / proposals ----------
+    // ---- admin curation (Phase 2 C): merge / proposals -------------------
     // Admin status is probed once via the gated endpoint (200 -> show
     // the section, 403 -> stay hidden) — same self-gating pattern as the
     // codebook toggle itself.
@@ -488,13 +488,6 @@
         case "merge":
             return "Merge " + q(codeName(pay.src_id)) + " into "
                 + q(codeName(pay.dst_id));
-        case "split":
-            var dest = pay.new_name
-                ? " → " + q(pay.new_name)
-                : (pay.target_id
-                    ? " → " + q(codeName(pay.target_id)) : "");
-            return "Split " + q(codeName(pay.src_id)) + " by "
-                + esc(pay.annotator || "?") + dest;
         case "rename":
             return "Rename " + q(codeName(pay.code_id)) + " → "
                 + q(pay.new_name || "?");
@@ -698,7 +691,6 @@
         var codes = flatCodes();
         fillCodeSelect(el("cb-merge-src"), codes, "merge from…");
         fillCodeSelect(el("cb-merge-dst"), codes, "into…");
-        fillCodeSelect(el("cb-split-src"), codes, "split…");
         fetch(ADMIN_API + "/proposals")
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) { renderProposals(d && d.proposals); })
@@ -731,22 +723,6 @@
             var d = el("cb-merge-dst").value;
             if (!s || !d) { adminErr("Pick both codes."); return; }
             postAdmin("/merge", { src_id: s, dst_id: d }, afterAdminOp);
-        });
-        var sp = el("cb-split-btn");
-        if (sp) sp.addEventListener("click", function () {
-            var body = {
-                src_id: el("cb-split-src").value,
-                annotator: (el("cb-split-annotator").value || "").trim(),
-                new_name: (el("cb-split-name").value || "").trim(),
-            };
-            if (!body.src_id || !body.annotator) {
-                adminErr("Pick a code and an annotator."); return;
-            }
-            postAdmin("/split", body, function () {
-                el("cb-split-name").value = "";
-                el("cb-split-annotator").value = "";
-                afterAdminOp();
-            });
         });
         var notesBtn = el("cb-notes-suggest-btn");
         if (notesBtn) notesBtn.addEventListener("click", function () {

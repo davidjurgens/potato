@@ -506,6 +506,21 @@ class UserAuthenticator:
                         if not os.path.isfile(user_config_path):
                             logger.info(f"user_config_path '{user_config_path}' does not exist yet; will be created on first registration")
 
+                    # A relative path here resolves against whatever the
+                    # process's cwd happens to be at request time (not
+                    # task_dir), so e.g. running `potato start` from a
+                    # different directory than usual silently points this
+                    # at a nonexistent location and registration crashes
+                    # with FileNotFoundError. Anchor it to task_dir (already
+                    # normalized to an absolute path by config loading) so
+                    # it's independent of cwd, matching every other
+                    # path-like config value in this app.
+                    if not os.path.isabs(user_config_path):
+                        task_dir = config.get("task_dir")
+                        if task_dir:
+                            user_config_path = os.path.normpath(
+                                os.path.join(task_dir, user_config_path))
+
                     logger.debug(f"User config path: {user_config_path}")
 
                     auth_config = config.get("authentication", {})

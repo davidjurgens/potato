@@ -9,6 +9,18 @@ debug: true
 annotation_task_name: "sentiment-solo-demo"
 output_annotation_dir: "annotations"
 
+# Without this, auth defaults to in_memory with no configured file, and
+# UserAuthenticator.save_user_config() silently skips writing registered
+# users to disk (see potato/authentication.py) — every registration is
+# lost on restart even though annotation state (user_state.json) persists
+# fine, since that's a separate, always-disk-backed mechanism.
+authentication:
+  method: in_memory
+  # Relative to task_dir (this file's own directory), same as every
+  # other path in this config — independent of where `potato start`
+  # is actually run from.
+  user_config_path: user_config.json
+
 
 # Enable Solo Mode
 solo_mode:

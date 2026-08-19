@@ -74,6 +74,12 @@ PHASE_TRANSITIONS: Dict[SoloPhase, Set[SoloPhase]] = {
         SoloPhase.DISAGREEMENT_RESOLUTION,
         SoloPhase.ACTIVE_ANNOTATION,
         SoloPhase.EDGE_CASE_SYNTHESIS,  # Detour: disagreement rate is high
+        # Reaching the agreement threshold with no instances left to hand
+        # out (check_and_advance_to_autonomous) goes straight here rather
+        # than through ACTIVE_ANNOTATION — there's nothing left to
+        # "actively annotate" at that point, so routing through it first
+        # would just be a no-op stop.
+        SoloPhase.AUTONOMOUS_LABELING,
     },
     SoloPhase.DISAGREEMENT_RESOLUTION: {
         SoloPhase.PARALLEL_ANNOTATION,

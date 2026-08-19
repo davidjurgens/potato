@@ -459,6 +459,15 @@
         padding: 0.5rem 1rem;
     }
 
+    .autonomous-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8125rem;
+        color: var(--muted-foreground, #71717a);
+        padding: 0.5rem 0;
+    }
+
     /* ── Responsive ─────────────────────────────────────────── */
     /* ── Confusion Heatmap ──────────────────────────────────── */
     .heatmap-cell {
@@ -1005,6 +1014,8 @@
             <a href="{{ url_for('solo_mode.prompt_editor') }}" class="btn btn-primary">Edit Prompt</a>
         {% elif phase in ['edge_case_synthesis', 'edge_case_labeling'] %}
             <a href="{{ url_for('solo_mode.edge_cases') }}" class="btn btn-primary">Continue Edge Cases</a>
+        {% elif phase == 'prompt_validation' %}
+            <a href="{{ url_for('solo_mode.prompt_editor') }}" class="btn btn-primary">Verify Prompt</a>
         {% elif phase in ['parallel_annotation', 'active_annotation'] %}
             <a href="{{ url_for('solo_mode.annotate') }}" class="btn btn-primary">Continue Annotating</a>
         {% elif phase == 'disagreement_resolution' %}
@@ -1013,6 +1024,11 @@
             <a href="{{ url_for('solo_mode.review') }}" class="btn btn-primary">Continue Review</a>
         {% elif phase == 'rule_review' %}
             <a href="{{ url_for('solo_mode.rule_review') }}" class="btn btn-primary">Review Edge Case Rules</a>
+        {% elif phase == 'autonomous_labeling' %}
+            <div id="autonomous-status" class="autonomous-status" role="status" aria-live="polite">
+                <span class="loading-spinner" style="width: 14px; height: 14px; border-width: 2px; border-top-color: var(--primary, #6e56cf); border-color: color-mix(in oklab, var(--primary, #6e56cf) 25%, transparent); border-top-color: var(--primary, #6e56cf);"></span>
+                <span id="autonomous-status-text">Checking progress&hellip;</span>
+            </div>
         {% elif phase == 'final_validation' %}
             <a href="{{ url_for('solo_mode.validation') }}" class="btn btn-primary">Continue Validation</a>
         {% elif phase == 'completed' %}
