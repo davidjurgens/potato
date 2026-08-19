@@ -637,9 +637,9 @@
             'disagreement_resolution': 'You and the LLM disagreed on this one. Compare both labels below and decide which is correct.',
             'periodic_review': 'Spot-check a sample of LLM labels to keep quality high before continuing.',
             'rule_review': 'Approve or reject the edge-case rules the model inferred from your labels.',
-            'autonomous_labeling': 'Agreement is high enough that the LLM is now labeling the rest of the dataset on its own.',
-            'final_validation': 'Spot-check a sample of the LLM-only labels to confirm the run is ready to finish.',
-            'completed': 'The workflow is complete &mdash; export your annotations from the dashboard.',
+            'autonomous_labeling': 'Nothing for you to do here &mdash; the LLM is labeling the rest of the dataset on its own. This page checks automatically and will take you to Validation once it\'s done. (If the Codebook panel shows anything to review, that\'s unrelated to this wait &mdash; it just flags instances whose code definitions changed after they were labeled, and can appear at any phase.)',
+            'final_validation': 'Spot-check the LLM-only labels below. Once you\'ve gone through all of them, the workflow finishes automatically and takes you to the Complete screen.',
+            'completed': 'You\'re done &mdash; every instance is labeled. Export your annotations below.',
         } %}
         {% block flow_guidance %}
         {% set default_guidance = default_guidance_by_phase.get(phase, '') %}

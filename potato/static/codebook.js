@@ -588,6 +588,8 @@
         var badge = el("cb-toggle-badge");
         if (!n) {
             if (badge) badge.remove();
+            toggle.classList.remove("has-pending");
+            toggle.removeAttribute("aria-label");
             return;
         }
         if (!badge) {
@@ -597,8 +599,15 @@
             toggle.appendChild(badge);
         }
         badge.textContent = String(n);
-        badge.title = n + " pending codebook proposal" + (n > 1 ? "s" : "")
+        var label = n + " pending codebook proposal" + (n > 1 ? "s" : "")
             + " to review";
+        badge.title = label;
+        // The badge alone is a small, easy-to-miss corner element — pulse
+        // the whole toggle in the "needs attention" amber and label it
+        // explicitly (not just via a tooltip) so it doesn't rely on
+        // spotting a small number.
+        toggle.classList.add("has-pending");
+        toggle.setAttribute("aria-label", "Codebook — " + label);
     }
 
     // Best-effort, page-load-time check for pending proposals (e.g. from

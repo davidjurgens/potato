@@ -44,6 +44,7 @@ from . import review
 from .changelog import propose_change
 from .revision import (
     all_stale_instances,
+    clear_provenance,
     codes_added_since,
     current_revision,
     instance_revision,
@@ -78,6 +79,7 @@ __all__ = [
     "stale_instances",
     "all_stale_instances",
     "codes_added_since",
+    "clear_provenance",
     "derive_code_name",
     "similar_code_names",
     "changelog",

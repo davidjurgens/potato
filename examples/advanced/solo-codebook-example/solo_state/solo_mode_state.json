@@ -5,7 +5,7 @@
     {
       "version": 1,
       "prompt_text": "Label the following text according to this task: Classify each patient comment by the single primary theme it expresses about getting healthcare: an access barrier, a cost concern, distrust of a provider, or a complaint about wait times. Pick the theme the comment is mostly about.",
-      "created_at": "2026-08-19T12:47:35.958650",
+      "created_at": "2026-08-19T14:19:48.306264",
       "created_by": "user_setup",
       "source_description": "Initial prompt from task description",
       "parent_version": null,
@@ -21,61 +21,10 @@
         "confidence_score": 1.0,
         "uncertainty_score": 0.0,
         "prompt_version": 1,
-        "timestamp": "2026-08-19T12:50:33.549294",
+        "timestamp": "2026-08-19T14:20:58.641530",
         "model_name": "llama3.2:3b",
-        "reasoning": "The patient mentions the distance to the clinic and its impact on their ability to reach care, indicating a structural obstacle that prevents them from getting to or booking care.",
+        "reasoning": "The patient mentions the distance to the clinic and their inability to reach it without taking a full day off work, indicating a structural obstacle that prevents them from accessing care.",
         "human_label": "access barriers",
-        "agrees_with_human": true,
-        "disagreement_resolved": false,
-        "resolution_label": null
-      }
-    },
-    "3": {
-      "primary_theme": {
-        "instance_id": "3",
-        "schema_name": "primary_theme",
-        "predicted_label": "provider trust",
-        "confidence_score": 0.5,
-        "uncertainty_score": 0.5,
-        "prompt_version": 1,
-        "timestamp": "2026-08-19T12:50:51.032542",
-        "model_name": "llama3.2:3b",
-        "reasoning": "The patient expresses distrust of their doctor's listening skills and advice, indicating a lack of confidence in the provider's ability to understand their needs.",
-        "human_label": "provider trust",
-        "agrees_with_human": true,
-        "disagreement_resolved": false,
-        "resolution_label": null
-      }
-    },
-    "2": {
-      "primary_theme": {
-        "instance_id": "2",
-        "schema_name": "primary_theme",
-        "predicted_label": "cost concerns",
-        "confidence_score": 1.0,
-        "uncertainty_score": 0.0,
-        "prompt_version": 1,
-        "timestamp": "2026-08-19T12:50:38.667377",
-        "model_name": "llama3.2:3b",
-        "reasoning": "The patient mentions skipping a follow-up appointment due to the cost, indicating a worry about the monetary price of care.",
-        "human_label": "cost concerns",
-        "agrees_with_human": true,
-        "disagreement_resolved": false,
-        "resolution_label": null
-      }
-    },
-    "4": {
-      "primary_theme": {
-        "instance_id": "4",
-        "schema_name": "primary_theme",
-        "predicted_label": "wait times",
-        "confidence_score": 1.0,
-        "uncertainty_score": 0.0,
-        "prompt_version": 1,
-        "timestamp": "2026-08-19T12:50:56.530672",
-        "model_name": "llama3.2:3b",
-        "reasoning": "The comment mentions 'four months out' which indicates a long lead time for an appointment, suggesting that the patient experienced wait times.",
-        "human_label": "wait times",
         "agrees_with_human": true,
         "disagreement_resolved": false,
         "resolution_label": null
@@ -89,13 +38,81 @@
         "confidence_score": 1.0,
         "uncertainty_score": 0.0,
         "prompt_version": 1,
-        "timestamp": "2026-08-19T12:51:01.619171",
+        "timestamp": "2026-08-19T14:22:05.972275",
         "model_name": "llama3.2:3b",
-        "reasoning": "The patient mentions being unable to find a specialist within a hundred miles, indicating a structural obstacle that prevents them from reaching care.",
+        "reasoning": "The text explicitly states that there is no specialist within a hundred miles, which blocks the patient from reaching care and booking an appointment.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "2": {
+      "primary_theme": {
+        "instance_id": "2",
+        "schema_name": "primary_theme",
+        "predicted_label": "cost concerns",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-19T14:21:04.896299",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The patient mentions skipping a follow-up appointment due to the cost, indicating a worry about the monetary price of care.",
         "human_label": "cost concerns",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "3": {
+      "primary_theme": {
+        "instance_id": "3",
+        "schema_name": "primary_theme",
+        "predicted_label": "provider trust",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-19T14:21:46.467921",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The text mentions feeling heard or dismissed by the provider, indicating a lack of confidence in their judgment.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "4": {
+      "primary_theme": {
+        "instance_id": "4",
+        "schema_name": "primary_theme",
+        "predicted_label": "wait times",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-19T14:22:01.125038",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The text mentions a long lead time for appointments, indicating a delay between seeking care and receiving it.",
+        "human_label": "access barriers",
         "agrees_with_human": false,
         "disagreement_resolved": true,
-        "resolution_label": "cost concerns"
+        "resolution_label": "access barriers"
+      }
+    },
+    "11": {
+      "primary_theme": {
+        "instance_id": "11",
+        "schema_name": "primary_theme",
+        "predicted_label": "provider trust",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-19T14:22:00.449547",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The text mentions feeling heard or dismissed by the provider, indicating a lack of confidence in the clinician's judgment and treatment approach.",
+        "human_label": "provider trust",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
       }
     },
     "6": {
@@ -106,28 +123,11 @@
         "confidence_score": 1.0,
         "uncertainty_score": 0.0,
         "prompt_version": 1,
-        "timestamp": "2026-08-19T12:51:08.111652",
+        "timestamp": "2026-08-19T14:22:11.536318",
         "model_name": "llama3.2:3b",
-        "reasoning": "The patient expresses concern about the debt they will incur from their care, which aligns with the definition of cost concerns. The mention of 'bills' and 'scared of the debt' further supports this classification. Although there is a mention of insurance, it is not enough to overcome the primary theme of financial burden.",
+        "reasoning": "The text mentions fear of debt due to bills piling up, indicating a worry about the monetary price of care.",
         "human_label": "cost concerns",
         "agrees_with_human": true,
-        "disagreement_resolved": false,
-        "resolution_label": null
-      }
-    },
-    "10": {
-      "primary_theme": {
-        "instance_id": "10",
-        "schema_name": "primary_theme",
-        "predicted_label": "cost concerns",
-        "confidence_score": 1.0,
-        "uncertainty_score": 0.0,
-        "prompt_version": 1,
-        "timestamp": "2026-08-19T12:51:45.772801",
-        "model_name": "llama3.2:3b",
-        "reasoning": "The text mentions 'pre-pay the whole procedure' and 'I just don't have that kind of money', indicating a concern about affordability.",
-        "human_label": null,
-        "agrees_with_human": null,
         "disagreement_resolved": false,
         "resolution_label": null
       }
@@ -140,28 +140,11 @@
         "confidence_score": 1.0,
         "uncertainty_score": 0.0,
         "prompt_version": 1,
-        "timestamp": "2026-08-19T12:51:28.874220",
+        "timestamp": "2026-08-19T14:22:25.281795",
         "model_name": "llama3.2:3b",
-        "reasoning": "The text expresses confidence in the provider's judgment and feeling heard, indicating trust, but there are no red flags or indicators of distrust or other themes.",
+        "reasoning": "The patient expresses feeling heard and trusting their new provider's judgment, indicating a positive experience with the provider-clinician relationship.",
         "human_label": "provider trust",
         "agrees_with_human": true,
-        "disagreement_resolved": false,
-        "resolution_label": null
-      }
-    },
-    "11": {
-      "primary_theme": {
-        "instance_id": "11",
-        "schema_name": "primary_theme",
-        "predicted_label": "provider trust",
-        "confidence_score": 1.0,
-        "uncertainty_score": 0.0,
-        "prompt_version": 1,
-        "timestamp": "2026-08-19T12:52:05.554414",
-        "model_name": "llama3.2:3b",
-        "reasoning": "The text expresses distrust of the provider, mentioning that the diagnosis felt rushed and dismissive, implying a lack of confidence in their judgment or attentiveness to the patient's concerns.",
-        "human_label": null,
-        "agrees_with_human": null,
         "disagreement_resolved": false,
         "resolution_label": null
       }
@@ -174,9 +157,9 @@
         "confidence_score": 1.0,
         "uncertainty_score": 0.0,
         "prompt_version": 1,
-        "timestamp": "2026-08-19T12:51:35.862996",
+        "timestamp": "2026-08-19T14:22:31.725852",
         "model_name": "llama3.2:3b",
-        "reasoning": "The text mentions waiting in the waiting room for almost two hours past their scheduled time, indicating a delay between seeking care and receiving it.",
+        "reasoning": "The text expresses a concern about the delay between sitting in the waiting room and receiving care, which is the primary theme expressed.",
         "human_label": "wait times",
         "agrees_with_human": true,
         "disagreement_resolved": false,
@@ -191,10 +174,27 @@
         "confidence_score": 1.0,
         "uncertainty_score": 0.0,
         "prompt_version": 1,
-        "timestamp": "2026-08-19T12:51:40.994666",
+        "timestamp": "2026-08-19T14:22:37.030454",
         "model_name": "llama3.2:3b",
-        "reasoning": "The text mentions the inability to translate the paperwork, which blocks the patient's ability to access care due to language barriers.",
+        "reasoning": "The patient mentions that the nearest clinic is two bus transfers away and they can't get there without taking a full day off work, indicating a structural obstacle (distance) that prevents them from reaching care.",
         "human_label": "access barriers",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "10": {
+      "primary_theme": {
+        "instance_id": "10",
+        "schema_name": "primary_theme",
+        "predicted_label": "cost concerns",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-08-19T14:22:42.076428",
+        "model_name": "llama3.2:3b",
+        "reasoning": "The text mentions not having the money to pre-pay for the procedure, indicating a concern about the cost of care.",
+        "human_label": "cost concerns",
         "agrees_with_human": true,
         "disagreement_resolved": false,
         "resolution_label": null
@@ -208,76 +208,93 @@
         "confidence_score": 1.0,
         "uncertainty_score": 0.0,
         "prompt_version": 1,
-        "timestamp": "2026-08-19T12:52:26.916005",
+        "timestamp": "2026-08-19T14:22:47.459186",
         "model_name": "llama3.2:3b",
-        "reasoning": "The text mentions a delay between seeking care and receiving it, specifically 'three months just to get a callback to schedule the test', indicating long wait times for appointments or follow-up actions.",
-        "human_label": null,
-        "agrees_with_human": null,
+        "reasoning": "The text mentions a long delay in scheduling a test, indicating an issue with wait times rather than access barriers, cost concerns, or provider trust.",
+        "human_label": "wait times",
+        "agrees_with_human": true,
         "disagreement_resolved": false,
         "resolution_label": null
       }
     }
   },
   "human_labeled_ids": [
-    "2",
-    "6",
-    "9",
-    "11",
-    "12",
+    "10",
+    "5",
+    "4",
     "8",
     "1",
-    "10",
+    "11",
     "3",
     "7",
-    "4",
-    "5"
+    "2",
+    "12",
+    "9",
+    "6"
   ],
   "labeled_by_user": {
     "lina1": [
-      "2",
-      "6",
-      "9",
-      "11",
-      "12",
+      "10",
+      "5",
+      "4",
       "8",
       "1",
-      "10",
+      "11",
       "3",
       "7",
-      "4",
-      "5"
+      "2",
+      "12",
+      "9",
+      "6"
     ]
   },
   "llm_labeled_ids": [
-    "2",
-    "6",
-    "9",
-    "11",
-    "12",
+    "10",
+    "5",
+    "4",
     "8",
     "1",
-    "10",
+    "11",
     "3",
     "7",
-    "4",
-    "5"
+    "2",
+    "12",
+    "9",
+    "6"
   ],
   "disagreement_ids": [
-    "5"
+    "4"
   ],
   "validation_sample_ids": [],
+  "validated_instance_ids": [],
   "pending_relabel_ids": [],
   "relabel_wave_size": 0,
   "edge_case_ids": [],
   "edge_case_labels": {},
   "agreement_metrics": {
-    "total_compared": 13,
-    "agreements": 12,
+    "total_compared": 11,
+    "agreements": 10,
     "disagreements": 1,
-    "agreement_rate": 0.9230769230769231
+    "agreement_rate": 0.9090909090909091
   },
   "confidence_history": {
     "1": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "5": [
+      [
+        1,
+        1.0
+      ],
+      [
+        1,
+        1.0
+      ]
+    ],
+    "2": [
       [
         1,
         1.0
@@ -290,12 +307,6 @@
       ],
       [
         1,
-        0.5
-      ]
-    ],
-    "2": [
-      [
-        1,
         1.0
       ]
     ],
@@ -303,9 +314,17 @@
       [
         1,
         1.0
+      ],
+      [
+        1,
+        1.0
+      ],
+      [
+        1,
+        1.0
       ]
     ],
-    "5": [
+    "11": [
       [
         1,
         1.0
@@ -317,27 +336,7 @@
         1.0
       ]
     ],
-    "10": [
-      [
-        1,
-        1.0
-      ],
-      [
-        1,
-        1.0
-      ]
-    ],
     "7": [
-      [
-        1,
-        1.0
-      ]
-    ],
-    "11": [
-      [
-        1,
-        1.0
-      ],
       [
         1,
         1.0
@@ -355,11 +354,13 @@
         1.0
       ]
     ],
-    "12": [
+    "10": [
       [
         1,
         1.0
-      ],
+      ]
+    ],
+    "12": [
       [
         1,
         1.0
@@ -369,72 +370,56 @@
   "reannotation_counts": {},
   "per_version_agreement": {
     "1": {
-      "compared": 13,
-      "agreements": 12
+      "compared": 11,
+      "agreements": 10
     }
   },
   "refinement_consecutive_failures": 0,
   "pending_refinements": [],
   "refinement_log": [],
   "icl_library": null,
-  "last_review_revision": 49,
+  "last_review_revision": 4,
   "edge_case_rule_data": {
     "rules": {},
     "categories": {}
   },
   "validation_tracker": {
     "metrics": {
-      "total_compared": 13,
-      "agreements": 12,
+      "total_compared": 11,
+      "agreements": 10,
       "disagreements": 1,
-      "agreement_rate": 0.9230769230769231,
+      "agreement_rate": 0.9090909090909091,
       "label_agreements": {
+        "access barriers": 3,
+        "cost concerns": 3,
         "provider trust": 2,
-        "wait times": 2,
-        "access barriers": 4,
-        "cost concerns": 4
+        "wait times": 2
       },
       "label_disagreements": {
-        "cost concerns": 1
+        "access barriers": 1
       },
       "confusion_matrix": {
-        "access barriers|cost concerns": 1
+        "wait times|access barriers": 1
       },
-      "recent_agreement_rate": 0.9230769230769231,
+      "recent_agreement_rate": 0.9090909090909091,
       "trend": "stable"
     },
     "comparison_history": [
       {
-        "instance_id": "3",
-        "human_label": "provider trust",
-        "llm_label": "provider trust",
-        "schema_name": "primary_theme",
-        "agrees": true,
-        "timestamp": "2026-08-19T12:51:10.760227"
-      },
-      {
         "instance_id": "5",
-        "human_label": "cost concerns",
-        "llm_label": "access barriers",
-        "schema_name": "primary_theme",
-        "agrees": false,
-        "timestamp": "2026-08-19T12:51:32.749204"
-      },
-      {
-        "instance_id": "8",
-        "human_label": "wait times",
-        "llm_label": "wait times",
-        "schema_name": "primary_theme",
-        "agrees": true,
-        "timestamp": "2026-08-19T12:52:04.014906"
-      },
-      {
-        "instance_id": "9",
         "human_label": "access barriers",
         "llm_label": "access barriers",
         "schema_name": "primary_theme",
         "agrees": true,
-        "timestamp": "2026-08-19T12:52:12.149145"
+        "timestamp": "2026-08-19T14:21:01.136227"
+      },
+      {
+        "instance_id": "1",
+        "human_label": "access barriers",
+        "llm_label": "access barriers",
+        "schema_name": "primary_theme",
+        "agrees": true,
+        "timestamp": "2026-08-19T14:21:06.709983"
       },
       {
         "instance_id": "2",
@@ -442,15 +427,31 @@
         "llm_label": "cost concerns",
         "schema_name": "primary_theme",
         "agrees": true,
-        "timestamp": "2026-08-19T12:52:14.830628"
+        "timestamp": "2026-08-19T14:21:09.946384"
       },
       {
         "instance_id": "4",
-        "human_label": "wait times",
+        "human_label": "access barriers",
         "llm_label": "wait times",
         "schema_name": "primary_theme",
+        "agrees": false,
+        "timestamp": "2026-08-19T14:22:03.327802"
+      },
+      {
+        "instance_id": "11",
+        "human_label": "provider trust",
+        "llm_label": "provider trust",
+        "schema_name": "primary_theme",
         "agrees": true,
-        "timestamp": "2026-08-19T12:52:17.409216"
+        "timestamp": "2026-08-19T14:22:28.957783"
+      },
+      {
+        "instance_id": "6",
+        "human_label": "cost concerns",
+        "llm_label": "cost concerns",
+        "schema_name": "primary_theme",
+        "agrees": true,
+        "timestamp": "2026-08-19T14:22:41.446242"
       },
       {
         "instance_id": "7",
@@ -458,55 +459,39 @@
         "llm_label": "provider trust",
         "schema_name": "primary_theme",
         "agrees": true,
-        "timestamp": "2026-08-19T12:52:19.344623"
+        "timestamp": "2026-08-19T14:22:43.702743"
       },
       {
-        "instance_id": "1",
-        "human_label": "access barriers",
-        "llm_label": "access barriers",
+        "instance_id": "8",
+        "human_label": "wait times",
+        "llm_label": "wait times",
         "schema_name": "primary_theme",
         "agrees": true,
-        "timestamp": "2026-08-19T12:52:21.407904"
+        "timestamp": "2026-08-19T14:22:45.378243"
       },
       {
-        "instance_id": "6",
+        "instance_id": "10",
         "human_label": "cost concerns",
         "llm_label": "cost concerns",
         "schema_name": "primary_theme",
         "agrees": true,
-        "timestamp": "2026-08-19T12:52:23.177310"
+        "timestamp": "2026-08-19T14:22:47.013588"
       },
       {
-        "instance_id": "1",
+        "instance_id": "9",
         "human_label": "access barriers",
         "llm_label": "access barriers",
         "schema_name": "primary_theme",
         "agrees": true,
-        "timestamp": "2026-08-19T12:53:12.738480"
+        "timestamp": "2026-08-19T14:22:48.994157"
       },
       {
-        "instance_id": "6",
-        "human_label": "cost concerns",
-        "llm_label": "cost concerns",
+        "instance_id": "12",
+        "human_label": "wait times",
+        "llm_label": "wait times",
         "schema_name": "primary_theme",
         "agrees": true,
-        "timestamp": "2026-08-19T12:53:17.909235"
-      },
-      {
-        "instance_id": "1",
-        "human_label": "access barriers",
-        "llm_label": "access barriers",
-        "schema_name": "primary_theme",
-        "agrees": true,
-        "timestamp": "2026-08-19T12:53:23.792702"
-      },
-      {
-        "instance_id": "6",
-        "human_label": "cost concerns",
-        "llm_label": "cost concerns",
-        "schema_name": "primary_theme",
-        "agrees": true,
-        "timestamp": "2026-08-19T12:53:24.673138"
+        "timestamp": "2026-08-19T14:22:50.841452"
       }
     ],
     "validation_samples": {},

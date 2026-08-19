@@ -174,20 +174,33 @@ def recolor_code(
 def update_code_fields(
     task_dir: str, code_id: str, *, details: Dict[str, Any], project: str,
     actor: str = "system", actor_kind: str = "human",
+    bump_revision: bool = True,
 ) -> Dict[str, Any]:
     """Update one or more structured fields (definition / clarification /
     negative_clarification / positive_examples / negative_examples /
     exclusion_rules). Every field changed here alters what the LLM sees, so
-    this is a prompt-affecting edit: it bumps the revision once, logs one
-    change row per field (full old->new for the version history), and
-    softly re-flags the instances labeled with this code for review.
+    by default this is a prompt-affecting edit: it bumps the revision once,
+    logs one change row per field (full old->new for the version history),
+    and softly re-flags the instances labeled with this code for review.
 
     Churn guard (critical): the candidate value is compared against the
     EFFECTIVE current value — i.e. the lazy-upgraded, canonical-JSON view
     of the column (store.effective_current), not the raw stored column. So
     re-saving a freshly-migrated legacy code unchanged is a true no-op:
     nothing logs, the revision doesn't move, no review flag fires. Only a
-    genuine content change is recorded."""
+    genuine content change is recorded.
+
+    bump_revision=False: for automatic, continuous accumulation of
+    evidence (e.g. Solo Mode appending a positive/negative example every
+    time a disagreement is resolved) rather than a deliberate redefinition
+    of what the code means. The revision counter is project-wide, not
+    scoped to the code that changed, so bumping it on every routine
+    disagreement resolution stale-flags every previously-reviewed
+    instance in the whole project — turning the mandatory codebook-review
+    gate into a treadmill that can never fully clear. Genuine edits
+    (tray edits, confirmed proposals, definition/clarification changes)
+    should still bump; only this narrow automatic path opts out. The
+    change is still logged either way, just without moving the revision."""
     code = _require(task_dir, code_id)
     # Keep only known rich fields whose effective value actually changes.
     # Both sides are normalised (text trimmed / list canonicalised) so the
@@ -208,13 +221,17 @@ def update_code_fields(
     updated = store.update_code(task_dir, code_id, details=changed)
     from potato.codebook import revision
     from potato.codebook import changelog
-    new_rev = revision.bump_revision(task_dir, project)
+    if bump_revision:
+        new_rev = revision.bump_revision(task_dir, project)
+    else:
+        new_rev = revision.current_revision(task_dir, project)
     for field, new_val in changed.items():
         changelog.log_change(
             task_dir, project=project, op=f"edit_{field}", code_id=code_id,
             old_value=old_vals[field], new_value=new_val, actor=actor,
             actor_kind=actor_kind, revision=new_rev)
-    _restamp(task_dir, project, [code_id])
+    if bump_revision:
+        _restamp(task_dir, project, [code_id])
     _notify(task_dir, project)
     return updated
 

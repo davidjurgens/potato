@@ -1,0 +1,77 @@
+{% extends "solo/base_solo.html" %}
+
+{% block title %}Codebook Review - Solo Mode{% endblock %}
+
+{% block extra_head %}
+<style>
+    .cr-list {
+        list-style: none;
+        margin: 0 0 24px;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .cr-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 16px;
+        border: 1px solid var(--border, #e4e4e7);
+        border-radius: var(--radius, 0.5rem);
+        background: var(--card, white);
+    }
+
+    .cr-item-id {
+        font-weight: 600;
+        font-size: var(--text-sm, 0.8125rem);
+        color: var(--foreground, #09090b);
+    }
+
+    .cr-item-reason {
+        font-size: var(--text-xs, 0.75rem);
+        color: var(--muted-foreground, #71717a);
+        margin-top: 2px;
+    }
+</style>
+{% endblock %}
+
+{% block flow_guidance %}
+<div class="flow-guidance" role="note">
+    <span class="flow-guidance-icon" aria-hidden="true">&rarr;</span>
+    <span>
+        The codebook changed since you labeled these &mdash; the
+        definitions your original labels were based on may no longer be
+        accurate. Go through each one below and re-confirm or update your
+        label before continuing. You can't get new instances to annotate
+        until this list is empty.
+    </span>
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Codebook Review</h1>
+<p>{{ items|length }} instance{{ 's' if items|length != 1 }} labeled under an older codebook revision.</p>
+
+<ul class="cr-list">
+    {% for it in items %}
+    <li class="cr-item">
+        <div>
+            <div class="cr-item-id">{{ it.instance_id }}</div>
+            <div class="cr-item-reason">
+                {% if it.codes_added_since %}
+                    Code{{ 's' if it.codes_added_since|length != 1 }} changed since:
+                    {{ it.codes_added_since|join(', ') }}
+                {% else %}
+                    Codebook changed since you labeled this
+                {% endif %}
+            </div>
+        </div>
+        <a href="{{ url_for('solo_mode.annotate', instance_id=it.instance_id) }}"
+           class="btn btn-primary">Go</a>
+    </li>
+    {% endfor %}
+</ul>
+{% endblock %}

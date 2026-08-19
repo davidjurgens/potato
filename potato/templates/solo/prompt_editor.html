@@ -169,7 +169,12 @@
         <a href="{{ url_for('solo_mode.setup') }}" class="btn btn-secondary">&larr; Back to Setup</a>
         <div>
             <button type="button" class="btn btn-secondary" onclick="skipToAnnotation()">Skip Edge Cases</button>
-            <button type="button" class="btn btn-primary" onclick="advancePhase()">Generate Edge Cases &rarr;</button>
+            <button type="button" class="btn btn-primary" id="advance-btn" onclick="advancePhase()"
+                    style="display: inline-flex; align-items: center; gap: 8px;">
+                <span class="loading-spinner" id="advance-spinner"
+                      style="width: 14px; height: 14px; border-width: 2px; display: none;"></span>
+                <span id="advance-btn-label">Generate Edge Cases &rarr;</span>
+            </button>
         </div>
     </div>
 </form>
@@ -239,6 +244,16 @@
     }
 
     function advancePhase() {
+        // Edge case synthesis is a real (slow, 10-30s) LLM call made
+        // during the page navigation this triggers, with no other
+        // feedback otherwise — show the wait explicitly rather than
+        // leaving the button looking inert.
+        const btn = document.getElementById('advance-btn');
+        const spinner = document.getElementById('advance-spinner');
+        const label = document.getElementById('advance-btn-label');
+        if (btn) btn.disabled = true;
+        if (spinner) spinner.style.display = 'inline-block';
+        if (label) label.textContent = 'Generating edge cases…';
         document.getElementById('form-action').value = 'advance';
         document.getElementById('prompt-form').submit();
     }

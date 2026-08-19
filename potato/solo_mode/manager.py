@@ -192,6 +192,10 @@ class SoloModeManager:
         self.llm_labeled_ids: Set[str] = set()
         self.disagreement_ids: Set[str] = set()
         self.validation_sample_ids: Set[str] = set()
+        # Subset of validation_sample_ids actually confirmed through the
+        # /solo/validation screen (record_validation) — deliberately not
+        # human_labeled_ids, which several unrelated flows also write to.
+        self.validated_instance_ids: Set[str] = set()
 
         # Instances a human already labeled under an *older* prompt version
         # and need to relabel under the current one, so the agreement rate
@@ -2399,6 +2403,19 @@ class SoloModeManager:
             if prediction is None:
                 return None
 
+            # If this instance/schema was already compared once (e.g. the
+            # human is re-confirming or correcting a label after
+            # revisiting it via the Codebook tray's stale-review
+            # worklist), replace that old comparison in the totals
+            # instead of adding a second one on top of it — otherwise
+            # every re-review permanently inflates total_compared and the
+            # displayed Agreement %, and can even push
+            # should_end_human_annotation()'s threshold check over the
+            # line using fabricated repeat-comparisons rather than
+            # actually-new ones.
+            already_compared = prediction.human_label is not None
+            previous_agreement = prediction.agrees_with_human
+
             prediction.human_label = label
             agrees = self._check_agreement(
                 prediction.predicted_label,
@@ -2407,20 +2424,31 @@ class SoloModeManager:
             )
             prediction.agrees_with_human = agrees
 
-            # Update agreement metrics
-            self.agreement_metrics.total_compared += 1
+            if already_compared:
+                if previous_agreement:
+                    self.agreement_metrics.agreements -= 1
+                else:
+                    self.agreement_metrics.disagreements -= 1
+            else:
+                self.agreement_metrics.total_compared += 1
+
             if agrees:
                 self.agreement_metrics.agreements += 1
+                self.disagreement_ids.discard(instance_id)
             else:
                 self.agreement_metrics.disagreements += 1
                 self.disagreement_ids.add(instance_id)
             self.agreement_metrics.update_rate()
 
-            # Track per-prompt-version agreement
+            # Track per-prompt-version agreement (same replace-not-add rule)
             pv = prediction.prompt_version
             if pv not in self._per_version_agreement:
                 self._per_version_agreement[pv] = {'compared': 0, 'agreements': 0}
-            self._per_version_agreement[pv]['compared'] += 1
+            if already_compared:
+                if previous_agreement:
+                    self._per_version_agreement[pv]['agreements'] -= 1
+            else:
+                self._per_version_agreement[pv]['compared'] += 1
             if agrees:
                 self._per_version_agreement[pv]['agreements'] += 1
 
@@ -2730,7 +2758,13 @@ class SoloModeManager:
         existing.append({"text": text, "why": why})
         update_code_fields(
             task_dir, code["id"], details={field: existing},
-            project=project, actor=actor, actor_kind="human")
+            project=project, actor=actor, actor_kind="human",
+            # Accumulating one more worked example from routine
+            # disagreement resolution isn't a redefinition of the code —
+            # don't bump the (project-wide) revision counter and
+            # stale-flag every other already-reviewed instance over it.
+            bump_revision=False,
+        )
 
     # === Instance Selection ===
 
@@ -2894,6 +2928,19 @@ class SoloModeManager:
                 return False
 
             if metrics.agreement_rate < threshold:
+                return False
+
+            # Don't hand the rest of the dataset to the LLM while a
+            # disagreement is still sitting unresolved. This catches ones
+            # the live annotate-and-submit flow already redirects for,
+            # plus a real gap that flow misses: the background labeling
+            # thread can retroactively compare an LLM prediction against
+            # an instance the human labeled earlier (out of order), find
+            # a disagreement, and add it to disagreement_ids — with no
+            # HTTP request in flight at that moment to redirect anywhere.
+            # Without this check that disagreement would just sit there
+            # forever while the workflow sails past it to Complete.
+            if self.get_pending_disagreements():
                 return False
 
             # Already in or past autonomous labeling phase
@@ -3107,6 +3154,17 @@ class SoloModeManager:
                 ]
                 codes_deleted = codebook_store.delete_codes(task_dir, all_ids)
 
+                # Wipe the revision counter and every stamped
+                # annotation-provenance row too — otherwise reseeding
+                # below bumps the revision off of wherever it was before
+                # the reset, which is now ahead of every existing stamp,
+                # and the Codebook tray's review worklist instantly flags
+                # every previously-labeled instance as stale even though
+                # the codebook (and often the annotation itself) was just
+                # wiped and rebuilt from scratch.
+                from potato.codebook import clear_provenance
+                clear_provenance(task_dir, project)
+
                 config_path = (
                     self.app_config.get('__config_file__')
                     or self.app_config.get('config_file')
@@ -3143,6 +3201,7 @@ class SoloModeManager:
             self.llm_labeled_ids = set()
             self.disagreement_ids = set()
             self.validation_sample_ids = set()
+            self.validated_instance_ids = set()
             self.pending_relabel_ids = set()
             self.relabel_wave_size = 0
             self.edge_case_ids = set()
@@ -3440,6 +3499,7 @@ class SoloModeManager:
                     'llm_labeled_ids': list(self.llm_labeled_ids),
                     'disagreement_ids': list(self.disagreement_ids),
                     'validation_sample_ids': list(self.validation_sample_ids),
+                    'validated_instance_ids': list(self.validated_instance_ids),
                     'pending_relabel_ids': list(self.pending_relabel_ids),
                     'relabel_wave_size': self.relabel_wave_size,
                     'edge_case_ids': list(self.edge_case_ids),
@@ -3531,6 +3591,7 @@ class SoloModeManager:
                 self.llm_labeled_ids = set(state.get('llm_labeled_ids', []))
                 self.disagreement_ids = set(state.get('disagreement_ids', []))
                 self.validation_sample_ids = set(state.get('validation_sample_ids', []))
+                self.validated_instance_ids = set(state.get('validated_instance_ids', []))
                 self.pending_relabel_ids = set(state.get('pending_relabel_ids', []))
                 self.relabel_wave_size = state.get('relabel_wave_size', 0)
                 self.edge_case_ids = set(state.get('edge_case_ids', []))
@@ -3865,8 +3926,16 @@ class SoloModeManager:
         """Get validation progress."""
         with self._lock:
             total = len(self.validation_sample_ids)
-            # Count validated (those that have been human-labeled from the validation set)
-            validated = len(self.validation_sample_ids & self.human_labeled_ids)
+            # Count validated — specifically instances that went through
+            # record_validation (the /solo/validation screen), not just
+            # "has any human label from anywhere". human_labeled_ids gets
+            # written by several unrelated flows (regular annotate,
+            # disagreement resolution, and revisiting an instance via the
+            # Codebook tray's stale-review worklist) — using it here meant
+            # relabeling something for a totally different reason could
+            # silently satisfy final validation for that instance without
+            # the user ever seeing the validation screen.
+            validated = len(self.validation_sample_ids & self.validated_instance_ids)
             return {
                 'total_samples': total,
                 'validated': validated,
@@ -3881,7 +3950,7 @@ class SoloModeManager:
         with self._lock:
             samples = []
             for instance_id in self.validation_sample_ids:
-                if instance_id not in self.human_labeled_ids:
+                if instance_id not in self.validated_instance_ids:
                     pred = self.get_llm_prediction_for_instance(instance_id)
                     if pred:
                         samples.append({
@@ -3903,6 +3972,7 @@ class SoloModeManager:
         schemes = self.app_config.get('annotation_schemes', [])
         schema_name = schemes[0].get('name', 'default') if schemes else 'default'
         self.record_human_label(instance_id, schema_name, human_label, 'validator')
+        self.validated_instance_ids.add(instance_id)
         if notes:
             try:
                 from potato.solo_mode import annotation_notes

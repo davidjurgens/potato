@@ -124,6 +124,60 @@ def admin_required(f):
     return decorated_function
 
 
+def _stamp_codebook_provenance(instance_id: str, username: str) -> None:
+    """Re-stamp this instance with the current codebook revision now that
+    a human has (re-)decided its label — annotate(), disagreement
+    resolution, periodic review, and final validation all finalize a
+    human label and should call this.
+
+    Without it, the codebook tray's "Review" worklist (instances flagged
+    stale because the codebook changed since they were labeled) never
+    clears: that worklist is driven entirely by comparing each instance's
+    stamped revision against the current one, and revisiting/resolving
+    the instance here doesn't move that stamp unless this runs. No-op
+    unless the project uses a codebook; never allowed to break the save.
+    """
+    try:
+        from potato.codebook.api import codebook_enabled
+        from potato.flask_server import config as _config
+        if codebook_enabled(_config):
+            from potato.codebook import record_annotation
+            record_annotation(
+                _config.get('task_dir', '.'),
+                _config.get('annotation_task_name') or 'default',
+                instance_id, username,
+            )
+    except Exception:
+        logger.debug(
+            "Codebook provenance stamp skipped for %s", instance_id,
+            exc_info=True,
+        )
+
+
+def _current_user_stale_items(username: str) -> list:
+    """This user's codebook-review worklist: instances they labeled under
+    an older codebook revision, each with the codes added since. []
+    (never raises) if the project doesn't use a codebook."""
+    try:
+        from potato.codebook.api import codebook_enabled
+        from potato.flask_server import config as _config
+        if not codebook_enabled(_config):
+            return []
+        from potato.codebook import stale_instances
+        return stale_instances(
+            _config.get('task_dir', '.'),
+            _config.get('annotation_task_name') or 'default',
+            username,
+        )
+    except Exception:
+        logger.debug("Codebook staleness check skipped", exc_info=True)
+        return []
+
+
+def _current_user_stale_ids(username: str) -> set:
+    return {str(it['instance_id']) for it in _current_user_stale_items(username)}
+
+
 # =============================================================================
 # User Routes
 # =============================================================================
@@ -368,6 +422,31 @@ def edge_cases():
     )
 
 
+@solo_mode_bp.route('/codebook-review')
+@login_required
+@solo_mode_required
+def codebook_review():
+    """Mandatory stop for instances labeled under an older codebook
+    revision. annotate() redirects here whenever this user has any
+    outstanding, and each "Go" link routes back into annotate() for that
+    specific instance — which the gate there lets through because it's
+    one of the flagged ids, not a request for new work."""
+    manager = get_solo_mode_manager()
+    user_id = session.get('username', 'anonymous')
+
+    items = _current_user_stale_items(user_id)
+    if not items:
+        # Cleared since the redirect that sent them here (e.g. two tabs,
+        # or they just finished the last one) — nothing left to gate on.
+        return redirect(url_for('solo_mode.annotate'))
+
+    return render_template(
+        'solo/codebook_review.html',
+        items=items,
+        phase=manager.get_current_phase().name.lower(),
+    )
+
+
 @solo_mode_bp.route('/annotate', methods=['GET', 'POST'])
 @login_required
 @solo_mode_required
@@ -386,6 +465,31 @@ def annotate():
     # can't label and the screen is a dead end — send the user to Setup.
     if not manager.get_current_prompt_text():
         return redirect(url_for('solo_mode.setup'))
+
+    # Codebook-review gate: instances this user labeled under an older
+    # codebook revision must be re-confirmed before new work is handed
+    # out. Previously this was purely advisory (a badge in the tray you
+    # could ignore forever); now it's mandatory. Only blocks requests for
+    # a *new* instance — a request for one of the flagged instances
+    # itself (the "Go" link from the review page/tray) passes through so
+    # the review can actually happen.
+    if request.method == 'GET':
+        requested_id = request.args.get('instance_id')
+        stale_ids = _current_user_stale_ids(user_id)
+        if stale_ids and requested_id not in stale_ids:
+            return redirect(url_for('solo_mode.codebook_review'))
+
+        # Disagreement gate: the live annotate-and-submit path already
+        # redirects to /disagreements the moment a disagreement happens
+        # in front of the user, but the background labeling thread can
+        # also find one on its own — retroactively comparing an LLM
+        # prediction against an instance the human labeled earlier, out
+        # of order, with no request in flight to redirect anywhere at
+        # that moment (see manager.check_and_advance_to_autonomous).
+        # Catch that case here so it can't just sit unresolved while the
+        # workflow moves on toward Complete.
+        if manager.get_pending_disagreements():
+            return redirect(url_for('solo_mode.disagreements'))
 
     # Reaching the annotate screen means parallel annotation has begun.
     # Two ways in leave the phase behind PARALLEL_ANNOTATION: coming
@@ -415,6 +519,7 @@ def annotate():
         if instance_id and annotation:
             # Record human annotation
             manager.record_human_annotation(instance_id, annotation, user_id)
+            _stamp_codebook_provenance(instance_id, user_id)
 
             # Check for disagreements
             if manager.check_for_disagreement(instance_id, annotation):
@@ -716,6 +821,8 @@ def disagreements():
                 instance_id, schema_name, actual_label, resolved_by='human',
                 notes=notes
             )
+            _stamp_codebook_provenance(
+                instance_id, session.get('username', 'anonymous'))
 
             # Check for more disagreements
             pending = manager.get_pending_disagreements()
@@ -787,6 +894,8 @@ def review():
                 manager.approve_llm_label(instance_id)
             elif decision == 'correct' and corrected_label:
                 manager.correct_llm_label(instance_id, corrected_label)
+            _stamp_codebook_provenance(
+                instance_id, session.get('username', 'anonymous'))
 
             return redirect(url_for('solo_mode.review'))
 
@@ -831,6 +940,8 @@ def validation():
 
         if instance_id and human_label:
             manager.record_validation(instance_id, human_label, notes)
+            _stamp_codebook_provenance(
+                instance_id, session.get('username', 'anonymous'))
 
             # Check if validation is complete
             progress = manager.get_validation_progress()

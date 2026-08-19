@@ -708,13 +708,34 @@ class TestSoloModeManagerValidation:
         assert progress['validated'] == 0
         assert progress['remaining'] == 5
 
-    def test_get_validation_progress_with_human_labels(self, manager):
+    def test_get_validation_progress_with_validated_instances(self, manager):
+        sample = manager.select_validation_sample(5)
+        for sid in sample[:2]:
+            manager.validated_instance_ids.add(sid)
+        progress = manager.get_validation_progress()
+        assert progress['validated'] == 2
+        assert progress['remaining'] == 3
+
+    def test_validation_progress_ignores_human_labels_from_other_flows(self, manager):
+        """A human label from any other source (regular annotate,
+        disagreement resolution, revisiting an instance via the Codebook
+        tray's stale-review worklist) must NOT count as having gone
+        through /solo/validation — only record_validation() should."""
         sample = manager.select_validation_sample(5)
         for sid in sample[:2]:
             manager.human_labeled_ids.add(sid)
         progress = manager.get_validation_progress()
-        assert progress['validated'] == 2
-        assert progress['remaining'] == 3
+        assert progress['validated'] == 0
+        assert progress['remaining'] == 5
+
+    def test_record_validation_marks_instance_validated(self, manager):
+        sample = manager.select_validation_sample(3)
+        manager.record_validation(sample[0], 'some_label')
+        progress = manager.get_validation_progress()
+        assert progress['validated'] == 1
+        assert sample[0] not in [
+            s['instance_id'] for s in manager.get_validation_samples()
+        ]
 
 
 # === State Persistence ===

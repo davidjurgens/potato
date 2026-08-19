@@ -82,6 +82,25 @@ def current_revision(task_dir: str, project: str) -> int:
     return int(row["revision"]) if row else 0
 
 
+def clear_provenance(task_dir: str, project: str) -> None:
+    """Wipe this project's revision counter and every stamped
+    annotation-provenance row — for a debug/full reset, where the
+    codebook itself is being torn down and rebuilt from scratch, so any
+    prior revision stamp refers to codes that no longer exist. Without
+    this, a reset that reseeds N codes bumps the revision N times off of
+    whatever it was before, which is now higher than every existing
+    stamp — instantly flagging every previously-labeled instance as
+    needing review, even ones whose own annotation was also wiped by the
+    same reset.
+    """
+    conn = _db(task_dir)
+    conn.execute(
+        "DELETE FROM annotation_provenance WHERE project = ?", (project,))
+    conn.execute(
+        "DELETE FROM codebook_revision WHERE project = ?", (project,))
+    conn.commit()
+
+
 def bump_revision(task_dir: str, project: str) -> int:
     """Increment (or initialise) the project's revision; return the new
     value. Called only for option-set-changing codebook ops."""

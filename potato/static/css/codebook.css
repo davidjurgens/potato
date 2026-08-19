@@ -64,23 +64,45 @@
 
 .cb-panel-toggle:active { background: var(--cb-surface-3); }
 
+/* Pending proposals to review: the toggle itself gets the "needs
+   attention" amber treatment (not just the small corner badge below),
+   plus a slow pulse, so it reads at a glance instead of requiring the
+   user to spot a small number. */
+.cb-panel-toggle.has-pending {
+    border-color: var(--cb-warn-line);
+    background: var(--cb-warn-surface);
+    color: var(--cb-warn-ink);
+    animation: cb-toggle-pulse 2.2s ease-in-out infinite;
+}
+
+.cb-panel-toggle.has-pending:hover { background: var(--cb-warn-surface); }
+
+@keyframes cb-toggle-pulse {
+    0%, 100% { box-shadow: -1px 1px 6px rgba(var(--cb-shadow-ink), 0.08), 0 0 0 0 rgba(122, 82, 0, 0.35); }
+    50%      { box-shadow: -1px 1px 6px rgba(var(--cb-shadow-ink), 0.08), 0 0 0 6px rgba(122, 82, 0, 0); }
+}
+
 .cb-toggle-badge {
     position: absolute;
-    top: -6px;
-    left: -6px;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 4px;
+    top: -8px;
+    left: -8px;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 5px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 999px;
-    background: var(--cb-accent);
-    color: var(--cb-accent-ink);
-    font-size: 0.68rem;
+    background: var(--cb-warn-ink);
+    color: var(--cb-warn-surface);
+    font-size: 0.75rem;
     font-weight: 700;
     line-height: 1;
-    border: 1.5px solid var(--cb-surface);
+    border: 2px solid var(--cb-surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cb-panel-toggle.has-pending { animation: none; }
 }
 
 .cb-panel {
