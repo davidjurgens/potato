@@ -76,6 +76,11 @@ class SoloDashboard {
       this._renderOverview(data);
       if (data.phase === 'autonomous_labeling') {
         this._checkAutonomousLabeling();
+      } else if (
+        (data.phase === 'parallel_annotation' || data.phase === 'active_annotation')
+        && data.annotation_stats && data.annotation_stats.remaining === 0
+      ) {
+        this._checkAutonomousReadiness();
       }
     } catch (e) {
       console.warn('Solo dashboard: failed to load overview', e);
@@ -105,6 +110,45 @@ class SoloDashboard {
       if (textEl && data.in_autonomous_labeling) {
         textEl.textContent = data.remaining + ' of ' + data.total
           + ' instance(s) left — checks automatically, no action needed';
+      }
+    } catch (e) {
+      // best-effort; next 30s cycle will retry
+    }
+  }
+
+  // Once there's nothing left to hand out ("Continue Annotating" has
+  // nothing new to show), the move to Auto Label depends on a check that
+  // previously only ran inside the annotate page itself — so a user just
+  // sitting on the dashboard would never see it re-evaluated, even if it
+  // was only blocked on something that resolves on its own (agreement
+  // still catching up, a disagreement not yet handled). This polls that
+  // check directly and explains why it's waiting instead of nothing.
+  async _checkAutonomousReadiness() {
+    const box = document.getElementById('autonomous-readiness-status');
+    const textEl = document.getElementById('autonomous-readiness-text');
+    if (!box) return;
+    try {
+      const resp = await fetch('/solo/api/autonomous-readiness/check', { method: 'POST' });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (!data.applicable) { box.hidden = true; return; }
+      box.hidden = false;
+      if (data.advanced) {
+        if (textEl) textEl.textContent = 'Ready — moving to Auto Label…';
+        setTimeout(() => window.location.reload(), 800);
+        return;
+      }
+      if (data.ready) {
+        // Already past this phase by the time we checked (e.g. another
+        // tab advanced it) — refresh to show the real current state.
+        window.location.reload();
+        return;
+      }
+      if (textEl) {
+        const reasons = (data.blockers || []).map(b => b.message).join('; ');
+        textEl.textContent = reasons
+          ? 'Waiting to start Auto Label — ' + reasons
+          : 'Waiting to start Auto Label…';
       }
     } catch (e) {
       // best-effort; next 30s cycle will retry

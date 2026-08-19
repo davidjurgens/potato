@@ -154,6 +154,61 @@ def _stamp_codebook_provenance(instance_id: str, username: str) -> None:
         )
 
 
+def _link_codebook_code(instance_id: str, label: Any, username: str) -> None:
+    """Link this instance to the codebook code matching its label
+    (Solo Mode's scheme labels *are* code names when the scheme has
+    codebook: true), replacing any link left over from an earlier label.
+
+    This is what lets a codebook edit's review-flag be scoped to just the
+    instances that actually used the affected code (via
+    codebook.service._restamp / store.affected_annotation_ids) instead of
+    either the whole project or nothing — without it, nothing ever
+    populates the annotation<->code link table Solo Mode's labeling never
+    touched, and scoping isn't possible at all. No-op unless the project
+    uses a codebook, or the label doesn't match a code (free-text
+    schemas); never allowed to break the save.
+    """
+    try:
+        from potato.codebook.api import codebook_enabled
+        from potato.flask_server import config as _config
+        if not codebook_enabled(_config):
+            return
+        if label is None:
+            return
+
+        from potato.codebook.codebook import Codebook
+        from potato.codebook import service as codebook_service
+
+        task_dir = _config.get('task_dir', '.')
+        project = _config.get('annotation_task_name') or 'default'
+
+        cb = Codebook.load(task_dir, project)
+        target = next(
+            (d for d in cb.details_in_order() if d.get('name') == str(label)),
+            None,
+        )
+        if target is None:
+            return  # label doesn't correspond to a codebook code
+
+        # Drop any link from a *different* code (an earlier label, before
+        # a relabel) so an instance always points at exactly the code
+        # matching its current label, never a stale extra one.
+        for existing in codebook_service.codes_on(task_dir, instance_id):
+            if existing.get('code_id') != target['id']:
+                codebook_service.remove_code(
+                    task_dir, annotation_id=instance_id,
+                    code_id=existing['code_id'])
+
+        codebook_service.apply_code(
+            task_dir, project=project, annotation_id=instance_id,
+            code_id=target['id'], created_by=username,
+        )
+    except Exception:
+        logger.debug(
+            "Codebook code-link skipped for %s", instance_id, exc_info=True,
+        )
+
+
 def _current_user_stale_items(username: str) -> list:
     """This user's codebook-review worklist: instances they labeled under
     an older codebook revision, each with the codes added since. []
@@ -476,7 +531,14 @@ def annotate():
     if request.method == 'GET':
         requested_id = request.args.get('instance_id')
         stale_ids = _current_user_stale_ids(user_id)
-        if stale_ids and requested_id not in stale_ids:
+        # True once the user has actually clicked "Go" on a specific
+        # flagged item — used below so *that* request isn't itself
+        # bounced to a different mandatory queue (disagreements) before
+        # it ever reaches the instance the user is trying to resolve.
+        reviewing_stale_item = (
+            requested_id is not None and requested_id in stale_ids
+        )
+        if stale_ids and not reviewing_stale_item:
             return redirect(url_for('solo_mode.codebook_review'))
 
         # Disagreement gate: the live annotate-and-submit path already
@@ -487,8 +549,13 @@ def annotate():
         # of order, with no request in flight to redirect anywhere at
         # that moment (see manager.check_and_advance_to_autonomous).
         # Catch that case here so it can't just sit unresolved while the
-        # workflow moves on toward Complete.
-        if manager.get_pending_disagreements():
+        # workflow moves on toward Complete. Skipped while
+        # reviewing_stale_item: without this, a pending disagreement
+        # anywhere in the project silently hijacks every "Go" click from
+        # the codebook-review queue and reroutes it to /disagreements
+        # instead — the review item never becomes reachable at all, and
+        # from the user's side that reads as "Go does nothing".
+        if not reviewing_stale_item and manager.get_pending_disagreements():
             return redirect(url_for('solo_mode.disagreements'))
 
     # Reaching the annotate screen means parallel annotation has begun.
@@ -520,6 +587,7 @@ def annotate():
             # Record human annotation
             manager.record_human_annotation(instance_id, annotation, user_id)
             _stamp_codebook_provenance(instance_id, user_id)
+            _link_codebook_code(instance_id, annotation, user_id)
 
             # Check for disagreements
             if manager.check_for_disagreement(instance_id, annotation):
@@ -543,8 +611,16 @@ def annotate():
     labels = manager.get_available_labels()
 
     if instance_id is None:
-        # Check if annotation is complete (atomic check-and-advance)
-        if manager.check_and_advance_to_autonomous():
+        # Check if annotation is complete (atomic check-and-advance).
+        # check_autonomous_readiness() is the diagnostic sibling of the
+        # older check_and_advance_to_autonomous() — same trigger, but
+        # when it's not ready it also says *why* (agreement below
+        # threshold, a disagreement still pending, not enough
+        # comparisons yet), so "Caught up for now" doesn't leave the
+        # user staring at a page with no idea whether anything is
+        # actually still blocking Auto Label from starting.
+        readiness = manager.check_autonomous_readiness()
+        if readiness.get('advanced'):
             return redirect(url_for('solo_mode.status'))
 
         return render_template(
@@ -558,6 +634,7 @@ def annotate():
             nav=nav,
             relabel=manager.get_relabel_progress(),
             existing_label=None,
+            autonomous_blockers=readiness.get('blockers') or [],
         )
 
     # Get full instance data
@@ -823,6 +900,8 @@ def disagreements():
             )
             _stamp_codebook_provenance(
                 instance_id, session.get('username', 'anonymous'))
+            _link_codebook_code(
+                instance_id, actual_label, session.get('username', 'anonymous'))
 
             # Check for more disagreements
             pending = manager.get_pending_disagreements()
@@ -890,12 +969,17 @@ def review():
         corrected_label = request.form.get('corrected_label')
 
         if instance_id and decision:
+            final_label = None
             if decision == 'approve':
                 manager.approve_llm_label(instance_id)
+                pred = manager.get_llm_prediction_for_instance(instance_id)
+                final_label = pred.get('label') if pred else None
             elif decision == 'correct' and corrected_label:
                 manager.correct_llm_label(instance_id, corrected_label)
-            _stamp_codebook_provenance(
-                instance_id, session.get('username', 'anonymous'))
+                final_label = corrected_label
+            username = session.get('username', 'anonymous')
+            _stamp_codebook_provenance(instance_id, username)
+            _link_codebook_code(instance_id, final_label, username)
 
             return redirect(url_for('solo_mode.review'))
 
@@ -942,6 +1026,8 @@ def validation():
             manager.record_validation(instance_id, human_label, notes)
             _stamp_codebook_provenance(
                 instance_id, session.get('username', 'anonymous'))
+            _link_codebook_code(
+                instance_id, human_label, session.get('username', 'anonymous'))
 
             # Check if validation is complete
             progress = manager.get_validation_progress()
@@ -1132,6 +1218,24 @@ def api_check_autonomous_labeling():
     server restart)."""
     manager = get_solo_mode_manager()
     return jsonify(manager.check_autonomous_labeling_progress())
+
+
+@solo_mode_bp.route('/api/autonomous-readiness/check', methods=['POST'])
+@login_required
+@solo_mode_required
+def api_check_autonomous_readiness():
+    """Check whether Parallel/Active Annotation is ready to hand off to
+    Autonomous Labeling, and advance if so — reporting *why* not if it
+    isn't (agreement below threshold, not enough comparisons yet, a
+    disagreement still pending). Safe to call repeatedly/on a timer.
+
+    check_and_advance_to_autonomous() (what actually gates the
+    transition) only ever runs inside annotate()'s GET handler, so once
+    there's nothing left to annotate, nothing re-checks it if you're just
+    sitting on the dashboard — this is what the dashboard polls instead.
+    """
+    manager = get_solo_mode_manager()
+    return jsonify(manager.check_autonomous_readiness())
 
 
 @solo_mode_bp.route('/api/relabel-status')

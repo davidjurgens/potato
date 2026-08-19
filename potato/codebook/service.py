@@ -230,8 +230,14 @@ def update_code_fields(
             task_dir, project=project, op=f"edit_{field}", code_id=code_id,
             old_value=old_vals[field], new_value=new_val, actor=actor,
             actor_kind=actor_kind, revision=new_rev)
-    if bump_revision:
-        _restamp(task_dir, project, [code_id])
+    # Scoped, not project-wide: only annotations actually linked to this
+    # code get soft-flagged (touch_instances only ever lowers a stamp,
+    # never raises one, so this is safe to call even when bump_revision
+    # is False and the global counter didn't move). This is what lets
+    # automatic example-teaching flag just the instances that used the
+    # affected code, instead of either the whole project (the treadmill
+    # bump_revision=True would cause here) or nothing at all.
+    _restamp(task_dir, project, [code_id])
     _notify(task_dir, project)
     return updated
 

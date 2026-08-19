@@ -1018,6 +1018,15 @@
             <a href="{{ url_for('solo_mode.prompt_editor') }}" class="btn btn-primary">Verify Prompt</a>
         {% elif phase in ['parallel_annotation', 'active_annotation'] %}
             <a href="{{ url_for('solo_mode.annotate') }}" class="btn btn-primary">Continue Annotating</a>
+            {# Hidden unless annotation_stats.remaining is 0 (set by JS on
+               load) — nothing left to hand out, so this replaces the
+               button's purpose: tell the user what's actually blocking
+               the move to Auto Label instead of leaving them to guess
+               why "Continue Annotating" does nothing useful anymore. #}
+            <div id="autonomous-readiness-status" class="autonomous-status" role="status" aria-live="polite" hidden>
+                <span class="loading-spinner" style="width: 14px; height: 14px; border-width: 2px; border-top-color: var(--primary, #6e56cf); border-color: color-mix(in oklab, var(--primary, #6e56cf) 25%, transparent); border-top-color: var(--primary, #6e56cf);"></span>
+                <span id="autonomous-readiness-text">Checking whether Auto Label can start&hellip;</span>
+            </div>
         {% elif phase == 'disagreement_resolution' %}
             <a href="{{ url_for('solo_mode.disagreements') }}" class="btn btn-primary">Resolve Disagreements</a>
         {% elif phase == 'periodic_review' %}

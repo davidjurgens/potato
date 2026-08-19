@@ -2423,6 +2423,18 @@ class SoloModeManager:
                 schema_name
             )
             prediction.agrees_with_human = agrees
+            # A fresh label is a fresh decision — any disagreement_resolved
+            # flag on this prediction was for whatever label was resolved
+            # last time, not this one. Without resetting it, an instance
+            # that was ever resolved once becomes permanently invisible to
+            # the disagreement system: relabel it later (e.g. via the
+            # Codebook tray's stale-review "Go" link) into a *new*
+            # disagreement, and check_for_disagreement()/
+            # get_pending_disagreements() both keep reporting "resolved"
+            # for a decision that was never actually looked at — the
+            # workflow never routes the human to it, and the resulting
+            # disagreement effectively vanishes.
+            prediction.disagreement_resolved = False
 
             if already_compared:
                 if previous_agreement:
@@ -2608,7 +2620,7 @@ class SoloModeManager:
             from potato.user_state_management import get_user_state_manager
             usm = get_user_state_manager()
             # Check all users' annotations for this instance
-            for user_id in usm.get_all_user_ids():
+            for user_id in usm.get_user_ids():
                 user_state = usm.get_user_state(user_id)
                 if user_state is None:
                     continue
@@ -2953,6 +2965,73 @@ class SoloModeManager:
                 SoloPhase.AUTONOMOUS_LABELING,
                 reason="Agreement threshold reached"
             )
+
+    def check_autonomous_readiness(self) -> Dict[str, Any]:
+        """Diagnostic sibling of check_and_advance_to_autonomous(): same
+        checks, but explains *why* it isn't advancing instead of just
+        returning False, and actually advances if everything's clear.
+
+        check_and_advance_to_autonomous() only ever runs from inside
+        annotate()'s GET handler — so once there's nothing left to hand
+        out, a user sitting on the dashboard has no reason to visit that
+        page again, and the check never fires again even if it's only
+        blocked on something transient (agreement not yet at threshold,
+        a disagreement not yet resolved). This is what the dashboard
+        polls instead, so the transition doesn't depend on a page visit
+        that stops making sense once annotation looks "done".
+        """
+        with self._lock:
+            phase = self.phase_controller.get_current_phase()
+            if phase.value >= SoloPhase.AUTONOMOUS_LABELING.value:
+                return {
+                    'phase': phase.to_str(), 'applicable': False,
+                    'ready': True, 'advanced': False, 'blockers': [],
+                }
+            if phase not in (SoloPhase.PARALLEL_ANNOTATION, SoloPhase.ACTIVE_ANNOTATION):
+                return {
+                    'phase': phase.to_str(), 'applicable': False,
+                    'ready': False, 'advanced': False, 'blockers': [],
+                }
+
+            metrics = self.agreement_metrics
+            threshold = self.config.thresholds.end_human_annotation_agreement
+            min_sample = self.config.thresholds.minimum_validation_sample
+
+            blockers = []
+            if metrics.total_compared < min_sample:
+                blockers.append({
+                    'type': 'sample_size',
+                    'message': f'{metrics.total_compared} of {min_sample} '
+                               f'comparisons made so far',
+                })
+            if metrics.agreement_rate < threshold:
+                blockers.append({
+                    'type': 'agreement',
+                    'message': f'{metrics.agreement_rate * 100:.0f}% '
+                               f'agreement, need {threshold * 100:.0f}%',
+                })
+            pending = self.get_pending_disagreements()
+            if pending:
+                blockers.append({
+                    'type': 'disagreements',
+                    'message': f'{len(pending)} disagreement(s) waiting '
+                               f'to be resolved',
+                    'count': len(pending),
+                })
+
+            if blockers:
+                return {
+                    'phase': phase.to_str(), 'applicable': True,
+                    'ready': False, 'advanced': False, 'blockers': blockers,
+                }
+
+        advanced = self.check_and_advance_to_autonomous()
+        with self._lock:
+            new_phase = self.phase_controller.get_current_phase()
+        return {
+            'phase': new_phase.to_str(), 'applicable': True,
+            'ready': True, 'advanced': advanced, 'blockers': [],
+        }
 
     def _finish_autonomous_labeling(self) -> None:
         """Called by the background labeling loop once every instance has

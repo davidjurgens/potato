@@ -4,61 +4,61 @@
     {
       "from_phase": "setup",
       "to_phase": "prompt-review",
-      "timestamp": "2026-08-19T14:19:48.307469",
+      "timestamp": "2026-08-19T15:35:39.846184",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "prompt-review",
       "to_phase": "edge-case-synthesis",
-      "timestamp": "2026-08-19T14:19:50.256059",
+      "timestamp": "2026-08-19T15:35:45.641335",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "edge-case-synthesis",
       "to_phase": "edge-case-labeling",
-      "timestamp": "2026-08-19T14:20:12.447509",
+      "timestamp": "2026-08-19T15:36:17.639853",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "edge-case-labeling",
       "to_phase": "prompt-validation",
-      "timestamp": "2026-08-19T14:20:42.970181",
+      "timestamp": "2026-08-19T15:37:06.853530",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "prompt-validation",
       "to_phase": "parallel-annotation",
-      "timestamp": "2026-08-19T14:20:46.410529",
+      "timestamp": "2026-08-19T15:39:47.582485",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "parallel-annotation",
       "to_phase": "autonomous-labeling",
-      "timestamp": "2026-08-19T14:22:50.850224",
+      "timestamp": "2026-08-19T15:43:03.442204",
       "reason": "Agreement threshold reached",
       "metadata": {}
     },
     {
       "from_phase": "autonomous-labeling",
       "to_phase": "final-validation",
-      "timestamp": "2026-08-19T14:22:50.959769",
+      "timestamp": "2026-08-19T15:43:03.555076",
       "reason": "Autonomous labeling complete; nothing LLM-only to validate",
       "metadata": {}
     },
     {
       "from_phase": "final-validation",
       "to_phase": "completed",
-      "timestamp": "2026-08-19T14:22:50.963688",
+      "timestamp": "2026-08-19T15:43:03.560579",
       "reason": "No LLM-only labels to validate",
       "metadata": {}
     }
   ],
   "phase_data": {},
-  "started_at": "2026-08-19T14:19:48.307504",
-  "completed_at": "2026-08-19T14:22:50.963694"
+  "started_at": "2026-08-19T15:35:39.846204",
+  "completed_at": "2026-08-19T15:43:03.560587"
 }

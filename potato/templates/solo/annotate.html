@@ -604,7 +604,19 @@
             </p>
         {% else %}
             <h1>Caught up for now</h1>
-            <p>{{ message }}. New instances may appear shortly &mdash; check the dashboard for progress.</p>
+            {% if autonomous_blockers %}
+                <p>{{ message }} &mdash; nothing left for you to label. Auto Label hasn't
+                   started yet because:</p>
+                <ul>
+                    {% for b in autonomous_blockers %}
+                    <li>{{ b.message }}</li>
+                    {% endfor %}
+                </ul>
+                <p>Nothing more to do here for now &mdash; the dashboard checks
+                   automatically and will move you on once these clear.</p>
+            {% else %}
+                <p>{{ message }}. New instances may appear shortly &mdash; check the dashboard for progress.</p>
+            {% endif %}
         {% endif %}
 
         {% if stats %}
