@@ -173,3 +173,7 @@ examples/image/text-prompt-labeling/media/
 # Rendered by examples/video/mask-propagation/make_clip.py. Generated rather
 # than committed for the same reason as the deep-zoom image above.
 examples/video/mask-propagation/media/
+
+# Local deploy state. Holds secrets.json (admin API key, Flask session key) and
+# the built bundle. Committing it would publish the keys for a live deployment.
+.potato/

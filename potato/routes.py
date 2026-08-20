@@ -31,7 +31,7 @@ import logging
 import traceback
 import datetime
 from datetime import timedelta
-from flask import Flask, session, render_template, request, redirect, url_for, jsonify, make_response
+from flask import Flask, Response, session, render_template, request, redirect, url_for, jsonify, make_response
 import time
 import uuid
 
@@ -2237,6 +2237,27 @@ def trigger_option_highlight_prefetch():
     ais.start_option_highlight_prefetch(instance_id, prefetch_count)
 
     return jsonify({"status": "prefetch_started", "from_instance": instance_id})
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    """Unauthenticated liveness probe for containers and load balancers.
+
+    Deliberately says almost nothing. It is reachable without a session (the
+    path is whitelisted in ``check_session_validity``), so anything it reports
+    is public: no task name, no item or annotator counts, no config. Callers
+    that need those use ``/admin/health`` with an API key.
+
+    Returns 200 once the state managers exist, 503 while the server is still
+    coming up. A container HEALTHCHECK and the deploy provider's post-create
+    poll both key on that transition.
+    """
+    try:
+        get_user_state_manager()
+        get_item_state_manager()
+    except Exception:
+        return jsonify({"status": "starting"}), 503
+    return jsonify({"status": "ok"}), 200
 
 
 # Admin routes for system inspection (read-only)
@@ -8428,21 +8449,8 @@ def configure_routes(flask_app, app_config):
     config = app_config
 
     # Set up session configuration
-    # Use a random secret key if sessions shouldn't persist, otherwise use the configured one
-    if config.get("persist_sessions", False):
-        secret_key = config.get("secret_key") or os.environ.get("POTATO_SECRET_KEY")
-        if not secret_key:
-            raise ValueError(
-                "persist_sessions is enabled but no secret_key is configured. "
-                "Set 'secret_key' in your config file or POTATO_SECRET_KEY environment variable."
-            )
-        app.secret_key = secret_key
-    else:
-        # Generate a random secret key to ensure sessions don't persist between restarts
-        import secrets
-        app.secret_key = secrets.token_hex(32)
-
-    app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 7))
+    from potato.server_utils.session_config import configure_session
+    configure_session(app, config)
 
     # Dataset publishing blueprint. Registered here (not only in configure_app) so
     # it exists on both the live server and the in-process test harness, which build
@@ -8568,6 +8576,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/api/ai_assistant", "ai_assistant", ai_assistant, methods=["GET"])
     app.add_url_rule("/api/audio/proxy", "audio_proxy", audio_proxy, methods=["GET"])
     app.add_url_rule("/admin/user_state/<user_id>", "admin_user_state", admin_user_state, methods=["GET"])
+    app.add_url_rule("/health", "health", health, methods=["GET"])
     app.add_url_rule("/admin/health", "admin_health", admin_health, methods=["GET"])
     app.add_url_rule("/admin/system_state", "admin_system_state", admin_system_state, methods=["GET"])
     app.add_url_rule("/admin/all_instances", "admin_all_instances", admin_all_instances, methods=["GET"])
@@ -8686,6 +8695,8 @@ def configure_routes(flask_app, app_config):
     # Export admin API routes
     app.add_url_rule("/admin/api/export/formats", "admin_api_export_formats", admin_api_export_formats, methods=["GET"])
     app.add_url_rule("/admin/api/export", "admin_api_export", admin_api_export, methods=["POST"])
+    app.add_url_rule("/admin/api/data/manifest", "admin_api_data_manifest", admin_api_data_manifest, methods=["GET"])
+    app.add_url_rule("/admin/api/data/archive", "admin_api_data_archive", admin_api_data_archive, methods=["GET"])
 
     # Agent chat routes (interactive agent testing)
     app.add_url_rule("/agent_chat/send", "agent_chat_send", agent_chat_send, methods=["POST"])
@@ -9800,6 +9811,66 @@ def admin_api_export_formats():
     from potato.export import export_registry
     formats = export_registry.list_exporters()
     return jsonify({"formats": formats})
+
+
+def _archive_paths():
+    """Absolute (output_dir, task_dir) for the running task."""
+    task_dir = os.path.abspath(config.get("task_dir") or ".")
+    output_dir = config.get("output_annotation_dir") or "annotation_output"
+    if not os.path.isabs(output_dir):
+        output_dir = os.path.join(task_dir, output_dir)
+    return os.path.abspath(output_dir), task_dir
+
+
+@app.route('/admin/api/data/manifest', methods=['GET'])
+def admin_api_data_manifest():
+    """What a data archive would contain, and how large it would be.
+
+    Lets `potato deploy pull` report a size before downloading, and gives it
+    something to check the result against.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.server_utils.data_archive import archive_manifest
+
+    output_dir, task_dir = _archive_paths()
+    payload = archive_manifest(output_dir, task_dir)
+    payload["task_name"] = config.get("annotation_task_name") or "potato"
+    return jsonify(payload)
+
+
+@app.route('/admin/api/data/archive', methods=['GET'])
+def admin_api_data_archive():
+    """Download everything collected, as a gzipped tar.
+
+    The transport of last resort, and the only one on a host without SSH — a
+    Space, a Render service, anything serverless. Those are also the hosts whose
+    filesystem does not survive a restart, so this is not a convenience.
+
+    Streamed rather than assembled in memory: a study with media produces an
+    archive larger than a small container's RAM, and building it there would
+    kill the server being backed up.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin access required"}), 403
+
+    from potato.server_utils.data_archive import archive_filename, stream_archive
+
+    output_dir, task_dir = _archive_paths()
+    task_name = config.get("annotation_task_name") or "potato"
+    filename = archive_filename(task_name)
+
+    logger.info("Serving a data archive of %s to an admin API caller", output_dir)
+    response = Response(stream_archive(output_dir, task_dir),
+                        mimetype="application/gzip")
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    # The content is generated per request and must never be cached by a proxy:
+    # it is a complete copy of the study's data.
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.route('/admin/api/export', methods=['POST'])

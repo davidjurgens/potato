@@ -1,5 +1,4 @@
 port: 8000
-server_name: Potato Annotator
 annotation_task_name: Text-prompt labelling
 task_dir: .
 output_annotation_dir: annotation_output/

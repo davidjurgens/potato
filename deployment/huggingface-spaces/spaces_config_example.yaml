@@ -33,7 +33,7 @@ task_dir: .
 # Authentication via HuggingFace OAuth
 # OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET are auto-provided by HF Spaces
 authentication:
-  type: oauth
+  method: oauth
   providers:
     huggingface:
       client_id: "${OAUTH_CLIENT_ID}"

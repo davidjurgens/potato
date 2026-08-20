@@ -99,7 +99,6 @@ annotation_schemes:
     multiline: true
     rows: 4
 
-html_layout: default
 base_html_template: default
 header_file: default
 site_dir: default

@@ -30,7 +30,7 @@ When deploying on Spaces with `hf_oauth: true` in the README front matter, Huggi
 
 ```yaml
 authentication:
-  type: oauth
+  method: oauth
   providers:
     huggingface:
       client_id: "${OAUTH_CLIENT_ID}"

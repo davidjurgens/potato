@@ -1169,6 +1169,8 @@
       "type": "object"
     },
     "auto_export_interval": {},
+    "auto_redirect_delay": {},
+    "auto_redirect_on_completion": {},
     "automatic_assignment": {},
     "automation": {
       "additionalProperties": true,
@@ -1249,6 +1251,7 @@
     "codebook": {
       "additionalProperties": true,
       "properties": {
+        "distiller": {},
         "enabled": {},
         "mode": {}
       },
@@ -1731,8 +1734,6 @@
     "login": {
       "additionalProperties": true,
       "properties": {
-        "auto_redirect_delay": {},
-        "auto_redirect_on_completion": {},
         "type": {},
         "url_argument": {}
       },

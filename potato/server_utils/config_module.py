@@ -4,6 +4,7 @@ Config module with enhanced security validation and error handling.
 
 import yaml
 import os
+import sys
 import logging
 import re
 import codecs
@@ -87,7 +88,12 @@ KNOWN_CONFIG_KEYS = {
         "user_config_path", "auto_register", "allow_local_login",
         "allowed_domain", "allowed_domains", "allowed_org",
     },
-    "login": {"type", "url_argument", "auto_redirect_delay", "auto_redirect_on_completion"},
+    "login": {"type", "url_argument"},
+    # Read at top level by routes.py and every crowd provider, never under
+    # `login` — they sat in that block for releases, so a config that put them
+    # where the allowlist implied got no warning and no redirect.
+    "auto_redirect_on_completion": None,
+    "auto_redirect_delay": None,
     "user_config": {"allow_all_users", "users"},
     "require_password": None,
     "require_no_password": None,
@@ -434,6 +440,11 @@ KNOWN_CONFIG_KEYS = {
     "codebook": {
         "enabled": None,
         "mode": None,
+        # Consumed by potato/codebook/distiller.py::DistillerConfig.from_config.
+        "distiller": {
+            "include", "include_types", "include_doc_sections",
+            "scope", "procedure", "max_chars",
+        },
     },
     # Top-level convenience scalar mirroring codebook.mode.
     "codebook_mode": None,
@@ -1530,13 +1541,8 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # data_files can be empty if data_directory, data_sources, or batch
     # assignment group data files are configured.
-    has_batch_data_files = _batch_assignment_has_group_data_files(config_data)
-    if not data_files and not data_directory and not data_sources and not has_batch_data_files:
-        raise ConfigValidationError(
-            "At least one data source must be configured: "
-            "'data_files', 'data_directory', 'data_sources', or "
-            "'batch_assignment.groups[].data_file'"
-        )
+    if not config_has_data_source(config_data):
+        raise ConfigValidationError(DATA_SOURCE_REQUIRED_MESSAGE)
 
     # Validate data_sources configuration if present
     if data_sources:
@@ -3138,6 +3144,19 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
     if not isinstance(auth_config, dict):
         raise ConfigValidationError("authentication configuration must be a dictionary")
 
+    # `type` is a long-standing typo for `method` in our own docs and in the
+    # Spaces example config. It is not in the key allowlist, so it produced a
+    # generic "unrecognized key" warning and the auth method silently fell back
+    # to in_memory — on a public host, the worst possible failure mode.
+    if "type" in auth_config and "method" not in auth_config:
+        logger.warning(
+            "authentication.type is not a recognized key; the setting is "
+            "authentication.method. Using '%s' as the method. Update your config — "
+            "this alias will be removed.",
+            auth_config["type"],
+        )
+        auth_config["method"] = auth_config.pop("type")
+
     method = auth_config.get("method", "in_memory")
     valid_methods = ["in_memory", "database", "clerk", "oauth"]
     if method not in valid_methods:
@@ -4316,6 +4335,35 @@ def _batch_assignment_has_group_data_files(config_data: Dict[str, Any]) -> bool:
     return False
 
 
+DATA_SOURCE_REQUIRED_MESSAGE = (
+    "At least one data source must be configured: "
+    "'data_files', 'data_directory', 'data_sources', or "
+    "'batch_assignment.groups[].data_file'"
+)
+
+
+def config_has_data_source(config_data: Dict[str, Any]) -> bool:
+    """Whether the config names at least one way to get items.
+
+    There are four mutually-acceptable sources, and tools that answer this
+    question by hand keep learning about them one at a time: the preview CLI
+    still asked only about ``data_files``/``data_directory`` when v2.8.0 shipped
+    live database ingestion, so it reported a hard ERROR on a ``data_sources``
+    config the server loads without complaint. Both callers go through here now,
+    so a fifth source is one edit rather than two.
+    """
+    if not isinstance(config_data, dict):
+        return False
+    data_files = config_data.get('data_files')
+    if isinstance(data_files, list) and data_files:
+        return True
+    if config_data.get('data_directory'):
+        return True
+    if config_data.get('data_sources'):
+        return True
+    return _batch_assignment_has_group_data_files(config_data)
+
+
 def validate_rbac_config(config_data: Dict[str, Any]) -> None:
     """Validate the optional ``rbac`` block.
 
@@ -4827,6 +4875,13 @@ _LLM_ENV_SUBSTITUTION_BLOCKS = (
 # scalars, but ${VAR} substitution always yields strings).
 _NUMERIC_LLM_KEYS = {"max_tokens", "temperature", "timeout", "max_turns", "max_steps", "top_p"}
 
+# Top-level secrets that accept ${VAR}. These are not part of an LLM block, but
+# the docs have long shown `secret_key: ${POTATO_SECRET_KEY}` — which silently
+# stored the literal string "${POTATO_SECRET_KEY}" as the Flask signing key.
+# A fixed, publicly documented signing key means anyone can forge a session
+# cookie, so this is a security fix rather than a convenience.
+_SECRET_SUBSTITUTION_KEYS = ("secret_key", "admin_api_key")
+
 
 def _substitute_env_typed(value: Any, key: Optional[str] = None) -> Any:
     """Recursively substitute ${VAR} references, coercing numeric LLM settings.
@@ -4868,6 +4923,31 @@ def _substitute_llm_block_env_vars(config_data: Dict[str, Any]) -> Dict[str, Any
         block = config_data.get(block_name)
         if isinstance(block, dict):
             config_data[block_name] = _substitute_env_typed(block)
+
+    # Top-level secret scalars.
+    for key in _SECRET_SUBSTITUTION_KEYS:
+        if isinstance(config_data.get(key), str):
+            config_data[key] = _substitute_env_typed(config_data[key], key)
+
+    # huggingface_backup.token. The documented form is `token: "${HF_TOKEN}"`,
+    # which without this reaches CommitScheduler as that literal string and the
+    # backup silently never authenticates.
+    backup_block = config_data.get("huggingface_backup")
+    if isinstance(backup_block, dict) and isinstance(backup_block.get("token"), str):
+        backup_block["token"] = _substitute_env_typed(backup_block["token"], "token")
+
+    # OAuth client secrets, which live per-provider under authentication.providers.
+    auth_block = config_data.get("authentication")
+    if isinstance(auth_block, dict):
+        providers = auth_block.get("providers")
+        if isinstance(providers, dict):
+            for provider_name, provider_cfg in providers.items():
+                if not isinstance(provider_cfg, dict):
+                    continue
+                for key in ("client_secret", "client_id"):
+                    if isinstance(provider_cfg.get(key), str):
+                        provider_cfg[key] = _substitute_env_typed(provider_cfg[key], key)
+
     return config_data
 
 
@@ -5061,6 +5141,18 @@ def init_config(args):
 
             # if multiple yaml files found, ask the user to choose which one to use
             else:
+                # A container has no tty, so input() would block forever with no
+                # output and no way to answer it. Fail with the candidate list
+                # instead of hanging.
+                if os.environ.get("POTATO_NONINTERACTIVE") == "1" or not sys.stdin.isatty():
+                    candidates = "\n  ".join(
+                        os.path.join(config_folder, name) for name in yamlfiles
+                    )
+                    raise ConfigValidationError(
+                        f"{len(yamlfiles)} config files found under {config_folder} and "
+                        "no terminal is attached to choose between them. Pass one "
+                        f"explicitly:\n  {candidates}"
+                    )
                 while True:
                     print("multiple config files found, please select the one you want to use (number 0-%d)"%len(yamlfiles))
                     for i,it in enumerate(yamlfiles):
@@ -5157,6 +5249,34 @@ def init_config(args):
                 config_updates["debug"] = True
             config_updates["debug_phase"] = args.debug_phase
 
+        cli_host = getattr(args, "host", None)
+        if isinstance(cli_host, str):
+            config_updates["host"] = cli_host
+
+        # --ssl-cert / --ssl-key were parsed but never reached app.run(), so a
+        # server started with them served plaintext while the operator believed
+        # it was serving TLS. Carry them into config so run_server can build an
+        # ssl_context; refuse a half-configured pair rather than silently
+        # falling back to HTTP.
+        # Only strings count as "configured". argparse always yields str or None,
+        # but callers that build an args stand-in (create_app's SimpleNamespace,
+        # or a Mock in tests) can hand back arbitrary objects.
+        ssl_cert = getattr(args, "ssl_cert", None)
+        ssl_key = getattr(args, "ssl_key", None)
+        ssl_cert = ssl_cert if isinstance(ssl_cert, str) else None
+        ssl_key = ssl_key if isinstance(ssl_key, str) else None
+        if bool(ssl_cert) != bool(ssl_key):
+            raise ConfigValidationError(
+                "--ssl-cert and --ssl-key must be given together "
+                f"(got ssl_cert={ssl_cert!r}, ssl_key={ssl_key!r})."
+            )
+        if ssl_cert and ssl_key:
+            for label, path in (("--ssl-cert", ssl_cert), ("--ssl-key", ssl_key)):
+                if not os.path.isfile(path):
+                    raise ConfigValidationError(f"{label} file not found: {path}")
+            config_updates["ssl_cert"] = ssl_cert
+            config_updates["ssl_key"] = ssl_key
+
         config.update(config_updates)
 
         # Apply server config values (CLI args take precedence)
@@ -5168,9 +5288,8 @@ def init_config(args):
                 config["port"] = server_config["port"]
                 logger.debug(f"Port set from config file: {server_config['port']}")
 
-            # Apply host from server config
-            if "host" in server_config:
-                # Host can only be set via config (no CLI arg currently)
+            # Apply host from server config if not specified via CLI
+            if "host" in server_config and not isinstance(getattr(args, "host", None), str):
                 config["host"] = server_config["host"]
                 logger.debug(f"Host set from config file: {server_config['host']}")
 

@@ -135,7 +135,6 @@ def _build_config(schema_name: str, result, data_file: str) -> dict:
     """Generate a runnable config for the imported project."""
     return {
         "port": 8000,
-        "server_name": "Potato Annotator",
         "annotation_task_name": f"{schema_name} (imported)",
         "task_dir": ".",
         "output_annotation_dir": "annotation_output/",

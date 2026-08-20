@@ -399,6 +399,37 @@ class ClerkAuthBackend(AuthBackend):
         return list(self.users.keys())
 
 
+def _parse_authorized_users(user_config: dict) -> list:
+    """Build the authorized-username roster from a config's ``user_config`` block.
+
+    Accepts both shapes that appear in the wild::
+
+        user_config:
+          users: ["alice", "bob"]
+          # or
+          users:
+            - {username: alice, password: hunter2}
+    """
+    roster = []
+    entries = user_config.get("users") or []
+    if isinstance(entries, str):
+        entries = [entries]
+    for entry in entries:
+        if isinstance(entry, str):
+            username = entry
+        elif isinstance(entry, dict):
+            username = entry.get("username") or entry.get("user") or entry.get("id")
+        else:
+            logger.warning(
+                "Ignoring unrecognized user_config.users entry of type %s",
+                type(entry).__name__,
+            )
+            continue
+        if username and username not in roster:
+            roster.append(username)
+    return roster
+
+
 class UserAuthenticator:
     """
     A class for maintaining state on which users are allowed to use the system.
@@ -408,16 +439,23 @@ class UserAuthenticator:
     and can be configured for passwordless operation.
     """
 
-    def __init__(self, user_config_path, auth_method="in_memory", auth_config=None):
-        self.allow_all_users = True
+    def __init__(self, user_config_path, auth_method="in_memory", auth_config=None,
+                 require_password=True, allow_all_users=True, authorized_users=None):
+        # allow_all_users / authorized_users / require_password are set here rather
+        # than by the caller after construction because the user-file load below
+        # goes through add_single_user(), which consults all three. Assigning them
+        # afterwards would load the roster under the wrong policy — in particular a
+        # passwordless deployment whose user file lists bare usernames would have
+        # every row rejected for "Missing password in user info".
+        self.allow_all_users = allow_all_users
         self.user_config_path = user_config_path
         self.user_config_path_explicit = False  # Set to True if path was explicitly configured
-        self.authorized_users = []
+        self.authorized_users = list(authorized_users or [])
         self.userlist = []
         self.usernames = set()
         self.users = {}
         self.required_user_info_keys = ["username", "password"]
-        self.require_password = True
+        self.require_password = require_password
         self.auth_method = auth_method
         self.auth_config = auth_config or {}
         self.auth_backend = self._initialize_backend(auth_method, auth_config)
@@ -459,6 +497,13 @@ class UserAuthenticator:
                     else:
                         self.add_single_user(single_user)
             self.users_loaded_from_file = len(self.users) - before
+            # Users provisioned through the user file are the roster an admin
+            # explicitly wrote down, so they are authorized by definition. Without
+            # this, `allow_all_users: false` plus a user_config_path but no
+            # `user_config.users` list would lock out the very people it provisions.
+            for username in self.users:
+                if username not in self.authorized_users:
+                    self.authorized_users.append(username)
 
     def _initialize_backend(self, auth_method: str, auth_config: dict = None) -> AuthBackend:
         if auth_method == "in_memory":
@@ -509,8 +554,26 @@ class UserAuthenticator:
 
                     auth_config = config.get("authentication", {})
 
-                    USER_AUTHENTICATOR_SINGLETON = UserAuthenticator(user_config_path, auth_method, auth_config)
-                    USER_AUTHENTICATOR_SINGLETON.require_password = require_password
+                    # user_config gates self-registration. Default stays True so
+                    # existing configs keep open enrolment; setting it to false is
+                    # what closes the task to a named roster.
+                    user_config = config.get("user_config", {}) or {}
+                    allow_all_users = user_config.get("allow_all_users", True)
+                    authorized_users = _parse_authorized_users(user_config)
+                    if not allow_all_users and not authorized_users:
+                        logger.warning(
+                            "user_config.allow_all_users is false but no roster was "
+                            "given via user_config.users or "
+                            "authentication.user_config_path. Only users already "
+                            "present in the auth backend will be able to log in."
+                        )
+
+                    USER_AUTHENTICATOR_SINGLETON = UserAuthenticator(
+                        user_config_path, auth_method, auth_config,
+                        require_password=require_password,
+                        allow_all_users=allow_all_users,
+                        authorized_users=authorized_users,
+                    )
                     USER_AUTHENTICATOR_SINGLETON.user_config_path_explicit = path_explicit
 
                     # F-036: a user file was explicitly configured and exists, but
@@ -520,7 +583,7 @@ class UserAuthenticator:
                     _auth = USER_AUTHENTICATOR_SINGLETON
                     if (path_explicit and os.path.isfile(user_config_path)
                             and _auth.users_loaded_from_file == 0):
-                        allow_all = config.get("user_config", {}).get("allow_all_users", False)
+                        allow_all = allow_all_users
                         logger.warning(
                             "user_config_path '%s' was configured but loaded 0 users "
                             "(%d malformed line(s)). Expected JSONL — one object per "
@@ -558,10 +621,18 @@ class UserAuthenticator:
 
     def add_user(self, username, password: Optional[str], **kwargs):
         """Add a user to the authentication system."""
+        # The roster check is independent of password mode. Passwordless only means
+        # "no password is required to prove you are alice"; it does not mean anyone
+        # may become alice. Previously this was an elif, so `require_password: false`
+        # silently disabled closed enrolment entirely.
+        if not self.allow_all_users and not self.is_authorized_user(username):
+            logger.warning(
+                "Rejected registration for '%s': allow_all_users is false and the "
+                "user is not in the authorized roster", username
+            )
+            return "Unauthorized user"
         if not self.require_password:
             logger.debug(f"Passwordless mode - allowing any user: {username}")
-        elif self.allow_all_users == False and not self.is_authorized_user(username):
-            return "Unauthorized user"
 
         result = self.auth_backend.add_user(username, password, **kwargs)
         if result == "Success":
@@ -590,10 +661,10 @@ class UserAuthenticator:
 
     def add_single_user(self, single_user):
         """Add a single user to the full user dict."""
+        # No roster check here: this is the provisioning path (the user file), and
+        # its contents ARE the roster. Self-registration is gated in add_user().
         if not self.require_password:
             logger.debug(f"Passwordless mode - allowing any user: {single_user['username']}")
-        elif self.allow_all_users == False and not self.is_authorized_user(single_user["username"]):
-            return "Unauthorized user"
 
         if not self.require_password:
             required_keys = ["username"]

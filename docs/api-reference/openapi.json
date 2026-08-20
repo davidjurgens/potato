@@ -2,7 +2,7 @@
   "info": {
     "description": "Generated from the live Flask url_map \u2014 see potato/server_utils/openapi_spec.py.\n\nMost endpoints are session-authenticated: POST /auth with `username` and `password` as form data, then reuse the session cookie. `x-potato-auth` records the decorators guarding an operation, and `x-potato-requires-config` marks operations that only exist when the named config is enabled.\n\nResponse schemas are intentionally not modelled; this spec is an authoritative index of what exists, not a payload contract.",
     "title": "Potato HTTP API",
-    "version": "2.7.1"
+    "version": "2.8.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -681,6 +681,34 @@
           }
         },
         "summary": "Get crowdsourcing platform statistics (MTurk, Prolific).",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/admin/api/data/archive": {
+      "get": {
+        "operationId": "get_admin_api_data_archive",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Download everything collected, as a gzipped tar.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/admin/api/data/manifest": {
+      "get": {
+        "operationId": "get_admin_api_data_manifest",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "What a data archive would contain, and how large it would be.",
         "tags": [
           "core"
         ]
@@ -6242,6 +6270,20 @@
           }
         },
         "summary": "Handle requests to go to a specific instance.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "get_health",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Unauthenticated liveness probe for containers and load balancers.",
         "tags": [
           "core"
         ]

@@ -59,12 +59,12 @@ Potato's computer-vision, spatial, and evaluation surfaces are newer than its te
 | Free self-hosted | Yes | Yes (MIT) | Community ed. | - | - | Community ed. | - |
 | Bounding boxes, polygons, masks | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | Interactive segmentation (click → mask) | In-browser, no GPU | Via Nuclio | Via ML backend | Yes | Yes | Yes | Yes |
-| Text-prompt segmentation | - | - | Via ML backend | Yes (SAM 3) | Yes (SAM 3) | Via apps | - |
+| Text-prompt segmentation | Yes (in-browser) | - | Via ML backend | Yes (SAM 3) | Yes (SAM 3) | Via apps | - |
 | Keypoints / skeletons | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | Polylines, ellipses, 2D cuboids | Yes | Yes | Partial | Partial | Yes | Yes | Yes |
 | Per-object attributes | - | Yes | Yes | Yes | Yes | Yes | Yes |
 | Video tracking with interpolation | Yes | Yes | Partial | Partial | Yes | Yes | Yes |
-| Model-based mask propagation | Frame-to-frame re-prompt | Via AI agents | Via ML backend | Yes | Yes | Yes | Yes |
+| Model-based mask propagation | Yes (SAM 2, server-side) | Via AI agents | Via ML backend | Yes | Yes | Yes | Yes |
 | Deep zoom / tiled gigapixel images | Yes (DZI + IIIF) | Partial | - | - | Yes | Yes | - |
 | 3D point clouds & cuboids | Yes | Yes | - | - | - | Yes | Yes |
 | Point-cloud sequences / episodes | - | Yes | - | - | - | Yes | Yes |
@@ -78,7 +78,7 @@ Potato's computer-vision, spatial, and evaluation surfaces are newer than its te
 | Generative-video / world-model evaluation | Yes | - | - | - | - | - | - |
 | VLM grounding & pointing evaluation | Yes | - | - | - | - | - | - |
 
-On every row except the last four, the mature CV platforms generally match or beat Potato. On those four, Potato is currently doing something the other tools do not offer.
+On most rows the mature CV platforms match or beat Potato. Two rows are worth reading closely rather than as a tick: Potato's text-prompt segmentation runs in the browser under an Apache-2.0 model, where the commercial equivalents run server-side on SAM 3's non-commercial terms; and its mask propagation runs on the server, so the free tier gets the capability but not in-browser. On the last four rows, Potato is doing something the other tools do not offer.
 
 ## Potato's strengths
 
@@ -225,7 +225,7 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 ### Image and Video Annotation
 
-Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation runs in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped. Fifteen import formats and twenty-nine export formats let you bring existing work in and take it back out.
+Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Fifteen import formats and twenty-nine export formats let you bring existing work in and take it back out.
 
 **vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, per-object attributes, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
@@ -235,7 +235,7 @@ Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, key
 
 **vs. Labelbox, SuperAnnotate, Encord, Kili, V7.** These are mature commercial platforms with workforce management, enterprise governance, and strong model-assisted labelling (SAM 3, GroundingDINO, auto-tracking). If you need a managed workforce, compliance certifications, or petabyte-scale curation, they are the right answer. Potato is free, self-hosted, and research-workflow-first.
 
-**vs. X-AnyLabeling, LabelMe, labelImg.** If you are one person labelling locally and want open-vocabulary auto-labelling today, X-AnyLabeling bundles Grounding DINO, Grounded-SAM 2, SAM 2.1, and YOLO in a desktop app and is very hard to beat for that. Potato's advantage begins when there is more than one annotator.
+**vs. X-AnyLabeling, LabelMe, labelImg.** X-AnyLabeling bundles Grounding DINO, Grounded-SAM 2, SAM 2.1, and YOLO in a desktop app, and for one person labelling locally across a wide range of models it is hard to beat. Potato ships a narrower model set and runs in the browser, so nothing is installed on the annotator's machine; its advantage begins when there is more than one annotator.
 
 ### Gigapixel and Deep Zoom
 
@@ -453,8 +453,6 @@ Counts are generated from Potato's own registries. There is no "best alternative
 So an evaluation does not have to discover these late:
 
 - **No model training.** Potato orders items, pre-labels with existing models, and critiques annotations with a VLM, but it does not train or serve detectors. Roboflow, V7, Supervisely, and Labelbox do.
-- **No text-prompt segmentation.** Interactive segmentation is click- and box-driven. SAM 3 / Grounding DINO-class open-vocabulary labelling is available in Roboflow, V7, Labelbox, and the open-source desktop tool X-AnyLabeling.
-- **Video mask propagation is frame-to-frame re-prompting, not memory-based tracking.** No published SAM 2 ONNX export includes the memory modules.
 - **No per-object attributes yet.** Geometry carries a label; occlusion levels, truncation flags, and sub-type attributes need a companion schema.
 - **No point-cloud sequence mode.** 3D annotation is per frame; track propagation across a sweep is not implemented.
 - **No DICOM, NIfTI, or WSI formats.** Deep zoom and 16-bit windowing cover large scientific images, not clinical ones.

@@ -1,0 +1,148 @@
+name: Publish Docker image
+
+# Publishes the canonical Potato image to GitHub Container Registry. Every
+# `potato deploy` target pulls from here rather than pip-installing on the host,
+# where the numpy/pandas/scipy/scikit-learn build is an out-of-memory kill on a
+# 1 GB VM and minutes of wall clock on a 2 GB one.
+#
+# Tags:
+#   latest, <version>, sha-<short>   core dependencies only  (~700 MB)
+#   latest-all, <version>-all        plus the `all` extras   (~1.5 GB)
+#
+# <version> comes from setup.py, so cutting a release tags the image with it
+# automatically. A tag push builds; a branch push to master builds `latest`; a
+# pull request builds without pushing, so a broken Dockerfile fails in review
+# rather than after merge.
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+    paths:
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - '.dockerignore'
+      - 'setup.py'
+      - 'MANIFEST.in'
+      - 'potato/**'
+      - '.github/workflows/docker-publish.yml'
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - '.dockerignore'
+      - 'setup.py'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - extras: ''
+            suffix: ''
+          - extras: 'all'
+            suffix: '-all'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from setup.py
+        id: version
+        run: |
+          version=$(python -c "import re,pathlib; \
+            print(re.search(r\"version='([^']+)'\", \
+            pathlib.Path('setup.py').read_text()).group(1))")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Building potato ${version}"
+
+      # arm64 matters: Apple Silicon laptops are the common `deploy up
+      # --provider local` host, and emulating amd64 there is unusably slow.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
+            suffix=${{ matrix.suffix }},onlatest=true
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            POTATO_EXTRAS=${{ matrix.extras }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=potato${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=potato${{ matrix.suffix }}
+
+      # A pushed image that cannot serve a task is worse than no image, because
+      # `deploy up` would pull it and fail on the host. Run the real thing
+      # against a real example before anyone depends on the tag.
+      - name: Smoke test the built image
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          tag=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          docker run -d --name potato-smoke -p 8000:7860 \
+            -v "$PWD/examples/classification/single-choice:/app" \
+            "$tag"
+
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then
+              echo "healthy after ${i}s"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "never became healthy; container logs:" >&2
+              docker logs potato-smoke >&2
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # /health only proves the process is up. Ask for the login page too,
+          # so a missing template or static asset fails here.
+          curl -fsS http://127.0.0.1:8000/ | grep -qi potato
+
+          # The workers guard is a data-integrity control; assert it holds in
+          # the published image rather than trusting the file on disk.
+          if docker run --rm -e GUNICORN_WORKERS=4 \
+               -v "$PWD/examples/classification/single-choice:/app" \
+               "$tag" 2>&1 | grep -q "per-process"; then
+            echo "multi-worker guard is active"
+          else
+            echo "multi-worker guard did not fire" >&2
+            exit 1
+          fi
+
+          docker rm -f potato-smoke

@@ -94,6 +94,12 @@ _VISION_DEPS = [
 _DB_DEPS = [
     "sqlalchemy>=2.0",
 ]
+# `potato deploy` to a VM provider. Only the SSH transport is extra: the API
+# clients use `requests` and the templates use Jinja2, both core dependencies.
+# paramiko 3.0+ is required for Ed25519Key.generate.
+_DEPLOY_DEPS = [
+    "paramiko>=3.0.0",
+]
 
 setup(
     name="potato-annotation",
@@ -141,10 +147,11 @@ setup(
         "auth": _AUTH_DEPS,
         "langchain": _LANGCHAIN_DEPS,
         "db": _DB_DEPS,
+        "deploy": _DEPLOY_DEPS,
         "vision": _VISION_DEPS,
         # `all` deliberately excludes `vision`: torch is a multi-gigabyte
         # install, and nothing in the default experience needs it.
-        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS,
+        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _DEPLOY_DEPS,
     },
     include_package_data=True,
     entry_points={
@@ -168,6 +175,9 @@ setup(
             # resolve it offline from an installed wheel, without reaching the
             # docs site. Regenerate: python scripts/generate_config_schema.py
             "schemas/*.json",
+            # cloud-init, Caddyfile and systemd unit templates. A provider
+            # renders these from an installed wheel, so they must ship.
+            "deploy/templates/*.j2",
         ],
     },
 )

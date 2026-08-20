@@ -22,6 +22,9 @@ from potato.server_utils.schemas.keybinding_allocator import allocate_keybinding
 
 logger = logging.getLogger(__name__)
 
+from potato.server_utils.generated_templates import (  # noqa: E402
+    resolve_generated_templates_dir)
+
 
 # TODO: Move this to config.yaml files
 # Items which will be displayed in the popup statistics sidebar
@@ -430,11 +433,11 @@ def generate_annotation_html_template(config: dict) -> str:
         codebook_html = '<a href="{{annotation_codebook_url}}" class="nav-item nav-link">Annotation Codebook</a>'
         codebook_html = codebook_html.replace("{{annotation_codebook_url}}", annotation_codebook)
 
-    # Create generated subdirectory within the templates directory
-    generated_dir = os.path.join(config["site_dir"], "generated")
-    if not os.path.exists(generated_dir):
-        os.makedirs(generated_dir)
-        logger.info(f"Created generated templates directory: {generated_dir}")
+    # Usually a "generated" subdirectory of the templates directory, but not
+    # when the package is installed read-only (an ordinary pip install run by a
+    # non-root user, or a container). The resolver picks a writable location and
+    # the Flask template loader consults the same one.
+    generated_dir = resolve_generated_templates_dir(config["site_dir"])
 
     def _bake_site_template(schemes_for_layout, site_suffix=None):
         """Bake a full site template for a given scheme list.
@@ -740,11 +743,11 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
             + "%s.html" % phase_name
         )
 
-    # Create generated subdirectory within the templates directory
-    generated_dir = os.path.join(config["site_dir"], "generated")
-    if not os.path.exists(generated_dir):
-        os.makedirs(generated_dir)
-        logger.info(f"Created generated templates directory: {generated_dir}")
+    # Usually a "generated" subdirectory of the templates directory, but not
+    # when the package is installed read-only (an ordinary pip install run by a
+    # non-root user, or a container). The resolver picks a writable location and
+    # the Flask template loader consults the same one.
+    generated_dir = resolve_generated_templates_dir(config["site_dir"])
 
     output_html_fname = os.path.join(generated_dir, site_name)
 

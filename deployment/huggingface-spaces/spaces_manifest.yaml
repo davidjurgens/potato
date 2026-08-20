@@ -19,6 +19,16 @@
 #   needs_lfs  (optional) true if data/ carries media (mp4/webm/wav/mp3/png/jpg/pdf) → .gitattributes.
 #   needs_ai   (optional) true if the demo calls an LLM at annotation time → wire to HF Inference API
 #              (HF_TOKEN) before deploy; lower priority wave.
+#   featured   (optional) true = part of the small live set kept reachable on HF.
+#              Everything else is a source example that ships as a Space only when
+#              someone deploys it. audit_spaces.py --check fails if a featured
+#              Space is not reachable.
+#              Cap: 3. HuggingFace allows the org three concurrent cpu-basic
+#              Spaces, and a fourth cannot be started or rebuilt at all — the API
+#              returns 403 and leaves the Space PAUSED, which never wakes for a
+#              visitor. A fourth entry can look healthy while it happens to be
+#              SLEEPING, but the first rebuild kills it. Do not raise this
+#              without a paid plan.
 #   status     (optional) "gated" = deploy only if it renders from bundled static data (Phase 2
 #              boot-check is the gate); otherwise local-only, not a Space. Default: "ready".
 
@@ -29,6 +39,7 @@ defaults:
   license: apache-2.0
   needs_lfs: false
   needs_ai: false
+  featured: false
   status: ready
 
 spaces:
@@ -136,24 +147,10 @@ spaces:
     category: span
     color_from: green
     color_to: blue
-  - id: event-annotation
-    source: examples/span/event-annotation
-    title: "Potato — Event Annotation"
-    summary: "Mark event triggers and arguments in text."
-    category: span
-    color_from: green
-    color_to: blue
 
   # ── Agent & GenAI evaluation (all feasible agent annotations) ─────────────
-  - id: agent-trace-evaluation
-    source: examples/agent-traces/agent-trace-evaluation
-    title: "Potato — Agent Trace Evaluation"
-    summary: "Evaluate AI agent traces: success, efficiency, side effects, hallucination spans."
-    category: agent
-    tags: [agent-traces, evaluation, llm]
-    color_from: indigo
-    color_to: purple
   - id: agent-comparison
+    featured: true
     source: examples/agent-traces/agent-comparison
     title: "Potato — Agent Comparison"
     summary: "Side-by-side comparison of two agent trajectories."
@@ -177,94 +174,6 @@ spaces:
     tags: [agent-traces, openai]
     color_from: indigo
     color_to: purple
-  - id: coding-agent-evaluation
-    source: examples/agent-traces/coding-agent-evaluation
-    title: "Potato — Coding Agent Evaluation"
-    summary: "Evaluate coding-agent runs and code edits."
-    category: agent
-    tags: [agent-traces, coding]
-    color_from: indigo
-    color_to: purple
-  - id: coding-agent-comparison
-    source: examples/agent-traces/coding-agent-comparison
-    title: "Potato — Coding Agent Comparison"
-    summary: "Compare two coding-agent solutions."
-    category: agent
-    tags: [agent-traces, coding]
-    color_from: indigo
-    color_to: purple
-  - id: coding-agent-prm
-    source: examples/agent-traces/coding-agent-prm
-    title: "Potato — Coding Agent PRM"
-    summary: "Step-level process-reward annotation of coding agents."
-    category: agent
-    tags: [agent-traces, coding, prm]
-    color_from: indigo
-    color_to: purple
-  - id: coding-agent-review
-    source: examples/agent-traces/coding-agent-review
-    title: "Potato — Coding Agent Review"
-    summary: "Review and rate coding-agent pull requests."
-    category: agent
-    tags: [agent-traces, coding]
-    color_from: indigo
-    color_to: purple
-  - id: swebench-evaluation
-    source: examples/agent-traces/swebench-evaluation
-    title: "Potato — SWE-bench Evaluation"
-    summary: "Annotate SWE-bench task attempts and patches."
-    category: agent
-    tags: [agent-traces, swebench, coding]
-    color_from: indigo
-    color_to: purple
-  - id: multi-agent-evaluation
-    source: examples/agent-traces/multi-agent-evaluation
-    title: "Potato — Multi-Agent Evaluation"
-    summary: "Evaluate multi-agent system interactions."
-    category: agent
-    tags: [agent-traces, multi-agent]
-    color_from: indigo
-    color_to: purple
-  - id: multi-dim-comparison
-    source: examples/agent-traces/multi-dim-comparison
-    title: "Potato — Multi-Dimensional Comparison"
-    summary: "Compare agent outputs across multiple quality dimensions."
-    category: agent
-    tags: [agent-traces, comparison]
-    color_from: indigo
-    color_to: purple
-  - id: complex-annotation
-    source: examples/agent-traces/complex-annotation
-    title: "Potato — Complex Trace Annotation"
-    summary: "Rich multi-schema annotation over complex agent traces."
-    category: agent
-    tags: [agent-traces]
-    color_from: indigo
-    color_to: purple
-  - id: continuous-eval
-    source: examples/agent-traces/continuous-eval
-    title: "Potato — Continuous Evaluation"
-    summary: "Continuous / streaming evaluation of agent runs."
-    category: agent
-    tags: [agent-traces]
-    color_from: indigo
-    color_to: purple
-  - id: trajectory-evaluation
-    source: examples/agent-traces/trajectory-evaluation
-    title: "Potato — Trajectory Evaluation"
-    summary: "Step-by-step trajectory quality assessment."
-    category: agent
-    tags: [agent-traces, trajectory]
-    color_from: indigo
-    color_to: purple
-  - id: trajectory-correction
-    source: examples/agent-traces/trajectory-correction
-    title: "Potato — Trajectory Correction"
-    summary: "Edit/correct agent trajectories for SFT/DPO data."
-    category: agent
-    tags: [agent-traces, trajectory, sft, dpo]
-    color_from: indigo
-    color_to: purple
   - id: rag-evaluation
     source: examples/agent-traces/rag-evaluation
     title: "Potato — RAG Evaluation"
@@ -273,15 +182,6 @@ spaces:
     tags: [agent-traces, rag]
     color_from: indigo
     color_to: purple
-  - id: visual-agent-evaluation
-    source: examples/agent-traces/visual-agent-evaluation
-    title: "Potato — Visual Agent Evaluation"
-    summary: "Screenshot-based evaluation of GUI/vision agents."
-    category: agent
-    tags: [agent-traces, vision, web-agent]
-    color_from: indigo
-    color_to: purple
-    needs_lfs: true
   - id: web-agent-review
     source: examples/agent-traces/web-agent-review
     title: "Potato — Web Agent Review"
@@ -291,113 +191,16 @@ spaces:
     color_from: indigo
     color_to: purple
     needs_lfs: true
-  - id: triage-queue
-    source: examples/agent-traces/triage-queue
-    title: "Potato — Triage Queue"
-    summary: "Signal-based triage queue for prioritizing traces to review."
-    category: agent
-    tags: [agent-traces, triage]
-    color_from: indigo
-    color_to: purple
-  - id: judge-alignment
-    source: examples/agent-traces/judge-alignment
-    title: "Potato — LLM Judge ↔ Human Alignment"
-    summary: "Measure LLM-judge agreement with human annotations."
-    category: agent
-    tags: [agent-traces, llm-judge]
-    color_from: indigo
-    color_to: purple
   # Live / ingestion variants — gated on the Phase 2 boot-check (static render only).
-  - id: live-agent-evaluation
-    source: examples/agent-traces/live-agent-evaluation
-    title: "Potato — Live Agent Evaluation"
-    summary: "Annotate live-captured agent sessions (static replay)."
-    category: agent
-    tags: [agent-traces, live]
-    color_from: indigo
-    color_to: purple
-    status: gated
-  - id: live-coding-agent
-    source: examples/agent-traces/live-coding-agent
-    title: "Potato — Live Coding Agent"
-    summary: "Annotate live-captured coding-agent sessions (static replay)."
-    category: agent
-    tags: [agent-traces, live, coding]
-    color_from: indigo
-    color_to: purple
-    status: gated
-  - id: web-agent-creation
-    source: examples/agent-traces/web-agent-creation
-    title: "Potato — Web Agent Creation"
-    summary: "Create web-agent traces by live browsing (needs live backend)."
-    category: agent
-    tags: [agent-traces, web-agent, live]
-    color_from: indigo
-    color_to: purple
-    status: gated
-    needs_lfs: true
-  - id: langchain-integration
-    source: examples/agent-traces/langchain-integration
-    title: "Potato — LangChain Integration"
-    summary: "Annotate ingested LangChain traces (static replay)."
-    category: agent
-    tags: [agent-traces, langchain]
-    color_from: indigo
-    color_to: purple
-    status: gated
 
   # ── Multimodal ────────────────────────────────────────────────────────────
-  - id: image-classification
-    source: examples/image/image-classification
-    title: "Potato — Image Classification"
-    summary: "Classify images with radio / checkbox schemes."
-    category: multimodal
-    tags: [image, vision]
-    color_from: pink
-    color_to: red
-    needs_lfs: true
   - id: image-bbox
+    featured: true
     source: examples/image/image-annotation
     title: "Potato — Image Bounding Boxes"
     summary: "Draw labeled bounding boxes on images."
     category: multimodal
     tags: [image, bbox, vision]
-    color_from: pink
-    color_to: red
-    needs_lfs: true
-  - id: image-ai-detection
-    source: examples/image/image-ai-detection
-    title: "Potato — AI-Generated Image Detection"
-    summary: "Label images as real vs AI-generated."
-    category: multimodal
-    tags: [image, vision]
-    color_from: pink
-    color_to: red
-    needs_lfs: true
-  - id: pdf-annotation
-    source: examples/image/pdf-annotation
-    title: "Potato — PDF Annotation"
-    summary: "Annotate PDF documents with coordinate mapping."
-    category: multimodal
-    tags: [pdf, document]
-    color_from: pink
-    color_to: red
-    needs_lfs: true
-  - id: pdf-bbox
-    source: examples/image/pdf-bbox
-    title: "Potato — PDF Bounding Boxes"
-    summary: "Draw bounding boxes over PDF page regions."
-    category: multimodal
-    tags: [pdf, bbox, document]
-    color_from: pink
-    color_to: red
-    needs_lfs: true
-  - id: audio-annotation
-    source: examples/audio/audio-annotation
-    title: "Potato — Audio Annotation"
-    summary: "Waveform display with segment labeling."
-    category: multimodal
-    tags: [audio]
     color_from: pink
     color_to: red
     needs_lfs: true
@@ -411,6 +214,7 @@ spaces:
     color_to: red
     needs_lfs: true
   - id: video-annotation
+    featured: true
     source: examples/video/video-annotation
     title: "Potato — Video Annotation"
     summary: "Video player with temporal segment labeling."
@@ -439,14 +243,6 @@ spaces:
     needs_lfs: true
 
   # ── Advanced workflows ────────────────────────────────────────────────────
-  - id: qda-mode
-    source: examples/advanced/qda-mode-example
-    title: "Potato — QDA Mode (Qualitative Coding)"
-    summary: "Codebook-driven qualitative coding with memos and cases."
-    category: advanced
-    tags: [qda, qualitative, codebook]
-    color_from: blue
-    color_to: indigo
   - id: codebook
     source: examples/advanced/codebook-example
     title: "Potato — Codebook Annotation"

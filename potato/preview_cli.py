@@ -72,11 +72,30 @@ def validate_config(config: Dict[str, Any]) -> List[str]:
         if field not in config:
             issues.append(f"ERROR: Missing required field '{field}'")
 
-    # Data source validation
-    has_data_files = config.get('data_files') and len(config.get('data_files', [])) > 0
-    has_data_directory = bool(config.get('data_directory'))
-    if not has_data_files and not has_data_directory:
-        issues.append("ERROR: Must have either 'data_files' or 'data_directory'")
+    # Data source validation. Ask the server's own helper rather than
+    # re-deriving the answer here — this check used to know only about
+    # data_files and data_directory, and so rejected the data_sources configs
+    # (live database ingestion) that the server loads fine.
+    try:
+        from potato.server_utils.config_module import (
+            DATA_SOURCE_REQUIRED_MESSAGE,
+            config_has_data_source,
+        )
+    except Exception:
+        has_data_source = bool(
+            config.get('data_files') or config.get('data_directory')
+            or config.get('data_sources')
+        )
+        message = (
+            "At least one data source must be configured: "
+            "'data_files', 'data_directory', 'data_sources', or "
+            "'batch_assignment.groups[].data_file'"
+        )
+    else:
+        has_data_source = config_has_data_source(config)
+        message = DATA_SOURCE_REQUIRED_MESSAGE
+    if not has_data_source:
+        issues.append(f"ERROR: {message}")
 
     # Annotation schemes validation
     has_schemes = 'annotation_schemes' in config

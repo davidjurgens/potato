@@ -1,0 +1,22 @@
+# HuggingFace Space for a Potato task.
+#
+# Derived from the published image rather than built from source. The catalog
+# Spaces copy the whole potato package — 930 files, several minutes of build per
+# Space — and there is no reason to: the image already contains the server, and
+# the Space only has to supply the project.
+FROM {{ image }}
+
+# HuggingFace runs Spaces as uid 1000, which the base image already uses.
+USER potato
+WORKDIR /app
+
+COPY --chown=potato:potato . /app
+
+# Spaces route to 7860, which the image already listens on.
+ENV POTATO_CONFIG={{ config_rel }} \
+    PORT=7860 \
+    GUNICORN_WORKERS=1 \
+    GUNICORN_THREADS={{ threads }} \
+    POTATO_NONINTERACTIVE=1
+
+EXPOSE 7860

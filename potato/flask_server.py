@@ -309,10 +309,15 @@ def _resolve_generated_template_path(html_file: str) -> str:
         return html_file
     if os.path.isabs(html_file) and os.path.exists(html_file):
         return html_file
+    from potato.server_utils.generated_templates import (
+        resolve_generated_templates_dir)
+
     site_dir = config.get("site_dir") or ""
-    candidate = os.path.join(site_dir, "generated", html_file)
-    if os.path.exists(candidate):
-        return candidate
+    if site_dir:
+        candidate = os.path.join(
+            resolve_generated_templates_dir(site_dir, create=False), html_file)
+        if os.path.exists(candidate):
+            return candidate
     return html_file
 
 
@@ -1734,9 +1739,10 @@ def load_phase_data(config: dict) -> None:
                             "_".join(config["annotation_task_name"].split(" "))
                             + "-" + "%s.html" % phase_name
                         )
-                        generated_dir = os.path.join(config["site_dir"], "generated")
-                        if not os.path.exists(generated_dir):
-                            os.makedirs(generated_dir)
+                        from potato.server_utils.generated_templates import (
+                            resolve_generated_templates_dir)
+                        generated_dir = resolve_generated_templates_dir(
+                            config["site_dir"])
                         output_html_fname = os.path.join(generated_dir, site_name)
                         with open(output_html_fname, "wt", encoding="utf-8") as outf:
                             outf.write(html_template)
@@ -3791,25 +3797,20 @@ def configure_app(flask_app):
     Returns:
         The configured Flask application instance
     """
+
     global app
     app = flask_app
 
-    # Set application configuration
-    # Use a random secret key if sessions shouldn't persist, otherwise use the configured one
-    if config.get("persist_sessions", False):
-        secret_key = config.get("secret_key") or os.environ.get("POTATO_SECRET_KEY")
-        if not secret_key:
-            raise ValueError(
-                "persist_sessions is enabled but no secret_key is configured. "
-                "Set 'secret_key' in your config file or POTATO_SECRET_KEY environment variable."
-            )
-        app.secret_key = secret_key
-    else:
-        # Generate a random secret key to ensure sessions don't persist between restarts
-        import secrets
-        app.secret_key = secrets.token_hex(32)
+    # Continuous backup to a HuggingFace Dataset, when configured. Started here
+    # rather than in run_server() so it runs on the WSGI factory path too --
+    # which is every container, and precisely where an ephemeral filesystem
+    # makes it the only copy of the data.
+    from potato.server_utils.hf_backup import init_backup
+    init_backup(config)
 
-    app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 2))
+    # Set application configuration
+    from potato.server_utils.session_config import configure_session
+    configure_session(app, config)
 
     # Configure routes from the routes module
     from routes import configure_routes
@@ -4060,11 +4061,13 @@ def create_app(config_file=None):
 
     # Configure Jinja2 to look in both main templates and generated templates directories
     real_templates_dir = os.path.join(cur_program_dir, 'templates')
-    generated_templates_dir = os.path.join(real_templates_dir, 'generated')
-
-    # Ensure the generated directory exists
-    if not os.path.exists(generated_templates_dir):
-        os.makedirs(generated_templates_dir, exist_ok=True)
+    # Not necessarily inside the package: an ordinary (non-editable) install
+    # leaves site-packages read-only for the serving user, so this may resolve
+    # to a writable directory elsewhere. The generator uses the same resolver,
+    # which is what keeps the two in agreement.
+    from potato.server_utils.generated_templates import (
+        resolve_generated_templates_dir)
+    generated_templates_dir = resolve_generated_templates_dir(real_templates_dir)
 
     # Add the generated directory to the template search path
     from jinja2 import ChoiceLoader, FileSystemLoader
@@ -4831,31 +4834,10 @@ def run_server(args):
                 logger.info("Webhook emitter stopped")
         atexit.register(cleanup_webhook_emitter)
 
-    # Initialize HuggingFace CommitScheduler for live backup if configured
-    hf_backup = config.get('huggingface_backup', {})
-    if hf_backup.get('enabled', False):
-        try:
-            from huggingface_hub import CommitScheduler
-            task_dir = config.get('task_dir', '.')
-            output_dir = os.path.join(
-                task_dir,
-                config.get('output_annotation_dir', 'annotation_output')
-            )
-            hf_token = hf_backup.get('token') or os.environ.get('HF_TOKEN')
-            scheduler = CommitScheduler(
-                repo_id=hf_backup['repo_id'],
-                folder_path=output_dir,
-                token=hf_token,
-                private=hf_backup.get('private', True),
-                every=hf_backup.get('schedule_minutes', 5),
-            )
-            logger.info("HuggingFace CommitScheduler initialized: %s (every %d min)",
-                        hf_backup['repo_id'], hf_backup.get('schedule_minutes', 5))
-        except ImportError:
-            logger.warning("huggingface_hub not installed, skipping CommitScheduler. "
-                           "Install with: pip install huggingface_hub>=0.20.0")
-        except Exception as e:
-            logger.error("Failed to initialize HuggingFace CommitScheduler: %s", e)
+    # The HuggingFace backup used to be started here. It now runs from
+    # configure_app(), because this function is only reached by `potato start`:
+    # every container starts through the create_app WSGI factory, so a backup
+    # wired here never ran on the hosts whose disks do not survive a restart.
 
     # Initialize WaveformService for audio annotation if configured
     _init_waveform_service(config)
@@ -4879,10 +4861,18 @@ def run_server(args):
     # Run the Flask app
     host = config.get("host", "0.0.0.0")
     port = config.get("port", 8000)
+
+    # --ssl-cert/--ssl-key used to be parsed and then dropped, so the server
+    # served plaintext while the operator thought it was serving TLS.
+    ssl_context = None
+    if config.get("ssl_cert") and config.get("ssl_key"):
+        ssl_context = (config["ssl_cert"], config["ssl_key"])
+        logger.info("Serving over HTTPS using cert %s", config["ssl_cert"])
+
     # Use threaded=True so background LLM calls (solo mode refinement,
     # edge case synthesis, etc.) don't block the HTTP server.
     app.run(host=host, port=port, debug=config.get("debug", False),
-            use_reloader=False, threaded=True)
+            use_reloader=False, threaded=True, ssl_context=ssl_context)
 
 
 # Define the main entry point for the Flask server
@@ -4916,6 +4906,18 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == 'download-models':
         from potato.models_cli import main as models_main
         sys.exit(models_main(sys.argv[2:]))
+
+    # ``deploy`` puts a task on a host and takes it down again. It has its own
+    # subcommands and flag set, so it does not fit the mode + config_file
+    # positional shape the server parser uses.
+    if len(sys.argv) > 1 and sys.argv[1] == 'deploy':
+        from potato.deploy.cli import main as deploy_main
+        sys.exit(deploy_main(sys.argv[2:]))
+
+    # ``share`` serves a task on a temporary public URL through a tunnel.
+    if len(sys.argv) > 1 and sys.argv[1] == 'share':
+        from potato.deploy.share_cli import main as share_main
+        sys.exit(share_main(sys.argv[2:]))
 
     # Parse command line arguments
     args = arguments()

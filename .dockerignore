@@ -1,0 +1,87 @@
+# Build context for the root Dockerfile.
+#
+# The image installs Potato from setup.py and mounts the project at runtime, so
+# the context needs only the package, the packaging metadata and the entrypoint.
+# Everything else is either development tooling, generated output, or a
+# researcher's data — none of which belongs in a published image.
+#
+# Excluding these is not only about size. annotation_output/ holds real
+# annotator records, *.sqlite holds the project database, and admin_api_key.txt
+# is a live credential; a stray COPY would publish all three to ghcr.io.
+
+# Version control and CI
+.git
+.github
+.gitignore
+.gitattributes
+
+# Python build and cache artifacts
+__pycache__
+*.py[cod]
+*.egg-info
+build/
+dist/
+.eggs/
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.tox
+.coverage
+htmlcov
+venv
+.venv
+env
+
+# Development dependency set — a superset of setup.py that pulls pytest,
+# selenium and the docs toolchain. The image installs from setup.py instead.
+requirements.txt
+requirements-test.txt
+
+# Downloaded model weights (382 MB) — gitignored, fetched by `potato
+# download-models`, and not a Python package, so pip never installs them. They
+# reach the image only if an operator mounts them or runs download-models in a
+# derived build. Browser-side segmentation needs none of it: ONNX Runtime Web is
+# vendored under potato/static, which does ship.
+potato/models
+
+# Example projects (554 MB, much of it media). The image serves whatever mounts
+# at /app, so it needs no examples of its own.
+examples
+
+# Tests, docs and the website build
+tests
+docs
+site
+mkdocs.yml
+internal
+plans
+node_modules
+
+# Generated Space bundles and deployment scratch
+spaces-build
+deployment
+.potato
+
+# Runtime output and credentials — never publish these
+annotation_output
+annotation_output*
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+admin_api_key.txt
+*.log
+potato/templates/generated
+
+# Local-only material
+demo
+recordings
+screenshots
+.deciduous
+.claude
+CLAUDE.md
+
+# Editor and OS noise
+.DS_Store
+.idea
+.vscode
+*.swp

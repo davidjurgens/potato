@@ -1,0 +1,35 @@
+[Unit]
+Description=Caddy TLS terminator for Potato
+After=docker.service network-online.target potato.service
+Requires=docker.service
+
+[Service]
+Type=exec
+Restart=always
+RestartSec=5
+TimeoutStartSec=300
+
+ExecStartPre=-/usr/bin/docker rm -f {{ container_name }}
+ExecStartPre=/bin/mkdir -p {{ cert_dir }} /var/log/caddy
+
+# --network host so Caddy reaches the app on 127.0.0.1: the app deliberately
+# binds to loopback only, so nothing can reach port {{ app_port }} from outside
+# even if the firewall is removed.
+#
+# The certificate store is on {{ cert_dir }}, which is the persistent volume
+# when one is attached. That matters more than usual here: an IP-address
+# certificate is valid for about six days, so losing the store on every restart
+# would mean re-issuing constantly and running into rate limits.
+ExecStart=/usr/bin/docker run \
+    --name {{ container_name }} \
+    --rm \
+    --network host \
+    -v /etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro \
+    -v {{ cert_dir }}:/data \
+    -v /var/log/caddy:/var/log/caddy \
+    {{ caddy_image }}
+
+ExecStop=/usr/bin/docker stop --time=15 {{ container_name }}
+
+[Install]
+WantedBy=multi-user.target

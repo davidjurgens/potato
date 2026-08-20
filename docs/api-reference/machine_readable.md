@@ -22,7 +22,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **159 top-level config keys**, **61 annotation types**, and
+It currently covers **161 top-level config keys**, **61 annotation types**, and
 **24 display types**.
 
 ### Editor validation

@@ -23,6 +23,14 @@ import yaml
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
+
+# This is a repo-local maintainer script and must build from the checkout it
+# lives in, not from whatever `potato` happens to be installed. Prepending the
+# repo root also steps around a stale `site-packages/potato` directory with no
+# __init__.py, which Python resolves as a namespace package whose __file__ is
+# None -- the residue of an old non-editable install.
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 MANIFEST = SCRIPT_DIR / "spaces_manifest.yaml"
 TEMPLATE_DIR = SCRIPT_DIR / "demo-space"  # source of Dockerfile + entrypoint
 
@@ -60,11 +68,15 @@ def load_manifest():
     return spaces
 
 
-def patch_demo_config(config_path: Path):
+def patch_demo_config_dict(cfg: dict) -> dict:
     """Make a demo frictionless: name-only login, no password, no registration.
-    Sets require_no_password + allow_all_users so visitors just enter a name."""
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f) or {}
+
+    Deliberately rewrites access control, which is the opposite of what
+    ``potato deploy`` does. These Spaces are public demos whose whole point is
+    that a visitor can annotate immediately; a researcher's own deployment keeps
+    whatever their config says.
+    """
+    cfg = dict(cfg or {})
     cfg["require_no_password"] = True       # flask_server maps this to require_password=False
     cfg.pop("require_password", None)        # avoid a conflicting explicit value
     uc = cfg.get("user_config")
@@ -75,6 +87,14 @@ def patch_demo_config(config_path: Path):
     # Drop any crowd-login type that would force a different flow
     if isinstance(cfg.get("login"), dict) and cfg["login"].get("type") in ("mturk", "prolific", "url_direct"):
         cfg["login"]["type"] = "standard"
+    return cfg
+
+
+def patch_demo_config(config_path: Path):
+    """File-in-place form of patch_demo_config_dict, for callers that have a path."""
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f) or {}
+    cfg = patch_demo_config_dict(cfg)
     with open(config_path, "w") as f:
         yaml.safe_dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
@@ -131,8 +151,11 @@ Visit **[www.potatoannotator.com]({site})** for docs, the schema gallery, and mo
 3. Annotate using the schemes on the right.
 4. Click **Next** to continue.
 
-> **Run your own copy:** click the **⋮ → Duplicate this Space** button (top-right) to launch
-> this exact demo in your own account on free hardware — change the data and config to make it yours.
+> **Run your own copy:** this demo is generated from a project in the Potato repo. Clone it and
+> start that project directly — no HuggingFace account needed, and no concurrency limit:
+> `python potato/flask_server.py start <example>/config.yaml -p 8000`.
+> Duplicating a Space instead requires a HuggingFace PRO, Team or Enterprise plan, because
+> Docker Spaces run on compute.
 
 > Annotations in this demo are ephemeral. To collect and keep data, deploy your own
 > Space — see the [deployment guide]({repo}/blob/master/deployment/huggingface-spaces/deploy.md).
@@ -150,6 +173,20 @@ and agent traces — with AI-assisted labeling, quality control, and adjudicatio
 
 
 def build_space(entry, out_dir: Path):
+    """Assemble one push-ready Space directory.
+
+    The project copy, the config patch and the exclude handling come from
+    ``potato.deploy.bundle``, which is the same code path ``potato deploy``
+    uses. This file used to carry its own copy; the two drifting apart would
+    mean a rule enforced for one target and not the other -- including the
+    excludes that keep annotation output and admin keys out of a public repo.
+    Everything below the bundle call is HuggingFace-specific and stays here.
+
+    ``tests/unit/test_build_space_parity.py`` holds the output to what this
+    produced before the change.
+    """
+    from potato.deploy.bundle import build_bundle
+
     space_id = entry["id"]
     source = REPO_ROOT / entry["source"]
     config = source / "config.yaml"
@@ -157,39 +194,35 @@ def build_space(entry, out_dir: Path):
         raise SystemExit(f"[{space_id}] source config not found: {config}")
 
     print(f"Building Space '{space_id}'  ({entry['source']}) → {out_dir}")
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
-    out_dir.mkdir(parents=True)
 
-    # 1. Copy the examples/ project (config + data + layouts + any aux files)
-    rsync(source, out_dir, SOURCE_EXCLUDES)
-    patch_demo_config(out_dir / "config.yaml")  # frictionless name-only login
+    # extra_files maps a bundle-relative name to a *source path*, so only the
+    # files that exist on disk go through it. The bundler also creates
+    # annotation_output/.gitkeep itself.
+    build_bundle(
+        str(config),
+        str(out_dir),
+        mode="directory",
+        include_source=True,           # Spaces build potato from source
+        patch=patch_demo_config_dict,  # frictionless name-only login
+        extra_files={
+            "Dockerfile": str(TEMPLATE_DIR / "Dockerfile"),
+            "entrypoint.sh": str(TEMPLATE_DIR / "entrypoint.sh"),
+            "requirements.txt": str(REPO_ROOT / "requirements.txt"),
+            "setup.py": str(REPO_ROOT / "setup.py"),
+        },
+        excludes=SOURCE_EXCLUDES,
+    )
 
-    # 2. Copy the potato package source
-    rsync(REPO_ROOT / "potato", out_dir / "potato", POTATO_EXCLUDES)
-
-    # 3. Project install files
-    for fname in ("requirements.txt", "setup.py"):
-        shutil.copy2(REPO_ROOT / fname, out_dir / fname)
-
-    # 4. Deployment scaffolding (Dockerfile + entrypoint)
-    shutil.copy2(TEMPLATE_DIR / "Dockerfile", out_dir / "Dockerfile")
-    entrypoint = out_dir / "entrypoint.sh"
-    shutil.copy2(TEMPLATE_DIR / "entrypoint.sh", entrypoint)
-    entrypoint.chmod(0o755)
-
-    # 5. Generated HF README with frontmatter
+    # Generated rather than copied, so they are written after the bundle.
     (out_dir / "README.md").write_text(render_readme(entry))
-
-    # 6. Empty output dir so the app can write at runtime
-    ann_out = out_dir / "annotation_output"
-    ann_out.mkdir(exist_ok=True)
-    (ann_out / ".gitkeep").write_text("")
-
-    # 7. git-lfs for media demos
     if entry.get("needs_lfs"):
-        lfs = "\n".join(f"{p} filter=lfs diff=lfs merge=lfs -text" for p in LFS_PATTERNS)
+        lfs = "\n".join(f"{p} filter=lfs diff=lfs merge=lfs -text"
+                        for p in LFS_PATTERNS)
         (out_dir / ".gitattributes").write_text(lfs + "\n")
+
+    # shutil.copy2 preserves the mode, but be explicit: a non-executable
+    # entrypoint makes the Space build fine and then fail to start.
+    (out_dir / "entrypoint.sh").chmod(0o755)
 
     print(f"  ✓ {space_id} built"
           f"{'  (git-lfs media)' if entry.get('needs_lfs') else ''}"

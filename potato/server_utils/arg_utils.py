@@ -97,6 +97,17 @@ def arguments():
     )
 
     parser.add_argument(
+        "--host",
+        action="store",
+        type=str,
+        dest="host",
+        help="interface to bind to (default: 0.0.0.0). Use 127.0.0.1 to accept "
+             "only local connections, e.g. when fronting the server with a tunnel "
+             "or reverse proxy.",
+        default=None,
+    )
+
+    parser.add_argument(
         "--persist-sessions",
         action="store_true",
         dest="persist_sessions",

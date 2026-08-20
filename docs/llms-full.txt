@@ -871,12 +871,12 @@ Potato's computer-vision, spatial, and evaluation surfaces are newer than its te
 | Free self-hosted | Yes | Yes (MIT) | Community ed. | - | - | Community ed. | - |
 | Bounding boxes, polygons, masks | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | Interactive segmentation (click → mask) | In-browser, no GPU | Via Nuclio | Via ML backend | Yes | Yes | Yes | Yes |
-| Text-prompt segmentation | - | - | Via ML backend | Yes (SAM 3) | Yes (SAM 3) | Via apps | - |
+| Text-prompt segmentation | Yes (in-browser) | - | Via ML backend | Yes (SAM 3) | Yes (SAM 3) | Via apps | - |
 | Keypoints / skeletons | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | Polylines, ellipses, 2D cuboids | Yes | Yes | Partial | Partial | Yes | Yes | Yes |
 | Per-object attributes | - | Yes | Yes | Yes | Yes | Yes | Yes |
 | Video tracking with interpolation | Yes | Yes | Partial | Partial | Yes | Yes | Yes |
-| Model-based mask propagation | Frame-to-frame re-prompt | Via AI agents | Via ML backend | Yes | Yes | Yes | Yes |
+| Model-based mask propagation | Yes (SAM 2, server-side) | Via AI agents | Via ML backend | Yes | Yes | Yes | Yes |
 | Deep zoom / tiled gigapixel images | Yes (DZI + IIIF) | Partial | - | - | Yes | Yes | - |
 | 3D point clouds & cuboids | Yes | Yes | - | - | - | Yes | Yes |
 | Point-cloud sequences / episodes | - | Yes | - | - | - | Yes | Yes |
@@ -890,7 +890,7 @@ Potato's computer-vision, spatial, and evaluation surfaces are newer than its te
 | Generative-video / world-model evaluation | Yes | - | - | - | - | - | - |
 | VLM grounding & pointing evaluation | Yes | - | - | - | - | - | - |
 
-On every row except the last four, the mature CV platforms generally match or beat Potato. On those four, Potato is currently doing something the other tools do not offer.
+On most rows the mature CV platforms match or beat Potato. Two rows are worth reading closely rather than as a tick: Potato's text-prompt segmentation runs in the browser under an Apache-2.0 model, where the commercial equivalents run server-side on SAM 3's non-commercial terms; and its mask propagation runs on the server, so the free tier gets the capability but not in-browser. On the last four rows, Potato is doing something the other tools do not offer.
 
 ## Potato's strengths
 
@@ -1037,7 +1037,7 @@ doccano is a lightweight open-source text annotation tool supporting text classi
 
 ### Image and Video Annotation
 
-Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation runs in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped. Fifteen import formats and twenty-nine export formats let you bring existing work in and take it back out.
+Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, keypoint sets with skeletons, instance-keyed brush masks, and video tubelets with polygon interpolation. Interactive segmentation and open-vocabulary text prompting both run in the browser through ONNX Runtime Web: no GPU to provision, no model server to keep up, and it works air-gapped once the weights are on the machine. Mask propagation through video uses SAM 2's memory modules and runs on the server, measured at 0.974–0.979 IoU per frame with no decay across the sequence. Fifteen import formats and twenty-nine export formats let you bring existing work in and take it back out.
 
 **vs. CVAT.** CVAT is the reference open-source CV tool and remains the better choice for high-volume, CV-only pipelines: deeper task/job management, per-object attributes, a larger format ecosystem through Datumaro, and a very large community. Choose Potato when the CV work sits alongside text, audio, or evaluation tasks, or when you need agreement statistics between annotators rather than accuracy against a ground-truth job.
 
@@ -1047,7 +1047,7 @@ Potato's CV surface covers boxes, polygons, polylines, ellipses, 2D cuboids, key
 
 **vs. Labelbox, SuperAnnotate, Encord, Kili, V7.** These are mature commercial platforms with workforce management, enterprise governance, and strong model-assisted labelling (SAM 3, GroundingDINO, auto-tracking). If you need a managed workforce, compliance certifications, or petabyte-scale curation, they are the right answer. Potato is free, self-hosted, and research-workflow-first.
 
-**vs. X-AnyLabeling, LabelMe, labelImg.** If you are one person labelling locally and want open-vocabulary auto-labelling today, X-AnyLabeling bundles Grounding DINO, Grounded-SAM 2, SAM 2.1, and YOLO in a desktop app and is very hard to beat for that. Potato's advantage begins when there is more than one annotator.
+**vs. X-AnyLabeling, LabelMe, labelImg.** X-AnyLabeling bundles Grounding DINO, Grounded-SAM 2, SAM 2.1, and YOLO in a desktop app, and for one person labelling locally across a wide range of models it is hard to beat. Potato ships a narrower model set and runs in the browser, so nothing is installed on the annotator's machine; its advantage begins when there is more than one annotator.
 
 ### Gigapixel and Deep Zoom
 
@@ -1265,8 +1265,6 @@ Counts are generated from Potato's own registries. There is no "best alternative
 So an evaluation does not have to discover these late:
 
 - **No model training.** Potato orders items, pre-labels with existing models, and critiques annotations with a VLM, but it does not train or serve detectors. Roboflow, V7, Supervisely, and Labelbox do.
-- **No text-prompt segmentation.** Interactive segmentation is click- and box-driven. SAM 3 / Grounding DINO-class open-vocabulary labelling is available in Roboflow, V7, Labelbox, and the open-source desktop tool X-AnyLabeling.
-- **Video mask propagation is frame-to-frame re-prompting, not memory-based tracking.** No published SAM 2 ONNX export includes the memory modules.
 - **No per-object attributes yet.** Geometry carries a label; occlusion levels, truncation flags, and sub-type attributes need a companion schema.
 - **No point-cloud sequence mode.** 3D annotation is per frame; track propagation across a sweep is not implemented.
 - **No DICOM, NIfTI, or WSI formats.** Deep zoom and 16-bit windowing cover large scientific images, not clinical ones.
@@ -3587,7 +3585,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Sub-keys |
 |-----|----------|------|----------|
 | `authentication` |  | object | `allow_local_login`, `allowed_domain`, `allowed_domains`, `allowed_org`, `auto_register`, `database_url`, `method`, `providers`, `user_config_path`, `user_identity_field` |
-| `login` |  | object | `auto_redirect_delay`, `auto_redirect_on_completion`, `type`, `url_argument` |
+| `login` |  | object | `type`, `url_argument` |
 | `user_config` |  | object | `allow_all_users`, `users` |
 | `require_password` |  | boolean |  |
 | `require_no_password` |  | boolean |  |
@@ -3633,7 +3631,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Sub-keys |
 |-----|----------|------|----------|
 | `qda_mode` |  | object | `codebook`, `enabled`, `memos` |
-| `codebook` |  | object | `enabled`, `mode` |
+| `codebook` |  | object | `distiller`, `enabled`, `mode` |
 | `codebook_mode` |  |  |  |
 | `codebook_invivo_key` |  |  |  |
 | `annotation_ui` |  | object | `memos`, `visibility` |
@@ -3809,6 +3807,8 @@ Recognized keys not yet sorted into a category above. They are valid configurati
 
 | Key | Required | Type | Sub-keys |
 |-----|----------|------|----------|
+| `auto_redirect_delay` |  |  |  |
+| `auto_redirect_on_completion` |  |  |  |
 | `embeddings` |  |  |  |
 | `export_include_annotation_changes` |  |  |  |
 | `item_store` |  | object | `backend`, `cache_size`, `path` |
@@ -7065,6 +7065,74 @@ All annotation schemas share these **required fields**:
 - **`description`** (string): Text displayed to annotators explaining what to do
 
 Additional fields are specific to each annotation type and may be required or optional.
+
+## Annotation Type Reference
+
+`annotation_type` accepts the values below. The sections after this table cover the common ones in detail; for the rest, the Details column links to the guide that does. The Example column names a runnable project for every type that has one. Run one from the repository root with `python potato/flask_server.py start <example>/config.yaml -p 8000`.
+
+| Type | What it does | Details | Example |
+|---|---|---|---|
+| `agent_interaction_graph` | Clickable agent-interaction graph: mark critical-path nodes + flag problematic edges | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/interaction-graph/` |
+| `agent_scorecard` | Per-agent + per-team scorecard with optional milestones (MultiAgentBench-style) | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/agent-scorecard/` |
+| `audio_annotation` | Audio segmentation and annotation with waveform visualization | [below](#10-audio-annotation-audio_annotation) | `examples/audio/audio-annotation/` |
+| `bws` | Best-Worst Scaling: select the best and worst item from a set | [below](#31-best-worst-scaling-bws) | `examples/classification/iterative-bws/` |
+| `card_sort` | Drag-and-drop card sorting into predefined or user-created groups | [below](#21-card-sorting-card_sort) | `examples/classification/card-sort/` |
+| `code_review` | GitHub PR-style code review with inline comments and file ratings | [below](#24-code-review-code_review) | `examples/agent-traces/coding-agent-review/` |
+| `confidence` | Confidence rating meta-annotation for any primary annotation | [below](#33-confidence-rating-confidence) | `examples/classification/confidence-calibrated/` |
+| `conjoint` | Discrete choice conjoint analysis with side-by-side profile comparison | [below](#22-conjoint-analysis-conjoint) | `examples/classification/conjoint/` |
+| `consensus_tracking` | Tag discussion acts per turn (proposal/agreement/disagreement/decision/concession) with cross-turn links to referenced proposals | [multi agent discussion](../agent-evaluation/multi_agent_discussion.md) | `examples/agent-traces/debate-judging/` |
+| `constant_sum` | Allocate a fixed budget of points across categories | [below](#34-constant-sum--points-allocation-constant_sum) | `examples/classification/constant-sum/` |
+| `context_attribution` | Tag how each turn uses earlier context (used correctly / hallucinated / ignored) with links to the source turn | [agent task recipes](../agent-evaluation/agent_task_recipes.md) | `examples/agent-traces/context-attribution/` |
+| `coreference` | Coreference chain annotation for grouping mentions of the same entity | [below](#13-coreference-chains-coreference) | `examples/span/coreference/` |
+| `emergent_behavior` | Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/emergent-behavior/` |
+| `episode_annotation` | Embodied robot episode: synchronized video streams and time-series lanes with phase, outcome and dense-reward annotation | [episodes](embodied/episodes.md) | `examples/embodied/lerobot-episode/` |
+| `error_span` | MQM-style error span annotation with typed severity for quality evaluation | [below](#20-error-span-with-typed-severity-error_span) | `examples/classification/error-span/` |
+| `event_annotation` | N-ary event annotation with triggers and typed arguments | [below](#30-event-annotation-event_annotation) | `examples/span/event-annotation/` |
+| `extractive_qa` | SQuAD-style extractive question answering with answer span highlighting | [below](#17-extractive-qa-extractive_qa) | `examples/classification/extractive-qa/` |
+| `failure_attribution` | Multi-agent failure attribution: responsible agent + decisive step + reason | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/failure-attribution/` |
+| `grounding_eval` | Grounding evaluation: bind referring expressions to image regions or points, with an explicit not-present answer | [vlm grounding](../agent-evaluation/vlm_grounding.md) | `examples/ai-assisted/grounding-eval/` |
+| `gui_trajectory` | Computer-use/GUI agent step review: per-step screenshot + action correctness + click grounding | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/gui-trajectory/` |
+| `handoff_review` | Annotate agent-to-agent handoffs: inter-agent misalignment flags + quality | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/handoff-review/` |
+| `hierarchical_multiselect` | Hierarchical tree-structured multi-label selection | [below](#38-hierarchical-multi-label-selection-hierarchical_multiselect) | `examples/classification/hierarchical-multiselect/` |
+| `image_annotation` | Image annotation with bounding boxes, polygons, freeform drawing, and landmarks | [below](#9-image-annotation-image_annotation) | `examples/image/image-annotation/` |
+| `likert` | Likert scale rating | [below](#2-likert-scale-likert) | `examples/classification/likert/` |
+| `multi_document_event` | Cross-document event annotation: template slots filled with evidence from many documents | [multi document events](../advanced/multi_document_events.md) | `examples/advanced/multi-document-events/` |
+| `multimodal_reasoning` | Interleaved text/image/tool reasoning trace: per-step coherence + visual-hallucination rating | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/multimodal-reasoning/` |
+| `multirate` | Rate multiple items on a scale | [below](#7-multi-rate-multirate) | `examples/classification/multirate/` |
+| `multiselect` | Multiple-choice checkbox selection | [below](#3-multiple-choice-multiselect) | `examples/classification/check-box/` |
+| `number` | Numeric input field | [below](#8-number-input-number) | `examples/advanced/all-annotation-types/` |
+| `pairwise` | Pairwise comparison of two items (binary selection or scale rating) | [below](#29-pairwise-comparison-pairwise) | `examples/classification/pairwise-scale/` |
+| `process_reward` | Per-step process reward signals for PRM training | [below](#23-process-reward-process_reward) | `examples/agent-traces/cot-process-reward/` |
+| `pure_display` | Display-only content (instructions, headers) | [below](#27-display-only-pure_display) | `examples/advanced/all-annotation-types/` |
+| `radio` | Single-choice radio button selection | [below](#1-single-choice-radio) | `examples/classification/single-choice/` |
+| `range_slider` | Dual-thumb slider for selecting an acceptable range | [below](#37-range-slider--dual-thumb-range_slider) | `examples/classification/range-slider/` |
+| `ranking` | Drag-and-drop ranking of items by preference or relevance | [below](#36-ranking--drag-and-drop-ranking) | `examples/classification/ranking/` |
+| `region_caption` | Region captioning: a free-text description per region drawn on the image, with caption agreement over matched regions | [vlm grounding](../agent-evaluation/vlm_grounding.md) | `examples/image/region-captioning/` |
+| `rollout_evaluation` | World-model rollout evaluation: frame-locked video panels with temporal violation localization, preference and counterfactual plausibility | [world model eval](../agent-evaluation/world_model_eval.md) | `examples/agent-traces/world-model-rollouts/` |
+| `rubric_eval` | Multi-criteria rubric evaluation grid for LLM and text quality assessment | [below](#18-rubric-evaluation-rubric_eval) | `examples/classification/rubric-eval/` |
+| `select` | Dropdown selection | [below](#25-dropdown-selection-select) | `examples/advanced/all-annotation-types/` |
+| `semantic_differential` | Bipolar adjective scales for measuring connotative meaning | [below](#35-semantic-differential-semantic_differential) | `examples/classification/semantic-differential/` |
+| `slider` | Slider for selecting a value in a range | [below](#5-slider-slider) | `examples/classification/slider/` |
+| `soft_label` | Probability distribution across labels via constrained sliders | [below](#32-soft-label--probability-distribution-soft_label) | `examples/classification/soft-label/` |
+| `span` | Text span annotation/highlighting with optional entity linking to knowledge bases | [below](#4-text-span-selection-span) | `examples/span/span-labeling/` |
+| `span_link` | Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION) | [below](#26-span-linking-span_link) | `examples/span/span-linking/` |
+| `spatial_annotation` | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments | [point cloud](spatial/point_cloud.md) | `examples/spatial/kitti-cuboids/` |
+| `speech_transcript` | Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction | [transcript formats](multimedia/transcript_formats.md) | `examples/agent-traces/speech-transcript/` |
+| `table_grid` | Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty) | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/table-grid/` |
+| `temporal_grounding` | Video temporal grounding: mark gold event intervals with live IoU vs predicted | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/temporal-grounding/` |
+| `text` | Free-form text input | [below](#6-text-input-text) | `examples/classification/text-box/` |
+| `text_edit` | Inline text editing with diff tracking for post-editing and correction tasks | [below](#19-text-edit--post-edit-text_edit) | `examples/classification/text-edit/` |
+| `tiered_annotation` | Hierarchical multi-tier annotation for audio/video (ELAN-style) | [below](#15-tiered-annotation-tiered_annotation) | `examples/audio/tiered-annotation/` |
+| `tool_call_review` | Per-tool-call correctness review (right tool / args / ordering) | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/tool-call-review/` |
+| `tool_contention` | Tool/resource-contention timeline: per-agent lanes + shared-resource collision classification | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/tool-contention/` |
+| `trajectory_edit` | Per-step trajectory correction/editing for SFT/DPO training data | [trajectory correction](../agent-evaluation/trajectory_correction.md) | `examples/agent-traces/trajectory-correction/` |
+| `trajectory_eval` | Per-step trajectory evaluation with error taxonomy and severity scoring | [below](#39-trajectory-evaluation-trajectory_eval) | `examples/agent-traces/trajectory-evaluation/` |
+| `tree_annotation` | Annotation of conversation tree nodes with path selection | [below](#14-conversation-tree-tree_annotation) | `examples/span/conversation-tree/` |
+| `triage` | Binary accept/reject triage for rapid data curation | [below](#12-triage-triage) | `examples/advanced/triage/` |
+| `vas` | Continuous visual analog scale for fine-grained magnitude estimation | [below](#16-visual-analog-scale-vas) | `examples/classification/vas/` |
+| `video` | Video player display | [below](#28-video-player-video) | — |
+| `video_annotation` | Video annotation with temporal segments, frame classification, keyframes, and object tracking | [below](#11-video-annotation-video_annotation) | `examples/video/video-frame-annotation/` |
+| `voice_interaction` | Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/voice-interaction/` |
 
 ## Supported Annotation Types
 
@@ -43994,7 +44062,7 @@ When deploying on Spaces with `hf_oauth: true` in the README front matter, Huggi
 
 ```yaml
 authentication:
-  type: oauth
+  method: oauth
   providers:
     huggingface:
       client_id: "${OAUTH_CLIENT_ID}"
@@ -44113,37 +44181,65 @@ URL: https://potatoannotator.readthedocs.io/en/latest/data-export/potato_on_hugg
 
 # Potato on HuggingFace
 
-Potato has a growing presence on the HuggingFace Hub: **live demo Spaces** you can try in the
-browser, **sample annotation datasets**, and guides for deploying your own. This page is the
-index.
+Potato has a presence on the HuggingFace Hub: a small set of **live demo Spaces** you can try in
+the browser, a wider catalog of deployed-but-paused ones, **sample annotation datasets**, and
+guides for deploying your own. This page is the index.
 
 - **Website:** [www.potatoannotator.com](https://www.potatoannotator.com)
 - **Collection (all demos):** [Potato Annotation Demos](https://huggingface.co/collections/Blablablab/potato-annotation-demos-6a3753d95427d61a91ecf4fd)
-- **Live demo:** [Blablablab/agent-trace-evaluation](https://huggingface.co/spaces/Blablablab/agent-trace-evaluation)
+- **Live demo:** [Blablablab/video-annotation](https://huggingface.co/spaces/Blablablab/video-annotation)
 - **Deploy your own Space:** [deployment guide](huggingface_spaces.md)
 - 🤖 **Use HF models for AI features:** [Using HuggingFace Models](../ai-intelligence/huggingface_models.md)
 - 📤 **Export annotations to the Hub:** [HuggingFace Hub Export](huggingface_export.md)
 
-> The full catalog of demo Spaces is rolling out under the
-> [`Blablablab`](https://huggingface.co/Blablablab) org and grouped in a HuggingFace
-> **Collection**. Each demo is generated from a project in [`examples/`](https://github.com/davidjurgens/potato/tree/master/examples/) via the
-> [Spaces catalog tooling](huggingface_spaces.md) — adding a new
-> one is a single manifest entry.
+> The demo Spaces live under the [`Blablablab`](https://huggingface.co/Blablablab) org and are
+> grouped in a HuggingFace **Collection**. Each one is generated from a project in
+> [`examples/`](https://github.com/davidjurgens/potato/tree/master/examples/) via the
+> [Spaces catalog tooling](huggingface_spaces.md) — adding a new one is a single manifest
+> entry. Every example in the repo runs locally whether or not it has a Space.
 
-## Running any demo
+## Running a demo
 
-On HuggingFace free CPU-basic hardware, an org can keep ~3 Spaces running at once, so a
-curated set of flagships stays live (auto-waking when you open them) while the rest are
-deployed but paused. **Any demo can be run on demand:** open its Space and click
-**⋮ → Duplicate this Space** to launch your own copy on free hardware (the data and config
-come with it — edit them to make it yours).
+HuggingFace caps a free CPU-basic organization at **three Spaces running at once**, and the
+48-hour idle-sleep timer cannot be shortened on free hardware. A demo someone opens holds one
+of those three slots for two days after its last visit. Three demos are therefore kept live and
+the rest of the catalog is paused.
 
-Every demo Space links back to **[www.potatoannotator.com](https://www.potatoannotator.com)**
-from both its landing card and the in-app footer.
+The three are marked **· live** below. They were picked from search traffic to
+potatoannotator.com:
+
+| Demo | Why |
+|---|---|
+| [video-annotation](https://huggingface.co/spaces/Blablablab/video-annotation) | Video action and temporal segmentation is the most-searched topic on the site |
+| [agent-comparison](https://huggingface.co/spaces/Blablablab/agent-comparison) | LLM and agent evaluation is the second |
+| [image-bbox](https://huggingface.co/spaces/Blablablab/image-bbox) | Image region annotation is the third |
+
+Search demand concentrates in video, agents and images, so a traffic-led pick of three leaves
+no text demo live. Span and classification annotation are in the catalog below but paused; run
+one of them locally to try it.
+
+Every other demo is deployed but **paused**. A paused Space does not wake when you open it;
+only its owner can restart it. The rest of the catalog below is an index of what Potato
+supports, and those Space pages will not open.
+
+Any of them runs locally from the example it was generated from. This needs no HuggingFace
+account and has no concurrency limit:
+
+```bash
+pip install potato-annotation
+python potato/flask_server.py start examples/video/video-annotation/config.yaml -p 8000
+```
+
+> **"Duplicate this Space" no longer works on a free account.** HuggingFace now requires PRO
+> for personal accounts, or Team/Enterprise for organizations, to create *or duplicate* a
+> Gradio or Docker Space. Potato demos are Docker Spaces. Running the example locally, as
+> above, is the free path.
 
 ## Demo catalog
 
-Every entry below is a self-contained, one-click annotation demo (log in with any username).
+Generated from `deployment/huggingface-spaces/spaces_manifest.yaml`. Entries marked
+**· live** are the ones kept reachable; the rest are deployed but paused.
+`python deployment/huggingface-spaces/audit_spaces.py` reports the current state.
 
 ### Text classification (9)
 - **sentiment-analysis** — Single-choice radio labeling with sequential keybindings.
@@ -44156,69 +44252,56 @@ Every entry below is a self-contained, one-click annotation demo (log in with an
 - **ranking** — Drag-to-rank ordering of candidate items.
 - **survey** — Multi-question survey with mixed input types.
 
-### Span & structure (6)
+### Span & structure (5)
 - **ner-span** — Highlight-and-label text spans for NER / extraction.
 - **coreference** — Link coreferent mentions across a document.
 - **entity-linking** — Link entity spans to a knowledge-base catalog.
 - **dependency-tree** — Annotate syntactic dependency arcs between tokens.
 - **multi-span** — Span annotation across multiple text fields.
-- **event-annotation** — Mark event triggers and arguments in text.
 
-### Agent & GenAI evaluation (20+)
-- **agent-trace-evaluation** — Evaluate agent traces: success, efficiency, side effects, hallucination spans.
-- **agent-comparison** / **multi-dim-comparison** — Compare two trajectories, overall or per dimension.
-- **anthropic-evaluation** / **openai-evaluation** — Annotate Claude / OpenAI agent traces.
-- **coding-agent-evaluation** / **-comparison** / **-prm** / **-review** — Evaluate, compare, process-reward, and review coding agents.
-- **swebench-evaluation** — Annotate SWE-bench attempts and patches.
-- **multi-agent-evaluation** — Evaluate multi-agent interactions.
-- **complex-annotation** — Rich multi-schema annotation over complex traces.
-- **continuous-eval** — Continuous / streaming evaluation of agent runs.
-- **trajectory-evaluation** / **trajectory-correction** — Step quality + edit traces for SFT/DPO.
-- **rag-evaluation** — Retrieval relevance, faithfulness, citation accuracy.
-- **visual-agent-evaluation** / **web-agent-review** — Screenshot-based GUI/web agent review with overlays.
-- **triage-queue** — Signal-based queue for prioritizing traces to review.
-- **judge-alignment** — Measure LLM-judge agreement with human annotations.
+### Agent & GenAI evaluation (5)
+- **agent-comparison** **· live** — Side-by-side comparison of two agent trajectories.
+- **anthropic-evaluation** — Annotate Claude/Anthropic agent traces.
+- **openai-evaluation** — Annotate OpenAI agent / tool-use traces.
+- **rag-evaluation** — Rate retrieval relevance, faithfulness, citation accuracy.
+- **web-agent-review** — Review web-agent runs with screenshot + click/scroll overlays.
 
-  _Live/ingestion variants (`live-agent-evaluation`, `live-coding-agent`, `web-agent-creation`,
-  `langchain-integration`) are available to run locally; they deploy as Spaces only where they
-  render from bundled static data._
-
-### Multimodal (10)
-- **image-classification** · **image-bbox** · **image-ai-detection** — Classify, draw boxes, real-vs-AI.
-- **pdf-annotation** · **pdf-bbox** — Annotate and box PDF documents.
-- **audio-annotation** · **audio-classification** — Waveform segment labeling and clip classification.
-- **video-annotation** · **video-classification** — Temporal segments and whole-clip labels.
+### Multimodal (5)
+- **image-bbox** **· live** — Draw labeled bounding boxes on images.
+- **audio-classification** — Classify audio clips (emotion / event / speaker).
+- **video-annotation** **· live** — Video player with temporal segment labeling.
+- **video-classification** — Whole-clip video classification.
 - **multimodal** — Combine media + text fields in one task.
 
-### Advanced workflows (6)
-- **qda-mode** — Codebook-driven qualitative coding with memos and cases.
+### Advanced workflows (5)
 - **codebook** — Shared evolving codebook across annotators.
 - **adjudication** — Resolve multi-annotator disagreements.
 - **quality-control** — Attention checks and gold-standard items.
 - **conditional-logic** — Branching questions that adapt to prior answers.
 - **mace** — Annotator competence estimation with MACE.
 
+### Showcase (1)
+- **all-annotation-types** — Every schema type in a single task.
+
 ### AI-assisted (5)
-_These showcase LLM features and need an endpoint — wire to the HF Inference API
-([guide](../ai-intelligence/huggingface_models.md)) before deploying._
-- **solo-mode** — LLM auto-labels while you calibrate (human-in-the-loop).
+- **solo-mode** — LLM auto-labels while you calibrate; human-in-the-loop.
 - **judge-calibration** — Calibrate an LLM judge against blind human labels.
 - **ai-hints** — LLM label suggestions inline in the annotation UI.
 - **span-ai-keywords** — LLM-suggested keyword spans to accept/reject.
 - **llm-chat** — Evaluate a live LLM chat conversation.
 
-### Domain layouts & showcase (4)
-- **content-moderation** · **medical-review** · **dialogue-qa** — Custom domain layouts.
-- **all-annotation-types** — Every schema type in a single task.
-
+### Domain layouts (3)
+- **content-moderation** — Custom moderation layout with policy categories.
+- **medical-review** — Domain layout for clinical text review.
+- **dialogue-qa** — Turn-level dialogue question-answering layout.
 ## Deploying the catalog
 
 See the [Spaces deployment runbook](huggingface_spaces.md):
 
 ```bash
 python deployment/huggingface-spaces/build_space.py --list          # see all demos
-python deployment/huggingface-spaces/build_space.py agent-trace-evaluation
-python deployment/huggingface-spaces/deploy_space.py agent-trace-evaluation Blablablab
+python deployment/huggingface-spaces/build_space.py video-annotation
+python deployment/huggingface-spaces/deploy_space.py video-annotation Blablablab
 ```
 
 ## Related
@@ -48938,6 +49021,785 @@ Thank you for contributing to Potato!
 
 ---
 
+<!-- source: docs/deployment/docker.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/docker/
+
+# Running Potato in Docker
+
+Potato publishes a prebuilt image to GitHub Container Registry. It contains the
+server and its dependencies and nothing else — your project mounts at `/app` at
+run time, so one image serves every task.
+
+```bash
+docker run -p 8000:7860 -v "$PWD/myproject:/app" ghcr.io/davidjurgens/potato:latest
+```
+
+Open <http://localhost:8000>. `myproject` is a directory holding `config.yaml`
+and whatever it references (`data/`, `layouts/`).
+
+## Why a prebuilt image
+
+Potato's core dependencies include numpy, pandas, scipy and scikit-learn.
+Installing them on a small VM is slow at best: on a 1 GB machine the build is
+killed for running out of memory, and on 2 GB it takes five to ten minutes,
+repeated on every redeploy. Pulling the image takes under a minute and gives the
+same bytes every time. `potato deploy` uses it for that reason.
+
+## Tags
+
+| Tag | Contents | Size |
+|---|---|---|
+| `latest`, `2.8.0` | Core dependencies | ~840 MB |
+| `latest-all`, `2.8.0-all` | Plus AI SDKs, document formats, export and OAuth | ~1.5 GB |
+| `sha-<short>` | A specific commit | — |
+
+Both are built for `linux/amd64` and `linux/arm64`, so they run natively on
+Apple Silicon.
+
+Pin a version for a study that will run for months. `latest` moves.
+
+The `-all` variant covers `ai_support`, PDF and DOCX ingestion, parquet export
+and OAuth logins. Neither variant includes the `vision` extra: it pulls
+multi-gigabyte torch wheels, and browser-side segmentation does not need it:
+ONNX Runtime Web is vendored in the image already.
+
+## Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `POTATO_CONFIG` | `config.yaml` | Config path inside the container |
+| `PORT` | `7860` | Listen port |
+| `GUNICORN_THREADS` | `8` | Concurrent requests |
+| `GUNICORN_TIMEOUT` | `120` | Worker timeout, seconds |
+| `POTATO_SECRET_KEY` | generated | Flask session signing key |
+| `POTATO_ADMIN_API_KEY` | generated | Admin API authentication |
+| `POTATO_GENERATED_TEMPLATES_DIR` | auto | Where baked task templates go |
+
+Set `POTATO_SECRET_KEY` on anything that outlives a single run. Without it the
+key is random per process, so every restart logs all annotators out.
+
+```bash
+docker run -p 8000:7860 \
+  -v "$PWD/myproject:/app" \
+  -e POTATO_SECRET_KEY="$(openssl rand -hex 32)" \
+  -e POTATO_CONFIG=configs/pilot.yaml \
+  ghcr.io/davidjurgens/potato:latest
+```
+
+## One worker
+
+The image runs a single gunicorn worker and refuses to start with more.
+
+Potato keeps its item pool, its assignment queue and every annotator's state in
+memory, in the process. A second worker gets its own copy of all three: it hands
+out instances the first worker already assigned, and because `user_state.json`
+is rewritten in full on each save, whichever worker saves last discards the
+other's annotations. Nothing reports this; annotations simply go missing.
+
+Raise `GUNICORN_THREADS` for concurrency instead. Threads share one copy of the
+state, so they do not have this problem. The default of 8 comfortably serves the
+dozens of simultaneous annotators a typical study has.
+
+`POTATO_ALLOW_MULTIWORKER=1` overrides the refusal. Do not use it to serve a
+real study.
+
+## Keeping the data
+
+Annotations are written under `output_annotation_dir` inside the mounted
+project, so with a bind mount they are already on your disk. Nothing else is
+needed for a local run.
+
+For a container whose filesystem does not survive a restart — most managed
+hosts — mount a volume and point the project at it, or use
+`potato deploy pull` to fetch the data down.
+
+Two files matter beyond the annotation output: `project.sqlite` (memos, the
+codebook, cases, search index, review workflow) and `datasets.sqlite`. Both live
+in the project directory and neither is regenerable.
+
+!!! warning "Copying a live SQLite file gives you a corrupt database"
+    `project.sqlite` runs in WAL mode with a live writer. `docker cp` on the
+    file alone yields a corrupt or stale database, and it fails silently — you
+    find out weeks later. Snapshot it first:
+
+    ```bash
+    docker exec <container> sqlite3 /app/project.sqlite ".backup /tmp/snap.sqlite"
+    docker cp <container>:/tmp/snap.sqlite ./project.sqlite
+    ```
+
+    `potato deploy pull` does this for you.
+
+## Health checks
+
+`GET /health` is unauthenticated and reports only whether the server is up:
+`{"status": "ok"}` once it is ready, `503` while it is still loading data. Point
+a load balancer or orchestrator at it. Large tasks take a while to index, so
+allow a generous start period; the image's own `HEALTHCHECK` gives it 90
+seconds.
+
+`GET /admin/health` reports item and annotator counts, and needs the admin API
+key in an `X-API-Key` header.
+
+## Other commands
+
+Anything after the image name replaces the server:
+
+```bash
+docker run --rm -v "$PWD/myproject:/app" ghcr.io/davidjurgens/potato:latest \
+  python -m potato.preview_cli config.yaml
+
+docker run --rm -it -v "$PWD/myproject:/app" ghcr.io/davidjurgens/potato:latest sh
+```
+
+## Building it yourself
+
+```bash
+git clone https://github.com/davidjurgens/potato
+cd potato
+docker build -t potato .
+docker build --build-arg POTATO_EXTRAS=all -t potato:all .
+```
+
+`POTATO_EXTRAS` takes any extras name from `setup.py`: `ai`, `formats`,
+`export`, `vision`, `all`.
+
+## Troubleshooting
+
+**`config file not found`** — the project did not mount where the server looked.
+The error lists what it found in `/app`; compare that against your `-v`
+argument. A relative host path needs to be absolute or `$PWD`-prefixed.
+
+**Permission errors writing annotations** — the container runs as uid 1000. On
+Linux, either `chown -R 1000:1000` the project directory or add
+`--user "$(id -u):$(id -g)"`. Docker Desktop on macOS and Windows maps ownership
+for you.
+
+**Everyone is logged out after a restart** — set `POTATO_SECRET_KEY`.
+
+**The server exits with `GUNICORN_WORKERS`** — see [One worker](#one-worker).
+
+## Related
+
+- [Reverse proxy](reverse-proxy.md) — TLS and path prefixes
+- [Scaling](scaling.md) — how many annotators one instance serves
+
+
+---
+
+<!-- source: docs/deployment/deploy-digitalocean.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-digitalocean/
+
+# Deploying to a DigitalOcean Droplet
+
+One command takes a task from a config file to an HTTPS URL you can send to
+annotators.
+
+```bash
+pip install 'potato-annotation[deploy]'
+export DIGITALOCEAN_TOKEN=dop_v1_...
+potato deploy up myproject/config.yaml --provider digitalocean
+```
+
+It prints what it will create, what it will cost and what the URL will expose,
+then asks before spending anything. Several minutes later — most of it spent
+installing Docker and pulling the image on a fresh machine — you have a running
+server at `https://<droplet-ip>`.
+
+## Before you start
+
+A DigitalOcean personal access token with **read and write** scope, from
+<https://cloud.digitalocean.com/account/api/tokens>. Read-only tokens fail at
+the first call with a clear message.
+
+Potato looks for the token in `--token`, then `DIGITALOCEAN_TOKEN`,
+`DIGITALOCEAN_ACCESS_TOKEN` or `DO_TOKEN`, then `~/.config/doctl/config.yaml`.
+It is never written to disk.
+
+## What gets created
+
+| Resource | Purpose | Cost |
+|---|---|---|
+| Droplet, `s-2vcpu-2gb` | Runs the server | $18/month |
+| Cloud firewall | Inbound 22, 80, 443 only | free |
+| SSH key | Generated for this deployment alone | free |
+| Block volume (with `--volume-gb`) | Annotations that survive the droplet | $0.10/GB/month |
+
+Everything is tagged `potato` and `potato-<name>`, so you can find and remove it
+from the console even if the local state file is lost.
+
+`s-1vcpu-1gb` is offered by DigitalOcean and Potato will warn you off it. The
+image is about 840 MB and the working set is numpy, pandas and scipy; 1 GB
+swaps. 2 GB is the smallest size worth using.
+
+## How TLS works without a domain
+
+With no `--domain`, Caddy obtains a Let's Encrypt certificate for the droplet's
+IP address. Browsers accept it with no warning and no DNS to configure.
+
+**IP certificates are valid for about six days**, not ninety. Renewal happens
+automatically and has roughly two days of slack rather than thirty. If a study
+runs unattended for weeks, check `potato deploy status` occasionally — a failed
+renewal shows up there as a TLS error before an annotator meets a browser
+warning.
+
+**The certificate store belongs on a volume.** With `--volume-gb` it is placed
+there automatically, so a restart does not mean re-issuing.
+
+For a real name, point an A record at the droplet and pass `--domain`:
+
+```bash
+potato deploy up myproject/config.yaml --provider digitalocean \
+  --domain annotate.example.edu
+```
+
+That path uses ordinary ninety-day certificates. Create the DNS record first —
+Caddy validates over HTTP-01 and needs the name to resolve.
+
+Potato does not use `sslip.io` or similar wildcard DNS services. They are
+deliberately absent from the Public Suffix List, which means a browser treats
+every host under one as the same site for cookie purposes: anyone else's machine
+on that domain could set a cookie your Flask session would accept.
+
+## Keeping the annotations
+
+```bash
+potato deploy pull myproject/config.yaml
+```
+
+This downloads the annotation output directory, plus `project.sqlite` (memos,
+codebook, cases, search index, review workflow) and `datasets.sqlite`. Neither
+database can be regenerated.
+
+Both are snapshotted with `sqlite3 .backup` on the host before being copied.
+That is not a detail you can skip if you fetch them yourself: they run in WAL
+mode with a live writer, so copying the file gives you a database that is
+corrupt or missing recent work, with nothing to tell you so.
+
+`potato deploy destroy` refuses to run on a deployment that has never been
+pulled. `--force` overrides it.
+
+Use `--volume-gb` for anything longer than a pilot:
+
+```bash
+potato deploy up myproject/config.yaml --provider digitalocean --volume-gb 25
+```
+
+Annotations then live on the volume rather than the droplet's own disk, so
+resizing or rebuilding the droplet does not lose them.
+
+## Access control
+
+Deploy does not change how your task authenticates. Whatever `user_config` and
+`authentication` say is what ships.
+
+Preflight tells you what the URL exposes before you confirm. Open registration
+on a public host is reported as a warning, not an error, because for a
+crowdsourced study it is often the point. To restrict it:
+
+```yaml
+user_config:
+  allow_all_users: false
+  users:
+    - alice
+    - bob
+```
+
+The admin API key is generated per deployment, injected as an environment
+variable, and stored locally in `.potato/secrets.json` at mode 0600. It never
+enters the bundle. Keep `.potato/` out of version control — Potato's own
+`.gitignore` already does.
+
+## Managing a deployment
+
+```bash
+potato deploy status myproject/config.yaml     # is it up and is TLS healthy
+potato deploy logs myproject/config.yaml -f    # follow the server logs
+potato deploy list myproject/config.yaml       # every deployment of this config
+potato deploy up myproject/config.yaml --provider digitalocean   # push changes
+potato deploy destroy myproject/config.yaml    # remove everything
+```
+
+Running `up` again on the same name updates the existing droplet: it uploads the
+new bundle and restarts the service rather than creating a second machine. Use
+`--name` to run several deployments from one config:
+
+```bash
+potato deploy up config.yaml --provider digitalocean --name pilot
+potato deploy up config.yaml --provider digitalocean --name main
+```
+
+## The deploy sequence
+
+The waits are long, so it helps to know which one you are sitting in.
+
+1. Verify the token, then generate an ed25519 key for this deployment only, so
+   that your own SSH keys are never uploaded and revoking one deployment cannot
+   affect another.
+2. Create the volume, if you asked for one.
+3. Launch the droplet from DigitalOcean's `docker-20-04` image with a cloud-init
+   payload, and **record its id locally before anything else runs**. A machine
+   whose id was never written down is a machine that bills forever.
+4. Attach the firewall.
+5. Wait for an IPv4 address, then for SSH, then for cloud-init. These are three
+   separate moments minutes apart.
+6. Upload the bundle over SFTP as a single archive.
+7. Write the environment file at mode 0600, holding the session key and admin
+   key.
+8. Start the server and Caddy, then poll `/health` until it answers.
+
+The app listens on `127.0.0.1:8000` inside the droplet and is reachable only
+through Caddy. Port 8000 is never opened, so there is no plaintext route to the
+task even if the firewall is removed.
+
+Run `potato deploy up --dry-run` to see all of it, including the exact firewall
+rules and cloud-init, without creating anything or needing a token.
+
+## Troubleshooting
+
+**`Refusing to deploy`** — preflight found an error. Each finding says how to
+satisfy it. `--force` is not honoured for a public host.
+
+**It stops at "Waiting for first-boot provisioning"** — Docker is installing and
+the image is pulling, which takes several minutes on a small droplet. If it
+fails, the last 40 lines of `/var/log/cloud-init-output.log` are printed.
+
+**"never became healthy"** — the droplet was created and is still running. It is
+not cleaned up automatically, because the logs on it are how you find out what
+happened. Use `potato deploy logs`, then `destroy --force` when you are done.
+
+**A browser certificate warning** — most often DNS. With `--domain`, the A
+record must resolve before Caddy can validate. Without one, check
+`potato deploy status`: a failed IP-certificate renewal reports as a TLS error.
+
+**`No deploy key for '<name>'`** — `.potato/secrets.json` was deleted. The key
+exists nowhere else. Add your own key to the droplet from the DigitalOcean
+console to reach it.
+
+## Related
+
+- [Docker](docker.md) — the image this deploys, and running it yourself
+- [Reverse proxy](reverse-proxy.md) — if you terminate TLS yourself
+- [Scaling](scaling.md) — how many annotators one droplet serves
+
+
+---
+
+<!-- source: docs/deployment/deploy-render.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-render/
+
+# Deploying to Render
+
+The free path. No credit card, no CLI, no git repository — one API call deploys
+the published Potato image and Render gives it HTTPS.
+
+```bash
+export RENDER_API_KEY=rnd_...
+potato deploy up myproject/config.yaml --provider render --hf-token hf_...
+```
+
+## Read this before using the free tier
+
+A free Render instance has **no disk** and **stops after 15 minutes idle**. When
+it stops, everything written to its filesystem is gone: annotations, user state,
+the project database. Fifteen minutes after your last annotator closes the tab.
+
+So `potato deploy` will not create a free service unless you have said what
+happens to the data. Three ways to answer:
+
+```bash
+# 1. Mirror annotations to a HuggingFace Dataset as they arrive
+potato deploy up config.yaml --provider render --hf-token hf_...
+
+# 2. Pay for a disk
+potato deploy up config.yaml --provider render --plan starter --volume-gb 1
+
+# 3. Say the data is disposable
+potato deploy up config.yaml --provider render --demo
+```
+
+The backup is the usual answer for a pilot: it costs nothing, needs only a
+HuggingFace account, and the annotations end up somewhere you can share and
+version. A paid instance is the answer for a study that will run for weeks.
+
+## Cost
+
+| Plan | Monthly | Disk | Idle behaviour |
+|---|---|---|---|
+| `free` | $0 | none | stops after 15 minutes |
+| `starter` | $7 | $0.25/GB | stays up |
+| `standard` | $25 | $0.25/GB | stays up |
+
+Pass the plan with `--plan`. A disk needs `starter` or higher; Render does not
+attach one to a free instance.
+
+## Getting an API key
+
+<https://dashboard.render.com/u/settings#api-keys>. Potato reads `--token` and
+then `RENDER_API_KEY`, and never writes either to disk.
+
+## One instance
+
+The service is pinned to a single instance and Potato will not raise it.
+
+The item pool, the assignment queue and every annotator's state live in memory,
+in the process. A second instance gets its own copy of all three: it hands out
+instances the first already assigned, and whichever instance saves last
+overwrites the other's annotations. Nothing reports it.
+
+Concurrency comes from threads, which share one copy of that state. The default
+of 8 serves the dozens of simultaneous annotators a typical study has.
+
+## Getting the data back
+
+`potato deploy pull` does not work here: there is no SSH into a Render service.
+Two routes instead.
+
+**The HuggingFace backup**, if you deployed with `--hf-token`. Annotations are
+committed to a private Dataset every five minutes:
+
+```bash
+huggingface-cli download --repo-type dataset <you>/<name>-annotations \
+  --local-dir ./annotations
+```
+
+**The admin export API**, which works on any deployment. The key is in
+`.potato/secrets.json`:
+
+```bash
+curl -H "X-API-Key: $(python -c "import json;print(json.load(open('.potato/secrets.json'))['<name>']['admin_api_key'])")" \
+  -X POST https://potato-<name>.onrender.com/admin/api/export
+```
+
+## Managing a deployment
+
+```bash
+potato deploy status myproject/config.yaml
+potato deploy up myproject/config.yaml --provider render   # push changes
+potato deploy destroy myproject/config.yaml
+```
+
+Running `up` again triggers a redeploy of the existing service rather than
+creating a second one.
+
+`potato deploy logs` is not supported: Render's log API needs a paid plan and a
+websocket. Read them in the dashboard.
+
+Deleting a service deletes its disk with it. Anything already in the backup
+Dataset is unaffected, because `destroy` does not touch that repo.
+
+## Troubleshooting
+
+**"Refusing to create a free Render service"** — see
+[the free tier](#read-this-before-using-the-free-tier). The message lists the
+three ways forward.
+
+**The first request takes a minute** — a free instance that has spun down starts
+on the next request. `potato deploy status` says so when it sees this.
+
+**The service never became live** — the build log in the Render dashboard says
+why. The most common cause is an image tag that does not exist.
+
+**`suspended`** — Render suspends services for billing or for exceeding a free
+tier limit. The dashboard has the reason.
+
+## Related
+
+- [Docker](docker.md) — the image this deploys
+- [DigitalOcean](deploy-digitalocean.md) — a persistent VM, from $18/month
+- [HuggingFace Spaces](deploy-huggingface.md) — an ephemeral host with the same
+  backup story
+
+
+---
+
+<!-- source: docs/deployment/deploy-huggingface.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-huggingface/
+
+# Deploying to a HuggingFace Space
+
+```bash
+pip install 'potato-annotation[huggingface]'
+export HF_TOKEN=hf_...
+potato deploy up myproject/config.yaml --provider huggingface
+```
+
+This creates a Docker Space, a private Dataset repo for the annotations, and
+uploads the project. The Space gets HTTPS on `*.hf.space` with nothing to
+configure.
+
+## Two things to know first
+
+**Docker Spaces are not free.** From the Hub documentation: *"Static Spaces are
+free for everyone. Gradio and Docker Spaces run on compute and require a paid
+plan to create: PRO for personal accounts, Team or Enterprise for
+organizations."* Potato Spaces are Docker Spaces, so creating one needs PRO
+($9/month) or a Team plan. Restarting a Space you already have does not.
+
+If you want a free host, use [Render](deploy-render.md) or `potato share`.
+
+**A Space's filesystem does not survive.** It is wiped on every rebuild and
+every restart, and free Spaces sleep after 48 hours idle. Annotations written to
+it are temporary by construction.
+
+That second fact shapes the whole provider. It creates a private Dataset repo
+`<you>/<name>-annotations` and mirrors the annotation output into it every five
+minutes, and the Space's README says so. **The Dataset, not the Space, is where
+your data lives.** `--demo` skips it for a throwaway, and says plainly in the
+plan that anything collected will be lost.
+
+## Getting the data
+
+```bash
+potato deploy pull myproject/config.yaml
+```
+
+This downloads the backup Dataset, not the Space. Whatever is on the Space right
+now is at best a partial copy of what the Dataset already has.
+
+Without a backup — a `--demo` deployment — there is nowhere to pull from, and
+the only route is the admin export API against the running Space.
+
+`potato deploy destroy` deletes the Space and **leaves the Dataset alone**.
+Deleting the host is cheap and reversible; deleting the annotations is neither,
+so it is never implied. Remove the Dataset yourself when you are done with it.
+
+## The concurrency cap
+
+A free account runs at most **three Spaces at once**. A fourth cannot start: the
+API returns 403 and the Space lands in `PAUSED`.
+
+`PAUSED` and `SLEEPING` look similar and behave completely differently. A
+sleeping Space wakes when a visitor opens it. A paused one does not: only its
+owner can restart it, so a visitor sees a dead page. `potato deploy status`
+distinguishes them.
+
+The 48-hour idle-sleep timer cannot be shortened on free hardware.
+
+## What gets uploaded
+
+A Space built by `potato deploy` contains the project, a Dockerfile and a
+README, which is a dozen or so files. The Dockerfile derives from the published
+image:
+
+```dockerfile
+FROM ghcr.io/davidjurgens/potato:latest
+COPY --chown=potato:potato . /app
+```
+
+The demo catalog under `deployment/huggingface-spaces/` still copies the whole
+Potato package into each Space, which comes to 930 files. Deriving from the
+image instead means the Space carries only your project.
+
+Secrets — the session signing key, the admin API key, the HuggingFace token for
+the backup — are set as **Space secrets** through the API, never committed. Even
+a private Space repo is readable by everyone who has access to it.
+
+## Options
+
+| Flag | Purpose |
+|---|---|
+| `--owner` | Deploy under an organization instead of your account |
+| `--private` | Create a private Space |
+| `--demo` | No backup Dataset; annotations are disposable |
+| `--backup-minutes` | How often to mirror annotations (default 5) |
+| `--name` | Space name, defaulting to a slug of the task name |
+
+## Backing up from any provider
+
+The `huggingface_backup` block is not specific to Spaces. Any deployment on any
+provider can mirror its annotations to a Dataset, which is the answer to an
+ephemeral filesystem wherever you meet one:
+
+```yaml
+huggingface_backup:
+  enabled: true
+  repo_id: "your-name/study-annotations"
+  token: "${HF_TOKEN}"
+  repo_type: dataset
+  schedule_minutes: 5
+  private: true
+```
+
+Passing `--hf-token` to `potato deploy up` configures this for you.
+
+## Troubleshooting
+
+**A payment error on create** — Docker Spaces need PRO or a Team plan. The error
+names the free alternatives.
+
+**The Space is `PAUSED`** — usually the three-Space cap. Pause another Space,
+then restart this one from its settings page or with
+`huggingface-cli`. Restarting does not need PRO.
+
+**`BUILD_ERROR`** — the build log at
+`https://huggingface.co/spaces/<owner>/<name>?logs=build` says why.
+
+**Logs are not streamed** — HuggingFace's log endpoints are undocumented and
+JWT-gated, so Potato links to the UI rather than pretending to stream them.
+
+**Annotations are missing after a rebuild** — expected, and the reason the
+backup exists. Check the Dataset repo. If this was a `--demo` deployment, they are
+gone.
+
+## The demo catalog
+
+The Spaces under the `Blablablab` organization are a separate, maintainer-run
+catalog built from `deployment/huggingface-spaces/spaces_manifest.yaml`, not by
+`potato deploy`. See [Potato on HuggingFace](../data-export/potato_on_huggingface.md).
+
+## Related
+
+- [Render](deploy-render.md) — free, no paid plan needed
+- [DigitalOcean](deploy-digitalocean.md) — a persistent VM
+- [Docker](docker.md) — the image a Space derives from
+
+
+---
+
+<!-- source: docs/deployment/deploy-pull.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-pull/
+
+# Getting Annotations Back
+
+```bash
+potato deploy pull myproject/config.yaml
+```
+
+Downloads everything a deployment has collected into a timestamped directory,
+checks what arrived, and prints the result. Nothing is deleted from the host.
+
+```
+Pulled to ./potato-pull-pilot-20260820-161905
+  downloaded over HTTPS from https://potato-pilot.onrender.com
+  project.sqlite snapshotted server-side with the SQLite backup API
+  files      27
+  size       3.6MB
+  annotators 24
+  databases  project.sqlite
+```
+
+## What comes back
+
+- The whole annotation output directory: every annotator's `user_state.json`,
+  their annotated instances, the assignment file, `potato.log`, and any
+  adjudication or MACE output.
+- `project.sqlite` — memos, the codebook, cases, typing sessions, the review
+  workflow. None of it can be regenerated from the annotations.
+- `datasets.sqlite`, when the deployment has one.
+
+Two things are deliberately left behind. `.item_cache.sqlite` is rebuilt from
+the data files on demand and is often the largest file there. `admin_api_key.txt`
+is the credential guarding the endpoint doing the download.
+
+## The SQLite snapshot
+
+`project.sqlite` runs in WAL mode with a live writer. The `.sqlite` file on disk
+is not a complete database on its own — the `-wal` sidecar holds committed pages
+it does not have. Copy the file alone and you get a database that is corrupt or
+missing recent work, and nothing tells you at the time. It opens. It just has
+holes.
+
+So every transport snapshots through SQLite itself before copying, and if the
+snapshot fails, the pull says so rather than falling back to a file copy. The
+downloaded databases are then opened and integrity-checked locally, and a pull
+that returns an unreadable one is reported as a failure.
+
+This is worth knowing if you ever fetch the files yourself:
+
+```bash
+# Wrong — silently gives you a damaged database
+scp root@host:/opt/potato/app/project.sqlite .
+
+# Right
+ssh root@host "sqlite3 /opt/potato/app/project.sqlite \".backup /tmp/snap.sqlite\""
+scp root@host:/tmp/snap.sqlite ./project.sqlite
+```
+
+## Transports
+
+Potato picks the best available transport for the provider.
+
+| Provider | Transport |
+|---|---|
+| `digitalocean` | SFTP over the deploy key, falling back to HTTPS |
+| `huggingface` | The backup Dataset; the Space itself for a `--demo` deployment |
+| `render` | HTTPS |
+| `local` | `docker cp` |
+
+The HTTPS route uses `GET /admin/api/data/archive`, authenticated with the admin
+API key that `potato deploy` generated and stored in `.potato/secrets.json`. It
+needs no shell, which is why it works on Render and anything serverless — the
+hosts most likely to lose their disk in the first place.
+
+You can use it by hand against any deployment:
+
+```bash
+curl -H "X-API-Key: $ADMIN_KEY" \
+  https://your-host/admin/api/data/archive -o annotations.tar.gz
+
+# Or ask what it would send, before sending it
+curl -H "X-API-Key: $ADMIN_KEY" https://your-host/admin/api/data/manifest
+```
+
+## Verification and destroy
+
+`potato deploy destroy` refuses to run on a deployment that has never been
+successfully pulled, so what counts as "successfully" matters.
+
+A pull that returns zero files is **not** recorded as one. An empty result and a
+study nobody has annotated yet look identical from the outside, and only one of
+them means the data is safe. If the task genuinely has no annotations, say so:
+
+```bash
+potato deploy pull config.yaml --allow-empty
+```
+
+An unreadable database counts the same way. `destroy` keeps refusing until a
+good pull succeeds.
+
+`--force` overrides `destroy` entirely, and discards whatever is on the host.
+
+## Options
+
+| Flag | Purpose |
+|---|---|
+| `--dest DIR` | Where to write, instead of `./potato-pull-<name>-<timestamp>/` |
+| `--allow-empty` | Record a pull that returned nothing |
+| `--name` | Which deployment, when a config has several |
+
+## Continuous backup
+
+Pulling is something you remember to do. For a host whose filesystem does not
+survive a restart — a Space, a free Render instance — that is not good enough,
+so those deployments also mirror annotations to a HuggingFace Dataset every few
+minutes. It works on every provider despite being documented under
+[HuggingFace Spaces](deploy-huggingface.md#backing-up-from-any-provider).
+
+## Troubleshooting
+
+**"rejected the admin API key"** — `.potato/secrets.json` no longer matches what
+the server has, usually because the deployment was recreated. On a provider with
+SSH you can read the key from `/opt/potato/potato.env` on the host.
+
+**"Nothing came back"** — either nobody has annotated, or `output_annotation_dir`
+on the server is not where the config says. The manifest endpoint shows what the
+server thinks it has.
+
+**"No `user_state.json` anywhere in the result"** — files arrived, so the
+transport worked. The output directory is the thing to check.
+
+**"has no admin data-archive endpoint"** — the deployment is running a Potato
+older than the one that added it. Redeploy, or use the provider's own transport.
+
+## Related
+
+- [DigitalOcean](deploy-digitalocean.md)
+- [Render](deploy-render.md)
+- [HuggingFace Spaces](deploy-huggingface.md)
+
+
+---
+
 <!-- source: docs/deployment/reverse-proxy.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/deployment/reverse-proxy/
 
@@ -50810,7 +51672,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **159 top-level config keys**, **61 annotation types**, and
+It currently covers **161 top-level config keys**, **61 annotation types**, and
 **24 display types**.
 
 ### Editor validation

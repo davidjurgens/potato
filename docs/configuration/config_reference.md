@@ -69,7 +69,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Sub-keys |
 |-----|----------|------|----------|
 | `authentication` |  | object | `allow_local_login`, `allowed_domain`, `allowed_domains`, `allowed_org`, `auto_register`, `database_url`, `method`, `providers`, `user_config_path`, `user_identity_field` |
-| `login` |  | object | `auto_redirect_delay`, `auto_redirect_on_completion`, `type`, `url_argument` |
+| `login` |  | object | `type`, `url_argument` |
 | `user_config` |  | object | `allow_all_users`, `users` |
 | `require_password` |  | boolean |  |
 | `require_no_password` |  | boolean |  |
@@ -115,7 +115,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Sub-keys |
 |-----|----------|------|----------|
 | `qda_mode` |  | object | `codebook`, `enabled`, `memos` |
-| `codebook` |  | object | `enabled`, `mode` |
+| `codebook` |  | object | `distiller`, `enabled`, `mode` |
 | `codebook_mode` |  |  |  |
 | `codebook_invivo_key` |  |  |  |
 | `annotation_ui` |  | object | `memos`, `visibility` |
@@ -291,6 +291,8 @@ Recognized keys not yet sorted into a category above. They are valid configurati
 
 | Key | Required | Type | Sub-keys |
 |-----|----------|------|----------|
+| `auto_redirect_delay` |  |  |  |
+| `auto_redirect_on_completion` |  |  |  |
 | `embeddings` |  |  |  |
 | `export_include_annotation_changes` |  |  |  |
 | `item_store` |  | object | `backend`, `cache_size`, `path` |
