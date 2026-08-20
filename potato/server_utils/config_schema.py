@@ -153,6 +153,14 @@ def _annotation_schemes_schema(schemas: List[Dict[str, Any]]) -> Dict[str, Any]:
         for field_name in schema["required_fields"]:
             known_fields.setdefault(field_name, {})
 
+    # Keys read by shared helpers rather than by any one generator, so no
+    # registry entry lists them. Omitting them made an editor underline
+    # `layout:` and `label_requirement:` on the types that never spelled
+    # them out. See registry.UNIVERSAL_OPTIONAL_FIELDS.
+    from potato.server_utils.schemas.registry import UNIVERSAL_OPTIONAL_FIELDS
+    for field_name in sorted(UNIVERSAL_OPTIONAL_FIELDS):
+        known_fields.setdefault(field_name, {})
+
     item: Dict[str, Any] = {
         "type": "object",
         "required": ["annotation_type", "name", "description"],

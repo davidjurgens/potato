@@ -92,8 +92,12 @@ def classify_schema(scheme: Dict[str, Any]) -> SchemaKind:
     """Classify a schema definition into an IAA-relevant kind."""
     atype = (scheme.get("annotation_type") or "").strip().lower()
     kind = _KIND_BY_TYPE.get(atype, SchemaKind.UNSUPPORTED)
-    # Downgrade multiselect with max_choices == 1 to NOMINAL
-    if kind == SchemaKind.MULTILABEL and atype == "multiselect":
+    # A multi-label schema capped at one choice is nominal, and scoring it with
+    # a set-valued metric would understate agreement. The cap was previously
+    # only honored for `annotation_type: multiselect`, which accepts neither
+    # key — `max_selections` belongs to hierarchical_multiselect, so the
+    # downgrade could never fire. Gate on the kind alone.
+    if kind == SchemaKind.MULTILABEL:
         max_choices = scheme.get("max_choices") or scheme.get("max_selections")
         if max_choices == 1:
             return SchemaKind.NOMINAL

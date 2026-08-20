@@ -323,16 +323,16 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `grounding_eval` | (none beyond name/description) | `region_type`, `expression_source`, `expressions_field`, `caption_field`, `predictions_field`, ... | Grounding evaluation: bind referring expressions to image regions or points, with an explicit not-present answer |
 | `gui_trajectory` | (none beyond name/description) | `steps_key`, `screenshot_key`, `action_key`, `coord_space`, `verdict_options` | Computer-use/GUI agent step review: per-step screenshot + action correctness + click grounding |
 | `handoff_review` | (none beyond name/description) | `steps_key`, `agent_key`, `flags`, `quality_scale` | Annotate agent-to-agent handoffs: inter-agent misalignment flags + quality |
-| `hierarchical_multiselect` | `taxonomy` | `auto_select_children`, `auto_select_parent`, `show_search`, `max_selections` | Hierarchical tree-structured multi-label selection |
+| `hierarchical_multiselect` | `taxonomy` | `auto_select_children`, `auto_select_parent`, `show_search`, `max_selections`, `taxonomy_preset`, ... | Hierarchical tree-structured multi-label selection |
 | `image_annotation` | `tools`, `labels` | `zoom_enabled`, `pan_enabled`, `min_annotations`, `max_annotations`, `freeform_brush_size`, ... | Image annotation with bounding boxes, polygons, freeform drawing, and landmarks |
-| `likert` | `min_label`, `max_label`, `size` | `label_requirement` | Likert scale rating |
+| `likert` | `min_label`, `max_label`, `size` | `label_requirement`, `labels`, `displaying_score`, `bad_text_label`, `sequential_key_binding` | Likert scale rating |
 | `multi_document_event` | `slots` | `allow_annotator_create`, `template_name` | Cross-document event annotation: template slots filled with evidence from many documents |
 | `multimodal_reasoning` | (none beyond name/description) | `steps_key`, `type_key`, `verdict_options` | Interleaved text/image/tool reasoning trace: per-step coherence + visual-hallucination rating |
-| `multirate` | `options`, `labels` | `label_requirement` | Rate multiple items on a scale |
+| `multirate` | `options`, `labels` | `label_requirement`, `options_from_data`, `display_config`, `arrangement` | Rate multiple items on a scale |
 | `multiselect` | `labels` | `display_config`, `label_requirement`, `sequential_key_binding`, `video_as_label`, `has_free_response`, ... | Multiple-choice checkbox selection |
-| `number` | (none beyond name/description) | `min`, `max`, `step`, `label_requirement` | Numeric input field |
+| `number` | (none beyond name/description) | `min`, `max`, `step`, `label_requirement`, `min_value`, ... | Numeric input field |
 | `pairwise` | (none beyond name/description) | `mode`, `items_key`, `items`, `show_labels`, `labels`, ... | Pairwise comparison of two items (binary selection or scale rating) |
-| `process_reward` | (none beyond name/description) | `steps_key`, `step_text_key`, `mode`, `allow_neutral`, `inline_with_trace` | Per-step process reward signals for PRM training |
+| `process_reward` | (none beyond name/description) | `steps_key`, `step_text_key`, `mode`, `allow_neutral`, `inline_with_trace`, ... | Per-step process reward signals for PRM training |
 | `pure_display` | (none beyond name/description) | `labels`, `allow_html` | Display-only content (instructions, headers) |
 | `radio` | `labels` | `horizontal`, `label_requirement`, `sequential_key_binding`, `has_free_response`, `option_randomization`, ... | Single-choice radio button selection |
 | `range_slider` | (none beyond name/description) | `min_value`, `max_value`, `step`, `left_label`, `right_label`, ... | Dual-thumb slider for selecting an acceptable range |
@@ -340,17 +340,17 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `region_caption` | (none beyond name/description) | `placeholder`, `min_length`, `max_length`, `require_all`, `agreement_distance` | Region captioning: a free-text description per region drawn on the image, with caption agreement over matched regions |
 | `rollout_evaluation` | (none beyond name/description) | `streams`, `manifest_field`, `prompt_field`, `intervention_field`, `intervention_time_field`, ... | World-model rollout evaluation: frame-locked video panels with temporal violation localization, preference and counterfactual plausibility |
 | `rubric_eval` | `criteria` | `scale_points`, `scale_labels`, `show_overall` | Multi-criteria rubric evaluation grid for LLM and text quality assessment |
-| `select` | `labels` | `label_requirement`, `option_randomization`, `dynamic_options`, `dynamic_options_field` | Dropdown selection |
+| `select` | `labels` | `label_requirement`, `option_randomization`, `dynamic_options`, `dynamic_options_field`, `use_predefined_labels`, ... | Dropdown selection |
 | `semantic_differential` | `pairs` | `scale_points` | Bipolar adjective scales for measuring connotative meaning |
-| `slider` | `min_value`, `max_value`, `starting_value` | `step`, `label_requirement` | Slider for selecting a value in a range |
+| `slider` | `min_value`, `max_value`, `starting_value` | `step`, `label_requirement`, `labels`, `show_labels`, `maxTick` | Slider for selecting a value in a range |
 | `soft_label` | `labels` | `total`, `min_per_label`, `show_distribution_chart` | Probability distribution across labels via constrained sliders |
 | `span` | `labels` | `sequential_key_binding`, `bad_text_label`, `title`, `allow_discontinuous`, `entity_linking`, ... | Text span annotation/highlighting with optional entity linking to knowledge bases |
 | `span_link` | `link_types`, `span_schema` | `visual_display` | Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION) |
 | `spatial_annotation` | `tools`, `labels` | `source_field`, `calibration_field`, `color_mode`, `point_size`, `max_points`, ... | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments |
-| `speech_transcript` | (none beyond name/description) | `segments_key`, `audio_key`, `error_types`, `allow_correction` | Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction |
+| `speech_transcript` | (none beyond name/description) | `segments_key`, `audio_key`, `error_types`, `allow_correction`, `turns_key`, ... | Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction |
 | `table_grid` | (none beyond name/description) | `image_key`, `rows_key`, `cols_key`, `default_rows`, `default_cols`, ... | Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty) |
 | `temporal_grounding` | (none beyond name/description) | `video_key`, `events_key`, `duration` | Video temporal grounding: mark gold event intervals with live IoU vs predicted |
-| `text` | (none beyond name/description) | `label_requirement`, `placeholder`, `rows` | Free-form text input |
+| `text` | (none beyond name/description) | `label_requirement`, `placeholder`, `rows`, `labels`, `multiline`, ... | Free-form text input |
 | `text_edit` | (none beyond name/description) | `source_field`, `show_diff`, `show_edit_distance`, `allow_reset` | Inline text editing with diff tracking for post-editing and correction tasks |
 | `tiered_annotation` | `tiers`, `source_field` | `media_type`, `tier_height`, `show_tier_labels`, `collapsed_tiers`, `zoom_enabled`, ... | Hierarchical multi-tier annotation for audio/video (ELAN-style) |
 | `tool_call_review` | (none beyond name/description) | `steps_key`, `verdict_options` | Per-tool-call correctness review (right tool / args / ordering) |
@@ -359,7 +359,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `trajectory_eval` | (none beyond name/description) | `steps_key`, `step_text_key`, `correctness_options`, `error_types`, `severities`, ... | Per-step trajectory evaluation with error taxonomy and severity scoring |
 | `tree_annotation` | (none beyond name/description) | `node_scheme`, `path_selection`, `branch_comparison` | Annotation of conversation tree nodes with path selection |
 | `triage` | (none beyond name/description) | `accept_label`, `reject_label`, `skip_label`, `auto_advance`, `show_progress`, ... | Binary accept/reject triage for rapid data curation |
-| `vas` | (none beyond name/description) | `left_label`, `right_label`, `min_value`, `max_value`, `show_value` | Continuous visual analog scale for fine-grained magnitude estimation |
+| `vas` | (none beyond name/description) | `left_label`, `right_label`, `min_value`, `max_value`, `show_value`, ... | Continuous visual analog scale for fine-grained magnitude estimation |
 | `video` | `video_path` | `autoplay`, `loop`, `muted`, `controls`, `custom_css`, ... | Video player display |
 | `video_annotation` | (none beyond name/description) | `mode`, `labels`, `segment_schemes`, `min_segments`, `max_segments`, ... | Video annotation with temporal segments, frame classification, keyframes, and object tracking |
 | `voice_interaction` | (none beyond name/description) | `turns_key`, `audio_key`, `speaker_key`, `user_speakers`, `overlap_labels`, ... | Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification |
