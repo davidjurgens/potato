@@ -343,9 +343,45 @@ class TestPublishWorkflow:
         assert "chown -R 1000:1000" in script
 
     def test_smoke_tests_before_anyone_depends_on_the_tag(self, workflow):
+        """The push used to run first, so a broken image reached the tag and
+        the smoke test only reported it afterwards. Two runs published images
+        that could not boot before this was reordered."""
         steps = workflow["jobs"]["build"]["steps"]
         names = [s.get("name", "") for s in steps]
-        assert any("Smoke test" in n for n in names)
+        smoke = next(i for i, n in enumerate(names) if "Smoke test" in n)
+        push = next(i for i, n in enumerate(names) if n == "Build and push")
+        assert smoke < push, (
+            "the image is pushed before it is tested, so `latest` can point at "
+            "an image that does not boot")
+
+    def test_the_tested_image_is_the_one_that_gets_pushed(self, workflow):
+        """A test build with different build-args would prove nothing."""
+        steps = workflow["jobs"]["build"]["steps"]
+        test_build = next(s for s in steps if s.get("name") == "Build for testing")
+        push = next(s for s in steps if s.get("name") == "Build and push")
+        assert test_build["with"]["build-args"] == push["with"]["build-args"]
+        assert test_build["with"]["context"] == push["with"]["context"]
+        # Same cache scope, so the push reuses the exact layers just tested
+        # rather than rebuilding amd64 from scratch.
+        assert test_build["with"]["cache-to"] == push["with"]["cache-to"]
+
+    def test_the_test_build_is_loadable_and_not_pushed(self, workflow):
+        """buildx cannot load a multi-platform image, and a test build that
+        pushed would defeat the point of testing first."""
+        steps = workflow["jobs"]["build"]["steps"]
+        test_build = next(s for s in steps if s.get("name") == "Build for testing")
+        assert test_build["with"]["load"] is True
+        assert "push" not in test_build["with"]
+        assert test_build["with"]["platforms"] == "linux/amd64"
+
+    def test_pull_requests_are_smoke_tested_too(self, workflow):
+        """Nothing is pushed on a PR, so the test can run unconditionally —
+        which is the only way a broken Dockerfile fails in review."""
+        steps = workflow["jobs"]["build"]["steps"]
+        smoke = next(s for s in steps if "Smoke test" in s.get("name", ""))
+        assert "if" not in smoke, (
+            "the smoke test is skipped on pull requests, so a broken image is "
+            "found only after merge")
 
     def test_the_image_name_matches_what_the_provider_pulls(self):
         from potato.deploy.providers.local import DEFAULT_IMAGE

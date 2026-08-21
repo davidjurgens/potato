@@ -92,27 +92,33 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
 
-      - name: Build and push
+      # Built for the runner's own architecture and loaded into its daemon, not
+      # pushed. buildx cannot load a multi-platform image, and the smoke test
+      # needs something it can actually run — so amd64 is what gets exercised.
+      # arm64 exists for Apple Silicon laptops; every deploy target is amd64.
+      #
+      # The layers land in the gha cache, so the push step below rebuilds
+      # nothing for amd64 and only compiles arm64.
+      - name: Build for testing
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           build-args: |
             POTATO_EXTRAS=${{ matrix.extras }}
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          load: true
+          tags: potato-smoke:candidate
           cache-from: type=gha,scope=potato${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=potato${{ matrix.suffix }}
 
-      # A pushed image that cannot serve a task is worse than no image, because
-      # `deploy up` would pull it and fail on the host. Run the real thing
-      # against a real example before anyone depends on the tag.
+      # An image that cannot serve a task is worse than no image, because
+      # `deploy up` pulls it and fails on the host. This runs before the push,
+      # so a broken build never reaches the tag — and it runs on pull requests
+      # too, where nothing is pushed at all.
       - name: Smoke test the built image
-        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
-          tag=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          tag=potato-smoke:candidate
 
           # A copy, because the server writes into the project directory and the
           # checkout belongs to the runner account, not to uid 1000. Handing the
@@ -180,3 +186,19 @@ jobs:
           fi
 
           docker rm -f potato-smoke
+
+      # Only now, with the image proven to boot, serve and refuse correctly.
+      # amd64 comes from the cache the test build populated; arm64 is compiled
+      # here. A pull request stops short of this and pushes nothing.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            POTATO_EXTRAS=${{ matrix.extras }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=potato${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=potato${{ matrix.suffix }}
