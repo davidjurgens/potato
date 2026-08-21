@@ -411,6 +411,13 @@ class DigitalOceanProvider(Provider):
             record.bundle_sha = bundle.sha256()
             self.console(f"  {bundle.file_count} files, {uploaded // 1024} KiB compressed")
 
+            # SFTP writes as root, so every uploaded file arrives owned by root
+            # even though cloud-init chowned the directory. The container runs
+            # as uid 1000 and would fail on the first write. ENV_FILE is a
+            # sibling of both directories and stays root-owned at 0600: systemd
+            # reads it, the container never does.
+            session.run(f"chown -R 1000:1000 {APP_DIR} {DATA_DIR}", check=True)
+
             env = self.runtime_env(spec, spec.extra.get("generated"))
             session.put_text(_render_env_file(env), ENV_FILE, mode=0o600)
 

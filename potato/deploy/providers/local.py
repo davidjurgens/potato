@@ -136,6 +136,13 @@ class LocalProvider(Provider):
                 "-w", "/app",
                 "--label", "potato-deploy=1",
                 "--label", f"potato-name={spec.name}"]
+        # The bundle directory belongs to whoever ran the CLI. The image runs as
+        # uid 1000, which matches that only by coincidence, and on a Linux host
+        # where it does not the server dies during boot on its first write.
+        # Running as the caller also leaves the annotations owned by them rather
+        # than by a uid they would need root to read.
+        if hasattr(os, "getuid"):
+            args += ["--user", f"{os.getuid()}:{os.getgid()}"]
         for key, value in env.items():
             args += ["-e", f"{key}={value}"]
         args.append(image)

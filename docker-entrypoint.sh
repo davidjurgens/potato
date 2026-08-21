@@ -43,6 +43,38 @@ if [ ! -f "${CONFIG_FILE}" ]; then
     exit 1
 fi
 
+# Potato writes annotation output, potato.log and its SQLite databases into the
+# project directory, so an unwritable /app kills the server during boot. A bind
+# mount carries the host's ownership and the container's uid matches it only by
+# coincidence: any directory created by root, and any host account whose uid is
+# not 1000, fails here. Docker Desktop ignores ownership on bind mounts, so this
+# is invisible on a Mac and reliable on Linux.
+#
+# Checked here because the alternative is a PermissionError thirty frames into a
+# gunicorn worker traceback, printed after the process has already given up.
+if [ "${POTATO_ALLOW_READONLY_APP}" != "1" ]; then
+    # touch rather than a `>` redirect: a redirection failure on a special
+    # builtin is fatal in POSIX sh, so dash exits before reaching the message
+    # this check exists to print.
+    probe=".potato-write-probe.$$"
+    if ! touch "${probe}" 2>/dev/null; then
+        echo "ERROR: $(pwd) is not writable by uid $(id -u), which is the user" >&2
+        echo "       this image runs as. Potato writes annotation output," >&2
+        echo "       potato.log and its SQLite databases into the project" >&2
+        echo "       directory, so it cannot start." >&2
+        echo "" >&2
+        echo "       Give the directory to the container user:" >&2
+        echo "           sudo chown -R 1000:1000 <project-dir>" >&2
+        echo "       or run the container as yourself:" >&2
+        echo '           docker run --user "$(id -u):$(id -g)" ...' >&2
+        echo "" >&2
+        echo "       Set POTATO_ALLOW_READONLY_APP=1 if the config writes" >&2
+        echo "       everything under /data and /app is deliberately read-only." >&2
+        exit 1
+    fi
+    rm -f "${probe}"
+fi
+
 echo "Starting Potato"
 echo "  config:  ${CONFIG_FILE}"
 echo "  port:    ${PORT}"

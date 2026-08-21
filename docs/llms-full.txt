@@ -49103,6 +49103,33 @@ dozens of simultaneous annotators a typical study has.
 `POTATO_ALLOW_MULTIWORKER=1` overrides the refusal. Do not use it to serve a
 real study.
 
+## File ownership
+
+The image runs as uid 1000. A bind mount keeps the host's ownership, so the
+container can only write to your project directory if that uid can. On Linux it
+usually cannot: a directory you created belongs to your own uid, and one created
+by root belongs to root.
+
+The server checks this at startup and refuses to run rather than dying partway
+through boot. Two ways to satisfy it:
+
+```bash
+sudo chown -R 1000:1000 myproject                  # hand it to the container user
+docker run --user "$(id -u):$(id -g)" ...          # or run as yourself
+```
+
+`--user` also leaves the annotations owned by you rather than by a uid you would
+need root to read.
+
+Docker Desktop on macOS and Windows ignores ownership on bind mounts, so the
+problem never appears there. A setup that works on a Mac can still fail on a
+Linux server.
+
+If the project is deliberately read-only and the config writes everything under
+`/data`, set `POTATO_ALLOW_READONLY_APP=1` to skip the check.
+
+`potato deploy` handles ownership on every target it provisions.
+
 ## Keeping the data
 
 Annotations are written under `output_annotation_dir` inside the mounted
@@ -49169,10 +49196,9 @@ docker build --build-arg POTATO_EXTRAS=all -t potato:all .
 The error lists what it found in `/app`; compare that against your `-v`
 argument. A relative host path needs to be absolute or `$PWD`-prefixed.
 
-**Permission errors writing annotations** — the container runs as uid 1000. On
-Linux, either `chown -R 1000:1000` the project directory or add
-`--user "$(id -u):$(id -g)"`. Docker Desktop on macOS and Windows maps ownership
-for you.
+**`/app is not writable by uid 1000`** — see
+[File ownership](#file-ownership). The server refuses to start rather than
+failing partway through boot.
 
 **Everyone is logged out after a restart** — set `POTATO_SECRET_KEY`.
 

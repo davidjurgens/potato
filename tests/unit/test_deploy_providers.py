@@ -335,3 +335,35 @@ class TestPersistBeforeProvision:
         record = store.get("study")
         assert record is not None, "no record written before provisioning"
         assert record.provider_ref.get("container") == "potato-deploy-study"
+
+
+@pytest.mark.skipif(not hasattr(os, "getuid"), reason="POSIX ownership only")
+class TestLocalRunsAsTheCaller:
+    """The bundle directory belongs to whoever ran the CLI, not to uid 1000.
+
+    The image runs as uid 1000, and on a Linux host where the caller's uid is
+    something else the server dies during boot on its first write into /app.
+    Docker Desktop ignores bind-mount ownership, so this passes on a Mac and
+    fails everywhere else. Running as the caller also leaves the annotations
+    owned by them rather than by a uid they need root to read.
+    """
+
+    def _docker_run_args(self, monkeypatch, spec, bundle, tmp_path):
+        store = DeploymentStore(str(tmp_path / "config.yaml"))
+        monkeypatch.setattr("potato.deploy.providers.local._docker_available",
+                            lambda: True)
+        calls = []
+
+        def fake_run(args, check=True, timeout=120):
+            calls.append(args)
+            return "container-id"
+
+        monkeypatch.setattr("potato.deploy.providers.local._run", fake_run)
+        get_provider("local").create(spec, bundle, None, store)
+        return next(a for a in calls if "run" in a and "-d" in a)
+
+    def test_passes_the_callers_uid_and_gid(self, monkeypatch, spec, bundle,
+                                            tmp_path):
+        args = self._docker_run_args(monkeypatch, spec, bundle, tmp_path)
+        assert "--user" in args
+        assert args[args.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"

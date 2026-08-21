@@ -113,8 +113,18 @@ jobs:
         run: |
           set -euo pipefail
           tag=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+
+          # A copy, because the server writes into the project directory and the
+          # checkout belongs to the runner account, not to uid 1000. Handing the
+          # directory over is what the DigitalOcean cloud-init does; the
+          # alternative a laptop user takes is --user "$(id -u):$(id -g)".
+          project=/tmp/potato-smoke-project
+          rm -rf "$project"
+          cp -r examples/classification/single-choice "$project"
+          sudo chown -R 1000:1000 "$project"
+
           docker run -d --name potato-smoke -p 8000:7860 \
-            -v "$PWD/examples/classification/single-choice:/app" \
+            -v "$project:/app" \
             "$tag"
 
           for i in $(seq 1 60); do
@@ -137,11 +147,28 @@ jobs:
           # The workers guard is a data-integrity control; assert it holds in
           # the published image rather than trusting the file on disk.
           if docker run --rm -e GUNICORN_WORKERS=4 \
-               -v "$PWD/examples/classification/single-choice:/app" \
+               -v "$project:/app" \
                "$tag" 2>&1 | grep -q "per-process"; then
             echo "multi-worker guard is active"
           else
             echo "multi-worker guard did not fire" >&2
+            exit 1
+          fi
+
+          # An unwritable /app is the most likely first failure for anyone
+          # mounting a directory they own, so the diagnosis has to survive in
+          # the published image. Without this the symptom is a PermissionError
+          # thirty frames into a gunicorn traceback.
+          readonly_project=/tmp/potato-smoke-readonly
+          rm -rf "$readonly_project"
+          cp -r examples/classification/single-choice "$readonly_project"
+          sudo chown -R 0:0 "$readonly_project"
+          if docker run --rm -v "$readonly_project:/app" "$tag" 2>&1 \
+               | grep -q "not writable by uid"; then
+            echo "unwritable-mount diagnosis is intact"
+          else
+            echo "unwritable /app did not produce an actionable error" >&2
+            docker run --rm -v "$readonly_project:/app" "$tag" 2>&1 | tail -20 >&2
             exit 1
           fi
 

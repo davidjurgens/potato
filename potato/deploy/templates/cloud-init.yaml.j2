@@ -52,6 +52,13 @@ runcmd:
   - [ mkdir, -p, "{{ data_dir }}/caddy" ]
 {% endif %}
 
+  # Both directories are bind-mounted into a container that runs as uid 1000.
+  # Created by root they are unwritable by the server, which then dies during
+  # boot on its first log write. This has to come after `mount -a`, because
+  # mounting the volume replaces the directory that was just chowned.
+  - [ chown, -R, "1000:1000", "{{ app_dir }}" ]
+  - [ chown, -R, "1000:1000", "{{ data_dir }}" ]
+
   # The firewall is belt-and-braces: DigitalOcean's own firewall already blocks
   # everything else, but a cloud firewall deleted by hand in the console should
   # not silently expose port {{ app_port }}.

@@ -12,6 +12,7 @@ which the publish workflow's smoke test does on real hardware.
 
 import os
 import re
+import stat
 import subprocess
 
 import pytest
@@ -39,6 +40,11 @@ def dockerignore_entries():
             if line and not line.startswith("#"):
                 entries.append(line)
     return entries
+
+
+# touch lives here; gunicorn lives in the virtualenv. Pinning PATH keeps a test
+# that must not start a server from starting one on a machine that has it.
+SYSTEM_PATH_ONLY = {"PATH": "/usr/bin:/bin"}
 
 
 def run_entrypoint(args=(), env=None, cwd=None):
@@ -102,6 +108,84 @@ class TestEntrypointConfigCheck:
         result = run_entrypoint(env={"POTATO_CONFIG": "missing.yaml"},
                                 cwd=str(tmp_path))
         assert "missing.yaml" in result.stderr
+
+
+@pytest.mark.skipif(os.geteuid() == 0,
+                    reason="root writes to read-only directories anyway")
+class TestEntrypointWriteProbe:
+    """An unwritable /app is the most likely first failure of the whole image.
+
+    Potato writes annotation output, potato.log and its SQLite databases into
+    the project directory. A bind mount carries the host's ownership, and the
+    container's uid matches it only by coincidence — so this fires on any
+    directory created by root (which is every DigitalOcean droplet before the
+    fix) and on any host account whose uid is not 1000 (which is every GitHub
+    runner). Docker Desktop ignores ownership on bind mounts, so it passes on a
+    Mac and fails on Linux.
+
+    Without the probe the symptom is a PermissionError thirty frames into a
+    gunicorn worker traceback, printed after the process has given up.
+    """
+
+    @pytest.fixture
+    def unwritable_project(self, tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "config.yaml").write_text("task_dir: .\n")
+        project.chmod(stat.S_IRUSR | stat.S_IXUSR)
+        yield str(project)
+        project.chmod(stat.S_IRWXU)
+
+    def test_refuses_rather_than_failing_inside_gunicorn(self, unwritable_project):
+        result = run_entrypoint(cwd=unwritable_project)
+        assert result.returncode == 1
+        assert "not writable by uid" in result.stderr
+
+    def test_names_both_ways_out(self, unwritable_project):
+        result = run_entrypoint(cwd=unwritable_project)
+        assert "chown -R 1000:1000" in result.stderr
+        assert "--user" in result.stderr
+
+    def test_says_why_the_directory_has_to_be_writable(self, unwritable_project):
+        """Otherwise the reader assumes a read-only project would be fine."""
+        assert "annotation output" in run_entrypoint(cwd=unwritable_project).stderr
+
+    def test_the_override_exists_for_a_deliberate_read_only_mount(
+            self, unwritable_project):
+        """A config writing everything under /data is a legitimate setup."""
+        result = run_entrypoint(env={"POTATO_ALLOW_READONLY_APP": "1"},
+                                cwd=unwritable_project)
+        assert "not writable by uid" not in result.stderr
+
+    def test_a_writable_project_passes_the_probe(self, tmp_path):
+        (tmp_path / "config.yaml").write_text("task_dir: .\n")
+        result = run_entrypoint(env=SYSTEM_PATH_ONLY, cwd=str(tmp_path))
+        assert "not writable by uid" not in result.stderr
+        # Reaching the banner means the probe passed and the exec was next.
+        assert "Starting Potato" in result.stdout
+
+    def test_the_probe_leaves_nothing_behind(self, tmp_path):
+        (tmp_path / "config.yaml").write_text("task_dir: .\n")
+        run_entrypoint(env=SYSTEM_PATH_ONLY, cwd=str(tmp_path))
+        assert [p.name for p in tmp_path.iterdir()] == ["config.yaml"]
+
+    def test_a_command_override_skips_the_probe(self, unwritable_project):
+        """`docker run potato potato validate x.yaml` needs no writable mount."""
+        result = run_entrypoint(["echo", "hi"], cwd=unwritable_project)
+        assert result.returncode == 0
+        assert result.stdout.strip() == "hi"
+
+    def test_the_probe_is_not_a_special_builtin_redirect(self):
+        """`: > file` is fatal in dash when the redirect fails.
+
+        POSIX makes a redirection error on a special built-in exit the shell,
+        so the message this check exists to print never gets reached. The first
+        version of the check had exactly that bug.
+        """
+        with open(ENTRYPOINT) as handle:
+            source = handle.read()
+        assert "touch " in source
+        assert ": > " not in source
 
 
 class TestEntrypointCommandOverride:

@@ -16,8 +16,10 @@ import yaml
 
 from potato.deploy.providers.base import DeploySpec, get_provider
 from potato.deploy.providers.digitalocean import (
+    APP_DIR,
     APP_PORT,
     BASE_IMAGE,
+    DATA_DIR,
     CADDY_IMAGE,
     DEFAULT_IMAGE,
     DEFAULT_REGION,
@@ -130,6 +132,35 @@ class TestCloudInit:
         commands = " ".join(str(c) for c in document["runcmd"])
         assert "potato.service" in commands and "caddy-potato.service" in commands
 
+    def test_hands_both_mounts_to_the_container_user(self, spec):
+        """cloud-init runs as root; the container runs as uid 1000.
+
+        Both directories are bind-mounted into it, so root-owned they are
+        unwritable by the server and it dies during boot on its first log
+        write. This is the failure the published image hit in CI, where the
+        checkout belonged to the runner account rather than to uid 1000.
+        """
+        document = yaml.safe_load(build_cloud_init(spec, public_host="203.0.113.9"))
+        commands = [" ".join(str(part) for part in c) if isinstance(c, list) else str(c)
+                    for c in document["runcmd"]]
+        for directory in (APP_DIR, DATA_DIR):
+            assert any(c.startswith("chown") and "1000:1000" in c and directory in c
+                       for c in commands), f"{directory} is never given to uid 1000"
+
+    def test_the_chown_follows_the_volume_mount(self, spec):
+        """Mounting replaces the directory, discarding an earlier chown."""
+        spec.volume_gb = 10
+        document = yaml.safe_load(build_cloud_init(
+            spec, public_host="203.0.113.9", volume_device="/dev/sda"))
+        commands = [" ".join(str(part) for part in c) if isinstance(c, list) else str(c)
+                    for c in document["runcmd"]]
+        mount = max(i for i, c in enumerate(commands) if c.startswith("mount -a"))
+        chown = min(i for i, c in enumerate(commands)
+                    if c.startswith("chown") and DATA_DIR in c)
+        assert chown > mount, (
+            "the data directory is chowned before the volume is mounted, so the "
+            "mount hides it and the container still cannot write")
+
     def test_carries_no_secret(self, spec):
         """Secrets go over SSH into a 0600 file, never into user_data.
 
@@ -150,6 +181,58 @@ class TestCloudInit:
         unit = _write_file(document, "/etc/systemd/system/potato.service")
         assert "Restart=always" in unit
         assert "WantedBy=multi-user.target" in unit
+
+
+class TestUploadedFilesReachTheContainerUser:
+    """SFTP writes as root, so cloud-init's chown does not cover the bundle.
+
+    The directory is owned by uid 1000 by then, but every file dropped into it
+    over SFTP arrives owned by root, and the server writes into those files.
+    """
+
+    @staticmethod
+    def _configure_host_source():
+        import ast
+        import inspect
+
+        from potato.deploy.providers import digitalocean
+
+        source = inspect.getsource(digitalocean)
+        tree = ast.parse(source)
+        function = next(node for node in ast.walk(tree)
+                        if isinstance(node, ast.FunctionDef)
+                        and node.name == "_configure_host")
+        return ast.get_source_segment(source, function) or ""
+
+    def test_the_bundle_is_handed_over_after_it_lands(self):
+        body = self._configure_host_source()
+        assert "chown -R 1000:1000" in body
+        assert body.index("put_archive") < body.index("chown -R 1000:1000"), (
+            "the chown runs before the upload, so the uploaded files stay "
+            "root-owned and the container cannot write to them")
+
+    def test_a_redeploy_hands_over_the_new_files_too(self):
+        """`up` on an existing droplet re-uploads as root through the same
+        helper, so the fix has to live there rather than in create."""
+        import ast
+        import inspect
+
+        from potato.deploy.providers import digitalocean
+
+        source = inspect.getsource(digitalocean)
+        tree = ast.parse(source)
+        update = next(node for node in ast.walk(tree)
+                      if isinstance(node, ast.FunctionDef) and node.name == "_update")
+        assert "_configure_host" in (ast.get_source_segment(source, update) or "")
+
+    def test_the_environment_file_is_left_alone(self):
+        """It holds the signing key and admin key; systemd reads it, not the
+        container. Chowning it to 1000 would hand both to the task."""
+        from potato.deploy.providers.digitalocean import (
+            APP_DIR, DATA_DIR, ENV_FILE)
+
+        assert not ENV_FILE.startswith(APP_DIR)
+        assert not ENV_FILE.startswith(DATA_DIR)
 
 
 class TestVolumeHandling:
