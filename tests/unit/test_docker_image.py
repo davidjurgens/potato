@@ -306,6 +306,42 @@ class TestPublishWorkflow:
         variants = workflow["jobs"]["build"]["strategy"]["matrix"]["include"]
         assert {v["extras"] for v in variants} == {"", "all"}
 
+    def test_refusal_checks_do_not_pipe_docker_into_grep(self, workflow):
+        """Under `set -o pipefail` that pattern inverts its own result.
+
+        Both refusal checks expect the container to exit non-zero. Piped into
+        grep, the pipeline reports the failing `docker run` even when grep
+        matched, so a guard that fired correctly reads as one that did not.
+        That is exactly how the multi-worker check failed once the ownership
+        fix let the smoke test reach it.
+        """
+        steps = workflow["jobs"]["build"]["steps"]
+        script = next(s["run"] for s in steps
+                      if "Smoke test" in s.get("name", ""))
+        assert "pipefail" in script, "the assumption behind this test changed"
+        offenders = [line.strip() for line in script.splitlines()
+                     if "docker run" in line and "| grep" in line]
+        assert not offenders, (
+            f"docker run piped into grep under pipefail: {offenders}. Capture "
+            "the output first: out=$(docker run ... 2>&1 || true)")
+
+    def test_both_container_refusals_are_asserted(self, workflow):
+        """A published image that cannot diagnose its own misuse is worse than
+        one that fails loudly, because the symptom lands on the researcher."""
+        steps = workflow["jobs"]["build"]["steps"]
+        script = next(s["run"] for s in steps
+                      if "Smoke test" in s.get("name", ""))
+        assert "per-process" in script
+        assert "not writable by uid" in script
+
+    def test_the_smoke_project_is_given_to_the_container_user(self, workflow):
+        """The checkout belongs to the runner account, not to uid 1000, so a
+        bind mount of it straight from $PWD cannot be written to."""
+        steps = workflow["jobs"]["build"]["steps"]
+        script = next(s["run"] for s in steps
+                      if "Smoke test" in s.get("name", ""))
+        assert "chown -R 1000:1000" in script
+
     def test_smoke_tests_before_anyone_depends_on_the_tag(self, workflow):
         steps = workflow["jobs"]["build"]["steps"]
         names = [s.get("name", "") for s in steps]

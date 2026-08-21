@@ -144,14 +144,21 @@ jobs:
           # so a missing template or static asset fails here.
           curl -fsS http://127.0.0.1:8000/ | grep -qi potato
 
+          # Both checks below expect the container to refuse and exit non-zero,
+          # so their output is captured rather than piped into grep: under
+          # `set -o pipefail` a pipeline reports the failing `docker run` even
+          # when grep matched, which reads as "the guard did not fire" for a
+          # guard that fired correctly.
+
           # The workers guard is a data-integrity control; assert it holds in
           # the published image rather than trusting the file on disk.
-          if docker run --rm -e GUNICORN_WORKERS=4 \
-               -v "$project:/app" \
-               "$tag" 2>&1 | grep -q "per-process"; then
+          guard=$(docker run --rm -e GUNICORN_WORKERS=4 \
+                    -v "$project:/app" "$tag" 2>&1 || true)
+          if echo "$guard" | grep -q "per-process"; then
             echo "multi-worker guard is active"
           else
             echo "multi-worker guard did not fire" >&2
+            echo "$guard" | tail -20 >&2
             exit 1
           fi
 
@@ -163,12 +170,12 @@ jobs:
           rm -rf "$readonly_project"
           cp -r examples/classification/single-choice "$readonly_project"
           sudo chown -R 0:0 "$readonly_project"
-          if docker run --rm -v "$readonly_project:/app" "$tag" 2>&1 \
-               | grep -q "not writable by uid"; then
+          refusal=$(docker run --rm -v "$readonly_project:/app" "$tag" 2>&1 || true)
+          if echo "$refusal" | grep -q "not writable by uid"; then
             echo "unwritable-mount diagnosis is intact"
           else
             echo "unwritable /app did not produce an actionable error" >&2
-            docker run --rm -v "$readonly_project:/app" "$tag" 2>&1 | tail -20 >&2
+            echo "$refusal" | tail -20 >&2
             exit 1
           fi
 
