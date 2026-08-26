@@ -269,7 +269,16 @@ class FormLayoutManager {
             if (groupElement) {
                 // Move specified schemas into the group
                 groupConfig.schemas.forEach(schemaName => {
-                    const form = container.querySelector(`[data-schema-name="${schemaName}"]`);
+                    // Sixteen generators -- slider, span, the canvas and media
+                    // schemes, multi_document_event -- render their wrapper
+                    // without `data-schema-name`, so matching on that alone
+                    // silently left them outside the group they were listed in.
+                    // `layout.groups` validates the names against
+                    // `annotation_schemes`, so nothing warned: the group came up
+                    // with a title and fewer questions than it was given. Every
+                    // generator sets the element id to the scheme name.
+                    const form = container.querySelector(`[data-schema-name="${CSS.escape(schemaName)}"]`)
+                              || container.querySelector(`#${CSS.escape(schemaName)}.annotation-form`);
                     if (form) {
                         const content = groupElement.querySelector('.annotation-form-group-content');
                         if (content) {
@@ -1117,10 +1126,19 @@ function clearAllFormInputs() {
         input.checked = false;
     });
 
-    // Clear sliders
+    // Clear sliders. The touched marks go with the value -- left behind, the
+    // previous item's "the annotator moved this" would make the next item's
+    // default position look like an answer.
     const sliderInputs = document.querySelectorAll('input[type="range"]');
     sliderInputs.forEach(input => {
-        input.value = input.getAttribute('min') || input.getAttribute('starting_value') || '0';
+        if (input.getAttribute('data-server-set') === 'true') return;
+        // Back to the position the generator rendered, which is what
+        // `starting_value` sets. `min` was winning here and the generators
+        // never emit a `starting_value` attribute, so a slider configured to
+        // start mid-scale snapped to its minimum on every instance change.
+        input.value = input.getAttribute('value')
+                   || input.getAttribute('min') || '0';
+        input.removeAttribute('data-modified');
         const valueDisplay = document.getElementById(`${input.name}-value`);
         if (valueDisplay) {
             valueDisplay.textContent = input.value;
@@ -1346,12 +1364,17 @@ async function loadAnnotations() {
             }
         });
 
-        // Read slider state from HTML 'value' ATTRIBUTE
+        // Read slider state from HTML 'value' ATTRIBUTE. Same rule as the
+        // hidden inputs below, and for the same reason: the generators render
+        // slider, vas and soft_label at a starting position, so the value
+        // attribute is only evidence of an answer when the server put it there
+        // (marked data-server-set). Adopting it unconditionally recorded the
+        // default as this annotator's answer for every item they opened.
         const sliderInputs = document.querySelectorAll('input[type="range"]');
         sliderInputs.forEach(input => {
             const schema = input.getAttribute('schema');
             const labelName = input.getAttribute('label_name');
-            // Read from HTML attribute - server sets this for saved slider values
+            if (!input.hasAttribute('data-server-set')) return;
             const serverValue = input.getAttribute('value');
             if (serverValue) {
                 input.value = serverValue;
@@ -1988,8 +2011,10 @@ function validateRequiredFields(options) {
         // Check other inputs (textbox, select, range, etc.)
         for (const input of group.others) {
             if (input.type === 'range') {
-                // Sliders: check if user has interacted (data-modified attribute)
-                if (input.getAttribute('data-modified') !== 'true') {
+                // Sliders: a range always reports a value, so "answered" means
+                // the annotator moved it, or the server sent one back.
+                if (input.getAttribute('data-modified') !== 'true'
+                        && input.getAttribute('data-server-set') !== 'true') {
                     schemaFilled = false;
                     break;
                 }
@@ -2163,12 +2188,19 @@ function syncAnnotationsFromDOM() {
         }
     });
 
-    // Sync sliders
+    // Sync sliders. Unlike every other input here, a range reports a value
+    // whether or not anyone touched it -- slider, vas and soft_label all render
+    // at a starting position -- so collecting unconditionally recorded a
+    // default answer for every item an annotator merely scrolled past, and
+    // `require_fully_annotated` could not tell the difference. Take the same
+    // signal the requiredness check takes.
     const sliders = document.querySelectorAll('input[type="range"].annotation-input');
     sliders.forEach(input => {
         const schema = input.getAttribute('schema');
         const labelName = input.getAttribute('label_name');
-        if (schema && labelName) {
+        const touched = input.getAttribute('data-modified') === 'true'
+                     || input.getAttribute('data-server-set') === 'true';
+        if (schema && labelName && touched) {
             if (!currentAnnotations[schema]) {
                 currentAnnotations[schema] = {};
             }
@@ -2237,6 +2269,27 @@ function whetherNone(checkbox) {
 }
 
 // Input event handling functions
+/**
+ * Mark every slider belonging to this scheme as touched.
+ *
+ * Scheme-wide rather than per-input because the constrained group widgets --
+ * `soft_label`, `constant_sum` -- move their sibling sliders in code when one
+ * is dragged, assigning `.value` without dispatching an event. Marking only the
+ * slider under the cursor stored one number out of a distribution that only
+ * means anything whole. Answering one slider of a group scheme is answering the
+ * scheme.
+ */
+function markSliderSchemeTouched(input) {
+    const schema = input.getAttribute('schema');
+    if (!schema) {
+        input.setAttribute('data-modified', 'true');
+        return;
+    }
+    document
+        .querySelectorAll(`input[type="range"].annotation-input[schema="${CSS.escape(schema)}"]`)
+        .forEach(sibling => sibling.setAttribute('data-modified', 'true'));
+}
+
 function setupInputEventListeners() {
     // Set up event listeners for all annotation inputs
     const inputs = document.querySelectorAll('.annotation-input');
@@ -2261,8 +2314,13 @@ function setupInputEventListeners() {
                 handleInputChange(event.target);
             });
         } else if (inputType === 'range') {
-            // Slider inputs - immediate saving with value display
+            // Slider inputs - immediate saving with value display.
+            // A range always has a value, so nothing else can tell "the
+            // annotator chose 50" from "the slider renders at 50". Mark it on
+            // the first interaction: syncAnnotationsFromDOM skips unmarked
+            // ranges, and the required-scheme check reads the same attribute.
             input.addEventListener('input', function (event) {
+                markSliderSchemeTouched(event.target);
                 const valueDisplay = document.getElementById(`${input.name}-value`);
                 if (valueDisplay) {
                     valueDisplay.textContent = event.target.value;
@@ -2633,6 +2691,9 @@ function populateInputValues() {
 
         if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
             input.value = currentAnnotations[schema][labelName];
+            // A value the server sent back was answered by a person, so it has
+            // to keep surviving the sync now that untouched ranges are skipped.
+            input.setAttribute('data-server-set', 'true');
             const valueDisplay = document.getElementById(`${input.name}-value`);
             if (valueDisplay) {
                 valueDisplay.textContent = currentAnnotations[schema][labelName];

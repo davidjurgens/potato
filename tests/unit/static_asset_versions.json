@@ -8,8 +8,8 @@
     "version": "2"
   },
   "annotation.js": {
-    "sha256": "ef1da9fb348f6efc",
-    "version": "30"
+    "sha256": "60dcde7a34180881",
+    "version": "31"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -40,8 +40,8 @@
     "version": "6"
   },
   "codebook.js": {
-    "sha256": "2a6086ea9e2cdef1",
-    "version": "14"
+    "sha256": "52c78d82786477ea",
+    "version": "15"
   },
   "conversation-tree.js": {
     "sha256": "9181c59ed2b15736",
@@ -172,8 +172,8 @@
     "version": "1"
   },
   "memos.js": {
-    "sha256": "a3b146e4e0ca01c9",
-    "version": "2"
+    "sha256": "031f31d592ecdeb9",
+    "version": "3"
   },
   "multi-agent-discussion.css": {
     "sha256": "276ac528ca3f2b51",
