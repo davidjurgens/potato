@@ -4101,6 +4101,20 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         from potato.routes_trace_ingestion import trace_ingestion_bp
         flask_app.register_blueprint(trace_ingestion_bp)
         flask_app.config["trace_ingestion"] = trace_ingestion_config
+        if not trace_ingestion_config.get("api_key"):
+            if trace_ingestion_config.get("allow_unauthenticated"):
+                logger.warning(
+                    "trace_ingestion is enabled with allow_unauthenticated: true and no "
+                    "api_key -- /api/traces/webhook accepts writes from anyone who can "
+                    "reach this server."
+                )
+            else:
+                logger.warning(
+                    "trace_ingestion is enabled but no api_key is set, so the webhook "
+                    "endpoints will reject every request. Set trace_ingestion.api_key, "
+                    "or trace_ingestion.allow_unauthenticated: true to accept anonymous "
+                    "posts."
+                )
         logger.info("Registered trace ingestion blueprint")
 
         # Start Langfuse poller if configured. Guard against `sources:` being
