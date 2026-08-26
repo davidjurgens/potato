@@ -18,7 +18,7 @@ user_config:
   users: []
 
 automatic_assignment:
-  on: true
+  "on": true
   output_filename: assigned_user_data.json
   sampling_strategy: random
   labels_per_instance: 3

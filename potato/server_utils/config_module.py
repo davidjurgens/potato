@@ -5031,6 +5031,52 @@ def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[
     return config_data
 
 
+#: Boolean keys, mapped back to the words YAML 1.1 ate. `on`/`off` are the only
+#: spellings Potato's own keys use (`automatic_assignment.on`, `textarea.on`),
+#: so a `True` key is always a mis-parsed `on`.
+_YAML_BOOLEAN_KEYS = {True: "on", False: "off"}
+
+
+def _restore_yaml_boolean_keys(node, config_file: str = "", _path: str = ""):
+    """Turn boolean dict *keys* back into the strings they were written as.
+
+    `automatic_assignment: {on: true}` parses as `{True: True}` under YAML 1.1,
+    so `config["automatic_assignment"].get("on")` is None and the feature is
+    silently off. Four shipped example configs had exactly that, three of them
+    disabling automatic assignment without any sign of it.
+
+    It is also a crash: a dict with both a bool and a str key cannot be sorted,
+    so `jsonify` on `/api/schemas` raises `TypeError: '<' not supported between
+    instances of 'str' and 'bool'` and the annotation form never loads.
+
+    Quoting the key in YAML avoids all of this, and the warning says so -- but a
+    config that reads correctly to a human should not need the trick, so the
+    value is repaired rather than rejected.
+    """
+    if isinstance(node, dict):
+        repaired = {}
+        for key, value in node.items():
+            new_key = key
+            if isinstance(key, bool):
+                new_key = _YAML_BOOLEAN_KEYS[key]
+                logger.warning(
+                    "%s: `%s:` at %s was read as the boolean %s, because YAML "
+                    "treats bare on/off/yes/no as booleans. Reading it as "
+                    "`%s` instead; quote the key (`\"%s\":`) to be explicit.",
+                    config_file or "config", new_key,
+                    _path or "the top level", key, new_key, new_key,
+                )
+            repaired[new_key] = _restore_yaml_boolean_keys(
+                value, config_file, f"{_path}.{new_key}" if _path else str(new_key))
+        return repaired
+    if isinstance(node, list):
+        return [
+            _restore_yaml_boolean_keys(item, config_file, f"{_path}[{i}]")
+            for i, item in enumerate(node)
+        ]
+    return node
+
+
 def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, Any]:
     """
     Load and validate a YAML configuration file with security checks.
@@ -5067,32 +5113,19 @@ def load_and_validate_config(config_file: str, project_dir: str) -> Dict[str, An
     except Exception as e:
         raise ConfigValidationError(f"Error reading configuration file {config_file}: {str(e)}")
 
+    # YAML 1.1 turns bare `on`, `off`, `yes` and `no` into booleans, including
+    # when they are *keys*. Fix before anything reads the config.
+    config_data = _restore_yaml_boolean_keys(config_data, config_file)
+
     # Get the directory containing the config file for relative path resolution
     config_file_dir = os.path.dirname(validated_config_path)
 
-    # Merge external AI config file if specified (before validation)
-    config_data = _merge_ai_config_file(config_data, config_file_dir)
+    config_data = normalize_config_before_validation(config_data, config_file_dir)
 
-    # Substitute ${ENV_VAR} references in LLM endpoint config blocks
-    # (live_agent, solo_mode, judge_calibration, agent_proxy, ...)
-    config_data = _substitute_llm_block_env_vars(config_data)
-
-    # Apply default values for common configuration options
-    if 'task_dir' not in config_data:
-        config_data['task_dir'] = '.'
-        logger.debug("task_dir not specified, defaulting to '.'")
-    if 'site_dir' not in config_data:
-        config_data['site_dir'] = 'default'
-        logger.debug("site_dir not specified, defaulting to 'default'")
-
-    # Resolve task_dir relative to config file directory if it's '.' or a relative path
-    if 'task_dir' in config_data:
-        task_dir = config_data['task_dir']
-        if task_dir == '.' or not os.path.isabs(task_dir):
-            # Resolve relative to config file's directory
-            task_dir = os.path.normpath(os.path.join(config_file_dir, task_dir))
-            config_data['task_dir'] = task_dir
-            logger.debug(f"Resolved task_dir to: {task_dir}")
+    # Fold deprecated keys onto their replacements before anything reads them.
+    # Removes the legacy key, so the warn-only pass inside
+    # validate_yaml_structure() does not report it a second time.
+    apply_deprecated_key_aliases(config_data)
 
     # Validate the configuration structure
     validate_yaml_structure(config_data, project_dir, config_file_dir)
