@@ -1019,6 +1019,53 @@ def load_user_data(config: dict):
     ism.rebuild_auto_batch_pins_from_users(user_id_to_instance_ids)
 
     logger.info("Loaded user data for %d users" % len(usm.get_user_ids()))
+    _warn_on_orphaned_schemes(config, usm)
+
+
+def _warn_on_orphaned_schemes(config: dict, usm) -> None:
+    """Warn when saved annotations name a scheme the config no longer defines.
+
+    Editing `annotation_schemes` after people have annotated is silent in every
+    direction. An item stays "annotated" whatever it was annotated *with*, so a
+    renamed or newly added scheme is never put back in front of anyone who
+    already finished, and the three surfaces that report on the study disagree
+    without saying so: the overview reports 100% complete, agreement reports
+    zero items for every configured scheme, and the CSV export -- which is
+    driven by what was stored rather than by the config -- comes out with
+    columns named after schemes that no longer exist.
+
+    This does not repair anything. It puts the mismatch in the boot log, which
+    is the only place the operator is already looking.
+    """
+    configured = {s.get("name") for s in (config.get("annotation_schemes") or [])
+                  if isinstance(s, dict) and s.get("name")}
+    if not configured:
+        return
+
+    stored: dict[str, int] = {}
+    for user_id in usm.get_user_ids():
+        user_state = usm.get_user_state(user_id)
+        if not user_state:
+            continue
+        for labels in user_state.instance_id_to_label_to_value.values():
+            for label in labels:
+                schema = getattr(label, "schema", None)
+                if schema and schema not in configured:
+                    stored[schema] = stored.get(schema, 0) + 1
+
+    if not stored:
+        return
+
+    named = ", ".join(f"{name} ({count} answer(s))"
+                      for name, count in sorted(stored.items()))
+    logger.warning(
+        "Saved annotations name %d scheme(s) that annotation_schemes no longer "
+        "defines: %s. Items already annotated stay annotated, so nobody who "
+        "finished will be shown the current schemes, agreement will report zero "
+        "items for them, and exports will carry the old names. If this was a "
+        "rename, keep the old name or start a new output_annotation_dir.",
+        len(stored), named,
+    )
 
 def load_training_data(config: dict) -> None:
     """
