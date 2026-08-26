@@ -10,11 +10,34 @@ import logging
 import os
 import queue
 import time
+from functools import wraps
+
 from flask import Blueprint, Response, jsonify, request, stream_with_context
+from flask import session as flask_session
 
 logger = logging.getLogger(__name__)
 
 live_coding_agent_bp = Blueprint("live_coding_agent", __name__)
+
+
+def _login_required(f):
+    """Require an authenticated session.
+
+    These endpoints start, instruct, roll back and stop real coding-agent
+    subprocesses, so they are the most consequential surface in the app -- and
+    they shipped with no auth at all. The global `before_request` gate cannot
+    cover them either: it whitelists the bare "/api/" prefix, so it never runs
+    for any route in this blueprint.
+
+    Answers with 401 JSON rather than redirecting to the login page: every
+    caller here is XHR, and a 302 to HTML reads as success to a JSON client.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "username" not in flask_session:
+            return jsonify({"error": "Authentication required"}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 
 def _get_manager():
@@ -28,6 +51,7 @@ def _get_config():
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/start", methods=["POST"])
+@_login_required
 def start_session():
     """Start a new coding agent session."""
     from .coding_agent_runner import CodingAgentConfig
@@ -43,15 +67,16 @@ def start_session():
     config = _get_config()
     agent_config = CodingAgentConfig.from_config(config)
 
-    # Override with request config if provided
+    # Deliberately no client config overrides here. The request used to be
+    # able to set `backend_type`, `ai_config` and `working_dir`; `working_dir`
+    # selects what gets mounted into the sandbox, and `ai_config` carries
+    # credentials. Sandbox settings are server-side, from YAML, only.
     if "config" in data:
-        req_config = data["config"]
-        if "backend_type" in req_config:
-            agent_config.backend_type = req_config["backend_type"]
-        if "ai_config" in req_config:
-            agent_config.ai_config.update(req_config["ai_config"])
-        if "working_dir" in req_config:
-            agent_config.working_dir = req_config["working_dir"]
+        logger.warning(
+            "Ignoring client-supplied agent config from %s: sandbox and "
+            "backend settings come from the server config only.",
+            flask_session.get("username", "anonymous"),
+        )
 
     # Set up trace directory
     task_dir = config.get("task_dir", ".")
@@ -76,6 +101,7 @@ def start_session():
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/stream/<session_id>")
+@_login_required
 def stream_events(session_id):
     """SSE event stream for a coding agent session."""
     manager = _get_manager()
@@ -124,6 +150,7 @@ def stream_events(session_id):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/pause/<session_id>", methods=["POST"])
+@_login_required
 def pause_session(session_id):
     manager = _get_manager()
     runner = manager.get_session(session_id)
@@ -134,6 +161,7 @@ def pause_session(session_id):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/resume/<session_id>", methods=["POST"])
+@_login_required
 def resume_session(session_id):
     manager = _get_manager()
     runner = manager.get_session(session_id)
@@ -144,6 +172,7 @@ def resume_session(session_id):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/instruct/<session_id>", methods=["POST"])
+@_login_required
 def instruct_session(session_id):
     manager = _get_manager()
     runner = manager.get_session(session_id)
@@ -160,6 +189,7 @@ def instruct_session(session_id):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/checkpoints/<session_id>")
+@_login_required
 def get_checkpoints(session_id):
     """List all checkpoints for a session."""
     manager = _get_manager()
@@ -170,6 +200,7 @@ def get_checkpoints(session_id):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/rollback/<session_id>", methods=["POST"])
+@_login_required
 def rollback_session(session_id):
     """Rollback to a specific step."""
     manager = _get_manager()
@@ -191,6 +222,7 @@ def rollback_session(session_id):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/diff/<session_id>/<int:step>")
+@_login_required
 def get_diff(session_id, step):
     """Get diff from a step to current state."""
     manager = _get_manager()
@@ -202,6 +234,7 @@ def get_diff(session_id, step):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/replay/<session_id>", methods=["POST"])
+@_login_required
 def replay_session(session_id):
     """Replay from a step with optional new instructions or edited actions."""
     manager = _get_manager()
@@ -234,6 +267,7 @@ def replay_session(session_id):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/branches/<session_id>")
+@_login_required
 def get_branches(session_id):
     """List all branches for a session."""
     manager = _get_manager()
@@ -244,6 +278,7 @@ def get_branches(session_id):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/switch_branch/<session_id>", methods=["POST"])
+@_login_required
 def switch_branch(session_id):
     """Switch to a different branch."""
     manager = _get_manager()
@@ -265,6 +300,7 @@ def switch_branch(session_id):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/stop/<session_id>", methods=["POST"])
+@_login_required
 def stop_session(session_id):
     manager = _get_manager()
     runner = manager.get_session(session_id)
@@ -278,6 +314,7 @@ def stop_session(session_id):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/state/<session_id>")
+@_login_required
 def get_state(session_id):
     manager = _get_manager()
     runner = manager.get_session(session_id)
@@ -287,6 +324,7 @@ def get_state(session_id):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/trace/<session_id>")
+@_login_required
 def get_trace(session_id):
     manager = _get_manager()
     runner = manager.get_session(session_id)
@@ -296,6 +334,7 @@ def get_trace(session_id):
 
 
 @live_coding_agent_bp.route("/api/live_coding_agent/sessions")
+@_login_required
 def list_sessions():
     manager = _get_manager()
     return jsonify({"sessions": manager.list_sessions()})
