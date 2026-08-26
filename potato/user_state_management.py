@@ -2605,7 +2605,14 @@ class InMemoryUserState(UserState):
         if self.max_assignments >= 0:
             # Explicit cap: the user may annotate up to this many items, but should
             # still finish cleanly if the dataset/eligible pool is exhausted first.
-            return len(self.get_annotated_instance_ids()) < self.max_assignments and has_available_items
+            # Injected attention checks and gold items do not count against it --
+            # assignment already discounts them, and if this did not, the two
+            # disagreed and the annotator was declared finished holding an
+            # unreached item.
+            from potato.quality_control import count_dataset_items
+
+            annotated = count_dataset_items(self.get_annotated_instance_ids())
+            return annotated < self.max_assignments and has_available_items
 
         return has_available_items
 

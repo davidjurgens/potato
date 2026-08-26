@@ -263,19 +263,42 @@ class QualityControlManager:
             items = self._load_json_or_jsonl(str(file_path))
 
             for item in items:
-                if 'id' not in item or 'expected_answer' not in item:
-                    self.logger.warning(f"Attention check item missing required fields: {item}")
+                missing = [f for f in ("id", "expected_answer") if f not in item]
+                if missing:
+                    self.logger.warning(
+                        "Attention check item skipped, missing %s: %s",
+                        ", ".join(missing), item)
                     continue
 
                 self.attention_items.append(item)
                 self.attention_expected[item['id']] = item['expected_answer']
 
             self.logger.info(f"Loaded {len(self.attention_items)} attention check items")
+            self._warn_if_nothing_loaded(
+                "Attention checks", self.attention_items, file_path,
+                ("id", "expected_answer"))
 
         except (json.JSONDecodeError, ValueError) as e:
             self.logger.error(f"Failed to parse attention checks file: {e}")
         except Exception as e:
             self.logger.error(f"Failed to load attention checks: {e}")
+
+    def _warn_if_nothing_loaded(self, feature, loaded, file_path, required) -> None:
+        """Say loudly when a quality-control feature is on but has no items.
+
+        The per-item warnings scroll past, the manager still reports the
+        feature as enabled, and a study can run for weeks with quality control
+        doing nothing at all. That is a data-integrity failure, not a
+        formatting problem, so it gets ERROR and states the consequence.
+        """
+        if loaded:
+            return
+        self.logger.error(
+            "%s are enabled but NOT RUNNING: no usable items were loaded from "
+            "%s. Every item there was skipped or the file is empty. Each item "
+            "needs %s. Until this is fixed, the feature is off and nothing "
+            "downstream will say so.",
+            feature, file_path, " and ".join(f"`{f}`" for f in required))
 
     def _load_gold_standards(self) -> None:
         """Load gold standard items from file."""
@@ -295,8 +318,11 @@ class QualityControlManager:
             items = self._load_json_or_jsonl(str(file_path))
 
             for item in items:
-                if 'id' not in item or 'gold_label' not in item:
-                    self.logger.warning(f"Gold standard item missing required fields: {item}")
+                missing = [f for f in ("id", "gold_label") if f not in item]
+                if missing:
+                    self.logger.warning(
+                        "Gold standard item skipped, missing %s: %s",
+                        ", ".join(missing), item)
                     continue
 
                 self.gold_items.append(item)
@@ -305,6 +331,8 @@ class QualityControlManager:
                     self.gold_explanations[item['id']] = item['explanation']
 
             self.logger.info(f"Loaded {len(self.gold_items)} gold standard items")
+            self._warn_if_nothing_loaded(
+                "Gold standards", self.gold_items, file_path, ("id", "gold_label"))
 
         except (json.JSONDecodeError, ValueError) as e:
             self.logger.error(f"Failed to parse gold standards file: {e}")
@@ -1091,3 +1119,31 @@ def clear_quality_control_manager():
     global _QUALITY_CONTROL_MANAGER
     with _QUALITY_CONTROL_LOCK:
         _QUALITY_CONTROL_MANAGER = None
+
+
+def count_dataset_items(instance_ids) -> int:
+    """How many of these ids came out of the dataset rather than the platform.
+
+    Attention checks and gold items are injected into an annotator's queue by
+    the platform, not drawn from the item pool, but they land in
+    ``instance_id_ordering`` and in the annotated set like anything else.
+    Anything that compares one of those collections against
+    ``max_annotations_per_user`` has to discount them, or every injected check
+    costs the annotator one real item -- and the only visible sign is a progress
+    bar that ends early.
+
+    Two places do that comparison, and they must agree: assignment top-up in
+    ``ItemStateManager`` and the completion check in
+    ``UserState.has_remaining_assignments``. When only one of them discounted,
+    the server kept assigning a twelfth item that the annotator was never
+    allowed to reach.
+    """
+    instance_ids = list(instance_ids or [])
+    manager = get_quality_control_manager()
+    if manager is None:
+        return len(instance_ids)
+    return sum(
+        1 for instance_id in instance_ids
+        if not (manager.is_attention_check(instance_id)
+                or manager.is_gold_standard(instance_id))
+    )

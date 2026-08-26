@@ -1705,6 +1705,38 @@ class ItemStateManager:
     def is_assignment_paused(self) -> bool:
         return self._assignment_paused
 
+    def _dataset_assignment_count(self, user_state) -> int:
+        """How many of the user's assigned items came out of the dataset.
+
+        Attention checks and gold items are injected into the queue by the
+        platform, not drawn from the pool, but they land in
+        ``assigned_instance_ids`` like anything else. Counting them against the
+        per-annotator quota means every injected check costs the annotator one
+        real item: on a six-item task with two checks and the default quota, two
+        articles are simply never served, and the only visible sign is a
+        progress bar that ends early.
+        """
+        assigned = user_state.get_assigned_instance_ids()
+        try:
+            from potato.quality_control import count_dataset_items
+        except Exception:
+            return len(assigned)
+        return count_dataset_items(assigned)
+
+    def _already_with_user(self, user_state, iid) -> bool:
+        """True when the user already holds this item, annotated or not.
+
+        Assignment tops up incrementally: three items up front, then one at a
+        time as the annotator works. A strategy that filters only on
+        ``has_annotated`` will happily re-pick an item the user has been given
+        but not yet reached. ``assign_instance`` drops the duplicate silently,
+        the strategy still reports one item assigned, and the queue stops
+        growing -- which is how ``assignment_strategy: random`` on a six-item
+        task hands an annotator three items and then nothing, with the progress
+        counter simply stopping early and no warning anywhere.
+        """
+        return iid in user_state.get_assigned_instance_ids() or user_state.has_annotated(iid)
+
     def assign_instances_to_user(self, user_state: UserState) -> int:
         """
         Assigns a set of instances to a user based on the current state of the system
@@ -1772,7 +1804,7 @@ class ItemStateManager:
             return 0
 
         # Determine how many instances to assign
-        current_assignments = user_state.get_assigned_instance_count()
+        current_assignments = self._dataset_assignment_count(user_state)
         max_assignments = user_state.get_max_assignments()
 
         if max_assignments > 0:
@@ -1823,7 +1855,7 @@ class ItemStateManager:
                 if cap >= 0 and annotation_count >= cap:
                     self.logger.debug(f"[ASSIGNMENT] Skipping {iid}: reached annotation cap")
                     continue
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
                 else:
                     self.logger.debug(f"User {getattr(user_state, 'user_id', None)} already annotated {iid}, skipping.")
@@ -1879,7 +1911,7 @@ class ItemStateManager:
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
@@ -1908,7 +1940,7 @@ class ItemStateManager:
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
@@ -1925,7 +1957,7 @@ class ItemStateManager:
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
@@ -1973,7 +2005,7 @@ class ItemStateManager:
                 if self._item_is_saturated(iid):
                     continue
                 # Skip if user already annotated this item
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
 
             self.logger.debug(f"Category-based: {len(unlabeled_items)} unlabeled items available for user {user_id}")
