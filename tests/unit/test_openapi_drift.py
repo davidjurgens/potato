@@ -208,8 +208,17 @@ class TestAuthAnnotations:
                 )
 
     def test_authenticated_operations_document_401(self, checked_in):
-        missing = [
-            f"{m.upper()} {p}" for p, m, op in _operations(checked_in)
-            if op.get("x-potato-auth") and "401" not in op.get("responses", {})
-        ]
-        assert not missing, f"Guarded operations without a 401 response: {missing[:10]}"
+        from potato.server_utils.openapi_spec import AUTH_DECORATORS
+
+        missing = []
+        for path, method, op in _operations(checked_in):
+            auth = op.get("x-potato-auth")
+            if not auth:
+                continue
+            levels = {AUTH_DECORATORS[a] for a in auth}
+            # A debug-only endpoint is not gated on identity: it either does not
+            # exist (403) or is wide open. There is nothing to answer 401 with.
+            expected = "403" if levels == {"debug-only"} else "401"
+            if expected not in op.get("responses", {}):
+                missing.append(f"{method.upper()} {path} (wanted {expected})")
+        assert not missing, f"Guarded operations missing their auth response: {missing[:10]}"
