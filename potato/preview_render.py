@@ -284,6 +284,11 @@ def start_server(
         "-p", str(port),
         "--debug",
         "--debug-phase", phase,
+        # Loopback explicitly. This is a throwaway server for one screenshot,
+        # so it has no reason to listen on anything else -- and debug on a
+        # non-loopback bind is refused, since debug narrows admin auth and
+        # exposes the interactive debugger.
+        "--host", "127.0.0.1",
     ]
 
     # DEVNULL on stdout: a verbose config can fill the 64KB pipe buffer and
