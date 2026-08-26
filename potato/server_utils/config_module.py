@@ -170,7 +170,6 @@ KNOWN_CONFIG_KEYS = {
         "recluster_threshold", "preserve_visited",
         "trigger_ai_prefetch", "cache_dir",
     },
-    "diversity_config": None,
     "embedding_visualization": {
         "enabled", "sample_size", "include_all_annotated",
         "embedding_model", "image_embedding_model", "umap", "label_source",
@@ -212,7 +211,18 @@ KNOWN_CONFIG_KEYS = {
     # === UI & layout ===
     "ui": None,
     "ui_config": None,
-    "layout": {"grid", "breakpoints", "groups", "order", "styling"},
+    # Third level recorded because it is where the form layout is actually
+    # configured, and an undeclared key is invisible to the JSON Schema, the
+    # config reference and `validate --strict` alike.
+    "layout": {
+        "grid": {"columns", "gap", "row_gap", "align_items"},
+        "breakpoints": {"mobile", "tablet"},
+        "groups": {"id", "schemas", "title", "description", "collapsible",
+                   "collapsed_default", "background_color"},
+        "order": None,
+        "styling": {"align_items", "content_align", "group_background_odd",
+                    "group_background_even", "group_padding", "form_padding"},
+    },
     "instance_display": {"fields", "layout", "resizable"},
     "format_handling": {"enabled", "default_format", "pdf", "spreadsheet"},
     # Derived from the shared English defaults (single source of truth) plus
@@ -226,6 +236,10 @@ KNOWN_CONFIG_KEYS = {
 
     # === Content ===
     "annotation_instructions": None,
+    # Read by CredentialManager.from_config(). The top-level
+    # `env_substitution` alias that used to sit here was read by nothing;
+    # the working form has always been nested under this key.
+    "credentials": {"env_substitution", "env_file"},
     "annotation_codebook_url": None,
     "custom_footer_html": None,
     "header_file": None,
@@ -255,9 +269,7 @@ KNOWN_CONFIG_KEYS = {
         "waveform_cache_dir", "waveform_look_ahead", "waveform_cache_max_size",
         "client_fallback_max_duration",
     },
-    "spectrogram": None,
     "media_directory": None,
-    "default_video_fps": None,
 
     # === External integrations ===
     # Crowd-provider selection + per-provider sub-blocks (validated by the
@@ -357,7 +369,18 @@ KNOWN_CONFIG_KEYS = {
 
     # === Agent ===
     "live_agent": None,
-    "live_coding_agent": None,
+    # Live coding agent. `sandbox_*` and `container_*` govern the boundary the
+    # agent's tool calls run inside -- see potato/sandbox/__init__.py for the
+    # ladder. Declared explicitly because a typo in a sandbox key is a security
+    # setting that silently does nothing.
+    "live_coding_agent": {
+        "backend_type", "ai_config", "working_dir", "max_turns",
+        "system_prompt",
+        "sandbox_mode", "container_cli", "container_runtime", "sandbox_image",
+        "sandbox_network", "sandbox_user", "sandbox_memory", "sandbox_cpus",
+        "sandbox_pids_limit", "sandbox_root",
+        "acknowledge_untrusted_code_execution",
+    },
     "agent_proxy": None,
 
     # === Legacy / multi-task ===
@@ -532,14 +555,12 @@ KNOWN_CONFIG_KEYS = {
     "admin_api_key": None,
     "alert_time_each_instance": None,
     "assignment_strategy": None,
-    "reclaim_stale_assignments": None,
     "instance_reclaim": None,
     # Where item payloads live. In-memory by default; see potato/item_store.py
     # for the measurement that makes that the right default and the scale at
     # which "paged" starts to pay for itself.
     "item_store": {"backend", "path", "cache_size"},
     "max_session_seconds": None,
-    "env_substitution": None,
 
     # === Internal (set by system, not user) ===
     "config_file": None,
@@ -5133,17 +5154,23 @@ def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[
     Returns:
         The config_data with external AI config merged in (modified in place and returned)
     """
-    ai_support = config_data.get("ai_support", {})
+    if "ai_support" not in config_data:
+        return config_data
+
+    ai_support = config_data.get("ai_support")
     if not isinstance(ai_support, dict):
         return config_data
 
     ai_config_file = ai_support.get("ai_config_file")
 
     if not ai_config_file:
-        # No external file specified - apply env var substitution to inline ai_config
-        if "ai_config" in ai_support:
-            ai_support["ai_config"] = _substitute_env_typed(ai_support["ai_config"])
-            config_data["ai_support"] = ai_support
+        # No external file specified: substitute env vars across the whole
+        # inline block. `endpoint_type` sits beside `ai_config` rather than
+        # inside it, and used to be skipped, so a config written as
+        # `endpoint_type: ${POTATO_LLM_TEXT_ENDPOINT_TYPE}` reached validation
+        # with the literal `${...}` as its value and was rejected as an
+        # unknown endpoint type.
+        config_data["ai_support"] = _substitute_env_typed(ai_support)
         return config_data
 
     if not isinstance(ai_config_file, str):
