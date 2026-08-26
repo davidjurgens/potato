@@ -3822,6 +3822,38 @@ def configure_app(flask_app):
     return app
 
 
+def _preflight_coding_agent_sandbox(config):
+    """Check the configured agent sandbox is usable, and say what it is.
+
+    Raises on an unusable sandbox instead of starting: a server that accepts
+    annotators while unable to contain their tool calls is worse than one that
+    refuses to boot with an actionable message.
+    """
+    from potato.sandbox import SandboxSettings, preflight, startup_report
+
+    settings = SandboxSettings.from_config(config.get("live_coding_agent", {}))
+
+    reason = preflight(settings)
+    if reason:
+        raise RuntimeError(
+            "Live coding agent sandbox is not usable: %s" % reason
+        )
+
+    for line in startup_report(settings).split("\n"):
+        if settings.is_isolated_mode():
+            logger.info(line)
+        else:
+            logger.warning(line)
+
+    if settings.mode == "container":
+        # A previous crash leaves one container per session with nothing left
+        # running to reap it.
+        from potato.sandbox.container import sweep_orphaned_containers
+        swept = sweep_orphaned_containers(settings.container_cli)
+        if swept:
+            logger.info("Swept %d orphaned sandbox container(s)", swept)
+
+
 def _register_web_agent_blueprints_if_needed(flask_app, config):
     """Register web agent blueprints only if web_agent display types are configured."""
     needs_web_agent = False
@@ -3879,6 +3911,11 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         flask_app.register_blueprint(live_coding_agent_bp)
         flask_app.config["live_coding_agent_enabled"] = True
         logger.info("Registered live coding agent blueprint (live_coding_agent display type detected)")
+
+        # Annotators can edit and execute tool calls through this blueprint, so
+        # the sandbox is the security boundary. Validate it now rather than at
+        # the first tool call, which would strand an annotator mid-task.
+        _preflight_coding_agent_sandbox(config)
 
         import atexit
         def _cleanup_coding_agent_sessions():

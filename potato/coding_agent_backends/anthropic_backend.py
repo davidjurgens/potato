@@ -160,7 +160,7 @@ class AnthropicToolUseBackend(CodingAgentBackend):
                     })
 
                     # Execute the tool
-                    output = execute_tool(tool_name, tool_input, self._working_dir)
+                    output = execute_tool(tool_name, tool_input, self.sandbox)
 
                     # Classify output type
                     output_type = self._classify_output_type(tool_name)

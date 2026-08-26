@@ -22,11 +22,11 @@ from .coding_agent_backend import (
     CodingAgentBackend,
     CodingAgentEvent,
     CodingAgentEventType,
-    create_backend,
+    create_backend as create_agent_backend,
 )
 from .coding_agent_branch import BranchManager
 from .coding_agent_checkpoint import CheckpointManager
-from .coding_agent_sandbox import SandboxManager
+from .sandbox import SandboxBackend, SandboxSettings, create_backend
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,10 @@ class CodingAgentConfig:
     working_dir: str = "."
     max_turns: int = 50
     system_prompt: str = ""
-    sandbox_mode: str = "worktree"
+    # Parsed, validated sandbox configuration. Built from the same
+    # `live_coding_agent` block, but kept as an object so the mode ladder and
+    # its deprecation warnings live in one place.
+    sandbox: SandboxSettings = field(default_factory=SandboxSettings)
 
     @classmethod
     def from_config(cls, config: dict) -> "CodingAgentConfig":
@@ -59,7 +62,7 @@ class CodingAgentConfig:
             working_dir=live_config.get("working_dir", "."),
             max_turns=live_config.get("max_turns", 50),
             system_prompt=live_config.get("system_prompt", ""),
-            sandbox_mode=live_config.get("sandbox_mode", "worktree"),
+            sandbox=SandboxSettings.from_config(live_config),
         )
 
 
@@ -78,7 +81,7 @@ class CodingAgentRunner:
         self._listener_lock = threading.Lock()
 
         self._backend: Optional[CodingAgentBackend] = None
-        self._sandbox: Optional[SandboxManager] = None
+        self._sandbox: Optional[SandboxBackend] = None
         self._checkpoint_mgr: Optional[CheckpointManager] = None
         self._branch_mgr: Optional[BranchManager] = None
         self._structured_turns: List[Dict] = []
@@ -126,12 +129,15 @@ class CodingAgentRunner:
         self._started_at = time.time()
         self._structured_turns = []
 
-        # Create sandbox
-        self._sandbox = SandboxManager(
-            mode=self.config.sandbox_mode,
-            base_dir=os.path.abspath(self.config.working_dir),
+        # Create sandbox. Raises SandboxError rather than degrading to a
+        # weaker backend: an operator who asked for a container and silently
+        # received none is the defect this replaces.
+        self._sandbox = create_backend(
+            os.path.abspath(self.config.working_dir), self.config.sandbox,
         )
         working_dir = self._sandbox.create(self.session_id)
+        logger.info("Session %s sandbox: %s", self.session_id,
+                    self._sandbox.describe())
 
         # Initialize checkpoint and branch managers
         self._checkpoint_mgr = CheckpointManager(working_dir, self.session_id)
@@ -143,7 +149,10 @@ class CodingAgentRunner:
             "ai_config": self.config.ai_config,
             "max_turns": self.config.max_turns,
         }
-        self._backend = create_backend(self.config.backend_type, backend_config)
+        self._backend = create_agent_backend(self.config.backend_type, backend_config)
+        # The agent drives the same tool executor annotators do, so it runs
+        # inside the same boundary.
+        self._backend.set_sandbox(self._sandbox)
 
         # Start the backend
         self._backend.start(task_description, working_dir, self.config.system_prompt)
@@ -329,11 +338,15 @@ class CodingAgentRunner:
         # Execute edited actions if provided
         if edited_actions:
             from .coding_agent_backend import execute_tool
-            working_dir = self._sandbox.working_dir if self._sandbox else self.config.working_dir
+            if self._sandbox is None:
+                raise RuntimeError(
+                    "Cannot replay edited actions without a sandbox: the "
+                    "session was never started."
+                )
             for action in edited_actions:
                 tool_name = action.get("tool", "")
                 tool_input = action.get("input", {})
-                output = execute_tool(tool_name, tool_input, working_dir)
+                output = execute_tool(tool_name, tool_input, self._sandbox)
                 action["output"] = output
 
         # Inject instructions if provided
@@ -388,7 +401,8 @@ class CodingAgentRunner:
             "backend": self.config.backend_type,
             "model": self.config.ai_config.get("model", ""),
             "started_at": self._started_at,
-            "sandbox_mode": self.config.sandbox_mode,
+            "sandbox_mode": self.config.sandbox.mode,
+            "sandbox": self.config.sandbox.describe(),
         }
         # Include branches if any were created
         if self._branch_mgr and len(self._branch_mgr.list_branches()) > 1:
