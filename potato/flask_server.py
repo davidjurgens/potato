@@ -2355,6 +2355,12 @@ def get_current_page_html(config, username):
         for scheme in annotation_schemes
     )
     context['ai_enabled'] = config.get("ai_support", {}).get("enabled", False)
+    # Same two-path hazard. The sidebars sit behind `is_annotation_page` as
+    # well, so today this only keeps the flags defined rather than falling
+    # through to Jinja's `default(false)` -- but a page that renders the
+    # annotation template must carry every variable that template reads, or
+    # the next person to widen that condition gets a silent no-op.
+    context.update(_annotation_sidebar_flags(config))
 
     if phase == UserPhase.TRAINING:
         context.update(_training_page_context(user_state))
@@ -2526,6 +2532,58 @@ def _annotator_dashboard_enabled() -> bool:
     if isinstance(raw, dict):
         return bool(raw.get("enabled", False))
     return False
+
+
+_SIDEBAR_GATE_WARNED: set[str] = set()
+
+
+def _annotation_sidebar_flags(cfg) -> dict:
+    """Which of the three universal sidebars this task actually has.
+
+    Memos, search-and-claim and the codebook tray used to be *self-gating*: the
+    template loaded all three on every annotation page and each one probed its
+    own API to find out whether the feature was on. Almost no task enables any
+    of them, so the common case was nine failed requests per page view -- five
+    503s from the codebook blueprint, two from memos, a 403 from search -- and
+    a console noisy enough to hide a real error.
+
+    The server already knows the answer, so it says so here and the template
+    omits the markup and the script entirely. Each predicate is imported from
+    the blueprint that enforces it, so the client and the API cannot disagree
+    about what is enabled.
+    """
+    def gate(name, fn):
+        # A broken subsystem degrades to "off", matching what already happens
+        # to its blueprint: routes.py registers all three inside a try, so an
+        # import failure has always meant the feature is absent. Warn once
+        # rather than per request -- this runs on every page render.
+        try:
+            return bool(fn())
+        except Exception:
+            if name not in _SIDEBAR_GATE_WARNED:
+                _SIDEBAR_GATE_WARNED.add(name)
+                logger.warning(
+                    "%s gate is unavailable; the sidebar will stay off", name,
+                    exc_info=True)
+            return False
+
+    def memos():
+        from potato.memos.api import memos_enabled
+        return memos_enabled(cfg)
+
+    def codebook():
+        from potato.codebook.api import codebook_enabled
+        return codebook_enabled(cfg)
+
+    def search_claim():
+        from potato.search.service import search_settings
+        return (search_settings(cfg) or {}).get("annotator_claim")
+
+    return {
+        "memos_enabled": gate("memos", memos),
+        "codebook_ui_enabled": gate("codebook", codebook),
+        "search_claim_enabled": gate("search", search_claim),
+    }
 
 
 def render_page_with_annotations(username: str):
@@ -2970,6 +3028,9 @@ def render_page_with_annotations(username: str):
         jumping_to_id_disabled=config.get("jumping_to_id_disabled", False),
         # Hotkey review mode (auto-advance when all required schemas complete)
         review_mode=config.get("review_mode", {}) or {},
+        # Universal sidebars (memos / search-and-claim / codebook tray). Off
+        # unless the task enables them; see _annotation_sidebar_flags.
+        **_annotation_sidebar_flags(config),
         # ai=ai_hints,
         **kwargs
     )

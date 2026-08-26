@@ -761,7 +761,7 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=3"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=30"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=31"></script>
     <!-- Shared geometry for the bottom-anchored floating widgets below; must
          load before them. Unconditional: tiny, and several may be enabled at
          once (see the combined showcase example). -->
@@ -1059,9 +1059,12 @@
         });
     </script>
 
-    <!-- Universal Memos sidebar (self-hides if annotation_ui.memos is off:
-         the API returns 503 and the toggle stays hidden) -->
+    <!-- Universal Memos sidebar. Rendered only when annotation_ui.memos is
+         on (or qda/solo mode implies it) -- the client used to load it always
+         and probe /api/memos to find out, which cost every annotator a 503 per
+         page for a feature they did not have. -->
     {% if is_annotation_page %}
+    {% if memos_enabled | default(false) %}
     <button type="button" id="memo-panel-toggle" class="memo-panel-toggle" hidden>
         &#128221; Notes
     </button>
@@ -1090,11 +1093,13 @@
             </div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='memos.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='memos.js') }}?v=3"></script>
+    {% endif %}
 
-    <!-- Annotator search-and-claim sidebar (self-hides unless
-         search.annotator_claim is enabled: the enable-probe only gets
-         400 when the feature is on and the user is authed). -->
+    <!-- Annotator search-and-claim sidebar. Rendered only when
+         search.annotator_claim is on; the client still probes once to confirm
+         the session is authed, since the server flag cannot know that. -->
+    {% if search_claim_enabled | default(false) %}
     <button type="button" id="search-panel-toggle" class="search-panel-toggle" hidden>
         &#128269; Find
     </button>
@@ -1114,10 +1119,12 @@
         </div>
     </div>
     <script src="{{ url_for('static', filename='search.js') }}?v=3"></script>
+    {% endif %}
 
-    <!-- Universal Codebook tray (self-hides unless the codebook is
-         enabled: the enable-probe is not 200 otherwise). The composer
-         only appears when codebook_mode is extensible/open. -->
+    <!-- Universal Codebook tray, rendered only when a codebook is configured.
+         The composer inside it still appears only when codebook_mode is
+         extensible/open, which the tray payload reports. -->
+    {% if codebook_ui_enabled | default(false) %}
     <button type="button" id="cb-panel-toggle" class="cb-panel-toggle" hidden>
         &#127991; Codebook
     </button>
@@ -1208,7 +1215,8 @@
             <div id="cb-mode-hint" class="cb-mode-hint"></div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='codebook.js') }}?v=14"></script>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=15"></script>
+    {% endif %}
     {% endif %}
 </body>
 </html>

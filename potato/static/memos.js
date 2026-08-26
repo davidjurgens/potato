@@ -114,10 +114,20 @@
         });
     }
 
+    // The GET currently outstanding, as {iid, promise}. init() and
+    // annotation.js's loadCurrentInstance() both call load() on a page load
+    // and used to fetch the same instance's notes twice. Sharing only an
+    // *in-flight* request keeps the refreshes after an add, edit or delete
+    // honest -- those run once the first one has settled, so they never fold
+    // into it.
+    var inFlight = null;
+
     function load() {
-        state.instanceId = currentInstanceId();
-        if (!state.instanceId) return Promise.resolve();
-        return api("GET", "?instance_id=" + encodeURIComponent(state.instanceId))
+        var iid = currentInstanceId();
+        if (!iid) return Promise.resolve();
+        if (inFlight && inFlight.iid === iid) return inFlight.promise;
+        state.instanceId = iid;
+        var pending = api("GET", "?instance_id=" + encodeURIComponent(iid))
             .then(function (res) {
                 if (res.status === 503) { state.enabled = false; return null; }
                 state.enabled = true;
@@ -131,7 +141,12 @@
                 render();
                 if (data.open_by_default && !dismissed()) openPanel();
             })
-            .catch(function () { /* network: leave panel as-is */ });
+            .catch(function () { /* network: leave panel as-is */ })
+            .then(function () {
+                if (inFlight && inFlight.promise === pending) inFlight = null;
+            });
+        inFlight = { iid: iid, promise: pending };
+        return pending;
     }
 
     function resetComposer() {

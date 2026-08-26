@@ -637,9 +637,20 @@
             .catch(function () { return cache || null; });
     }
 
+    // The instance whose tray/banner/worklist load has already been started.
+    // init() and annotation.js's loadCurrentInstance() both reach onInstance()
+    // on a page load, and each used to issue the whole chain -- two full
+    // codebook fetches, two provenance calls and two worklist calls for one
+    // page. A real navigation is a full reload, so this resets by itself;
+    // an in-page instance change still gets a fresh load because the id moved.
+    var loadedFor = null;
+
     function onInstance() {
         if (!el("cb-panel")) return;
-        syncCodebook(instanceId());
+        var iid = instanceId();
+        if (loadedFor === iid) return;
+        loadedFor = iid;
+        syncCodebook(iid);
         refreshProvenance();
         refreshAdmin();
     }
@@ -867,15 +878,23 @@
         }).join("");
     }
 
-    function populateAdmin() {
+    // `proposals` is the body of the probe request when populateAdmin is
+    // called straight from refreshAdmin's probe. Without it the probe and the
+    // populate both GET /admin/proposals, so an adjudicator paid for the same
+    // list twice on every instance.
+    function populateAdmin(proposals) {
         var codes = flatCodes();
         fillCodeSelect(el("cb-merge-src"), codes, "merge from…");
         fillCodeSelect(el("cb-merge-dst"), codes, "into…");
         fillCodeSelect(el("cb-split-src"), codes, "split…");
-        fetch(ADMIN_API + "/proposals")
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (d) { renderProposals(d && d.proposals); })
-            .catch(function () { /* best-effort */ });
+        if (proposals !== undefined) {
+            renderProposals(proposals);
+        } else {
+            fetch(ADMIN_API + "/proposals")
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (d) { renderProposals(d && d.proposals); })
+                .catch(function () { /* best-effort */ });
+        }
         fetch(ADMIN_API + "/changes")
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) { renderChanges(d && d.changes); })
@@ -893,7 +912,11 @@
         fetch(ADMIN_API + "/proposals").then(function (r) {
             adminOK = r.status === 200;
             sec.hidden = !adminOK;
-            if (adminOK) populateAdmin();
+            if (!adminOK) return null;
+            return r.json();
+        }).then(function (d) {
+            if (d === null) return;
+            populateAdmin((d && d.proposals) || []);
         }).catch(function () { sec.hidden = true; });
     }
 
@@ -1377,22 +1400,22 @@
 
     function init() {
         if (!window.config || !window.config.is_annotation_page) return;
+        // The tray markup is only in the page when the server says a codebook
+        // is configured, so its presence *is* the gate. This used to probe
+        // GET /api/codebook for a 200 and stay hidden on the 503 -- which meant
+        // every task without a codebook paid for the probe.
         if (!el("cb-panel")) return;
-        fetch(API).then(function (r) {
-            if (r.status === 200) {
-                var t = el("cb-panel-toggle");
-                if (t) t.hidden = false;
-                wire();
-                return r.json();
-            }
-            return null;
-        }).then(function (data) {
-            if (!data) return;
-            writeCache(data);
-            renderTray(data);
-            reconcileForms(data, instanceId());
-            refreshProvenance();
-        }).catch(function () { /* leave hidden */ });
+        var t = el("cb-panel-toggle");
+        if (t) t.hidden = false;
+        wire();
+        // The load itself belongs to annotation.js: its reconcile has to run
+        // after generateAnnotationForms(), and init() fires long before that.
+        // Doing it here as well is what produced the duplicate fetches. The
+        // timer is a safety net for a page that renders the tray without the
+        // annotation bootstrap -- it does nothing once onInstance() has run.
+        setTimeout(function () {
+            if (loadedFor === null) onInstance();
+        }, 2000);
     }
 
     if (document.readyState === "loading") {
