@@ -20,14 +20,27 @@ logger = logging.getLogger(__name__)
 class WebhookReceiver:
     """Receives and normalizes agent traces from webhook POST requests."""
 
-    def __init__(self, api_key: str = "", allowed_formats: Optional[List[str]] = None):
+    def __init__(
+        self,
+        api_key: str = "",
+        allowed_formats: Optional[List[str]] = None,
+        allow_unauthenticated: bool = False,
+    ):
         self.api_key = api_key
         self.allowed_formats = allowed_formats or ["auto", "generic", "langsmith"]
+        self.allow_unauthenticated = allow_unauthenticated
 
     def validate_auth(self, request_headers: Dict[str, str]) -> bool:
-        """Validate webhook authentication."""
+        """Validate webhook authentication.
+
+        With no `trace_ingestion.api_key` configured this used to return True,
+        so turning trace ingestion on without also setting a key left an open
+        endpoint that writes into the annotation task. It now fails closed;
+        an admin who genuinely wants an open receiver (a trusted private
+        network, say) sets `trace_ingestion.allow_unauthenticated: true`.
+        """
         if not self.api_key:
-            return True  # No auth required
+            return self.allow_unauthenticated
 
         # Check Authorization header
         auth = request_headers.get("Authorization", "")
