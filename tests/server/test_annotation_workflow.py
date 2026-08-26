@@ -61,7 +61,6 @@ class TestAnnotationWorkflow:
             self.annotation_schemes,
             data_files=[self.data_file],
             annotation_task_name="Annotation Workflow Test",
-            output_annotation_format="json",
             max_annotations_per_user=10,
             assignment_strategy="fixed_order"
         )

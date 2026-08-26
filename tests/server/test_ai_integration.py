@@ -173,7 +173,6 @@ ai_support:
       on_prev: 0
 
 output_annotation_dir: {test_dir}/output
-output_annotation_format: json
 """
         config_file = os.path.join(test_dir, "ai_mock_config.yaml")
         with open(config_file, 'w') as f:

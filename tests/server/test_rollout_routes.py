@@ -73,7 +73,6 @@ def _write_config(test_dir, **schema_overrides):
         "task_dir": test_dir,
         "media_directory": os.path.join(test_dir, "media"),
         "output_annotation_dir": os.path.join(test_dir, "out"),
-        "output_annotation_format": "json",
         "data_files": [data_file],
         "item_properties": {"id_key": "id", "text_key": "note"},
         "user_config": {"allow_all_users": True},

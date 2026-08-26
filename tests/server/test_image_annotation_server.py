@@ -91,7 +91,6 @@ class TestImageAnnotationServerConfig:
         config_content = {
             "server_name": "Image Annotation Test",
             "annotation_task_name": "Test Task",
-            "output_annotation_format": "json",
             "alert_time_each_instance": 0,
             "item_properties": {
                 "id_key": "id",
@@ -131,7 +130,6 @@ class TestImageAnnotationServerConfig:
         config_content = {
             "server_name": "Image Annotation Test",
             "annotation_task_name": "Test Task",
-            "output_annotation_format": "json",
             "alert_time_each_instance": 0,
             "item_properties": {
                 "id_key": "id",

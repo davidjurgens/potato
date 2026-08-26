@@ -115,7 +115,6 @@ def server():
             },
             additional_config={
                 "export_include_phase_data": True,
-                "output_annotation_format": "csv",
                 "training": {
                     "enabled": True,
                     "data_file": "training_data.json",

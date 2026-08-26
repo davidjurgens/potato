@@ -66,7 +66,6 @@ def create_dialogue_span_config(test_dir):
         "annotation_task_name": "Dialogue Span Selenium Test",
         "task_dir": os.path.abspath(test_dir),
         "output_annotation_dir": os.path.join(os.path.abspath(test_dir), "annotation_output"),
-        "output_annotation_format": "json",
         "data_files": [os.path.join(os.path.abspath(test_dir), "data", "test_traces.json")],
         "item_properties": {
             "id_key": "id",

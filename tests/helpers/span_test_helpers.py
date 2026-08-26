@@ -163,7 +163,6 @@ def create_span_test_config(
         "annotation_task_name": "Span Test",
         "task_dir": test_dir,
         "output_annotation_dir": os.path.join(test_dir, "output"),
-        "output_annotation_format": "jsonl",
         "data_files": [data_file],
         "item_properties": {
             "id_key": "id",

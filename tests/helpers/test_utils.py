@@ -117,7 +117,7 @@ def create_test_config(
 
     # Add optional kwargs that are passed through
     optional_fields = [
-        "max_annotations_per_user", "assignment_strategy", "output_annotation_format",
+        "max_annotations_per_user", "assignment_strategy",
         "random_seed", "admin_api_key", "max_annotations_per_item",
         "icl_labeling", "adjudication", "mace", "list_as_text",
         "keystroke_logging", "annotation_telemetry",

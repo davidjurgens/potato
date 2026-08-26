@@ -373,7 +373,7 @@ def generate_config(
     lines.append("")
     lines.append("task_dir: .")
     lines.append("output_annotation_dir: annotation_output")
-    lines.append("output_annotation_format: json")
+    lines.append("export_annotation_format: jsonl")
     lines.append("")
 
     # --- instance display -------------------------------------------------- #

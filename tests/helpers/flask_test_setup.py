@@ -232,8 +232,6 @@ class FlaskTestServer:
                 config['persist_sessions'] = False
 
                 # Add missing required config keys if not present
-                if 'output_annotation_format' not in config:
-                    config['output_annotation_format'] = 'jsonl'
                 if 'site_dir' not in config:
                     config['site_dir'] = 'output'
                 if 'alert_time_each_instance' not in config:

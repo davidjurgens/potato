@@ -63,7 +63,6 @@ server_name: Audio Annotation UI Test
 annotation_task_name: Audio Annotation UI Test
 task_dir: {cls.test_dir}
 output_annotation_dir: {cls.test_dir}/annotation_output/
-output_annotation_format: json
 
 data_files:
   - data/test_audio.json

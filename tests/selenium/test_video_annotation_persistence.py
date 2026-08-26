@@ -77,7 +77,6 @@ server_name: Video Annotation Test Server
 annotation_task_name: Video Annotation Persistence Test
 task_dir: {cls.test_output_dir}
 output_annotation_dir: annotation_output/
-output_annotation_format: json
 annotation_codebook_url: ''
 
 data_files:

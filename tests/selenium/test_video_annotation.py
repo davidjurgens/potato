@@ -62,7 +62,6 @@ server_name: Video Annotation Test
 annotation_task_name: Video Annotation Test
 task_dir: {cls.test_dir}
 output_annotation_dir: {cls.test_dir}/annotation_output/
-output_annotation_format: json
 
 data_files:
   - data/test_videos.json
@@ -562,7 +561,6 @@ server_name: Video Test No Peaks
 annotation_task_name: Video Test No Peaks
 task_dir: {cls.test_dir}
 output_annotation_dir: {cls.test_dir}/annotation_output/
-output_annotation_format: json
 
 data_files:
   - data/test_videos.json

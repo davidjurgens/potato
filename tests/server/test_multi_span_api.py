@@ -54,7 +54,6 @@ def create_multi_span_config(test_dir):
         "annotation_task_name": "Multi-Span Test",
         "task_dir": os.path.abspath(test_dir),
         "output_annotation_dir": os.path.join(os.path.abspath(test_dir), "annotation_output"),
-        "output_annotation_format": "json",
         "annotation_codebook_url": "",
         "data_files": [os.path.join(os.path.abspath(test_dir), "data", "test_data.json")],
         "item_properties": {

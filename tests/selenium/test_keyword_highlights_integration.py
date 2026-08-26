@@ -77,7 +77,6 @@ server_name: keyword highlights test
 annotation_task_name: Keyword Highlights Test
 task_dir: {cls.test_dir}
 output_annotation_dir: annotation_output/
-output_annotation_format: json
 data_files:
   - data.json
 item_properties:

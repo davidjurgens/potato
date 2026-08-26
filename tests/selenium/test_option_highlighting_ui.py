@@ -85,7 +85,6 @@ class TestOptionHighlightingUI(unittest.TestCase):
             "data_files": ["test_data.json"],
             "item_properties": {"id_key": "id", "text_key": "text"},
             "output_annotation_dir": "annotation_output",
-            "output_annotation_format": "json",
             "user_config": {"allow_all_users": True},
             "annotation_schemes": [
                 {
