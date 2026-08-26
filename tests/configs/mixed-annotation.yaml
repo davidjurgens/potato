@@ -4,7 +4,6 @@ annotation_task_name: Mixed Annotation Types Test
 debug: true
 task_dir: output/mixed-annotation
 output_annotation_dir: output/mixed-annotation
-output_annotation_format: json
 annotation_codebook_url: ''
 max_annotations_per_user: 10
 assignment_strategy: fixed_order

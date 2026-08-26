@@ -4,7 +4,6 @@
 annotation_task_name: Malicious Path Traversal Test
 task_dir: output/malicious-test
 output_annotation_dir: output/malicious-test
-output_annotation_format: json
 max_annotations_per_user: 10
 assignment_strategy: fixed_order
 

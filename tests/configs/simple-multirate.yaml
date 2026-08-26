@@ -1,7 +1,6 @@
 annotation_task_name: Simple Multirate Test
 task_dir: output/simple-multirate
 output_annotation_dir: output/simple-multirate/annotations
-output_annotation_format: jsonl
 data_files:
 - ../../../data/test_data.json
 item_properties:
