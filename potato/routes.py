@@ -2790,6 +2790,12 @@ def admin_api_config():
     Returns:
         flask.Response: JSON response with configuration data or update result
     """
+    # The POST branch is authorized inside admin_dashboard.update_config(), but
+    # the GET branch read straight from `config` and returned it to anyone.
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     if request.method == "GET":
         # Return current configuration
         response_data = {
@@ -2830,6 +2836,10 @@ def admin_api_set_user_instances(username):
     Returns:
         flask.Response: JSON response with updated user info
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     data = request.get_json()
     if not data or 'max_instances' not in data:
         return jsonify({"error": "max_instances is required"}), 400
@@ -2864,6 +2874,10 @@ def admin_api_stale_assignments():
     Returns:
         flask.Response: JSON with stale assignment info
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     import time
     ism = get_item_state_manager()
     usm = get_user_state_manager()
@@ -2901,6 +2915,10 @@ def admin_api_reclaim_instance():
         instance_id (str): The instance to reclaim
         username (str): The user to reclaim from
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     data = request.get_json()
     if not data or 'instance_id' not in data or 'username' not in data:
         return jsonify({"error": "instance_id and username are required"}), 400
@@ -3524,6 +3542,10 @@ def admin_api_step_agreement():
     Returns:
         JSON with overall, per_step, and per_instance agreement.
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         from potato.step_agreement import compute_step_agreement
         from potato.item_state_management import get_item_state_manager
@@ -3571,6 +3593,10 @@ def admin_api_step_quality():
     Returns:
         JSON with gold standard results and attention check stats.
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         step_qc_config = config.get("quality_control", {}).get("step_level", {})
         if not step_qc_config.get("enabled", False):
@@ -3827,6 +3853,10 @@ def admin_api_icl_status():
         - accuracy_metrics: Verification-based accuracy
         - labeling_paused: Whether labeling is currently paused
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         from potato.ai.icl_labeler import get_icl_labeler
         icl_labeler = get_icl_labeler()
@@ -3855,6 +3885,10 @@ def admin_api_icl_examples():
     Returns:
         JSON with examples grouped by schema
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         from potato.ai.icl_labeler import get_icl_labeler
         icl_labeler = get_icl_labeler()
@@ -3902,6 +3936,10 @@ def admin_api_icl_predictions():
     Returns:
         JSON with predictions list
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         from potato.ai.icl_labeler import get_icl_labeler
         icl_labeler = get_icl_labeler()
@@ -3956,6 +3994,10 @@ def admin_api_icl_accuracy():
     Returns:
         JSON with accuracy metrics
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         from potato.ai.icl_labeler import get_icl_labeler
         icl_labeler = get_icl_labeler()
@@ -3995,6 +4037,10 @@ def admin_api_icl_trigger():
     Returns:
         JSON with operation result
     """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin authentication required"}), 403
+
     try:
         from potato.ai.icl_labeler import get_icl_labeler
         icl_labeler = get_icl_labeler()
@@ -10176,10 +10222,21 @@ def chat_config():
 
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
+    """Stop the development server.
+
+    This shipped with no authentication of any kind. Under gunicorn it is inert
+    (werkzeug.server.shutdown is absent, so it 500s), but under `potato start`
+    -- which is how nearly every task is run -- an unauthenticated POST from
+    anyone who could reach the port stopped the server.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({'error': 'Admin authentication required'}), 403
+
     func = request.environ.get('werkzeug.server.shutdown')
     if func is None:
         return jsonify({'error': 'Not running with the Werkzeug Server'}), 500
-    logger.info('Shutting down server via /shutdown')
+    logger.info('Shutting down server via /shutdown (authorized)')
     func()
     return jsonify({'status': 'Server shutting down...'})
 
