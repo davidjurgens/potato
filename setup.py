@@ -54,6 +54,17 @@ _FORMAT_DEPS = [
     "pygments>=2.17.0",
     "openpyxl>=3.1.0",
 ]
+# Headless-browser rendering for `potato preview --screenshot`, which boots a
+# task and reports what the browser did with it. Optional: without it preview
+# still validates and still returns the server-rendered HTML.
+# Model Context Protocol server, so coding agents can discover annotation types,
+# validate configs and render tasks. Imported lazily by `potato mcp`.
+_MCP_DEPS = [
+    "mcp>=1.2.0",
+]
+_PREVIEW_DEPS = [
+    "playwright>=1.40.0",
+]
 _VIZ_DEPS = [
     "umap-learn>=0.5.0",
 ]
@@ -138,6 +149,10 @@ setup(
         "ai": _AI_DEPS,
         "formats": _FORMAT_DEPS,
         "viz": _VIZ_DEPS,
+        "preview": _PREVIEW_DEPS,
+        "mcp": _MCP_DEPS,
+        # Everything a coding agent needs: the MCP server plus browser rendering.
+        "agent": _MCP_DEPS + _PREVIEW_DEPS,
         "export": _EXPORT_DEPS,
         "huggingface": _HF_DEPS,
         # Dataset publishing: HuggingFace push + parquet output. Zenodo and the
@@ -151,7 +166,7 @@ setup(
         "vision": _VISION_DEPS,
         # `all` deliberately excludes `vision`: torch is a multi-gigabyte
         # install, and nothing in the default experience needs it.
-        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _DEPLOY_DEPS,
+        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _DEPLOY_DEPS + _PREVIEW_DEPS + _MCP_DEPS,
     },
     include_package_data=True,
     entry_points={

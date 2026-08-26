@@ -92,7 +92,6 @@ from potato.solo_mode.routes import solo_mode_bp
 
 from potato.qda_mode import init_qda_mode_manager
 
-from potato.create_task_cli import create_task_cli
 from potato.server_utils.arg_utils import arguments
 from potato.server_utils.config_module import init_config, config
 from potato.server_utils.schemas.span import render_span_annotations
@@ -4059,6 +4058,16 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         atexit.register(lambda: (get_automation_manager() and get_automation_manager().shutdown()))
         logger.info("Registered automation-rules blueprint")
 
+    # MCP control surface. Config-gated like the blueprints below, and with an
+    # extra refusal: register_mcp_routes() declines under debug: true unless
+    # mcp.allow_debug is set, because debug disables admin auth server-wide.
+    try:
+        from potato.mcp_server.routes import register_mcp_routes
+
+        register_mcp_routes(flask_app, config)
+    except Exception as e:
+        logger.warning("Could not register the MCP control surface: %s", e)
+
     # Semantic curation (Catalog): embedding index + similarity search + slices.
     if config.get("curation", {}).get("enabled", False):
         from potato.curation import init_curation_manager, get_curation_manager
@@ -5016,6 +5025,26 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == 'share':
         from potato.deploy.share_cli import main as share_main
         sys.exit(share_main(sys.argv[2:]))
+
+    # ``validate`` and ``preview`` inspect a config without starting anything.
+    # They take a config file like the server modes do, but each carries flags
+    # (--strict/--json, --format/--layout-only) that would collide with the
+    # server parser's, and registering them there would pull all ~24 server
+    # flags into their --help.
+    if len(sys.argv) > 1 and sys.argv[1] == 'validate':
+        from potato.validate_cli import main as validate_main
+        sys.exit(validate_main(sys.argv[2:]))
+
+    if len(sys.argv) > 1 and sys.argv[1] == 'preview':
+        from potato.preview_cli import main as preview_main
+        sys.exit(preview_main(sys.argv[2:]))
+
+    # ``mcp`` runs the Model Context Protocol server that coding agents connect
+    # to. Its own subcommands (serve/tools/config), and `serve` takes a --root
+    # rather than a config file.
+    if len(sys.argv) > 1 and sys.argv[1] == 'mcp':
+        from potato.mcp_server.cli import main as mcp_main
+        sys.exit(mcp_main(sys.argv[2:]))
 
     # Parse command line arguments
     args = arguments()

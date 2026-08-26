@@ -270,7 +270,18 @@ KNOWN_CONFIG_KEYS = {
         "completion_code", "sandbox_mode",
     },
     "webhooks": {"enabled", "endpoints"},
-    "trace_ingestion": {"enabled", "sources", "api_key", "notify_annotators"},
+    # Model Context Protocol control surface. Absent or disabled means the
+    # blueprint is never registered, so the endpoints do not exist at all.
+    "mcp": {
+        "enabled", "tools", "destructive", "scope", "auth", "audit_log",
+        "allow_debug",
+    },
+    "trace_ingestion": {
+        "enabled", "sources", "api_key", "notify_annotators",
+        # Opt back in to an unauthenticated receiver. Without an api_key the
+        # webhook endpoints now reject every request; this re-opens them.
+        "allow_unauthenticated",
+    },
     "cot_segmentation": {
         "source_key", "target_key", "strategy", "min_step_chars", "max_steps",
         "markers", "sentences_per_step", "llm_max_chars",
@@ -1763,6 +1774,7 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate instance display configuration if present
     validate_instance_display_config(config_data)
+    validate_mcp_config(config_data)
 
     # Validate format_handling configuration if present
     validate_format_handling_config(config_data)
@@ -6081,6 +6093,81 @@ def parse_active_learning_config(config_data: Dict[str, Any]) -> 'ActiveLearning
         llm_enabled=llm_enabled,
         llm_config=llm_config
     )
+
+
+def validate_mcp_config(config_data: Dict[str, Any]) -> None:
+    """Validate the `mcp:` block.
+
+    Unlike every other unknown key in this file, an unrecognized tool name here
+    RAISES. The warn-only policy is right for a key that turns a feature on: the
+    worst case is the feature stays off. It is wrong for an allowlist. An admin
+    who writes `read_annotaitons` and gets a warning buried in the startup log
+    believes they granted something they did not, and one who typos a name that
+    happens to match a real tool grants something they never intended. Failing
+    at boot is the only safe reading of a security allowlist.
+    """
+    mcp_config = config_data.get("mcp")
+    if mcp_config is None:
+        return
+    if not isinstance(mcp_config, dict):
+        raise ConfigValidationError("'mcp' must be a mapping")
+    if not mcp_config.get("enabled", False):
+        return
+
+    from potato.mcp_server.live_tools import DESTRUCTIVE_TOOL_NAMES, TOOL_NAMES
+
+    tools = mcp_config.get("tools", [])
+    if not isinstance(tools, list):
+        raise ConfigValidationError("'mcp.tools' must be a list of tool names")
+
+    unknown = [t for t in tools if t not in TOOL_NAMES]
+    if unknown:
+        raise ConfigValidationError(
+            f"mcp.tools names unknown tool(s): {', '.join(map(str, unknown))}. "
+            f"Valid tools: {', '.join(TOOL_NAMES)}"
+        )
+
+    destructive = mcp_config.get("destructive", [])
+    if not isinstance(destructive, list):
+        raise ConfigValidationError("'mcp.destructive' must be a list of tool names")
+
+    unknown = [t for t in destructive if t not in TOOL_NAMES]
+    if unknown:
+        raise ConfigValidationError(
+            f"mcp.destructive names unknown tool(s): {', '.join(map(str, unknown))}. "
+            f"Valid tools: {', '.join(TOOL_NAMES)}"
+        )
+
+    not_destructive = [t for t in destructive if t not in DESTRUCTIVE_TOOL_NAMES]
+    if not_destructive:
+        raise ConfigValidationError(
+            f"mcp.destructive lists tool(s) that are not destructive: "
+            f"{', '.join(not_destructive)}. Destructive tools are: "
+            f"{', '.join(DESTRUCTIVE_TOOL_NAMES)}"
+        )
+
+    ungranted = [t for t in destructive if t not in tools]
+    if ungranted:
+        raise ConfigValidationError(
+            f"mcp.destructive lists {', '.join(ungranted)}, which mcp.tools does "
+            f"not grant. A destructive tool must appear in both."
+        )
+
+    scope = mcp_config.get("scope")
+    if scope is not None and not isinstance(scope, dict):
+        raise ConfigValidationError("'mcp.scope' must be a mapping")
+
+    auth = mcp_config.get("auth")
+    if auth is not None and not isinstance(auth, dict):
+        raise ConfigValidationError("'mcp.auth' must be a mapping")
+
+    if tools and config_data.get("debug") and not mcp_config.get("allow_debug"):
+        raise ConfigValidationError(
+            "mcp.enabled is true alongside debug: true. Debug mode disables "
+            "admin authentication across the server, so an MCP control surface "
+            "on a debug server is a remote shell. Turn off debug, or set "
+            "mcp.allow_debug: true to state that you mean it."
+        )
 
 
 def validate_instance_display_config(config_data: Dict[str, Any]) -> None:

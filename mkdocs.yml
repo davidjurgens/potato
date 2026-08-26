@@ -194,6 +194,8 @@ nav:
     - Tools:
         - Import CLI: tools/import_cli.md
         - Preview CLI: tools/preview_cli.md
+        - MCP Server: tools/mcp_server.md
+        - Agent Instructions: tools/authoring-agents.md
         - Migration CLI: tools/migration_cli.md
         - Simulator: tools/simulator.md
         - Debugging Guide: tools/debugging_guide.md
