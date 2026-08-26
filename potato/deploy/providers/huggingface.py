@@ -110,6 +110,14 @@ class HuggingFaceProvider(Provider):
 
     # -- plan ----------------------------------------------------------
 
+    def verify_credential(self):
+        identity = _hf_api(self.token).whoami()
+        name = identity.get("name") or identity.get("fullname") or "unknown"
+        # PRO is what Docker Spaces require, so it is the fact worth surfacing
+        # before someone spends a deploy discovering a 402.
+        plan_type = (identity.get("plan") or identity.get("type") or "").strip()
+        return f"{name} ({plan_type})" if plan_type else name
+
     def plan(self, spec: DeploySpec, bundle) -> DeployPlan:
         owner = spec.extra.get("owner") or "<your-username>"
         repo_id = f"{owner}/{spec.name}"

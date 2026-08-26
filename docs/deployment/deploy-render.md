@@ -115,6 +115,7 @@ tier limit. The dashboard has the reason.
 
 ## Related
 
+- [Deploying a task](one-command-deploy.md) — choosing a target
 - [Docker](docker.md) — the image this deploys
 - [DigitalOcean](deploy-digitalocean.md) — a persistent VM, from $18/month
 - [HuggingFace Spaces](deploy-huggingface.md) — an ephemeral host with the same

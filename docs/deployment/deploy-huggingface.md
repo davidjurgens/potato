@@ -18,7 +18,8 @@ plan to create: PRO for personal accounts, Team or Enterprise for
 organizations."* Potato Spaces are Docker Spaces, so creating one needs PRO
 ($9/month) or a Team plan. Restarting a Space you already have does not.
 
-If you want a free host, use [Render](deploy-render.md) or `potato share`.
+If you want a free host, use [Render](deploy-render.md) or
+[`potato share`](deploy-share.md).
 
 **A Space's filesystem does not survive.** It is wiped on every rebuild and
 every restart, and free Spaces sleep after 48 hours idle. Annotations written to

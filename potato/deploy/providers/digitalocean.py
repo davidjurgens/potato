@@ -183,6 +183,18 @@ class DigitalOceanProvider(Provider):
 
     # -- plan ----------------------------------------------------------
 
+    def verify_credential(self):
+        account = DigitalOceanAPI(self.token).verify_token()
+        email = account.get("email") or "unknown account"
+        limit = account.get("droplet_limit")
+        status = account.get("status")
+        detail = f"{email}"
+        if status and status != "active":
+            detail += f", status {status}"
+        if limit is not None:
+            detail += f", droplet limit {limit}"
+        return detail
+
     def plan(self, spec: DeploySpec, bundle) -> DeployPlan:
         region = spec.region or DEFAULT_REGION
         size = spec.size or DEFAULT_SIZE

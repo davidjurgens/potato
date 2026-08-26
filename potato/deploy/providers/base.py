@@ -116,6 +116,15 @@ class Provider(ABC):
     ephemeral_fs: bool = False
     #: True when the target is reachable from the public internet.
     public: bool = True
+    #: One line for `potato deploy providers`. Set it where the flags above
+    #: would read wrong: `tunnel` has a persistent filesystem and is the least
+    #: durable target there is, so deriving "durable" from `ephemeral_fs` is
+    #: exactly backwards.
+    summary: str = ""
+    #: True when the bundle directory *is* the running task's directory rather
+    #: than a copy that gets uploaded. Rebuilding a mounted bundle must not
+    #: delete the annotations the server has been writing into it.
+    mounts_bundle: bool = False
     supports_logs: bool = False
     supports_pull: bool = False
 
@@ -148,6 +157,16 @@ class Provider(ABC):
 
     def pull(self, record, dest: str) -> PullResult:
         raise ProviderError(f"{self.name} does not support pulling data")
+
+    def verify_credential(self) -> Optional[str]:
+        """Ask the provider who this token belongs to, or return None.
+
+        A token that is expired, read-only, or pasted with a trailing newline
+        looks identical to a good one until `up` is several resources deep.
+        Returning None means the target has no cheap identity call, not that
+        the token is fine.
+        """
+        return None
 
     # -- helpers -------------------------------------------------------
 

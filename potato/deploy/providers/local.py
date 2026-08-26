@@ -49,18 +49,48 @@ def _docker_available() -> bool:
         return False
 
 
-def _run(args: List[str], check: bool = True, timeout: int = 120) -> str:
+def _run(args: List[str], check: bool = True, timeout: int = 120,
+         merge_stderr: bool = False) -> str:
+    """Run a docker command and return its stdout.
+
+    ``merge_stderr`` folds the command's stderr into the returned text, which
+    ``docker logs`` needs: it replays the container's two streams on its own
+    two streams, and a Python traceback or a gunicorn boot failure arrives on
+    stderr. Reading stdout alone returns the access log and drops the reason
+    the server died.
+    """
     try:
-        result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        if merge_stderr:
+            result = subprocess.run(args, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True,
+                                    timeout=timeout)
+        else:
+            result = subprocess.run(args, capture_output=True, text=True,
+                                    timeout=timeout)
     except FileNotFoundError:
         raise ProviderError("docker is not installed or not on PATH")
     except subprocess.TimeoutExpired:
         raise ProviderError(f"docker command timed out: {' '.join(args[:3])}...")
     if check and result.returncode != 0:
-        raise ProviderError(
-            f"docker command failed ({result.returncode}): "
-            f"{result.stderr.strip() or result.stdout.strip()}")
+        detail = (result.stderr or "").strip() or (result.stdout or "").strip()
+        raise ProviderError(f"docker command failed ({result.returncode}): {detail}")
     return result.stdout
+
+
+def _image_present(image: str) -> bool:
+    """True when the image is already in the local daemon."""
+    return bool(_run(["docker", "images", "-q", image],
+                     check=False, timeout=30).strip())
+
+
+def _container_state(container: str) -> dict:
+    """`docker inspect`'s State object, or {} when the container is gone."""
+    output = _run(["docker", "inspect", "--format", "{{json .State}}", container],
+                  check=False, timeout=30)
+    try:
+        return json.loads(output.strip() or "{}")
+    except ValueError:
+        return {}
 
 
 @register_provider
@@ -69,7 +99,8 @@ class LocalProvider(Provider):
 
     name = "local"
     ephemeral_fs = False
-    public = False           # bound to localhost
+    public = False           # published on 127.0.0.1 only, see create()
+    mounts_bundle = True     # /app is the bundle directory, not a copy of it
     supports_logs = True
     supports_pull = True
 
@@ -91,12 +122,15 @@ class LocalProvider(Provider):
             Action("docker.rm", f"remove any existing container {container}",
                    {"container": container}),
             Action("docker.run",
-                   f"run {container} on port {port} with the bundle mounted at /app",
+                   f"run {container} on 127.0.0.1:{port} with the bundle "
+                   f"mounted at /app",
                    {"container": container, "image": image, "port": port,
                     "mount": bundle.bundle_dir if bundle else None,
                     # Keys only: values include generated secrets.
                     "env_keys": sorted(env)}),
-            Action("health.wait", f"poll http://127.0.0.1:{port}/ until it responds"),
+            Action("health.wait",
+                   f"poll http://127.0.0.1:{port}/health until the server answers, "
+                   f"failing if the container exits first"),
         ]
         if shutil.which("docker") is None:
             plan.warnings.append(
@@ -129,9 +163,29 @@ class LocalProvider(Provider):
 
         _run(["docker", "rm", "-f", container], check=False)
 
+        # `docker run` pulls only when the image is absent, so without this an
+        # image pulled weeks ago is reused forever and nothing says so. A pull
+        # failure is not fatal: an offline machine with the image already
+        # cached should still be able to deploy.
+        self.console(f"Pulling {image} ...")
+        try:
+            _run(["docker", "pull", image], timeout=900)
+        except ProviderError as exc:
+            if not _image_present(image):
+                raise ProviderError(
+                    f"could not pull {image} and no local copy exists: {exc}")
+            self.console(f"Could not pull {image}; using the local copy. ({exc})")
+
         env = self.runtime_env(spec, spec.extra.get("generated"))
+        # 127.0.0.1 explicitly. `-p 8000:7860` publishes on 0.0.0.0, so the
+        # task answers on the laptop's LAN address to anyone on the same wifi —
+        # while this provider declares `public = False` and preflight therefore
+        # suppresses every public-host warning, including open registration.
+        # Verified: before this, a deploy on a university network was reachable
+        # at http://<laptop-ip>:8000 and returned 200. To reach it from another
+        # device, use `potato share`, which gives it HTTPS and a real hostname.
         args = ["docker", "run", "-d", "--name", container,
-                "-p", f"{port}:7860",
+                "-p", f"127.0.0.1:{port}:7860",
                 "-v", f"{os.path.abspath(bundle.bundle_dir)}:/app",
                 "-w", "/app",
                 "--label", "potato-deploy=1",
@@ -156,11 +210,68 @@ class LocalProvider(Provider):
             store.upsert(record)
             raise
         record.provider_ref["container_id"] = container_id
+        store.upsert(record)
+
+        # A container that starts and a server that serves are different
+        # events. Every refusal the entrypoint makes — an unwritable mount, a
+        # config that will not parse, a multi-worker override — happens after
+        # `docker run` has already returned an id and exited 0. Without this
+        # wait, `up` prints a URL for a container that is already dead and the
+        # diagnosis stays in a log nobody was told to read.
+        try:
+            self._wait_until_serving(container, port)
+        except ProviderError:
+            record.status = "failed"
+            store.upsert(record)
+            raise
+
         record.status = "running"
         store.upsert(record)
 
         self.console(f"Started {container} at {record.url}")
         return record
+
+    def _wait_until_serving(self, container: str, port: int,
+                            timeout: float = 180.0) -> None:
+        """Block until the server answers, or explain why it never will."""
+        import urllib.error
+        import urllib.request
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            state = _container_state(container)
+            if state and not state.get("Running"):
+                raise ProviderError(self._boot_failure(container, state))
+            try:
+                urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/health", timeout=5)
+                return
+            except urllib.error.HTTPError:
+                return  # answering, even if with a 4xx
+            except Exception:
+                time.sleep(1)
+
+        raise ProviderError(
+            f"{container} did not answer on port {port} within "
+            f"{timeout:.0f}s. It is still running, so its logs are intact:\n"
+            f"  docker logs {container}")
+
+    @staticmethod
+    def _boot_failure(container: str, state: dict) -> str:
+        """The exit code and the tail of the log that explains it."""
+        code = state.get("ExitCode")
+        tail = _run(["docker", "logs", "--tail", "25", container],
+                    check=False, timeout=30, merge_stderr=True).strip()
+        message = [f"{container} exited with code {code} before serving a request."]
+        if state.get("OOMKilled"):
+            message.append(
+                "It was killed for running out of memory. Give Docker more RAM, "
+                "or use a smaller dataset.")
+        if tail:
+            message.append("Last 25 log lines:")
+            message.append(tail)
+        message.append(f"The container was left in place: docker logs {container}")
+        return "\n".join(message)
 
     # -- status --------------------------------------------------------
 
@@ -200,7 +311,7 @@ class LocalProvider(Provider):
         args.append(container)
 
         if not follow:
-            yield from _run(args, check=False).splitlines()
+            yield from _run(args, check=False, merge_stderr=True).splitlines()
             return
 
         process = subprocess.Popen(args, stdout=subprocess.PIPE,

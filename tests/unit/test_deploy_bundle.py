@@ -7,6 +7,7 @@ previous run's annotations) that should never leave the machine.
 """
 
 import os
+import pathlib
 import tarfile
 
 import pytest
@@ -18,6 +19,7 @@ from potato.deploy.bundle import (
     SOURCE_EXCLUDES,
     build_bundle,
     bundle_tarball,
+    collected_data_names,
     copy_tree,
     write_lfs_attributes,
 )
@@ -354,3 +356,98 @@ class TestBundleDirectoryInsideProject:
         written = copy_tree(str(src), str(dst), [])
         assert os.path.join("sub", "file.txt") in written
         assert not any("output" in w for w in written)
+
+
+class TestRebuildingDoesNotDeleteCollectedData:
+    """A rebuild must not destroy what the running server wrote into the bundle.
+
+    The `local` provider bind-mounts the bundle directory as the task's own
+    directory, so annotations and `project.sqlite` are written straight back
+    into it. `build_bundle` used to rmtree that directory, which made
+    `potato deploy up` — the documented way to push a change — delete every
+    annotation collected since the first deploy. Verified against a real
+    container: three annotations in, redeploy, zero annotations out.
+    """
+
+    def _project(self, tmp_path):
+        project = tmp_path / "project"
+        (project / "data").mkdir(parents=True)
+        (project / "data" / "items.json").write_text('[{"id":"1","text":"hi"}]')
+        config = project / "config.yaml"
+        config.write_text(yaml.safe_dump({
+            "task_dir": ".", "data_files": ["data/items.json"],
+            "output_annotation_dir": "annotation_output/study-1/"}))
+        return str(config)
+
+    def _populate(self, out_dir):
+        """Stand in for what the container writes while annotators work."""
+        annotations = out_dir / "annotation_output" / "study-1" / "alice"
+        annotations.mkdir(parents=True, exist_ok=True)
+        (annotations / "user_state.json").write_text('{"user_id": "alice"}')
+        (out_dir / "project.sqlite").write_bytes(b"SQLite format 3\x00")
+        (out_dir / "stale-input.txt").write_text("from the previous build")
+
+    def test_a_mounted_bundle_keeps_its_annotations(self, tmp_path):
+        config = self._project(tmp_path)
+        out_dir = tmp_path / "bundle"
+        build_bundle(config, str(out_dir), preserve_collected_data=True)
+        self._populate(out_dir)
+
+        build_bundle(config, str(out_dir), preserve_collected_data=True)
+
+        kept = out_dir / "annotation_output" / "study-1" / "alice" / "user_state.json"
+        assert kept.exists(), "the rebuild deleted the annotations"
+        assert (out_dir / "project.sqlite").exists()
+
+    def test_a_mounted_bundle_still_drops_stale_inputs(self, tmp_path):
+        """Preserving data must not turn the bundle into an append-only pile."""
+        config = self._project(tmp_path)
+        out_dir = tmp_path / "bundle"
+        build_bundle(config, str(out_dir), preserve_collected_data=True)
+        self._populate(out_dir)
+
+        build_bundle(config, str(out_dir), preserve_collected_data=True)
+
+        assert not (out_dir / "stale-input.txt").exists()
+
+    def test_an_uploaded_bundle_is_still_replaced_wholesale(self, tmp_path):
+        """The default has to stay destructive.
+
+        The same directory tree is reused across providers. A stale local
+        `project.sqlite` carried into a cloud provider's tarball would unpack
+        over the live database on the host, which is worse than what it fixes.
+        """
+        config = self._project(tmp_path)
+        out_dir = tmp_path / "bundle"
+        build_bundle(config, str(out_dir))
+        self._populate(out_dir)
+
+        build_bundle(config, str(out_dir))
+
+        assert not (out_dir / "project.sqlite").exists()
+        assert not (out_dir / "annotation_output" / "study-1").exists()
+
+    def test_a_nested_output_dir_is_kept_by_its_top_level_entry(self, tmp_path):
+        """`annotation_output/study-1/` is what a rebuild would delete."""
+        config = self._project(tmp_path)
+        assert "annotation_output" in collected_data_names(
+            yaml.safe_load(pathlib.Path(config).read_text()))
+
+    def test_the_databases_and_their_sidecars_are_named(self):
+        names = collected_data_names({"output_annotation_dir": "out/"})
+        for expected in ("project.sqlite", "project.sqlite-wal",
+                         "project.sqlite-shm", "datasets.sqlite", "out"):
+            assert expected in names
+
+
+class TestOnlyMountingProvidersPreserve:
+    """`mounts_bundle` is what decides, and only `local` sets it."""
+
+    def test_local_mounts_its_bundle(self):
+        from potato.deploy.providers.base import get_provider
+        assert get_provider("local").mounts_bundle is True
+
+    @pytest.mark.parametrize("name", ["digitalocean", "render", "huggingface"])
+    def test_upload_providers_do_not(self, name):
+        from potato.deploy.providers.base import get_provider
+        assert get_provider(name).mounts_bundle is False

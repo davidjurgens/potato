@@ -209,6 +209,13 @@ class RenderProvider(Provider):
 
     # -- plan ----------------------------------------------------------
 
+    def verify_credential(self):
+        owners = RenderAPI(self.token).verify_token()
+        if not owners:
+            raise ProviderError("Render accepted the key but returned no owner.")
+        first = owners[0]
+        return first.get("email") or first.get("name") or first.get("id", "unknown")
+
     def plan(self, spec: DeploySpec, bundle) -> DeployPlan:
         plan_name = spec.extra.get("plan") or DEFAULT_PLAN
         env = self.runtime_env(spec, spec.extra.get("generated"))

@@ -142,6 +142,7 @@ class TunnelProvider(Provider):
     """Publishes a locally-running server through a tunnel."""
 
     name = "tunnel"
+    summary = "temporary public URL; stops when `potato share` does"
     ephemeral_fs = False
     public = True
     supports_logs = False

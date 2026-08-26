@@ -152,6 +152,63 @@ def _check_debug_mode(ctx: CheckContext) -> List[Finding]:
 
 
 @check
+def _check_mcp_surface(ctx: CheckContext) -> List[Finding]:
+    """The MCP control surface is remote control, so deploying it needs care."""
+    mcp_config = ctx.config.get("mcp") or {}
+    if not mcp_config.get("enabled"):
+        return []
+
+    findings = []
+
+    if ctx.config.get("debug"):
+        findings.append(Finding(
+            "D017", "error",
+            "mcp.enabled is set on a server running in debug mode. Debug "
+            "disables admin authentication server-wide, so an MCP control "
+            "surface there is remote control with no lock on it.",
+            "Remove `debug: true` before deploying.",
+            key="mcp.enabled",
+        ))
+
+    from potato.server_utils.agent_tokens import list_tokens
+
+    active = [t for t in list_tokens(ctx.config) if not t.get("revoked")]
+    if not active:
+        findings.append(Finding(
+            "D018", "error",
+            "mcp.enabled is set but no agent tokens have been issued, so every "
+            "call will be refused. The surface is inert rather than open, but "
+            "it is not doing what the config says it does.",
+            "Issue one: potato mcp issue-token --config config.yaml "
+            "--name <agent> --role <role>",
+            key="mcp.enabled",
+        ))
+
+    destructive = mcp_config.get("destructive") or []
+    if destructive:
+        findings.append(Finding(
+            "D019", "warning",
+            f"mcp.destructive grants {', '.join(destructive)} to agents. These "
+            f"tools discard annotation work and cannot be undone.",
+            "Confirm this is intended, and keep mcp.audit_log on so the calls "
+            "are recorded.",
+            key="mcp.destructive",
+        ))
+
+    admin_tokens = [t for t in active if t.get("role") == "admin"]
+    if admin_tokens and (mcp_config.get("scope") or {}).get("users") is None:
+        findings.append(Finding(
+            "D020", "warning",
+            f"{len(admin_tokens)} admin-role agent token(s) are active with no "
+            f"mcp.scope.users restriction, so they may act on any annotator.",
+            "Narrow with mcp.scope.users, or issue a lower role.",
+            key="mcp.scope",
+        ))
+
+    return findings
+
+
+@check
 def _check_inline_secrets(ctx: CheckContext) -> List[Finding]:
     findings = []
     for key_path, value in _walk(ctx.config):

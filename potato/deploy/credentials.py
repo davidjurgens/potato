@@ -198,10 +198,18 @@ def redact(value: Optional[str], keep: int = 4) -> str:
     return f"{'*' * (len(value) - keep)}{value[-keep:]}"
 
 
-def describe_available(environ: Optional[Dict[str, str]] = None) -> List[str]:
-    """One line per provider saying whether a credential is present."""
+def describe_available(environ: Optional[Dict[str, str]] = None,
+                       providers: Optional[Sequence[str]] = None) -> List[str]:
+    """One line per provider saying whether a credential is present.
+
+    ``providers`` restricts the listing to targets that exist. The credential
+    table carries entries for targets that are not implemented yet — listing
+    them advertises a `--provider fly` that argparse then rejects.
+    """
+    names = sorted(PROVIDER_CREDENTIALS if providers is None
+                   else set(PROVIDER_CREDENTIALS) & set(providers))
     out = []
-    for provider in sorted(PROVIDER_CREDENTIALS):
+    for provider in names:
         if not requires_credential(provider):
             out.append(f"{provider:14s} no token required")
             continue

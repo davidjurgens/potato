@@ -23,6 +23,7 @@ from potato.deploy.bundle import build_bundle
 from potato.deploy.preflight import harden_config, render_report, run_preflight
 from potato.deploy.providers.base import (
     DeploySpec,
+    Provider,
     ProviderError,
     available_providers,
     get_provider,
@@ -55,6 +56,19 @@ def _load_config(config_path: str) -> dict:
             return yaml.safe_load(handle) or {}
     except Exception:
         return {}
+
+
+def _bundle_dir(config_path: str, provider: str, name: str) -> str:
+    """Where a deployment's bundle is assembled.
+
+    Scoped by provider, not only by name. The ``local`` provider bind-mounts
+    its bundle as the running task's directory, so the server's annotations
+    live there — and a bundle directory shared with a cloud provider meant that
+    building for DigitalOcean (a `--dry-run` was enough) deleted the running
+    local deployment's data on the way past.
+    """
+    return os.path.join(os.path.dirname(os.path.abspath(config_path)),
+                        ".potato", "bundle", provider, name)
 
 
 def _parse_key_values(pairs: Optional[List[str]], flag: str) -> dict:
@@ -154,6 +168,8 @@ def build_parser() -> argparse.ArgumentParser:
     listing.add_argument("config_file")
 
     providers = sub.add_parser("providers", help="show targets and credential status")
+    providers.add_argument("--verify", action="store_true",
+                           help="ask each provider whether its token actually works")
     return parser
 
 
@@ -176,8 +192,7 @@ def cmd_check(args) -> int:
 
 def cmd_build(args) -> int:
     name = args.name or slugify(_load_task_name(args.config_file))
-    out_dir = args.out or os.path.join(
-        os.path.dirname(os.path.abspath(args.config_file)), ".potato", "bundle", name)
+    out_dir = args.out or _bundle_dir(args.config_file, args.provider, name)
 
     report = run_preflight(args.config_file, provider=args.provider,
                            public=False)
@@ -231,11 +246,11 @@ def cmd_up(args) -> int:
             return EXIT_BLOCKED
         _echo("Proceeding despite errors because --force was given.")
 
-    out_dir = os.path.join(os.path.dirname(os.path.abspath(args.config_file)),
-                           ".potato", "bundle", name)
+    out_dir = _bundle_dir(args.config_file, provider_name, name)
     manifest = build_bundle(args.config_file, out_dir,
                             patch=lambda cfg: harden_config(
-                                cfg, provider=provider_name, workers=args.workers))
+                                cfg, provider=provider_name, workers=args.workers),
+                            preserve_collected_data=provider.mounts_bundle)
     _echo(f"Bundle: {manifest.file_count} files, {manifest.human_size()}")
     for warning in manifest.warnings:
         _echo(f"  WARNING {warning}")
@@ -467,11 +482,37 @@ def cmd_providers(args) -> int:
         if missing:
             traits.append(f"needs `pip install 'potato-annotation[deploy]'` "
                           f"({', '.join(missing)} missing)")
-        _echo(f"  {name:14s} {', '.join(traits) or 'durable, public'}")
+        _echo(f"  {name:14s} {provider.summary or ', '.join(traits) or 'durable, public'}")
     _echo("")
     _echo("Credentials:")
-    for line in creds.describe_available():
+    for line in creds.describe_available(providers=available_providers()):
         _echo(f"  {line}")
+
+    if getattr(args, "verify", False):
+        _echo("")
+        _echo("Verifying:")
+        for name in available_providers():
+            provider = get_provider(name)
+            if type(provider).verify_credential is Provider.verify_credential:
+                # No identity call, so there is nothing to check and saying
+                # "no token configured" would read as a problem.
+                continue
+            token, _source = creds.resolve_token(name)
+            if not token:
+                _echo(f"  {name:14s} skipped, no token configured")
+                continue
+            try:
+                identity = get_provider(name, token=token).verify_credential()
+            except ProviderError as exc:
+                _echo(f"  {name:14s} REJECTED — {exc}")
+                continue
+            except Exception as exc:  # a provider SDK can raise anything
+                _echo(f"  {name:14s} could not be checked — {exc}")
+                continue
+            if identity is None:
+                _echo(f"  {name:14s} no identity call; only `up` can prove it")
+            else:
+                _echo(f"  {name:14s} OK — {identity}")
     return EXIT_OK
 
 

@@ -14,15 +14,86 @@ then asks before spending anything. Several minutes later — most of it spent
 installing Docker and pulling the image on a fresh machine — you have a running
 server at `https://<droplet-ip>`.
 
-## Before you start
+## Getting a token
 
-A DigitalOcean personal access token with **read and write** scope, from
-<https://cloud.digitalocean.com/account/api/tokens>. Read-only tokens fail at
-the first call with a clear message.
+You need a DigitalOcean account and a personal access token with **write**
+scope.
 
-Potato looks for the token in `--token`, then `DIGITALOCEAN_TOKEN`,
-`DIGITALOCEAN_ACCESS_TOKEN` or `DO_TOKEN`, then `~/.config/doctl/config.yaml`.
-It is never written to disk.
+**1. Make an account.** <https://cloud.digitalocean.com/registrations/new>.
+DigitalOcean asks for a payment method during signup, before anything can be
+created.
+
+**2. Open the token page.**
+<https://cloud.digitalocean.com/account/api/tokens>, reachable from **API** in
+the sidebar.
+
+**3. Generate a new token.** You will be asked for a name, an expiry and a set
+of scopes.
+
+- **Name.** Anything; `potato-deploy` makes it obvious what to revoke later.
+- **Expiry.** The shortest one that covers your study. A token is a password
+  for your whole account, so one that lapses on its own is a much smaller
+  problem than a permanent one sitting in a shell history.
+- **Scopes.** Full access. Potato creates and deletes droplets, volumes,
+  firewalls and SSH keys, and reads your account to check the token before
+  doing any of it. A narrower set that misses one of those fails partway
+  through `up`, which is the failure that can leave a droplet billing with
+  nothing recorded locally.
+
+**4. Copy it immediately.** DigitalOcean shows the token once. If you lose it,
+delete it and make another.
+
+**5. Put it in your shell.**
+
+```bash
+export DIGITALOCEAN_TOKEN=dop_v1_...
+```
+
+Add it to `~/.zshrc` or `~/.bashrc` if you will use it again, or keep it in the
+one terminal if you would rather it not persist.
+
+**6. Check that it works** — before it can cost anything:
+
+```bash
+potato deploy providers --verify
+```
+
+```
+Verifying:
+  digitalocean   OK — researcher@example.edu, droplet limit 10
+```
+
+A token that is expired, read-only, or pasted with a stray newline looks
+exactly like a working one until `up` is several resources deep, so it is worth
+the two seconds. A bad one says so:
+
+```
+  digitalocean   REJECTED — DigitalOcean rejected the token (401). Check that it
+                 has not expired and that it carries write scope.
+```
+
+**When the study is over, delete the token** on the same page. Nothing Potato
+created depends on it continuing to exist.
+
+### Where Potato looks
+
+`--token`, then `DIGITALOCEAN_TOKEN`, `DIGITALOCEAN_ACCESS_TOKEN` or
+`DO_TOKEN`, then the token `doctl` stores in `~/.config/doctl/config.yaml`. It
+is never written to disk by Potato and never enters the bundle.
+
+`potato deploy providers` prints which of those it found, with the token
+masked, which settles "did the export take" without echoing a credential.
+
+### Install the extra
+
+The DigitalOcean provider talks SSH, which needs paramiko:
+
+```bash
+pip install 'potato-annotation[deploy]'
+```
+
+`potato deploy providers` tells you if it is missing, before you have chosen a
+target and typed a token.
 
 ## What gets created
 
@@ -186,6 +257,8 @@ console to reach it.
 
 ## Related
 
+- [Deploying a task](one-command-deploy.md) — choosing a target
+- [Your own machine](deploy-local.md) — the same bundle, no account, no cost
 - [Docker](docker.md) — the image this deploys, and running it yourself
 - [Reverse proxy](reverse-proxy.md) — if you terminate TLS yourself
 - [Scaling](scaling.md) — how many annotators one droplet serves

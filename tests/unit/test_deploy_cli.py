@@ -426,3 +426,106 @@ class TestShareCli:
         for backend in ("cloudflared", "tailscale", "ngrok"):
             args = share_cli.build_parser().parse_args(["cfg.yaml", "--backend", backend])
             assert args.backend == backend
+
+
+class TestBundleDirectoryIsScopedByProvider:
+    """One bundle directory per provider, not one per deployment name.
+
+    The `local` provider bind-mounts its bundle as the running task's
+    directory. Sharing that path with a cloud provider meant that building for
+    DigitalOcean — a `--dry-run` was enough, since the plan needs the bundle
+    size — deleted the running local deployment's annotations on the way past.
+    """
+
+    def test_two_providers_get_two_directories(self, tmp_path):
+        from potato.deploy.cli import _bundle_dir
+        config = str(tmp_path / "config.yaml")
+        local = _bundle_dir(config, "local", "study")
+        cloud = _bundle_dir(config, "digitalocean", "study")
+        assert local != cloud
+
+    def test_the_provider_name_is_in_the_path(self, tmp_path):
+        from potato.deploy.cli import _bundle_dir
+        path = _bundle_dir(str(tmp_path / "config.yaml"), "local", "study")
+        assert os.path.join("bundle", "local", "study") in path
+
+    def test_it_sits_beside_the_config(self, tmp_path):
+        from potato.deploy.cli import _bundle_dir
+        project = tmp_path / "project"
+        project.mkdir()
+        path = _bundle_dir(str(project / "config.yaml"), "local", "study")
+        assert path.startswith(str(project))
+
+
+class TestCredentialVerification:
+    """`deploy providers --verify` answers "is this token any good" for $0.
+
+    A token that is expired, read-only, or pasted with a trailing newline looks
+    identical to a working one until `up` is several billable resources deep.
+    """
+
+    def test_every_credentialled_provider_can_be_asked(self):
+        """A provider with a token but no identity call is a gap, not a design."""
+        from potato.deploy.providers.base import (
+            Provider, available_providers, get_provider)
+        from potato.deploy import credentials as creds
+
+        for name in available_providers():
+            if not creds.requires_credential(name):
+                continue
+            if name == "tunnel":
+                continue  # NGROK_AUTHTOKEN is optional and has no whoami
+            assert type(get_provider(name)).verify_credential is not \
+                Provider.verify_credential, f"{name} cannot verify its token"
+
+    def test_the_base_implementation_returns_none(self):
+        """None means "not checkable", never "the token is fine"."""
+        from potato.deploy.providers.base import get_provider
+        assert get_provider("tunnel").verify_credential() is None
+
+    def test_digitalocean_reports_the_account(self, monkeypatch):
+        from potato.deploy.providers.base import get_provider
+        monkeypatch.setattr(
+            "potato.deploy.providers.digitalocean.DigitalOceanAPI",
+            lambda token: type("A", (), {
+                "verify_token": lambda self: {
+                    "email": "researcher@example.edu", "droplet_limit": 10,
+                    "status": "active"}})())
+        detail = get_provider("digitalocean", token="dop_v1_x").verify_credential()
+        assert "researcher@example.edu" in detail
+        assert "10" in detail
+
+    def test_digitalocean_surfaces_a_locked_account(self, monkeypatch):
+        """A `warning` status still authenticates and still cannot create."""
+        from potato.deploy.providers.base import get_provider
+        monkeypatch.setattr(
+            "potato.deploy.providers.digitalocean.DigitalOceanAPI",
+            lambda token: type("A", (), {
+                "verify_token": lambda self: {
+                    "email": "r@example.edu", "status": "locked"}})())
+        assert "locked" in get_provider(
+            "digitalocean", token="dop_v1_x").verify_credential()
+
+
+class TestProviderListingMatchesReality:
+    """The listing must not advertise a target `--provider` would reject."""
+
+    def test_only_registered_providers_are_listed(self):
+        from potato.deploy import credentials as creds
+        from potato.deploy.providers.base import available_providers
+
+        listed = {line.split()[0]
+                  for line in creds.describe_available(
+                      providers=available_providers())}
+        assert listed <= set(available_providers())
+
+    def test_the_unrestricted_listing_still_covers_the_table(self):
+        """Passing no filter keeps the old behaviour for other callers."""
+        from potato.deploy import credentials as creds
+        assert len(creds.describe_available()) == len(creds.PROVIDER_CREDENTIALS)
+
+    def test_tunnel_is_not_described_as_durable(self):
+        """It has a persistent filesystem and is the least durable target there is."""
+        from potato.deploy.providers.base import get_provider
+        assert "durable" not in get_provider("tunnel").summary
+        assert get_provider("tunnel").summary

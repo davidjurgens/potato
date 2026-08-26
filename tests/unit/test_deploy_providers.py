@@ -321,9 +321,9 @@ class TestPersistBeforeProvision:
 
         calls = []
 
-        def fake_run(args, check=True, timeout=120):
+        def fake_run(args, check=True, timeout=120, merge_stderr=False):
             calls.append(args)
-            if "run" in args:
+            if args[:2] == ["docker", "run"]:
                 raise ProviderError("simulated failure right after docker run")
             return ""
 
@@ -354,16 +354,251 @@ class TestLocalRunsAsTheCaller:
                             lambda: True)
         calls = []
 
-        def fake_run(args, check=True, timeout=120):
+        def fake_run(args, check=True, timeout=120, merge_stderr=False):
             calls.append(args)
             return "container-id"
 
         monkeypatch.setattr("potato.deploy.providers.local._run", fake_run)
+        monkeypatch.setattr(
+            "potato.deploy.providers.local.LocalProvider._wait_until_serving",
+            lambda self, container, port, timeout=180.0: None)
         get_provider("local").create(spec, bundle, None, store)
-        return next(a for a in calls if "run" in a and "-d" in a)
+        return next(a for a in calls if a[:2] == ["docker", "run"])
 
     def test_passes_the_callers_uid_and_gid(self, monkeypatch, spec, bundle,
                                             tmp_path):
         args = self._docker_run_args(monkeypatch, spec, bundle, tmp_path)
         assert "--user" in args
         assert args[args.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
+
+
+class TestLocalUpWaitsForTheServer:
+    """`docker run` returning an id is not the same event as a server serving.
+
+    Every refusal the entrypoint makes — an unwritable mount, a config that will
+    not parse, a `GUNICORN_WORKERS` override — happens *after* `docker run` has
+    returned a container id and exited 0. Before this wait existed, `up` printed
+    "Deployed: http://127.0.0.1:8000" for a container that was already
+    `Exited (3)`, recorded `status: running` in the state file, and left the
+    traceback in a log the user was never told to read. Verified against a real
+    container with a deliberately unparseable data file.
+    """
+
+    def _create(self, monkeypatch, spec, bundle, tmp_path, *, state, logs=""):
+        store = DeploymentStore(str(tmp_path / "config.yaml"))
+        monkeypatch.setattr("potato.deploy.providers.local._docker_available",
+                            lambda: True)
+        calls = []
+
+        def fake_run(args, check=True, timeout=120, merge_stderr=False):
+            calls.append(args)
+            if args[:2] == ["docker", "logs"]:
+                return logs
+            return "container-id"
+
+        monkeypatch.setattr("potato.deploy.providers.local._run", fake_run)
+        monkeypatch.setattr("potato.deploy.providers.local._container_state",
+                            lambda container: state)
+        return store, calls
+
+    def test_a_container_that_exited_fails_the_deploy(self, monkeypatch, spec,
+                                                      bundle, tmp_path):
+        store, _ = self._create(monkeypatch, spec, bundle, tmp_path,
+                                state={"Running": False, "ExitCode": 3})
+        with pytest.raises(ProviderError, match="exited with code 3"):
+            get_provider("local").create(spec, bundle, None, store)
+
+    def test_the_failure_carries_the_container_log(self, monkeypatch, spec,
+                                                   bundle, tmp_path):
+        """The message is the whole point: the cause is in those lines."""
+        store, _ = self._create(
+            monkeypatch, spec, bundle, tmp_path,
+            state={"Running": False, "ExitCode": 3},
+            logs="ValueError: Invalid JSON at line 1 in data/items.json")
+        with pytest.raises(ProviderError, match="Invalid JSON"):
+            get_provider("local").create(spec, bundle, None, store)
+
+    def test_the_log_is_read_with_stderr_merged(self, monkeypatch, spec,
+                                                bundle, tmp_path):
+        """Tracebacks and gunicorn boot failures arrive on stderr, not stdout.
+
+        `docker logs` replays the container's two streams on its own two
+        streams, so reading stdout alone returns the access log and drops the
+        reason the server died.
+        """
+        seen = {}
+        store = DeploymentStore(str(tmp_path / "config.yaml"))
+        monkeypatch.setattr("potato.deploy.providers.local._docker_available",
+                            lambda: True)
+
+        def fake_run(args, check=True, timeout=120, merge_stderr=False):
+            if args[:2] == ["docker", "logs"]:
+                seen["merge_stderr"] = merge_stderr
+            return "container-id"
+
+        monkeypatch.setattr("potato.deploy.providers.local._run", fake_run)
+        monkeypatch.setattr("potato.deploy.providers.local._container_state",
+                            lambda container: {"Running": False, "ExitCode": 3})
+        with pytest.raises(ProviderError):
+            get_provider("local").create(spec, bundle, None, store)
+        assert seen.get("merge_stderr") is True
+
+    def test_a_failed_boot_is_recorded_as_failed(self, monkeypatch, spec,
+                                                 bundle, tmp_path):
+        """A record saying `running` for a dead container is worse than none."""
+        store, _ = self._create(monkeypatch, spec, bundle, tmp_path,
+                                state={"Running": False, "ExitCode": 3})
+        with pytest.raises(ProviderError):
+            get_provider("local").create(spec, bundle, None, store)
+        assert store.get("study").status == "failed"
+
+    def test_an_oom_kill_says_so(self, monkeypatch, spec, bundle, tmp_path):
+        """Exit code alone does not tell a researcher to give Docker more RAM."""
+        store, _ = self._create(
+            monkeypatch, spec, bundle, tmp_path,
+            state={"Running": False, "ExitCode": 137, "OOMKilled": True})
+        with pytest.raises(ProviderError, match="out of memory"):
+            get_provider("local").create(spec, bundle, None, store)
+
+    def test_a_healthy_server_records_running(self, monkeypatch, spec, bundle,
+                                              tmp_path):
+        store, _ = self._create(monkeypatch, spec, bundle, tmp_path,
+                                state={"Running": True})
+        monkeypatch.setattr(
+            "potato.deploy.providers.local.LocalProvider._wait_until_serving",
+            lambda self, container, port, timeout=180.0: None)
+        record = get_provider("local").create(spec, bundle, None, store)
+        assert record.status == "running"
+        assert store.get("study").status == "running"
+
+
+class TestLocalPullsTheImage:
+    """`docker run` pulls only when the image is absent.
+
+    Without an explicit pull, an image fetched weeks ago is reused forever and
+    nothing in the output says so — which on a `:latest` tag means silently
+    deploying an old build.
+    """
+
+    def _calls(self, monkeypatch, spec, bundle, tmp_path, *, pull_fails=False,
+               cached=True):
+        store = DeploymentStore(str(tmp_path / "config.yaml"))
+        monkeypatch.setattr("potato.deploy.providers.local._docker_available",
+                            lambda: True)
+        calls = []
+
+        def fake_run(args, check=True, timeout=120, merge_stderr=False):
+            calls.append(args)
+            if args[:2] == ["docker", "pull"] and pull_fails:
+                raise ProviderError("no route to host")
+            return "container-id"
+
+        monkeypatch.setattr("potato.deploy.providers.local._run", fake_run)
+        monkeypatch.setattr("potato.deploy.providers.local._image_present",
+                            lambda image: cached)
+        monkeypatch.setattr(
+            "potato.deploy.providers.local.LocalProvider._wait_until_serving",
+            lambda self, container, port, timeout=180.0: None)
+        return store, calls
+
+    def test_the_image_is_pulled_before_it_is_run(self, monkeypatch, spec,
+                                                  bundle, tmp_path):
+        store, calls = self._calls(monkeypatch, spec, bundle, tmp_path)
+        get_provider("local").create(spec, bundle, None, store)
+        verbs = [a[1] for a in calls if a[0] == "docker"]
+        assert "pull" in verbs
+        assert verbs.index("pull") < verbs.index("run")
+
+    def test_offline_with_a_cached_image_still_deploys(self, monkeypatch, spec,
+                                                       bundle, tmp_path):
+        """A failed pull is not a failed deploy when the image is already here."""
+        store, calls = self._calls(monkeypatch, spec, bundle, tmp_path,
+                                   pull_fails=True, cached=True)
+        get_provider("local").create(spec, bundle, None, store)
+        assert any(a[:2] == ["docker", "run"] for a in calls)
+
+    def test_offline_without_the_image_refuses(self, monkeypatch, spec, bundle,
+                                               tmp_path):
+        store, _ = self._calls(monkeypatch, spec, bundle, tmp_path,
+                               pull_fails=True, cached=False)
+        with pytest.raises(ProviderError, match="no local copy"):
+            get_provider("local").create(spec, bundle, None, store)
+
+
+class TestPlanMatchesCreate:
+    """A plan that advertises a step create() never takes is a lie users act on.
+
+    Both of these were advertised and neither happened, which is how the
+    `health.wait` gap survived: the dry-run output said the deploy waits for
+    the server, so nobody looked.
+    """
+
+    def test_every_planned_docker_verb_is_one_create_runs(self, monkeypatch,
+                                                          spec, bundle, tmp_path):
+        planned = {a.kind for a in get_provider("local").plan(spec, bundle).actions}
+
+        store = DeploymentStore(str(tmp_path / "config.yaml"))
+        monkeypatch.setattr("potato.deploy.providers.local._docker_available",
+                            lambda: True)
+        calls = []
+        waited = []
+
+        def fake_run(args, check=True, timeout=120, merge_stderr=False):
+            calls.append(args)
+            return "container-id"
+
+        monkeypatch.setattr("potato.deploy.providers.local._run", fake_run)
+        monkeypatch.setattr("potato.deploy.providers.local._image_present",
+                            lambda image: True)
+        monkeypatch.setattr(
+            "potato.deploy.providers.local.LocalProvider._wait_until_serving",
+            lambda self, container, port, timeout=180.0: waited.append(port))
+        get_provider("local").create(spec, bundle, None, store)
+
+        performed = {f"docker.{a[1]}" for a in calls if a[0] == "docker"}
+        for action in planned:
+            if action.startswith("docker."):
+                assert action in performed, f"plan promises {action}, create skips it"
+        if "health.wait" in planned:
+            assert waited, "plan promises a health wait, create does not wait"
+
+
+class TestLocalIsActuallyLocal:
+    """`public = False` has to be true, because preflight believes it.
+
+    `-p 8000:7860` publishes on 0.0.0.0, so the task answered on the laptop's
+    LAN address to anyone on the same wifi — while the provider declared itself
+    non-public and preflight therefore suppressed every public-host warning,
+    open registration included. Verified against a real container: the task
+    returned 200 at http://<laptop-lan-ip>:8123 before this was pinned.
+    """
+
+    def _docker_run_args(self, monkeypatch, spec, bundle, tmp_path):
+        store = DeploymentStore(str(tmp_path / "config.yaml"))
+        monkeypatch.setattr("potato.deploy.providers.local._docker_available",
+                            lambda: True)
+        calls = []
+
+        def fake_run(args, check=True, timeout=120, merge_stderr=False):
+            calls.append(args)
+            return "container-id"
+
+        monkeypatch.setattr("potato.deploy.providers.local._run", fake_run)
+        monkeypatch.setattr("potato.deploy.providers.local._image_present",
+                            lambda image: True)
+        monkeypatch.setattr(
+            "potato.deploy.providers.local.LocalProvider._wait_until_serving",
+            lambda self, container, port, timeout=180.0: None)
+        get_provider("local").create(spec, bundle, None, store)
+        return next(a for a in calls if a[:2] == ["docker", "run"])
+
+    def test_the_port_is_published_on_loopback_only(self, monkeypatch, spec,
+                                                    bundle, tmp_path):
+        args = self._docker_run_args(monkeypatch, spec, bundle, tmp_path)
+        published = args[args.index("-p") + 1]
+        assert published.startswith("127.0.0.1:"), (
+            f"published as {published!r}, which docker binds to every interface")
+
+    def test_the_provider_still_declares_itself_non_public(self):
+        """If this ever flips to True, the binding above has to change with it."""
+        assert get_provider("local").public is False

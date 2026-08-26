@@ -267,6 +267,46 @@ def potato_package_root() -> str:
         "`pip install -e .`.")
 
 
+def collected_data_names(config: Mapping) -> List[str]:
+    """Top-level entries in a bundle directory that hold collected data.
+
+    A bundle directory is normally write-once: build it, upload it, forget it.
+    The ``local`` provider bind-mounts it as the running task's directory
+    instead, so the server writes annotations and its databases straight back
+    into it — and rebuilding the bundle with a plain rmtree deleted them.
+    That made `potato deploy up`, the documented way to push a change, destroy
+    every annotation collected since the first one.
+
+    Nothing here can be regenerated from the source project, so nothing here is
+    ever removed by a rebuild. For a provider that uploads the bundle rather
+    than mounting it these entries do not exist, and the function returns
+    names that simply are not present.
+    """
+    names = ["project.sqlite", "datasets.sqlite"]
+    names += [f"{name}{suffix}" for name in list(names) for suffix in ("-wal", "-shm")]
+
+    output = str(config.get("output_annotation_dir") or "annotation_output").strip()
+    # The configured value is often nested ("annotation_output/study-1/"), but
+    # what a rebuild deletes is the top-level entry, so that is what to keep.
+    top = os.path.normpath(output).lstrip(os.sep).split(os.sep)[0]
+    if top and top not in (".", ".."):
+        names.append(top)
+    return names
+
+
+def _clean_out_dir(out_dir: str, config: Mapping) -> None:
+    """Empty a bundle directory without touching what the server wrote into it."""
+    keep = set(collected_data_names(config))
+    for entry in os.listdir(out_dir):
+        if entry in keep:
+            continue
+        target = os.path.join(out_dir, entry)
+        if os.path.isdir(target) and not os.path.islink(target):
+            shutil.rmtree(target)
+        else:
+            os.remove(target)
+
+
 def build_bundle(
     config_path: str,
     out_dir: str,
@@ -277,6 +317,7 @@ def build_bundle(
     extra_files: Optional[Mapping[str, str]] = None,
     excludes: Sequence[str] = SOURCE_EXCLUDES,
     clean: bool = True,
+    preserve_collected_data: bool = False,
 ) -> BundleManifest:
     """Build a self-contained deployable copy of the project holding ``config_path``.
 
@@ -296,6 +337,13 @@ def build_bundle(
         extra_files: ``{bundle_relative_name: source_path}`` written verbatim.
         excludes: Glob patterns skipped during the copy.
         clean: Remove ``out_dir`` first.
+        preserve_collected_data: Keep the annotation output and the project
+            databases already in ``out_dir`` when cleaning. Set this only for a
+            provider that *mounts* the bundle directory as the live task
+            directory, which today is ``local``. A provider that uploads the
+            bundle must leave it off: the same directory is reused across
+            providers, and carrying a stale local database into the tarball
+            would overwrite the live one on the host.
 
     Returns:
         BundleManifest describing what was written.
@@ -324,7 +372,10 @@ def build_bundle(
         )
 
     if clean and os.path.exists(out_dir):
-        shutil.rmtree(out_dir)
+        if preserve_collected_data:
+            _clean_out_dir(out_dir, config)
+        else:
+            shutil.rmtree(out_dir)
     os.makedirs(out_dir, exist_ok=True)
 
     manifest = BundleManifest(bundle_dir=out_dir, config_rel_path=config_rel)

@@ -223,9 +223,18 @@ def _database_opens(path: str) -> bool:
 
     The point of the whole snapshot-rather-than-copy rule is that a broken one
     looks fine until someone opens it, so open it here.
+
+    ``immutable=1`` rather than plain ``mode=ro``: a read-only connection to a
+    WAL-mode database still builds a shared-memory index, so checking the
+    snapshot left ``project.sqlite-wal`` and ``project.sqlite-shm`` sitting
+    beside it. Those are the live sidecars this whole path exists to avoid
+    copying, and finding them in a directory labelled as the safe copy is
+    exactly the wrong signal. A snapshot has no WAL to replay, so promising
+    SQLite the file cannot change costs nothing.
     """
     try:
-        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=10)
+        connection = sqlite3.connect(
+            f"file:{path}?mode=ro&immutable=1", uri=True, timeout=10)
         try:
             return connection.execute(
                 "PRAGMA quick_check").fetchone()[0] == "ok"
