@@ -363,15 +363,53 @@ def stop_server(proc) -> None:
 
 
 def playwright_available() -> bool:
+    """True when Playwright can actually drive a browser.
+
+    Checks for a browser *binary*, not just the Python package. They install
+    separately: `requirements-test.txt` pulls in pytest-playwright, so CI had
+    the import succeed and every render fail with "Browser failed to open the
+    page". A skip guard that answers the wrong question is worse than none,
+    because it turns "this environment cannot run these" into a red build.
+
+    The probe runs in a subprocess. Resolving the executable path goes through
+    the sync API, which raises if called from inside an asyncio loop -- and the
+    render path this guards *is* async, so probing in-process would report
+    "no browser" precisely when a browser was about to be used.
+    """
+    global _BROWSER_PRESENT
+    if _BROWSER_PRESENT is not None:
+        return _BROWSER_PRESENT
+
     try:
         import playwright  # noqa: F401
-        return True
     except ImportError:
+        _BROWSER_PRESENT = False
         return False
+
+    probe = (
+        "import os,sys\n"
+        "from playwright.sync_api import sync_playwright\n"
+        "with sync_playwright() as p:\n"
+        "    sys.exit(0 if os.path.exists(p.chromium.executable_path) else 1)\n"
+    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True, timeout=60,
+        )
+        _BROWSER_PRESENT = result.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        _BROWSER_PRESENT = False
+    return _BROWSER_PRESENT
+
+
+#: Probing spawns a subprocess, so the answer is cached for the process.
+_BROWSER_PRESENT = None
 
 
 PLAYWRIGHT_HINT = (
-    "Playwright is not installed, so no screenshot was taken. Install it with:\n"
+    "No Playwright browser is available, so no screenshot was taken. The\n"
+    "package and the browser install separately; you need both:\n"
     "    pip install 'potato-annotation[preview]' && playwright install chromium"
 )
 

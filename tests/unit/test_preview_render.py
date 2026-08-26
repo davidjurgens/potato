@@ -142,7 +142,7 @@ class TestGuardRails:
         assert "annotation" in PHASES
 
 
-@pytest.mark.skipif(not playwright_available(), reason="Playwright not installed")
+@pytest.mark.skipif(not playwright_available(), reason="no Playwright browser available")
 class TestEndToEnd:
     """Boots a real server and drives a real browser."""
 

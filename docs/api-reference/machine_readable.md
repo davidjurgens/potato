@@ -118,7 +118,7 @@ Most endpoints are session-authenticated: `POST /auth` with `username` and
 
 ## Examples catalog
 
-A derived index of the **214 example projects** in the repository, across 15
+A derived index of the **213 example projects** in the repository, across 15
 categories. Each entry records the annotation types and display types the config
 uses, the subsystems it switches on, whether it ships data and a README, and the
 command that runs it.

@@ -336,7 +336,7 @@ def test_screenshot_returns_an_image_block(tmp_path):
     from potato.preview_render import playwright_available
 
     if not playwright_available():
-        pytest.skip("Playwright not installed")
+        pytest.skip("no Playwright browser available")
 
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "items.json").write_text(
