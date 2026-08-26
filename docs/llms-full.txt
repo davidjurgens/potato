@@ -52960,6 +52960,196 @@ route. See [Testing](../guides/testing.md) for the drift tests that enforce this
 
 ---
 
+<!-- source: docs/releasenotes/v2.8.1.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.8.1/
+
+# Release Notes: v2.8.1 — Security Fixes
+
+A patch release. It closes five security issues, three of them reported
+privately against 2.8.0 through GitHub's advisory flow, and two found while
+fixing those. **Upgrade if you run Potato anywhere other than localhost.**
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+## The five issues
+
+### Unauthenticated SSRF through the media endpoints
+
+`/api/audio/proxy` took a URL from the query string, fetched it server-side, and
+returned the body to the caller. The only check was that the URL started with
+`http://` or `https://`. There was no authentication, so anyone who could reach
+the port could ask the server to fetch anything it could reach — a cloud
+instance's metadata service, an internal admin UI, a service on the LAN — and
+read the response back.
+
+`/api/waveform/generate` and `/api/video/waveform/generate` had the same shape.
+They do not return the body, but they fetch what they are given, and when the
+input is not a URL they treat it as a local path and hand it to a subprocess,
+which answers "does this file exist" for any path on the host.
+
+All four now require a login and validate the URL through one shared guard that
+resolves the host, refuses private, loopback, link-local, reserved and cloud
+metadata addresses, pins the connection to the address it validated so the name
+cannot be re-resolved to another one, re-checks every redirect hop, and caps the
+response size. `Access-Control-Allow-Origin: *` is gone from the proxy; every
+caller was same-origin.
+
+Three URL validators already existed in the codebase and none of them was
+shared. They are now one, and the weakest of those behaviours is gone: a host
+that fails to resolve is no longer allowed through.
+
+*Reported privately. Credit in the advisory.*
+
+### Remote code execution through the live coding agent
+
+Every route in the live coding agent blueprint started, instructed, rolled back
+or stopped a real agent session, and none of them checked for a login. The
+global session gate did not cover them either: it exempts the bare `/api/`
+prefix, so it never ran for anything in that blueprint.
+
+From there, `POST /api/live_coding_agent/replay/<session_id>` accepted
+`edited_actions`, tool calls supplied by the caller, and executed them.
+`Bash` ran through `subprocess.run(shell=True)` on the host, and `Read`, `Write`
+and `Edit` honoured absolute paths by construction, so they reached any file the
+Potato user could.
+
+The sandbox that was supposed to contain this did not. `sandbox_mode: docker`
+was never implemented: it logged a warning and fell back to running tools
+directly on the host, so an operator who asked for a container got nothing and
+was not told. The default, `worktree`, is a git worktree on the same host, as the same
+user, with the same network. It was documented as "safe isolation".
+
+Fixed in three layers. Every route requires a login and checks that the session
+belongs to the caller. Client-supplied `working_dir`, `backend_type` and
+`ai_config` are ignored; those come from the server's config only. And the
+sandbox was rebuilt as a real one, described below.
+
+*Reported privately. Credit in the advisory.*
+
+### Admin config readable without the admin key
+
+The admin config endpoint authorized its POST branch and not its GET branch, so
+any caller could read the task configuration back, including whatever
+credentials and endpoint settings it held. The read side now requires the same
+key the write side always did.
+
+Found while writing tests for the reports above. The test harness had been
+sending a hardcoded admin key that only worked because debug mode accepts
+anything, so the admin tests had been exercising the debug bypass rather than
+the real check, which is why this went unnoticed.
+
+### Trace-ingestion webhook accepted everyone
+
+`WebhookReceiver.authenticate()` returned true whenever `trace_ingestion.api_key`
+was unset. Turning trace ingestion on without also setting a key left an
+unauthenticated endpoint that writes items into the annotation task. Enabling a
+feature should not be the same act as disabling its authentication.
+
+It now fails closed. An operator who wants an open receiver on a trusted network
+sets `allow_unauthenticated: true` and says so, and Potato warns at startup
+either way.
+
+### Debug mode on a reachable interface
+
+`debug: true` disables admin authentication by design and is documented that
+way. What was not obvious is how the pieces combine: the default bind is
+`0.0.0.0`, the admin dashboard put the real admin key into the rendered HTML,
+and Flask's debugger is an interactive console for anyone who can reach it.
+
+Debug remains a local convenience. It no longer grants admin on a non-loopback
+bind, the server refuses to start with debug on a public interface unless
+`POTATO_ALLOW_REMOTE_DEBUG=1` is set, the admin key is out of the HTML, and the
+Werkzeug debugger is never handed to a non-loopback bind. Deployment preflight
+already refused debug and still does.
+
+*Reported privately. Credit in the advisory.*
+
+## The new sandbox ladder
+
+Annotators can edit an agent's tool call and re-run it. That is the point of the
+feature, so the boundary those tools run inside is the security control. It is
+now a ladder, and you pick the rung your machine supports:
+
+| `sandbox_mode` | Boundary | Needs |
+|---|---|---|
+| `container` (default) | Namespaces, cgroups, seccomp | `docker` or `podman` |
+| `container` + `container_runtime` | gVisor or a hardware VM | `runsc` or `kata` installed |
+| `bubblewrap` | Namespaces, no daemon, no root | `bwrap`, Linux |
+| `trusted` | None | An explicit acknowledgement |
+
+Containers run with no network, a read-only root filesystem, as `nobody`, with
+every capability dropped and limits on memory, CPU and process count. The agent
+works on a per-session copy of `working_dir`, never the directory itself.
+
+Nothing here implements isolation from scratch. Each rung drives a tool that
+already does, which is also why the strongest options are configuration rather
+than code: gVisor and Kata install as drop-in container runtimes, so
+`container_runtime: runsc` upgrades the boundary with no change on Potato's
+side. `container_cli: podman` gets rootless containers, which need no root
+daemon.
+
+`bubblewrap` is there for shared machines and clusters where Docker is not
+available and rootless Podman is impractical. It is a weaker boundary and says
+so at startup.
+
+**Backends never fall back.** If the one you configured is unavailable, the
+session fails with an error naming the alternatives, and the check runs at
+startup rather than at the first tool call. Silently degrading to no isolation
+is the defect this replaces.
+
+## Breaking changes
+
+**`sandbox_mode` defaults to `container`.** If you run the live coding agent
+without Docker or Podman, Potato will not start until you choose a rung. The
+error names all three ways forward.
+
+**`worktree` and `direct` now require an acknowledgement.** Both map to
+`trusted` and need `acknowledge_untrusted_code_execution: true` alongside:
+
+```yaml
+live_coding_agent:
+  sandbox_mode: trusted
+  acknowledge_untrusted_code_execution: true
+```
+
+This will stop existing configs from starting, which is deliberate. `worktree`
+was the default and read as isolation; against a shell it provides none. It is
+still worth having for keeping agent edits off your main checkout, and it is
+still available. It just no longer claims to be a boundary.
+
+**`output_annotation_format` is deprecated.** It has not been read since the v2
+storage rewrite, so it was configuring nothing. It now folds onto
+`export_annotation_format` with a warning, and `potato migrate` converts it.
+
+## Also in this release
+
+- The three universal sidebars are gated server-side, so a plain task stops
+  making six failed background requests per page.
+- Quality-control items no longer count against an annotator's quota, which was
+  ending studies with articles still unannotated.
+- A required scheme hidden by `display_logic` no longer blocks saving.
+- Sixteen schema types landed outside the `layout.groups` group they were
+  assigned to; they now land inside it.
+- `on:` in a config is read as a key rather than as YAML 1.1's boolean `True`.
+- Potato warns when a scheme is renamed out from under existing annotations,
+  which previously showed as 100% complete with zero agreement.
+- An MCP server, a browser-backed `potato preview --screenshot`, and a
+  machine-readable catalog of the shipped examples, so coding agents can check
+  their work instead of guessing.
+- `potato deploy local` and `potato deploy share`, and bundle directories scoped
+  per provider. A cloud rebuild used to clean out the directory a local
+  deployment was writing into.
+
+## Credits
+
+Three of these were reported privately and responsibly through GitHub's advisory
+flow, with clear reproductions and suggested fixes. Named in the advisories.
+
+
+---
+
 <!-- source: docs/releasenotes/v2.8.0.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.8.0/
 

@@ -2,6 +2,56 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [2.8.1] - Security Fixes
+
+Closes five security issues: three reported privately against 2.8.0, and two
+found while fixing those. **Upgrade if you run Potato anywhere other than
+localhost.**
+
+**Unauthenticated SSRF** through `/api/audio/proxy` and the two waveform
+endpoints, which fetched any URL a caller supplied and, for the proxy, returned
+the body, reaching cloud metadata services, internal APIs and anything else on
+the host's network. All four now require a login and share one URL guard that
+blocks private and metadata addresses, pins the resolved address against DNS
+rebinding, and re-checks redirects.
+
+**Unauthenticated remote code execution** through the live coding agent, whose
+routes had no login check at all and whose replay endpoint executed
+caller-supplied tool calls with `shell=True` on the host. The sandbox meant to
+contain this did not: `sandbox_mode: docker` was never implemented and silently
+fell back to no isolation, and the default `worktree` is a git worktree on the
+same host as the same user. Rebuilt as a ladder that never falls back and checks at startup:
+`container` (Docker or Podman, no network, read-only root, unprivileged,
+optionally gVisor or Kata), `bubblewrap`, or `trusted` with an explicit
+acknowledgement.
+
+**Admin config readable without the admin key**: the endpoint authorized its
+write branch and not its read branch. Found because the test harness had been
+exercising the debug bypass rather than the real check.
+
+**Trace-ingestion webhook accepted everyone** when no `api_key` was configured,
+so enabling the feature disabled its authentication. Now fails closed.
+
+**Debug mode on a reachable interface** no longer grants admin, no longer puts
+the admin key in the rendered HTML, and no longer hands Flask's interactive
+debugger to a non-loopback bind.
+
+**Breaking:** `sandbox_mode` defaults to `container`, and `worktree`/`direct`
+map to `trusted` and require `acknowledge_untrusted_code_execution: true`.
+Existing live-coding-agent configs will not start until they choose a rung.
+`output_annotation_format` is deprecated in favour of `export_annotation_format`
+and folds automatically.
+
+Also: server-side sidebar gating, quality-control items no longer eating an
+annotator's quota, a required-but-hidden scheme no longer blocking saving,
+sixteen schema types landing in their configured `layout.groups` group, an MCP
+server and browser-backed `potato preview --screenshot`, and
+`potato deploy local` / `potato deploy share`.
+
+**[Full Release Notes →](docs/releasenotes/v2.8.1.md)**
+
+---
+
 ## [2.8.0] - Vision, and the Statistics to Check It
 
 Potato's image, video, 3D, embodied and world-model surfaces were rebuilt from a

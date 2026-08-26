@@ -114,7 +114,7 @@ _DEPLOY_DEPS = [
 
 setup(
     name="potato-annotation",
-    version='2.8.0',
+    version='2.8.1',
     author="Potato Development Team",
     author_email="jurgens@umich.edu",
     description="A flexible, stand-alone, web-based platform for text annotation tasks",

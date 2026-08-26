@@ -231,6 +231,7 @@ nav:
         - API Reference: api-reference/api_reference.md
         - Machine-Readable Specs: api-reference/machine_readable.md
     - Release Notes:
+        - v2.8.1: releasenotes/v2.8.1.md
         - v2.8.0: releasenotes/v2.8.0.md
         - v2.7.1: releasenotes/v2.7.1.md
         - v2.7.0: releasenotes/v2.7.0.md

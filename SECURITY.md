@@ -8,8 +8,8 @@ is whatever is currently latest.
 
 | Version | Supported |
 | ------- | --------------------- |
-| 2.7.x   | :white_check_mark: |
-| 2.0 – 2.6 | Upgrade to 2.7.x |
+| 2.8.x   | :white_check_mark: |
+| 2.0 – 2.7 | Upgrade to 2.8.x |
 | 1.x     | :x: |
 
 ## Reporting a vulnerability
@@ -48,7 +48,16 @@ Two behaviours are deliberate and documented rather than defects. The
 which executes arbitrary code — it is off by default and
 [documented as dangerous](docs/integrations/convokit.md). Debug mode
 (`debug: true`) bypasses admin authentication on purpose, and is
-[documented as a development-only setting](docs/tools/debugging_guide.md).
+[documented as a development-only setting](docs/tools/debugging_guide.md). It is
+for a server bound to loopback. Running it on a reachable interface hands the
+admin dashboard and the admin API to anyone who can connect, and deployment
+preflight refuses it for that reason.
+
+The live coding agent executes tool calls that annotators can edit, so the
+sandbox is the boundary that matters. `sandbox_mode: trusted` turns that
+boundary off and requires `acknowledge_untrusted_code_execution: true` to
+select. Reports about what a trusted-mode agent can reach are working as
+documented; reports about escaping `container` or `bubblewrap` are in scope.
 
 ## Hardening a deployment
 
