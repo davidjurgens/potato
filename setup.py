@@ -186,9 +186,13 @@ setup(
         # requiring packaging changes.
         "potato": [
             "i18n/*.yaml",
-            # Generated config JSON Schema. Shipped so editors and tooling can
-            # resolve it offline from an installed wheel, without reaching the
-            # docs site. Regenerate: python scripts/generate_config_schema.py
+            # Generated specs: the config JSON Schema and the examples catalog.
+            # Shipped so editors, agents and the MCP server resolve them offline
+            # from an installed wheel, without reaching the docs site. The
+            # examples catalog especially -- `examples/` itself is not packaged,
+            # so this JSON is the only record of it a wheel has. Regenerate:
+            #   python scripts/generate_config_schema.py
+            #   python scripts/generate_examples_manifest.py
             "schemas/*.json",
             # cloud-init, Caddyfile and systemd unit templates. A provider
             # renders these from an installed wheel, so they must ship.
