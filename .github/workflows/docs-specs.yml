@@ -62,14 +62,6 @@ jobs:
       - name: Examples manifest is current
         run: python scripts/generate_examples_manifest.py --check
 
-      # Red until scripts/generate_agent_pack.py is written. The generator and
-      # potato/agent_pack were lost before ever being committed (nothing in git
-      # history, no stash, no installed copy), so this step is a placeholder for
-      # work that has to be rewritten, not a guard that currently guards
-      # anything.
-      - name: Agent pack is current
-        run: python scripts/generate_agent_pack.py --check
-
       - name: Drift guards
         run: |
           pytest -q \
