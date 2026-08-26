@@ -55,7 +55,8 @@ class WaveformService:
         cache_dir: str,
         look_ahead: int = DEFAULT_LOOK_AHEAD,
         cache_max_size: int = DEFAULT_CACHE_MAX_SIZE,
-        client_fallback_max_duration: int = DEFAULT_CLIENT_FALLBACK_MAX_DURATION
+        client_fallback_max_duration: int = DEFAULT_CLIENT_FALLBACK_MAX_DURATION,
+        task_dir: Optional[str] = None,
     ):
         """
         Initialize the WaveformService.
@@ -65,8 +66,11 @@ class WaveformService:
             look_ahead: Number of instances to pre-compute ahead
             cache_max_size: Maximum number of cached waveform files
             client_fallback_max_duration: Max duration (seconds) for client-side fallback
+            task_dir: Base directory local media paths are resolved inside.
+                Defaults to the process working directory.
         """
         self.cache_dir = cache_dir
+        self._task_dir = task_dir
         self.look_ahead = look_ahead
         self.cache_max_size = cache_max_size
         self.client_fallback_max_duration = client_fallback_max_duration
@@ -161,6 +165,28 @@ class WaveformService:
         """
         return path.startswith(('http://', 'https://', '//'))
 
+    def _resolve_local_media(self, path: str) -> Optional[str]:
+        """Resolve a local media path inside the task directory, or None.
+
+        Uses the same containment rule as the rest of the server: realpath the
+        candidate and refuse anything that leaves the base directory, which
+        catches `..` and symlinks pointing out.
+        """
+        base = os.path.realpath(self._task_dir or os.getcwd())
+        candidate = os.path.realpath(
+            path if os.path.isabs(path) else os.path.join(base, path)
+        )
+        if candidate != base and not candidate.startswith(base + os.sep):
+            logger.warning(
+                "Refusing waveform request for %s: outside the task directory",
+                path,
+            )
+            return None
+        if not os.path.exists(candidate):
+            logger.warning("Audio file not found: %s", candidate)
+            return None
+        return candidate
+
     def _download_audio(self, url: str) -> Optional[str]:
         """
         Download an audio file from URL to a temporary file.
@@ -187,11 +213,31 @@ class WaveformService:
 
             logger.debug(f"Downloading audio from {url} to {temp_path}")
 
-            response = requests.get(url, stream=True, timeout=60)
+            # The URL reaches here from a request body, so it goes through
+            # the SSRF guard: this path used to fetch whatever it was given,
+            # which made waveform generation a blind request forgery even
+            # though it never returns the body.
+            from potato.server_utils.url_guard import (
+                URLNotAllowed, fetch, DEFAULT_MAX_BYTES,
+            )
+            try:
+                response = fetch(url, timeout=60)
+            except URLNotAllowed as e:
+                logger.warning("Blocked waveform fetch of %s: %s", url, e)
+                os.unlink(temp_path)
+                return None
             response.raise_for_status()
 
+            written = 0
             with open(temp_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
+                    written += len(chunk)
+                    if written > DEFAULT_MAX_BYTES:
+                        logger.warning("Waveform source %s exceeded the size cap", url)
+                        response.close()
+                        f.close()
+                        os.unlink(temp_path)
+                        return None
                     f.write(chunk)
 
             logger.debug(f"Downloaded audio: {os.path.getsize(temp_path)} bytes")
@@ -307,9 +353,12 @@ class WaveformService:
                     return None
                 local_path = temp_audio
             else:
-                local_path = audio_path
-                if not os.path.exists(local_path):
-                    logger.warning(f"Audio file not found: {local_path}")
+                # A non-URL is treated as a local path, and the value arrives
+                # from a request body. Unconstrained, that answered "does this
+                # file exist" for any path on the host, and handed the path to
+                # a subprocess. Contain it to the task directory.
+                local_path = self._resolve_local_media(audio_path)
+                if local_path is None:
                     return None
 
             # Generate waveform
@@ -522,7 +571,8 @@ def init_waveform_service(
     cache_dir: str,
     look_ahead: int = WaveformService.DEFAULT_LOOK_AHEAD,
     cache_max_size: int = WaveformService.DEFAULT_CACHE_MAX_SIZE,
-    client_fallback_max_duration: int = WaveformService.DEFAULT_CLIENT_FALLBACK_MAX_DURATION
+    client_fallback_max_duration: int = WaveformService.DEFAULT_CLIENT_FALLBACK_MAX_DURATION,
+    task_dir: Optional[str] = None,
 ) -> WaveformService:
     """
     Initialize the global WaveformService instance.
@@ -541,6 +591,7 @@ def init_waveform_service(
         cache_dir=cache_dir,
         look_ahead=look_ahead,
         cache_max_size=cache_max_size,
-        client_fallback_max_duration=client_fallback_max_duration
+        client_fallback_max_duration=client_fallback_max_duration,
+        task_dir=task_dir,
     )
     return _waveform_service

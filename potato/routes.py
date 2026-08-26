@@ -248,6 +248,26 @@ def get_admin_api_key():
     """Get the admin API key. See potato.server_utils.admin_key for details."""
     return _get_admin_api_key(config)
 
+def _caller_presented_admin_key() -> bool:
+    """True when this request carried the real admin key.
+
+    Distinguishes "authorized because they hold the key" from "authorized by
+    the debug bypass or an RBAC role", which decides whether echoing the key
+    back discloses anything.
+    """
+    import hmac as _hmac
+    try:
+        supplied = request.headers.get('X-API-Key') or session.get('admin_api_key')
+    except RuntimeError:
+        return False
+    if not supplied:
+        return False
+    expected = get_admin_api_key()
+    if not expected:
+        return False
+    return _hmac.compare_digest(str(supplied), str(expected))
+
+
 def validate_admin_api_key(provided_key: str) -> bool:
     """Authorize an admin request.
 
@@ -268,6 +288,38 @@ def validate_admin_api_key(provided_key: str) -> bool:
         )
     except Exception:
         return False
+
+
+# -------------------------------------------------------------------
+# Media endpoints that fetch a caller-supplied URL
+# -------------------------------------------------------------------
+
+def media_login_required(f):
+    """Require an authenticated session on an endpoint that fetches a URL.
+
+    These are not covered by the global `before_request` gate: it whitelists
+    the bare "/api/" prefix, so it never runs for any route under it. They were
+    therefore reachable by anyone who could open the port, and each one asks
+    the server to fetch a URL the caller chose.
+
+    Answers 401 JSON rather than redirecting; every caller is XHR from the
+    annotation page, and a 302 to the login HTML reads as success to a JSON
+    client.
+    """
+    from functools import wraps
+
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'username' not in session and not config.get("debug", False):
+            return jsonify({"error": "Authentication required"}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
+def _media_url_allowlist():
+    """Hosts an operator has declared safe for server-side media fetches."""
+    allow = config.get("media_url_allowlist") or []
+    return list(allow) if isinstance(allow, (list, tuple)) else [allow]
 
 
 # -------------------------------------------------------------------
@@ -6098,7 +6150,13 @@ def admin():
     context = {
         "annotation_task_name": config.get("annotation_task_name", "Annotation Platform"),
         "debug_mode": config.get("debug", False),
-        "admin_api_key": get_admin_api_key() or "",
+        # Only echoed back to a caller who already presented the correct key,
+        # which tells them nothing new. Under the debug bypass or an RBAC role
+        # the caller never supplied it, and emitting it there put the real key
+        # in HTML for anyone who could load this page -- in debug mode, anyone
+        # at all. The dashboard's XHRs work without it: validate_admin_api_key
+        # falls through to the debug and RBAC checks, which use the session.
+        "admin_api_key": (get_admin_api_key() or "") if _caller_presented_admin_key() else "",
         "mace_enabled": config.get("mace", {}).get("enabled", False),
         "bws_enabled": bool(config.get("bws_config")),
         "embedding_viz_enabled": embedding_viz_enabled,
@@ -8038,6 +8096,7 @@ def get_waveform_data(cache_key):
 
 
 @app.route("/api/waveform/generate", methods=["POST"])
+@media_login_required
 def generate_waveform():
     """
     Generate waveform data for an audio file.
@@ -8107,6 +8166,7 @@ def generate_waveform():
 
 
 @app.route("/api/video/metadata", methods=["POST"])
+@media_login_required
 def get_video_metadata():
     """
     Get metadata for a video file.
@@ -8155,6 +8215,7 @@ def get_video_metadata():
 
 
 @app.route("/api/video/waveform/generate", methods=["POST"])
+@media_login_required
 def generate_video_waveform():
     """
     Generate waveform data from a video file's audio track.
@@ -8181,7 +8242,10 @@ def generate_video_waveform():
         # Try to generate waveform using the existing WaveformService
         try:
             from potato.server_utils.waveform_service import WaveformService
-            waveform_service = WaveformService()
+            waveform_service = WaveformService(
+                cache_dir=config.get("waveform_cache_dir", "waveform_cache"),
+                task_dir=config.get("task_dir", "."),
+            )
 
             # Generate waveform from video (will extract audio track)
             result = waveform_service.generate_waveform(video_url)
@@ -8218,72 +8282,73 @@ def generate_video_waveform():
 
 
 @app.route("/api/audio/proxy")
+@media_login_required
 def audio_proxy():
     """
-    Proxy endpoint for fetching external audio files with Range request support.
+    Proxy an external audio file so the browser can read it for waveform
+    generation without tripping CORS. Supports Range requests for seeking.
 
-    This endpoint fetches audio files from external URLs and returns them
-    with proper headers, bypassing CORS restrictions that prevent the browser
-    from directly accessing external audio files for waveform generation.
-
-    Supports HTTP Range requests to enable seeking in audio files.
+    The URL comes from the caller, so it goes through the SSRF guard: this
+    endpoint used to accept any http(s) URL without authentication and return
+    the body, which made the server a reader for anything it could reach,
+    including cloud metadata and loopback-bound admin interfaces.
 
     Query parameters:
         url: The external audio URL to fetch
-
-    Returns:
-        The audio file with appropriate Content-Type header
     """
+    from potato.server_utils.url_guard import (
+        URLNotAllowed, fetch, read_capped, DEFAULT_MAX_BYTES,
+    )
     import requests as req
 
     audio_url = request.args.get('url')
     if not audio_url:
         return jsonify({"error": "Missing url parameter"}), 400
 
-    # Validate URL (basic security check)
-    if not audio_url.startswith(('http://', 'https://')):
-        return jsonify({"error": "Invalid URL - must be http or https"}), 400
+    headers = {}
+    if 'Range' in request.headers:
+        headers['Range'] = request.headers['Range']
 
     try:
-        # Forward any Range header from the client to the upstream server
-        headers = {}
-        if 'Range' in request.headers:
-            headers['Range'] = request.headers['Range']
-
-        # Fetch the audio file
-        response = req.get(audio_url, headers=headers, stream=True, timeout=30)
-        response.raise_for_status()
-
-        # Get content type from response or default to audio/mpeg
-        content_type = response.headers.get('Content-Type', 'audio/mpeg')
-        content_length = response.headers.get('Content-Length')
-
-        # Create response with the audio data
-        flask_response = make_response(response.content)
-        flask_response.headers['Content-Type'] = content_type
-        flask_response.headers['Access-Control-Allow-Origin'] = '*'
-        flask_response.headers['Cache-Control'] = 'public, max-age=3600'
-
-        # Add headers to support Range requests (seeking)
-        flask_response.headers['Accept-Ranges'] = 'bytes'
-
-        if content_length:
-            flask_response.headers['Content-Length'] = content_length
-
-        # If the upstream returned a 206 Partial Content, pass that through
-        if response.status_code == 206:
-            flask_response.status_code = 206
-            if 'Content-Range' in response.headers:
-                flask_response.headers['Content-Range'] = response.headers['Content-Range']
-
-        return flask_response
-
+        response = fetch(
+            audio_url, headers=headers, timeout=30,
+            allowlist=_media_url_allowlist(),
+        )
+    except URLNotAllowed as e:
+        logger.warning("Blocked audio proxy request to %s: %s", audio_url, e)
+        return jsonify({"error": "URL not allowed"}), 403
     except req.exceptions.Timeout:
-        logger.error(f"Timeout fetching audio: {audio_url}")
+        logger.error("Timeout fetching audio: %s", audio_url)
         return jsonify({"error": "Request timed out"}), 504
     except req.exceptions.RequestException as e:
-        logger.error(f"Error fetching audio {audio_url}: {e}")
+        logger.error("Error fetching audio %s: %s", audio_url, e)
         return jsonify({"error": "Failed to fetch audio"}), 502
+
+    try:
+        body = read_capped(response, DEFAULT_MAX_BYTES)
+    except URLNotAllowed as e:
+        logger.warning("Audio proxy response too large for %s: %s", audio_url, e)
+        return jsonify({"error": "Response too large"}), 502
+    finally:
+        response.close()
+
+    content_type = response.headers.get('Content-Type', 'audio/mpeg')
+
+    flask_response = make_response(body)
+    flask_response.headers['Content-Type'] = content_type
+    # No Access-Control-Allow-Origin: every caller is the annotation page on
+    # this same origin, and the wildcard let any site read proxied content
+    # through a logged-in user's browser.
+    flask_response.headers['Cache-Control'] = 'private, max-age=3600'
+    flask_response.headers['Accept-Ranges'] = 'bytes'
+    flask_response.headers['Content-Length'] = str(len(body))
+
+    if response.status_code == 206:
+        flask_response.status_code = 206
+        if 'Content-Range' in response.headers:
+            flask_response.headers['Content-Range'] = response.headers['Content-Range']
+
+    return flask_response
 
 
 @app.route("/api/ai_assistant", methods=["GET"])

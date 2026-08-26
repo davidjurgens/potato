@@ -4686,7 +4686,9 @@ def _init_waveform_service(config: dict) -> None:
             cache_dir=cache_dir,
             look_ahead=look_ahead,
             cache_max_size=cache_max_size,
-            client_fallback_max_duration=client_fallback_max_duration
+            client_fallback_max_duration=client_fallback_max_duration,
+            # Local media paths from request bodies resolve inside this.
+            task_dir=config.get("task_dir", "."),
         )
 
         if waveform_service.is_available:
@@ -5099,9 +5101,51 @@ def run_server(args):
         ssl_context = (config["ssl_cert"], config["ssl_key"])
         logger.info("Serving over HTTPS using cert %s", config["ssl_cert"])
 
+    # Two different things are spelled `debug`. Potato's own conveniences
+    # (skip login, debug phases, verbose logging) are safe to keep wherever
+    # the operator asked for them. Flask's `debug=True` additionally serves the
+    # Werkzeug interactive debugger, which is a remote console for anyone who
+    # can reach a traceback. Those are separable, and only the second one has
+    # to be refused off loopback.
+    from potato.server_utils.admin_key import is_loopback_bind
+
+    debug_requested = config.get("debug", False)
+    loopback = is_loopback_bind({"host": host})
+
+    if debug_requested and not loopback:
+        if os.environ.get("POTATO_ALLOW_REMOTE_DEBUG") != "1":
+            raise SystemExit(
+                "Refusing to start: debug is enabled and the server is bound "
+                "to %s rather than loopback.\n"
+                "  debug disables parts of the admin authentication and, with "
+                "the built-in server, exposes the Werkzeug interactive "
+                "debugger.\n"
+                "  Bind to 127.0.0.1, remove `debug: true`, or set "
+                "POTATO_ALLOW_REMOTE_DEBUG=1 if you accept the risk."
+                % host
+            )
+        logger.warning(
+            "=" * 70 + "\n"
+            "debug is enabled on %s, a non-loopback bind, allowed only "
+            "because POTATO_ALLOW_REMOTE_DEBUG=1 is set.\n"
+            "The Werkzeug interactive debugger is still withheld.\n"
+            + "=" * 70, host,
+        )
+
+    # The interactive debugger is never served off loopback, override or not.
+    werkzeug_debug = bool(debug_requested and loopback)
+
+    if debug_requested:
+        logger.warning(
+            "debug is on. Bound to %s. Admin bypass: %s. Werkzeug debugger: %s.",
+            host,
+            "active (loopback)" if loopback else "withheld (not loopback)",
+            "on" if werkzeug_debug else "off",
+        )
+
     # Use threaded=True so background LLM calls (solo mode refinement,
     # edge case synthesis, etc.) don't block the HTTP server.
-    app.run(host=host, port=port, debug=config.get("debug", False),
+    app.run(host=host, port=port, debug=werkzeug_debug,
             use_reloader=False, threaded=True, ssl_context=ssl_context)
 
 
