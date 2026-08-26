@@ -48,7 +48,7 @@ Each `user_state.json` contains the complete annotation state for that user:
 }
 ```
 
-> **Note:** The older `output_annotation_format` config key is legacy and has no effect. Use `export_annotation_format` for auto-export (see below).
+> **Note:** `output_annotation_format` is deprecated. The loader reads it as `export_annotation_format` and logs a warning, turning `json` into `jsonl` because no exporter is called `json`. It will stop being read in a later release. `potato migrate <config> --to-v2` renames it for you.
 
 ## Auto-Export
 

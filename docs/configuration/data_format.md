@@ -178,11 +178,10 @@ output formats, including: csv, tsv, json, or jsonl.
 # necessary to restart annotation.
 "output_annotation_dir": "annotation_output/folder_name/",
 
-# The output format for the all-annotator data. Allowed formats are:
-# * jsonl
-# * json (same output as jsonl)
-# * csv
-# * tsv
-#
-"output_annotation_format": "json", 
+# Write a periodic export of everyone's annotations to
+# <output_annotation_dir>/exports/<format>/. Any format the export registry
+# knows works here: csv, tsv, jsonl, parquet, huggingface, coco and two dozen
+# more. Leave it out and no export runs; the per-annotator JSON is written
+# either way.
+"export_annotation_format": "jsonl",
 ```

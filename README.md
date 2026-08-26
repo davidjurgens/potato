@@ -289,7 +289,7 @@ so they cannot drift from it.
 |----------|-------------------|
 | [`llms.txt`](https://potatoannotator.readthedocs.io/en/latest/llms.txt) | Curated index of the docs ([llms.txt standard](https://llmstxt.org)) |
 | [`llms-full.txt`](https://potatoannotator.readthedocs.io/en/latest/llms-full.txt) | Every documentation page in one file |
-| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 161 config keys, 61 annotation types, 24 display types — validates a `config.yaml` before the server runs |
+| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 158 config keys, 61 annotation types, 24 display types — validates a `config.yaml` before the server runs |
 | [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 419 HTTP paths, with per-operation auth and config gating |
 
 Every config in `examples/` carries a `# yaml-language-server: $schema=…`
@@ -317,6 +317,13 @@ pytest --cov=potato --cov-report=html
 See the **[Testing guide](docs/guides/testing.md)** for which tier to write in,
 the test-file security rules, the annotation-persistence testing pattern, and
 the drift tests that keep the generated specs honest.
+
+## Contributing
+
+Bug fixes, new annotation types, documentation corrections and example projects
+are welcome. **[CONTRIBUTING.md](CONTRIBUTING.md)** covers setup and what to run
+before opening a PR; the **[full contributor guide](docs/guides/contributing.md)**
+covers the checklist for adding an annotation type and what reviewers look at.
 
 ---
 

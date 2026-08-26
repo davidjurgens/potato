@@ -142,3 +142,29 @@ class TestSchemaDocPointers:
             "Reference-table examples do not configure the type they illustrate: "
             f"{mismatched}"
         )
+
+
+def test_every_registered_type_has_a_worked_example():
+    """A type with no example config is a type nobody can copy.
+
+    `annotation-types.md` in the agent pack promises a worked example per type
+    and prints "_No example config ships with this type._" where there is none.
+    That happened once and nothing failed: `video` was registered, documented,
+    and had no example anywhere in `examples/`, so an agent reaching for it got
+    a field list and no idea what a working one looks like.
+
+    The neighbouring test only checks the examples that *are* named. This checks
+    that each type has one at all.
+    """
+    from potato.server_utils.schema_examples import example_scheme_for
+    from potato.server_utils.schemas.registry import schema_registry
+
+    missing = sorted(
+        name for name in schema_registry.get_supported_types()
+        if not example_scheme_for(name)
+    )
+    assert not missing, (
+        f"No example config uses these registered annotation types: {missing}. "
+        f"Add one under examples/<category>/<name>/ -- a type nobody can copy "
+        f"is a type an agent will guess at."
+    )

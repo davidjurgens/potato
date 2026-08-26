@@ -36,10 +36,19 @@ def _counts():
     gen = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gen)
 
+    import json
+
+    with open(REPO_ROOT / "docs" / "api-reference" / "openapi.json", encoding="utf-8") as f:
+        openapi = json.load(f)
+
+    from potato.server_utils.examples_manifest import load_manifest
+
     return {
         "annotation_types": len(schema_registry.get_supported_types()),
         "display_types": len(display_registry.get_supported_types()),
         "config_keys": len(gen.KNOWN_CONFIG_KEYS),
+        "http_paths": len(openapi["paths"]),
+        "examples": load_manifest()["count"],
     }
 
 
@@ -101,6 +110,33 @@ CLAIMS = [
     ("docs/comparison.md",
      r"\| Display types \| (\d+) \|",
      "display_types"),
+
+    # llms.txt is the entry point we hand to coding agents, and it was the one
+    # index nothing checked: it claimed 56 annotation types, 23 display types
+    # and 390 HTTP paths against an actual 61 / 24 / 422.
+    ("docs/llms.txt",
+     r"all (\d+) annotation types and \d+ display types",
+     "annotation_types"),
+    ("docs/llms.txt",
+     r"all \d+ annotation types and (\d+) display types",
+     "display_types"),
+    ("docs/llms.txt",
+     r"all (\d+) HTTP paths",
+     "http_paths"),
+
+    ("docs/api-reference/machine_readable.md",
+     r"\*\*(\d+) paths / \d+ operations\*\*",
+     "http_paths"),
+
+    # Both of these said 212 against a manifest of 214. The examples count was
+    # the one number in llms.txt and machine_readable.md that nothing pinned.
+    ("docs/llms.txt",
+     r"all (\d+) example projects",
+     "examples"),
+    ("docs/api-reference/machine_readable.md",
+     r"the \*\*(\d+) example projects\*\*",
+     "examples"),
+
 ]
 
 

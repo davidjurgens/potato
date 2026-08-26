@@ -248,7 +248,7 @@ over prose when writing a config or calling the API.
 
 ## Contributing
 
-- [Contributing Guide](deployment/open-sourcing.md) - How to contribute to Potato
+- [Contributing Guide](guides/contributing.md) - How to contribute to Potato
 
 ---
 

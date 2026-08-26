@@ -108,7 +108,7 @@ Additional fields are specific to each annotation type and may be required or op
 | `tree_annotation` | Annotation of conversation tree nodes with path selection | [below](#14-conversation-tree-tree_annotation) | `examples/span/conversation-tree/` |
 | `triage` | Binary accept/reject triage for rapid data curation | [below](#12-triage-triage) | `examples/advanced/triage/` |
 | `vas` | Continuous visual analog scale for fine-grained magnitude estimation | [below](#16-visual-analog-scale-vas) | `examples/classification/vas/` |
-| `video` | Video player display | [below](#28-video-player-video) | — |
+| `video` | Video player display | [below](#28-video-player-video) | `examples/video/video-player/` |
 | `video_annotation` | Video annotation with temporal segments, frame classification, keyframes, and object tracking | [below](#11-video-annotation-video_annotation) | `examples/video/video-frame-annotation/` |
 | `voice_interaction` | Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/voice-interaction/` |
 

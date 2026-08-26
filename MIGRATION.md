@@ -213,7 +213,7 @@ Check for:
     "server_name": "potato annotator",
     "annotation_task_name": "Sentiment Analysis Task",
     "output_annotation_dir": "annotation_output/sentiment/",
-    "output_annotation_format": "jsonl",
+    "export_annotation_format": "jsonl",
     "data_files": ["data/tweets.json"],
     "item_properties": {
         "id_key": "id",
@@ -261,7 +261,7 @@ task_dir: sentiment_project/
 
 # Updated path structure
 output_annotation_dir: sentiment_project/annotations/
-output_annotation_format: jsonl
+export_annotation_format: jsonl
 
 data_files:
   - data/tweets.json

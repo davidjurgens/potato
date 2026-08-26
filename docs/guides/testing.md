@@ -195,7 +195,7 @@ python scripts/generate_llms_full.py
 
 New annotation schema types have their own checklist covering unit tests,
 Selenium persistence tests, docs, and an example project — see the
-[Developer Guide](developer-guide.md).
+[Contributing guide](contributing.md#adding-an-annotation-type).
 
 ## Known pre-existing failures
 

@@ -270,7 +270,7 @@ auto_export_interval: 60                     # seconds between exports (default:
 
 Annotations are always saved as per-user `user_state.json` files in `output_annotation_dir`. The `export_annotation_format` setting additionally auto-exports to the specified format(s) into an `exports/` subdirectory. You can also export manually at any time using the export CLI — see [Export Formats](../data-export/export_formats.md).
 
-> **Note:** The older `output_annotation_format` config key is legacy and has no effect. Use `export_annotation_format` instead.
+> **Note:** `output_annotation_format` is deprecated. The loader reads it as `export_annotation_format` and logs a warning, turning `json` into `jsonl` because no exporter is called `json`. It will stop being read in a later release. `potato migrate <config> --to-v2` renames it for you.
 
 ## Instance Display
 
