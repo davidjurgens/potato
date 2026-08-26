@@ -325,7 +325,8 @@ live_coding_agent:
     base_url: http://localhost:11434
   working_dir: ./workspace
   max_turns: 20
-  sandbox_mode: worktree          # worktree (default), docker, direct
+  sandbox_mode: container         # container (default), bubblewrap, trusted
+  container_cli: docker           # or podman
 ```
 
 ### Agent Backends
@@ -336,13 +337,79 @@ live_coding_agent:
 | Anthropic API | `anthropic_tool_use` | `ANTHROPIC_API_KEY` env var |
 | Claude Agent SDK | `claude_sdk` | `claude-agent-sdk` package installed |
 
-### Sandbox Modes
+### Sandbox modes
 
-| Mode | Description | Best For |
-|------|------------|---------|
-| `worktree` | Git worktree per session (lightweight copy) | Production use, safe isolation |
-| `docker` | Docker container with mounted workspace | Maximum isolation |
-| `direct` | Agent works directly in working_dir | Development, simple setup |
+Annotators can edit a tool call and re-execute it. That includes `Bash`, so the
+sandbox is what stops an edited command reaching the host. Pick the strongest
+one your machine supports.
+
+| Mode | Boundary | Needs |
+|------|----------|-------|
+| `container` (default) | Namespaces, cgroups, seccomp. No network, read-only root, runs as `nobody`, all capabilities dropped | `docker` or `podman` |
+| `bubblewrap` | Namespaces, no daemon, no root | `bwrap`, Linux |
+| `trusted` | None | An explicit acknowledgement |
+
+Set `container_cli: podman` for rootless containers, which need no root daemon.
+
+To go further, install a drop-in container runtime and name it:
+
+```yaml
+live_coding_agent:
+  sandbox_mode: container
+  container_runtime: runsc     # gVisor: intercepts syscalls in userspace
+  # container_runtime: kata    # Kata: a hardware VM per container
+```
+
+Potato passes the value straight through as `--runtime`, so nothing else
+changes.
+
+#### Running without a container runtime
+
+On a shared cluster or a machine where Docker is not an option, `bubblewrap` is
+usually available and needs neither a daemon nor root:
+
+```yaml
+live_coding_agent:
+  sandbox_mode: bubblewrap
+```
+
+It is a weaker boundary than a container, with no cgroup limits, and it needs
+unprivileged user namespaces, which some hardened kernels turn off. Potato
+checks for both at startup and refuses to run if either is missing.
+
+#### Trusted mode
+
+If you control the host and trust your annotators, run without a sandbox:
+
+```yaml
+live_coding_agent:
+  sandbox_mode: trusted
+  acknowledge_untrusted_code_execution: true
+```
+
+Both keys are required. Without the second, the server refuses to start. Tool
+calls then run as the Potato user with no isolation, and Potato logs a banner
+saying so on every boot. Deployment preflight rejects this mode for a public
+host.
+
+`worktree`, `docker` and `direct` still parse, and map onto the ladder above.
+`worktree` and `direct` become `trusted` and need the acknowledgement key:
+a git worktree is on the same host, as the same user, with the same network, so
+`cd /` leaves it. It keeps the agent's edits off your main checkout, which is
+worth having, but it is not a security boundary. `docker` becomes `container`,
+which fails loudly when Docker is missing instead of silently running tools on
+the host the way `docker` used to.
+
+#### Workspace copies and Docker-in-Docker
+
+The agent works on a **copy** of `working_dir`, made per session, so its edits
+never touch the original. Copies live in `.potato-sandboxes` beside
+`working_dir`; set `sandbox_root` to move them.
+
+If Potato itself runs inside a container, do not mount the host Docker socket to
+get container mode. That is equivalent to giving the sandbox host root. Use
+rootless Podman, `bubblewrap`, or `trusted` inside an already-isolated
+container.
 
 ### Controls
 
