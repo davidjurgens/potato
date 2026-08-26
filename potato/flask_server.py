@@ -2549,12 +2549,74 @@ def _scheme_has_required_annotation(user_state, instance_id: str, scheme: dict) 
     return False
 
 
+def _flat_annotations_for_instance(user_state, instance_id: str) -> dict:
+    """`{schema: value}` for one instance, in the shape display_logic compares.
+
+    Mirrors `flatten_phase_annotations`, which does the same job for phase
+    pages; annotation pages key by `Label` objects rather than by page, so the
+    flattening differs even though the comparison afterwards is identical.
+    """
+    flat: dict = {}
+    for label_key, value in (
+        user_state.instance_id_to_label_to_value.get(instance_id, {}) or {}
+    ).items():
+        if not hasattr(label_key, "get_schema"):
+            continue
+        schema = label_key.get_schema()
+        name = label_key.get_name() if hasattr(label_key, "get_name") else None
+        if not value:
+            continue
+        existing = flat.get(schema)
+        # A multiselect contributes one entry per ticked label, so collect them
+        # into a list; single-choice schemes keep the label name, which is what
+        # `equals` is written against in a config.
+        if existing is None:
+            flat[schema] = name if name is not None else value
+        elif isinstance(existing, list):
+            existing.append(name)
+        else:
+            flat[schema] = [existing, name]
+    return flat
+
+
+def _hidden_scheme_names(user_state, instance_id: str) -> set:
+    """Schemes whose `display_logic` condition is not met for this instance."""
+    schemes = config.get("annotation_schemes", []) or []
+    if not any(isinstance(s, dict) and s.get("display_logic") for s in schemes):
+        return set()
+    try:
+        from potato.server_utils.display_logic import compute_hidden_schemas
+        return compute_hidden_schemas(
+            schemes, _flat_annotations_for_instance(user_state, instance_id))
+    except Exception:
+        logger.warning(
+            "display_logic could not be evaluated for %s; required-answer "
+            "checking will treat every scheme as visible", instance_id,
+            exc_info=True)
+        return set()
+
+
 def _instance_meets_required_annotation_rules(user_state, instance_id: str) -> list:
-    """Return the names of required schemes that are still unsatisfied."""
+    """Return the names of required schemes that are still unsatisfied.
+
+    A scheme hidden by its own `display_logic` is skipped. Without that, a
+    required follow-up behind a condition is unsatisfiable the moment the
+    condition is false: the annotator cannot see the question, cannot answer
+    it, and every save is refused with a 400 they are never shown. The task
+    validates, previews and screenshots cleanly, so nothing catches it before
+    an annotator is stuck on the first item that takes the other branch.
+
+    `display_logic` plus `required` is the natural way to write a gated
+    follow-up, which is why this has to work rather than be documented around.
+    """
+    hidden = _hidden_scheme_names(user_state, instance_id)
     unsatisfied = []
     for scheme in config.get("annotation_schemes", []):
+        name = scheme.get("name", "unknown")
+        if name in hidden:
+            continue
         if _scheme_is_required(scheme) and not _scheme_has_required_annotation(user_state, instance_id, scheme):
-            unsatisfied.append(scheme.get("name", "unknown"))
+            unsatisfied.append(name)
     return unsatisfied
 
 
