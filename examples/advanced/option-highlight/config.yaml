@@ -22,7 +22,7 @@ item_properties:
 # Output configuration
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # AI Support Configuration - using Ollama with qwen3:0.6b
 ai_support:

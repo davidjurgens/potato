@@ -25,7 +25,7 @@ item_properties:
 
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # --- Continuous-eval ingestion -------------------------------------------
 # Webhook endpoint (POST /api/traces/webhook) + SSE notifications to annotators

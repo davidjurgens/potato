@@ -37,7 +37,7 @@ item_properties:
 
 # Output directory for annotations
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Annotation scheme - single radio button for sentiment classification
 # AI buttons available: Hint, Keyword, Rationale (configured via ai_support below)

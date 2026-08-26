@@ -41,7 +41,7 @@
 annotation_task_name: "Politeness — Codebook Sidebar"
 task_dir: .
 output_annotation_dir: annotation_output/
-output_annotation_format: jsonl
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 
 data_files:

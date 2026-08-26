@@ -23,7 +23,7 @@ item_properties:
 
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Live coding agent configuration
 live_coding_agent:

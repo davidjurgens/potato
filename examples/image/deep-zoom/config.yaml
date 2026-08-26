@@ -1,8 +1,9 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 port: 8000
 annotation_task_name: Deep-zoom survey annotation
 task_dir: .
 output_annotation_dir: annotation_output/
-output_annotation_format: json
+export_annotation_format: jsonl
 
 data_files:
   - data/scans.json

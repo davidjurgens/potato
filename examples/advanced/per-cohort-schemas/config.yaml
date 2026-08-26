@@ -3,7 +3,7 @@ port: 9101
 annotation_task_name: Per-Cohort Schemas Example
 task_dir: .
 output_annotation_dir: annotation_output/per-cohort-schemas/
-output_annotation_format: tsv
+export_annotation_format: tsv
 alert_time_each_instance: 10000000
 random_seed: 1234
 data_files:

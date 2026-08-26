@@ -37,4 +37,4 @@ annotation_schemes:
       description: "Select the best response path by clicking nodes in order"
 
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl

@@ -3,7 +3,7 @@ port: 8000
 annotation_task_name: "Boundary Lab — Politeness"
 task_dir: .
 output_annotation_dir: annotation_output/boundary-probing/
-output_annotation_format: jsonl
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/politeness.json

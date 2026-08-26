@@ -3,7 +3,7 @@ port: 8000
 annotation_task_name: "Pocket — Sentiment Triage"
 task_dir: .
 output_annotation_dir: annotation_output/pocket-mode/
-output_annotation_format: jsonl
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/reviews.json

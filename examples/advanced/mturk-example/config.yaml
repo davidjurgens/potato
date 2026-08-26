@@ -45,7 +45,7 @@ max_annotations_per_item: 3
 # Task directories
 task_dir: .
 output_annotation_dir: annotation_output/mturk-example/
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Data files
 data_files:

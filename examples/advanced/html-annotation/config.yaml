@@ -3,7 +3,7 @@ port: 9001
 annotation_task_name: Simple HTML as Input Example
 task_dir: .
 output_annotation_dir: annotation_output/simple-html-annotation/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/html-as-input.json

@@ -27,7 +27,7 @@ annotation_task_name: "Robot episode review"
 task_dir: .
 media_directory: media
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 data_files:
   - data/episodes.json

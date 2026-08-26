@@ -26,7 +26,7 @@
 annotation_task_name: Custom Layout Example
 task_dir: .
 output_annotation_dir: annotation_output/custom-layout-example/
-output_annotation_format: jsonl
+export_annotation_format: jsonl
 
 # Point to a custom layout file (optional - if not set, Potato auto-generates one)
 task_layout: layouts/custom_task_layout.html

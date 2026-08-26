@@ -2,7 +2,7 @@
 annotation_task_name: Range Slider Formality Assessment
 task_dir: .
 output_annotation_dir: annotation_output/range-slider/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/range-slider-example.json

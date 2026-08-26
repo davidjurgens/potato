@@ -2,7 +2,7 @@
 annotation_task_name: Hierarchical Topic Classification
 task_dir: .
 output_annotation_dir: annotation_output/hierarchical-multiselect/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/hierarchical-example.json

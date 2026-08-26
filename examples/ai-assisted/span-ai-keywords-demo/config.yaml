@@ -44,7 +44,7 @@ item_properties:
 
 # Output directory for annotations
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Admin keyword highlights file
 # These keywords will always be highlighted with bordered boxes

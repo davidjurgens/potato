@@ -2,7 +2,7 @@
 annotation_task_name: SQuAD-Style Extractive QA
 task_dir: .
 output_annotation_dir: annotation_output/extractive-qa/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/extractive-qa-example.json

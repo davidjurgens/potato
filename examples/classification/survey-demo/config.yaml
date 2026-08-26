@@ -5,7 +5,7 @@
 annotation_task_name: Survey Instruments Demo
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Data files
 data_files:

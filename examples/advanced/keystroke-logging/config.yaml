@@ -13,7 +13,7 @@
 annotation_task_name: keystroke-logging
 task_dir: .
 output_annotation_dir: annotation_output/
-output_annotation_format: csv
+export_annotation_format: csv
 
 data_files:
   - data/keystroke-logging-example.json

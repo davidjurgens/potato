@@ -10,7 +10,7 @@ item_properties:
 task_dir: .
 port: 8000
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 instance_display:
   layout:

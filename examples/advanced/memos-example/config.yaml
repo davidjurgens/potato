@@ -3,7 +3,7 @@ port: 8000
 annotation_task_name: Memos Example
 task_dir: .
 output_annotation_dir: annotation_output/memos-example/
-output_annotation_format: tsv
+export_annotation_format: tsv
 data_files:
 - data/memos-example.json
 item_properties:

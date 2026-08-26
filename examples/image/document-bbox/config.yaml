@@ -11,7 +11,7 @@ data_files:
   - data/document-examples.jsonl
 
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 item_properties:
   id_key: id

@@ -3,7 +3,7 @@ port: 8000
 annotation_task_name: Codebook Example
 task_dir: .
 output_annotation_dir: annotation_output/codebook-example/
-output_annotation_format: tsv
+export_annotation_format: tsv
 data_files:
 - data/codebook-example.json
 item_properties:

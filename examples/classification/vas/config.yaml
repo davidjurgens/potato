@@ -2,7 +2,7 @@
 annotation_task_name: VAS Pain Level Rating
 task_dir: .
 output_annotation_dir: annotation_output/vas/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/vas-example.json

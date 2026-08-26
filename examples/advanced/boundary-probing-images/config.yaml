@@ -21,7 +21,7 @@ port: 8000
 annotation_task_name: "Boundary Lab — Scene Setting"
 task_dir: .
 output_annotation_dir: annotation_output/boundary-probing-images/
-output_annotation_format: jsonl
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 
 data_files:

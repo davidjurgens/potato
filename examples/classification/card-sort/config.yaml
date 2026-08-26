@@ -2,7 +2,7 @@
 annotation_task_name: Topic Card Sorting
 task_dir: .
 output_annotation_dir: annotation_output/card-sort/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/card-sort-example.json

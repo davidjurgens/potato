@@ -2,7 +2,7 @@
 annotation_task_name: LLM Response Quality Rubric
 task_dir: .
 output_annotation_dir: annotation_output/rubric-eval/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/rubric-eval-example.json

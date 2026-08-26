@@ -3,7 +3,7 @@ port: 8000
 annotation_task_name: Geometry Primitives
 task_dir: .
 output_annotation_dir: annotation_output/geometry-primitives/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 alert_time_each_instance: 10000000
 

@@ -57,6 +57,8 @@ KNOWN_CONFIG_KEYS = {
     "data_files": None,
     "task_dir": None,
     "output_annotation_dir": None,
+    # Deprecated; folded onto export_annotation_format at load time. Kept here
+    # so an old config gets the deprecation warning rather than "unrecognized".
     "output_annotation_format": None,
     "annotation_task_name": None,
     "task_description": None,
@@ -80,7 +82,6 @@ KNOWN_CONFIG_KEYS = {
     # === Annotation ===
     "annotation_schemes": None,
     "phases": None,
-    "output_annotation_format": None,
 
     # === Auth / login ===
     "authentication": {
@@ -534,6 +535,153 @@ KNOWN_CONFIG_KEYS = {
     "__config_file__": None,
     "_bws_pool_items": None,
 }
+
+
+# --- Deprecated config keys ------------------------------------------------- #
+
+# Keys the loader still accepts, with a warning, and will stop reading in a
+# later release. `output_annotation_format` was live until the v2 storage
+# rewrite (commit 5eef51d, March 2025) deleted save_all_annotations(), the only
+# code that read it. Annotations have gone to
+# `<output_annotation_dir>/<user>/user_state.json` regardless of its value ever
+# since, so a config carrying it gets a setting that does nothing. Folding it
+# onto `export_annotation_format` writes a periodic export in that format under
+# `<output_annotation_dir>/exports/<format>/`, which is close to what the name
+# suggests.
+DEPRECATED_KEY_ALIASES = {
+    "output_annotation_format": "export_annotation_format",
+}
+
+# `json` was one of four values the old key accepted, and the export registry
+# has no exporter under that name -- `jsonl` is the JSON-shaped one. Without
+# this mapping every folded config would log "not registered, skipping" on each
+# save. Deliberately a static table: importing the export registry here would
+# pull 29 exporters onto the boot path.
+DEPRECATED_KEY_VALUE_ALIASES = {
+    "output_annotation_format": {"json": "jsonl"},
+}
+
+_DEPRECATION_REMOVAL_NOTE = "It will stop being read in a later release."
+
+
+def normalize_config_before_validation(
+    config_data: Dict[str, Any], config_file_dir: str
+) -> Dict[str, Any]:
+    """Apply everything the server does to a config before validating it.
+
+    `potato validate` used to skip these steps and so reported errors a running
+    server does not have: a config whose `ai_support.endpoint_type` came from an
+    environment variable was rejected as an unknown endpoint type, because
+    nothing had expanded the `${...}` yet. One function, both callers.
+    """
+    # Merge external AI config file if specified (before validation)
+    config_data = _merge_ai_config_file(config_data, config_file_dir)
+
+    # Substitute ${ENV_VAR} references in LLM endpoint config blocks
+    # (live_agent, solo_mode, judge_calibration, agent_proxy, ...)
+    config_data = _substitute_llm_block_env_vars(config_data)
+
+    # Apply default values for common configuration options
+    if 'task_dir' not in config_data:
+        config_data['task_dir'] = '.'
+        logger.debug("task_dir not specified, defaulting to '.'")
+    if 'site_dir' not in config_data:
+        config_data['site_dir'] = 'default'
+        logger.debug("site_dir not specified, defaulting to 'default'")
+
+    # Resolve task_dir relative to config file directory if it's '.' or a relative path
+    task_dir = config_data.get('task_dir')
+    if isinstance(task_dir, str) and (task_dir == '.' or not os.path.isabs(task_dir)):
+        task_dir = os.path.normpath(os.path.join(config_file_dir, task_dir))
+        config_data['task_dir'] = task_dir
+        logger.debug(f"Resolved task_dir to: {task_dir}")
+
+    return config_data
+
+
+def deprecated_key_warnings(config_data: Dict[str, Any]) -> List[str]:
+    """Describe every deprecated key present in the config.
+
+    Pure: builds the messages `apply_deprecated_key_aliases()` logs, so
+    `potato validate` can report the same thing without touching the config.
+    """
+    messages: List[str] = []
+    if not isinstance(config_data, dict):
+        return messages
+
+    for legacy, replacement in DEPRECATED_KEY_ALIASES.items():
+        if legacy not in config_data:
+            continue
+        value = config_data[legacy]
+
+        if replacement in config_data:
+            messages.append(
+                f"'{legacy}' is deprecated and is being ignored here, because "
+                f"'{replacement}' is also set. Delete '{legacy}'."
+            )
+            continue
+
+        if not value:
+            messages.append(
+                f"'{legacy}' is deprecated and empty, so it does nothing. "
+                f"Delete it, or set '{replacement}' to the format you want "
+                f"exported."
+            )
+            continue
+
+        folded = _fold_deprecated_value(legacy, value)
+        if folded != value:
+            messages.append(
+                f"'{legacy}' is deprecated and never changed where annotations "
+                f"are stored. Reading it as '{replacement}: {folded}', which "
+                f"writes a periodic export to "
+                f"'<output_annotation_dir>/exports/{folded}/'. The value "
+                f"changed because no exporter is called '{value}'. Rename the "
+                f"key. {_DEPRECATION_REMOVAL_NOTE}"
+            )
+        else:
+            messages.append(
+                f"'{legacy}' is deprecated and never changed where annotations "
+                f"are stored. Reading it as '{replacement}: {folded}', which "
+                f"writes a periodic export to "
+                f"'<output_annotation_dir>/exports/{folded}/'. Rename the key. "
+                f"{_DEPRECATION_REMOVAL_NOTE}"
+            )
+    return messages
+
+
+def _fold_deprecated_value(legacy: str, value: Any) -> Any:
+    """Map a legacy value onto one the replacement key understands."""
+    value_map = DEPRECATED_KEY_VALUE_ALIASES.get(legacy, {})
+    if isinstance(value, str):
+        return value_map.get(value, value)
+    if isinstance(value, list):
+        return [value_map.get(v, v) if isinstance(v, str) else v for v in value]
+    return value
+
+
+def apply_deprecated_key_aliases(config_data: Dict[str, Any]) -> List[str]:
+    """Fold deprecated keys onto their replacements, warning once for each.
+
+    Mutates `config_data`: the legacy key is removed after its value moves, so
+    nothing downstream reads a key whose meaning has changed. An explicitly set
+    replacement always wins.
+    """
+    messages = deprecated_key_warnings(config_data)
+    if not isinstance(config_data, dict):
+        return messages
+
+    for legacy, replacement in DEPRECATED_KEY_ALIASES.items():
+        if legacy not in config_data:
+            continue
+        value = config_data.pop(legacy)
+        if replacement in config_data or not value:
+            continue
+        config_data[replacement] = _fold_deprecated_value(legacy, value)
+
+    for message in messages:
+        logger.warning(message)
+    return messages
 
 
 def validate_ui_language_config(config_data):
@@ -1498,6 +1646,12 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     """
     if not isinstance(config_data, dict):
         raise ConfigValidationError("Configuration must be a YAML object (dictionary)")
+
+    # Report deprecated keys without touching them, so `potato validate` says
+    # the same thing the server says at boot. On the server path
+    # load_and_validate_config() has already folded and removed them.
+    for _deprecation in deprecated_key_warnings(config_data):
+        logger.warning(_deprecation)
 
     # Required fields validation. NOTE: 'data_files' is intentionally NOT here —
     # it is one of three mutually-acceptable data sources (data_files /

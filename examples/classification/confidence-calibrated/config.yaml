@@ -2,7 +2,7 @@
 annotation_task_name: Confidence-Calibrated Sentiment Annotation
 task_dir: .
 output_annotation_dir: annotation_output/confidence-calibrated/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/confidence-example.json

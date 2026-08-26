@@ -8,7 +8,7 @@ annotation_task_name: Entity Linking Example
 
 task_dir: .
 output_annotation_dir: annotation_output/simple-entity-linking/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 
 data_files:

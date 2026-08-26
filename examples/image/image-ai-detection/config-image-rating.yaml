@@ -11,7 +11,7 @@ port: 8000
 annotation_task_name: "Image Quality & Content Rating"
 task_dir: .
 output_annotation_dir: annotation_output_rating
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Data files (reusing the same images)
 data_files:

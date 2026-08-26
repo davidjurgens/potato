@@ -19,7 +19,7 @@ item_properties:
 
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Semantic curation. Build the index from the Catalog page (or set
 # embed_on_ingest to index runtime-ingested traces automatically).

@@ -2,7 +2,7 @@
 annotation_task_name: Semantic Differential Word Connotation
 task_dir: .
 output_annotation_dir: annotation_output/semantic-differential/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/semantic-differential-example.json

@@ -3,7 +3,7 @@ port: 8000
 annotation_task_name: QDA Mode Example
 task_dir: .
 output_annotation_dir: annotation_output/qda-mode-example/
-output_annotation_format: tsv
+export_annotation_format: tsv
 data_files:
 - data/qda-mode-example.json
 item_properties:
