@@ -12,6 +12,7 @@ nav:
         - Administrator Guide: guides/admin-guide.md
         - Developer Guide: guides/developer-guide.md
         - Testing: guides/testing.md
+        - Contributing: guides/contributing.md
         - Crowdsourcing Guide: guides/crowdsourcing-guide.md
         - Agent Evaluation Guide: guides/agent-evaluation-guide.md
         - AI-Assisted Annotation: guides/ai-assisted-annotation-guide.md
