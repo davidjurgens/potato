@@ -545,8 +545,11 @@ def _register_builtin_schemas():
         SchemaDefinition(
             name="video_annotation",
             generator=generate_video_annotation_layout,
-            required_fields=["name", "description"],
-            optional_fields=["mode", "labels", "segment_schemes", "min_segments", "max_segments", "timeline_height", "overview_height", "zoom_enabled", "playback_rate_control", "frame_stepping", "show_timecode", "video_fps", "tracking_options", "ai_support", "source_field"],
+            # `labels` is required in every one of the five modes -- the
+            # generator raises without it -- so declaring it optional meant
+            # `validate --strict` passed a config that could not render.
+            required_fields=["name", "description", "labels"],
+            optional_fields=["mode", "segment_schemes", "min_segments", "max_segments", "timeline_height", "overview_height", "zoom_enabled", "playback_rate_control", "frame_stepping", "show_timecode", "video_fps", "tracking_options", "ai_support", "source_field"],
             supports_keybindings=True,
             description="Video annotation with temporal segments, frame classification, keyframes, and object tracking"
         ),

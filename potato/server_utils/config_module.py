@@ -6251,8 +6251,23 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
 
         # Validate span_target
         if field.get("span_target"):
-            # Types that support span annotation targets
-            span_target_types = ["text", "dialogue", "pdf", "document", "spreadsheet", "code", "agent_trace", "interactive_chat", "multi_agent_discussion", "audio_dialogue"]
+            # Sourced from the registry, like valid_display_types above. This
+            # was a second hardcoded list, and it had drifted: it rejected
+            # `eval_trace` and `coding_trace`, both of which declare span
+            # support, while allowing pdf/spreadsheet/agent_trace, which
+            # declare `supports_span_target = False` because they anchor spans
+            # their own way rather than through the `.text-content` contract.
+            # `get_span_target_capable_types()` is the union and the only
+            # question validation should be asking.
+            try:
+                from .displays import display_registry
+                span_target_types = display_registry.get_span_target_capable_types()
+            except Exception:
+                span_target_types = [
+                    "text", "dialogue", "pdf", "document", "spreadsheet", "code",
+                    "agent_trace", "interactive_chat", "multi_agent_discussion",
+                    "audio_dialogue", "eval_trace", "coding_trace",
+                ]
             if field_type not in span_target_types:
                 raise ConfigValidationError(
                     f"instance_display.fields[{i}].span_target is set but type '{field_type}' "

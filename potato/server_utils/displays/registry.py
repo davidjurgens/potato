@@ -55,6 +55,18 @@ class DisplayDefinition:
     lazy_populated: bool = False
 
 
+#: Display types that accept ``span_target: true`` without satisfying the
+#: standard ``.text-content`` contract, because they anchor spans themselves.
+#: Each declares ``supports_span_target = False`` on its renderer -- correctly,
+#: since that flag is about the standard contract -- and then emits its own
+#: ``span-target-<type>`` class and handles the offsets.
+#:
+#:   pdf         - anchors into the PDF.js text layer
+#:   spreadsheet - anchors per cell rather than by character offset
+#:   agent_trace - anchors per step, using the step id
+CUSTOM_SPAN_TARGET_TYPES = frozenset({"pdf", "spreadsheet", "agent_trace"})
+
+
 class DisplayRegistry:
     """
     Centralized registry for display types.
@@ -213,7 +225,12 @@ class DisplayRegistry:
 
     def get_span_target_types(self) -> List[str]:
         """
-        Get all display type names that support span annotation.
+        Display types that support the standard span contract.
+
+        "Standard" means the renderer wraps its content in the
+        ``.text-content`` element that span offsets are measured against.
+        This is narrower than the set of types that accept a ``span_target``
+        field -- see :meth:`get_span_target_capable_types`.
 
         Returns:
             List of type names where supports_span_target is True
@@ -223,6 +240,20 @@ class DisplayRegistry:
             if self.type_supports_span_target(name):
                 types.append(name)
         return sorted(types)
+
+    def get_span_target_capable_types(self) -> List[str]:
+        """
+        Every display type that accepts ``span_target: true``.
+
+        The standard-contract types, plus the ones in
+        :data:`CUSTOM_SPAN_TARGET_TYPES` that implement their own anchoring.
+        Config validation must use this rather than
+        :meth:`get_span_target_types`, and rather than a list of its own --
+        a second hardcoded list is how ``eval_trace`` and ``coding_trace``
+        came to be rejected by the validator while declaring support in the
+        registry.
+        """
+        return sorted(set(self.get_span_target_types()) | CUSTOM_SPAN_TARGET_TYPES)
 
     def list_displays(self) -> List[Dict[str, Any]]:
         """
