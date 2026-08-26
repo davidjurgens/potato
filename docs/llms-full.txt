@@ -52960,10 +52960,126 @@ route. See [Testing](../guides/testing.md) for the drift tests that enforce this
 
 ---
 
+<!-- source: docs/releasenotes/v2.8.2.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.8.2/
+
+# Release Notes: v2.8.2 — The Fixes 2.8.1 Said It Had
+
+**2.8.1 did not contain two of the five fixes its release notes and advisories
+described.** The SSRF fix and the debug-mode hardening were never written. The
+release notes for them were. Anyone who upgraded to 2.8.1 for either issue was
+not protected, and the advisories said they were.
+
+That is a documentation failure with a security consequence, and it is worse
+than shipping nothing, because it told people to stop worrying.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+## Fix status by release
+
+| Issue | Advisory | In 2.8.1 | In 2.8.2 |
+|---|---|---|---|
+| RCE through the live coding agent | `GHSA-cm4p-5rfv-x252` | Yes | Yes |
+| Admin config readable without the key | — | Yes | Yes |
+| Trace-ingestion webhook accepted everyone | — | Yes | Yes |
+| SSRF on the media endpoints | `GHSA-9394-85jj-2mhj` | **No** | Yes |
+| Debug mode on a reachable interface | `GHSA-r4ww-vc5h-35qf` | **No** | Yes |
+
+The three that were real in 2.8.1 are unchanged. If you are on 2.8.1 and do not
+use audio or video annotation and never enable `debug`, you are no worse off
+than you thought. Otherwise, upgrade.
+
+## SSRF on the media endpoints
+
+Four endpoints took a URL from the caller and fetched it server-side:
+`/api/audio/proxy`, `/api/waveform/generate`, `/api/video/waveform/generate` and
+`/api/video/metadata`. None required a login. The proxy returned the response
+body, so it read anything the server could reach — cloud instance metadata,
+loopback-bound admin interfaces, internal APIs. The waveform endpoints do not
+return the body, but they fetch what they are given, and when the input was not
+a URL they treated it as a local path and passed it to a subprocess, which
+answered whether an arbitrary path existed on the host.
+
+All four now require a login, and every URL goes through one shared guard in
+`potato/server_utils/url_guard.py`. It:
+
+- allows only `http` and `https`
+- resolves the host and refuses loopback, private, link-local, reserved,
+  multicast, unspecified, CGNAT and cloud-metadata addresses, including their
+  IPv6 and v4-mapped spellings
+- refuses a host that resolves to *any* blocked address, rather than picking a
+  public one from a mixed answer — a name that answers with both is a rebinding
+  primitive, not a host with a fallback
+- connects to the address it validated instead of handing the name back to
+  `requests`, which would resolve it a second time
+- re-validates every redirect hop, since a public URL that redirects to the
+  metadata service defeats any check of the caller's URL alone
+- caps the response, both on the declared Content-Length and while reading
+- **fails closed** on a name that will not resolve. The old `web_proxy`
+  validator allowed that case on the reasoning that the fetch would fail
+  anyway. It does not: a name that fails once can answer on the retry.
+
+The audio proxy no longer sends `Access-Control-Allow-Origin: *`. Every caller
+is the annotation page on the same origin, and the wildcard let any site read
+proxied content through a logged-in user's browser.
+
+Local paths handed to waveform generation now resolve inside `task_dir`, with
+`realpath` containment that catches `..` and symlinks pointing out.
+
+If you genuinely need the server to fetch from an internal host, name it in
+`media_url_allowlist`.
+
+## Debug mode
+
+`debug: true` disabling admin authentication is deliberate and documented. It
+was also unconditional, and the default bind is `0.0.0.0`.
+
+- The admin bypass applies only when the server is bound to loopback. On any
+  other interface, debug grants nothing and the admin key is still required.
+- The server refuses to start with `debug: true` on a non-loopback bind. Set
+  `POTATO_ALLOW_REMOTE_DEBUG=1` if you accept the risk; the error names that.
+- The Werkzeug interactive debugger is never served off loopback, override or
+  not. Potato's debug conveniences and Flask's remote console are now separate
+  things.
+- The admin dashboard puts the admin key in its HTML only for a caller who
+  already presented it. Under the debug bypass or an RBAC role the caller never
+  supplied the key, and emitting it there handed the real key to anyone who
+  could load the page.
+- Startup says what debug is doing: which interface, whether the bypass is
+  active, whether the debugger is on.
+
+Local debugging against `127.0.0.1` is unchanged, and `potato preview` now
+binds its throwaway server to loopback, which it should always have done.
+
+## Cause of the incomplete 2.8.1 release
+
+The 2.8.1 work implemented one phase of a five-phase remediation plan and then
+wrote release notes for all five. The verification that ran afterwards checked
+the version number and the phase that had been built, so it passed.
+
+The check that would have caught it — asserting each claimed fix against the
+built artifact — is now in the test suite rather than in a checklist:
+`tests/unit/test_url_guard.py`, `tests/unit/test_debug_bind_guard.py` and
+`tests/server/test_media_proxy_ssrf.py`. The last of those asserts both that an
+unauthenticated caller is refused **and** that an authenticated one still cannot
+reach an internal address, because every annotator on a crowdsourced task is
+authenticated and a test that only checks the first proves very little.
+
+
+---
+
 <!-- source: docs/releasenotes/v2.8.1.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.8.1/
 
 # Release Notes: v2.8.1 — Security Fixes
+
+> **Correction, 2026-08-26:** this page originally described five fixes. Two of
+> them — the SSRF fix and the debug-mode hardening — were **not in 2.8.1**. They
+> shipped in [2.8.2](v2.8.2.md). The sections below are left as published, with
+> this note, rather than quietly rewritten. If you upgraded to 2.8.1 for either
+> issue, upgrade again.
 
 A patch release. It closes five security issues, three of them reported
 privately against 2.8.0 through GitHub's advisory flow, and two found while

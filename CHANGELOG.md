@@ -2,11 +2,50 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
-## [2.8.1] - Security Fixes
+## [2.8.2] - The Fixes 2.8.1 Said It Had
 
-Closes five security issues: three reported privately against 2.8.0, and two
-found while fixing those. **Upgrade if you run Potato anywhere other than
-localhost.**
+**2.8.1 did not contain the SSRF or debug-mode fixes its release notes and
+advisories claimed.** The code was never written; the release notes were. If you
+upgraded to 2.8.1 for either of those, you were not protected. Upgrade to 2.8.2.
+
+The RCE fix (the agent sandbox), the admin config read authorization and the
+trace-ingestion webhook fix were real in 2.8.1 and are unchanged here.
+
+**Unauthenticated SSRF, now actually fixed.** `/api/audio/proxy`,
+`/api/waveform/generate`, `/api/video/waveform/generate` and
+`/api/video/metadata` require a login, and every caller-supplied URL goes
+through one shared guard. It resolves the host and refuses loopback, private,
+link-local, reserved, multicast, CGNAT and cloud-metadata addresses; rejects a
+host that resolves to any blocked address, since a mixed answer is a rebinding
+primitive; connects to the address it validated rather than re-resolving the
+name; re-validates every redirect hop; and caps the response. It fails closed on
+a name that will not resolve, where the old `web_proxy` validator allowed it.
+The proxy no longer sends `Access-Control-Allow-Origin: *`. Local paths handed
+to waveform generation resolve inside `task_dir`, closing a file-existence
+oracle.
+
+**Debug mode, now actually hardened.** The admin bypass applies only on a
+loopback bind. The server refuses to start with `debug: true` on any other
+interface unless `POTATO_ALLOW_REMOTE_DEBUG=1` is set. The Werkzeug interactive
+debugger is never served off loopback, override or not. The admin dashboard
+echoes the admin key only to a caller who already presented it, so the debug
+bypass and RBAC roles no longer disclose it. Local debugging on 127.0.0.1 is
+unchanged.
+
+Also: `potato preview` binds its throwaway server to loopback.
+
+**[Full Release Notes →](docs/releasenotes/v2.8.2.md)**
+
+---
+
+## [2.8.1] - Security Fixes (partly incomplete — see 2.8.2)
+
+> **Correction:** this entry claimed five fixes. Two of them, the SSRF and the
+> debug-mode hardening, were not in the release. They shipped in 2.8.2. The
+> descriptions below are left as published, with this note, rather than
+> rewritten.
+
+Closes three security issues, and claimed two more that were not included.
 
 **Unauthenticated SSRF** through `/api/audio/proxy` and the two waveform
 endpoints, which fetched any URL a caller supplied and, for the proxy, returned
