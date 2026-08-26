@@ -26,6 +26,12 @@ from .registry import import_registry
 
 logger = logging.getLogger(__name__)
 
+# Same line `scripts/generate_config_schema.py --stamp-examples` writes into
+# every shipped example, kept in one place so they cannot disagree.
+from potato.server_utils.config_schema import SCHEMA_URL
+
+SCHEMA_MODELINE = f"# yaml-language-server: $schema={SCHEMA_URL}"
+
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser(
@@ -550,6 +556,10 @@ def _write_project(parsed, result, source: str,
     config_path = os.path.join(parsed.output_dir, "config.yaml")
     config = _build_config(parsed.schema_name, result, data_rel)
     with open(config_path, "w") as f:
+        # The modeline first: it is what switches on live validation in an
+        # editor and tells a coding agent where the contract is. safe_dump
+        # alone produced a config with neither.
+        f.write(SCHEMA_MODELINE + "\n")
         yaml.safe_dump(config, f, sort_keys=False, default_flow_style=False)
 
     # Never clobber a README someone has written by hand -- re-running the

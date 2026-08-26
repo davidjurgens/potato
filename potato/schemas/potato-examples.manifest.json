@@ -1,0 +1,4869 @@
+{
+  "categories": {
+    "advanced": 56,
+    "agent-testing": 3,
+    "agent-traces": 57,
+    "ai-assisted": 6,
+    "audio": 7,
+    "classification": 30,
+    "conversation": 4,
+    "crowdsourcing": 6,
+    "custom-layouts": 6,
+    "embodied": 1,
+    "image": 15,
+    "span": 11,
+    "spatial": 2,
+    "testing": 2,
+    "video": 8
+  },
+  "count": 214,
+  "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
+  "examples": [
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "active_learning",
+        "icl_labeling"
+      ],
+      "data_files": [
+        "data/classification-sample.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/active-learning-llm-cold-start",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "active-learning-llm-cold-start",
+      "path": "examples/advanced/active-learning-llm-cold-start/config.yaml",
+      "run": "potato start examples/advanced/active-learning-llm-cold-start/config.yaml -p 8000",
+      "task_name": "Active Learning with LLM Cold-Start"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "active_learning"
+      ],
+      "data_files": [
+        "data/sentiment-sample.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/active-learning-strategies",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "active-learning-strategies",
+      "path": "examples/advanced/active-learning-strategies/config.yaml",
+      "run": "potato start examples/advanced/active-learning-strategies/config.yaml -p 8000",
+      "task_name": "Active Learning Strategies Demo"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "active_learning"
+      ],
+      "data_files": [
+        "data/toy-example.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/active-learning",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "active-learning",
+      "path": "examples/advanced/active-learning/config.yaml",
+      "run": "potato start examples/advanced/active-learning/config.yaml -p 8000",
+      "task_name": "Simple Active Learning Example"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "adjudication"
+      ],
+      "data_files": [
+        "data/adjudication-example.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/adjudication",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "adjudication",
+      "path": "examples/advanced/adjudication/config.yaml",
+      "run": "potato start examples/advanced/adjudication/config.yaml -p 8000",
+      "task_name": "Sentiment Adjudication Demo"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multirate",
+        "multiselect",
+        "number",
+        "pure_display",
+        "radio",
+        "select",
+        "slider",
+        "span",
+        "text"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/toy-example.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/all-annotation-types",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "all-annotation-types",
+      "path": "examples/advanced/all-annotation-types/config.yaml",
+      "run": "potato start examples/advanced/all-annotation-types/config.yaml -p 8000",
+      "task_name": "All Annotation Types Showcase"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "radio",
+        "slider",
+        "span",
+        "text"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases",
+        "training"
+      ],
+      "data_files": [
+        "data/toy-example.3.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/all-phases-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "all-phases-example",
+      "path": "examples/advanced/all-phases-example/config.yaml",
+      "run": "potato start examples/advanced/all-phases-example/config.yaml -p 8000",
+      "task_name": "All the Phases Annotations"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/scenes.json"
+      ],
+      "description": "Records **how** a drawn annotation was produced \u2014 timing, zoom, revision, and",
+      "dir": "examples/advanced/annotation-telemetry",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "annotation-telemetry",
+      "path": "examples/advanced/annotation-telemetry/config.yaml",
+      "run": "potato start examples/advanced/annotation-telemetry/config.yaml -p 8000",
+      "task_name": "Annotation telemetry demo"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/annotator-progress-example.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/annotator-progress",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "annotator-progress",
+      "path": "examples/advanced/annotator-progress/config.yaml",
+      "run": "potato start examples/advanced/annotator-progress/config.yaml -p 8000",
+      "task_name": "Annotator Progress Dashboard Example"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "boundary_probing"
+      ],
+      "data_files": [
+        "data/scenes.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/boundary-probing-images",
+      "display_types": [
+        "image"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "boundary-probing-images",
+      "path": "examples/advanced/boundary-probing-images/config.yaml",
+      "run": "potato start examples/advanced/boundary-probing-images/config.yaml -p 8000",
+      "task_name": "Boundary Lab \u2014 Scene Setting"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "boundary_probing"
+      ],
+      "data_files": [
+        "data/politeness.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/boundary-probing",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "boundary-probing",
+      "path": "examples/advanced/boundary-probing/config.yaml",
+      "run": "potato start examples/advanced/boundary-probing/config.yaml -p 8000",
+      "task_name": "Boundary Lab \u2014 Politeness"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "cases"
+      ],
+      "data_files": [
+        "data/cases-example.json"
+      ],
+      "description": "Demonstrates **cases**: grouping instances into units of analysis. Each",
+      "dir": "examples/advanced/cases-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "cases-example",
+      "path": "examples/advanced/cases-example/config.yaml",
+      "run": "potato start examples/advanced/cases-example/config.yaml -p 8000",
+      "task_name": "Cases Example"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/code-example.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/code-annotation",
+      "display_types": [
+        "code",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "code-annotation",
+      "path": "examples/advanced/code-annotation/config.yaml",
+      "run": "potato start examples/advanced/code-annotation/config.yaml -p 8000",
+      "task_name": "Code Quality Review"
+    },
+    {
+      "annotation_types": [
+        "multiselect"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "codebook"
+      ],
+      "data_files": [
+        "data/codebook-document-example.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/codebook-document-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "codebook-document-example",
+      "path": "examples/advanced/codebook-document-example/config.yaml",
+      "run": "potato start examples/advanced/codebook-document-example/config.yaml -p 8000",
+      "task_name": "Codebook Document Example"
+    },
+    {
+      "annotation_types": [
+        "multiselect"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/codebook-example.json"
+      ],
+      "description": "Demonstrates the **universal codebook**: a `multiselect` scheme whose",
+      "dir": "examples/advanced/codebook-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "codebook-example",
+      "path": "examples/advanced/codebook-example/config.yaml",
+      "run": "potato start examples/advanced/codebook-example/config.yaml -p 8000",
+      "task_name": "Codebook Example"
+    },
+    {
+      "annotation_types": [
+        "span"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/codebook-invivo-example.json"
+      ],
+      "description": "Demonstrates **in-vivo coding**: a `span` scheme that is also",
+      "dir": "examples/advanced/codebook-invivo-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "codebook-invivo-example",
+      "path": "examples/advanced/codebook-invivo-example/config.yaml",
+      "run": "potato start examples/advanced/codebook-invivo-example/config.yaml -p 8000",
+      "task_name": "Codebook In-Vivo Example"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/politeness.json"
+      ],
+      "description": "A long, **per-label** codebook \u2014 definition, inclusion criteria, exclusion",
+      "dir": "examples/advanced/codebook-sidebar",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "codebook-sidebar",
+      "path": "examples/advanced/codebook-sidebar/config.yaml",
+      "run": "potato start examples/advanced/codebook-sidebar/config.yaml -p 8000",
+      "task_name": "Politeness \u2014 Codebook Sidebar"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "radio",
+        "slider",
+        "text"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [],
+      "description": "",
+      "dir": "examples/advanced/conditional-logic",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "conditional-logic",
+      "path": "examples/advanced/conditional-logic/config.yaml",
+      "run": "potato start examples/advanced/conditional-logic/config.yaml -p 8000",
+      "task_name": "Conditional Logic Demo - PII Detection"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/reviews.json"
+      ],
+      "description": "Short movie-review sentences labeled for overall sentiment, with toxic spans highlighted. A small pilot used to demonstrate Potato's dataset publishing.",
+      "dir": "examples/advanced/dataset-publishing",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "dataset-publishing",
+      "path": "examples/advanced/dataset-publishing/config.yaml",
+      "run": "potato start examples/advanced/dataset-publishing/config.yaml -p 8000",
+      "task_name": "Movie Review Sentiment"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "diversity_ordering"
+      ],
+      "data_files": [
+        "data/test_data.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/diversity-test",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "diversity-test",
+      "path": "examples/advanced/diversity-test/config.yaml",
+      "run": "potato start examples/advanced/diversity-test/config.yaml -p 8000",
+      "task_name": "Diversity Ordering Test (100 items, 5 themes)"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "diversity_ordering"
+      ],
+      "data_files": [
+        "data/diversity-example.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/diversity",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "diversity",
+      "path": "examples/advanced/diversity/config.yaml",
+      "run": "potato start examples/advanced/diversity/config.yaml -p 8000",
+      "task_name": "Topic Classification with Diversity Ordering"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "diversity_ordering"
+      ],
+      "data_files": [
+        "data/embedding-viz-data.json"
+      ],
+      "description": "The **embedding visualization** in the Potato admin dashboard, with pre-annotated synthetic data so the label coloring and the clustering have something to show.",
+      "dir": "examples/advanced/embedding-visualization",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "embedding-visualization",
+      "path": "examples/advanced/embedding-visualization/config.yaml",
+      "run": "potato start examples/advanced/embedding-visualization/config.yaml -p 8000",
+      "task_name": "Embedding Visualization Demo"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "span",
+        "text"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "attention_checks",
+        "phases",
+        "training"
+      ],
+      "data_files": [
+        "data/items.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/full-study-skeleton",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "full-study-skeleton",
+      "path": "examples/advanced/full-study-skeleton/config.yaml",
+      "run": "potato start examples/advanced/full-study-skeleton/config.yaml -p 8000",
+      "task_name": "Full Study Skeleton"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "layout"
+      ],
+      "data_files": [
+        "data/grid-layout-example.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/grid-layout",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "grid-layout",
+      "path": "examples/advanced/grid-layout/config.yaml",
+      "run": "potato start examples/advanced/grid-layout/config.yaml -p 8000",
+      "task_name": "Grid Layout Demo"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "span"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "adjudication"
+      ],
+      "data_files": [
+        "data/items.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/heterogeneous-coverage",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "heterogeneous-coverage",
+      "path": "examples/advanced/heterogeneous-coverage/config.yaml",
+      "run": "potato start examples/advanced/heterogeneous-coverage/config.yaml -p 8000",
+      "task_name": "Heterogeneous Coverage Example"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/review-items.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/hotkey-review",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "hotkey-review",
+      "path": "examples/advanced/hotkey-review/config.yaml",
+      "run": "potato start examples/advanced/hotkey-review/config.yaml -p 8000",
+      "task_name": "Hotkey Trace Review"
+    },
+    {
+      "annotation_types": [
+        "multiselect"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/html-as-input.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/html-annotation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "html-annotation",
+      "path": "examples/advanced/html-annotation/config.yaml",
+      "run": "potato start examples/advanced/html-annotation/config.yaml -p 8000",
+      "task_name": "Simple HTML as Input Example"
+    },
+    {
+      "annotation_types": [
+        "text"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "keystroke_logging",
+        "phases",
+        "training"
+      ],
+      "data_files": [
+        "data/keystroke-calibration-example.json"
+      ],
+      "description": "Generates **labeled** writing-process data from inside your own study, so you can",
+      "dir": "examples/advanced/keystroke-calibration",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "keystroke-calibration",
+      "path": "examples/advanced/keystroke-calibration/config.yaml",
+      "run": "potato start examples/advanced/keystroke-calibration/config.yaml -p 8000",
+      "task_name": "keystroke-calibration"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "text"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "keystroke_logging"
+      ],
+      "data_files": [
+        "data/keystroke-logging-example.json"
+      ],
+      "description": "Records **how** annotators write their free-text responses \u2014 pauses, bursts,",
+      "dir": "examples/advanced/keystroke-logging",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "keystroke-logging",
+      "path": "examples/advanced/keystroke-logging/config.yaml",
+      "run": "potato start examples/advanced/keystroke-logging/config.yaml -p 8000",
+      "task_name": "keystroke-logging"
+    },
+    {
+      "annotation_types": [
+        "likert"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/kwarg-example.csv"
+      ],
+      "description": "",
+      "dir": "examples/advanced/kwargs-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "kwargs-example",
+      "path": "examples/advanced/kwargs-example/config.yaml",
+      "run": "potato start examples/advanced/kwargs-example/config.yaml -p 8000",
+      "task_name": "Example for using kwargs"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "text"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "data_sources"
+      ],
+      "data_files": [],
+      "description": "Annotate a database table that is still being written to. Rows inserted after",
+      "dir": "examples/advanced/live-database-ingestion",
+      "display_types": [],
+      "has_data_dir": false,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "live-database-ingestion",
+      "path": "examples/advanced/live-database-ingestion/config.yaml",
+      "run": "potato start examples/advanced/live-database-ingestion/config.yaml -p 8000",
+      "task_name": "live-database-ingestion"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/politeness.json"
+      ],
+      "description": "Most examples in this repo describe the task in the one-line `description:` on",
+      "dir": "examples/advanced/long-guidelines",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "long-guidelines",
+      "path": "examples/advanced/long-guidelines/config.yaml",
+      "run": "potato start examples/advanced/long-guidelines/config.yaml -p 8000",
+      "task_name": "Politeness \u2014 Long Guidelines"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "mace"
+      ],
+      "data_files": [
+        "data/mace-demo-data.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/mace-demo",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "mace-demo",
+      "path": "examples/advanced/mace-demo/config.yaml",
+      "run": "potato start examples/advanced/mace-demo/config.yaml -p 8000",
+      "task_name": "MACE Competence Estimation Demo"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/memos-example.json"
+      ],
+      "description": "Demonstrates the **universal Memos sidebar**: free-text analytic notes",
+      "dir": "examples/advanced/memos-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "memos-example",
+      "path": "examples/advanced/memos-example/config.yaml",
+      "run": "potato start examples/advanced/memos-example/config.yaml -p 8000",
+      "task_name": "Memos Example"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/toy-example.json"
+      ],
+      "description": "Classify the sentiment of short text snippets. This is a simple task that takes about 5 minutes to complete.",
+      "dir": "examples/advanced/mturk-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "mturk-example",
+      "path": "examples/advanced/mturk-example/config.yaml",
+      "run": "potato start examples/advanced/mturk-example/config.yaml -p 8000",
+      "task_name": "MTurk Annotation Task"
+    },
+    {
+      "annotation_types": [
+        "multi_document_event"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "corpus_map",
+        "event_template"
+      ],
+      "data_files": [
+        "data/disasters.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/multi-document-events",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "multi-document-events",
+      "path": "examples/advanced/multi-document-events/config.yaml",
+      "run": "potato start examples/advanced/multi-document-events/config.yaml -p 8000",
+      "task_name": "Cross-Document Disaster Events"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "span"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/videos.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/multi-modal",
+      "display_types": [
+        "text",
+        "video"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "multi-modal",
+      "path": "examples/advanced/multi-modal/config.yaml",
+      "run": "potato start examples/advanced/multi-modal/config.yaml -p 8000",
+      "task_name": "Video + Transcript Analysis"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "rooms"
+      ],
+      "data_files": [
+        "data/norming.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/multiplayer-rooms",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "multiplayer-rooms",
+      "path": "examples/advanced/multiplayer-rooms/config.yaml",
+      "run": "potato start examples/advanced/multiplayer-rooms/config.yaml -p 8000",
+      "task_name": "Multiplayer Rooms \u2014 Norming Sarcasm Together"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [],
+      "description": "",
+      "dir": "examples/advanced/oauth-login",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "oauth-login",
+      "path": "examples/advanced/oauth-login/config.yaml",
+      "run": "potato start examples/advanced/oauth-login/config.yaml -p 8000",
+      "task_name": "OAuth Login Demo"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "ai_support"
+      ],
+      "data_files": [
+        "data/emotion_examples.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/option-highlight",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "option-highlight",
+      "path": "examples/advanced/option-highlight/config.yaml",
+      "run": "potato start examples/advanced/option-highlight/config.yaml -p 8000",
+      "task_name": "Emotion Classification with AI Highlighting"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/documents.json"
+      ],
+      "description": "One page is shown at a time with a page-thumbnail browser. Link anchors across",
+      "dir": "examples/advanced/pdf-link-paginated",
+      "display_types": [
+        "pdf"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "pdf-link-paginated",
+      "path": "examples/advanced/pdf-link-paginated/config.yaml",
+      "run": "potato start examples/advanced/pdf-link-paginated/config.yaml -p 8000",
+      "task_name": "PDF Linking \u2014 Paginated View"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/documents.json"
+      ],
+      "description": "All PDF pages are stacked in one scrollable container. Highlight text spans and",
+      "dir": "examples/advanced/pdf-link-scroll",
+      "display_types": [
+        "pdf"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "pdf-link-scroll",
+      "path": "examples/advanced/pdf-link-scroll/config.yaml",
+      "run": "potato start examples/advanced/pdf-link-scroll/config.yaml -p 8000",
+      "task_name": "PDF Linking \u2014 Scroll View"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "text"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "batch_assignment"
+      ],
+      "data_files": [
+        "data/items.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/per-cohort-schemas",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "per-cohort-schemas",
+      "path": "examples/advanced/per-cohort-schemas/config.yaml",
+      "run": "potato start examples/advanced/per-cohort-schemas/config.yaml -p 8000",
+      "task_name": "Per-Cohort Schemas Example"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "pocket"
+      ],
+      "data_files": [
+        "data/reviews.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/pocket-mode",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "pocket-mode",
+      "path": "examples/advanced/pocket-mode/config.yaml",
+      "run": "potato start examples/advanced/pocket-mode/config.yaml -p 8000",
+      "task_name": "Pocket \u2014 Sentiment Triage"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "psychometrics"
+      ],
+      "data_files": [
+        "data/sarcasm.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/psychometrics",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "psychometrics",
+      "path": "examples/advanced/psychometrics/config.yaml",
+      "run": "potato start examples/advanced/psychometrics/config.yaml -p 8000",
+      "task_name": "Psychometrics \u2014 Sarcasm with Error Bars"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "span"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "cases",
+        "qda_mode",
+        "search"
+      ],
+      "data_files": [
+        "data/qda-mode-example.json"
+      ],
+      "description": "A composed qualitative-coding workspace: one config that turns on the",
+      "dir": "examples/advanced/qda-mode-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "qda-mode-example",
+      "path": "examples/advanced/qda-mode-example/config.yaml",
+      "run": "potato start examples/advanced/qda-mode-example/config.yaml -p 8000",
+      "task_name": "QDA Mode Example"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "attention_checks",
+        "gold_standards",
+        "pre_annotation"
+      ],
+      "data_files": [
+        "data/quality-control-example.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/quality-control",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "quality-control",
+      "path": "examples/advanced/quality-control/config.yaml",
+      "run": "potato start examples/advanced/quality-control/config.yaml -p 8000",
+      "task_name": "Sentiment Analysis with Quality Control"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/review-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/review-workflow",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "review-workflow",
+      "path": "examples/advanced/review-workflow/config.yaml",
+      "run": "potato start examples/advanced/review-workflow/config.yaml -p 8000",
+      "task_name": "Review Workflow"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "search"
+      ],
+      "data_files": [
+        "data/search-example.json"
+      ],
+      "description": "Demonstrates **universal FTS5 search**. Read-only admin search is always",
+      "dir": "examples/advanced/search-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "search-example",
+      "path": "examples/advanced/search-example/config.yaml",
+      "run": "potato start examples/advanced/search-example/config.yaml -p 8000",
+      "task_name": "Search Example"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "boundary_probing",
+        "pocket",
+        "thinkaloud",
+        "truth_serum"
+      ],
+      "data_files": [
+        "data/politeness.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/showcase",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "showcase",
+      "path": "examples/advanced/showcase/config.yaml",
+      "run": "potato start examples/advanced/showcase/config.yaml -p 8000",
+      "task_name": "Potato Showcase \u2014 Politeness"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/reflection-examples.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/solo-mode",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "solo-mode",
+      "path": "examples/advanced/solo-mode/config.yaml",
+      "run": "potato start examples/advanced/solo-mode/config.yaml -p 8000",
+      "task_name": "sentiment-solo-demo"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "text"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/spreadsheet-example.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/spreadsheet-annotation",
+      "display_types": [
+        "spreadsheet",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "spreadsheet-annotation",
+      "path": "examples/advanced/spreadsheet-annotation/config.yaml",
+      "run": "potato start examples/advanced/spreadsheet-annotation/config.yaml -p 8000",
+      "task_name": "Data Quality Annotation"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/data.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/surveyflow-conditional-logic",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "surveyflow-conditional-logic",
+      "path": "examples/advanced/surveyflow-conditional-logic/config.yaml",
+      "run": "potato start examples/advanced/surveyflow-conditional-logic/config.yaml -p 8000",
+      "task_name": "SurveyFlow Conditional Logic"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "thinkaloud"
+      ],
+      "data_files": [
+        "data/politeness.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/think-aloud",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "think-aloud",
+      "path": "examples/advanced/think-aloud/config.yaml",
+      "run": "potato start examples/advanced/think-aloud/config.yaml -p 8000",
+      "task_name": "Think-Aloud \u2014 Politeness"
+    },
+    {
+      "annotation_types": [
+        "triage"
+      ],
+      "category": "advanced",
+      "config_keys": [],
+      "data_files": [
+        "data/triage-example.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/triage",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "triage",
+      "path": "examples/advanced/triage/config.yaml",
+      "run": "potato start examples/advanced/triage/config.yaml -p 8000",
+      "task_name": "Simple Triage Example"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "truth_serum"
+      ],
+      "data_files": [
+        "data/sarcasm.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/truth-serum",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "truth-serum",
+      "path": "examples/advanced/truth-serum/config.yaml",
+      "run": "potato start examples/advanced/truth-serum/config.yaml -p 8000",
+      "task_name": "Truth Serum \u2014 Sarcasm"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "data_sources"
+      ],
+      "data_files": [
+        "data/example-items.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/url-data",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "url-data",
+      "path": "examples/advanced/url-data/config.yaml",
+      "run": "potato start examples/advanced/url-data/config.yaml -p 8000",
+      "task_name": "URL Data Source Demo"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "text"
+      ],
+      "category": "agent-testing",
+      "config_keys": [
+        "agent_proxy"
+      ],
+      "data_files": [
+        "data/tasks.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-testing/coding-agent-docker-test",
+      "display_types": [
+        "interactive_chat",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "coding-agent-docker-test",
+      "path": "examples/agent-testing/coding-agent-docker-test/config.yaml",
+      "run": "potato start examples/agent-testing/coding-agent-docker-test/config.yaml -p 8000",
+      "task_name": "Live Coding Agent (Docker sandbox)"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "text"
+      ],
+      "category": "agent-testing",
+      "config_keys": [
+        "agent_proxy"
+      ],
+      "data_files": [
+        "data/tasks.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-testing/coding-agent-live-test",
+      "display_types": [
+        "interactive_chat",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "coding-agent-live-test",
+      "path": "examples/agent-testing/coding-agent-live-test/config.yaml",
+      "run": "potato start examples/agent-testing/coding-agent-live-test/config.yaml -p 8000",
+      "task_name": "Live Coding Agent (subprocess sandbox)"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "text"
+      ],
+      "category": "agent-testing",
+      "config_keys": [
+        "agent_proxy"
+      ],
+      "data_files": [
+        "data/tasks.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-testing/interactive-agent-test",
+      "display_types": [
+        "interactive_chat",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "interactive-agent-test",
+      "path": "examples/agent-testing/interactive-agent-test/config.yaml",
+      "run": "potato start examples/agent-testing/interactive-agent-test/config.yaml -p 8000",
+      "task_name": "Interactive Agent Testing"
+    },
+    {
+      "annotation_types": [
+        "multirate",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/agent-comparisons.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/agent-comparison",
+      "display_types": [
+        "dialogue"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "agent-comparison",
+      "path": "examples/agent-traces/agent-comparison/config.yaml",
+      "run": "potato start examples/agent-traces/agent-comparison/config.yaml -p 8000",
+      "task_name": "Agent Trace Comparison"
+    },
+    {
+      "annotation_types": [
+        "agent_scorecard"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/agent-scorecard",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "agent-scorecard",
+      "path": "examples/agent-traces/agent-scorecard/config.yaml",
+      "run": "potato start examples/agent-traces/agent-scorecard/config.yaml -p 8000",
+      "task_name": "Multi-Agent Scorecard"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio",
+        "span",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/agent-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/agent-trace-evaluation",
+      "display_types": [
+        "dialogue",
+        "spreadsheet",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "agent-trace-evaluation",
+      "path": "examples/agent-traces/agent-trace-evaluation/config.yaml",
+      "run": "potato start examples/agent-traces/agent-trace-evaluation/config.yaml -p 8000",
+      "task_name": "Agent Trace Evaluation"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/anthropic-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/anthropic-evaluation",
+      "display_types": [
+        "dialogue",
+        "spreadsheet",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "anthropic-evaluation",
+      "path": "examples/agent-traces/anthropic-evaluation/config.yaml",
+      "run": "potato start examples/agent-traces/anthropic-evaluation/config.yaml -p 8000",
+      "task_name": "Anthropic Claude Trace Evaluation"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [
+        "automation",
+        "datasets",
+        "trace_ingestion"
+      ],
+      "data_files": [
+        "data/seed.json"
+      ],
+      "description": "The **production \u2192 eval flywheel**: ingested traces are matched by",
+      "dir": "examples/agent-traces/automation-loop",
+      "display_types": [
+        "eval_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "automation-loop",
+      "path": "examples/agent-traces/automation-loop/config.yaml",
+      "run": "potato start examples/agent-traces/automation-loop/config.yaml -p 8000",
+      "task_name": "Automation Loop"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/coding-agent-comparison",
+      "display_types": [
+        "coding_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "coding-agent-comparison",
+      "path": "examples/agent-traces/coding-agent-comparison/config.yaml",
+      "run": "potato start examples/agent-traces/coding-agent-comparison/config.yaml -p 8000",
+      "task_name": "Coding Agent Comparison"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/coding-agent-evaluation",
+      "display_types": [
+        "coding_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "coding-agent-evaluation",
+      "path": "examples/agent-traces/coding-agent-evaluation/config.yaml",
+      "run": "potato start examples/agent-traces/coding-agent-evaluation/config.yaml -p 8000",
+      "task_name": "Coding Agent Trace Evaluation"
+    },
+    {
+      "annotation_types": [
+        "process_reward",
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/coding-agent-prm",
+      "display_types": [
+        "coding_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "coding-agent-prm",
+      "path": "examples/agent-traces/coding-agent-prm/config.yaml",
+      "run": "potato start examples/agent-traces/coding-agent-prm/config.yaml -p 8000",
+      "task_name": "Coding Agent PRM Annotation"
+    },
+    {
+      "annotation_types": [
+        "code_review",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/coding-agent-review",
+      "display_types": [
+        "coding_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "coding-agent-review",
+      "path": "examples/agent-traces/coding-agent-review/config.yaml",
+      "run": "potato start examples/agent-traces/coding-agent-review/config.yaml -p 8000",
+      "task_name": "Coding Agent Code Review"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "span",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/demo-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/complex-annotation",
+      "display_types": [
+        "dialogue",
+        "spreadsheet",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "complex-annotation",
+      "path": "examples/agent-traces/complex-annotation/config.yaml",
+      "run": "potato start examples/agent-traces/complex-annotation/config.yaml -p 8000",
+      "task_name": "Agent Trace Evaluation"
+    },
+    {
+      "annotation_types": [
+        "context_attribution",
+        "likert",
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/context-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/context-attribution",
+      "display_types": [
+        "dialogue",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "context-attribution",
+      "path": "examples/agent-traces/context-attribution/config.yaml",
+      "run": "potato start examples/agent-traces/context-attribution/config.yaml -p 8000",
+      "task_name": "Agent Context-Use Annotation"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [
+        "trace_ingestion"
+      ],
+      "data_files": [
+        "data/continuous-eval-example.json"
+      ],
+      "description": "Visualize a single agent trace decomposed into three synchronized side-by-side panes \u2014",
+      "dir": "examples/agent-traces/continuous-eval",
+      "display_types": [
+        "eval_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "continuous-eval",
+      "path": "examples/agent-traces/continuous-eval/config.yaml",
+      "run": "potato start examples/agent-traces/continuous-eval/config.yaml -p 8000",
+      "task_name": "Continuous Agent Evaluation"
+    },
+    {
+      "annotation_types": [
+        "process_reward",
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/cot-traces.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/cot-process-reward",
+      "display_types": [
+        "cot_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "cot-process-reward",
+      "path": "examples/agent-traces/cot-process-reward/config.yaml",
+      "run": "potato start examples/agent-traces/cot-process-reward/config.yaml -p 8000",
+      "task_name": "Chain-of-Thought Process Reward"
+    },
+    {
+      "annotation_types": [
+        "consensus_tracking",
+        "likert",
+        "radio",
+        "rubric_eval",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/debates.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/debate-judging",
+      "display_types": [
+        "multi_agent_discussion",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "debate-judging",
+      "path": "examples/agent-traces/debate-judging/config.yaml",
+      "run": "potato start examples/agent-traces/debate-judging/config.yaml -p 8000",
+      "task_name": "Debate Judging"
+    },
+    {
+      "annotation_types": [
+        "emergent_behavior"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/emergent-behavior",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "emergent-behavior",
+      "path": "examples/agent-traces/emergent-behavior/config.yaml",
+      "run": "potato start examples/agent-traces/emergent-behavior/config.yaml -p 8000",
+      "task_name": "Emergent Behavior Tagging"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [
+        "datasets"
+      ],
+      "data_files": [
+        "data/experiments-example.json"
+      ],
+      "description": "Enables Potato's evaluation backbone \u2014 **versioned datasets** of evaluation",
+      "dir": "examples/agent-traces/experiments",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "experiments",
+      "path": "examples/agent-traces/experiments/config.yaml",
+      "run": "potato start examples/agent-traces/experiments/config.yaml -p 8000",
+      "task_name": "Agent Eval \u2014 Datasets & Experiments"
+    },
+    {
+      "annotation_types": [
+        "failure_attribution",
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/failure-attribution",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "failure-attribution",
+      "path": "examples/agent-traces/failure-attribution/config.yaml",
+      "run": "potato start examples/agent-traces/failure-attribution/config.yaml -p 8000",
+      "task_name": "Multi-Agent Failure Attribution"
+    },
+    {
+      "annotation_types": [
+        "hierarchical_multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/failure-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/failure-taxonomy",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "failure-taxonomy",
+      "path": "examples/agent-traces/failure-taxonomy/config.yaml",
+      "run": "potato start examples/agent-traces/failure-taxonomy/config.yaml -p 8000",
+      "task_name": "Agent Failure-Mode Taxonomy (MAST)"
+    },
+    {
+      "annotation_types": [
+        "gui_trajectory"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/gui-trajectory",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "gui-trajectory",
+      "path": "examples/agent-traces/gui-trajectory/config.yaml",
+      "run": "potato start examples/agent-traces/gui-trajectory/config.yaml -p 8000",
+      "task_name": "GUI Agent Trajectory Review"
+    },
+    {
+      "annotation_types": [
+        "handoff_review"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/handoff-review",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "handoff-review",
+      "path": "examples/agent-traces/handoff-review/config.yaml",
+      "run": "potato start examples/agent-traces/handoff-review/config.yaml -p 8000",
+      "task_name": "Agent Handoff Review"
+    },
+    {
+      "annotation_types": [
+        "agent_interaction_graph"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/interaction-graph",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "interaction-graph",
+      "path": "examples/agent-traces/interaction-graph/config.yaml",
+      "run": "potato start examples/agent-traces/interaction-graph/config.yaml -p 8000",
+      "task_name": "Agent Interaction Graph"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "text",
+        "trajectory_eval"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [],
+      "description": "",
+      "dir": "examples/agent-traces/interactive-vlm-evaluation/vlm-eval-backup",
+      "display_types": [
+        "live_agent"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "vlm-eval-backup",
+      "path": "examples/agent-traces/interactive-vlm-evaluation/vlm-eval-backup/config.yaml",
+      "run": "potato start examples/agent-traces/interactive-vlm-evaluation/vlm-eval-backup/config.yaml -p 8000",
+      "task_name": "Interactive VLM Web Agent Evaluation"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [
+        "ai_support"
+      ],
+      "data_files": [
+        "data/judge-alignment-example.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/judge-alignment",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "judge-alignment",
+      "path": "examples/agent-traces/judge-alignment/config.yaml",
+      "run": "potato start examples/agent-traces/judge-alignment/config.yaml -p 8000",
+      "task_name": "Judge Alignment"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [
+        "trace_ingestion"
+      ],
+      "data_files": [
+        "data/sample-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/langchain-integration",
+      "display_types": [
+        "dialogue",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "langchain-integration",
+      "path": "examples/agent-traces/langchain-integration/config.yaml",
+      "run": "potato start examples/agent-traces/langchain-integration/config.yaml -p 8000",
+      "task_name": "LangChain Agent Evaluation"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [],
+      "description": "",
+      "dir": "examples/agent-traces/live-agent-evaluation",
+      "display_types": [
+        "live_agent",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "live-agent-evaluation",
+      "path": "examples/agent-traces/live-agent-evaluation/config.yaml",
+      "run": "potato start examples/agent-traces/live-agent-evaluation/config.yaml -p 8000",
+      "task_name": "Live Agent Evaluation"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "process_reward",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/tasks.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/live-coding-agent",
+      "display_types": [
+        "live_coding_agent",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "live-coding-agent",
+      "path": "examples/agent-traces/live-coding-agent/config.yaml",
+      "run": "potato start examples/agent-traces/live-coding-agent/config.yaml -p 8000",
+      "task_name": "Live Coding Agent Evaluation"
+    },
+    {
+      "annotation_types": [
+        "trajectory_eval"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/mast-step-tagging",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "mast-step-tagging",
+      "path": "examples/agent-traces/mast-step-tagging/config.yaml",
+      "run": "potato start examples/agent-traces/mast-step-tagging/config.yaml -p 8000",
+      "task_name": "MAST Step Tagging"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [
+        "arena"
+      ],
+      "data_files": [
+        "data/seed.json"
+      ],
+      "description": "Send one prompt to **N models side by side**, compare their responses, and pick",
+      "dir": "examples/agent-traces/model-arena",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "model-arena",
+      "path": "examples/agent-traces/model-arena/config.yaml",
+      "run": "potato start examples/agent-traces/model-arena/config.yaml -p 8000",
+      "task_name": "Model Arena"
+    },
+    {
+      "annotation_types": [
+        "consensus_tracking",
+        "likert",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/discussions.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/multi-agent-discussion",
+      "display_types": [
+        "multi_agent_discussion",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "multi-agent-discussion",
+      "path": "examples/agent-traces/multi-agent-discussion/config.yaml",
+      "run": "potato start examples/agent-traces/multi-agent-discussion/config.yaml -p 8000",
+      "task_name": "Multi-Agent Discussion Review"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/multi-agent-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/multi-agent-evaluation",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "multi-agent-evaluation",
+      "path": "examples/agent-traces/multi-agent-evaluation/config.yaml",
+      "run": "potato start examples/agent-traces/multi-agent-evaluation/config.yaml -p 8000",
+      "task_name": "Multi-Agent Trace Evaluation"
+    },
+    {
+      "annotation_types": [
+        "pairwise"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [],
+      "description": "",
+      "dir": "examples/agent-traces/multi-dim-comparison",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "multi-dim-comparison",
+      "path": "examples/agent-traces/multi-dim-comparison/config.yaml",
+      "run": "potato start examples/agent-traces/multi-dim-comparison/config.yaml -p 8000",
+      "task_name": "Multi-Dimensional Agent Comparison"
+    },
+    {
+      "annotation_types": [
+        "multimodal_reasoning"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/multimodal-reasoning",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "multimodal-reasoning",
+      "path": "examples/agent-traces/multimodal-reasoning/config.yaml",
+      "run": "potato start examples/agent-traces/multimodal-reasoning/config.yaml -p 8000",
+      "task_name": "Multimodal Reasoning Review"
+    },
+    {
+      "annotation_types": [
+        "consensus_tracking",
+        "likert",
+        "multiselect",
+        "radio",
+        "slider"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/negotiations.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/negotiation-review",
+      "display_types": [
+        "multi_agent_discussion",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "negotiation-review",
+      "path": "examples/agent-traces/negotiation-review/config.yaml",
+      "run": "potato start examples/agent-traces/negotiation-review/config.yaml -p 8000",
+      "task_name": "Negotiation Review"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/openai-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/openai-evaluation",
+      "display_types": [
+        "dialogue",
+        "spreadsheet",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "openai-evaluation",
+      "path": "examples/agent-traces/openai-evaluation/config.yaml",
+      "run": "potato start examples/agent-traces/openai-evaluation/config.yaml -p 8000",
+      "task_name": "OpenAI Trace Evaluation"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/orchestration-pattern",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "orchestration-pattern",
+      "path": "examples/agent-traces/orchestration-pattern/config.yaml",
+      "run": "potato start examples/agent-traces/orchestration-pattern/config.yaml -p 8000",
+      "task_name": "Orchestration Pattern"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/per-turn-binding",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "per-turn-binding",
+      "path": "examples/agent-traces/per-turn-binding/config.yaml",
+      "run": "potato start examples/agent-traces/per-turn-binding/config.yaml -p 8000",
+      "task_name": "Per-Turn Schema Binding"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "radio",
+        "rubric_eval",
+        "trajectory_edit"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/plans.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/plan-review",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "plan-review",
+      "path": "examples/agent-traces/plan-review/config.yaml",
+      "run": "potato start examples/agent-traces/plan-review/config.yaml -p 8000",
+      "task_name": "Agent Plan Review"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multirate",
+        "radio",
+        "span",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/rag-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/rag-evaluation",
+      "display_types": [
+        "dialogue",
+        "spreadsheet",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "rag-evaluation",
+      "path": "examples/agent-traces/rag-evaluation/config.yaml",
+      "run": "potato start examples/agent-traces/rag-evaluation/config.yaml -p 8000",
+      "task_name": "RAG Pipeline Evaluation"
+    },
+    {
+      "annotation_types": [
+        "failure_attribution",
+        "multiselect",
+        "radio",
+        "triage"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/safety-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/safety-escalation",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "safety-escalation",
+      "path": "examples/agent-traces/safety-escalation/config.yaml",
+      "run": "potato start examples/agent-traces/safety-escalation/config.yaml -p 8000",
+      "task_name": "Agent Safety Escalation Review"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [
+        "trace_ingestion"
+      ],
+      "data_files": [
+        "data/seed.json"
+      ],
+      "description": "Instrument your agent with the **`potato_trace`** SDK so its runs are captured",
+      "dir": "examples/agent-traces/sdk-capture",
+      "display_types": [
+        "eval_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "sdk-capture",
+      "path": "examples/agent-traces/sdk-capture/config.yaml",
+      "run": "potato start examples/agent-traces/sdk-capture/config.yaml -p 8000",
+      "task_name": "SDK Capture \u2014 Agent Traces"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [
+        "curation",
+        "datasets"
+      ],
+      "data_files": [
+        "data/traces.json"
+      ],
+      "description": "Find *what to review* by **similarity**, not just rules: build an embedding index",
+      "dir": "examples/agent-traces/semantic-curation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "semantic-curation",
+      "path": "examples/agent-traces/semantic-curation/config.yaml",
+      "run": "potato start examples/agent-traces/semantic-curation/config.yaml -p 8000",
+      "task_name": "Semantic Curation"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/session-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/session-scoring",
+      "display_types": [
+        "dialogue",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "session-scoring",
+      "path": "examples/agent-traces/session-scoring/config.yaml",
+      "run": "potato start examples/agent-traces/session-scoring/config.yaml -p 8000",
+      "task_name": "Session-Level Scoring"
+    },
+    {
+      "annotation_types": [
+        "speech_transcript"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/transcripts.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/speech-transcript",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "speech-transcript",
+      "path": "examples/agent-traces/speech-transcript/config.yaml",
+      "run": "potato start examples/agent-traces/speech-transcript/config.yaml -p 8000",
+      "task_name": "Speech Transcript Error Tagging"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/tree-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/sub-agent-tree",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "sub-agent-tree",
+      "path": "examples/agent-traces/sub-agent-tree/config.yaml",
+      "run": "potato start examples/agent-traces/sub-agent-tree/config.yaml -p 8000",
+      "task_name": "Sub-Agent Run Tree"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/swebench-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/swebench-evaluation",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "swebench-evaluation",
+      "path": "examples/agent-traces/swebench-evaluation/config.yaml",
+      "run": "potato start examples/agent-traces/swebench-evaluation/config.yaml -p 8000",
+      "task_name": "SWE-bench Patch Evaluation"
+    },
+    {
+      "annotation_types": [
+        "table_grid"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/tables.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/table-grid",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "table-grid",
+      "path": "examples/agent-traces/table-grid/config.yaml",
+      "run": "potato start examples/agent-traces/table-grid/config.yaml -p 8000",
+      "task_name": "Table Structure Annotation"
+    },
+    {
+      "annotation_types": [
+        "temporal_grounding"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/clips.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/temporal-grounding",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "temporal-grounding",
+      "path": "examples/agent-traces/temporal-grounding/config.yaml",
+      "run": "potato start examples/agent-traces/temporal-grounding/config.yaml -p 8000",
+      "task_name": "Video Temporal Grounding"
+    },
+    {
+      "annotation_types": [
+        "tool_call_review"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/tool-call-review",
+      "display_types": [
+        "agent_trace",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "tool-call-review",
+      "path": "examples/agent-traces/tool-call-review/config.yaml",
+      "run": "potato start examples/agent-traces/tool-call-review/config.yaml -p 8000",
+      "task_name": "Tool-Call Review"
+    },
+    {
+      "annotation_types": [
+        "tool_contention"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/runs.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/tool-contention",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "tool-contention",
+      "path": "examples/agent-traces/tool-contention/config.yaml",
+      "run": "potato start examples/agent-traces/tool-contention/config.yaml -p 8000",
+      "task_name": "Tool Contention Review"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "trajectory_edit"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/trajectory-correction-example.json"
+      ],
+      "description": "Let annotators **edit** an agent trace \u2014 rewrite a wrong reasoning step, fix a typo'd tool",
+      "dir": "examples/agent-traces/trajectory-correction",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "trajectory-correction",
+      "path": "examples/agent-traces/trajectory-correction/config.yaml",
+      "run": "potato start examples/agent-traces/trajectory-correction/config.yaml -p 8000",
+      "task_name": "Trajectory Correction"
+    },
+    {
+      "annotation_types": [
+        "trajectory_eval"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [],
+      "description": "",
+      "dir": "examples/agent-traces/trajectory-evaluation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "trajectory-evaluation",
+      "path": "examples/agent-traces/trajectory-evaluation/config.yaml",
+      "run": "potato start examples/agent-traces/trajectory-evaluation/config.yaml -p 8000",
+      "task_name": "Agent Trajectory Evaluation"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/triage-queue-example.json"
+      ],
+      "description": "Review the worst agent traces **first**. Each trace in `data/triage-queue-example.json`",
+      "dir": "examples/agent-traces/triage-queue",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "triage-queue",
+      "path": "examples/agent-traces/triage-queue/config.yaml",
+      "run": "potato start examples/agent-traces/triage-queue/config.yaml -p 8000",
+      "task_name": "Trace Triage"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/visual-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/visual-agent-evaluation",
+      "display_types": [
+        "dialogue",
+        "image",
+        "spreadsheet",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "visual-agent-evaluation",
+      "path": "examples/agent-traces/visual-agent-evaluation/config.yaml",
+      "run": "potato start examples/agent-traces/visual-agent-evaluation/config.yaml -p 8000",
+      "task_name": "Visual Agent Evaluation"
+    },
+    {
+      "annotation_types": [
+        "voice_interaction"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/calls.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/voice-interaction",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "voice-interaction",
+      "path": "examples/agent-traces/voice-interaction/config.yaml",
+      "run": "potato start examples/agent-traces/voice-interaction/config.yaml -p 8000",
+      "task_name": "Voice Agent Turn-Taking"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/tasks.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/web-agent-creation",
+      "display_types": [
+        "live_agent",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "web-agent-creation",
+      "path": "examples/agent-traces/web-agent-creation/config.yaml",
+      "run": "potato start examples/agent-traces/web-agent-creation/config.yaml -p 8000",
+      "task_name": "Web Agent Trace Creation"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/web-traces.json"
+      ],
+      "description": "",
+      "dir": "examples/agent-traces/web-agent-review",
+      "display_types": [
+        "text",
+        "web_agent_trace"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "web-agent-review",
+      "path": "examples/agent-traces/web-agent-review/config.yaml",
+      "run": "potato start examples/agent-traces/web-agent-review/config.yaml -p 8000",
+      "task_name": "Web Agent Trace Review"
+    },
+    {
+      "annotation_types": [
+        "rollout_evaluation",
+        "text"
+      ],
+      "category": "agent-traces",
+      "config_keys": [],
+      "data_files": [
+        "data/rollouts.json"
+      ],
+      "description": "Three videos of the same scenario, frame-locked: the real recording and two",
+      "dir": "examples/agent-traces/world-model-rollouts",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "world-model-rollouts",
+      "path": "examples/agent-traces/world-model-rollouts/config.yaml",
+      "run": "potato start examples/agent-traces/world-model-rollouts/config.yaml -p 8000",
+      "task_name": "World-model rollout evaluation"
+    },
+    {
+      "annotation_types": [
+        "grounding_eval",
+        "image_annotation"
+      ],
+      "category": "ai-assisted",
+      "config_keys": [],
+      "data_files": [
+        "data/scenes.json"
+      ],
+      "description": "Which region of an image a piece of language refers to \u2014 and, just as",
+      "dir": "examples/ai-assisted/grounding-eval",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "grounding-eval",
+      "path": "examples/ai-assisted/grounding-eval/config.yaml",
+      "run": "potato start examples/ai-assisted/grounding-eval/config.yaml -p 8000",
+      "task_name": "Grounding evaluation"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "ai-assisted",
+      "config_keys": [],
+      "data_files": [
+        "data/judge-calibration-example.json"
+      ],
+      "description": "",
+      "dir": "examples/ai-assisted/judge-calibration",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "judge-calibration",
+      "path": "examples/ai-assisted/judge-calibration/config.yaml",
+      "run": "potato start examples/ai-assisted/judge-calibration/config.yaml -p 8000",
+      "task_name": "Judge Calibration Demo"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "span"
+      ],
+      "category": "ai-assisted",
+      "config_keys": [
+        "keyword_highlights_file"
+      ],
+      "data_files": [
+        "data/data.json"
+      ],
+      "description": "**Admin-defined keyword highlights**: words and phrases the task owner marks in advance, boxed in the text when an annotator opens an instance.",
+      "dir": "examples/ai-assisted/keyword-highlights",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "keyword-highlights",
+      "path": "examples/ai-assisted/keyword-highlights/config.yaml",
+      "run": "potato start examples/ai-assisted/keyword-highlights/config.yaml -p 8000",
+      "task_name": "Sentiment Analysis with Keyword Highlights"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "ai-assisted",
+      "config_keys": [
+        "chat_support"
+      ],
+      "data_files": [],
+      "description": "Classify the sentiment of each text as positive, negative, neutral, or mixed. Use the chat assistant if you need help thinking through ambiguous cases.",
+      "dir": "examples/ai-assisted/llm-chat",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "llm-chat",
+      "path": "examples/ai-assisted/llm-chat/config.yaml",
+      "run": "potato start examples/ai-assisted/llm-chat/config.yaml -p 8000",
+      "task_name": "Sentiment Classification with Chat Support"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "ai-assisted",
+      "config_keys": [
+        "ai_support"
+      ],
+      "data_files": [
+        "data/reviews.json"
+      ],
+      "description": "Every one of Potato's AI features, driven by a **local Ollama instance**. No cloud API key needed.",
+      "dir": "examples/ai-assisted/ollama-ai-demo",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "ollama-ai-demo",
+      "path": "examples/ai-assisted/ollama-ai-demo/config.yaml",
+      "run": "potato start examples/ai-assisted/ollama-ai-demo/config.yaml -p 8000",
+      "task_name": "AI-Assisted Product Review Analysis"
+    },
+    {
+      "annotation_types": [
+        "span"
+      ],
+      "category": "ai-assisted",
+      "config_keys": [
+        "ai_support",
+        "keyword_highlights_file"
+      ],
+      "data_files": [
+        "data/reviews.json"
+      ],
+      "description": "All three overlay systems on one page:",
+      "dir": "examples/ai-assisted/span-ai-keywords-demo",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "span-ai-keywords-demo",
+      "path": "examples/ai-assisted/span-ai-keywords-demo/config.yaml",
+      "run": "potato start examples/ai-assisted/span-ai-keywords-demo/config.yaml -p 8000",
+      "task_name": "Span Annotation with AI & Admin Keywords"
+    },
+    {
+      "annotation_types": [
+        "audio_annotation",
+        "radio"
+      ],
+      "category": "audio",
+      "config_keys": [],
+      "data_files": [
+        "data/audio-annotation-example.json"
+      ],
+      "description": "",
+      "dir": "examples/audio/audio-annotation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "audio-annotation",
+      "path": "examples/audio/audio-annotation/config.yaml",
+      "run": "potato start examples/audio/audio-annotation/config.yaml -p 8000",
+      "task_name": "Audio Segmentation Demo"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "audio",
+      "config_keys": [],
+      "data_files": [
+        "data/audio.json"
+      ],
+      "description": "",
+      "dir": "examples/audio/audio-classification",
+      "display_types": [
+        "audio",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "audio-classification",
+      "path": "examples/audio/audio-classification/config.yaml",
+      "run": "potato start examples/audio/audio-classification/config.yaml -p 8000",
+      "task_name": "Audio Classification"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "span",
+        "span_link"
+      ],
+      "category": "audio",
+      "config_keys": [],
+      "data_files": [
+        "data/sporc-sample.json"
+      ],
+      "description": "",
+      "dir": "examples/audio/audio-dialogue-sporc",
+      "display_types": [
+        "audio_dialogue",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "audio-dialogue-sporc",
+      "path": "examples/audio/audio-dialogue-sporc/config.yaml",
+      "run": "potato start examples/audio/audio-dialogue-sporc/config.yaml -p 8000",
+      "task_name": "SPoRC Podcast Dialogue"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "span",
+        "span_link"
+      ],
+      "category": "audio",
+      "config_keys": [],
+      "data_files": [
+        "data/audio-dialogue-example.json"
+      ],
+      "description": "",
+      "dir": "examples/audio/audio-dialogue",
+      "display_types": [
+        "audio_dialogue",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "audio-dialogue",
+      "path": "examples/audio/audio-dialogue/config.yaml",
+      "run": "potato start examples/audio/audio-dialogue/config.yaml -p 8000",
+      "task_name": "Podcast Dialogue Annotation"
+    },
+    {
+      "annotation_types": [
+        "audio_annotation"
+      ],
+      "category": "audio",
+      "config_keys": [],
+      "data_files": [
+        "data/audio_tasks.json"
+      ],
+      "description": "",
+      "dir": "examples/audio/audio-with-context",
+      "display_types": [
+        "image",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "audio-with-context",
+      "path": "examples/audio/audio-with-context/config.yaml",
+      "run": "potato start examples/audio/audio-with-context/config.yaml -p 8000",
+      "task_name": "Audio Segmentation with Context"
+    },
+    {
+      "annotation_types": [
+        "tiered_annotation"
+      ],
+      "category": "audio",
+      "config_keys": [],
+      "data_files": [
+        "data/tiered-example.json"
+      ],
+      "description": "",
+      "dir": "examples/audio/tiered-annotation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "tiered-annotation",
+      "path": "examples/audio/tiered-annotation/config.yaml",
+      "run": "potato start examples/audio/tiered-annotation/config.yaml -p 8000",
+      "task_name": "Tiered Annotation Example"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "span"
+      ],
+      "category": "audio",
+      "config_keys": [],
+      "data_files": [
+        "data/transcripts.json"
+      ],
+      "description": "",
+      "dir": "examples/audio/transcript-formats",
+      "display_types": [
+        "audio_dialogue",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "transcript-formats",
+      "path": "examples/audio/transcript-formats/config.yaml",
+      "run": "potato start examples/audio/transcript-formats/config.yaml -p 8000",
+      "task_name": "Transcript Formats"
+    },
+    {
+      "annotation_types": [
+        "bws"
+      ],
+      "category": "classification",
+      "config_keys": [
+        "bws_config"
+      ],
+      "data_files": [
+        "data/sentiment-pool.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/classification/best-worst-scaling",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "best-worst-scaling",
+      "path": "examples/classification/best-worst-scaling/config.yaml",
+      "run": "potato start examples/classification/best-worst-scaling/config.yaml -p 8000",
+      "task_name": "Sentiment Intensity BWS"
+    },
+    {
+      "annotation_types": [
+        "card_sort"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/card-sort-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/card-sort",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "card-sort",
+      "path": "examples/classification/card-sort/config.yaml",
+      "run": "potato start examples/classification/card-sort/config.yaml -p 8000",
+      "task_name": "Topic Card Sorting"
+    },
+    {
+      "annotation_types": [
+        "multiselect"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/dynamic-labels.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/check-box-dynamic-labels",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "check-box-dynamic-labels",
+      "path": "examples/classification/check-box-dynamic-labels/config.yaml",
+      "run": "potato start examples/classification/check-box-dynamic-labels/config.yaml -p 8000",
+      "task_name": "Simple Check Box Dynamic Labels Example"
+    },
+    {
+      "annotation_types": [
+        "multiselect"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/toy-example.csv"
+      ],
+      "description": "",
+      "dir": "examples/classification/check-box-with-free-response",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "check-box-with-free-response",
+      "path": "examples/classification/check-box-with-free-response/config.yaml",
+      "run": "potato start examples/classification/check-box-with-free-response/config.yaml -p 8000",
+      "task_name": "Simple Check Box With Free Response Example"
+    },
+    {
+      "annotation_types": [
+        "multiselect"
+      ],
+      "category": "classification",
+      "config_keys": [
+        "ai_support"
+      ],
+      "data_files": [
+        "data/toy-example.csv"
+      ],
+      "description": "",
+      "dir": "examples/classification/check-box",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "check-box",
+      "path": "examples/classification/check-box/config.yaml",
+      "run": "potato start examples/classification/check-box/config.yaml -p 8000",
+      "task_name": "Simple Check Box Example"
+    },
+    {
+      "annotation_types": [
+        "confidence",
+        "radio"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/confidence-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/confidence-calibrated",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "confidence-calibrated",
+      "path": "examples/classification/confidence-calibrated/config.yaml",
+      "run": "potato start examples/classification/confidence-calibrated/config.yaml -p 8000",
+      "task_name": "Confidence-Calibrated Sentiment Annotation"
+    },
+    {
+      "annotation_types": [
+        "conjoint"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/conjoint-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/conjoint",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "conjoint",
+      "path": "examples/classification/conjoint/config.yaml",
+      "run": "potato start examples/classification/conjoint/config.yaml -p 8000",
+      "task_name": "AI Assistant Preference Study"
+    },
+    {
+      "annotation_types": [
+        "constant_sum"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/constant-sum-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/constant-sum",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "constant-sum",
+      "path": "examples/classification/constant-sum/config.yaml",
+      "run": "potato start examples/classification/constant-sum/config.yaml -p 8000",
+      "task_name": "Constant-Sum Topic Relevance Allocation"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "radio"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/dialogues.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/dialogue-classification",
+      "display_types": [
+        "dialogue",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "dialogue-classification",
+      "path": "examples/classification/dialogue-classification/config.yaml",
+      "run": "potato start examples/classification/dialogue-classification/config.yaml -p 8000",
+      "task_name": "Dialogue Classification"
+    },
+    {
+      "annotation_types": [
+        "error_span"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/error-span-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/error-span",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "error-span",
+      "path": "examples/classification/error-span/config.yaml",
+      "run": "potato start examples/classification/error-span/config.yaml -p 8000",
+      "task_name": "MQM Translation Quality Evaluation"
+    },
+    {
+      "annotation_types": [
+        "extractive_qa"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/extractive-qa-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/extractive-qa",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "extractive-qa",
+      "path": "examples/classification/extractive-qa/config.yaml",
+      "run": "potato start examples/classification/extractive-qa/config.yaml -p 8000",
+      "task_name": "SQuAD-Style Extractive QA"
+    },
+    {
+      "annotation_types": [
+        "hierarchical_multiselect"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/hierarchical-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/hierarchical-multiselect",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "hierarchical-multiselect",
+      "path": "examples/classification/hierarchical-multiselect/config.yaml",
+      "run": "potato start examples/classification/hierarchical-multiselect/config.yaml -p 8000",
+      "task_name": "Hierarchical Topic Classification"
+    },
+    {
+      "annotation_types": [
+        "bws"
+      ],
+      "category": "classification",
+      "config_keys": [
+        "ibws_config"
+      ],
+      "data_files": [
+        "data/sentiment-pool.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/classification/iterative-bws",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "iterative-bws",
+      "path": "examples/classification/iterative-bws/config.yaml",
+      "run": "potato start examples/classification/iterative-bws/config.yaml -p 8000",
+      "task_name": "Sentiment Intensity (Iterative BWS)"
+    },
+    {
+      "annotation_types": [
+        "likert"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/toy-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/likert",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "likert",
+      "path": "examples/classification/likert/config.yaml",
+      "run": "potato start examples/classification/likert/config.yaml -p 8000",
+      "task_name": "Simple Likert Scale Example"
+    },
+    {
+      "annotation_types": [
+        "pairwise",
+        "text"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/llm_responses.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/llm-preference",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "llm-preference",
+      "path": "examples/classification/llm-preference/config.yaml",
+      "run": "potato start examples/classification/llm-preference/config.yaml -p 8000",
+      "task_name": "LLM Response Quality Comparison"
+    },
+    {
+      "annotation_types": [
+        "multirate"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/toy-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/multirate",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "multirate",
+      "path": "examples/classification/multirate/config.yaml",
+      "run": "potato start examples/classification/multirate/config.yaml -p 8000",
+      "task_name": "Simple Multirate Example"
+    },
+    {
+      "annotation_types": [
+        "pairwise"
+      ],
+      "category": "classification",
+      "config_keys": [
+        "surveyflow"
+      ],
+      "data_files": [
+        "data/pairwise-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/pairwise-comparison",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "pairwise-comparison",
+      "path": "examples/classification/pairwise-comparison/config.yaml",
+      "run": "potato start examples/classification/pairwise-comparison/config.yaml -p 8000",
+      "task_name": "Simple Pairwise Comparison Example"
+    },
+    {
+      "annotation_types": [
+        "pairwise"
+      ],
+      "category": "classification",
+      "config_keys": [
+        "surveyflow"
+      ],
+      "data_files": [
+        "data/pairwise-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/pairwise-scale",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "pairwise-scale",
+      "path": "examples/classification/pairwise-scale/config.yaml",
+      "run": "potato start examples/classification/pairwise-scale/config.yaml -p 8000",
+      "task_name": "Pairwise Scale Comparison Example"
+    },
+    {
+      "annotation_types": [
+        "range_slider"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/range-slider-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/range-slider",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "range-slider",
+      "path": "examples/classification/range-slider/config.yaml",
+      "run": "potato start examples/classification/range-slider/config.yaml -p 8000",
+      "task_name": "Range Slider Formality Assessment"
+    },
+    {
+      "annotation_types": [
+        "ranking"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/ranking-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/ranking",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "ranking",
+      "path": "examples/classification/ranking/config.yaml",
+      "run": "potato start examples/classification/ranking/config.yaml -p 8000",
+      "task_name": "Response Quality Ranking"
+    },
+    {
+      "annotation_types": [
+        "rubric_eval"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/rubric-eval-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/rubric-eval",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "rubric-eval",
+      "path": "examples/classification/rubric-eval/config.yaml",
+      "run": "potato start examples/classification/rubric-eval/config.yaml -p 8000",
+      "task_name": "LLM Response Quality Rubric"
+    },
+    {
+      "annotation_types": [
+        "semantic_differential"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/semantic-differential-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/semantic-differential",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "semantic-differential",
+      "path": "examples/classification/semantic-differential/config.yaml",
+      "run": "potato start examples/classification/semantic-differential/config.yaml -p 8000",
+      "task_name": "Semantic Differential Word Connotation"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/toy-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/single-choice",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "single-choice",
+      "path": "examples/classification/single-choice/config.yaml",
+      "run": "potato start examples/classification/single-choice/config.yaml -p 8000",
+      "task_name": "Simple Single-Choice Example"
+    },
+    {
+      "annotation_types": [
+        "slider"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/toy-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/slider",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "slider",
+      "path": "examples/classification/slider/config.yaml",
+      "run": "potato start examples/classification/slider/config.yaml -p 8000",
+      "task_name": "Simple Slider Example"
+    },
+    {
+      "annotation_types": [
+        "soft_label"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/soft-label-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/soft-label",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "soft-label",
+      "path": "examples/classification/soft-label/config.yaml",
+      "run": "potato start examples/classification/soft-label/config.yaml -p 8000",
+      "task_name": "Soft Label Sentiment Distribution"
+    },
+    {
+      "annotation_types": [
+        "likert"
+      ],
+      "category": "classification",
+      "config_keys": [
+        "phases"
+      ],
+      "data_files": [
+        "data/texts.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/survey-demo",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "survey-demo",
+      "path": "examples/classification/survey-demo/config.yaml",
+      "run": "potato start examples/classification/survey-demo/config.yaml -p 8000",
+      "task_name": "Survey Instruments Demo"
+    },
+    {
+      "annotation_types": [
+        "text"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/toy-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/text-box",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "text-box",
+      "path": "examples/classification/text-box/config.yaml",
+      "run": "potato start examples/classification/text-box/config.yaml -p 8000",
+      "task_name": "Simple Text Box Example"
+    },
+    {
+      "annotation_types": [
+        "text_edit"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/text-edit-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/text-edit",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "text-edit",
+      "path": "examples/classification/text-edit/config.yaml",
+      "run": "potato start examples/classification/text-edit/config.yaml -p 8000",
+      "task_name": "Machine Translation Post-Editing"
+    },
+    {
+      "annotation_types": [
+        "slider"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/toy-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/two-sliders",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "two-sliders",
+      "path": "examples/classification/two-sliders/config.yaml",
+      "run": "potato start examples/classification/two-sliders/config.yaml -p 8000",
+      "task_name": "Two Sliders Example"
+    },
+    {
+      "annotation_types": [
+        "vas"
+      ],
+      "category": "classification",
+      "config_keys": [],
+      "data_files": [
+        "data/vas-example.json"
+      ],
+      "description": "",
+      "dir": "examples/classification/vas",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "vas",
+      "path": "examples/classification/vas/config.yaml",
+      "run": "potato start examples/classification/vas/config.yaml -p 8000",
+      "task_name": "VAS Pain Level Rating"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio",
+        "span",
+        "text"
+      ],
+      "category": "conversation",
+      "config_keys": [],
+      "data_files": [
+        "data/awry.jsonl"
+      ],
+      "description": "Annotate Wikipedia talk-page threads for derailment \u2014 the task behind Cornell's",
+      "dir": "examples/conversation/convokit-awry",
+      "display_types": [
+        "dialogue",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "convokit-awry",
+      "path": "examples/conversation/convokit-awry/config.yaml",
+      "run": "potato start examples/conversation/convokit-awry/config.yaml -p 8000",
+      "task_name": "Conversations Gone Awry"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "span"
+      ],
+      "category": "conversation",
+      "config_keys": [],
+      "data_files": [
+        "data/politeness.jsonl"
+      ],
+      "description": "Re-annotate the Stanford Politeness Corpus \u2014 requests from Wikipedia talk pages,",
+      "dir": "examples/conversation/convokit-politeness",
+      "display_types": [
+        "dialogue"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "convokit-politeness",
+      "path": "examples/conversation/convokit-politeness/config.yaml",
+      "run": "potato start examples/conversation/convokit-politeness/config.yaml -p 8000",
+      "task_name": "Wikipedia Politeness"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "span"
+      ],
+      "category": "conversation",
+      "config_keys": [],
+      "data_files": [
+        "data/threads.jsonl"
+      ],
+      "description": "A branching **tree** and a flat **thread** of the same conversation, annotated",
+      "dir": "examples/conversation/convokit-tree",
+      "display_types": [
+        "conversation_tree",
+        "dialogue",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "convokit-tree",
+      "path": "examples/conversation/convokit-tree/config.yaml",
+      "run": "potato start examples/conversation/convokit-tree/config.yaml -p 8000",
+      "task_name": "Thread Structure and Text"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "radio",
+        "span",
+        "span_link",
+        "text"
+      ],
+      "category": "conversation",
+      "config_keys": [],
+      "data_files": [
+        "data/thread.jsonl"
+      ],
+      "description": "A branching discussion annotated at every level at once. **No ConvoKit involved** \u2014",
+      "dir": "examples/conversation/threaded-forum",
+      "display_types": [
+        "dialogue",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "threaded-forum",
+      "path": "examples/conversation/threaded-forum/config.yaml",
+      "run": "potato start examples/conversation/threaded-forum/config.yaml -p 8000",
+      "task_name": "Threaded Discussion Annotation"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "crowdsourcing",
+      "config_keys": [
+        "crowdsourcing"
+      ],
+      "data_files": [
+        "data/example.json"
+      ],
+      "description": "Classify the sentiment of short text snippets. This task takes about 5 minutes.",
+      "dir": "examples/crowdsourcing/connect-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "connect-example",
+      "path": "examples/crowdsourcing/connect-example/config.yaml",
+      "run": "potato start examples/crowdsourcing/connect-example/config.yaml -p 8000",
+      "task_name": "Connect Annotation Task"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "crowdsourcing",
+      "config_keys": [
+        "crowdsourcing"
+      ],
+      "data_files": [
+        "data/example.json"
+      ],
+      "description": "Expert review of short text snippets.",
+      "dir": "examples/crowdsourcing/expert-invites-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "expert-invites-example",
+      "path": "examples/crowdsourcing/expert-invites-example/config.yaml",
+      "run": "potato start examples/crowdsourcing/expert-invites-example/config.yaml -p 8000",
+      "task_name": "Expert Annotation Task"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "crowdsourcing",
+      "config_keys": [
+        "crowdsourcing"
+      ],
+      "data_files": [
+        "data/panel-example.json"
+      ],
+      "description": "Classify the sentiment of short text snippets.",
+      "dir": "examples/crowdsourcing/generic-panel",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "generic-panel",
+      "path": "examples/crowdsourcing/generic-panel/config.yaml",
+      "run": "potato start examples/crowdsourcing/generic-panel/config.yaml -p 8000",
+      "task_name": "Panel Annotation Task"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "crowdsourcing",
+      "config_keys": [
+        "crowdsourcing"
+      ],
+      "data_files": [
+        "data/example.json"
+      ],
+      "description": "Classify the sentiment of short text snippets.",
+      "dir": "examples/crowdsourcing/microworkers-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "microworkers-example",
+      "path": "examples/crowdsourcing/microworkers-example/config.yaml",
+      "run": "potato start examples/crowdsourcing/microworkers-example/config.yaml -p 8000",
+      "task_name": "Microworkers Annotation Task"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "crowdsourcing",
+      "config_keys": [],
+      "data_files": [
+        "data/prolific-example.json"
+      ],
+      "description": "Classify the sentiment of short text snippets. This task takes about 5 minutes to complete.",
+      "dir": "examples/crowdsourcing/prolific-basic",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "prolific-basic",
+      "path": "examples/crowdsourcing/prolific-basic/config.yaml",
+      "run": "potato start examples/crowdsourcing/prolific-basic/config.yaml -p 8000",
+      "task_name": "Prolific Annotation Task"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "crowdsourcing",
+      "config_keys": [
+        "crowdsourcing"
+      ],
+      "data_files": [
+        "data/example.json"
+      ],
+      "description": "Classify the sentiment of short text snippets. This study takes about 5 minutes.",
+      "dir": "examples/crowdsourcing/sona-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "sona-example",
+      "path": "examples/crowdsourcing/sona-example/config.yaml",
+      "run": "potato start examples/crowdsourcing/sona-example/config.yaml -p 8000",
+      "task_name": "SONA Annotation Task"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "custom-layouts",
+      "config_keys": [
+        "phases",
+        "training"
+      ],
+      "data_files": [
+        "data/category-assignment-data.json"
+      ],
+      "description": "",
+      "dir": "examples/custom-layouts/category-assignment",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "category-assignment",
+      "path": "examples/custom-layouts/category-assignment/config.yaml",
+      "run": "potato start examples/custom-layouts/category-assignment/config.yaml -p 8000",
+      "task_name": "Category-Based Assignment Example"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "text"
+      ],
+      "category": "custom-layouts",
+      "config_keys": [
+        "task_layout"
+      ],
+      "data_files": [
+        "data/content.json"
+      ],
+      "description": "",
+      "dir": "examples/custom-layouts/content-moderation",
+      "display_types": [
+        "image",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "content-moderation",
+      "path": "examples/custom-layouts/content-moderation/config.yaml",
+      "run": "potato start examples/custom-layouts/content-moderation/config.yaml -p 8000",
+      "task_name": "Content Moderation Dashboard"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "custom-layouts",
+      "config_keys": [
+        "task_layout"
+      ],
+      "data_files": [
+        "data/toy-example.json"
+      ],
+      "description": "",
+      "dir": "examples/custom-layouts/custom-layout-example",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "custom-layout-example",
+      "path": "examples/custom-layouts/custom-layout-example/config.yaml",
+      "run": "potato start examples/custom-layouts/custom-layout-example/config.yaml -p 8000",
+      "task_name": "Custom Layout Example"
+    },
+    {
+      "annotation_types": [
+        "likert",
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "custom-layouts",
+      "config_keys": [
+        "task_layout"
+      ],
+      "data_files": [
+        "data/conversations.json"
+      ],
+      "description": "",
+      "dir": "examples/custom-layouts/dialogue-qa",
+      "display_types": [
+        "dialogue",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "dialogue-qa",
+      "path": "examples/custom-layouts/dialogue-qa/config.yaml",
+      "run": "potato start examples/custom-layouts/dialogue-qa/config.yaml -p 8000",
+      "task_name": "Customer Service Quality Assessment"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "custom-layouts",
+      "config_keys": [
+        "ai_support",
+        "icl_labeling"
+      ],
+      "data_files": [
+        "data/icl-labeling-example.json"
+      ],
+      "description": "",
+      "dir": "examples/custom-layouts/icl-labeling",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "icl-labeling",
+      "path": "examples/custom-layouts/icl-labeling/config.yaml",
+      "run": "potato start examples/custom-layouts/icl-labeling/config.yaml -p 8000",
+      "task_name": "ICL Labeling Example"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "custom-layouts",
+      "config_keys": [
+        "task_layout"
+      ],
+      "data_files": [
+        "data/studies.json"
+      ],
+      "description": "",
+      "dir": "examples/custom-layouts/medical-review",
+      "display_types": [
+        "image",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "medical-review",
+      "path": "examples/custom-layouts/medical-review/config.yaml",
+      "run": "potato start examples/custom-layouts/medical-review/config.yaml -p 8000",
+      "task_name": "Radiology Review"
+    },
+    {
+      "annotation_types": [
+        "episode_annotation",
+        "text"
+      ],
+      "category": "embodied",
+      "config_keys": [],
+      "data_files": [
+        "data/episodes.json"
+      ],
+      "description": "Annotate a robot demonstration: two synchronized camera views, the arm's own",
+      "dir": "examples/embodied/lerobot-episode",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "lerobot-episode",
+      "path": "examples/embodied/lerobot-episode/config.yaml",
+      "run": "potato start examples/embodied/lerobot-episode/config.yaml -p 8000",
+      "task_name": "Robot episode review"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "image",
+      "config_keys": [
+        "ai_support"
+      ],
+      "data_files": [
+        "data/scenes.json"
+      ],
+      "description": "Ask a vision model to review the regions you have already drawn, one at a time,",
+      "dir": "examples/image/annotation-critique",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "annotation-critique",
+      "path": "examples/image/annotation-critique/config.yaml",
+      "run": "potato start examples/image/annotation-critique/config.yaml -p 8000",
+      "task_name": "Annotation review (VLM as judge)"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "image",
+      "config_keys": [
+        "pre_annotation"
+      ],
+      "data_files": [
+        "data/instances_sample.json"
+      ],
+      "description": "Correcting annotations imported from a COCO file, rather than annotating from",
+      "dir": "examples/image/coco-import",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "coco-import",
+      "path": "examples/image/coco-import/config.yaml",
+      "run": "potato start examples/image/coco-import/config.yaml -p 8000",
+      "task_name": "object_detection (imported)"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/scans.json"
+      ],
+      "description": "A 6000\u00d74000 survey image, served as a tile pyramid through OpenSeadragon with",
+      "dir": "examples/image/deep-zoom",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "deep-zoom",
+      "path": "examples/image/deep-zoom/config.yaml",
+      "run": "potato start examples/image/deep-zoom/config.yaml -p 8000",
+      "task_name": "Deep-zoom survey annotation"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/document-examples.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/image/document-bbox",
+      "display_types": [
+        "document",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "document-bbox",
+      "path": "examples/image/document-bbox/config.yaml",
+      "run": "potato start examples/image/document-bbox/config.yaml -p 8000",
+      "task_name": "Document Region Annotation"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "image",
+      "config_keys": [
+        "pre_annotation"
+      ],
+      "data_files": [
+        "data/instances.json"
+      ],
+      "description": "The same two annotated images shipped in **four** annotation formats, so you",
+      "dir": "examples/image/format-migration",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "format-migration",
+      "path": "examples/image/format-migration/config.yaml",
+      "run": "potato start examples/image/format-migration/config.yaml -p 8000",
+      "task_name": "Format migration"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/geometry-primitives.json"
+      ],
+      "description": "",
+      "dir": "examples/image/geometry-primitives",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "geometry-primitives",
+      "path": "examples/image/geometry-primitives/config.yaml",
+      "run": "potato start examples/image/geometry-primitives/config.yaml -p 8000",
+      "task_name": "Geometry Primitives"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "image",
+      "config_keys": [
+        "ai_support"
+      ],
+      "data_files": [
+        "data/image-ai-example.json"
+      ],
+      "description": "",
+      "dir": "examples/image/image-ai-detection",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "image-ai-detection",
+      "path": "examples/image/image-ai-detection/config.yaml",
+      "run": "potato start examples/image/image-ai-detection/config.yaml -p 8000",
+      "task_name": "AI-Assisted Object Detection"
+    },
+    {
+      "annotation_types": [
+        "image_annotation",
+        "radio"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/image-annotation-example.json"
+      ],
+      "description": "",
+      "dir": "examples/image/image-annotation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "image-annotation",
+      "path": "examples/image/image-annotation/config.yaml",
+      "run": "potato start examples/image/image-annotation/config.yaml -p 8000",
+      "task_name": "Object Detection Demo"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/images.json"
+      ],
+      "description": "",
+      "dir": "examples/image/image-classification",
+      "display_types": [
+        "image",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "image-classification",
+      "path": "examples/image/image-classification/config.yaml",
+      "run": "potato start examples/image/image-classification/config.yaml -p 8000",
+      "task_name": "Image Classification"
+    },
+    {
+      "annotation_types": [
+        "image_annotation",
+        "multiselect",
+        "radio"
+      ],
+      "category": "image",
+      "config_keys": [
+        "ai_support"
+      ],
+      "data_files": [
+        "data/image-classification-example.json"
+      ],
+      "description": "",
+      "dir": "examples/image/image-vllm-rationale",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "image-vllm-rationale",
+      "path": "examples/image/image-vllm-rationale/config.yaml",
+      "run": "potato start examples/image/image-vllm-rationale/config.yaml -p 8000",
+      "task_name": "Image Classification with AI Rationales"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/scenes.json"
+      ],
+      "description": "",
+      "dir": "examples/image/interactive-segmentation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "interactive-segmentation",
+      "path": "examples/image/interactive-segmentation/config.yaml",
+      "run": "potato start examples/image/interactive-segmentation/config.yaml -p 8000",
+      "task_name": "Interactive segmentation"
+    },
+    {
+      "annotation_types": [
+        "span"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/pdf-example.json"
+      ],
+      "description": "",
+      "dir": "examples/image/pdf-annotation",
+      "display_types": [
+        "pdf",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "pdf-annotation",
+      "path": "examples/image/pdf-annotation/config.yaml",
+      "run": "potato start examples/image/pdf-annotation/config.yaml -p 8000",
+      "task_name": "PDF Entity Annotation"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "text"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/pdf-layout-examples.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/image/pdf-bbox",
+      "display_types": [
+        "pdf",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "pdf-bbox",
+      "path": "examples/image/pdf-bbox/config.yaml",
+      "run": "potato start examples/image/pdf-bbox/config.yaml -p 8000",
+      "task_name": "PDF Layout Annotation"
+    },
+    {
+      "annotation_types": [
+        "image_annotation",
+        "region_caption"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/scenes.json"
+      ],
+      "description": "One free-text description per region drawn on the image \u2014 the annotation behind",
+      "dir": "examples/image/region-captioning",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "region-captioning",
+      "path": "examples/image/region-captioning/config.yaml",
+      "run": "potato start examples/image/region-captioning/config.yaml -p 8000",
+      "task_name": "Region captioning"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "image",
+      "config_keys": [],
+      "data_files": [
+        "data/photos.json"
+      ],
+      "description": "Type what you are looking for. The detector boxes every match and offers each",
+      "dir": "examples/image/text-prompt-labeling",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "text-prompt-labeling",
+      "path": "examples/image/text-prompt-labeling/config.yaml",
+      "run": "potato start examples/image/text-prompt-labeling/config.yaml -p 8000",
+      "task_name": "Text-prompt labelling"
+    },
+    {
+      "annotation_types": [
+        "tree_annotation"
+      ],
+      "category": "span",
+      "config_keys": [],
+      "data_files": [
+        "data/tree-example.json"
+      ],
+      "description": "",
+      "dir": "examples/span/conversation-tree",
+      "display_types": [
+        "conversation_tree"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "conversation-tree",
+      "path": "examples/span/conversation-tree/config.yaml",
+      "run": "potato start examples/span/conversation-tree/config.yaml -p 8000",
+      "task_name": "Conversation Tree Evaluation"
+    },
+    {
+      "annotation_types": [
+        "coreference",
+        "span"
+      ],
+      "category": "span",
+      "config_keys": [],
+      "data_files": [
+        "data/coreference-example.json"
+      ],
+      "description": "",
+      "dir": "examples/span/coreference",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "coreference",
+      "path": "examples/span/coreference/config.yaml",
+      "run": "potato start examples/span/coreference/config.yaml -p 8000",
+      "task_name": "Coreference Annotation Demo"
+    },
+    {
+      "annotation_types": [
+        "span",
+        "span_link"
+      ],
+      "category": "span",
+      "config_keys": [
+        "layout"
+      ],
+      "data_files": [
+        "data/sentences.json"
+      ],
+      "description": "",
+      "dir": "examples/span/dependency-tree",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "dependency-tree",
+      "path": "examples/span/dependency-tree/config.yaml",
+      "run": "potato start examples/span/dependency-tree/config.yaml -p 8000",
+      "task_name": "Dependency Tree Annotation"
+    },
+    {
+      "annotation_types": [
+        "span"
+      ],
+      "category": "span",
+      "config_keys": [],
+      "data_files": [
+        "data/entity-linking-example.json"
+      ],
+      "description": "",
+      "dir": "examples/span/entity-linking",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "entity-linking",
+      "path": "examples/span/entity-linking/config.yaml",
+      "run": "potato start examples/span/entity-linking/config.yaml -p 8000",
+      "task_name": "Entity Linking Example"
+    },
+    {
+      "annotation_types": [
+        "event_annotation",
+        "span"
+      ],
+      "category": "span",
+      "config_keys": [],
+      "data_files": [
+        "data/event-example.json"
+      ],
+      "description": "",
+      "dir": "examples/span/event-annotation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "event-annotation",
+      "path": "examples/span/event-annotation/config.yaml",
+      "run": "potato start examples/span/event-annotation/config.yaml -p 8000",
+      "task_name": "Event Annotation Example"
+    },
+    {
+      "annotation_types": [
+        "span"
+      ],
+      "category": "span",
+      "config_keys": [],
+      "data_files": [
+        "data/multi-span-example.json"
+      ],
+      "description": "",
+      "dir": "examples/span/multi-span",
+      "display_types": [
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "multi-span",
+      "path": "examples/span/multi-span/config.yaml",
+      "run": "potato start examples/span/multi-span/config.yaml -p 8000",
+      "task_name": "Multi-Span Annotation Example"
+    },
+    {
+      "annotation_types": [
+        "image_annotation"
+      ],
+      "category": "span",
+      "config_keys": [],
+      "data_files": [
+        "data/segmentation-example.json"
+      ],
+      "description": "",
+      "dir": "examples/span/segmentation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "segmentation",
+      "path": "examples/span/segmentation/config.yaml",
+      "run": "potato start examples/span/segmentation/config.yaml -p 8000",
+      "task_name": "Image Segmentation Demo"
+    },
+    {
+      "annotation_types": [
+        "span"
+      ],
+      "category": "span",
+      "config_keys": [],
+      "data_files": [
+        "data/toy-example.csv"
+      ],
+      "description": "",
+      "dir": "examples/span/span-labeling-with-abbreviations",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "span-labeling-with-abbreviations",
+      "path": "examples/span/span-labeling-with-abbreviations/config.yaml",
+      "run": "potato start examples/span/span-labeling-with-abbreviations/config.yaml -p 8000",
+      "task_name": "Simple Highlighting Example"
+    },
+    {
+      "annotation_types": [
+        "span"
+      ],
+      "category": "span",
+      "config_keys": [],
+      "data_files": [
+        "data/toy-example.csv"
+      ],
+      "description": "",
+      "dir": "examples/span/span-labeling",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "span-labeling",
+      "path": "examples/span/span-labeling/config.yaml",
+      "run": "potato start examples/span/span-labeling/config.yaml -p 8000",
+      "task_name": "Simple Highlighting Example"
+    },
+    {
+      "annotation_types": [
+        "span",
+        "span_link"
+      ],
+      "category": "span",
+      "config_keys": [],
+      "data_files": [
+        "data.json"
+      ],
+      "description": "",
+      "dir": "examples/span/span-linking",
+      "display_types": [],
+      "has_data_dir": false,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "span-linking",
+      "path": "examples/span/span-linking/config.yaml",
+      "run": "potato start examples/span/span-linking/config.yaml -p 8000",
+      "task_name": "Span Linking Example"
+    },
+    {
+      "annotation_types": [
+        "span"
+      ],
+      "category": "span",
+      "config_keys": [],
+      "data_files": [
+        "data/toy-example.csv"
+      ],
+      "description": "",
+      "dir": "examples/span/span-required-labeling",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "span-required-labeling",
+      "path": "examples/span/span-required-labeling/config.yaml",
+      "run": "potato start examples/span/span-required-labeling/config.yaml -p 8000",
+      "task_name": "Simple Highlighting Example"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "radio",
+        "text"
+      ],
+      "category": "spatial",
+      "config_keys": [],
+      "data_files": [
+        "data/scenes.json"
+      ],
+      "description": "Review a monocular depth prediction: the RGB frame, the predicted depth over",
+      "dir": "examples/spatial/depth-eval",
+      "display_types": [
+        "depth_map",
+        "image"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "depth-eval",
+      "path": "examples/spatial/depth-eval/config.yaml",
+      "run": "potato start examples/spatial/depth-eval/config.yaml -p 8000",
+      "task_name": "Depth prediction review"
+    },
+    {
+      "annotation_types": [
+        "spatial_annotation",
+        "text"
+      ],
+      "category": "spatial",
+      "config_keys": [],
+      "data_files": [
+        "data/scenes.json"
+      ],
+      "description": "Oriented 3D bounding boxes on a lidar point cloud.",
+      "dir": "examples/spatial/kitti-cuboids",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "kitti-cuboids",
+      "path": "examples/spatial/kitti-cuboids/config.yaml",
+      "run": "potato start examples/spatial/kitti-cuboids/config.yaml -p 8000",
+      "task_name": "Lidar 3D boxes"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "text"
+      ],
+      "category": "testing",
+      "config_keys": [],
+      "data_files": [
+        "data/test-items.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/testing/verify-format-displays",
+      "display_types": [
+        "code",
+        "document",
+        "spreadsheet",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "verify-format-displays",
+      "path": "examples/testing/verify-format-displays/config.yaml",
+      "run": "potato start examples/testing/verify-format-displays/config.yaml -p 8000",
+      "task_name": "Format Display Verification"
+    },
+    {
+      "annotation_types": [
+        "span"
+      ],
+      "category": "testing",
+      "config_keys": [],
+      "data_files": [
+        "data/span-test-items.jsonl"
+      ],
+      "description": "",
+      "dir": "examples/testing/verify-span-labeling",
+      "display_types": [
+        "code",
+        "document",
+        "text"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "verify-span-labeling",
+      "path": "examples/testing/verify-span-labeling/config.yaml",
+      "run": "potato start examples/testing/verify-span-labeling/config.yaml -p 8000",
+      "task_name": "Span Labeling Verification"
+    },
+    {
+      "annotation_types": [
+        "video_annotation"
+      ],
+      "category": "video",
+      "config_keys": [],
+      "data_files": [
+        "data/clips.json"
+      ],
+      "description": "Draw the object once. Press **Track forward**. SAM 2 follows it through the",
+      "dir": "examples/video/mask-propagation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "mask-propagation",
+      "path": "examples/video/mask-propagation/config.yaml",
+      "run": "potato start examples/video/mask-propagation/config.yaml -p 8000",
+      "task_name": "Track through an occlusion"
+    },
+    {
+      "annotation_types": [
+        "video_annotation"
+      ],
+      "category": "video",
+      "config_keys": [],
+      "data_files": [
+        "data/clips.json"
+      ],
+      "description": "Tracking an object across video frames with **polygons**, not just boxes.",
+      "dir": "examples/video/polygon-tracking",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": true,
+      "name": "polygon-tracking",
+      "path": "examples/video/polygon-tracking/config.yaml",
+      "run": "potato start examples/video/polygon-tracking/config.yaml -p 8000",
+      "task_name": "Polygon Tracking"
+    },
+    {
+      "annotation_types": [
+        "multiselect"
+      ],
+      "category": "video",
+      "config_keys": [],
+      "data_files": [
+        "data/video-as-input.json"
+      ],
+      "description": "",
+      "dir": "examples/video/video-annotation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "video-annotation",
+      "path": "examples/video/video-annotation/config.yaml",
+      "run": "potato start examples/video/video-annotation/config.yaml -p 8000",
+      "task_name": "Simple Video as Input Example"
+    },
+    {
+      "annotation_types": [
+        "multiselect"
+      ],
+      "category": "video",
+      "config_keys": [],
+      "data_files": [
+        "data/video-label-example.json"
+      ],
+      "description": "",
+      "dir": "examples/video/video-as-label",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "video-as-label",
+      "path": "examples/video/video-as-label/config.yaml",
+      "run": "potato start examples/video/video-as-label/config.yaml -p 8000",
+      "task_name": "Simple Video as Label Example"
+    },
+    {
+      "annotation_types": [
+        "multiselect",
+        "radio"
+      ],
+      "category": "video",
+      "config_keys": [],
+      "data_files": [
+        "data/videos.json"
+      ],
+      "description": "",
+      "dir": "examples/video/video-classification",
+      "display_types": [
+        "text",
+        "video"
+      ],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "video-classification",
+      "path": "examples/video/video-classification/config.yaml",
+      "run": "potato start examples/video/video-classification/config.yaml -p 8000",
+      "task_name": "Video Classification"
+    },
+    {
+      "annotation_types": [
+        "video_annotation"
+      ],
+      "category": "video",
+      "config_keys": [],
+      "data_files": [
+        "data/video-frame-example.json"
+      ],
+      "description": "",
+      "dir": "examples/video/video-frame-annotation",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "video-frame-annotation",
+      "path": "examples/video/video-frame-annotation/config.yaml",
+      "run": "potato start examples/video/video-frame-annotation/config.yaml -p 8000",
+      "task_name": "Video Frame Annotation Example"
+    },
+    {
+      "annotation_types": [
+        "radio",
+        "video"
+      ],
+      "category": "video",
+      "config_keys": [],
+      "data_files": [
+        "data/clips.json"
+      ],
+      "description": "",
+      "dir": "examples/video/video-player",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "video-player",
+      "path": "examples/video/video-player/config.yaml",
+      "run": "potato start examples/video/video-player/config.yaml -p 8000",
+      "task_name": "Video Player"
+    },
+    {
+      "annotation_types": [
+        "video_annotation"
+      ],
+      "category": "video",
+      "config_keys": [],
+      "data_files": [
+        "data/video-tracking-example.json"
+      ],
+      "description": "",
+      "dir": "examples/video/video-tracking",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "video-tracking",
+      "path": "examples/video/video-tracking/config.yaml",
+      "run": "potato start examples/video/video-tracking/config.yaml -p 8000",
+      "task_name": "Simple Video Object Tracking"
+    }
+  ]
+}

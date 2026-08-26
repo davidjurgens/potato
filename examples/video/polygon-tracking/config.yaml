@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
 # Polygon and mask tracking across video frames.
 # Run from repo root:
 #   python potato/flask_server.py start examples/video/polygon-tracking/config.yaml -p 8000
