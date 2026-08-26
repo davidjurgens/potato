@@ -216,7 +216,7 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 214 examples, generated from the configs themselves.
+All 213 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
 ### advanced/ (56)
@@ -288,7 +288,7 @@ The `Types` column lists the annotation types each one uses.
 | [`coding-agent-live-test/`](agent-testing/coding-agent-live-test/) | Live Coding Agent (subprocess sandbox) | `likert`, `radio`, `text` |
 | [`interactive-agent-test/`](agent-testing/interactive-agent-test/) | Interactive Agent Testing | `likert`, `radio`, `text` |
 
-### agent-traces/ (57)
+### agent-traces/ (56)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -344,7 +344,6 @@ The `Types` column lists the annotation types each one uses.
 | [`trajectory-evaluation/`](agent-traces/trajectory-evaluation/) | Agent Trajectory Evaluation | `trajectory_eval` |
 | [`triage-queue/`](agent-traces/triage-queue/) | Trace Triage | `radio` |
 | [`visual-agent-evaluation/`](agent-traces/visual-agent-evaluation/) | Visual Agent Evaluation | `likert`, `multiselect`, `radio`, `text` |
-| [`vlm-eval-backup/`](agent-traces/interactive-vlm-evaluation/vlm-eval-backup/) | Interactive VLM Web Agent Evaluation | `radio`, `text`, `trajectory_eval` |
 | [`voice-interaction/`](agent-traces/voice-interaction/) | Voice Agent Turn-Taking | `voice_interaction` |
 | [`web-agent-creation/`](agent-traces/web-agent-creation/) | Web Agent Trace Creation | `likert`, `radio`, `text` |
 | [`web-agent-review/`](agent-traces/web-agent-review/) | Web Agent Trace Review | `likert`, `multiselect`, `radio`, `text` |

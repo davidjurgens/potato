@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from typing import Any, Dict, List, Optional
 
 MANIFEST_FILENAME = "potato-examples.manifest.json"
@@ -147,15 +148,55 @@ def describe_example(config_path: str, root: Optional[str] = None) -> Optional[d
     }
 
 
+def _git_ignored(root: str, paths: List[str]) -> set:
+    """Which of `paths` git does not track, as absolute paths.
+
+    The manifest is generated from the filesystem but committed, so anything
+    present only on the author's machine silently becomes part of a checked-in
+    artifact and CI then reports it stale. That is not hypothetical: a scratch
+    directory ignored through `.git/info/exclude` -- which is local-only and
+    invisible to everyone else -- shipped in the 2.8.1 manifest and broke the
+    drift check on every subsequent run.
+
+    Returns an empty set when git is unavailable or this is not a checkout, so
+    building from an unpacked sdist still works.
+    """
+    if not paths:
+        return set()
+    try:
+        result = subprocess.run(
+            ["git", "-C", root, "check-ignore", "--stdin"],
+            input="\n".join(paths), capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    # check-ignore exits 1 when nothing matched, which is not an error here.
+    if result.returncode not in (0, 1):
+        return set()
+    return {
+        os.path.abspath(os.path.join(root, line.strip()))
+        for line in (result.stdout or "").splitlines() if line.strip()
+    }
+
+
 def build_manifest(root: Optional[str] = None) -> Dict[str, Any]:
-    """Walk `examples/` and return the catalog."""
+    """Walk `examples/` and return the catalog.
+
+    Skips anything git ignores, so the catalog describes what is committed
+    rather than what happens to be on the machine that generated it.
+    """
     import glob
 
     root = root or _repo_root()
     pattern = os.path.join(root, "examples", "**", "config.yaml")
 
+    candidates = sorted(glob.glob(pattern, recursive=True))
+    ignored = _git_ignored(root, candidates)
+
     entries = []
-    for config_path in sorted(glob.glob(pattern, recursive=True)):
+    for config_path in candidates:
+        if os.path.abspath(config_path) in ignored:
+            continue
         entry = describe_example(config_path, root)
         if entry:
             entries.append(entry)

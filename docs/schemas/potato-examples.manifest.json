@@ -2,7 +2,7 @@
   "categories": {
     "advanced": 56,
     "agent-testing": 3,
-    "agent-traces": 57,
+    "agent-traces": 56,
     "ai-assisted": 6,
     "audio": 7,
     "classification": 30,
@@ -16,7 +16,7 @@
     "testing": 2,
     "video": 8
   },
-  "count": 214,
+  "count": 213,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -1870,28 +1870,6 @@
       "path": "examples/agent-traces/interaction-graph/config.yaml",
       "run": "potato start examples/agent-traces/interaction-graph/config.yaml -p 8000",
       "task_name": "Agent Interaction Graph"
-    },
-    {
-      "annotation_types": [
-        "radio",
-        "text",
-        "trajectory_eval"
-      ],
-      "category": "agent-traces",
-      "config_keys": [],
-      "data_files": [],
-      "description": "",
-      "dir": "examples/agent-traces/interactive-vlm-evaluation/vlm-eval-backup",
-      "display_types": [
-        "live_agent"
-      ],
-      "has_data_dir": true,
-      "has_modeline": true,
-      "has_readme": false,
-      "name": "vlm-eval-backup",
-      "path": "examples/agent-traces/interactive-vlm-evaluation/vlm-eval-backup/config.yaml",
-      "run": "potato start examples/agent-traces/interactive-vlm-evaluation/vlm-eval-backup/config.yaml -p 8000",
-      "task_name": "Interactive VLM Web Agent Evaluation"
     },
     {
       "annotation_types": [
