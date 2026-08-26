@@ -88,8 +88,34 @@ item_properties:
         # data_sources) and is enforced by a separate check (see
         # test_no_data_source_reported), not the required-field list.
         err = " ".join(report.errors)
-        assert "task_dir" in err
         assert "output_annotation_dir" in err
+        # task_dir is NOT reported: the server defaults it to the config file's
+        # own directory, so a config without it boots. Validate applies the same
+        # default, and must not invent an error the server does not have.
+        assert "task_dir" not in err
+
+    def test_missing_task_dir_is_not_an_error(self, tmp_path):
+        """The server defaults task_dir; validate must agree."""
+        (tmp_path / "items.json").write_text('[{"id": "1", "text": "hi"}]')
+        config_file = _write_config(
+            tmp_path,
+            """
+annotation_task_name: No task_dir
+output_annotation_dir: out
+data_files:
+  - items.json
+item_properties:
+  id_key: id
+  text_key: text
+annotation_schemes:
+  - annotation_type: radio
+    name: q
+    description: q
+    labels: [a, b]
+""",
+        )
+        report = validate_config_file(config_file)
+        assert report.ok is True, report.errors
 
     def test_no_data_source_reported(self, tmp_path):
         """A config with all required fields but no data source must fail.

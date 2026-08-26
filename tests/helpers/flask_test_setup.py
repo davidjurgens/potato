@@ -1226,7 +1226,7 @@ class FlaskTestServer:
             # Fall back to API endpoint
             response = self.session.get(
                 f"{self.base_url}/admin/user_state/{username}",
-                headers={"X-API-Key": "admin_api_key"},
+                headers={"X-API-Key": self.resolve_admin_key()},
                 timeout=5
             )
 
@@ -1290,22 +1290,45 @@ class FlaskTestServer:
         """Property to maintain compatibility with existing tests."""
         return None  # The app is not directly accessible in this implementation
 
+    def resolve_admin_key(self) -> str:
+        """The key the server will actually accept.
+
+        `self.admin_api_key` is stamped into the config when the server starts,
+        so it is the answer nearly always. The fallback asks the same resolver
+        the request handler uses (config, then POTATO_ADMIN_API_KEY, then the
+        generated `{task_dir}/admin_api_key.txt`) for a server handed a config
+        that already named a key.
+
+        This exists because `get()` and `post()` used to send the literal
+        string ``admin_api_key`` instead of either -- a value no server has
+        ever issued. It went unnoticed because the endpoints under test did
+        not check.
+        """
+        key = getattr(self, "admin_api_key", None)
+        if key:
+            return key
+        try:
+            from potato.server_utils.admin_key import get_admin_api_key
+            from potato.server_utils.config_module import config
+            return get_admin_api_key(config) or ""
+        except Exception:
+            return ""
+
+    def _with_admin_key(self, path: str, kwargs: dict) -> dict:
+        if path.startswith('/admin/'):
+            headers = dict(kwargs.get('headers') or {})
+            headers.setdefault('X-API-Key', self.resolve_admin_key())
+            kwargs['headers'] = headers
+        return kwargs
+
     def get(self, path: str, **kwargs) -> requests.Response:
         """Make a GET request to the server using the session."""
-        # Add admin API key for admin endpoints
-        if path.startswith('/admin/'):
-            headers = kwargs.get('headers', {})
-            headers['X-API-Key'] = 'admin_api_key'
-            kwargs['headers'] = headers
+        kwargs = self._with_admin_key(path, kwargs)
         return self.session.get(f"{self.base_url}{path}", **kwargs)
 
     def post(self, path: str, **kwargs) -> requests.Response:
         """Make a POST request to the server using the session."""
-        # Add admin API key for admin endpoints
-        if path.startswith('/admin/'):
-            headers = kwargs.get('headers', {})
-            headers['X-API-Key'] = 'admin_api_key'
-            kwargs['headers'] = headers
+        kwargs = self._with_admin_key(path, kwargs)
         return self.session.post(f"{self.base_url}{path}", **kwargs)
 
 

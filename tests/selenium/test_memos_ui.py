@@ -109,9 +109,14 @@ class TestMemosUI(unittest.TestCase):
         time.sleep(0.4)  # debounce save
 
     def _nav(self, button_id):
+        # Navigation is a full page reload, so waiting for #instance_id to be
+        # *present* proves nothing -- the pre-navigation element satisfies it
+        # immediately, and the following read returns the old instance id.
+        # Wait for the old node to go stale first.
+        old = self.driver.find_element(By.ID, "instance_id")
         self.driver.find_element(By.ID, button_id).click()
+        self.wait.until(EC.staleness_of(old))
         self.wait.until(EC.presence_of_element_located((By.ID, "instance_id")))
-        time.sleep(0.3)
 
     def _add_memo(self, body):
         self.wait.until(EC.element_to_be_clickable(

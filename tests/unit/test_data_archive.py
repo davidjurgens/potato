@@ -248,6 +248,39 @@ class TestVerifyPull:
         assert "project.sqlite" in verification.corrupt
         assert not verification.ok
 
+    def test_verifying_a_snapshot_leaves_no_wal_sidecars(self, tmp_path):
+        """Checking the snapshot must not deposit the files it exists to avoid.
+
+        A read-only connection to a WAL-mode database still builds a
+        shared-memory index, so the integrity check used to leave
+        `project.sqlite-wal` and `project.sqlite-shm` beside the snapshot it
+        had just verified. Those are the live sidecars the whole
+        snapshot-rather-than-copy rule exists to keep out of a pulled
+        directory, and finding them in the copy labelled safe is exactly the
+        wrong signal.
+        """
+        import sqlite3
+
+        dest = tmp_path / "pulled"
+        dest.mkdir()
+        database = dest / "project.sqlite"
+        connection = sqlite3.connect(str(database))
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("CREATE TABLE memo (id INTEGER PRIMARY KEY, body TEXT)")
+        connection.execute("INSERT INTO memo (body) VALUES ('kept')")
+        connection.commit()
+        connection.close()
+        for sidecar in ("project.sqlite-wal", "project.sqlite-shm"):
+            (dest / sidecar).unlink(missing_ok=True)
+        (dest / "user_state.json").write_text("{}")
+
+        verification = verify_pull(str(dest))
+
+        assert "project.sqlite" not in verification.corrupt
+        stray = sorted(f.name for f in dest.iterdir()
+                       if f.name.startswith("project.sqlite-"))
+        assert stray == [], f"verification left {stray} beside the snapshot"
+
     def test_files_without_annotators_is_called_out(self, tmp_path):
         """Files arrived, so the transport worked; the path must be wrong."""
         dest = tmp_path / "pulled"

@@ -20,7 +20,9 @@ def flask_server(request):
         "description": "ok?", "labels": ["yes", "no"],
     }]
     extra = {
-        "trace_ingestion": {"enabled": True, "api_key": "", "notify_annotators": False},
+        "trace_ingestion": {"enabled": True, "api_key": "",
+                            "allow_unauthenticated": True,
+                            "notify_annotators": False},
         "datasets": {"enabled": True, "storage": "file"},
         "automation": {
             "enabled": True,

@@ -386,8 +386,12 @@ class TestSchemaRegistry:
         assert schema_def.name == "video_annotation"
         assert schema_def.supports_keybindings is True
         assert "mode" in schema_def.optional_fields
-        assert "labels" in schema_def.optional_fields
         assert "timeline_height" in schema_def.optional_fields
+        # `labels` is required, not optional: the generator raises without it in
+        # every one of the five modes, so declaring it optional let
+        # `validate --strict` pass a config that could not render.
+        assert "labels" in schema_def.required_fields
+        assert "labels" not in schema_def.optional_fields
 
     def test_generate_via_registry(self):
         """Test generating layout via registry."""

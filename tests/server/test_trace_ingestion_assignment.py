@@ -77,7 +77,8 @@ class TestIngestedTraceBecomesAnnotatable:
     def flask_server(self, request):
         with TestConfigManager(
             "trace_ingest_assign", SCHEMES, num_instances=2,
-            additional_config={"trace_ingestion": {"enabled": True, "api_key": ""}},
+            additional_config={"trace_ingestion": {
+                "enabled": True, "api_key": "", "allow_unauthenticated": True}},
         ) as cfg:
             server = FlaskTestServer(port=INGEST_PORT, config_file=cfg.config_path)
             if not server.start():

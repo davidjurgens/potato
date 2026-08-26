@@ -408,12 +408,29 @@ class TestCodebookTrayDisabled(unittest.TestCase):
         if hasattr(self, "driver"):
             self.driver.quit()
 
-    def test_toggle_hidden_when_codebook_disabled(self):
-        time.sleep(1.5)  # allow the enable-probe to resolve
-        toggle = self.driver.find_element(By.ID, "cb-panel-toggle")
-        self.assertFalse(
-            toggle.is_displayed(),
-            "Codebook toggle must stay hidden when no codebook is enabled")
+    def test_tray_absent_when_codebook_disabled(self):
+        """Not merely hidden: absent, and with it the requests it made.
+
+        The tray used to ship on every annotation page and probe
+        /api/codebook to find out whether it belonged there, so a task with
+        no codebook paid five 503s per page view. The server decides now, so
+        neither the markup nor codebook.js reaches the browser.
+        """
+        time.sleep(1.0)
+        self.assertEqual(
+            [], self.driver.find_elements(By.ID, "cb-panel-toggle"),
+            "Codebook tray must not be rendered when no codebook is enabled")
+        self.assertEqual(
+            [], self.driver.find_elements(By.ID, "cb-panel"))
+        self.assertNotIn(
+            "codebook.js", self.driver.page_source,
+            "codebook.js must not load when no codebook is enabled")
+        failures = [
+            e for e in self.driver.get_log("browser")
+            if "/api/codebook" in e.get("message", "")
+        ]
+        self.assertEqual([], failures,
+                         f"Codebook endpoints were still called: {failures}")
 
 
 if __name__ == "__main__":
