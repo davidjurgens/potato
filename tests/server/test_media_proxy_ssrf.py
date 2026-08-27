@@ -16,18 +16,25 @@ import pytest
 
 @pytest.fixture(scope="module")
 def client():
-    from potato.flask_server import app
+    from flask import Flask
+
     from potato.routes import configure_routes
     from potato.server_utils.config_module import config
 
     config.setdefault("task_dir", ".")
-    # The module-level `app` has no routes until configure_routes() runs: the
-    # live server registers them through the factory, and a test that skips it
-    # gets 404 for every endpoint, which reads as "blocked" if the assertion
-    # only checks "not 200".
+    # A fresh app rather than the module-level `potato.flask_server.app`.
+    # That one is shared by the whole server suite, and once any earlier test
+    # has served a request through it Flask refuses every later
+    # `add_url_rule` ("The setup method 'add_url_rule' can no longer be called
+    # on the application"), so all 20 tests here errored at setup depending on
+    # which files ran first. An app of our own has no routes until
+    # configure_routes() runs: the live server registers them through the
+    # factory, and a test that skips it gets 404 for every endpoint, which
+    # reads as "blocked" if the assertion only checks "not 200".
+    app = Flask("test_media_proxy_ssrf")
     configure_routes(app, config)
     app.config["TESTING"] = True
-    app.secret_key = app.secret_key or "test-secret-for-media-proxy"
+    app.secret_key = "test-secret-for-media-proxy"
     with app.test_client() as c:
         yield c
 

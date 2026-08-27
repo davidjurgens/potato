@@ -105,8 +105,16 @@ class InstanceSelector:
         disagreement_weight: float = 0.1,
         edge_case_rule_weight: float = 0.0,
         cartography_weight: float = 0.0,
+        llm_predicted_weight: float = 0.0,
     ) -> None:
-        """Configure selection weights."""
+        """Configure selection weights.
+
+        Every pool has to be named here. Omitting one does not leave it alone --
+        it rebuilds ``SelectionWeights`` from scratch, so the missing pool drops
+        to its dataclass default. ``llm_predicted`` was absent until 2026-08-27,
+        which meant any call to this method silently switched the LLM-predicted
+        pool off.
+        """
         self.weights = SelectionWeights(
             low_confidence=low_confidence_weight,
             diverse=diversity_weight,
@@ -114,6 +122,7 @@ class InstanceSelector:
             disagreement=disagreement_weight,
             edge_case_rule=edge_case_rule_weight,
             cartography=cartography_weight,
+            llm_predicted=llm_predicted_weight,
         )
         self.weights.validate()
 
