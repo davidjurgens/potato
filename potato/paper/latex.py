@@ -151,6 +151,10 @@ def render_report(metrics: Dict[str, Any], output_dir: str) -> Dict[str, str]:
                "% Annotation methods — cut-paste into your Methods section\n"
                + report.methods_paragraph(metrics, _STYLE)),
     ]
+    blocks.append(_block(
+        "paragraph-data-quality",
+        "% Data quality precautions \u2014 cut-paste into your Methods section\n"
+        + report.data_quality_paragraph(metrics, _STYLE)))
     for rt in report.distribution_tables(metrics, _STYLE):
         blocks.append(_table_block(rt, tables_dir))
     blocks.append(_table_block(report.annotator_table(metrics, _STYLE), tables_dir))

@@ -23,6 +23,7 @@ from typing import List, Optional
 import yaml
 
 from .registry import import_registry
+from .text.registry import text_import_registry
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,22 @@ def parse_args(args=None):
               "verified without a human opening each item. Without it, imported "
               "annotations are pre-annotations: they show as a starting point "
               "and are only stored once a real annotator saves."))
+    parser.add_argument(
+        "--conll-document-unit", choices=["auto", "sentence", "file"],
+        default="auto",
+        help=("What counts as one annotation item in a CoNLL file. 'auto' "
+              "follows -DOCSTART-/# newdoc markers and falls back to one item "
+              "per sentence, which is how most NER corpora are distributed."))
+    parser.add_argument(
+        "--qdpx-end-position", choices=["inclusive", "exclusive"],
+        help=("Override how a .qdpx file's endPosition is read. REFI-QDA 1.5 "
+              "makes it inclusive; exporters disagree, so the reading is "
+              "inferred from the file and this only forces it."))
+    parser.add_argument(
+        "--prodigy-keep-rejected", action="store_true",
+        help=("Import Prodigy tasks answered reject/ignore. They are dropped "
+              "by default: a rejection is a human saying the annotations are "
+              "wrong, so importing them turns that into positive signal."))
     parser.add_argument(
         "--list-formats", action="store_true",
         help="List supported import formats and exit")
@@ -400,6 +417,104 @@ def _container_format(path: str, explicit: Optional[str]):
     return None
 
 
+def _text_format(parsed) -> Optional[str]:
+    """
+    Which text-annotation importer, if any, should handle this input.
+
+    Returns None when the input belongs to the CV path, including when
+    ``--input-format`` explicitly names a CV format -- an explicit choice is
+    never overridden by detection.
+    """
+    from pathlib import Path as _Path
+
+    if parsed.input_format:
+        return (parsed.input_format
+                if text_import_registry.is_registered(parsed.input_format)
+                else None)
+    if not parsed.input:
+        return None
+    return text_import_registry.detect_path(_Path(parsed.input))
+
+
+def _run_text_import(parsed, fmt: str, options: dict) -> int:
+    """Import a text-annotation source into a runnable project."""
+    from pathlib import Path as _Path
+
+    from .text.project import write_project
+
+    schema_name = parsed.schema_name
+    if schema_name == "image_annotation":
+        # The default is the CV one. Silently generating a scheme called
+        # "image_annotation" over text would be confusing in the config and
+        # wrong in every export that keys on the scheme name.
+        schema_name = "spans"
+
+    try:
+        result = text_import_registry.parse_path(fmt, _Path(parsed.input), options)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    written = write_project(result, parsed.output_dir, schema_name,
+                            source=parsed.input,
+                            config_only=parsed.config_only)
+
+    for warning in result.warnings[:20]:
+        logger.warning(warning)
+    if len(result.warnings) > 20:
+        logger.warning("... and %d more warnings", len(result.warnings) - 20)
+
+    if parsed.seed_user:
+        _write_text_seed_user(parsed.output_dir, parsed.seed_user,
+                              schema_name, result)
+
+    stats = result.stats
+    print(f"Imported {stats.get('num_documents', 0)} document(s), "
+          f"{stats.get('num_spans', 0)} span(s), "
+          f"{stats.get('num_codes', 0)} code(s) into {parsed.output_dir}")
+    config_path = os.path.join(parsed.output_dir, "config.yaml")
+    print(f"\nRun it:\n  python potato/flask_server.py start {config_path} -p 8000")
+    logger.debug("wrote %s", ", ".join(written))
+    return 0
+
+
+def _write_text_seed_user(output_dir: str, username: str, schema_name: str,
+                          result) -> None:
+    """
+    Write the imported spans as a user's saved work.
+
+    Fabricates an annotator, exactly as the CV path's ``--seed-user`` does, and
+    exists for the same reason: it is the only way to verify import -> export
+    end to end without a human opening every item.
+    """
+    user_dir = os.path.join(output_dir, "annotation_output", username)
+    os.makedirs(user_dir, exist_ok=True)
+
+    span_to_value = {}
+    for document in result.documents:
+        if not document.spans:
+            continue
+        span_to_value[document.instance_id] = [
+            [span.as_client_span(schema_name), "1"] for span in document.spans
+        ]
+
+    state = {
+        "user_id": username,
+        "instance_id_ordering": [d.instance_id for d in result.documents],
+        "current_instance_index": 0,
+        "max_assignments": len(result.documents),
+        "instance_id_to_label_to_value": {},
+        "instance_id_to_span_to_value": span_to_value,
+    }
+    with open(os.path.join(user_dir, "user_state.json"), "w") as f:
+        json.dump(state, f, indent=2)
+
+    logger.warning(
+        "--seed-user wrote %d item(s) as '%s'. This is fabricated annotator "
+        "work; do not include it in agreement or adjudication analysis.",
+        len(span_to_value), username)
+
+
 def _run_hub_import(parsed, options) -> int:
     """Import straight from the HuggingFace Hub, which has no local path."""
     from .hf_importer import HuggingFaceImporter
@@ -422,11 +537,14 @@ def main(args=None) -> int:
     )
 
     if parsed.list_formats:
-        print("Supported annotation import formats:\n")
-        for info in import_registry.list_importers():
-            exts = ", ".join(info["file_extensions"]) or "-"
-            print(f"  {info['name']:<10} {info['description']}")
-            print(f"  {'':<10} extensions: {exts}\n")
+        for heading, infos in (
+                ("Image / video annotation formats", import_registry.list_importers()),
+                ("Text annotation formats", text_import_registry.list_importers())):
+            print(f"{heading}:\n")
+            for info in infos:
+                exts = ", ".join(info["file_extensions"]) or "-"
+                print(f"  {info['name']:<10} {info['description']}")
+                print(f"  {'':<10} extensions: {exts}\n")
         return 0
 
     if not parsed.input and not parsed.hf_dataset:
@@ -446,12 +564,25 @@ def main(args=None) -> int:
         "extract_media": parsed.extract_media,
         "hf_split": parsed.hf_split,
         "image_dir": parsed.image_dir,
+        "conll_document_unit": parsed.conll_document_unit,
+        "qdpx_end_position": parsed.qdpx_end_position,
+        "prodigy_keep_rejected": parsed.prodigy_keep_rejected,
     }
 
     # A Hub dataset has no path at all, so it bypasses the file/directory
     # branching entirely.
     if parsed.hf_dataset:
         return _run_hub_import(parsed, options)
+
+    # Text formats are checked before the CV ones. Every text detector is
+    # gated on both extension and content and none of them accepts a CV
+    # format's file, so the order costs nothing -- but the reverse order does:
+    # a .qdpx is a ZIP, and the CV path reads its input with json.load, which
+    # fails on the binary with a message about invalid JSON rather than
+    # reaching an importer that knows what it is.
+    text_format = _text_format(parsed)
+    if text_format:
+        return _run_text_import(parsed, text_format, options)
 
     # Most CV formats are DIRECTORY formats -- a dataset is a tree of per-image
     # files, not one document -- so the input may be either.

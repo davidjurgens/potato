@@ -2183,9 +2183,16 @@
           return;
         }
 
-        // Load Plotly.js if not already loaded
+        // Load Plotly.js if not already loaded. Prefer the vendored copy so the
+        // dashboard works on offline / air-gapped installs; the CDN is only a
+        // fallback for deployments that stripped the vendor directory.
         if (typeof Plotly === 'undefined') {
-          await loadScript('https://cdn.plot.ly/plotly-2.27.0.min.js');
+          try {
+            await loadScript('/static/vendor/plotly-2.27.0.min.js');
+          } catch (localErr) {
+            console.warn('[admin] local Plotly unavailable, falling back to CDN', localErr);
+            await loadScript('https://cdn.plot.ly/plotly-2.27.0.min.js');
+          }
         }
 
         // Load embedding-viz.js if not already loaded

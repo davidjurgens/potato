@@ -135,6 +135,7 @@ def _register_builtin_exporters():
     from .parquet_exporter import ParquetExporter
     from .tabular_exporter import CSVExporter, TSVExporter, JSONLExporter
     from .codebook_exporter import CodebookExporter
+    from .qdpx_exporter import QDPXExporter
     from .quotation_report_exporter import QuotationReportExporter
     from .convokit_exporter import ConvoKitExporter
     from .keystroke_exporter import KeystrokeExporter
@@ -175,6 +176,10 @@ def _register_builtin_exporters():
         TSVExporter(),
         JSONLExporter(),
         CodebookExporter(),
+        # REFI-QDA project exchange: the format qualitative researchers
+        # actually move projects with, and the only way a Potato project can
+        # be handed to a colleague on NVivo, ATLAS.ti or MAXQDA.
+        QDPXExporter(),
         QuotationReportExporter(),
         # Reads and writes the ConvoKit format with the standard library only,
         # so it belongs here rather than among the optional exporters below.

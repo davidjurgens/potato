@@ -59,7 +59,8 @@ truth_serum:
 
 # Think-Aloud: speak freely while annotating; commit labels with a set phrasing
 # ("I label this polite"). STT runs locally via faster-whisper when installed
-# (`pip install faster-whisper`); `auto` degrades gracefully without it.
+# (`pip install "potato-annotation[transcribe]"`); `auto` degrades gracefully
+# without it.
 thinkaloud:
   enabled: true
   schema: politeness

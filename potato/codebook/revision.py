@@ -71,6 +71,27 @@ _CONTENT_PROV_MIGRATION = Migration(
     """,
 )
 
+# `codebook_revision` holds only the CURRENT revision and when it was last
+# touched, so it cannot answer "when did revision 3 happen" -- and that is
+# exactly the question the agreement timeline asks when it overlays a
+# guideline edit against a change in agreement. One row per bump makes the
+# answer exact instead of inferred from the earliest annotation stamped with
+# it, which is only a lower bound and is missing entirely for a revision
+# nobody annotated under.
+_REVISION_HISTORY_MIGRATION = Migration(
+    name="0006_codebook_revision_history",
+    sql="""
+    CREATE TABLE IF NOT EXISTS codebook_revision_history (
+        project    TEXT NOT NULL,
+        revision   INTEGER NOT NULL,
+        created_at REAL NOT NULL,
+        PRIMARY KEY (project, revision)
+    );
+    CREATE INDEX IF NOT EXISTS idx_revision_history_time
+        ON codebook_revision_history (project, created_at);
+    """,
+)
+
 # Defensive: guarantee the codes table migration (0001_codebook) is
 # registered before this module's ALTER, regardless of import path.
 from potato.codebook.store import _CODEBOOK_MIGRATION as _CB_MIG
@@ -79,12 +100,14 @@ register_migration(_CB_MIG)
 register_migration(_REVISION_MIGRATION)
 register_migration(_CODES_REV_MIGRATION)
 register_migration(_CONTENT_PROV_MIGRATION)
+register_migration(_REVISION_HISTORY_MIGRATION)
 
 
 def _db(task_dir: str):
     register_migration(_REVISION_MIGRATION)
     register_migration(_CODES_REV_MIGRATION)
     register_migration(_CONTENT_PROV_MIGRATION)
+    register_migration(_REVISION_HISTORY_MIGRATION)
     return get_db(task_dir)
 
 
@@ -109,8 +132,54 @@ def bump_revision(task_dir: str, project: str) -> int:
                updated_at = excluded.updated_at""",
         (project, now),
     )
+    revision = current_revision(task_dir, project)
+    # One row per bump, so the agreement timeline can mark exactly when the
+    # guidelines moved. INSERT OR IGNORE rather than a plain INSERT: a project
+    # whose revision counter was rolled back by hand would otherwise crash the
+    # codebook edit that triggered this.
+    conn.execute(
+        """INSERT OR IGNORE INTO codebook_revision_history
+               (project, revision, created_at)
+           VALUES (?, ?, ?)""",
+        (project, revision, now),
+    )
     conn.commit()
-    return current_revision(task_dir, project)
+    return revision
+
+
+def revision_history(task_dir: str, project: str) -> List[Dict[str, object]]:
+    """
+    Every recorded codebook bump, oldest first, as ``{revision, created_at}``.
+
+    Revisions made before this table existed are not in it. Rather than
+    silently returning a short list, callers get exactly what was recorded and
+    :func:`potato.server_utils.iaa.drift.codebook_markers` fills the gap from
+    ``annotation_provenance``, which is a lower bound on when a revision was
+    in use.
+    """
+    rows = _db(task_dir).execute(
+        """SELECT revision, created_at FROM codebook_revision_history
+           WHERE project = ? ORDER BY created_at ASC, revision ASC""",
+        (project,),
+    ).fetchall()
+    return [{"revision": int(r["revision"]), "created_at": float(r["created_at"])}
+            for r in rows]
+
+
+def revision_first_seen(task_dir: str, project: str) -> Dict[int, float]:
+    """
+    The earliest time each revision appears on a saved annotation.
+
+    A lower bound on when the revision took effect, and the only evidence
+    available for bumps that predate ``codebook_revision_history``.
+    """
+    rows = _db(task_dir).execute(
+        """SELECT revision, MIN(updated_at) AS first_seen
+           FROM annotation_provenance
+           WHERE project = ? GROUP BY revision""",
+        (project,),
+    ).fetchall()
+    return {int(r["revision"]): float(r["first_seen"]) for r in rows}
 
 
 def current_sem_revision(task_dir: str, project: str) -> int:

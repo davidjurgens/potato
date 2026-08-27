@@ -817,6 +817,10 @@ class AssignmentStrategy(Enum):
     - PSYCHOMETRIC: Routes items by expected information gain under a live
       IRT model (annotator ability x item uncertainty); confident items
       stop consuming annotation budget
+    - MODEL_REVIEW: Serves prelabelled items least-confident first, for
+      human QC of model output. Items the model predicted NOTHING on are
+      excluded -- they have no confidence to rank and reviewing them is a
+      separate job (see potato/model_review.py)
     """
     RANDOM = 'random'
     FIXED_ORDER = 'fixed_order'
@@ -829,6 +833,7 @@ class AssignmentStrategy(Enum):
     BATCH = 'batch'
     PRIORITY = 'priority'
     PSYCHOMETRIC = 'psychometric'
+    MODEL_REVIEW = 'model_review'
 
     def fromstr(phase: str) -> AssignmentStrategy:
         """
@@ -843,31 +848,16 @@ class AssignmentStrategy(Enum):
         Raises:
             ValueError: If the string doesn't match any known strategy
         """
-        phase = phase.lower()
-        if phase == "random":
-            return AssignmentStrategy.RANDOM
-        elif phase == "fixed_order":
-            return AssignmentStrategy.FIXED_ORDER
-        elif phase == "active_learning":
-            return AssignmentStrategy.ACTIVE_LEARNING
-        elif phase == "llm_confidence":
-            return AssignmentStrategy.LLM_CONFIDENCE
-        elif phase == "max_diversity":
-            return AssignmentStrategy.MAX_DIVERSITY
-        elif phase == "least_annotated":
-            return AssignmentStrategy.LEAST_ANNOTATED
-        elif phase == "category_based":
-            return AssignmentStrategy.CATEGORY_BASED
-        elif phase == "diversity_clustering":
-            return AssignmentStrategy.DIVERSITY_CLUSTERING
-        elif phase == "batch":
-            return AssignmentStrategy.BATCH
-        elif phase == "priority":
-            return AssignmentStrategy.PRIORITY
-        elif phase == "psychometric":
-            return AssignmentStrategy.PSYCHOMETRIC
-        else:
-            raise ValueError(f"Unknown phase: {phase}")
+        # Derived from the enum rather than a hand-written if/elif chain.
+        # The chain was a fourth registration point that nothing forced you to
+        # remember: a strategy added to the enum, to the config whitelist and
+        # to both assignment branches would still raise "Unknown phase" the
+        # first time a real config used it.
+        wanted = (phase or "").lower()
+        for strategy in AssignmentStrategy:
+            if strategy.value == wanted:
+                return strategy
+        raise ValueError(f"Unknown phase: {phase}")
 
 
 class ItemStateManager:
@@ -1627,6 +1617,39 @@ class ItemStateManager:
         cap = self._get_annotator_cap_for_item(instance_id)
         return cap >= 0 and len(self.instance_annotators[instance_id]) >= cap
 
+    def _model_review_candidates(self, user_state: 'UserState') -> list:
+        """
+        Prelabelled items this user has not seen, least confident first.
+
+        Shared by the assignment branch and by
+        ``has_unlabeled_items_for_user`` on purpose: two implementations of
+        "what is available" is how an assignment strategy comes to report
+        work it will not hand out, which /annotate experiences as a redirect
+        loop.
+        """
+        from potato import model_review
+
+        qc = self.config.get('pre_annotation', {}) or {}
+        field_name = qc.get('field', 'predictions')
+        schema_names = [s.get('name') for s in
+                        self.config.get('annotation_schemes', []) or []
+                        if s.get('name')]
+
+        summaries = []
+        for iid in list(self.remaining_instance_ids):
+            if self._item_is_saturated(iid):
+                if iid in self.remaining_instance_ids:
+                    self.remaining_instance_ids.remove(iid)
+                continue
+            if self._already_with_user(user_state, iid):
+                continue
+            item = self._store.get(iid)
+            data = item.get_data() if item is not None else {}
+            summaries.append(model_review.summarize_predictions(
+                iid, data, field_name, schema_names))
+
+        return model_review.review_order(summaries)
+
     def has_unlabeled_items_for_user(self, user_state: 'UserState') -> bool:
         """Check whether any items remain for this user to annotate (read-only)."""
         if self.assignment_strategy == AssignmentStrategy.BATCH:
@@ -1642,6 +1665,13 @@ class ItemStateManager:
                 if not user_state.has_annotated(iid):
                     return True
             return False
+
+        if self.assignment_strategy == AssignmentStrategy.MODEL_REVIEW:
+            # Without this branch the generic loop below reports items as
+            # available that the strategy will then refuse to serve (every
+            # item the model predicted nothing on), and /annotate
+            # redirect-loops between "you have work" and "there is none".
+            return bool(self._model_review_candidates(user_state))
 
         if self.assignment_strategy == AssignmentStrategy.PSYCHOMETRIC:
             # Early-stopped (resolved) items are excluded from assignment, so
@@ -1963,6 +1993,17 @@ class ItemStateManager:
                 return 0
             to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
             self.logger.debug(f"LLM confidence (random fallback): assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
+            for item_id in to_assign:
+                user_state.assign_instance(self._store.get(item_id))
+            return len(to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.MODEL_REVIEW:
+            candidates = self._model_review_candidates(user_state)
+            if not candidates:
+                return 0
+            to_assign = candidates[:instances_to_assign]
+            self.logger.debug(
+                f"Model review: assigning {to_assign} (least confident first) "
+                f"to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
                 user_state.assign_instance(self._store.get(item_id))
             return len(to_assign)

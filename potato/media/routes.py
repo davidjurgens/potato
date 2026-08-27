@@ -89,6 +89,10 @@ def media_proxy(filepath: str):
     suffix = source.suffix.lower()
 
     # Nothing to do: hand it straight back rather than re-encoding a JPEG.
+    # Deliberately no max-age here, unlike the transcoded branches below: this
+    # is the user's own file at a stable path, and a researcher who swaps it
+    # mid-study should see the new one. Flask still sends Last-Modified/ETag, so
+    # a prefetched copy revalidates with a 304 instead of re-downloading.
     if suffix in IMAGE_PASSTHROUGH or suffix in VIDEO_PASSTHROUGH:
         return send_file(resolved)
 
@@ -114,7 +118,12 @@ def media_proxy(filepath: str):
                     # suggest a bug and hide the actionable message.
                     return jsonify({"error": str(exc)}), 415
                 cache.prune()
-        return send_file(str(target), mimetype="image/webp")
+        response = send_file(str(target), mimetype="image/webp")
+        # Derived from an immutable (path, size, mtime, params) cache key, same
+        # as the deep-zoom tiles below, so it can be cached hard. Without this a
+        # prefetched image is re-validated on every Next click.
+        response.headers["Cache-Control"] = "public, max-age=604800"
+        return response
 
     if suffix in TRANSCODE_VIDEO_EXTENSIONS:
         target = cache.path_for(source, ".webm")
@@ -125,7 +134,10 @@ def media_proxy(filepath: str):
                 except VideoTranscodeError as exc:
                     return jsonify({"error": str(exc)}), 415
                 cache.prune()
-        return send_file(str(target), mimetype="video/webm")
+        response = send_file(str(target), mimetype="video/webm")
+        # Immutable cache key, as above.
+        response.headers["Cache-Control"] = "public, max-age=604800"
+        return response
 
     return jsonify({
         "error": f"{suffix or 'This file'} is not a media format Potato knows "

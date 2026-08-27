@@ -1512,6 +1512,11 @@ class UserState:
         # Save keyword highlight state for randomization consistency
         d['instance_id_to_keyword_highlight_state'] = self.instance_id_to_keyword_highlight_state
 
+        # Which order each scheme's options were shown in. Persisted so that a
+        # study can be corrected for position bias after the fact -- see
+        # potato/server_utils/presentation_order.py.
+        d['instance_id_to_presentation_order'] = self.instance_id_to_presentation_order
+
         # Save crowdsourcing platform metadata (provider, study/session IDs)
         d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
 
@@ -1629,6 +1634,8 @@ class UserState:
         # Restore keyword highlight state if present
         if 'instance_id_to_keyword_highlight_state' in j:
             user_state.instance_id_to_keyword_highlight_state = j['instance_id_to_keyword_highlight_state']
+        if 'instance_id_to_presentation_order' in j:
+            user_state.instance_id_to_presentation_order = j['instance_id_to_presentation_order']
 
         # Restore span link annotations if present
         if 'instance_id_to_link_to_value' in j:
@@ -2008,6 +2015,17 @@ class InMemoryUserState(UserState):
         # This ensures the same user sees the same highlights for an instance across navigation
         self.instance_id_to_keyword_highlight_state: Dict[str, Dict[str, Any]] = {}
 
+        # Which order each scheme's options were shown in, per instance.
+        # Maps instance_id -> {scheme_name: [label names in shown order]}.
+        #
+        # Kept HERE rather than only on behavioural data because
+        # `update_annotation_state` REPLACES instance_id_to_behavioral_data
+        # wholesale on every save, so anything written there at render time is
+        # destroyed by the first autosave. Same reason
+        # instance_id_to_keyword_highlight_state exists, and it is merged into
+        # the behavioural record on save by the same code path.
+        self.instance_id_to_presentation_order: Dict[str, Dict[str, list]] = {}
+
         # Span link annotations - stores relationships between spans
         # Maps instance_id -> {link_id -> SpanLink}
         self.instance_id_to_link_to_value: Dict[str, Dict[str, SpanLink]] = defaultdict(dict)
@@ -2050,6 +2068,26 @@ class InMemoryUserState(UserState):
             state: Dict with 'highlights', 'seed', 'settings' keys
         """
         self.instance_id_to_keyword_highlight_state[instance_id] = state
+
+    def get_presentation_order(self, instance_id: str) -> Dict[str, Any]:
+        """The order each scheme's options were shown in on this instance."""
+        return self.instance_id_to_presentation_order.get(instance_id, {})
+
+    def record_presentation_order(self, instance_id: str,
+                                  orders: Dict[str, Any]) -> None:
+        """
+        Record the shown order for schemes that do not already have one.
+
+        Never overwrites. The first render is what the annotator answered
+        against; a later re-render -- after an admin edits the config, say --
+        must not rewrite history and make a stored answer look as though it
+        was given under an arrangement nobody ever saw.
+        """
+        if not orders:
+            return
+        stored = self.instance_id_to_presentation_order.setdefault(instance_id, {})
+        for scheme_name, order in orders.items():
+            stored.setdefault(scheme_name, list(order))
 
     def add_new_assigned_data(self, new_assigned_data):
         """
@@ -3004,6 +3042,11 @@ class InMemoryUserState(UserState):
         # Save keyword highlight state for randomization consistency
         d['instance_id_to_keyword_highlight_state'] = self.instance_id_to_keyword_highlight_state
 
+        # Which order each scheme's options were shown in. Persisted so that a
+        # study can be corrected for position bias after the fact -- see
+        # potato/server_utils/presentation_order.py.
+        d['instance_id_to_presentation_order'] = self.instance_id_to_presentation_order
+
         # Save span link annotations
         d['instance_id_to_link_to_value'] = {}
         for instance_id, links in self.instance_id_to_link_to_value.items():
@@ -3138,6 +3181,8 @@ class InMemoryUserState(UserState):
         # Restore keyword highlight state if present
         if 'instance_id_to_keyword_highlight_state' in j:
             user_state.instance_id_to_keyword_highlight_state = j['instance_id_to_keyword_highlight_state']
+        if 'instance_id_to_presentation_order' in j:
+            user_state.instance_id_to_presentation_order = j['instance_id_to_presentation_order']
 
         # Restore span link annotations if present
         if 'instance_id_to_link_to_value' in j:

@@ -2,7 +2,7 @@
   "info": {
     "description": "Generated from the live Flask url_map \u2014 see potato/server_utils/openapi_spec.py.\n\nMost endpoints are session-authenticated: POST /auth with `username` and `password` as form data, then reuse the session cookie. `x-potato-auth` records the decorators guarding an operation, and `x-potato-requires-config` marks operations that only exist when the named config is enabled.\n\nResponse schemas are intentionally not modelled; this spec is an authoritative index of what exists, not a payload contract.",
     "title": "Potato HTTP API",
-    "version": "2.8.1"
+    "version": "2.8.2"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -385,6 +385,29 @@
         ],
         "x-potato-auth": [
           "inline:admin_access"
+        ]
+      }
+    },
+    "/admin/api/ai-cost": {
+      "get": {
+        "operationId": "get_admin_ai_cost",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "What AI has cost this project, and what the next judge run would cost.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -1669,6 +1692,29 @@
         ]
       }
     },
+    "/admin/api/judge-position-bias": {
+      "post": {
+        "operationId": "post_admin_judge_position_bias",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Is the judge judging, or just picking whatever is listed first?",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
     "/admin/api/mace/overview": {
       "get": {
         "operationId": "get_admin_api_mace_overview",
@@ -2413,6 +2459,53 @@
         "x-potato-requires-config": "automation.enabled: true"
       }
     },
+    "/admin/calibration": {
+      "get": {
+        "operationId": "get_admin_calibration",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Past calibration rounds, who is eligible, and how a live round is going.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
+    "/admin/calibration/start": {
+      "post": {
+        "operationId": "post_admin_calibration_start",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Send annotators back through the training exercise.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key",
+          "inline:session_username"
+        ]
+      }
+    },
     "/admin/catalog": {
       "get": {
         "operationId": "get_curation_catalog_page",
@@ -2483,6 +2576,54 @@
         "x-potato-requires-config": "curation.enabled: true"
       }
     },
+    "/admin/catalog/api/duplicates": {
+      "get": {
+        "operationId": "get_curation_api_duplicates",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Near-duplicate groups in this project.",
+        "tags": [
+          "curation"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "curation.enabled: true"
+      }
+    },
+    "/admin/catalog/api/duplicates/exclude": {
+      "post": {
+        "operationId": "post_curation_api_exclude_duplicates",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Stop assigning the duplicates in the given groups.",
+        "tags": [
+          "curation"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "curation.enabled: true"
+      }
+    },
     "/admin/catalog/api/search": {
       "post": {
         "operationId": "post_curation_api_search",
@@ -2520,6 +2661,7 @@
             "description": "Admin role required"
           }
         },
+        "summary": "Every slice a picker should offer: saved ones plus the built-ins.",
         "tags": [
           "curation"
         ],
@@ -2982,6 +3124,29 @@
         ]
       }
     },
+    "/admin/iaa/drift": {
+      "get": {
+        "operationId": "get_admin_iaa_drift",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Agreement per time window, with codebook markers and a drift verdict.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
     "/admin/item_state": {
       "get": {
         "operationId": "get_admin_item_state",
@@ -3053,6 +3218,29 @@
           }
         },
         "summary": "LLM-judge \u2194 human alignment report: Cohen's \u03ba, confusion, disagreements.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
+    "/admin/model-review": {
+      "get": {
+        "operationId": "get_admin_model_review",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "The human-QC picture over model prelabels.",
         "tags": [
           "core"
         ],
@@ -5728,6 +5916,26 @@
         },
         "tags": [
           "memos"
+        ]
+      }
+    },
+    "/api/model-review/verdict": {
+      "post": {
+        "operationId": "post_model_review_verdict",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Record a reviewer's verdict on one item's prelabels.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },

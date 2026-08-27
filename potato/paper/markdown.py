@@ -111,6 +111,7 @@ def render_sections(metrics: Dict[str, Any]) -> Dict[str, str]:
     return {
         "summary": report.description_paragraph(metrics, _STYLE),
         "annotation_process": report.methods_paragraph(metrics, _STYLE),
+        "data_quality": report.data_quality_paragraph(metrics, _STYLE),
         "label_distributions": dist_md,
         "agreement": table_to_markdown(report.agreement_table(metrics, _STYLE)),
         "annotators": table_to_markdown(report.annotator_table(metrics, _STYLE)),
@@ -127,6 +128,8 @@ def render_markdown(metrics: Dict[str, Any]) -> str:
         s["summary"],
         "## Annotation Process",
         s["annotation_process"],
+        "## Data Quality",
+        s["data_quality"],
         "## Label Distributions",
         s["label_distributions"],
         "## Inter-Annotator Agreement",

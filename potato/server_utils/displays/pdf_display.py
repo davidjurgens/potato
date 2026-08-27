@@ -137,7 +137,9 @@ class PDFDisplay(BaseDisplay):
 
         # Container div with PDF.js viewer
         parts.append(
-            f'<div class="pdf-display pdf-viewer-{view_mode}" '
+            # `pdf-plain-mode` is the asset-detection marker and the selector
+            # pdf-viewer.js binds to, mirroring pdf-bbox-mode / pdf-link-mode.
+            f'<div class="pdf-display pdf-plain-mode pdf-viewer-{view_mode}" '
             f'data-field-key="{field_key}" '
             f'data-pdf-source="{html.escape(pdf_source)}" '
             f'data-view-mode="{view_mode}" '
@@ -611,10 +613,15 @@ class PDFDisplay(BaseDisplay):
     def get_js_init(self) -> Optional[str]:
         """
         Return JavaScript initialization code for PDF.js.
+
+        Note: nothing outside the displays package calls ``get_js_init``, so
+        this is not what starts the viewer. ``pdf-viewer.js`` self-initializes
+        on DOMContentLoaded; it is loaded when ``_render_pdfjs`` emits the
+        ``pdf-plain-mode`` marker that ``FRONTEND_ASSET_MARKERS['pdf_viewer']``
+        keys on. Relying on this hook is what left the default PDF mode
+        rendering an empty container: the guard below fails silently.
         """
         return '''
-            // PDF display initialization is handled by pdf-viewer.js
-            // which is loaded as a separate script
             if (typeof initPDFViewers === 'function') {
                 initPDFViewers();
             }

@@ -77,10 +77,35 @@ class SliceStore:
             self._save()
 
     def get(self, name: str) -> Optional[Slice]:
-        return self._slices.get(name)
+        found = self._slices.get(name)
+        if found is not None:
+            return found
+        return next((b for b in BUILTIN_SLICES if b.name == name), None)
 
     def list(self) -> List[Slice]:
+        """The slices this project saved. Built-ins are NOT included.
+
+        Deliberately unchanged: this is "what you saved", and a listing that
+        silently included a slice nobody created would make `delete` on it a
+        no-op and the UI's "your slices" a lie. Use :meth:`list_all` for the
+        listing a picker should show.
+        """
         return list(self._slices.values())
+
+    def list_all(self) -> List[Slice]:
+        """Saved slices, plus the built-ins a project did not have to save.
+
+        A saved slice of the same name shadows its built-in, so a project can
+        redefine one without losing the ability to save slices at all.
+        """
+        saved = self.list()
+        names = {s.name for s in saved}
+        return saved + [b for b in BUILTIN_SLICES if b.name not in names]
+
+    def is_builtin(self, name: str) -> bool:
+        """True for a built-in that has not been shadowed by a saved slice."""
+        return name not in self._slices and any(b.name == name
+                                                for b in BUILTIN_SLICES)
 
     def delete(self, name: str) -> bool:
         with self._lock:
@@ -88,6 +113,24 @@ class SliceStore:
             if existed:
                 self._save()
             return existed
+
+
+#: Slices every project gets without saving them, because the question they
+#: answer is universal and nobody thinks to ask it until it has already cost
+#: them. Built-ins are merged into ``SliceStore.list()`` and can be shadowed by
+#: saving a slice of the same name.
+BUILTIN_SLICES = [
+    Slice(
+        name="model-found-nothing",
+        # THE false-negative pool. A wrong prediction is visible in a review
+        # UI -- it is right there, wrong. A MISSING one is invisible: the
+        # reviewer sees an empty item and moves on. And a confidence-ordered
+        # queue can never surface these, because an item with no prediction
+        # has no confidence to be low. They exist only if you go looking.
+        metadata_filter=[{"field": "_n_predictions", "equals": 0}],
+        top_k=10000,
+    ),
+]
 
 
 def resolve_slice(slc: Slice, index, embedder, metadata_for: Any) -> List[str]:

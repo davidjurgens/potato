@@ -3127,6 +3127,116 @@ def admin_api_agent_rollup():
     return jsonify(report)
 
 
+def _agreement_drift():
+    """
+    The agreement-over-time report for ``/admin/iaa``, or None.
+
+    Returns None rather than raising: the drift section is an addition to a
+    page that already worked, and a project with no timestamps -- or with
+    ``calibration.enabled: false`` -- must still get its IAA table.
+    """
+    settings = (config.get("calibration") or {})
+    if settings.get("enabled") is False:
+        return None
+    try:
+        from potato.server_utils.iaa.drift import (codebook_markers,
+                                                   compute_agreement_over_time)
+
+        markers = codebook_markers(
+            config.get("task_dir", "."),
+            config.get("annotation_task_name", "default"),
+        )
+        return compute_agreement_over_time(
+            get_item_state_manager(), get_user_state_manager(), config,
+            n_windows=int(settings.get("windows", 6)),
+            by=str(settings.get("window_by", "count")),
+            markers=markers,
+        )
+    except Exception:
+        logger.exception("Agreement-over-time report failed; "
+                         "showing the IAA table without it")
+        return None
+
+
+@app.route("/admin/iaa/drift", methods=["GET"])
+def admin_iaa_drift():
+    """
+    Agreement per time window, with codebook markers and a drift verdict.
+
+    Separate from ``/admin/iaa`` because it costs one extra IAA pass per
+    window: a script polling the agreement numbers should not pay for the
+    timeline unless it wants it.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    report = _agreement_drift()
+    if report is None:
+        return jsonify({"error": "Agreement drift tracking is unavailable. "
+                                 "Check the server log, or calibration.enabled"}), 503
+
+    from potato.server_utils.iaa.dispatcher import json_safe
+    return jsonify(json_safe(report))
+
+
+@app.route("/admin/calibration", methods=["GET"])
+def admin_calibration():
+    """Past calibration rounds, who is eligible, and how a live round is going."""
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    from potato import calibration
+
+    usm = get_user_state_manager()
+    history = calibration.round_history(config)
+    latest = history[0] if history else None
+    return jsonify({
+        "training_enabled": bool((config.get("training") or {}).get("enabled")),
+        "eligible": calibration.eligible_users(usm),
+        "rounds": history,
+        "progress": (calibration.round_progress(usm, latest["usernames"])
+                     if latest else []),
+    })
+
+
+@app.route("/admin/calibration/start", methods=["POST"])
+def admin_calibration_start():
+    """
+    Send annotators back through the training exercise.
+
+    Body: ``{"usernames": [...], "reason": "..."}``. Omitting ``usernames``
+    recalls everyone eligible, which is the usual case -- drift is a property
+    of the guidelines, so it affects the whole team, not one person.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    from potato import calibration
+
+    payload = request.get_json(silent=True) or {}
+    usm = get_user_state_manager()
+    usernames = payload.get("usernames")
+    if not usernames:
+        usernames = calibration.eligible_users(usm)
+
+    try:
+        result = calibration.start_round(
+            config, usm, usernames,
+            started_by=session.get("username", "admin"),
+            reason=str(payload.get("reason") or ""),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        logger.exception("Failed to start calibration round")
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(result)
+
+
 @app.route("/admin/iaa", methods=["GET"])
 def admin_iaa():
     """
@@ -3160,7 +3270,8 @@ def admin_iaa():
             # the benefit of a table would be a breaking API change.
             from potato.server_utils.iaa.presentation import present
 
-            return render_template("admin/iaa.html", report=present(report))
+            return render_template("admin/iaa.html", report=present(report),
+                                   drift=_agreement_drift())
         except Exception:
             # Template optional; fall back to JSON if missing.
             logger.exception("Falling back to JSON: IAA page failed to render")
@@ -3231,8 +3342,14 @@ def admin_judge_alignment():
                     return 0
             schemas = [s.get("name") for s in judge_scoped_schemas(config)]
             pairs = gather_pairs(config, users, schemas, pv or latest_prompt_version(config))
+            from potato.server_utils.judge_alignment import load_position_bias
+
+            stored = load_position_bias(config)
             report["eval_cards"] = eval_cards_from_pairs(
                 pairs, report.get("per_schema", {}), _text_len,
+                position_by_schema={name: probe.get("swap")
+                                    for name, probe in stored.items()
+                                    if probe.get("swap")},
                 prompt_version=report.get("prompt_version") or "")
         except Exception:
             logger.exception("eval-card computation failed (non-fatal)")
@@ -3262,16 +3379,205 @@ def admin_judge_alignment_run():
 
     body = request.get_json(silent=True) or {}
     try:
+        from potato.ai.cost import SpendCapExceeded
         from potato.server_utils.judge_alignment import run_judge_batch
         summary = run_judge_batch(
             config, get_users(),
             rubric_overrides=body.get("rubrics"),
             max_per_schema=body.get("max_per_schema"),
         )
+    except SpendCapExceeded as exc:
+        # 402, not 500: nothing failed. The run was refused before it started,
+        # which is the point -- halting halfway would leave a part-judged
+        # project and a bill for it.
+        return jsonify({"error": str(exc), "cap_usd": exc.cap,
+                        "spent_usd": exc.spent,
+                        "estimate": exc.estimate.to_dict() if exc.estimate else None,
+                        "ran": False}), 402
     except Exception as exc:
         logger.exception("Failed to run judge batch")
         return jsonify({"error": str(exc)}), 500
     return jsonify(summary)
+
+
+@app.route("/admin/model-review", methods=["GET"])
+def admin_model_review():
+    """
+    The human-QC picture over model prelabels.
+
+    Reports the confidence-ordered queue, the items the model predicted
+    nothing on (the false-negative pool), and the precision/recall computed
+    from review verdicts.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato import model_review
+        report = model_review.summarize_project(get_item_state_manager(), config)
+    except Exception as exc:
+        logger.exception("Model-review summary failed")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(report)
+
+
+@app.route("/api/model-review/verdict", methods=["POST"])
+def model_review_verdict():
+    """
+    Record a reviewer's verdict on one item's prelabels.
+
+    Body: ``{"instance_id": ..., "verdict": "accept"|"correct"|"reject",
+    "schema_name": ..., "note": ...}``.
+
+    Stored separately from annotations on purpose: "the model was right" and
+    "a human independently chose this label" are different facts, and storing
+    the first as the second makes model precision unmeasurable.
+    """
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    body = request.get_json(silent=True) or {}
+    instance_id = body.get("instance_id")
+    if not instance_id:
+        return jsonify({"error": "instance_id is required"}), 400
+
+    from potato import model_review
+
+    try:
+        model_review.record_verdict(config, model_review.ReviewVerdict(
+            instance_id=str(instance_id),
+            reviewer=session['username'],
+            verdict=str(body.get("verdict") or ""),
+            schema_name=str(body.get("schema_name") or ""),
+            note=str(body.get("note") or ""),
+        ))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        logger.exception("Could not record a model-review verdict")
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"status": "ok"})
+
+
+@app.route("/admin/api/ai-cost", methods=["GET"])
+def admin_ai_cost():
+    """
+    What AI has cost this project, and what the next judge run would cost.
+
+    The complaint about the commercial platforms is not the price, it is the
+    surprise: credits consumed by auto-labelling and discovered at export
+    time. This is the number that has to exist BEFORE the button is pressed.
+
+    Query: ``?max_per_schema=N`` to price a smaller run.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.ai import cost
+        from potato.item_state_management import get_item_state_manager
+        from potato.server_utils.judge_alignment import (
+            _judge_batch_work, estimate_batch_cost)
+
+        max_per_schema = request.args.get("max_per_schema")
+        work = _judge_batch_work(
+            config, get_users(), get_item_state_manager(),
+            int(max_per_schema) if max_per_schema else None)
+        projected = estimate_batch_cost(config, [text for _iid, text in work])
+        spent = cost.total_spend(config)
+    except Exception as exc:
+        logger.exception("AI cost report failed")
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({
+        "spent": spent,
+        "next_judge_run": dict(projected.to_dict(),
+                               summary=projected.summary()),
+    })
+
+
+@app.route("/admin/api/judge-position-bias", methods=["POST"])
+def admin_judge_position_bias():
+    """
+    Is the judge judging, or just picking whatever is listed first?
+
+    Runs every sampled item twice -- once with the allowed labels in
+    configured order, once reversed -- and reports how often the verdict
+    changed. A judge that reads the item answers the same either way.
+
+    Body: ``{"schema": "<name>", "max_items": 50}``. This makes TWO model
+    calls per item, so it samples rather than covering the project, and the
+    response says how many items it actually used.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    body = request.get_json(silent=True) or {}
+    from potato.ai.cost import SpendCapExceeded
+
+    try:
+        from potato.ai import position_bias
+        from potato.ai.judge import JudgeService
+        from potato.server_utils.judge_alignment import judge_scoped_schemas
+
+        schemas = judge_scoped_schemas(config)
+        wanted = body.get("schema")
+        if wanted:
+            schemas = [s for s in schemas if s.get("name") == wanted]
+        if not schemas:
+            return jsonify({"error": "No categorical schema is in scope for "
+                                     "the judge"}), 400
+
+        max_items = int(body.get("max_items") or 50)
+        ism = get_item_state_manager()
+        text_key = (config.get("item_properties") or {}).get("text_key", "text")
+
+        items = []
+        for instance_id, item in ism.iter_items():
+            data = item.get_data() if hasattr(item, "get_data") else {}
+            text = (data or {}).get(text_key)
+            if isinstance(text, str) and text:
+                items.append({"instance_id": instance_id, "text": text})
+            if len(items) >= max_items:
+                break
+
+        from potato.server_utils.judge_alignment import (
+            check_batch_against_cap, estimate_batch_cost, save_position_bias)
+
+        # This is the most expensive action in the tool: TWO model calls per
+        # item per schema. Pricing it at one call would understate it by half,
+        # which is exactly the surprise the budget feature exists to prevent.
+        projected = estimate_batch_cost(
+            config, [i["text"] for i in items] * len(schemas),
+            calls_per_item=2)
+        check_batch_against_cap(config, projected, "position_bias_probe")
+
+        service = JudgeService(config)
+        report = {}
+        for scheme in schemas:
+            results = position_bias.probe_batch(service, scheme, items)
+            summary = position_bias.summarize(results)
+            # Stored WITHOUT the per-item results: the eval card needs the
+            # rates, and keeping every verdict pair would grow the file by a
+            # row per item on every re-run.
+            save_position_bias(config, scheme.get("name"), summary)
+            summary["results"] = [r.to_dict() for r in results]
+            report[scheme.get("name")] = summary
+    except SpendCapExceeded as exc:
+        return jsonify({"error": str(exc), "cap_usd": exc.cap,
+                        "spent_usd": exc.spent,
+                        "estimate": exc.estimate.to_dict() if exc.estimate else None,
+                        "ran": False}), 402
+    except Exception as exc:
+        logger.exception("Position-bias probe failed")
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"schemas": report, "n_items_sampled": len(items),
+                    "estimated_cost": projected.to_dict()})
 
 
 @app.route("/admin/api/rollout/judge-batch", methods=["POST"])
@@ -6758,6 +7064,17 @@ def track_interactions():
         instance_id
     )
 
+    # Mirror the option order this annotator was shown onto the behavioural
+    # record, so every consumer that reads behavioural data gets it without
+    # having to know about a second store. The authoritative copy is
+    # user_state.instance_id_to_presentation_order, written at render time;
+    # this is the first point afterwards at which a BehavioralData object
+    # exists to mirror it onto.
+    shown_orders = user_state.get_presentation_order(instance_id) \
+        if hasattr(user_state, "get_presentation_order") else {}
+    if shown_orders and hasattr(bd, "presentation_order"):
+        bd.presentation_order = dict(shown_orders)
+
     # Record server timestamp for each event
     server_timestamp = time_module.time()
 
@@ -8718,6 +9035,12 @@ def configure_routes(flask_app, app_config):
     # by configure_routes). Audit: diff of @app.route paths vs add_url_rule paths.
     app.add_url_rule("/get_ai_suggestion", "get_ai_suggestion", get_ai_suggestion, methods=["GET"])
     app.add_url_rule("/admin/iaa", "admin_iaa", admin_iaa, methods=["GET"])
+    app.add_url_rule("/admin/iaa/drift", "admin_iaa_drift", admin_iaa_drift,
+                     methods=["GET"])
+    app.add_url_rule("/admin/calibration", "admin_calibration",
+                     admin_calibration, methods=["GET"])
+    app.add_url_rule("/admin/calibration/start", "admin_calibration_start",
+                     admin_calibration_start, methods=["POST"])
     app.add_url_rule("/admin/api/agent_rollup", "admin_api_agent_rollup", admin_api_agent_rollup, methods=["GET"])
     app.add_url_rule("/admin/annotation-integrity", "admin_annotation_integrity", admin_annotation_integrity, methods=["GET"])
     app.add_url_rule("/admin/api/perspectivist", "admin_perspectivist_export", admin_perspectivist_export, methods=["GET"])
@@ -8725,6 +9048,14 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/judge-alignment", "admin_judge_alignment", admin_judge_alignment, methods=["GET"])
     app.add_url_rule("/admin/api/judge-alignment/run", "admin_judge_alignment_run", admin_judge_alignment_run, methods=["POST"])
     app.add_url_rule("/admin/api/judge-alignment/autocalibrate", "admin_judge_alignment_autocalibrate", admin_judge_alignment_autocalibrate, methods=["POST"])
+    app.add_url_rule("/admin/api/judge-position-bias", "admin_judge_position_bias",
+                     admin_judge_position_bias, methods=["POST"])
+    app.add_url_rule("/admin/api/ai-cost", "admin_ai_cost", admin_ai_cost,
+                     methods=["GET"])
+    app.add_url_rule("/admin/model-review", "admin_model_review",
+                     admin_model_review, methods=["GET"])
+    app.add_url_rule("/api/model-review/verdict", "model_review_verdict",
+                     model_review_verdict, methods=["POST"])
     app.add_url_rule("/admin/api/rollout/judge-batch", "admin_rollout_judge_batch", admin_rollout_judge_batch, methods=["POST"])
     app.add_url_rule("/admin/api/rollout/alignment", "admin_rollout_alignment", admin_rollout_alignment, methods=["GET"])
     app.add_url_rule("/admin/triage-queue", "admin_triage_queue", admin_triage_queue, methods=["GET"])

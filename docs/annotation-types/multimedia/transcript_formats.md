@@ -6,9 +6,11 @@ For the task-oriented walkthrough — running Whisper, downloading YouTube capti
 
 ## Where transcription happens
 
-ASR and diarization run **upstream** of Potato. Potato ingests their output; it does not transcribe or diarize. Run Whisper, WhisperX, pyannote, or a cloud API first, then point Potato at the result.
+Transcription can run either upstream or inside Potato. This page covers the ingestion side: you ran Whisper, WhisperX, pyannote, or a cloud API, and you point Potato at the result.
 
-(The one exception is unrelated: [Think-Aloud](../../advanced/think_aloud.md) runs local faster-whisper to capture spoken rationales from annotators. That is a recording feature, not transcript ingestion.)
+Potato can also do it itself. `potato transcripts --transcribe` runs faster-whisper locally, and `--diarize` adds speaker labels, both behind the optional `potato-annotation[transcribe]` extra. See [Path A of the transcripts guide](../../guides/working_with_transcripts.md#path-a-you-only-have-audio). The output is written in plain Whisper JSON, which is the first row of the table below, so a locally produced transcript and an upstream one take exactly the same path from here on.
+
+[Think-Aloud](../../advanced/think_aloud.md) uses the same local Whisper backend for a different purpose: capturing spoken rationales from annotators while they work. That is a recording feature, not transcript ingestion.
 
 ## Supported formats
 

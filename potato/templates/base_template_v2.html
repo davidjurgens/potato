@@ -9,6 +9,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{annotation_task_name}}</title>
 
+    <!-- Warm the HTTP cache for the next instance's media. Navigation is a full
+         page reload, so this has to be a real prefetch hint rather than
+         anything JS holds in memory. Empty on phase pages, which have no
+         "next instance".
+         Deliberately no `as`/`crossorigin`: those pin the request mode, and a
+         CORS-mode prefetch will not satisfy the no-CORS image/video request
+         that follows, so the file would be fetched twice. -->
+    {% for url in prefetch_urls | default([]) %}
+    <link rel="prefetch" href="{{ url }}">
+    {% endfor %}
+
     <!-- Bootstrap CSS -->
     <!-- Bootstrap CSS (vendored at /static/vendor/bootstrap-5.3.3.min.css) -->
     <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
@@ -997,10 +1008,20 @@
     <script src="{{ url_for('static', filename='pdf-bbox.js') }}?v=3"></script>
     {% endif %}
 
+    <!-- Shared PDF.js loader: must precede every consumer below -->
+    {% if frontend_assets.pdf_link | default(false) or frontend_assets.pdf_viewer | default(false) %}
+    <script src="{{ url_for('static', filename='js/pdfjs-loader.js') }}?v=1"></script>
+    {% endif %}
+
     <!-- PDF multi-page anchor + cross-page linking -->
     {% if frontend_assets.pdf_link | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='pdf-link-mode.css') }}?v=1">
-    <script src="{{ url_for('static', filename='pdf-link-mode.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='pdf-link-mode.js') }}?v=5"></script>
+    {% endif %}
+
+    <!-- Plain PDF.js viewer (default annotation_mode for a pdf display) -->
+    {% if frontend_assets.pdf_viewer | default(false) %}
+    <script src="{{ url_for('static', filename='js/pdf-viewer.js') }}?v=1"></script>
     {% endif %}
 
     {% if agent_proxy_enabled | default(false) %}

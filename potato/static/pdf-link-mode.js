@@ -19,10 +19,8 @@
 (function () {
     'use strict';
 
-    // PDF.js is vendored locally so PDF annotation works on offline / air-gapped
-    // deployments; the CDN is only a fallback if the local copy is missing.
-    const PDFJS_LOCAL = '/static/vendor/pdfjs';
-    const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174';
+    // PDF.js loading lives in pdfjs-loader.js (vendored copy first, CDN only as
+    // a fallback) so this file and pdf-viewer.js cannot drift apart again.
 
     // Distinct, consistent colors for anchor labels (hash-based, matches the
     // palette philosophy in pdf-bbox.js so the two modes feel related).
@@ -51,32 +49,13 @@
         return `${prefix}_${Math.random().toString(36).slice(2, 10)}${(performance.now() | 0)}`;
     }
 
-    function _injectScript(src) {
-        return new Promise((resolve, reject) => {
-            const s = document.createElement('script');
-            s.src = src;
-            s.onload = () => resolve();
-            s.onerror = () => reject(new Error('Failed to load ' + src));
-            document.head.appendChild(s);
-        });
-    }
-
-    let _pdfjsLoading = null;
     function loadPDFJS() {
         if (window.pdfjsLib) return Promise.resolve();
-        if (_pdfjsLoading) return _pdfjsLoading;
-        _pdfjsLoading = (async () => {
-            // Prefer the vendored copy; fall back to the CDN if it 404s.
-            try {
-                await _injectScript(`${PDFJS_LOCAL}/pdf.min.js`);
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_LOCAL}/pdf.worker.min.js`;
-            } catch (localErr) {
-                console.warn('[PdfLinkMode] local PDF.js unavailable, using CDN', localErr);
-                await _injectScript(`${PDFJS_CDN}/pdf.min.js`);
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN}/pdf.worker.min.js`;
-            }
-        })();
-        return _pdfjsLoading;
+        if (!window.PotatoPDFJS) {
+            return Promise.reject(
+                new Error('pdfjs-loader.js must be loaded before pdf-link-mode.js'));
+        }
+        return window.PotatoPDFJS.load();
     }
 
     class PdfLinkMode {

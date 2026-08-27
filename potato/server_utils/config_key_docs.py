@@ -532,6 +532,51 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "ui_language": _D(
         "Interface language code", type="string", default="en", category=UI,
     ),
+    # /admin/iaa agreement-drift strings. Every OTHER ui_language.* key
+    # predates the coverage ratchet and sits on the legacy exemption list;
+    # new ones are documented here so the published JSON Schema, the config
+    # reference and describe_config_key all know about them.
+    "ui_language.iaa_drift_title": _D(
+        "Heading of the agreement-over-time section on /admin/iaa",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_note": _D(
+        "Sentence explaining what a window is and how it is scored",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_recalibrate": _D(
+        "Label on the prompt raised when agreement falls below baseline",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_below_baseline": _D(
+        "Phrase following the percentage in the re-calibration prompt",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_baseline": _D(
+        "Row label for the whole-project agreement figure",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_th_window": _D(
+        "Short column prefix for a window, e.g. the W in W1, W2",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_sparse": _D(
+        "Note on a window holding too few items to judge",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_codebook_changes": _D(
+        "Label preceding the list of codebook revisions on the timeline",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_approx": _D(
+        "Marks a codebook revision whose date was inferred rather than recorded",
+        type="string", category=UI,
+    ),
+    "ui_language.iaa_drift_untimed": _D(
+        "Note about items with no timestamp, which cannot be placed on the "
+        "timeline",
+        type="string", category=UI,
+    ),
     "layout": _D(
         "How the annotation questions are arranged on the page: a grid, "
         "collapsible groups, an explicit order, and responsive breakpoints. "
@@ -2026,6 +2071,45 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Models to fan out to. Each is endpoint_type plus model, with optional "
         "label, base_url, temperature and ai_config",
         type="array", category=AGENT_EVAL,
+    ),
+    "ai_budget": _D(
+        "Cost estimate and spend cap for AI actions. The complaint about "
+        "commercial platforms is not the price but the surprise -- credits "
+        "consumed by auto-labelling and discovered at export time",
+        type="object", category=AI, see_also=("ai_support",),
+    ),
+    "ai_budget.cap_usd": _D(
+        "Dollar ceiling for this project's AI spend. A run projected to cross "
+        "it is refused BEFORE it starts, so it cannot leave a part-labelled "
+        "dataset and a bill for it",
+        type="number", category=AI, example=25.0,
+    ),
+    "calibration": _D(
+        "Agreement drift tracking and the re-calibration prompt on /admin/iaa. "
+        "Agreement is scored per time window so a fall in recent work is "
+        "visible, instead of averaging into one whole-project number",
+        type="object", category=QC, see_also=("num_annotators_per_item",),
+    ),
+    "calibration.enabled": _D(
+        "Compute the agreement timeline. Costs one extra IAA pass per window, "
+        "so it can be turned off on very large projects",
+        type="boolean", default=True, category=QC,
+    ),
+    "calibration.windows": _D(
+        "How many time windows the timeline is cut into",
+        type="integer", default=6, category=QC,
+    ),
+    "calibration.window_by": _D(
+        "'count' gives every window the same number of items, 'time' the same "
+        "duration. Equal-count is the default because a study that ran in "
+        "bursts leaves equal-duration windows empty, and an empty window has "
+        "no agreement rather than low agreement",
+        type="string", default="count", category=QC,
+    ),
+    "calibration.drop_threshold": _D(
+        "Relative fall below the project baseline that raises the "
+        "re-calibration prompt, e.g. 0.15 for 15%",
+        type="number", default=0.15, category=QC,
     ),
     "judge_alignment": _D(
         "LLM-as-judge alignment: score items with a judge, compare against the "

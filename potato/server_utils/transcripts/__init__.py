@@ -126,6 +126,25 @@ from .loader import (
     read_transcript_file,
     resolve_transcript_source,
 )
+# Local ASR. Importing this costs nothing -- faster-whisper is imported inside
+# the functions that need it, so a Potato install without the `transcribe`
+# extra is unaffected.
+from .transcribe import (
+    AUDIO_EXTENSIONS,
+    MODEL_SIZES,
+    TranscriptionError,
+    cache_path_for,
+    is_available as transcription_available,
+    looks_like_media,
+    transcribe_file,
+)
+from .diarize import (
+    DiarizationError,
+    assign_speakers,
+    diarize_file,
+    is_available as diarization_available,
+    speaker_label,
+)
 
 __all__ = [
     "normalize_transcript",
@@ -135,6 +154,18 @@ __all__ = [
     "read_transcript_file",
     "TRANSCRIPT_EXTENSIONS",
     "detect_format",
+    "AUDIO_EXTENSIONS",
+    "MODEL_SIZES",
+    "TranscriptionError",
+    "cache_path_for",
+    "looks_like_media",
+    "transcribe_file",
+    "transcription_available",
+    "DiarizationError",
+    "assign_speakers",
+    "diarization_available",
+    "diarize_file",
+    "speaker_label",
 ]
 
 

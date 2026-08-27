@@ -99,6 +99,20 @@
       },
       "type": "object"
     },
+    "ai_budget": {
+      "additionalProperties": true,
+      "description": "Cost estimate and spend cap for AI actions. The complaint about commercial platforms is not the price but the surprise -- credits consumed by auto-labelling and discovered at export time",
+      "properties": {
+        "cap_usd": {
+          "description": "Dollar ceiling for this project's AI spend. A run projected to cross it is refused BEFORE it starts, so it cannot leave a part-labelled dataset and a bill for it",
+          "examples": [
+            25.0
+          ],
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "ai_support": {
       "additionalProperties": true,
       "description": "Model-backed label suggestions shown alongside each item",
@@ -999,6 +1013,7 @@
           "prompt_field": {},
           "quality_scale": {},
           "question_field": {},
+          "randomize_order": {},
           "rating_scale": {},
           "region_type": {},
           "reject_key": {},
@@ -2818,7 +2833,8 @@
         "diversity_clustering",
         "batch",
         "priority",
-        "psychometric"
+        "psychometric",
+        "model_review"
       ]
     },
     "attention_checks": {
@@ -3077,6 +3093,33 @@
           "examples": [
             4
           ],
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "calibration": {
+      "additionalProperties": true,
+      "description": "Agreement drift tracking and the re-calibration prompt on /admin/iaa. Agreement is scored per time window so a fall in recent work is visible, instead of averaging into one whole-project number",
+      "properties": {
+        "drop_threshold": {
+          "default": 0.15,
+          "description": "Relative fall below the project baseline that raises the re-calibration prompt, e.g. 0.15 for 15%",
+          "type": "number"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Compute the agreement timeline. Costs one extra IAA pass per window, so it can be turned off on very large projects",
+          "type": "boolean"
+        },
+        "window_by": {
+          "default": "count",
+          "description": "'count' gives every window the same number of items, 'time' the same duration. Equal-count is the default because a study that ran in bursts leaves equal-duration windows empty, and an empty window has no agreement rather than low agreement",
+          "type": "string"
+        },
+        "windows": {
+          "default": 6,
+          "description": "How many time windows the timeline is cut into",
           "type": "integer"
         }
       },
@@ -5393,6 +5436,46 @@
         "iaa_band_strong": {},
         "iaa_band_substantial": {},
         "iaa_band_weak": {},
+        "iaa_drift_approx": {
+          "description": "Marks a codebook revision whose date was inferred rather than recorded",
+          "type": "string"
+        },
+        "iaa_drift_baseline": {
+          "description": "Row label for the whole-project agreement figure",
+          "type": "string"
+        },
+        "iaa_drift_below_baseline": {
+          "description": "Phrase following the percentage in the re-calibration prompt",
+          "type": "string"
+        },
+        "iaa_drift_codebook_changes": {
+          "description": "Label preceding the list of codebook revisions on the timeline",
+          "type": "string"
+        },
+        "iaa_drift_note": {
+          "description": "Sentence explaining what a window is and how it is scored",
+          "type": "string"
+        },
+        "iaa_drift_recalibrate": {
+          "description": "Label on the prompt raised when agreement falls below baseline",
+          "type": "string"
+        },
+        "iaa_drift_sparse": {
+          "description": "Note on a window holding too few items to judge",
+          "type": "string"
+        },
+        "iaa_drift_th_window": {
+          "description": "Short column prefix for a window, e.g. the W in W1, W2",
+          "type": "string"
+        },
+        "iaa_drift_title": {
+          "description": "Heading of the agreement-over-time section on /admin/iaa",
+          "type": "string"
+        },
+        "iaa_drift_untimed": {
+          "description": "Note about items with no timestamp, which cannot be placed on the timeline",
+          "type": "string"
+        },
         "iaa_empty_state": {},
         "iaa_fully_aligned_items": {},
         "iaa_items": {},

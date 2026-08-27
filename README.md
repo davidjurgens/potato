@@ -51,7 +51,7 @@ The tables below are a **representative sample, not a complete list.** Schemes a
 | **Agent Traces** | Step-by-step evaluation of LLM agents, tool calls, ReAct chains, and multi-agent systems ([docs](docs/agent-evaluation/agent_traces.md)) |
 | **Web Agents** | Screenshot-based review with SVG click/scroll overlays, or live browsing with automatic trace recording ([docs](docs/agent-evaluation/web_agent_annotation.md)) |
 | **RAG Pipelines** | Retrieval relevance, answer faithfulness, citation accuracy, hallucination detection |
-| **Audio** | Waveform visualization, segment labeling, ELAN-style tiered annotation, and 21 transcript/subtitle formats read directly — Whisper, cloud ASR, SRT/VTT, YouTube captions, TextGrid/EAF ([docs](docs/annotation-types/multimedia/audio_annotation.md), [transcripts](docs/guides/working_with_transcripts.md)) |
+| **Audio** | Waveform visualization, segment labeling, ELAN-style tiered annotation, and 21 transcript/subtitle formats read directly — Whisper, cloud ASR, SRT/VTT, YouTube captions, TextGrid/EAF. No transcript? Potato runs Whisper and speaker diarization locally ([docs](docs/annotation-types/multimedia/audio_annotation.md), [transcripts](docs/guides/working_with_transcripts.md)) |
 | **Video** | Frame-by-frame labeling, temporal segments, playback sync ([docs](docs/annotation-types/multimedia/video_annotation.md)) |
 | **Images** | Bounding boxes, polygons, landmarks, classification ([docs](docs/annotation-types/multimedia/image_annotation.md)) |
 | **Dialogue** | Turn-level annotation, conversation trees, interactive chat evaluation, and diarized transcripts synced to their audio ([docs](docs/annotation-types/multimedia/audio_dialogue.md)) |
@@ -289,7 +289,7 @@ so they cannot drift from it.
 |----------|-------------------|
 | [`llms.txt`](https://potatoannotator.readthedocs.io/en/latest/llms.txt) | Curated index of the docs ([llms.txt standard](https://llmstxt.org)) |
 | [`llms-full.txt`](https://potatoannotator.readthedocs.io/en/latest/llms-full.txt) | Every documentation page in one file |
-| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 158 config keys, 61 annotation types, 24 display types — validates a `config.yaml` before the server runs |
+| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 160 config keys, 61 annotation types, 24 display types — validates a `config.yaml` before the server runs |
 | [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 419 HTTP paths, with per-operation auth and config gating |
 
 Every config in `examples/` carries a `# yaml-language-server: $schema=…`

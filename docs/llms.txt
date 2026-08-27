@@ -17,7 +17,7 @@ Generated from the running code, not maintained by hand. Prefer these over prose
 when writing a config or calling the API.
 
 - [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json): every valid config.yaml key, all 61 annotation types and 24 display types; validates a config before the server runs
-- [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json): all 435 HTTP paths, with auth (`x-potato-auth`) and config gating (`x-potato-requires-config`) per operation
+- [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json): all 444 HTTP paths, with auth (`x-potato-auth`) and config gating (`x-potato-requires-config`) per operation
 - [Examples catalog](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-examples.manifest.json): all 213 example projects, with the annotation types, display types and features each one demonstrates
 - [How to use them](https://potatoannotator.readthedocs.io/en/latest/api-reference/machine_readable/): editor setup, CI validation, jq recipes
 - [MCP server](https://potatoannotator.readthedocs.io/en/latest/tools/mcp_server/): `potato mcp serve` exposes the registries, the validator and a headless renderer as MCP tools

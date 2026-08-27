@@ -145,6 +145,10 @@ class TestBuiltinExportersRegistered:
             "csv", "tsv", "jsonl",
             # QDA-wave exporters (v2.5.0)
             "codebook", "quotation_report",
+            # REFI-QDA project exchange -- the format qualitative researchers
+            # actually move projects with, between NVivo, ATLAS.ti and MAXQDA.
+            # Stdlib zipfile + ElementTree, so no optional dependency.
+            "qdpx",
             # ConvoKit round-trip — stdlib only, so not optional
             "convokit",
             # Keystroke / typing-dynamics streams. Falls back to JSONL when

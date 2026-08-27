@@ -47,7 +47,7 @@ sufficient. Mishearings are absorbed by fuzzy label matching ("in polite" → *I
 ## Setup
 
 ```bash
-pip install faster-whisper   # local STT; first recording downloads the model (~39 MB)
+pip install "potato-annotation[transcribe]"   # local STT; first recording downloads the model (~39 MB)
 python potato/flask_server.py start examples/advanced/think-aloud/config.yaml -p 8000 --debug
 ```
 

@@ -366,6 +366,9 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "document_bbox": ("document-bbox-mode", "document-bbox-container", "document-bbox-canvas"),
     "pdf_bbox": ("pdf-bbox-mode", "pdf-bbox-container", "pdf-bbox-canvas"),
     "pdf_link": ("pdf-link-mode",),
+    # Plain PDF.js viewer: the default annotation_mode ("span") for a PDF
+    # display. Marker matches the class pdf_display._render_pdfjs emits.
+    "pdf_viewer": ("pdf-plain-mode",),
     "web_agent_viewer": ('class="web-agent-viewer"', 'class="live-agent-viewer"'),
     "web_agent_playback": ('data-auto-playback="true"',),
     "web_agent_recorder": ("web-agent-recorder",),
@@ -396,6 +399,67 @@ def _detect_frontend_assets_for_page(html_file: str, display_html: str = "") -> 
     detected["span_link"] = detected["span_link"] or detected["coreference"]
 
     return detected
+
+
+# Extensions worth warming the HTTP cache for. Text is not here: it arrives in
+# the page itself, so there is nothing to prefetch.
+_PREFETCHABLE_SUFFIXES = (
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".svg",
+    ".mp3", ".wav", ".ogg", ".m4a", ".flac",
+    ".mp4", ".webm", ".mov", ".mkv",
+    ".pdf",
+)
+
+# Several media fields on one item are normal (a video plus its poster frame);
+# a hundred are not. Cap it so a wide table cannot flood the connection pool
+# and slow down the page the annotator is actually looking at.
+_MAX_PREFETCH_URLS = 4
+
+
+def _looks_prefetchable(value) -> bool:
+    if not isinstance(value, str) or len(value) > 2048:
+        return False
+    candidate = value.split("?", 1)[0].split("#", 1)[0].strip().lower()
+    if not candidate:
+        return False
+    if not (candidate.startswith(("/", "http://", "https://"))):
+        return False
+    return candidate.endswith(_PREFETCHABLE_SUFFIXES)
+
+
+def _next_instance_prefetch_urls(user_state) -> list:
+    """Media URLs on the instance the annotator will see next.
+
+    Navigation is a full page reload, so a JS-side prefetch would be thrown
+    away. Emitting ``<link rel="prefetch">`` instead warms the *HTTP* cache,
+    which survives the reload — that is the whole mechanism.
+
+    Returns [] for anything unexpected. A prefetch is an optimisation; it must
+    never be the reason a page fails to render.
+    """
+    try:
+        ordering = getattr(user_state, "instance_id_ordering", None)
+        index = getattr(user_state, "current_instance_index", -1)
+        if not ordering or index < 0 or index + 1 >= len(ordering):
+            return []
+
+        ism = get_item_state_manager()
+        next_id = ordering[index + 1]
+        if not ism.has_item(next_id):
+            return []
+
+        data = ism.get_item(next_id).get_data() or {}
+        urls = []
+        for value in data.values():
+            if _looks_prefetchable(value):
+                if value not in urls:
+                    urls.append(value)
+                if len(urls) >= _MAX_PREFETCH_URLS:
+                    break
+        return urls
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug(f"Skipping media prefetch: {exc}")
+        return []
 
 
 def _apply_annotation_filter(items: list, filter_config: dict, id_key: str) -> list:
@@ -2779,6 +2843,14 @@ def render_page_with_annotations(username: str):
             k: v for k, v in item_data.items()
             if isinstance(v, (str, int, float, bool, list))
         }
+        # Pairwise candidates come from the item's own data and are laid out by
+        # the client in the order it receives them, so swapping them means
+        # permuting the list HERE -- there is no markup to reorder afterwards.
+        # Always showing A before B is the position bias the whole feature
+        # exists for: it does not cancel across annotators, it inflates
+        # agreement while biasing the estimate.
+        _apply_pairwise_order(var_elems["instance_data"], user_state,
+                              username, instance_id)
 
     # also save the displayed text in the metadata dict
     # instance_id_to_data[instance_id]['displayed_text'] = text
@@ -2798,6 +2870,16 @@ def render_page_with_annotations(username: str):
     # NOTE2: We have to this here to account for any keyword highlighting before
     # the instance text gets marked up in the post-processing below
     span_annotations = get_span_annotations_for_user_on(username, instance_id)
+    if not span_annotations:
+        # Span pre-annotations have to be applied HERE, not in the soup walk
+        # below that handles every other schema type. Spans are not an input
+        # value: they are markup baked into the instance text, and by the time
+        # that walk runs the text has already been rendered. Without this a
+        # config with `pre_annotation.enabled` and a span scheme fell through
+        # to "not yet supported" and showed the annotator nothing -- which is
+        # exactly what an imported brat/CoNLL/QDPX project produces.
+        span_annotations = _span_annotations_from_pre_annotations(
+            pre_annotation_data, config)
     if span_annotations is not None and len(span_annotations) > 0:
         # Mark up the instance text where the annotated spans were
         text = render_span_annotations(text, span_annotations)
@@ -3040,6 +3122,10 @@ def render_page_with_annotations(username: str):
 
     frontend_assets = _detect_frontend_assets_for_page(html_file, display_html)
 
+    # Warm the HTTP cache for the next instance's media while the annotator
+    # works on this one, so Next does not begin with a blank wait.
+    prefetch_urls = _next_instance_prefetch_urls(user_state)
+
     # Get IBWS round info if active
     ibws_round_info = None
     if config.get("ibws_config"):
@@ -3097,6 +3183,7 @@ def render_page_with_annotations(username: str):
         span_targets=display_template_vars.get("span_targets", []),
         multi_span_mode=display_template_vars.get("multi_span_mode", False),
         frontend_assets=frontend_assets,
+        prefetch_urls=prefetch_urls,
         # Agent proxy (for conditional loading of agent-chat assets)
         agent_proxy_enabled=agent_proxy_enabled,
         # Chat support (for conditional loading of llm-chat-sidebar assets)
@@ -3175,13 +3262,10 @@ def render_page_with_annotations(username: str):
                 # a radio when input.value == value, and the radio's value
                 # attribute is the label name. This matches how a returning
                 # user's restored annotations are stored.
-                if isinstance(predicted_value, str) and predicted_value in scheme.get('label2value', {}):
-                    annotations[schema_name][predicted_value] = predicted_value
-                elif isinstance(predicted_value, list):
-                    # Multi-select: multiple values
-                    for val in predicted_value:
-                        if val in scheme.get('label2value', {}):
-                            annotations[schema_name][val] = val
+                known = scheme.get('label2value', {})
+                for name in _prelabel_names(predicted_value):
+                    if name in known:
+                        annotations[schema_name][name] = name
             elif scheme['annotation_type'] in ['text']:
                 if "labels" not in scheme:
                     annotations[schema_name]['text_box'] = str(predicted_value)
@@ -3207,6 +3291,12 @@ def render_page_with_annotations(username: str):
                         f"list of annotation objects or a JSON string, got "
                         f"{type(predicted_value).__name__}"
                     )
+            elif scheme['annotation_type'] == 'span':
+                # Already applied, further up, by
+                # _span_annotations_from_pre_annotations(). Spans are markup in
+                # the instance text rather than an input value, so they cannot
+                # be set by this DOM walk -- the text was rendered before it.
+                pass
             else:
                 logger.debug(f"Pre-annotation not yet supported for {scheme['annotation_type']}")
 
@@ -3346,15 +3436,32 @@ def render_page_with_annotations(username: str):
                             option = input_field.findChildren("option", {"value": value})[0]
                             option["selected"] = "selected"
 
-    # randomize the order of options for schemas that support it
-    selected_schemas_for_option_randomization = []
-    for it in config['annotation_schemes']:
-        if it.get('option_randomization') and it['annotation_type'] in ('multirate', 'radio', 'multiselect', 'select'):
-            selected_schemas_for_option_randomization.append(it['description'])
+    # Record which order every ordered scheme's options are shown in, and
+    # shuffle the ones configured for it.
+    #
+    # Recording happens whether or not randomization is on. A fixed order
+    # biases every annotator the same way, which INFLATES agreement while
+    # biasing the estimate -- so a study that ran without randomization can
+    # only be corrected afterwards if we wrote down what was actually shown.
+    from potato.server_utils import presentation_order as _order
 
+    shown_orders = _order.orders_for_item(
+        config.get('annotation_schemes', []), username, instance_id)
+    # Re-read what comes back: an item rendered before is answered against the
+    # order it was FIRST shown in, not the one we would derive now.
+    shown_orders = _order.record(user_state, instance_id, shown_orders)
 
-        soup = randomize_options(soup, selected_schemas_for_option_randomization,
-                                 map_user_id_to_digit(username))
+    randomized = {
+        it['description']: shown_orders.get(it.get('name'))
+        for it in config.get('annotation_schemes', [])
+        if _order.wants_randomization(it) and shown_orders.get(it.get('name'))
+    }
+    if randomized:
+        # Called ONCE, outside the loop. It used to sit inside it, so the soup
+        # was re-shuffled once per configured scheme with a partially-built
+        # name list -- and with a seed from the builtin hash(), which is salted
+        # per process, so the order changed on every server restart.
+        soup = randomize_options(soup, randomized)
 
     # If the admin has turned on AI hints, add them to the page
     soup = add_ai_hints(soup, instance_id)
@@ -3598,91 +3705,179 @@ def render_page_with_annotations_WEIRD(username):
         annotation_codebook_url=_sanitize_codebook_url(config.get("annotation_codebook_url", "")),
     )
 
-def randomize_options(soup, legend_names, seed):
-    random.seed(seed)
+def _apply_pairwise_order(instance_data, user_state, username, instance_id):
+    """
+    Permute a pairwise scheme's candidate list, and record where each came from.
 
-    # Find all fieldsets in the soup
+    The record is a list of SOURCE INDICES, not label names: the candidates are
+    per-item text, so "this annotator saw the item that was second in the data
+    first" is the only fact an analyst can condition on afterwards.
+
+    Reuses an order already recorded for this item rather than deriving a fresh
+    one, so a reload shows the same arrangement -- an annotator shown a
+    different pairing on every visit is being asked a different question each
+    time.
+    """
+    from potato.server_utils import presentation_order as _order
+
+    for scheme in config.get('annotation_schemes', []) or []:
+        name = scheme.get("name")
+        if not name:
+            continue
+        order = _order.item_order(scheme, instance_data, username, instance_id)
+        if not order:
+            continue
+
+        recorded = _order.record(user_state, instance_id, {name: order}).get(name)
+        if recorded and len(recorded) == len(order):
+            try:
+                order = [int(i) for i in recorded]
+            except (TypeError, ValueError):
+                logger.warning("Ignoring a malformed recorded order for %s/%s",
+                               instance_id, name)
+
+        items_key = scheme.get("items_key", "text")
+        items = instance_data.get(items_key)
+        if isinstance(items, list) and len(items) == len(order):
+            instance_data[items_key] = [items[i] for i in order]
+
+
+def randomize_options(soup, orders):
+    """
+    Reorder a scheme's options to match an order decided upstream.
+
+    Args:
+        soup: The rendered page.
+        orders: ``{legend text: [label names in the order to show]}``, from
+            :func:`potato.server_utils.presentation_order.orders_for_item`.
+
+    Three things changed here, each of which had made the feature not work:
+
+    1. **The order is an input, not a decision.** It used to shuffle in place
+       with ``random.seed(seed)``. That both reached into the global random
+       stream every other caller in the process shares, and left the server
+       unable to say what it had shown -- so the order could never be recorded
+       and a study could never be corrected for position bias afterwards.
+    2. **The seed is stable.** It came from the builtin ``hash()``, which is
+       salted per process, so every option set re-ordered on each server
+       restart -- an annotator returning to an item was asked a different
+       question. It also collapsed to nine distinct values, so annotators
+       collided.
+    3. **It runs once.** The call sat inside the loop that built its own
+       argument, so it re-shuffled the soup once per configured scheme.
+
+    Matching is still by legend text, which is the scheme ``description``,
+    because that is what the generated markup carries. Two schemes sharing a
+    description are therefore reordered together; that is a pre-existing
+    limitation of the markup, not of the ordering.
+    """
+    if not orders:
+        return soup
+
     fieldsets = soup.find_all('fieldset')
     if not fieldsets:
         logger.debug("No fieldsets found.")
         return soup
 
-    # Initialize a variable to track whether the legend is found
-    legend_found = False
+    def reorder(nodes, wanted, key):
+        """Nodes in `wanted` order; anything unnamed keeps its relative place."""
+        by_name = {}
+        for node in nodes:
+            name = key(node)
+            if name is not None:
+                by_name.setdefault(name, []).append(node)
+        ordered = []
+        for name in wanted:
+            ordered.extend(by_name.pop(name, []))
+        # An option present in the DOM but absent from the recorded order --
+        # a dynamic option, or a config edited mid-study. Appending rather
+        # than dropping it keeps the annotator able to answer.
+        for leftovers in by_name.values():
+            ordered.extend(leftovers)
+        return ordered
 
-    # Iterate through each fieldset
     for fieldset in fieldsets:
-        # Find the legend within the current fieldset
         legend = fieldset.find('legend')
-        if legend and legend.string in legend_names:
-            # Legend found, set the flag
-            legend_found = True
+        wanted = orders.get(legend.string) if legend else None
+        if not wanted:
+            continue
 
-            # Determine the parent form's annotation type
-            parent_form = fieldset.find_parent('form')
-            annotation_type = parent_form.get('data-annotation-type', '') if parent_form else ''
+        parent_form = fieldset.find_parent('form')
+        annotation_type = parent_form.get('data-annotation-type', '') if parent_form else ''
 
-            if annotation_type == 'multirate':
-                # Multirate: shuffle <tr> rows in table (skip header row)
-                table = fieldset.find('table')
-                if not table:
-                    logger.debug("Table not found within the fieldset.")
-                    continue
-                tr_elements = table.find_all('tr')[1:]
-                random.shuffle(tr_elements)
-                for tr in tr_elements:
-                    table.append(tr)
+        if annotation_type == 'multirate':
+            table = fieldset.find('table')
+            if not table:
+                logger.debug("Table not found within the fieldset.")
+                continue
+            rows = table.find_all('tr')[1:]
+            for row in reorder(rows, wanted, _row_label):
+                table.append(row)
 
-            elif annotation_type == 'radio':
-                # Radio: shuffle <div class="shadcn-radio-option"> elements
-                options_container = fieldset.find('div', class_='shadcn-radio-options')
-                if not options_container:
-                    options_container = fieldset
-                option_divs = options_container.find_all('div', class_='shadcn-radio-option', recursive=False)
-                if option_divs:
-                    random.shuffle(option_divs)
-                    for div in option_divs:
-                        options_container.append(div)
+        elif annotation_type == 'radio':
+            container = (fieldset.find('div', class_='shadcn-radio-options')
+                         or fieldset)
+            options = container.find_all('div', class_='shadcn-radio-option',
+                                         recursive=False)
+            for div in reorder(options, wanted, _option_label):
+                container.append(div)
 
-            elif annotation_type == 'multiselect':
-                # Multiselect: shuffle checkbox option divs within the grid
-                grid = fieldset.find('div', class_='shadcn-multiselect-grid')
-                if not grid:
-                    grid = fieldset
-                option_divs = grid.find_all('div', class_='shadcn-multiselect-option', recursive=False)
-                if option_divs:
-                    random.shuffle(option_divs)
-                    for div in option_divs:
-                        grid.append(div)
+        elif annotation_type == 'multiselect':
+            grid = fieldset.find('div', class_='shadcn-multiselect-grid') or fieldset
+            options = grid.find_all('div', class_='shadcn-multiselect-option',
+                                    recursive=False)
+            for div in reorder(options, wanted, _option_label):
+                grid.append(div)
 
-            elif annotation_type == 'select':
-                # Select: shuffle <option> elements (skip first if it's a placeholder)
-                select_el = fieldset.find('select')
-                if select_el:
-                    options = select_el.find_all('option')
-                    # Keep placeholder (first option with empty value) in place
-                    placeholder = None
-                    shuffleable = []
-                    for opt in options:
-                        if not placeholder and (opt.get('value', '') == '' or opt.get('disabled') is not None):
-                            placeholder = opt
-                        else:
-                            shuffleable.append(opt)
-                    random.shuffle(shuffleable)
-                    # Clear and re-insert
-                    select_el.clear()
-                    if placeholder:
-                        select_el.append(placeholder)
-                    for opt in shuffleable:
-                        select_el.append(opt)
-            else:
-                logger.debug(f"Unsupported annotation type for randomization: {annotation_type}")
-
-    # Check if any legend was found
-    if not legend_found:
-        logger.debug("No matching legends found within any fieldset.")
+        elif annotation_type == 'select':
+            select_el = fieldset.find('select')
+            if not select_el:
+                continue
+            placeholder = None
+            shuffleable = []
+            for opt in select_el.find_all('option'):
+                if not placeholder and (opt.get('value', '') == ''
+                                        or opt.get('disabled') is not None):
+                    placeholder = opt
+                else:
+                    shuffleable.append(opt)
+            ordered = reorder(shuffleable, wanted,
+                              lambda o: o.get('value') or (o.string or '').strip())
+            select_el.clear()
+            if placeholder:
+                select_el.append(placeholder)
+            for opt in ordered:
+                select_el.append(opt)
+        else:
+            logger.debug("Unsupported annotation type for randomization: %s",
+                         annotation_type)
 
     return soup
+
+
+def _option_label(node):
+    """The label name a radio/checkbox option div stands for."""
+    field = node.find(['input', 'select', 'textarea'])
+    if field is not None:
+        for attr in ('label_name', 'value'):
+            value = field.get(attr)
+            if value:
+                return value
+    label = node.find('label')
+    return label.get_text(strip=True) if label else None
+
+
+def _row_label(row):
+    """The option name a multirate row stands for."""
+    field = row.find('input')
+    if field is not None:
+        for attr in ('label_name', 'schema'):
+            value = field.get(attr)
+            if value:
+                return value
+    cell = row.find(['th', 'td'])
+    return cell.get_text(strip=True) if cell else None
+
 
 def filter_dynamic_options(soup, schemes, instance_data):
     """
@@ -3742,15 +3937,6 @@ def filter_dynamic_options(soup, schemes, instance_data):
 
     return soup
 
-
-def map_user_id_to_digit(user_id_str):
-    # Convert the user_id_str to an integer using a hash function
-    user_id_hash = hash(user_id_str)
-
-    # Map the hashed value to a single-digit integer using modulus
-    digit = abs(user_id_hash) % 9 + 1  # Add 1 to avoid 0
-
-    return digit
 
 def get_total_annotations():
     """
@@ -3878,6 +4064,115 @@ def get_annotations_for_user_on(username, instance_id):
             continue
 
     return processed_annotations
+
+
+def _prelabel_names(predicted_value):
+    """
+    The label names in a categorical pre-annotation, whatever shape it is in.
+
+    A model that reports confidence writes
+    ``[{"label": "positive", "confidence": 0.31}]``, not ``["positive"]`` --
+    which is the shape `ai_prelabel` and every importer produce. This used to
+    test ``dict in label2value`` and raise ``TypeError: unhashable type:
+    'dict'`` from inside the annotation-page render, so the whole page 500'd
+    and the annotator saw a stack trace rather than an item.
+
+    Anything with no recognisable name is skipped rather than raising: a
+    malformed prediction should cost its own highlight, not the page.
+    """
+    if isinstance(predicted_value, str):
+        return [predicted_value]
+    if isinstance(predicted_value, dict):
+        predicted_value = [predicted_value]
+    if not isinstance(predicted_value, list):
+        return []
+
+    names = []
+    for entry in predicted_value:
+        if isinstance(entry, str):
+            names.append(entry)
+        elif isinstance(entry, dict):
+            name = entry.get('label') or entry.get('name')
+            if isinstance(name, str):
+                names.append(name)
+    return names
+
+
+def _span_annotations_from_pre_annotations(pre_annotation_data, config):
+    """
+    Build SpanAnnotation objects out of a span scheme's pre-annotations.
+
+    Every other schema type takes its pre-annotation through the soup walk in
+    ``render_page_with_annotations``, which sets an input's value. Spans have
+    no such input -- they are markup rendered into the instance text before the
+    template ever sees it -- so they need their own path, and without one a
+    span scheme silently ignored ``pre_annotation`` entirely.
+
+    Args:
+        pre_annotation_data: ``{schema_name: value}`` from
+            ``QualityControlManager.extract_pre_annotations``, or None.
+        config: The task config, read for which schemes are spans.
+
+    Returns:
+        A list of SpanAnnotation, empty when there is nothing to render.
+    """
+    if not pre_annotation_data:
+        return []
+
+    span_schemes = {
+        scheme.get("name")
+        for scheme in config.get("annotation_schemes", [])
+        if scheme.get("annotation_type") == "span"
+    }
+    if not span_schemes:
+        return []
+
+    spans = []
+    for schema_name, predicted in pre_annotation_data.items():
+        if schema_name not in span_schemes:
+            continue
+        if isinstance(predicted, str):
+            # Accept the JSON-string form for the same reason image
+            # pre-annotations do: a data file written by hand often quotes it.
+            try:
+                predicted = json.loads(predicted)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Pre-annotation for span schema %s is a string that is not "
+                    "JSON; ignoring it", schema_name)
+                continue
+        if not isinstance(predicted, list):
+            logger.warning(
+                "Pre-annotation for span schema %s must be a list of span "
+                "dicts, got %s", schema_name, type(predicted).__name__)
+            continue
+
+        for entry in predicted:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                start = int(entry["start"])
+                end = int(entry["end"])
+            except (KeyError, TypeError, ValueError):
+                logger.warning(
+                    "Skipping a pre-annotated span on %s with no usable "
+                    "start/end: %r", schema_name, entry)
+                continue
+            name = entry.get("name") or entry.get("label") or ""
+            if not name:
+                continue
+            spans.append(SpanAnnotation(
+                schema=schema_name,
+                name=name,
+                title=entry.get("title") or name,
+                start=start,
+                end=end,
+                id=entry.get("id"),
+                target_field=entry.get("target_field"),
+                additional_parts=entry.get("additional_parts"),
+            ))
+
+    return spans
 
 
 def get_span_annotations_for_user_on(username, instance_id):

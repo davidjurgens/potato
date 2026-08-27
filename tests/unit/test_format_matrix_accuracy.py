@@ -29,6 +29,9 @@ NON_CV_EXPORTERS = {
     # Behavioural streams about how an annotation was made, not the annotation
     # itself. It carries no geometry, so it has no row in the format matrix.
     "annotation_telemetry",
+    # REFI-QDA project exchange: text codings for qualitative software. Its
+    # only geometry is a character offset, so it belongs to the text formats.
+    "qdpx",
 }
 
 

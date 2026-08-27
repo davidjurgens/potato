@@ -118,7 +118,30 @@ class CurationManager:
         except KeyError:
             return {}
         data = item.get_data() if item else {}
-        return data if isinstance(data, dict) else {}
+        if not isinstance(data, dict):
+            return {}
+
+        # Derived review fields, so a slice can filter on what the MODEL said
+        # rather than only on what the data carries. The false-negative slice
+        # needs `_n_predictions == 0`, and there is no raw field that says so:
+        # an item with no predictions simply has no `predictions` key, which a
+        # value-based condition can never match.
+        enriched = dict(data)
+        try:
+            from potato import model_review
+
+            qc = (self.config.get("pre_annotation") or {})
+            summary = model_review.summarize_predictions(
+                instance_id, data, qc.get("field", "predictions"),
+                [s.get("name") for s in
+                 (self.config.get("annotation_schemes") or []) if s.get("name")])
+            enriched["_n_predictions"] = summary.n_predictions
+            enriched["_has_predictions"] = not summary.empty
+            enriched["_min_confidence"] = summary.min_confidence
+        except Exception:
+            logger.debug("Could not summarize predictions for %s", instance_id,
+                         exc_info=True)
+        return enriched
 
     def resolve(self, slc: Slice) -> List[str]:
         return resolve_slice(slc, self.index, self.embedder, self._metadata_for)

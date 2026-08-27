@@ -2377,21 +2377,81 @@ URL: https://potatoannotator.readthedocs.io/en/latest/guides/working_with_transc
 
 # Working with Transcripts
 
-You have speech, and you have a transcript of it — from Whisper, from a cloud ASR API, or downloaded alongside a video. This guide takes you from those files to a running annotation task.
+You have speech to annotate. This guide takes you from whatever you currently have — raw audio, ASR output, or a folder of subtitle files — to a running annotation task.
 
-Two starting points are covered. They converge once the transcript is in Potato:
+Three starting points are covered. They converge once the transcript is in Potato:
 
-- **[Path A](#path-a-you-ran-whisper)** — you ran an ASR model over audio you have.
-- **[Path B](#path-b-you-have-subtitle-files)** — you have subtitle or caption files.
+- **[Path A](#path-a-you-only-have-audio)** — you have audio or video and no transcript.
+- **[Path B](#path-b-you-ran-whisper)** — you already ran an ASR model.
+- **[Path C](#path-c-you-have-subtitle-files)** — you have subtitle or caption files.
 
 For the format-by-format reference, see [Transcript Format Support](../annotation-types/multimedia/transcript_formats.md).
 
-!!! note "Potato does not transcribe"
-    ASR and diarization run upstream. Potato ingests their output. This guide tells you which upstream options matter, but the transcription itself happens before Potato sees anything.
+---
+
+## Path A: you only have audio
+
+Potato can transcribe locally. Install the extra:
+
+```bash
+pip install "potato-annotation[transcribe]"
+```
+
+Then point the CLI at a folder of recordings:
+
+```bash
+potato transcripts ./interviews --transcribe --asr-model small.en -o data/interviews.json
+```
+
+That runs [faster-whisper](https://github.com/SYSTRAN/faster-whisper) on your own machine. No cloud API, no per-minute charge, and the audio never leaves the box. Each transcript is written beside its media as `<name>.whisper.json` and reused on later runs, so re-running the command after changing an unrelated flag costs nothing.
+
+### Picking a model
+
+| `--asr-model` | Parameters | Use it when |
+|---|---|---|
+| `tiny` / `tiny.en` | 39M | You want a fast rough pass, or you are testing the pipeline |
+| `base` / `base.en` | 74M | Default. Clean audio, one speaker at a time |
+| `small` / `small.en` | 244M | Interviews and meetings; the usual choice for research audio |
+| `medium` | 769M | Accented speech, domain vocabulary, poor recordings |
+| `large-v3` | 1550M | Accuracy matters more than time, and you have a GPU |
+
+Bigger is slower, roughly in proportion to the parameter count. The `.en` variants are English-only and beat the multilingual model of the same size on English audio. Weights download on first use, so the first run needs a network even though later ones do not.
+
+Add `--asr-device cuda` if you have a GPU, and `--asr-language en` to skip auto-detection.
+
+The cache records the settings that produced it, so switching `--asr-model` re-transcribes rather than handing back the old model's text. Changing `--asr-device` does not: that is the same model run on different hardware.
+
+### When the transcript is shorter than the recording
+
+Whisper hallucinates text over silence, so Potato runs [Silero VAD](https://github.com/snakers4/silero-vad) first and decodes only the parts with speech in them. The trade is that VAD also drops quiet and whispered speech. There is no warning when it does; the transcript just comes back short.
+
+`--asr-no-vad` turns it off and decodes every second. Reach for it when audio you know contains speech comes back empty or truncated, and expect some invented text over the silent stretches in exchange.
+
+### Speaker labels
+
+Whisper transcribes but does not diarize: it reports what was said, not who said it. `--diarize` adds speaker labels using a separate segmentation and speaker-embedding model:
+
+```bash
+potato transcripts ./interviews --transcribe --diarize --num-speakers 2 \
+    -o data/interviews.json
+```
+
+Turns come back as `SPEAKER_00`, `SPEAKER_01`, the same labels WhisperX produces. Two ONNX models (~47 MB total) download once and then run offline.
+
+Tell it the speaker count when you know it. A two-person interview diarizes markedly better with `--num-speakers 2` than with an inferred count. When you do not know the count, `--diarize-threshold` governs: raise it when one person is split across several labels, lower it when two people are merged into one.
+
+Expect to correct the result. Clustering does badly on crosstalk and on similar voices in a noisy room. Annotators can fix or supply speakers in the interface (see [Assigning speakers by hand](#assigning-speakers-by-hand)), and on a small corpus that is usually faster and more accurate than tuning the threshold.
+
+### Air-gapped installs
+
+Both stages fetch weights on first use. To run with no network at all, prime the caches on a connected machine and copy them across:
+
+- Whisper: set `--asr-model` to a local CTranslate2 model directory.
+- Diarization: set `POTATO_MODEL_CACHE`, or pass `--diarize-segmentation-model` and `--diarize-embedding-model` explicitly.
 
 ---
 
-## Path A: you ran Whisper
+## Path B: you ran Whisper
 
 ### Keep the right output file
 
@@ -2414,7 +2474,7 @@ If you only kept the `.txt`, you cannot recover the alignment without re-running
 
 Plain Whisper does not label speakers. Every turn arrives unassigned, which is fine for content annotation and painful for anything speaker-related.
 
-To get speakers, run [WhisperX](https://github.com/m-bain/whisperX), which wraps Whisper with pyannote diarization:
+Potato can add the labels for you with `--diarize` — see [Path A](#speaker-labels). To do it upstream instead, run [WhisperX](https://github.com/m-bain/whisperX), which wraps Whisper with pyannote diarization:
 
 ```bash
 whisperx interview_01.mp3 --model medium --diarize --output_format json
@@ -2455,7 +2515,7 @@ Skip to [Setting up the task](#setting-up-the-task).
 
 ---
 
-## Path B: you have subtitle files
+## Path C: you have subtitle files
 
 ### Getting captions
 
@@ -2716,6 +2776,234 @@ Press `1`/`2`/`3` — the annotation saves and the queue advances.
 
 - [Signal-Based Triage Queue](../agent-evaluation/triage_queue.md)
 - [Agent Task Recipes](../agent-evaluation/agent_task_recipes.md)
+
+
+---
+
+<!-- source: docs/guides/migrating-into-potato.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/guides/migrating-into-potato/
+
+# Bringing a Project Into Potato
+
+You do not have to start over. Potato reads the export formats of most tools
+you might be leaving, and turns one into a runnable project in a single
+command.
+
+```bash
+python -m potato.importers --input <your-export> --output-dir my-project/
+python potato/flask_server.py start my-project/config.yaml -p 8000
+```
+
+The importer writes a data file, a `config.yaml` with the right schema already
+declared, and a README. Your existing annotations arrive as **pre-annotations**:
+every annotator sees them as a starting point, and their corrections replace
+them on save.
+
+---
+
+## Supported formats
+
+| Coming from | Format | Notes |
+|---|---|---|
+| **brat** | `.ann` + `.txt` | Directory of file pairs. Discontinuous mentions survive; relations do not yet |
+| **doccano** | JSONL | Sequence labelling and document classification |
+| **Prodigy** | `db-out` JSONL | Rejected tasks are dropped by default — see below |
+| CoNLL corpora | CoNLL-2003, CoNLL-U | Column format or 10-column UD, NER from the tag column or `MISC` |
+| **NVivo, ATLAS.ti, MAXQDA, Quirkos, QDA Miner** | REFI-QDA `.qdpx` | Codebook hierarchy, codings and annotator identity |
+| **CVAT** | XML 1.1 | |
+| **V7 / Darwin** | JSON v2 | |
+| **Labelbox** | NDJSON | |
+| COCO | JSON | Polygons, RLE (compressed and not), crowd regions, keypoints |
+| YOLO, Pascal VOC, LabelMe, VIA, KITTI, MOT, DAVIS, Cityscapes, Open Images, WebDataset, HuggingFace | various | |
+
+List them at any time:
+
+```bash
+python -m potato.importers --list-formats
+```
+
+The format is detected from the file, so `--input-format` is only needed when
+detection cannot decide.
+
+---
+
+## Text annotation
+
+### brat
+
+Point at the directory; the importer pairs each `.ann` with its `.txt`.
+
+```bash
+python -m potato.importers --input ./my-corpus/ --output-dir potato-project/
+```
+
+Offsets are Unicode code points with an exclusive end. That is brat's
+convention and Potato's, so nothing is converted.
+
+Discontinuous mentions (`T1<TAB>LOC 0 3;17 21<TAB>New York`) keep their extra
+fragments. Relations (`R`) and events (`E`) are reported in the warnings rather
+than imported: brat relations reference `T` ids that have to be resolved to
+Potato span ids first, and getting that wrong would silently reattach a
+relation to the wrong span.
+
+### doccano
+
+```bash
+python -m potato.importers --input export.jsonl --output-dir potato-project/
+```
+
+Span entries are read in all three shapes doccano has emitted across versions
+(`[start, end, label]`, `start_offset`/`end_offset`, and `start`/`end`), so an
+older export works. Document categories become their own multiselect scheme.
+
+### Prodigy
+
+```bash
+python -m potato.importers --input db-out.jsonl --output-dir potato-project/
+```
+
+Tasks answered `reject` or `ignore` are not imported by default. A rejection is
+a human saying the annotations are wrong, and importing it as approved work
+turns that into positive signal. Pass `--prodigy-keep-rejected` to bring them
+in anyway. The `answer` field becomes a radio scheme, so the verdict survives
+either way.
+
+### CoNLL
+
+```bash
+python -m potato.importers --input eng.train --output-dir potato-project/
+```
+
+CoNLL is token-based: it records what the tokens are and what tag each carries,
+never where they sat in a string. So the text is **reconstructed** before any
+character offset exists, and how faithfully depends on what the file kept:
+
+- **CoNLL-U with `# text =`.** Exact, because the sentence string is in the
+  file.
+- **CoNLL-U without it.** Rebuilt from tokens. `SpaceAfter=No` in `MISC` is
+  honoured.
+- **CoNLL-2003.** Tokens joined with single spaces. The format records no
+  spacing at all, so `"Dr. Smith"` and `"Dr.  Smith"` produce the same file.
+
+The reconstruction is what gets stored, so the spans line up with what
+annotators see. The loss happens upstream, in what CoNLL records.
+
+`--conll-document-unit` decides what counts as one annotation item: `auto`
+(the default) follows `-DOCSTART-` and `# newdoc` markers and falls back to one
+item per sentence, which is how most NER corpora are distributed.
+
+---
+
+## Qualitative projects (REFI-QDA)
+
+`.qdpx` is the interchange format NVivo, ATLAS.ti, MAXQDA, Quirkos and QDA
+Miner all read and write.
+
+```bash
+python -m potato.importers --input project.qdpx --output-dir potato-project/
+```
+
+The codebook comes across with its hierarchy (each code keeps its parent),
+along with descriptions, colours, the codings themselves, and which annotator
+made each one.
+
+Exporting back out:
+
+```bash
+python -m potato.export -c config.yaml -f qdpx -o ./export/
+```
+
+!!! warning "ATLAS.ti supports one level of subcode"
+    REFI-QDA lets codes nest to any depth and so does Potato, but ATLAS.ti
+    flattens or drops anything past a single level on import — without telling
+    the researcher it happened. Export with `flatten_subcodes` to control that
+    yourself: every code is re-parented to the top level and renamed
+    `Parent > Child > Grandchild`, which loses the tree but keeps every code
+    legible.
+
+    Potato warns you when your codebook is deep enough for this to matter.
+
+### The offset trap
+
+REFI-QDA 1.5 §10.2 says selections are "defined by the first and the last
+character (Unicode codepoint)", which makes `endPosition` **inclusive** where
+Potato's `end` is exclusive. Exporting tools have not all read that the same
+way, and a file written with an exclusive end loses its last character on
+import.
+
+Potato measures both readings against the source text and uses the one that
+fits. It warns when a file contradicts the spec, and
+`--qdpx-end-position inclusive|exclusive` forces the reading if you need to.
+
+---
+
+## Computer vision
+
+```bash
+# A single annotation file
+python -m potato.importers --input instances_val2017.json \
+    --image-dir /data/val2017 --image-url-prefix /media \
+    --output-dir potato-project/
+
+# A directory dataset (YOLO, KITTI, VOC, ...)
+python -m potato.importers --input ./yolo-dataset/ --output-dir potato-project/
+
+# Straight from the HuggingFace Hub
+python -m potato.importers --hf-dataset cppe-5 --output-dir potato-project/
+```
+
+COCO files are read as-is: polygons, uncompressed RLE, compressed RLE strings
+and crowd regions all work without preprocessing. Category IDs survive the
+round trip, so an export keeps the original (often sparse) numbering.
+
+Full detail, including per-format caveats, is in
+[Import CLI](../tools/import_cli.md) and the
+[CV Format Matrix](../data-export/format_matrix.md).
+
+---
+
+## Verifying an import
+
+Imported annotations are pre-annotations, so an item nobody has opened exports
+as empty. That keeps machine output from being counted as human work, and it
+also makes an import hard to check end to end.
+
+`--seed-user` writes the imported annotations as one annotator's saved work so
+you can export immediately and diff:
+
+```bash
+python -m potato.importers --input ./corpus/ --output-dir p/ --seed-user check
+python -m potato.export -c p/config.yaml -f conll_2003 -o p/export/
+```
+
+!!! danger "`--seed-user` fabricates an annotator"
+    It exists to verify the round trip without a human opening every item.
+    Never include a seeded user in agreement or adjudication analysis.
+
+---
+
+## Known gaps
+
+Each of these produces a warning on the import rather than a silence:
+
+- **brat relations and events.** Reported in the warnings.
+- **Sub-token spans through CoNLL.** A span covering `Paris` inside the token
+  `Paris.` comes back as the whole token, since a file with sub-token spans is
+  one no other CoNLL tool can read.
+- **Whitespace, through CoNLL-2003.** The format does not record it.
+- **Non-text QDA sources.** Picture, PDF, audio and video sources in a `.qdpx`
+  are not imported yet; text sources are.
+- **Uncoded selections in a `.qdpx`.** A highlight with no code attached has
+  nothing to import. Counted in the warnings.
+
+---
+
+## Related
+
+- [Import CLI](../tools/import_cli.md) — every flag
+- [Export Formats](../data-export/export_formats.md) — going the other way
+- [Qualitative Data Analysis](../advanced/qda.md) — what Potato does once a QDA
+  project is in
 
 
 ---
@@ -3975,6 +4263,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `adjudication` |  | object |  | Resolve disagreements through an adjudication queue | `adjudicator_users`, `agreement_threshold`, `enabled`, `error_taxonomy`, `fast_decision_warning_ms`, `min_annotations`, `output_subdir`, `require_confidence`, `require_notes_on_override`, `show_agreement_scores`, `show_all_items`, `show_annotator_names`, `show_timing_data`, `similarity` |
 | `agreement_metrics` |  | object |  | Which inter-annotator agreement measures the admin pages compute | `enabled`, `min_overlap`, `refresh_interval` |
 | `attention_checks` |  | object |  | Insert items with a known answer to detect inattentive annotators | `enabled`, `failure_handling`, `frequency`, `items_file`, `min_response_time`, `probability` |
+| `calibration` |  | object |  | Agreement drift tracking and the re-calibration prompt on /admin/iaa. Agreement is scored per time window so a fall in recent work is visible, instead of averaging into one whole-project number | `drop_threshold`, `enabled`, `window_by`, `windows` |
 | `gold_standards` |  | object |  | Items with known labels, used to score annotators | `accuracy`, `auto_promote`, `enabled`, `frequency`, `items_file`, `mode` |
 | `gold_standards_file` |  | string |  | Gold items file, the flat alternative to the gold_standards block |  |
 | `quality_control` |  | object |  | Aggregate quality thresholds and actions |  |
@@ -3985,6 +4274,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `active_learning` |  | object |  | Order items by model uncertainty | `annotation_routing`, `bald_params`, `calibrate_probabilities`, `classifier`, `classifier_params`, `cold_start_strategy`, `confidence_method`, `database`, `enabled`, `hybrid_weights`, `icl_ensemble_params`, `llm`, `max_instances_to_reorder`, `min_annotations_per_instance`, `min_instances_for_training`, `model_persistence`, `query_strategy`, `random_sample_percent`, `resolution_strategy`, `routing_thresholds`, `schema_names`, `update_frequency`, `use_icl_ensemble`, `vectorizer`, `vectorizer_params` |
+| `ai_budget` |  | object |  | Cost estimate and spend cap for AI actions. The complaint about commercial platforms is not the price but the surprise -- credits consumed by auto-labelling and discovered at export time | `cap_usd` |
 | `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `option_highlighting` |
 | `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `ui` |
 | `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected |  |
@@ -4041,7 +4331,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `task_layout` |  | string |  | Custom HTML for the annotation form area |  |
 | `ui` |  | object |  | Interface toggles |  |
 | `ui_config` |  | object |  | Additional interface settings |  |
-| `ui_language` |  | string | `en` | Interface language code | `_base`, `adjudicate`, `admin_btn_computing`, `admin_btn_generate_scores`, `admin_btn_reload`, `admin_btn_save_changes`, `admin_err_annotators`, `admin_err_behavioral`, `admin_err_config`, `admin_err_crowdsourcing`, `admin_err_instances`, `admin_err_mace_load`, `admin_err_mace_trigger`, `admin_err_overview`, `admin_err_questions`, `admin_filter_all`, `admin_filter_completed`, `admin_filter_incomplete`, `admin_hint_unlimited`, `admin_label_assignment_strategy`, `admin_label_max_per_item`, `admin_label_max_per_user`, `admin_login_help`, `admin_login_key_label`, `admin_login_key_placeholder`, `admin_login_submit`, `admin_login_title`, `admin_mace_predicted_help`, `admin_mace_run_predictions`, `admin_mode_badge`, `admin_ok_config_saved`, `admin_opt_color_mace`, `admin_opt_color_majority`, `admin_opt_per_page`, `admin_opt_scoring_counting`, `admin_opt_strat_active_learning`, `admin_opt_strat_fixed_order`, `admin_opt_strat_least_annotated`, `admin_opt_strat_llm_confidence`, `admin_opt_strat_max_diversity`, `admin_opt_strat_random`, `admin_order_asc`, `admin_order_desc`, `admin_page_title`, `admin_section_ai_usage`, `admin_section_bws_scores`, `admin_section_competence`, `admin_section_predicted_labels`, `admin_section_quality`, `admin_section_system_config`, `admin_section_system_info`, `admin_sort_annotations`, `admin_sort_avg_time`, `admin_sort_completion`, `admin_sort_disagreement`, `admin_sort_id`, `admin_tab_annotators`, `admin_tab_behavioral`, `admin_tab_bws`, `admin_tab_configuration`, `admin_tab_crowdsourcing`, `admin_tab_datasets`, `admin_tab_embeddings`, `admin_tab_instances`, `admin_tab_mace`, `admin_tab_overview`, `admin_tab_questions`, `admin_th_ai_accept_rate`, `admin_th_ai_requests`, `admin_th_annotations`, `admin_th_annotator`, `admin_th_annotators`, `admin_th_appearances`, `admin_th_assignment_id`, `admin_th_avg_time`, `admin_th_avg_time_per_annotation`, `admin_th_avg_time_s`, `admin_th_best_count`, `admin_th_changes`, `admin_th_competence`, `admin_th_completion`, `admin_th_completion_pct`, `admin_th_disagreement`, `admin_th_instance`, `admin_th_instance_id`, `admin_th_instances`, `admin_th_interactions`, `admin_th_item_id`, `admin_th_last_activity`, `admin_th_max_instances`, `admin_th_most_frequent_label`, `admin_th_num_ai_used`, `admin_th_phase`, `admin_th_predicted_label`, `admin_th_rank`, `admin_th_reliability`, `admin_th_score`, `admin_th_session_id`, `admin_th_speed`, `admin_th_speed_per_hour`, `admin_th_status`, `admin_th_suspicion`, `admin_th_text`, `admin_th_text_preview`, `admin_th_time`, `admin_th_uncertainty`, `admin_th_user_id`, `admin_th_worker_id`, `admin_th_working_time`, `admin_th_worst_count`, `arena_empty`, `arena_enter_prompt`, `arena_error_prefix`, `arena_export`, `arena_export_title`, `arena_failed`, `arena_heading`, `arena_lb_note`, `arena_leaderboard_heading`, `arena_lede`, `arena_models_label`, `arena_ms`, `arena_no_dpo_pairs`, `arena_page_title`, `arena_pick_as_best`, `arena_picked`, `arena_prompt_heading`, `arena_prompt_placeholder`, `arena_responses_heading`, `arena_run`, `arena_running`, `arena_sent_to`, `arena_th_bt`, `arena_th_comparisons`, `arena_th_elo`, `arena_th_model`, `arena_th_win_rate`, `arena_th_wins`, `audio_to_annotate`, `automation_actions_error`, `automation_actions_ok`, `automation_actions_skipped`, `automation_activity`, `automation_col_action`, `automation_col_actions`, `automation_col_detail`, `automation_col_enabled`, `automation_col_item`, `automation_col_rule`, `automation_col_sample_rate`, `automation_col_status`, `automation_configured_rules`, `automation_heading`, `automation_items_processed`, `automation_latest`, `automation_lede_1`, `automation_lede_2`, `automation_lede_3`, `automation_no`, `automation_no_actions`, `automation_no_rules`, `automation_page_title`, `automation_recent_outcomes`, `automation_reload`, `automation_rules_fired`, `automation_snapshot_title`, `automation_yes`, `catalog_all_placeholder`, `catalog_anchor_label`, `catalog_anchor_placeholder`, `catalog_build_index`, `catalog_clusters_label`, `catalog_discover_button`, `catalog_discover_desc`, `catalog_discover_heading`, `catalog_embeddings_warn_1`, `catalog_embeddings_warn_2`, `catalog_heading`, `catalog_index_heading`, `catalog_items_indexed`, `catalog_lede_1`, `catalog_lede_2`, `catalog_lede_3`, `catalog_lede_slices`, `catalog_lede_what`, `catalog_more_traces_suffix`, `catalog_no_matches`, `catalog_no_slices`, `catalog_page_title`, `catalog_prompt_curate_prefix`, `catalog_prompt_curate_suffix`, `catalog_query_text_label`, `catalog_query_text_placeholder`, `catalog_resolve_button`, `catalog_save_slice_button`, `catalog_search_button`, `catalog_search_heading`, `catalog_slice_name_label`, `catalog_slice_query_label`, `catalog_slice_query_placeholder`, `catalog_slice_threshold_label`, `catalog_slices_heading`, `catalog_status_building`, `catalog_status_candidate_modes`, `catalog_status_clustering`, `catalog_status_curating`, `catalog_status_failed`, `catalog_status_imported_mid`, `catalog_status_imported_prefix`, `catalog_status_imported_suffix`, `catalog_status_indexed_prefix`, `catalog_status_indexed_suffix`, `catalog_status_matching_instances`, `catalog_status_name_required`, `catalog_status_results_suffix`, `catalog_status_saved`, `catalog_status_searching`, `catalog_th_actions`, `catalog_th_instance`, `catalog_th_query_anchor`, `catalog_th_similarity`, `catalog_th_slice`, `catalog_th_threshold`, `catalog_threshold_label`, `catalog_to_dataset_button`, `catalog_topk_label`, `catalog_traces_suffix`, `catalog_unlabeled`, `choose_username_placeholder`, `cite_us`, `codebook`, `continue_button`, `create_password_placeholder`, `dash_assigned_completed`, `dash_back_to_annotating`, `dash_error`, `dash_items_started_pct`, `dash_loading`, `dash_no_items_assigned`, `dash_no_items_project`, `dash_project_progress`, `dash_readonly`, `dash_stat_active_annotators`, `dash_stat_annotated`, `dash_stat_annotations`, `dash_stat_assigned`, `dash_stat_complete`, `dash_stat_items_started`, `dash_stat_total_items`, `dash_subtitle`, `dash_your_progress`, `datasets_annotation_process`, `datasets_assignment_active`, `datasets_assignment_paused`, `datasets_col_cmp`, `datasets_col_created`, `datasets_col_dataset`, `datasets_col_examples`, `datasets_col_experiment`, `datasets_col_scores`, `datasets_col_version`, `datasets_compare_selected`, `datasets_create_dataset_btn`, `datasets_created`, `datasets_creating`, `datasets_dataset_label`, `datasets_datasets_heading`, `datasets_description_label`, `datasets_done`, `datasets_evaluators_label`, `datasets_example_label`, `datasets_examples_label`, `datasets_experiments_heading`, `datasets_failed`, `datasets_heading`, `datasets_lede`, `datasets_llm_judge_note`, `datasets_loading_status`, `datasets_name_hint`, `datasets_name_label`, `datasets_new_dataset`, `datasets_no_datasets`, `datasets_no_experiments`, `datasets_optional_placeholder`, `datasets_page_title`, `datasets_pause_assignment`, `datasets_pick_dataset_evaluator`, `datasets_resume_assignment`, `datasets_run_btn`, `datasets_run_experiment`, `datasets_running`, `datasets_select_dataset`, `datasets_select_label`, `datasets_stat_annotated`, `datasets_stat_annotators`, `datasets_stat_datasets`, `datasets_stat_experiments`, `datasets_stat_ingested`, `datasets_stat_instances`, `datasets_stat_multi_annotated`, `datasets_stat_remaining`, `datasets_status_unavailable`, `datasets_version_label`, `datasets_versions_label`, `dsdetail_back_link`, `dsdetail_col_created`, `dsdetail_col_examples`, `dsdetail_col_experiment`, `dsdetail_col_id`, `dsdetail_col_inputs`, `dsdetail_col_note`, `dsdetail_col_reference`, `dsdetail_col_scores`, `dsdetail_col_split`, `dsdetail_col_tags`, `dsdetail_col_version`, `dsdetail_examples_heading`, `dsdetail_examples_subtitle`, `dsdetail_experiments_heading`, `dsdetail_export_dpo`, `dsdetail_export_dpo_title`, `dsdetail_export_sft`, `dsdetail_export_sft_title`, `dsdetail_import_instances`, `dsdetail_import_instances_title`, `dsdetail_import_traces`, `dsdetail_import_traces_title`, `dsdetail_include_annotations`, `dsdetail_no_examples`, `dsdetail_no_experiments`, `dsdetail_no_versions`, `dsdetail_status_import_failed`, `dsdetail_status_imported`, `dsdetail_status_imported_suffix`, `dsdetail_status_importing`, `dsdetail_tag_button`, `dsdetail_tag_input_label`, `dsdetail_tag_placeholder`, `dsdetail_versions_heading`, `error_heading`, `evalanalytics_alerts_heading`, `evalanalytics_col_avg_latency`, `evalanalytics_col_cost`, `evalanalytics_col_errors`, `evalanalytics_col_model`, `evalanalytics_col_tokens`, `evalanalytics_col_traces`, `evalanalytics_empty`, `evalanalytics_lede_after`, `evalanalytics_lede_before`, `evalanalytics_lede_tail`, `evalanalytics_permodel_aria`, `evalanalytics_permodel_heading`, `evalanalytics_stat_avg_latency`, `evalanalytics_stat_error_rate`, `evalanalytics_stat_p95_latency`, `evalanalytics_stat_total_cost`, `evalanalytics_stat_total_tokens`, `evalanalytics_stat_traces`, `evalanalytics_title`, `expcompare_back_link`, `expcompare_baseline`, `expcompare_ci_label`, `expcompare_col_metric`, `expcompare_empty`, `expcompare_heading`, `expcompare_lede_part1`, `expcompare_lede_part2`, `expcompare_lede_strong`, `expcompare_not_significant`, `expcompare_page_title`, `expcompare_row_examples`, `expcompare_sig_title`, `expcompare_significant`, `forgot_password`, `go_button`, `html_dir`, `html_lang`, `iaa_admin_dashboard`, `iaa_agreement`, `iaa_annotators`, `iaa_at_cap`, `iaa_band_fair`, `iaa_band_moderate`, `iaa_band_poor`, `iaa_band_strong`, `iaa_band_substantial`, `iaa_band_weak`, `iaa_empty_state`, `iaa_fully_aligned_items`, `iaa_items`, `iaa_meta_scored`, `iaa_na`, `iaa_overlap_sample`, `iaa_per_item_breakdown`, `iaa_scale_correlation_label`, `iaa_scale_correlation_note`, `iaa_scale_coverage_label`, `iaa_scale_coverage_note`, `iaa_scale_distribution_label`, `iaa_scale_distribution_note`, `iaa_scale_kappa_label`, `iaa_scale_lower_label`, `iaa_scale_lower_note`, `iaa_scale_raw_label`, `iaa_scale_raw_note`, `iaa_scale_span_label`, `iaa_scale_span_note_post`, `iaa_scale_span_note_pre`, `iaa_sweep_headline`, `iaa_sweep_note`, `iaa_sweep_title`, `iaa_th_annotators`, `iaa_th_cap`, `iaa_th_instance`, `iaa_th_metric`, `iaa_th_value`, `iaa_title`, `iaa_title_overlap_sample`, `in_progress_badge`, `instructions_heading`, `integrity_annotators_suffix`, `integrity_col_annotator`, `integrity_col_ca_score`, `integrity_col_flags`, `integrity_col_items`, `integrity_col_llm_alignment`, `integrity_col_residual`, `integrity_col_suspicion`, `integrity_correlated_agreement`, `integrity_heading`, `integrity_lede`, `integrity_lede_ca_desc`, `integrity_lede_residual_desc`, `integrity_lede_with_low`, `integrity_lede_without_ground_truth`, `integrity_llm_alignment`, `integrity_llm_labels_available`, `integrity_no_annotations`, `integrity_no_llm_labels`, `integrity_page_title`, `integrity_residual`, `judge_above`, `judge_agreement`, `judge_autocalibrate`, `judge_autocalibrate_intro_1`, `judge_autocalibrate_intro_2`, `judge_autocalibrate_intro_3`, `judge_autocalibrate_intro_4`, `judge_autocalibrate_intro_5`, `judge_bias_robustness`, `judge_chars`, `judge_cohens_kappa`, `judge_col_conf`, `judge_col_human`, `judge_col_instance`, `judge_col_judge`, `judge_col_reasoning`, `judge_compared_n`, `judge_confusion_caption`, `judge_confusion_caption_2`, `judge_confusion_label`, `judge_corrected`, `judge_current_paren`, `judge_current_prompt_version`, `judge_disagreements`, `judge_empty_1`, `judge_empty_2`, `judge_empty_3`, `judge_eval_cards`, `judge_eval_cards_intro`, `judge_heading`, `judge_human_vs_judge`, `judge_intro`, `judge_length_bias`, `judge_mean_kappa`, `judge_mean_kappa_drift`, `judge_over_versions`, `judge_page_title`, `judge_predictions`, `judge_prompt_versions`, `jump_next_unannotated`, `jump_prev_unannotated`, `labeled_badge`, `loading`, `login_subtitle_password`, `login_subtitle_username`, `login_title`, `logout`, `next_button`, `not_labeled_badge`, `or_divider`, `password_label`, `powered_by`, `previous_button`, `progress_label`, `register_button`, `register_tab`, `retry_button`, `sign_in_button`, `sign_in_tab`, `sign_in_with`, `submit_button`, `text_to_annotate`, `triage_col_annotations`, `triage_col_assigned`, `triage_col_instance`, `triage_col_priority`, `triage_col_reason`, `triage_empty_queue`, `triage_flagged`, `triage_heading`, `triage_intro_before`, `triage_intro_served`, `triage_intro_signal`, `triage_items_remaining`, `triage_no`, `triage_not_enabled_after`, `triage_not_enabled_before`, `triage_not_enabled_rank`, `triage_page_title`, `triage_priority_label`, `triage_summary_aria`, `triage_table_caption`, `triage_yes`, `username_label`, `username_placeholder`, `video_to_annotate` |
+| `ui_language` |  | string | `en` | Interface language code | `_base`, `adjudicate`, `admin_btn_computing`, `admin_btn_generate_scores`, `admin_btn_reload`, `admin_btn_save_changes`, `admin_err_annotators`, `admin_err_behavioral`, `admin_err_config`, `admin_err_crowdsourcing`, `admin_err_instances`, `admin_err_mace_load`, `admin_err_mace_trigger`, `admin_err_overview`, `admin_err_questions`, `admin_filter_all`, `admin_filter_completed`, `admin_filter_incomplete`, `admin_hint_unlimited`, `admin_label_assignment_strategy`, `admin_label_max_per_item`, `admin_label_max_per_user`, `admin_login_help`, `admin_login_key_label`, `admin_login_key_placeholder`, `admin_login_submit`, `admin_login_title`, `admin_mace_predicted_help`, `admin_mace_run_predictions`, `admin_mode_badge`, `admin_ok_config_saved`, `admin_opt_color_mace`, `admin_opt_color_majority`, `admin_opt_per_page`, `admin_opt_scoring_counting`, `admin_opt_strat_active_learning`, `admin_opt_strat_fixed_order`, `admin_opt_strat_least_annotated`, `admin_opt_strat_llm_confidence`, `admin_opt_strat_max_diversity`, `admin_opt_strat_random`, `admin_order_asc`, `admin_order_desc`, `admin_page_title`, `admin_section_ai_usage`, `admin_section_bws_scores`, `admin_section_competence`, `admin_section_predicted_labels`, `admin_section_quality`, `admin_section_system_config`, `admin_section_system_info`, `admin_sort_annotations`, `admin_sort_avg_time`, `admin_sort_completion`, `admin_sort_disagreement`, `admin_sort_id`, `admin_tab_annotators`, `admin_tab_behavioral`, `admin_tab_bws`, `admin_tab_configuration`, `admin_tab_crowdsourcing`, `admin_tab_datasets`, `admin_tab_embeddings`, `admin_tab_instances`, `admin_tab_mace`, `admin_tab_overview`, `admin_tab_questions`, `admin_th_ai_accept_rate`, `admin_th_ai_requests`, `admin_th_annotations`, `admin_th_annotator`, `admin_th_annotators`, `admin_th_appearances`, `admin_th_assignment_id`, `admin_th_avg_time`, `admin_th_avg_time_per_annotation`, `admin_th_avg_time_s`, `admin_th_best_count`, `admin_th_changes`, `admin_th_competence`, `admin_th_completion`, `admin_th_completion_pct`, `admin_th_disagreement`, `admin_th_instance`, `admin_th_instance_id`, `admin_th_instances`, `admin_th_interactions`, `admin_th_item_id`, `admin_th_last_activity`, `admin_th_max_instances`, `admin_th_most_frequent_label`, `admin_th_num_ai_used`, `admin_th_phase`, `admin_th_predicted_label`, `admin_th_rank`, `admin_th_reliability`, `admin_th_score`, `admin_th_session_id`, `admin_th_speed`, `admin_th_speed_per_hour`, `admin_th_status`, `admin_th_suspicion`, `admin_th_text`, `admin_th_text_preview`, `admin_th_time`, `admin_th_uncertainty`, `admin_th_user_id`, `admin_th_worker_id`, `admin_th_working_time`, `admin_th_worst_count`, `arena_empty`, `arena_enter_prompt`, `arena_error_prefix`, `arena_export`, `arena_export_title`, `arena_failed`, `arena_heading`, `arena_lb_note`, `arena_leaderboard_heading`, `arena_lede`, `arena_models_label`, `arena_ms`, `arena_no_dpo_pairs`, `arena_page_title`, `arena_pick_as_best`, `arena_picked`, `arena_prompt_heading`, `arena_prompt_placeholder`, `arena_responses_heading`, `arena_run`, `arena_running`, `arena_sent_to`, `arena_th_bt`, `arena_th_comparisons`, `arena_th_elo`, `arena_th_model`, `arena_th_win_rate`, `arena_th_wins`, `audio_to_annotate`, `automation_actions_error`, `automation_actions_ok`, `automation_actions_skipped`, `automation_activity`, `automation_col_action`, `automation_col_actions`, `automation_col_detail`, `automation_col_enabled`, `automation_col_item`, `automation_col_rule`, `automation_col_sample_rate`, `automation_col_status`, `automation_configured_rules`, `automation_heading`, `automation_items_processed`, `automation_latest`, `automation_lede_1`, `automation_lede_2`, `automation_lede_3`, `automation_no`, `automation_no_actions`, `automation_no_rules`, `automation_page_title`, `automation_recent_outcomes`, `automation_reload`, `automation_rules_fired`, `automation_snapshot_title`, `automation_yes`, `catalog_all_placeholder`, `catalog_anchor_label`, `catalog_anchor_placeholder`, `catalog_build_index`, `catalog_clusters_label`, `catalog_discover_button`, `catalog_discover_desc`, `catalog_discover_heading`, `catalog_embeddings_warn_1`, `catalog_embeddings_warn_2`, `catalog_heading`, `catalog_index_heading`, `catalog_items_indexed`, `catalog_lede_1`, `catalog_lede_2`, `catalog_lede_3`, `catalog_lede_slices`, `catalog_lede_what`, `catalog_more_traces_suffix`, `catalog_no_matches`, `catalog_no_slices`, `catalog_page_title`, `catalog_prompt_curate_prefix`, `catalog_prompt_curate_suffix`, `catalog_query_text_label`, `catalog_query_text_placeholder`, `catalog_resolve_button`, `catalog_save_slice_button`, `catalog_search_button`, `catalog_search_heading`, `catalog_slice_name_label`, `catalog_slice_query_label`, `catalog_slice_query_placeholder`, `catalog_slice_threshold_label`, `catalog_slices_heading`, `catalog_status_building`, `catalog_status_candidate_modes`, `catalog_status_clustering`, `catalog_status_curating`, `catalog_status_failed`, `catalog_status_imported_mid`, `catalog_status_imported_prefix`, `catalog_status_imported_suffix`, `catalog_status_indexed_prefix`, `catalog_status_indexed_suffix`, `catalog_status_matching_instances`, `catalog_status_name_required`, `catalog_status_results_suffix`, `catalog_status_saved`, `catalog_status_searching`, `catalog_th_actions`, `catalog_th_instance`, `catalog_th_query_anchor`, `catalog_th_similarity`, `catalog_th_slice`, `catalog_th_threshold`, `catalog_threshold_label`, `catalog_to_dataset_button`, `catalog_topk_label`, `catalog_traces_suffix`, `catalog_unlabeled`, `choose_username_placeholder`, `cite_us`, `codebook`, `continue_button`, `create_password_placeholder`, `dash_assigned_completed`, `dash_back_to_annotating`, `dash_error`, `dash_items_started_pct`, `dash_loading`, `dash_no_items_assigned`, `dash_no_items_project`, `dash_project_progress`, `dash_readonly`, `dash_stat_active_annotators`, `dash_stat_annotated`, `dash_stat_annotations`, `dash_stat_assigned`, `dash_stat_complete`, `dash_stat_items_started`, `dash_stat_total_items`, `dash_subtitle`, `dash_your_progress`, `datasets_annotation_process`, `datasets_assignment_active`, `datasets_assignment_paused`, `datasets_col_cmp`, `datasets_col_created`, `datasets_col_dataset`, `datasets_col_examples`, `datasets_col_experiment`, `datasets_col_scores`, `datasets_col_version`, `datasets_compare_selected`, `datasets_create_dataset_btn`, `datasets_created`, `datasets_creating`, `datasets_dataset_label`, `datasets_datasets_heading`, `datasets_description_label`, `datasets_done`, `datasets_evaluators_label`, `datasets_example_label`, `datasets_examples_label`, `datasets_experiments_heading`, `datasets_failed`, `datasets_heading`, `datasets_lede`, `datasets_llm_judge_note`, `datasets_loading_status`, `datasets_name_hint`, `datasets_name_label`, `datasets_new_dataset`, `datasets_no_datasets`, `datasets_no_experiments`, `datasets_optional_placeholder`, `datasets_page_title`, `datasets_pause_assignment`, `datasets_pick_dataset_evaluator`, `datasets_resume_assignment`, `datasets_run_btn`, `datasets_run_experiment`, `datasets_running`, `datasets_select_dataset`, `datasets_select_label`, `datasets_stat_annotated`, `datasets_stat_annotators`, `datasets_stat_datasets`, `datasets_stat_experiments`, `datasets_stat_ingested`, `datasets_stat_instances`, `datasets_stat_multi_annotated`, `datasets_stat_remaining`, `datasets_status_unavailable`, `datasets_version_label`, `datasets_versions_label`, `dsdetail_back_link`, `dsdetail_col_created`, `dsdetail_col_examples`, `dsdetail_col_experiment`, `dsdetail_col_id`, `dsdetail_col_inputs`, `dsdetail_col_note`, `dsdetail_col_reference`, `dsdetail_col_scores`, `dsdetail_col_split`, `dsdetail_col_tags`, `dsdetail_col_version`, `dsdetail_examples_heading`, `dsdetail_examples_subtitle`, `dsdetail_experiments_heading`, `dsdetail_export_dpo`, `dsdetail_export_dpo_title`, `dsdetail_export_sft`, `dsdetail_export_sft_title`, `dsdetail_import_instances`, `dsdetail_import_instances_title`, `dsdetail_import_traces`, `dsdetail_import_traces_title`, `dsdetail_include_annotations`, `dsdetail_no_examples`, `dsdetail_no_experiments`, `dsdetail_no_versions`, `dsdetail_status_import_failed`, `dsdetail_status_imported`, `dsdetail_status_imported_suffix`, `dsdetail_status_importing`, `dsdetail_tag_button`, `dsdetail_tag_input_label`, `dsdetail_tag_placeholder`, `dsdetail_versions_heading`, `error_heading`, `evalanalytics_alerts_heading`, `evalanalytics_col_avg_latency`, `evalanalytics_col_cost`, `evalanalytics_col_errors`, `evalanalytics_col_model`, `evalanalytics_col_tokens`, `evalanalytics_col_traces`, `evalanalytics_empty`, `evalanalytics_lede_after`, `evalanalytics_lede_before`, `evalanalytics_lede_tail`, `evalanalytics_permodel_aria`, `evalanalytics_permodel_heading`, `evalanalytics_stat_avg_latency`, `evalanalytics_stat_error_rate`, `evalanalytics_stat_p95_latency`, `evalanalytics_stat_total_cost`, `evalanalytics_stat_total_tokens`, `evalanalytics_stat_traces`, `evalanalytics_title`, `expcompare_back_link`, `expcompare_baseline`, `expcompare_ci_label`, `expcompare_col_metric`, `expcompare_empty`, `expcompare_heading`, `expcompare_lede_part1`, `expcompare_lede_part2`, `expcompare_lede_strong`, `expcompare_not_significant`, `expcompare_page_title`, `expcompare_row_examples`, `expcompare_sig_title`, `expcompare_significant`, `forgot_password`, `go_button`, `html_dir`, `html_lang`, `iaa_admin_dashboard`, `iaa_agreement`, `iaa_annotators`, `iaa_at_cap`, `iaa_band_fair`, `iaa_band_moderate`, `iaa_band_poor`, `iaa_band_strong`, `iaa_band_substantial`, `iaa_band_weak`, `iaa_drift_approx`, `iaa_drift_baseline`, `iaa_drift_below_baseline`, `iaa_drift_codebook_changes`, `iaa_drift_note`, `iaa_drift_recalibrate`, `iaa_drift_sparse`, `iaa_drift_th_window`, `iaa_drift_title`, `iaa_drift_untimed`, `iaa_empty_state`, `iaa_fully_aligned_items`, `iaa_items`, `iaa_meta_scored`, `iaa_na`, `iaa_overlap_sample`, `iaa_per_item_breakdown`, `iaa_scale_correlation_label`, `iaa_scale_correlation_note`, `iaa_scale_coverage_label`, `iaa_scale_coverage_note`, `iaa_scale_distribution_label`, `iaa_scale_distribution_note`, `iaa_scale_kappa_label`, `iaa_scale_lower_label`, `iaa_scale_lower_note`, `iaa_scale_raw_label`, `iaa_scale_raw_note`, `iaa_scale_span_label`, `iaa_scale_span_note_post`, `iaa_scale_span_note_pre`, `iaa_sweep_headline`, `iaa_sweep_note`, `iaa_sweep_title`, `iaa_th_annotators`, `iaa_th_cap`, `iaa_th_instance`, `iaa_th_metric`, `iaa_th_value`, `iaa_title`, `iaa_title_overlap_sample`, `in_progress_badge`, `instructions_heading`, `integrity_annotators_suffix`, `integrity_col_annotator`, `integrity_col_ca_score`, `integrity_col_flags`, `integrity_col_items`, `integrity_col_llm_alignment`, `integrity_col_residual`, `integrity_col_suspicion`, `integrity_correlated_agreement`, `integrity_heading`, `integrity_lede`, `integrity_lede_ca_desc`, `integrity_lede_residual_desc`, `integrity_lede_with_low`, `integrity_lede_without_ground_truth`, `integrity_llm_alignment`, `integrity_llm_labels_available`, `integrity_no_annotations`, `integrity_no_llm_labels`, `integrity_page_title`, `integrity_residual`, `judge_above`, `judge_agreement`, `judge_autocalibrate`, `judge_autocalibrate_intro_1`, `judge_autocalibrate_intro_2`, `judge_autocalibrate_intro_3`, `judge_autocalibrate_intro_4`, `judge_autocalibrate_intro_5`, `judge_bias_robustness`, `judge_chars`, `judge_cohens_kappa`, `judge_col_conf`, `judge_col_human`, `judge_col_instance`, `judge_col_judge`, `judge_col_reasoning`, `judge_compared_n`, `judge_confusion_caption`, `judge_confusion_caption_2`, `judge_confusion_label`, `judge_corrected`, `judge_current_paren`, `judge_current_prompt_version`, `judge_disagreements`, `judge_empty_1`, `judge_empty_2`, `judge_empty_3`, `judge_eval_cards`, `judge_eval_cards_intro`, `judge_heading`, `judge_human_vs_judge`, `judge_intro`, `judge_length_bias`, `judge_mean_kappa`, `judge_mean_kappa_drift`, `judge_over_versions`, `judge_page_title`, `judge_predictions`, `judge_prompt_versions`, `jump_next_unannotated`, `jump_prev_unannotated`, `labeled_badge`, `loading`, `login_subtitle_password`, `login_subtitle_username`, `login_title`, `logout`, `next_button`, `not_labeled_badge`, `or_divider`, `password_label`, `powered_by`, `previous_button`, `progress_label`, `register_button`, `register_tab`, `retry_button`, `sign_in_button`, `sign_in_tab`, `sign_in_with`, `submit_button`, `text_to_annotate`, `triage_col_annotations`, `triage_col_assigned`, `triage_col_instance`, `triage_col_priority`, `triage_col_reason`, `triage_empty_queue`, `triage_flagged`, `triage_heading`, `triage_intro_before`, `triage_intro_served`, `triage_intro_signal`, `triage_items_remaining`, `triage_no`, `triage_not_enabled_after`, `triage_not_enabled_before`, `triage_not_enabled_rank`, `triage_page_title`, `triage_priority_label`, `triage_summary_aria`, `triage_table_caption`, `triage_yes`, `username_label`, `username_placeholder`, `video_to_annotate` |
 
 ## Content
 
@@ -4141,7 +4431,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `alert_time_each_instance` |  | integer | `10000000` | Seconds an annotator may spend on one item before being warned. The default is effectively no limit |  |
-| `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, or psychometric |  |
+| `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, or psychometric |  |
 | `automatic_assignment` |  | object |  | Assign items to annotators automatically as they arrive |  |
 | `batch_assignment` |  | object |  | Split items into named groups and assign whole batches | `annotator_key`, `auto_assign_annotators`, `groups` |
 | `instance_reclaim` |  | object |  | Take assignments back from annotators who abandoned them so the items can go out again. `enabled` (false) and `timeout_hours` (24), plus optional `stale`, `manual`, `quality_control` and `prolific` sections each carrying `preserve_completed_annotations` |  |
@@ -4189,19 +4479,19 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `likert` | `min_label`, `max_label`, `size` | `label_requirement`, `labels`, `displaying_score`, `bad_text_label`, `sequential_key_binding` | Likert scale rating | `examples/classification/likert/config.yaml` |
 | `multi_document_event` | `slots` | `allow_annotator_create`, `template_name` | Cross-document event annotation: template slots filled with evidence from many documents | `examples/advanced/multi-document-events/config.yaml` |
 | `multimodal_reasoning` | (none beyond name/description) | `steps_key`, `type_key`, `verdict_options` | Interleaved text/image/tool reasoning trace: per-step coherence + visual-hallucination rating | `examples/agent-traces/multimodal-reasoning/config.yaml` |
-| `multirate` | `options`, `labels` | `label_requirement`, `options_from_data`, `display_config`, `arrangement` | Rate multiple items on a scale | `examples/classification/multirate/config.yaml` |
-| `multiselect` | `labels` | `display_config`, `label_requirement`, `sequential_key_binding`, `video_as_label`, `has_free_response`, `option_randomization`, `dynamic_options`, `dynamic_options_field`, `codebook` | Multiple-choice checkbox selection | `examples/classification/check-box/config.yaml` |
+| `multirate` | `options`, `labels` | `label_requirement`, `options_from_data`, `display_config`, `arrangement`, `randomize_order` | Rate multiple items on a scale | `examples/classification/multirate/config.yaml` |
+| `multiselect` | `labels` | `display_config`, `label_requirement`, `sequential_key_binding`, `video_as_label`, `has_free_response`, `option_randomization`, `dynamic_options`, `dynamic_options_field`, `codebook`, `randomize_order` | Multiple-choice checkbox selection | `examples/classification/check-box/config.yaml` |
 | `number` | (none beyond name/description) | `min`, `max`, `step`, `label_requirement`, `min_value`, `max_value`, `custom_css`, `tooltip`, `tooltip_file` | Numeric input field | `examples/advanced/all-annotation-types/config.yaml` |
-| `pairwise` | (none beyond name/description) | `mode`, `items_key`, `items`, `show_labels`, `labels`, `allow_tie`, `tie_label`, `sequential_key_binding`, `scale`, `label_requirement`, `dimensions`, `justification` | Pairwise comparison of two items (binary selection or scale rating) | `examples/classification/pairwise-scale/config.yaml` |
+| `pairwise` | (none beyond name/description) | `mode`, `items_key`, `items`, `show_labels`, `labels`, `allow_tie`, `tie_label`, `sequential_key_binding`, `scale`, `label_requirement`, `dimensions`, `justification`, `randomize_order` | Pairwise comparison of two items (binary selection or scale rating) | `examples/classification/pairwise-scale/config.yaml` |
 | `process_reward` | (none beyond name/description) | `steps_key`, `step_text_key`, `mode`, `allow_neutral`, `inline_with_trace`, `ai_prelabel`, `require_verification`, `reward_labels` | Per-step process reward signals for PRM training | `examples/agent-traces/cot-process-reward/config.yaml` |
 | `pure_display` | (none beyond name/description) | `labels`, `allow_html` | Display-only content (instructions, headers) | `examples/advanced/all-annotation-types/config.yaml` |
-| `radio` | `labels` | `horizontal`, `label_requirement`, `sequential_key_binding`, `has_free_response`, `option_randomization`, `dynamic_options`, `dynamic_options_field`, `codebook` | Single-choice radio button selection | `examples/classification/single-choice/config.yaml` |
+| `radio` | `labels` | `horizontal`, `label_requirement`, `sequential_key_binding`, `has_free_response`, `option_randomization`, `dynamic_options`, `dynamic_options_field`, `codebook`, `randomize_order` | Single-choice radio button selection | `examples/classification/single-choice/config.yaml` |
 | `range_slider` | (none beyond name/description) | `min_value`, `max_value`, `step`, `left_label`, `right_label`, `show_values` | Dual-thumb slider for selecting an acceptable range | `examples/classification/range-slider/config.yaml` |
 | `ranking` | `labels` | `allow_ties` | Drag-and-drop ranking of items by preference or relevance | `examples/classification/ranking/config.yaml` |
 | `region_caption` | (none beyond name/description) | `placeholder`, `min_length`, `max_length`, `require_all`, `agreement_distance` | Region captioning: a free-text description per region drawn on the image, with caption agreement over matched regions | `examples/image/region-captioning/config.yaml` |
 | `rollout_evaluation` | (none beyond name/description) | `streams`, `manifest_field`, `prompt_field`, `intervention_field`, `intervention_time_field`, `fps`, `layers`, `violation_types`, `severities`, `cf_verdicts`, `rubric`, `blind`, `shuffle`, `require_clean`, `max_violations` | World-model rollout evaluation: frame-locked video panels with temporal violation localization, preference and counterfactual plausibility | `examples/agent-traces/world-model-rollouts/config.yaml` |
 | `rubric_eval` | `criteria` | `scale_points`, `scale_labels`, `show_overall` | Multi-criteria rubric evaluation grid for LLM and text quality assessment | `examples/classification/rubric-eval/config.yaml` |
-| `select` | `labels` | `label_requirement`, `option_randomization`, `dynamic_options`, `dynamic_options_field`, `use_predefined_labels`, `codebook` | Dropdown selection | `examples/advanced/all-annotation-types/config.yaml` |
+| `select` | `labels` | `label_requirement`, `option_randomization`, `dynamic_options`, `dynamic_options_field`, `use_predefined_labels`, `codebook`, `randomize_order` | Dropdown selection | `examples/advanced/all-annotation-types/config.yaml` |
 | `semantic_differential` | `pairs` | `scale_points` | Bipolar adjective scales for measuring connotative meaning | `examples/classification/semantic-differential/config.yaml` |
 | `slider` | `min_value`, `max_value`, `starting_value` | `step`, `label_requirement`, `labels`, `show_labels`, `maxTick` | Slider for selecting a value in a range | `examples/classification/slider/config.yaml` |
 | `soft_label` | `labels` | `total`, `min_per_label`, `show_distribution_chart` | Probability distribution across labels via constrained sliders | `examples/classification/soft-label/config.yaml` |
@@ -14803,8 +15093,11 @@ Timestamps may be numbers (seconds) or `HH:MM:SS[.,]mmm` strings. A stable
 used to persist per-turn ratings and speaker assignments, so keep it stable
 across re-ingests.
 
-> ASR and diarization (Whisper, WhisperX, pyannote) run **upstream** of Potato.
-> Potato ingests their output; it does not transcribe or diarize.
+> Transcripts usually arrive from upstream ASR — Whisper, WhisperX, pyannote, or
+> a cloud API — and Potato ingests their output. It can also produce them
+> itself: `potato transcripts --transcribe --diarize` runs Whisper and speaker
+> clustering locally, behind the optional `potato-annotation[transcribe]` extra.
+> See [Working with Transcripts](../../guides/working_with_transcripts.md).
 
 ## Configuration
 
@@ -16745,9 +17038,11 @@ For the task-oriented walkthrough — running Whisper, downloading YouTube capti
 
 ## Where transcription happens
 
-ASR and diarization run **upstream** of Potato. Potato ingests their output; it does not transcribe or diarize. Run Whisper, WhisperX, pyannote, or a cloud API first, then point Potato at the result.
+Transcription can run either upstream or inside Potato. This page covers the ingestion side: you ran Whisper, WhisperX, pyannote, or a cloud API, and you point Potato at the result.
 
-(The one exception is unrelated: [Think-Aloud](../../advanced/think_aloud.md) runs local faster-whisper to capture spoken rationales from annotators. That is a recording feature, not transcript ingestion.)
+Potato can also do it itself. `potato transcripts --transcribe` runs faster-whisper locally, and `--diarize` adds speaker labels, both behind the optional `potato-annotation[transcribe]` extra. See [Path A of the transcripts guide](../../guides/working_with_transcripts.md#path-a-you-only-have-audio). The output is written in plain Whisper JSON, which is the first row of the table below, so a locally produced transcript and an upstream one take exactly the same path from here on.
+
+[Think-Aloud](../../advanced/think_aloud.md) uses the same local Whisper backend for a different purpose: capturing spoken rationales from annotators while they work. That is a recording feature, not transcript ingestion.
 
 ## Supported formats
 
@@ -33311,6 +33606,340 @@ All require an admin API key (`X-API-Key` header; bypassed in `--debug`):
 
 ---
 
+<!-- source: docs/ai-intelligence/model_review.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/model_review/
+
+# Reviewing Model Output
+
+Model pre-labels, then human QC — check the least confident, correct what is
+wrong, ship. This is how most annotation pipelines run once there is a model
+worth running.
+
+Potato had the parts and not the workflow. `ai_prelabel` writes predictions,
+active learning ranks by uncertainty, curation slices the data, and
+adjudication compares one human against another. Comparing a human against the
+model had no home.
+
+---
+
+## Quick start
+
+```yaml
+assignment_strategy: model_review
+pre_annotation:
+  enabled: true
+  field: predictions
+```
+
+Annotators are now served prelabelled items least-confident first. The report:
+
+```bash
+curl -H "X-API-Key: $KEY" http://localhost:8000/admin/model-review
+```
+
+```json
+{
+  "n_items": 12,
+  "n_prelabelled": 9,
+  "queue": ["r00", "r01", "r02", "..."],
+  "worst_first": ["r00", "r01"],
+  "empty_prediction_ids": ["r03", "r07", "r11"],
+  "n_empty": 3,
+  "metrics": { "precision": null, "recall": null, "..." : "..." }
+}
+```
+
+---
+
+## Two separate review jobs
+
+### Worst-first review
+
+An item's rank is its **lowest** prediction confidence. One bad box makes an
+item worth reviewing even beside nine good ones, and a mean would average that
+signal away.
+
+Items whose predictions carry no confidence sort after the ones that do. A
+model that does not report confidence is not thereby unsure, and treating it as
+confidence zero fills the worst-first queue with items nobody has a reason to
+doubt.
+
+The convention is to check the worst 10–20%. `worst_first` is the least
+confident 20% of the queue, and never fewer than one item.
+
+### Items the model said nothing about
+
+A wrong prediction is visible in a review UI. It is right there, wrong. A
+missing prediction is invisible: the reviewer sees an empty item and moves on.
+
+A confidence-ordered queue cannot surface one either, since an item with no
+prediction has no confidence to be low. So missing detections survive review
+unless someone goes looking for them.
+
+Potato ships a built-in slice for that, with no configuration:
+
+```bash
+curl -H "X-API-Key: $KEY" \
+  "http://localhost:8000/curation/api/slices/model-found-nothing/resolve"
+```
+
+It appears in `/admin/catalog` alongside your own slices, and can become a
+review dataset through the normal slice-to-dataset path.
+
+!!! note "An empty prediction list is an answer"
+    `"predictions": {"boxes": []}` means the model looked and found nothing.
+    That is what puts an item in the pool. An item with no `predictions` key at
+    all counts the same way.
+
+---
+
+## Verdicts
+
+A reviewer's judgement of a prelabel is stored separately from an annotation:
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+     -d '{"instance_id": "r00", "verdict": "accept", "schema_name": "tone"}' \
+     http://localhost:8000/api/model-review/verdict
+```
+
+| Verdict | Meaning |
+|---|---|
+| `accept` | The model was right |
+| `correct` | Partly right; the human changed something |
+| `reject` | Wrong |
+
+"The model was right" and "a human independently chose this label" are
+different facts. Storing the first as the second makes model precision
+unmeasurable, because every accepted prelabel then looks like human work.
+
+Re-reviewing replaces a verdict rather than appending, so an annotator who
+changes their mind is counted once. An unknown verdict is refused: a silently
+stored typo would make the precision denominator wrong with nothing to show
+for it.
+
+---
+
+## Precision and recall
+
+**Precision** is the accepted share of reviewed prelabels. A *corrected*
+prelabel does not count as a true positive — it was partly wrong, and counting
+corrections as correct lets a model that is always nearly-right score
+perfectly.
+
+**Recall** requires someone to have opened the empty-prediction pool. Until
+they have, Potato reports:
+
+```json
+"recall": null,
+"recall_note": "The empty-prediction pool was not reviewed, so there is no
+                evidence about what the model missed and recall cannot be
+                computed. Sample it from the empty-prediction slice."
+```
+
+A recall computed over an unreviewed denominator would be an assumption
+reported as a measurement.
+
+Once the pool is sampled, a verdict on an empty item can only mean the reviewer
+found something the model had not, so each is a confirmed false negative and
+recall becomes computable. Only items a human actually opened count; anything
+else moves recall by assumption.
+
+Verdicts on empty items stay out of the precision denominator, so the model is
+not penalised for a prediction it never made.
+
+---
+
+## Assignment behaviour
+
+`assignment_strategy: model_review` serves the queue. Items with no prediction
+are excluded from assignment; review those through the slice instead.
+
+The strategy is incompatible with `search.annotator_claim`, which lets
+annotators reorder a queue whose order is what makes it useful.
+
+---
+
+## Related
+
+- [AI Support](ai_support.md) — generating the prelabels
+- [Active Learning](active_learning_guide.md) — a different use of the same
+  uncertainty signal
+- [Near-Duplicate Detection](../advanced/near_duplicates.md) — the other
+  curation pass worth running before annotation starts
+- [AI Costs](ai_costs.md)
+
+
+---
+
+<!-- source: docs/ai-intelligence/ai_costs.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/ai-intelligence/ai_costs/
+
+# AI Cost Estimates and Spend Caps
+
+Users of the commercial annotation platforms complain less about the price than
+about finding out too late: credits consumed by auto-labelling and discovered
+at export time, when the work is done and the bill is already owed.
+
+Potato's bring-your-own-key model avoids the lock-in and used to reproduce that
+exactly. The bill was unbounded and invisible until the provider sent it.
+
+---
+
+## Quick start
+
+Ask what the next judge run would cost, before running it:
+
+```bash
+curl -H "X-API-Key: $KEY" http://localhost:8000/admin/api/ai-cost
+```
+
+```json
+{
+  "next_judge_run": {
+    "n_items": 400,
+    "total_tokens": 486400,
+    "model": "gpt-4o",
+    "cost_usd": 3.1,
+    "priced": true,
+    "as_of": "2026-08",
+    "summary": "400 item(s), about 486,400 tokens, roughly $3.10 at 2026-08
+                prices. An estimate, not a quote."
+  },
+  "spent": { "cost_usd": 0.42, "n_runs": 3, "cap_usd": 25.0 }
+}
+```
+
+Set a ceiling:
+
+```yaml
+ai_budget:
+  cap_usd: 25.0
+```
+
+---
+
+## The cap refuses before it starts
+
+A run projected to cross the cap is refused before the first model call, and
+the endpoint returns `402` with `"ran": false`:
+
+```json
+{
+  "ran": false,
+  "cap_usd": 25.0,
+  "spent_usd": 24.80,
+  "error": "This run is projected to cost $3.10, which would take the project
+            to $27.90 against a cap of $25.00 ($24.80 already spent). Nothing
+            has been run. Raise ai_budget.cap_usd, or run fewer items."
+}
+```
+
+Halting halfway leaves a part-labelled dataset and a bill for it, so refusing
+up front is the refusal that saves money.
+
+Money already spent counts toward the cap. Otherwise the cap applies per run,
+which caps nothing.
+
+Currently enforced on:
+
+- the judge batch (`/admin/api/judge-alignment/run`)
+- the [position-bias probe](../advanced/presentation_order.md)
+  (`/admin/api/judge-position-bias`)
+
+---
+
+## Token and price assumptions
+
+Two choices make it lean pessimistic rather than flattering.
+
+**Output is counted at the configured maximum**, not an average. Estimates that
+assume short answers are the ones that surprise you.
+
+**Prompt overhead is charged per item.** The rubric, the label list and the
+JSON instruction ride along with every single item, and leaving them out
+understates a short-text project by more than the items themselves.
+
+Token counts come from a characters-per-token rule of thumb. Real tokenizers
+vary by 20–30% and by language, so this is for deciding whether a run is
+affordable, never for reconciling an invoice.
+
+### Actions that call more than once
+
+The position-bias probe judges every item twice. Its estimate says so:
+
+```json
+"notes": ["This action queries the model 2 times per item."]
+```
+
+### An unknown price reports as unknown
+
+A model absent from the price table reports its token count and
+`cost_usd: null`.
+
+"Free" and "unknown" are different, and only one is safe to budget against. A
+guessed price would be believed.
+
+An unpriced model does not block a capped run either. The cap is a dollar
+ceiling with no dollar figure to compare against, so Potato logs a warning
+saying so and lets the run proceed.
+
+### Self-hosted models
+
+vLLM, Ollama and the local vision models report `cost_usd: 0` and
+`local: true`. The marginal cost of a local call is electricity.
+
+The token count is still reported, since it predicts how long the run takes.
+
+### The price table goes stale
+
+Every estimate carries `as_of`. A stale price still gives you the order of
+magnitude; presented as a quote it would not. The table lives in
+`potato/ai/cost.py`.
+
+---
+
+## The running total
+
+```json
+"spent": {
+  "cost_usd": 0.42,
+  "total_tokens": 138400,
+  "n_runs": 3,
+  "n_unpriced_runs": 1,
+  "cap_usd": 25.0,
+  "note": "1 run(s) used a model with no price on record and are not in the
+           dollar total."
+}
+```
+
+Unpriced runs are counted apart from the dollar total. Folding them in as zero
+would report a project using an unpriced model as having spent nothing.
+
+Each run records whether its figure was estimated or measured, so the total can
+be checked against an invoice — which is how anyone finds out an estimate was
+wrong.
+
+---
+
+## Configuration
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `ai_budget.cap_usd` | number | none | Dollar ceiling. A run projected to cross it is refused before it starts |
+
+---
+
+## Related
+
+- [AI Support](ai_support.md) — configuring an endpoint
+- [Presentation Order](../advanced/presentation_order.md) — the most expensive
+  action in Potato
+- [Judge Calibration](judge_calibration.md)
+
+
+---
+
 <!-- source: docs/advanced/mace.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/advanced/mace/
 
@@ -35051,6 +35680,508 @@ See [Admin Dashboard](../administration/admin_dashboard.md) for more details.
 - [Quality Control](../workflow/quality_control.md) - Attention checks and gold standards
 - [Admin Dashboard](../administration/admin_dashboard.md) - Real-time configuration management
 - [Crowdsourcing](../deployment/crowdsourcing.md) - MTurk and Prolific integration
+
+
+---
+
+<!-- source: docs/advanced/agreement_drift.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/advanced/agreement_drift/
+
+# Agreement Over Time and Re-Calibration
+
+A single agreement number for a whole project averages early work and late work
+together, so a team whose recent annotations have become unusable can still
+show an acceptable figure.
+
+Guidelines drift as new edge cases arrive. The practice credited with large
+agreement gains is the calibration session, where annotators work through
+pre-annotated items and argue about the disagreements, and the gain holds only
+if the sessions repeat.
+
+Potato had fourteen agreement metrics and no time dimension. This adds one, and
+the re-calibration round that acts on it.
+
+---
+
+## Quick start
+
+Nothing to configure. Open `/admin/iaa` and the **Agreement over time** section
+sits below the per-schema tables.
+
+To tune it:
+
+```yaml
+calibration:
+  enabled: true          # default
+  windows: 6             # how many slices
+  window_by: count       # or "time"
+  drop_threshold: 0.15   # 15% below baseline raises the prompt
+```
+
+JSON, for scripting:
+
+```bash
+curl -H "X-API-Key: $KEY" http://localhost:8000/admin/iaa/drift
+```
+
+---
+
+## Windows and timestamps
+
+Three decisions worth stating, since all three are arguable.
+
+**Which timestamp.** An annotation has several. `session_start` is when the
+annotator first opened the item, which for a queue skimmed once and answered
+later sits nowhere near the moment the answer was given. Potato uses the last
+recorded change for the schema instead, then falls back to `session_end` and
+`session_start`.
+
+**When an item enters a window.** Agreement is a property of an item across
+annotators rather than of one annotator's answer, so an item belongs to the
+window containing the moment its last annotator finished. That is when the item
+became measurable.
+
+**Which metric.** Each window re-runs the same agreement computation restricted
+to its own items, so every window is scored with the same per-schema metric the
+whole-project report uses. Picking one metric for the chart would score a span
+schema and a slider schema with the same measure.
+
+### Window sizing
+
+`window_by: count` gives every window the same number of items, and is the
+default. Equal-duration windows leave some stretches of a bursty study empty, and an empty window has no agreement at all rather than low
+agreement. A chart cannot tell the two apart.
+
+### Windows with no number
+
+A chance-corrected coefficient is undefined when there is nothing to be right
+about by chance. If every annotator chose the same label on every item in a
+window, α is 0/0, so a window of perfect agreement has no value to plot.
+
+Potato marks those `total agreement` and explains the marker under the table,
+rather than leaving a bare dash that reads as missing data.
+
+---
+
+## The re-calibration prompt
+
+When the latest window falls more than `drop_threshold` below the project
+baseline, `/admin/iaa` raises a prompt naming the schema and the size of the
+fall.
+
+It deliberately does not fire on two things:
+
+- **An old dip.** Only the latest non-sparse window is judged. A drop the team
+  already recovered from is history, and firing on it teaches people to ignore
+  the prompt.
+- **A baseline at or below zero.** Agreement already at chance is a problem the
+  whole-project number reports, and a percentage fall from zero is arithmetic.
+
+Windows holding fewer than five items are shown but marked `too few to judge`,
+and never fire the prompt.
+
+The baseline is the whole-project figure rather than the first window's. A first
+window that happens to be unusually good would otherwise set the bar for the
+whole study, and the first window is where an uncalibrated team's numbers are
+least stable.
+
+---
+
+## Codebook markers
+
+If the project uses a [codebook](qda.md), each revision is marked on the
+timeline, so a guideline edit that moved agreement shows up as an edit rather
+than an unexplained step.
+
+Revisions recorded since this feature shipped are exact. Older ones are
+inferred from the earliest annotation stamped with each revision, which is a
+lower bound, and are labelled `approximate` so the guess is visible.
+
+---
+
+## Running a calibration round
+
+A round sends annotators back through the training exercise mid-study. Before
+this, `TRAINING` was a one-shot gate: a user who passed it could never be sent
+back, so "re-calibrate periodically" was not expressible.
+
+```bash
+# Who is eligible, and how past rounds went
+curl -H "X-API-Key: $KEY" http://localhost:8000/admin/calibration
+
+# Recall everyone eligible
+curl -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+     -d '{"reason": "tone alpha fell 22%"}' \
+     http://localhost:8000/admin/calibration/start
+```
+
+Omitting `usernames` recalls everyone eligible, which is usually right, since
+drift is a property of the guidelines and affects the whole team.
+
+A round resets each annotator's training state and returns them to the training
+phase. Their assignments and existing annotations are untouched, so they rejoin
+annotation where they left off. A round asks them to re-do the exercise rather
+than the study.
+
+Annotators who have not passed the training gate yet are reported as skipped
+rather than silently dropped. An admin recalling twelve people needs to know
+that two of them are still on the consent page.
+
+!!! note "Rounds re-run the training set, not the disagreements"
+    A disagreement item has no right answer, and the training phase grades every
+    answer against known correct ones. Pointing it at the adjudication queue
+    would grade annotators against nothing.
+
+    Reviewing disagreements is a separate need, and
+    [Adjudication](../administration/adjudication.md) already does it with the
+    right affordances.
+
+`training` must be enabled. Recalling annotators to a phase that immediately
+advances past itself looks exactly like the feature doing nothing, so Potato
+refuses instead.
+
+---
+
+## Cost
+
+The timeline costs one extra agreement pass per window on each `/admin/iaa`
+load. Turn it off on a very large project:
+
+```yaml
+calibration:
+  enabled: false
+```
+
+---
+
+## Related
+
+- [Admin Dashboard](../administration/admin_dashboard.md)
+- [Training Phase](../workflow/training_phase.md)
+- [Adjudication](../administration/adjudication.md)
+- [Presentation Order](presentation_order.md) — the other way an agreement
+  number can be confidently wrong
+
+
+---
+
+<!-- source: docs/advanced/presentation_order.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/advanced/presentation_order/
+
+# Presentation Order and Position Bias
+
+Judges, human and model alike, favour the option offered first. When every
+annotator sees the same options in the same order, that pull does not cancel
+across annotators: it inflates agreement while biasing the estimate, so the
+reliability figure comes out confidently wrong. For a tool whose job is telling
+researchers whether their annotations are reliable, that is a worse failure
+than it would be for a tool that only collects them.
+
+Potato records which order every annotator saw, and can randomise it.
+
+---
+
+## Quick start
+
+```yaml
+annotation_schemes:
+  - annotation_type: radio
+    name: tone
+    description: Tone
+    randomize_order: true
+    labels: [very positive, positive, neutral, negative, very negative]
+```
+
+Two annotators on the same item see different arrangements. The same annotator
+returning to the same item sees the one they answered against.
+
+---
+
+## The record
+
+Randomisation only helps data collected after you switch it on. Recording the
+order helps data you already have: an analyst can condition on what each
+annotator saw and correct for the bias afterwards.
+
+So the order is written down for every ordered scheme regardless.
+`randomize_order: false` records "shown as configured", which is worth having.
+
+The record lands in two places:
+
+- `user_state.json`, under `instance_id_to_presentation_order`
+- each item's behavioural data, under `presentation_order`, so every export and
+  analysis path that reads behavioural data gets it
+
+```json
+"instance_id_to_presentation_order": {
+  "d1": {
+    "tone": ["neutral", "very negative", "positive", "negative", "very positive"],
+    "topic": ["service", "product", "price"]
+  }
+}
+```
+
+The first render is what is kept. A later re-render, after you edit the config
+say, does not rewrite history and make a stored answer look as though it was
+given under a different arrangement.
+
+---
+
+## Where it applies
+
+| Scheme | Order recorded | Can be randomised |
+|---|---|---|
+| `radio`, `multiselect`, `select`, `multirate` | ✅ | ✅ |
+| `pairwise` | ✅ (source indices) | ✅ |
+| `hierarchical_multiselect`, `ranking`, `bws`, `rollout_evaluation`, `trajectory_eval`, `conjoint` | ✅ | ❌ not yet |
+
+Asking to randomise a scheme in the bottom row logs a warning rather than
+silently pretending to. The order is still recorded, so the data stays
+correctable, and a researcher who believed their study was de-biased when it
+was not is worse off than one who was told.
+
+### Pairwise is different
+
+A pairwise scheme's two candidates come from the item's own data rather than
+from the scheme's labels, and the client lays them out in the order it receives
+them. Potato permutes that list before it reaches the page, and records source
+indices rather than label names:
+
+```json
+"better": [1, 0]
+```
+
+The candidates differ per item, so "this annotator saw the item that was second
+in the data first" is the only fact an analyst can condition on.
+
+---
+
+## Choosing the order
+
+Deterministically, from `(user_id, instance_id, scheme_name)`, hashed with
+blake2b.
+
+All three parts matter. Seeding on the annotator alone gives one person the
+same arrangement on every item, so their first-position preference lands on the
+same label every time and is correlated across the whole study rather than
+averaged out.
+
+!!! note "Not Python's `hash()`"
+    String hashing is salted per process unless `PYTHONHASHSEED` is pinned, so
+    a builtin hash re-orders every option set on every server restart and an
+    annotator returning to an item is asked a different question.
+
+    `option_randomization` — the older key — still works and is honoured
+    identically.
+
+---
+
+## Is your LLM judge just picking the first option?
+
+The same question for models. The usual check is to swap the positions so the
+judge cannot always pick the first, then hand-label a sample to see whether it
+is any good at all. The second half is human work; the first half is
+arithmetic.
+
+```bash
+curl -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+     -d '{"schema": "sentiment", "max_items": 50}' \
+     http://localhost:8000/admin/api/judge-position-bias
+```
+
+Every sampled item is judged twice, once with the allowed labels in configured
+order and once reversed. Nothing about the item changes, so any difference in
+the verdict is attributable to the order.
+
+The report separates three failure modes, since they have different fixes:
+
+| Reading | What it means | What to do |
+|---|---|---|
+| High flip rate **and** high first-position rate in both runs | A systematic position preference | Randomise, and correct the existing data |
+| High flip rate, no first-position pull | The judge is inconsistent rather than biased | Randomising does not help; fix the rubric |
+| Zero flips, one label on almost everything | Order-invariant and uninformative | Check the label distribution before trusting anything |
+
+The result feeds the `position` slot on the [judge eval
+card](../ai-intelligence/judge_calibration.md), which had been empty since it
+was written.
+
+!!! warning "This is the most expensive action in Potato"
+    Two model calls per item per schema. It samples rather than covering the
+    project, and the response says how many items it used. See
+    [AI Costs](../ai-intelligence/ai_costs.md).
+
+Probes under twenty usable pairs are reported but flagged unreliable. A small
+probe saying "5 items, 2 flips" beats silence, and nobody should quote it as a
+finding.
+
+---
+
+## Correcting existing data
+
+With the recorded order and the stored answer, "how often did this annotator
+pick whatever was first" is a one-line computation:
+
+```python
+from potato.server_utils.presentation_order import position_of
+
+order = user_state.get_presentation_order(instance_id)["tone"]
+position_of(order, chosen_label)   # 0 means they picked the first option
+```
+
+---
+
+## Related
+
+- [Agreement Over Time](agreement_drift.md) — the other way an agreement number
+  can be confidently wrong
+- [Behavioral Tracking](behavioral_tracking.md) — where the order is stored
+- [Judge Calibration](../ai-intelligence/judge_calibration.md)
+
+
+---
+
+<!-- source: docs/advanced/near_duplicates.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/advanced/near_duplicates/
+
+# Near-Duplicate Detection
+
+A thousand consecutive video frames are a thousand items and one picture. They
+eat a thousand annotations' worth of budget, and they inflate agreement, because
+two annotators trivially agree about the same image shown twice.
+
+Dedup is the step most projects re-implement from scratch. Potato does it in
+one call.
+
+---
+
+## Quick start
+
+```bash
+curl -H "X-API-Key: $KEY" \
+  "http://localhost:8000/curation/api/duplicates"
+```
+
+```json
+{
+  "n_items": 400,
+  "n_groups": 12,
+  "n_duplicates": 217,
+  "duplicate_rate": 0.54,
+  "largest_group": 41,
+  "groups": [
+    {"keeper": "f0012", "duplicates": ["f0013", "f0014"], "size": 3,
+     "method": "phash"}
+  ],
+  "note": "217 of 400 item(s) duplicate another. Each is an annotation budget
+           paid twice, and each also inflates agreement: two annotators
+           trivially agree about the same item shown twice."
+}
+```
+
+Then stop assigning them:
+
+```bash
+curl -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+     -d '{"instance_ids": ["f0013", "f0014"]}' \
+     http://localhost:8000/curation/api/duplicates/exclude
+```
+
+Excluded items stay in the project and stop being assigned. A duplicate is
+still evidence of what the dataset contained, and any annotation already made
+on one has to stay readable, so nothing is deleted.
+
+---
+
+## Choosing the measure
+
+Most of the difficulty people report with dedup comes from this choice.
+
+### Perceptual hash — the default
+
+`?method=phash` compares adjacent-pixel gradients on a small greyscale grid, so
+it survives re-encoding, mild rescaling and brightness shifts while still
+telling two different scenes apart. It needs no model, no index and no GPU.
+
+```bash
+curl -H "X-API-Key: $KEY" \
+  "http://localhost:8000/curation/api/duplicates?method=phash&max_distance=5"
+```
+
+`max_distance` is the Hamming distance in bits, out of 64. The default is 5.
+Zero catches only byte-identical re-encodings, and past about ten, unrelated
+images start joining.
+
+It needs Pillow, which is already a transitive dependency.
+
+### Embeddings for the semantic case
+
+`?method=embedding` is for the same scene from a different angle, or the same
+sentence reworded — where the pixels or characters genuinely differ, so a hash
+is useless.
+
+```bash
+curl -H "X-API-Key: $KEY" \
+  "http://localhost:8000/curation/api/duplicates?method=embedding&min_similarity=0.97"
+```
+
+This mode requires a built
+[curation index](../ai-intelligence/embedding_visualization.md).
+
+!!! warning "Do not reach for embeddings first"
+    Two frames of the same scene sit close in embedding space by design, which
+    makes an index good at "find me more like this" and wrong for "is this the
+    same picture".
+
+    The default threshold of 0.97 sits far above a typical retrieval threshold
+    for the same reason. At 0.9 you get items that are merely related, and a
+    reviewer then has to check every group by hand.
+
+---
+
+## Grouping
+
+Grouping is transitive: A near B and B near C puts all three together even when
+A and C are further apart than the threshold.
+
+A slow pan produces a chain of frames each close to the next. Splitting that
+into overlapping pairs would hand a reviewer the same frames several times.
+
+The **keeper**, the item to keep if you collapse the group, is the first by id.
+That is stable across runs, so re-running the scan proposes the same exclusions
+each time.
+
+Comparison is all-pairs, which is quadratic. That is fine for the tens of
+thousands of items a Potato project holds, and an approximate index would be
+faster at the cost of changing the answer.
+
+---
+
+## When nothing can be hashed
+
+A project of plain text, or one whose images are remote URLs, produces no
+hashes. Potato says so:
+
+```json
+"note": "No item could be perceptually hashed — the project may hold no local
+         images, or Pillow may not be installed. This is NOT a finding of zero
+         duplicates."
+```
+
+People act on a dedup report, so "we found nothing" and "we could not look"
+have to read differently.
+
+Remote URLs are skipped rather than fetched. Downloading a dataset to
+deduplicate it would turn a local scan into an unbounded network job.
+
+---
+
+## Related
+
+- [Reviewing Model Output](../ai-intelligence/model_review.md) — the other
+  curation pass worth running before annotation starts
+- [Embedding Visualization](../ai-intelligence/embedding_visualization.md) —
+  building the index the semantic mode needs
+- [Task Assignment](task_assignment.md) — what exclusion changes
 
 
 ---
@@ -36810,6 +37941,48 @@ under QDA Mode — paid annotators must not reshape the shared codebook.
 
 Every default above can be overridden explicitly; QDA Mode only changes
 the *starting point*.
+
+## Coming from another QDA tool
+
+Potato reads and writes REFI-QDA `.qdpx`, the interchange format NVivo,
+ATLAS.ti, MAXQDA, Quirkos and QDA Miner all support:
+
+```bash
+python -m potato.importers --input project.qdpx --output-dir my-study/
+python -m potato.export -c my-study/config.yaml -f qdpx -o ./export/
+```
+
+The codebook keeps its hierarchy, along with the codings and which analyst
+made each one. See
+[Bringing a Project Into Potato](../guides/migrating-into-potato.md).
+
+## Interview audio
+
+Interviews arrive as audio, and Potato handles both halves of getting them
+ready to code.
+
+If you already have transcripts, it reads Whisper, WhisperX, whisper.cpp,
+Deepgram, AssemblyAI and AWS Transcribe output directly, in whichever of their
+formats you have, and it handles the trap those formats share: some report time
+in seconds and some in milliseconds.
+
+If you only have the recordings, it transcribes them:
+
+```bash
+pip install "potato-annotation[transcribe]"
+potato transcripts ./interviews --transcribe --diarize --num-speakers 2 \
+    -o data/interviews.json
+```
+
+That runs Whisper and speaker clustering on your own machine. The audio never
+leaves it. No account, no credits, no per-minute charge.
+
+Speaker labels come across when the upstream tool produced them, or from
+`--diarize`. Either way annotators can correct or supply them in the interface,
+which on a small corpus is usually faster than tuning a clustering threshold.
+
+See [Working with Transcripts](../guides/working_with_transcripts.md) for model
+choices, air-gapped installs, and the rest.
 
 ## Quick start
 
@@ -39119,7 +40292,7 @@ sufficient. Mishearings are absorbed by fuzzy label matching ("in polite" → *I
 ## Setup
 
 ```bash
-pip install faster-whisper   # local STT; first recording downloads the model (~39 MB)
+pip install "potato-annotation[transcribe]"   # local STT; first recording downloads the model (~39 MB)
 python potato/flask_server.py start examples/advanced/think-aloud/config.yaml -p 8000 --debug
 ```
 
@@ -43152,6 +44325,36 @@ export/
 python -m potato.export -c config.yaml -f pascal_voc -o ./voc_export/
 ```
 
+### REFI-QDA project exchange (qdpx)
+
+The interchange format NVivo, ATLAS.ti, MAXQDA, Quirkos and QDA Miner read and
+write. Exporting one hands a Potato project to a colleague who uses any of
+them, or archives it in a form that outlives this tool.
+
+```bash
+python -m potato.export -c config.yaml -f qdpx -o ./export/
+```
+
+A `.qdpx` is a ZIP holding `project.qde` (REFI-QDA XML) and one UTF-8 `.txt`
+per annotated item under `sources/`. Codes carry their hierarchy, descriptions
+and colours; span annotations become `PlainTextSelection` elements with a
+`Coding` each; annotators become `Users`.
+
+Two things worth knowing:
+
+- **`endPosition` is inclusive.** REFI-QDA 1.5 §10.2 defines a selection by
+  "the first and the last character", where Potato's `end` is exclusive. The
+  exporter writes `end - 1`, and the importer measures both readings against
+  the source text rather than assuming, because exporting tools disagree.
+- **`flatten_subcodes`.** ATLAS.ti supports one level of subcode and silently
+  mangles anything deeper. Passing this option re-parents every code to the top
+  level and renames it `Parent > Child > Grandchild`, so you control the loss
+  instead of discovering it. Potato warns when your codebook is deep enough for
+  this to matter.
+
+Two exports of an unchanged project are byte-identical: the GUIDs REFI-QDA
+requires are derived from what they name, so an export can be diffed.
+
 ### CoNLL-2003 (conll_2003)
 
 CoNLL-2003 format for named entity recognition.
@@ -44933,9 +46136,21 @@ potato import --input instances_val2017.json --output-dir my-project
 python potato/flask_server.py start my-project/config.yaml -p 8000
 ```
 
-Fifteen formats are supported. See the
+Twenty formats are supported: fifteen computer-vision, and five text and
+qualitative ones (brat, doccano, Prodigy, CoNLL, REFI-QDA). See the
 [format matrix](../data-export/format_matrix.md) for what survives each
-direction; this page is about running the tool.
+direction, and
+[Bringing a Project Into Potato](../guides/migrating-into-potato.md) for the
+per-tool walkthrough; this page is about running the tool.
+
+Text formats are detected the same way and take the same flags, plus three of
+their own:
+
+| Flag | Format | What it does |
+|---|---|---|
+| `--conll-document-unit` | CoNLL | What counts as one item: `auto`, `sentence`, `file` |
+| `--qdpx-end-position` | REFI-QDA | Force `inclusive` or `exclusive` instead of inferring it |
+| `--prodigy-keep-rejected` | Prodigy | Import tasks answered `reject`/`ignore`, which are dropped by default |
 
 !!! important "Imported annotations are pre-annotations"
 
@@ -51089,7 +52304,12 @@ behind a strict proxy.
 
 **Status: supported.** Every stylesheet, script, font and icon Potato serves
 comes from `potato/static/`. A machine with no route to the internet renders the
-same interface as one with a fast connection.
+same interface as one with a fast connection — the annotator pages and the
+admin dashboard alike.
+
+The admin dashboard is worth naming, because it was the last thing to get
+there: an air-gap claim that covers only the pages annotators see is not an
+air-gap claim.
 
 ## What is served locally
 
@@ -51106,6 +52326,7 @@ same interface as one with a fast connection.
 | Bootstrap 4.1.3/4.4.1 + slim jQuery + Popper (legacy pages) | `vendor/bootstrap-4.*`, `vendor/jquery-3.4.1.slim.min.js`, `vendor/popper-1.16.0.umd.min.js` |
 | Peaks.js (audio/video waveforms) | `static/peaks.min.js` |
 | PDF.js | `vendor/pdfjs/` |
+| Plotly 2.27.0 (admin embedding plot) | `vendor/plotly-2.27.0.min.js` |
 | All of Potato's own CSS and JavaScript | `static/` |
 
 Two of these were load-bearing rather than cosmetic. Without **jQuery**, span
@@ -51124,6 +52345,25 @@ It survived the earlier air-gap work because the guard read `<script src>` and
 `<link href>` in templates, and an `@import` inside a stylesheet is neither.
 There is now a test for that too.
 
+### PDF.js and Plotly
+
+Both were in `vendor/` and neither was loaded from there. Two features reached
+for a CDN with the local copy already on disk:
+
+- **PDF.js.** `static/js/pdf-viewer.js` hardcoded cdnjs, while
+  `static/pdf-link-mode.js` beside it used a local-first loader with the CDN
+  only as a fallback. Two copies of the same job, one of them wrong. There is
+  now a single shared loader (`static/js/pdfjs-loader.js`) that both call.
+- **Plotly.** `templates/admin.html` loaded it from `cdn.plot.ly`, so the
+  embedding visualisation died with no network. It is now vendored, loaded
+  local-first.
+
+Both survived the earlier air-gap work for the same reason: the guards read the
+*annotator* template, and one of these was in an admin page while the other was
+in a JavaScript file rather than a template. `tests/unit/test_offline_assets.py`
+now checks every hand-written source file under `static/` and `templates/`, and
+fails if a CDN reference is not preceded by the local path.
+
 ### Legacy pages kept their old versions
 
 `header.html` and the Simple-Likert example template run on Bootstrap 4 with
@@ -51141,8 +52381,9 @@ Four guards, each catching a different failure:
 | `tests/unit/test_no_new_cdn_assets.py` | A new external asset in the main template, a stale allowlist entry, and — since the Google Fonts import — a stylesheet that `@import`s or `url()`s from the network |
 | `tests/unit/test_air_gap_assets.py` | A template referencing a static file that is **not in the tree**, a truncated vendored bundle, and a new external host in *any* source template |
 | `tests/server/test_air_gap_page.py` | A rendered page referencing a local asset the server does not actually serve |
+| `tests/unit/test_offline_assets.py` | A vendored library loaded from its CDN *first*, anywhere under `static/` or `templates/` — including admin pages and plain `.js` files, which the template-shaped guards above do not read. Also fails when a "local-first" path points at a file that is not on disk |
 
-The last is the strongest and the only one that catches an asset which is
+The third is the strongest and the only one that catches an asset which is
 vendored, committed and referenced but never enabled by
 `FRONTEND_ASSET_MARKERS` for the schema in question — a failure invisible to any
 static scan, and visible only to the project type that triggers it.
@@ -51173,6 +52414,21 @@ permanent exemptions. If a dependency genuinely cannot be vendored, add its host
 with a note explaining why and a consequence recorded on this page — then treat
 it as work with a deadline. The last three entries sat there long enough that
 this page had to warn people off deploying offline.
+
+## Model weights are not vendored
+
+The frontend guards above cover scripts and stylesheets. Optional features that
+run a machine-learning model fetch their weights the first time you use them,
+and those are too large to ship in the package:
+
+| Feature | Fetches | Staging it offline |
+|---|---|---|
+| `potato transcripts --transcribe` | A Whisper model from Hugging Face | Pass `--asr-model` a local CTranslate2 model directory |
+| `potato transcripts --diarize` | Two ONNX models (~47 MB) | Set `POTATO_MODEL_CACHE`, or pass `--diarize-segmentation-model` and `--diarize-embedding-model` |
+| [Think-Aloud](../advanced/think_aloud.md) | A Whisper model on the first recording | Set `thinkaloud.model` to a local model directory |
+
+Run each once on a connected machine, then copy the cache directory across.
+Nothing else in a default Potato install reaches the network at runtime.
 
 ## Related
 
@@ -52809,7 +54065,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **158 top-level config keys**, **61 annotation types**, and
+It currently covers **160 top-level config keys**, **61 annotation types**, and
 **24 display types**.
 
 ### Editor validation
@@ -52859,7 +54115,7 @@ display types, invalid `assignment_strategy` values, a missing
 
 ## OpenAPI 3.1 spec
 
-An index of Potato's HTTP surface: **435 paths / 472 operations**, generated by
+An index of Potato's HTTP surface: **444 paths / 481 operations**, generated by
 walking the live Flask `url_map`.
 
 Two extensions carry information a plain OpenAPI document cannot:

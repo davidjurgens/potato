@@ -28,7 +28,7 @@ annotation_schemes:
 # is stored as the rationale. To commit a label by voice they say a set phrase
 # ("I label this Polite", "my answer is neutral", "final answer impolite"),
 # detected by a rule-based parser — no LLM anywhere. Speech-to-text runs
-# fully locally via faster-whisper:  pip install faster-whisper
+# fully locally via faster-whisper:  pip install "potato-annotation[transcribe]"
 # (first recording downloads the ~39MB tiny.en model).
 # Review transcripts at /thinkaloud/review (admin; --debug passes).
 thinkaloud:

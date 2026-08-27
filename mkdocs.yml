@@ -18,6 +18,7 @@ nav:
         - AI-Assisted Annotation: guides/ai-assisted-annotation-guide.md
         - Working with Transcripts: guides/working_with_transcripts.md
         - Hotkey Review Mode: guides/hotkey_review_mode.md
+        - Bringing a Project Into Potato: guides/migrating-into-potato.md
     - Configuration:
         - Overview: configuration/configuration.md
         - Configuration Reference: configuration/config_reference.md
@@ -143,12 +144,17 @@ nav:
         - ICL Labeling: ai-intelligence/icl_labeling.md
         - HuggingFace Models: ai-intelligence/huggingface_models.md
         - Judge Calibration: ai-intelligence/judge_calibration.md
+        - Reviewing Model Output: ai-intelligence/model_review.md
+        - AI Costs and Spend Caps: ai-intelligence/ai_costs.md
     - Advanced Features:
         - MACE: advanced/mace.md
         - Embedding Visualization: advanced/embedding_visualization.md
         - Survey Instruments: advanced/survey_instruments.md
         - Category-Based Assignment: advanced/category_assignment.md
         - Task Assignment: advanced/task_assignment.md
+        - Agreement Over Time: advanced/agreement_drift.md
+        - Presentation Order: advanced/presentation_order.md
+        - Near-Duplicate Detection: advanced/near_duplicates.md
         - Behavioral Tracking: advanced/behavioral_tracking.md
         - Keystroke Logging: advanced/keystroke_logging.md
         - Writing-Process Detection: advanced/writing_process_detection.md

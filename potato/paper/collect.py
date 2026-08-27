@@ -44,6 +44,10 @@ class ProjectData:
     annotators: List[str] = field(default_factory=list)
     instance_ids: List[str] = field(default_factory=list)  # annotated instances
     total_items: Optional[int] = None       # dataset size, if data files readable
+    # username -> "passed" | "failed" | "in_progress", from each saved
+    # training_state. This is the exclusion record a reviewer asks for: how
+    # many people were screened out, and by what.
+    training_outcomes: Dict[str, str] = field(default_factory=dict)
 
 
 def _scheme_type(scheme: Dict[str, Any]) -> str:
@@ -137,6 +141,32 @@ def _extract_timings(state: Dict[str, Any]) -> List[float]:
     return seconds
 
 
+def _training_outcome(state: Dict[str, Any]) -> Optional[str]:
+    """
+    Whether this annotator passed, failed, or is still in the training gate.
+
+    A dataset report is asked to say how many annotators were screened out and
+    on what basis, and the saved training state is the only place that is
+    recorded. Returns None when training was not used, so a project without a
+    gate does not report a fabricated exclusion count of zero as if it had
+    screened people and excluded none.
+    """
+    training = state.get("training_state")
+    if not isinstance(training, dict) or not training:
+        return None
+    # An untouched TrainingState serialises with no questions and no verdict,
+    # which means the user never reached the gate rather than that they are
+    # partway through it.
+    if not training.get("completed_questions") and not (
+            training.get("passed") or training.get("failed")):
+        return None
+    if training.get("failed"):
+        return "failed"
+    if training.get("passed"):
+        return "passed"
+    return "in_progress"
+
+
 def _count_data_items(config: Dict[str, Any], base_dir: str) -> Optional[int]:
     """Count items across the configured data files (best effort)."""
     total = 0
@@ -210,6 +240,9 @@ def collect_project(config_path: str) -> ProjectData:
         timings = _extract_timings(state)
         if timings:
             project.timings[username] = timings
+        outcome = _training_outcome(state)
+        if outcome:
+            project.training_outcomes[username] = outcome
 
     project.instance_ids = sorted({r.instance_id for r in project.records})
     return project

@@ -151,6 +151,14 @@
     "sha256": "efe5dc811c72a00a",
     "version": "2"
   },
+  "js/pdf-viewer.js": {
+    "sha256": "64b0d86af915fb89",
+    "version": "1"
+  },
+  "js/pdfjs-loader.js": {
+    "sha256": "a03661d0428901c5",
+    "version": "1"
+  },
   "keystroke_tracker.js": {
     "sha256": "39b68a580e71b1e4",
     "version": "1"
@@ -204,8 +212,8 @@
     "version": "1"
   },
   "pdf-link-mode.js": {
-    "sha256": "6982dd245f109f7a",
-    "version": "4"
+    "sha256": "3f6e8969e0d06d39",
+    "version": "5"
   },
   "peaks-range-select.js": {
     "sha256": "a24dae28e18fe906",

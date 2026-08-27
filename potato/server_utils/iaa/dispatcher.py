@@ -751,9 +751,20 @@ def _pairwise_rank_mean(seqs_by_user, fn):
 # Top-level entry point
 # ---------------------------------------------------------------------------
 
-def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str, Any]) -> Dict[str, Any]:
+def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str, Any],
+                        instance_ids: Optional[Iterable[str]] = None) -> Dict[str, Any]:
     """
     Compute IAA across the overlap-sample items that have reached their cap.
+
+    Args:
+        instance_ids: Restrict the report to these items. Used by
+            :mod:`potato.server_utils.iaa.drift` to score one time window at a
+            time -- the windowed report has to run the SAME metric per schema
+            as the whole-project one, or a drop between two windows could be
+            an artefact of two different measures rather than a real change.
+            Items outside the set are excluded before the cap check, so a
+            window keeps only the items that both fall in it and are
+            saturated.
 
     Returns a dict shape:
         {
@@ -783,8 +794,11 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
         return {"schemas": {}, "items": {}, "n_overlap_items": 0}
 
     # Overlap items: per-item cap >= 2 AND saturated.
+    wanted = set(instance_ids) if instance_ids is not None else None
     overlap_items = []
     for iid, item in item_state_manager.iter_items():
+        if wanted is not None and iid not in wanted:
+            continue
         cap = item_state_manager._get_annotator_cap_for_item(iid)
         if cap is None or cap < 2:
             continue

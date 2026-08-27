@@ -298,6 +298,12 @@ KNOWN_CONFIG_KEYS = {
         "source_key", "target_key", "strategy", "min_step_chars", "max_steps",
         "markers", "sentences_per_step", "llm_max_chars",
     },
+    # Agreement drift tracking: agreement scored per time window, plus the
+    # re-calibration prompt that fires when the latest window falls below the
+    # project baseline. See potato/server_utils/iaa/drift.py.
+    # Cost estimate + spend cap for AI actions. See potato/ai/cost.py.
+    "ai_budget": {"cap_usd"},
+    "calibration": {"enabled", "windows", "window_by", "drop_threshold"},
     "judge_alignment": {"enabled", "ai_support", "schemas", "few_shot", "inline"},
     # Boundary Lab: counterfactual boundary probing (decision boundaries,
     # contrast-set export, invariance-probe quality control).
@@ -889,7 +895,7 @@ _OPTIONAL_BOOL_FIELDS = {
 _VALID_ASSIGNMENT_STRATEGIES = [
     "random", "fixed_order", "active_learning", "llm_confidence",
     "max_diversity", "least_annotated", "category_based", "diversity_clustering",
-    "batch", "priority", "psychometric",
+    "batch", "priority", "psychometric", "model_review",
 ]
 
 
@@ -1897,6 +1903,9 @@ _CLAIM_INCOMPATIBLE_STRATEGIES = {
     "random", "diversity_clustering", "max_diversity",
     "active_learning", "llm_confidence", "least_annotated",
     "category_based", "batch", "psychometric",
+    # Serves items in a confidence order the annotator did not choose, so a
+    # search-and-claim flow would silently reorder the review queue.
+    "model_review",
 }
 
 

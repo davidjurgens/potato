@@ -8,9 +8,21 @@ potato import --input instances_val2017.json --output-dir my-project
 python potato/flask_server.py start my-project/config.yaml -p 8000
 ```
 
-Fifteen formats are supported. See the
+Twenty formats are supported: fifteen computer-vision, and five text and
+qualitative ones (brat, doccano, Prodigy, CoNLL, REFI-QDA). See the
 [format matrix](../data-export/format_matrix.md) for what survives each
-direction; this page is about running the tool.
+direction, and
+[Bringing a Project Into Potato](../guides/migrating-into-potato.md) for the
+per-tool walkthrough; this page is about running the tool.
+
+Text formats are detected the same way and take the same flags, plus three of
+their own:
+
+| Flag | Format | What it does |
+|---|---|---|
+| `--conll-document-unit` | CoNLL | What counts as one item: `auto`, `sentence`, `file` |
+| `--qdpx-end-position` | REFI-QDA | Force `inclusive` or `exclusive` instead of inferring it |
+| `--prodigy-keep-rejected` | Prodigy | Import tasks answered `reject`/`ignore`, which are dropped by default |
 
 !!! important "Imported annotations are pre-annotations"
 

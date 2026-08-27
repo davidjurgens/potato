@@ -124,6 +124,18 @@ class JudgeService:
                     logger.warning("Judge: no ai_support / judge_alignment.ai_support configured")
                     return None
                 self._endpoint = AIEndpointFactory.create_endpoint({"ai_support": ai_support})
+                if self._endpoint is None:
+                    # create_endpoint() returns None for a block that is
+                    # present but not `enabled`, and every judge call after
+                    # this then returns None with nothing logged -- the probe
+                    # reports "0 usable verdicts" and the config looks fine.
+                    # Naming the two keys is the difference between a minute
+                    # and an afternoon.
+                    logger.warning(
+                        "Judge: ai_support is configured but produced no "
+                        "endpoint. It needs `enabled: true` and an "
+                        "`endpoint_type`; got enabled=%r endpoint_type=%r.",
+                        ai_support.get("enabled"), ai_support.get("endpoint_type"))
             except Exception as e:
                 logger.error(f"Judge: failed to create endpoint: {e}")
                 self._endpoint = None
@@ -145,13 +157,23 @@ class JudgeService:
         schema_info: Dict[str, Any],
         instance_text: str,
         few_shot_examples: Optional[List[Dict[str, str]]] = None,
+        label_order: Optional[List[str]] = None,
     ) -> str:
         """Compose the judge prompt.
 
         few_shot_examples: list of {"text": ..., "label": ...} gold exemplars
         (already excluding the target instance).
+        label_order: present the allowed labels in this order instead of the
+            configured one. Judges favour whatever is listed first, so running
+            the same item under two orders is how you find out whether a
+            verdict is a judgement or an artefact of the prompt -- see
+            potato/ai/position_bias.py. Labels not in the list are appended,
+            so a stale order cannot silently drop an option from the prompt.
         """
         labels = extract_labels(schema_info)
+        if label_order:
+            wanted = [l for l in label_order if l in labels]
+            labels = wanted + [l for l in labels if l not in wanted]
         rubric = self.get_rubric(schema_info)
         parts = [
             "You are an expert evaluator acting as an impartial judge.",
@@ -182,6 +204,7 @@ class JudgeService:
         instance_text: str,
         few_shot_examples: Optional[List[Dict[str, str]]] = None,
         prompt_version: Optional[str] = None,
+        label_order: Optional[List[str]] = None,
     ) -> Optional[JudgePrediction]:
         """Query the judge for one instance. Returns None on failure."""
         endpoint = self._get_endpoint()
@@ -196,7 +219,8 @@ class JudgeService:
                 rubric, schema_name, bool(few_shot_examples)
             )
 
-        prompt = self.build_prompt(schema_info, instance_text, few_shot_examples)
+        prompt = self.build_prompt(schema_info, instance_text, few_shot_examples,
+                                   label_order=label_order)
 
         try:
             from pydantic import BaseModel

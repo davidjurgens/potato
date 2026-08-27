@@ -140,7 +140,9 @@ def build_eval_card(schema: str, kappa: Optional[float], agreement_rate: Optiona
 def eval_cards_from_pairs(pairs_by_schema: Dict[str, List[tuple]],
                           per_schema_alignment: Dict[str, Dict],
                           text_len_getter: Callable[[str], int],
-                          prompt_version: str = "") -> Dict[str, Dict]:
+                          prompt_version: str = "",
+                          position_by_schema: Optional[Dict[str, Dict]] = None,
+                          ) -> Dict[str, Dict]:
     """Build a judge eval card per schema from alignment pairs.
 
     ``pairs_by_schema``: {schema: [(instance_id, human_label, judge_label,
@@ -165,7 +167,12 @@ def eval_cards_from_pairs(pairs_by_schema: Dict[str, List[tuple]],
             schema, kappa=al.get("kappa"), agreement_rate=al.get("agreement_rate"),
             verbosity=verbosity_bias(recs) if recs else None,
             calibration=confidence_calibration(conf_recs) if conf_recs else None,
-            position=None, prompt_version=prompt_version)
+            # The position slot was hard-coded to None from the day this was
+            # written: `position_swap_consistency` existed but nothing could
+            # supply the pair of verdicts it needs. potato/ai/position_bias.py
+            # is that driver, and its stored `swap` block is this shape.
+            position=(position_by_schema or {}).get(schema),
+            prompt_version=prompt_version)
     return cards
 
 

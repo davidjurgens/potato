@@ -268,6 +268,36 @@ export/
 python -m potato.export -c config.yaml -f pascal_voc -o ./voc_export/
 ```
 
+### REFI-QDA project exchange (qdpx)
+
+The interchange format NVivo, ATLAS.ti, MAXQDA, Quirkos and QDA Miner read and
+write. Exporting one hands a Potato project to a colleague who uses any of
+them, or archives it in a form that outlives this tool.
+
+```bash
+python -m potato.export -c config.yaml -f qdpx -o ./export/
+```
+
+A `.qdpx` is a ZIP holding `project.qde` (REFI-QDA XML) and one UTF-8 `.txt`
+per annotated item under `sources/`. Codes carry their hierarchy, descriptions
+and colours; span annotations become `PlainTextSelection` elements with a
+`Coding` each; annotators become `Users`.
+
+Two things worth knowing:
+
+- **`endPosition` is inclusive.** REFI-QDA 1.5 §10.2 defines a selection by
+  "the first and the last character", where Potato's `end` is exclusive. The
+  exporter writes `end - 1`, and the importer measures both readings against
+  the source text rather than assuming, because exporting tools disagree.
+- **`flatten_subcodes`.** ATLAS.ti supports one level of subcode and silently
+  mangles anything deeper. Passing this option re-parents every code to the top
+  level and renames it `Parent > Child > Grandchild`, so you control the loss
+  instead of discovering it. Potato warns when your codebook is deep enough for
+  this to matter.
+
+Two exports of an unchanged project are byte-identical: the GUIDs REFI-QDA
+requires are derived from what they name, so an export can be diffed.
+
 ### CoNLL-2003 (conll_2003)
 
 CoNLL-2003 format for named entity recognition.

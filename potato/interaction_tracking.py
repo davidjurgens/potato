@@ -236,6 +236,13 @@ class BehavioralData:
         focus_time_by_element: Milliseconds spent focused on each element
         scroll_depth_max: Maximum scroll percentage reached (0-100)
         keyword_highlights_shown: Keyword highlights displayed (from randomization feature)
+        presentation_order: Which order each scheme's options were shown in,
+            ``{schema_name: [label names]}``. Recorded whether or not
+            randomization is on, because a fixed order biases every annotator
+            the same way -- which inflates agreement while biasing the
+            estimate -- and the only way to correct a study afterwards is to
+            know what each annotator actually saw. See
+            potato/server_utils/presentation_order.py.
         chat_history: Messages exchanged with the LLM assistant sidebar
         typing_summaries: Per-field typing-dynamics sketch, keyed
             "{schema}:::{label}". Only the compact summary lives here — the raw
@@ -260,6 +267,7 @@ class BehavioralData:
     focus_time_by_element: Dict[str, int] = field(default_factory=dict)
     scroll_depth_max: float = 0.0
     keyword_highlights_shown: List[Dict[str, Any]] = field(default_factory=list)
+    presentation_order: Dict[str, List[str]] = field(default_factory=dict)
     chat_history: List[ChatMessage] = field(default_factory=list)
     typing_summaries: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     annotation_telemetry: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -287,6 +295,7 @@ class BehavioralData:
             'focus_time_by_element': self.focus_time_by_element,
             'scroll_depth_max': self.scroll_depth_max,
             'keyword_highlights_shown': self.keyword_highlights_shown,
+            'presentation_order': self.presentation_order,
             'chat_history': [
                 e.to_dict() if hasattr(e, 'to_dict') else e
                 for e in self.chat_history
@@ -332,6 +341,7 @@ class BehavioralData:
         bd.focus_time_by_element = data.get('focus_time_by_element', {})
         bd.scroll_depth_max = data.get('scroll_depth_max', 0.0)
         bd.keyword_highlights_shown = data.get('keyword_highlights_shown', [])
+        bd.presentation_order = data.get('presentation_order', {}) or {}
 
         # Reconstruct chat history
         chat_history = data.get('chat_history', [])

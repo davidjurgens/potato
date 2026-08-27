@@ -207,6 +207,68 @@
     outline-offset: 2px;
     border-radius: var(--radius);
   }
+
+  /* The re-calibration prompt. Deliberately not styled as an error: recent
+     agreement falling is a normal consequence of new edge cases appearing,
+     and the response is a calibration round, not a fix. */
+  .iaa-drift-trigger {
+    background: color-mix(in srgb, var(--destructive) 8%, transparent);
+    color: var(--text-color);
+    border-left: 3px solid var(--destructive);
+    border-radius: var(--radius);
+    padding: 0.625rem 0.875rem;
+    margin: 0 0 0.75rem 0;
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  /* A window below MIN_ITEMS_PER_WINDOW. Shown, because hiding it would make
+     a sparse project look like it has no history, but muted so it does not
+     read as a measurement worth acting on. */
+  .iaa-drift-sparse {
+    opacity: 0.55;
+  }
+
+  /* Even columns, so one window's note cannot make its column four times the
+     width of the others and destroy the left-to-right read the timeline is
+     for. */
+  .iaa-drift table {
+    table-layout: fixed;
+    /* Fixed columns need a floor to sit on, or the browser compresses them to
+       fit and the note text wraps to one word per line. */
+    min-width: 44rem;
+  }
+
+  .iaa-drift th:not(:first-child),
+  .iaa-drift td:not(:first-child) {
+    width: 9rem;
+  }
+
+  /* .admin-table-container is overflow-x: hidden, so a fixed-layout table
+     wider than the viewport gets CLIPPED rather than scrolled and the later
+     windows become unreachable. A timeline you cannot see the end of is worse
+     than no timeline. */
+  .iaa-drift .admin-table-container {
+    overflow-x: auto;
+  }
+
+  /* Two words standing in for a number, keyed to a footnote under the table.
+     Deliberately not styled as a value: it is the absence of one. */
+  .iaa-drift th[scope="row"] {
+    text-align: left;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .iaa-drift-flag {
+    display: block;
+    font-weight: 400;
+    font-size: 0.75rem;
+    font-style: italic;
+    line-height: 1.4;
+    color: var(--muted-foreground);
+    white-space: normal;
+  }
 </style>
 </head>
 <body>
@@ -345,6 +407,95 @@
           </table>
         </div>
       </details>
+
+      {# Agreement over time. A single whole-project number averages early and
+         late work together, so a team whose recent agreement has collapsed can
+         still show an acceptable figure. Guidelines drift as soon as new edge
+         cases appear, which is why the advice that produces large agreement
+         gains is to re-calibrate PERIODICALLY, not once. #}
+      {% if drift %}
+      <section class="dashboard-card iaa-schema-card iaa-drift"
+               aria-label="{{ ui_lang.iaa_drift_title|default('Agreement over time') }}">
+        <div class="iaa-schema-header">
+          <h2>{{ ui_lang.iaa_drift_title|default('Agreement over time') }}</h2>
+        </div>
+
+        {% if drift.reason %}
+          <p class="iaa-empty">{{ drift.reason }}</p>
+        {% else %}
+          {% for trigger in drift.triggers %}
+          <p class="iaa-drift-trigger">
+            <strong>{{ ui_lang.iaa_drift_recalibrate|default('Re-calibration suggested') }}</strong>
+            &mdash; <code>{{ trigger.schema }}</code>
+            {{ '%.0f'|format(trigger.relative_drop * 100) }}%
+            {{ ui_lang.iaa_drift_below_baseline|default('below the project baseline') }}
+            ({{ trigger.metric }} {{ '%.3f'|format(trigger.latest) }}
+            vs {{ '%.3f'|format(trigger.baseline) }}).
+          </p>
+          {% endfor %}
+
+          <p class="iaa-scale-note">{{ ui_lang.iaa_drift_note|default('Windows are ordered batches of items, placed by when their last annotator finished. Each window is scored with the same metric as the project as a whole.') }}</p>
+
+          {% for schema_name, series in drift.schemas.items() %}
+            {% if series.metric %}
+          <div class="admin-table-container">
+            <table class="admin-table">
+              <caption class="sr-only">{{ ui_lang.iaa_drift_title|default('Agreement over time') }} &mdash; {{ schema_name }}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{{ schema_name }} &middot; <em>{{ series.metric }}</em></th>
+                  {% for point in series.points %}<th scope="col">{{ ui_lang.iaa_drift_th_window|default('W') }}{{ point.window + 1 }}</th>{% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  {# scope="row" so a screen reader reading "0.520" also reads
+                     which schema and baseline it belongs to. This table is
+                     two-dimensional; the metric tables above are not. #}
+                  <th scope="row">{{ ui_lang.iaa_drift_baseline|default('Baseline') }} {{ '%.3f'|format(series.baseline) if series.baseline is not none else '—' }}</th>
+                  {% for point in series.points %}
+                  <td class="iaa-metric-value{% if point.sparse %} iaa-drift-sparse{% endif %}">
+                    {% if point.value is not none %}{{ '%.3f'|format(point.value) }}{% else %}&mdash;{% endif %}
+                    <span class="iaa-metric-context">{{ point.n_items }} {{ ui_lang.iaa_items|default('items') }}{% if point.sparse %} &middot; {{ ui_lang.iaa_drift_sparse|default('too few to judge') }}{% endif %}</span>
+                    {# A chance-corrected coefficient is undefined when there
+                       is nothing to be right about by chance, so a window where
+                       everyone agreed on everything has no number. Without a
+                       marker it plots as a bare dash, which reads as missing
+                       data and is the exact opposite of what happened. The
+                       marker is two words; the sentence goes in the footnote
+                       under the table, because repeating it in every cell
+                       forced the column wide enough to make the row
+                       unscannable. #}
+                    {% if point.value is none and point.note %}<span class="iaa-drift-flag">{{ point.note }}</span>{% endif %}
+                  </td>
+                  {% endfor %}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+              {% if series.footnotes %}
+          <ul class="iaa-footnotes">
+            {% for footnote in series.footnotes %}
+            <li><strong>{{ footnote.note }}</strong> &mdash; {{ footnote.explanation }}</li>
+            {% endfor %}
+          </ul>
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+
+          {% if drift.markers %}
+          <p class="iaa-scale-note">
+            <strong>{{ ui_lang.iaa_drift_codebook_changes|default('Codebook revisions:') }}</strong>
+            {% for marker in drift.markers %}r{{ marker.revision }}{% if marker.inferred %} ({{ ui_lang.iaa_drift_approx|default('approximate') }}){% endif %}{% if not loop.last %} &middot; {% endif %}{% endfor %}
+          </p>
+          {% endif %}
+
+          {% if drift.n_untimed_items %}
+          <p class="iaa-metric-note">{{ drift.n_untimed_items }} {{ ui_lang.iaa_drift_untimed|default('item(s) carry no timestamp and are not on the timeline. This is expected for annotations imported from another tool.') }}</p>
+          {% endif %}
+        {% endif %}
+      </section>
+      {% endif %}
     </main>
   </div>
 </body>

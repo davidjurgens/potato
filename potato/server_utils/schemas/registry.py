@@ -396,7 +396,7 @@ def _register_builtin_schemas():
             name="radio",
             generator=generate_radio_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["horizontal", "label_requirement", "sequential_key_binding", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field", "codebook"],
+            optional_fields=["horizontal", "label_requirement", "sequential_key_binding", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field", "codebook", "randomize_order"],
             supports_keybindings=True,
             single_select=True,
             description="Single-choice radio button selection"
@@ -405,7 +405,7 @@ def _register_builtin_schemas():
             name="multiselect",
             generator=generate_multiselect_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["display_config", "label_requirement", "sequential_key_binding", "video_as_label", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field", "codebook"],
+            optional_fields=["display_config", "label_requirement", "sequential_key_binding", "video_as_label", "has_free_response", "option_randomization", "dynamic_options", "dynamic_options_field", "codebook", "randomize_order"],
             supports_keybindings=True,
             description="Multiple-choice checkbox selection"
         ),
@@ -413,7 +413,7 @@ def _register_builtin_schemas():
             name="multirate",
             generator=generate_multirate_layout,
             required_fields=["name", "description", "options", "labels"],
-            optional_fields=["label_requirement", "options_from_data", "display_config", "arrangement"],
+            optional_fields=["label_requirement", "options_from_data", "display_config", "arrangement", "randomize_order"],
             supports_keybindings=False,
             description="Rate multiple items on a scale"
         ),
@@ -462,7 +462,7 @@ def _register_builtin_schemas():
             name="select",
             generator=generate_select_layout,
             required_fields=["name", "description", "labels"],
-            optional_fields=["label_requirement", "option_randomization", "dynamic_options", "dynamic_options_field", "use_predefined_labels", "codebook"],
+            optional_fields=["label_requirement", "option_randomization", "dynamic_options", "dynamic_options_field", "use_predefined_labels", "codebook", "randomize_order"],
             supports_keybindings=False,
             description="Dropdown selection"
         ),
@@ -565,7 +565,7 @@ def _register_builtin_schemas():
             name="pairwise",
             generator=generate_pairwise_layout,
             required_fields=["name", "description"],
-            optional_fields=["mode", "items_key", "items", "show_labels", "labels", "allow_tie", "tie_label", "sequential_key_binding", "scale", "label_requirement", "dimensions", "justification"],
+            optional_fields=["mode", "items_key", "items", "show_labels", "labels", "allow_tie", "tie_label", "sequential_key_binding", "scale", "label_requirement", "dimensions", "justification", "randomize_order"],
             supports_keybindings=True,
             description="Pairwise comparison of two items (binary selection or scale rating)"
         ),

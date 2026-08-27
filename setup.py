@@ -105,6 +105,23 @@ _VISION_DEPS = [
 _DB_DEPS = [
     "sqlalchemy>=2.0",
 ]
+# Local speech-to-text and speaker diarization. faster-whisper is Whisper
+# compiled through CTranslate2: no cloud API, no per-minute charge, and it runs
+# on CPU. Used by `potato transcripts --transcribe` and by Think-Aloud Mode's
+# live captioning.
+#
+# sherpa-onnx supplies the diarization Whisper has no model for. It is a ~9 MB
+# wheel running ONNX Runtime, deliberately chosen over pyannote.audio, which
+# would pull PyTorch and Lightning and require a Hugging Face token for gated
+# weights.
+#
+# Both download their model weights on first use, so an air-gapped machine
+# needs them staged once from a networked machine (POTATO_MODEL_CACHE for
+# diarization, a local CTranslate2 model directory for Whisper).
+_TRANSCRIBE_DEPS = [
+    "faster-whisper>=1.0.0",
+    "sherpa-onnx>=1.10.0",
+]
 # `potato deploy` to a VM provider. Only the SSH transport is extra: the API
 # clients use `requests` and the templates use Jinja2, both core dependencies.
 # paramiko 3.0+ is required for Ed25519Key.generate.
@@ -164,9 +181,10 @@ setup(
         "db": _DB_DEPS,
         "deploy": _DEPLOY_DEPS,
         "vision": _VISION_DEPS,
+        "transcribe": _TRANSCRIBE_DEPS,
         # `all` deliberately excludes `vision`: torch is a multi-gigabyte
         # install, and nothing in the default experience needs it.
-        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _DEPLOY_DEPS + _PREVIEW_DEPS + _MCP_DEPS,
+        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _DEPLOY_DEPS + _PREVIEW_DEPS + _MCP_DEPS + _TRANSCRIBE_DEPS,
     },
     include_package_data=True,
     entry_points={
