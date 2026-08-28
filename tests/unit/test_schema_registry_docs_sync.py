@@ -21,6 +21,26 @@ import pytest
 from potato.server_utils.schemas.registry import schema_registry
 
 
+
+def _slugify(heading: str) -> str:
+    """The anchor MkDocs will actually emit for a heading.
+
+    Borrowed from the renderer rather than reimplemented. A hand-rolled version
+    of this got the collapsing rule wrong -- it replaced each space
+    individually, so `Constant Sum / Points Allocation` produced a double hyphen
+    where the real slugifier emits one, and the five headings containing a
+    slash were guarded into a form that is dead in the built site. A guard that
+    disagrees with the renderer does not protect the links, it enforces broken
+    ones, so this asks the renderer.
+    """
+    try:
+        from markdown.extensions.toc import slugify
+    except ImportError:  # markdown ships with mkdocs, which is docs-only
+        value = re.sub(r"[^\w\s-]", "", heading).strip().lower()
+        return re.sub(r"[-\s]+", "-", value)
+    return slugify(heading, "-")
+
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_DOC = REPO_ROOT / "docs" / "annotation-types" / "schemas_and_templates.md"
 
@@ -101,10 +121,9 @@ class TestSchemaDocPointers:
         assert not broken, f"Reference-table Details links point at missing files: {broken}"
 
     def test_detail_anchors_resolve(self):
-        headings = set()
-        for heading in re.findall(r"^###\s+(.+?)\s*$", _doc_text(), flags=re.MULTILINE):
-            slug = re.sub(r"[^\w\s-]", "", heading.lower()).strip().replace(" ", "-")
-            headings.add(slug)
+        headings = {_slugify(h)
+                    for h in re.findall(r"^###\s+(.+?)\s*$", _doc_text(),
+                                        flags=re.MULTILINE)}
         broken = []
         for schema_type, (details, _example) in _table_rows().items():
             for anchor in re.findall(r"\]\(#([^)]+)\)", details):

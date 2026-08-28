@@ -80,7 +80,7 @@ curl -H "X-API-Key: $KEY" \
 ```
 
 This mode requires a built
-[curation index](../ai-intelligence/embedding_visualization.md).
+[curation index](embedding_visualization.md).
 
 !!! warning "Do not reach for embeddings first"
     Two frames of the same scene sit close in embedding space by design, which
@@ -134,6 +134,6 @@ deduplicate it would turn a local scan into an unbounded network job.
 
 - [Reviewing Model Output](../ai-intelligence/model_review.md) — the other
   curation pass worth running before annotation starts
-- [Embedding Visualization](../ai-intelligence/embedding_visualization.md) —
+- [Embedding Visualization](embedding_visualization.md) —
   building the index the semantic mode needs
 - [Task Assignment](task_assignment.md) — what exclusion changes

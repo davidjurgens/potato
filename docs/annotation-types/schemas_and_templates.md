@@ -59,7 +59,7 @@ Additional fields are specific to each annotation type and may be required or op
 | `confidence` | Confidence rating meta-annotation for any primary annotation | [below](#33-confidence-rating-confidence) | `examples/classification/confidence-calibrated/` |
 | `conjoint` | Discrete choice conjoint analysis with side-by-side profile comparison | [below](#22-conjoint-analysis-conjoint) | `examples/classification/conjoint/` |
 | `consensus_tracking` | Tag discussion acts per turn (proposal/agreement/disagreement/decision/concession) with cross-turn links to referenced proposals | [multi agent discussion](../agent-evaluation/multi_agent_discussion.md) | `examples/agent-traces/debate-judging/` |
-| `constant_sum` | Allocate a fixed budget of points across categories | [below](#34-constant-sum--points-allocation-constant_sum) | `examples/classification/constant-sum/` |
+| `constant_sum` | Allocate a fixed budget of points across categories | [below](#34-constant-sum-points-allocation-constant_sum) | `examples/classification/constant-sum/` |
 | `context_attribution` | Tag how each turn uses earlier context (used correctly / hallucinated / ignored) with links to the source turn | [agent task recipes](../agent-evaluation/agent_task_recipes.md) | `examples/agent-traces/context-attribution/` |
 | `coreference` | Coreference chain annotation for grouping mentions of the same entity | [below](#13-coreference-chains-coreference) | `examples/span/coreference/` |
 | `emergent_behavior` | Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/emergent-behavior/` |
@@ -83,15 +83,15 @@ Additional fields are specific to each annotation type and may be required or op
 | `process_reward` | Per-step process reward signals for PRM training | [below](#23-process-reward-process_reward) | `examples/agent-traces/cot-process-reward/` |
 | `pure_display` | Display-only content (instructions, headers) | [below](#27-display-only-pure_display) | `examples/advanced/all-annotation-types/` |
 | `radio` | Single-choice radio button selection | [below](#1-single-choice-radio) | `examples/classification/single-choice/` |
-| `range_slider` | Dual-thumb slider for selecting an acceptable range | [below](#37-range-slider--dual-thumb-range_slider) | `examples/classification/range-slider/` |
-| `ranking` | Drag-and-drop ranking of items by preference or relevance | [below](#36-ranking--drag-and-drop-ranking) | `examples/classification/ranking/` |
+| `range_slider` | Dual-thumb slider for selecting an acceptable range | [below](#37-range-slider-dual-thumb-range_slider) | `examples/classification/range-slider/` |
+| `ranking` | Drag-and-drop ranking of items by preference or relevance | [below](#36-ranking-drag-and-drop-ranking) | `examples/classification/ranking/` |
 | `region_caption` | Region captioning: a free-text description per region drawn on the image, with caption agreement over matched regions | [vlm grounding](../agent-evaluation/vlm_grounding.md) | `examples/image/region-captioning/` |
 | `rollout_evaluation` | World-model rollout evaluation: frame-locked video panels with temporal violation localization, preference and counterfactual plausibility | [world model eval](../agent-evaluation/world_model_eval.md) | `examples/agent-traces/world-model-rollouts/` |
 | `rubric_eval` | Multi-criteria rubric evaluation grid for LLM and text quality assessment | [below](#18-rubric-evaluation-rubric_eval) | `examples/classification/rubric-eval/` |
 | `select` | Dropdown selection | [below](#25-dropdown-selection-select) | `examples/advanced/all-annotation-types/` |
 | `semantic_differential` | Bipolar adjective scales for measuring connotative meaning | [below](#35-semantic-differential-semantic_differential) | `examples/classification/semantic-differential/` |
 | `slider` | Slider for selecting a value in a range | [below](#5-slider-slider) | `examples/classification/slider/` |
-| `soft_label` | Probability distribution across labels via constrained sliders | [below](#32-soft-label--probability-distribution-soft_label) | `examples/classification/soft-label/` |
+| `soft_label` | Probability distribution across labels via constrained sliders | [below](#32-soft-label-probability-distribution-soft_label) | `examples/classification/soft-label/` |
 | `span` | Text span annotation/highlighting with optional entity linking to knowledge bases | [below](#4-text-span-selection-span) | `examples/span/span-labeling/` |
 | `span_link` | Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION) | [below](#26-span-linking-span_link) | `examples/span/span-linking/` |
 | `spatial_annotation` | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments | [point cloud](spatial/point_cloud.md) | `examples/spatial/kitti-cuboids/` |
@@ -99,7 +99,7 @@ Additional fields are specific to each annotation type and may be required or op
 | `table_grid` | Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty) | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/table-grid/` |
 | `temporal_grounding` | Video temporal grounding: mark gold event intervals with live IoU vs predicted | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/temporal-grounding/` |
 | `text` | Free-form text input | [below](#6-text-input-text) | `examples/classification/text-box/` |
-| `text_edit` | Inline text editing with diff tracking for post-editing and correction tasks | [below](#19-text-edit--post-edit-text_edit) | `examples/classification/text-edit/` |
+| `text_edit` | Inline text editing with diff tracking for post-editing and correction tasks | [below](#19-text-edit-post-edit-text_edit) | `examples/classification/text-edit/` |
 | `tiered_annotation` | Hierarchical multi-tier annotation for audio/video (ELAN-style) | [below](#15-tiered-annotation-tiered_annotation) | `examples/audio/tiered-annotation/` |
 | `tool_call_review` | Per-tool-call correctness review (right tool / args / ordering) | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/tool-call-review/` |
 | `tool_contention` | Tool/resource-contention timeline: per-agent lanes + shared-resource collision classification | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/tool-contention/` |
