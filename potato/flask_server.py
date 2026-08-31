@@ -1952,13 +1952,17 @@ def load_phase_data(config: dict) -> None:
         except Exception as e:
             from potato.server_utils.config_module import ConfigValidationError
             if isinstance(e, ConfigValidationError):
-                # Configuration errors (e.g. invalid display_logic on a survey
-                # question) must fail fast rather than being logged-and-skipped:
-                # silently dropping a consent/prestudy phase would let users
-                # bypass required gating.
                 raise
+            # A phase that cannot be built must abort the boot, not be dropped.
+            # Logging and continuing produced studies that launched and were
+            # completed by annotators with the entire post-study survey
+            # missing -- the only trace was one ERROR line in the startup log.
+            # Same reasoning as consent/prestudy gating: a phase the author
+            # asked for and did not get is never the safe outcome.
             logger.error(f"Failed to load phase '{phase_name}': {e}")
-            continue
+            raise ConfigValidationError(
+                f"Failed to load phase '{phase_name}': {e}"
+            ) from e
 
     # Validate display_logic on SurveyFlow questions now that every phase's
     # questions are known. This covers what the config-load validator misses

@@ -2461,6 +2461,41 @@ def _validate_mace_config(config_data: Dict[str, Any]) -> None:
         )
 
 
+def _validate_instrument_questions(inst_id: str, phase_name: str) -> None:
+    """Check that every question in a bundled instrument uses a registered type.
+
+    The name check above only proves the instrument file exists. Its questions
+    are resolved at boot, so an unregistered `annotation_type` inside one used
+    to surface as a dropped phase at runtime with a clean `validate` run --
+    the eight demographics instruments all shipped `textbox`, which is not a
+    registered type (the free-text type is `text`).
+    """
+    try:
+        from potato.survey_instruments import get_instrument_questions
+        from potato.server_utils.schemas.registry import schema_registry
+    except ImportError:
+        return
+
+    try:
+        questions = get_instrument_questions(inst_id)
+    except Exception:
+        # Name validity is the caller's job; an unreadable file is reported
+        # by the loader at boot.
+        return
+
+    supported = set(schema_registry.get_supported_types())
+    for question in questions:
+        if not isinstance(question, dict):
+            continue
+        ann_type = question.get("annotation_type")
+        if ann_type is not None and ann_type not in supported:
+            raise ConfigValidationError(
+                f"Phase {phase_name}: instrument '{inst_id}' question "
+                f"'{question.get('name', '?')}' has unsupported annotation_type "
+                f"'{ann_type}'. Supported types: {', '.join(sorted(supported))}"
+            )
+
+
 def _validate_phase_instruments(phase: Dict[str, Any], phase_name: str) -> None:
     """
     Validate instrument references in a phase configuration.
@@ -2472,50 +2507,49 @@ def _validate_phase_instruments(phase: Dict[str, Any], phase_name: str) -> None:
     Raises:
         ConfigValidationError: If instrument references are invalid
     """
-    # Validate single instrument reference
+    # Normalize `instrument` (a string) and `instruments` (a list) into one
+    # list of ids so both go through the same name and question checks.
+    inst_ids: List[str] = []
+
     if 'instrument' in phase:
         inst_id = phase['instrument']
         if not isinstance(inst_id, str):
             raise ConfigValidationError(
                 f"Phase {phase_name}: 'instrument' must be a string"
             )
-        try:
-            from potato.survey_instruments import get_registry
-            registry = get_registry()
-            if inst_id not in registry['instruments']:
-                available = sorted(registry['instruments'].keys())[:10]
-                raise ConfigValidationError(
-                    f"Phase {phase_name}: Unknown instrument '{inst_id}'. "
-                    f"Available instruments: {available}..."
-                )
-        except ImportError:
-            # survey_instruments module not available - skip validation
-            pass
+        inst_ids.append(inst_id)
 
-    # Validate multiple instruments
     if 'instruments' in phase:
         inst_list = phase['instruments']
         if not isinstance(inst_list, list):
             raise ConfigValidationError(
                 f"Phase {phase_name}: 'instruments' must be a list"
             )
-        try:
-            from potato.survey_instruments import get_registry
-            registry = get_registry()
-            for inst_id in inst_list:
-                if not isinstance(inst_id, str):
-                    raise ConfigValidationError(
-                        f"Phase {phase_name}: All items in 'instruments' must be strings"
-                    )
-                if inst_id not in registry['instruments']:
-                    available = sorted(registry['instruments'].keys())[:10]
-                    raise ConfigValidationError(
-                        f"Phase {phase_name}: Unknown instrument '{inst_id}'. "
-                        f"Available instruments: {available}..."
-                    )
-        except ImportError:
-            # survey_instruments module not available - skip validation
-            pass
+        for inst_id in inst_list:
+            if not isinstance(inst_id, str):
+                raise ConfigValidationError(
+                    f"Phase {phase_name}: All items in 'instruments' must be strings"
+                )
+            inst_ids.append(inst_id)
+
+    if not inst_ids:
+        return
+
+    try:
+        from potato.survey_instruments import get_registry
+        registry = get_registry()
+    except ImportError:
+        # survey_instruments module not available - skip validation
+        return
+
+    for inst_id in inst_ids:
+        if inst_id not in registry['instruments']:
+            available = sorted(registry['instruments'].keys())[:10]
+            raise ConfigValidationError(
+                f"Phase {phase_name}: Unknown instrument '{inst_id}'. "
+                f"Available instruments: {available}..."
+            )
+        _validate_instrument_questions(inst_id, phase_name)
 
 
 def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None:

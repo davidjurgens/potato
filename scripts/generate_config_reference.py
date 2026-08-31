@@ -385,7 +385,11 @@ def generate_reference():
     lines.append("| Field | Required | Description |")
     lines.append("|-------|----------|-------------|")
     lines.append("| `name` | Yes | Internal identifier used in stored annotations |")
-    lines.append("| `text` | No | Display text (defaults to `name` if omitted) |")
+    lines.append(
+        "| `text` | No | Display text (defaults to a humanized `name` if "
+        "omitted). `label` and `displayed_label` are accepted spellings of "
+        "the same thing; `displayed_label` wins, then `text`, then `label` |"
+    )
     lines.append("| `tooltip` | No | Help text shown on hover |")
     lines.append("| `key_value` | No | Single-key keyboard shortcut for this label |")
     lines.append("| `abbreviation` | No | Short text for compact display (span overlays) |")
