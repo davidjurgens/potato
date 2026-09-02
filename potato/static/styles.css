@@ -2966,11 +2966,33 @@ fieldset[schema] {
   }
 }
 
+/* Screen-reader-only text.
+ *
+ * Anything drawn on a <canvas> is pixels, so a canvas message needs a DOM
+ * twin for assistive tech. The twin must not also appear on screen, or the
+ * message reads twice. grounding-eval.css, region-caption.css and
+ * rollout-eval.css each carry a scoped copy of this rule; new call sites use
+ * this one. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Pairwise display styles */
 .display-type-pairwise .pairwise-display-content {
+  /* PairwiseDisplay subtracts each cell's share of this gap from its width, so
+     the two must agree. Change it here, not in the inline style. */
+  --pairwise-gap: 16px;
   display: flex;
   flex-direction: row;
-  gap: 16px;
+  gap: var(--pairwise-gap);
   flex-wrap: wrap;
 }
 
@@ -2990,6 +3012,10 @@ fieldset[schema] {
 }
 
 .display-type-pairwise .pairwise-cell {
+  /* Without this a long unbroken string sets the cell's floor above its flex
+     basis and pushes its neighbour onto the next row. */
+  min-width: 0;
+  box-sizing: border-box;
   padding: 16px;
   background-color: var(--card, #ffffff);
   border: 1px solid var(--border, #e4e4e7);

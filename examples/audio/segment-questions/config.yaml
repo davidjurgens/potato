@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Per-segment questions on audio
+#
+# The annotator marks a region on the waveform, then answers a set of questions
+# about that region. The answers are stored on the segment, not on the item, so
+# one clip can carry as many answered segments as the annotator marks.
+#
+# Run from the repo root:
+#   python potato/flask_server.py start examples/audio/segment-questions/config.yaml -p 8000
+
+annotation_task_name: Interruptions in Consultations
+task_dir: .
+output_annotation_dir: annotation_output/segment-questions/
+export_annotation_format: jsonl
+
+data_files:
+  - data/consultations.json
+
+item_properties:
+  id_key: id
+  text_key: audio_url
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: audio_annotation
+    name: interruptions
+    description: >-
+      Mark each interruption on the waveform (right-click and drag, or press
+      [ and ] then Enter), then answer the questions for it.
+    # "both" gives each segment a label AND a question set. Use "questions" for
+    # question sets without labels, "label" for labels alone.
+    mode: both
+    labels:
+      - name: interruption
+        color: "#4ECDC4"
+        key_value: "1"
+      - name: overlap
+        color: "#FF6B6B"
+        key_value: "2"
+
+    # Each entry is an ordinary annotation scheme, rendered per segment.
+    # Answers land in the segment's `annotations` object, keyed by `name`.
+    segment_schemes:
+      - annotation_type: radio
+        name: who_started
+        description: "Who started it?"
+        labels: ["Clinician", "Patient"]
+
+      - annotation_type: multiselect
+        name: cues
+        description: "Which cues are present?"
+        labels: ["Raised voice", "Talking over", "Long pause"]
+
+      - annotation_type: likert
+        name: disruptiveness
+        description: "How disruptive was it?"
+        size: 5
+        min_label: "Barely noticeable"
+        max_label: "Derailed the conversation"
+
+      - annotation_type: text
+        name: note
+        description: "Anything else worth recording?"
+
+    min_segments: 1
+    zoom_enabled: true
+
+site_dir: default

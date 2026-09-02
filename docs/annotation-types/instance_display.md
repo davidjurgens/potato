@@ -235,7 +235,7 @@ so they do not affect span offsets. See
   type: "pairwise"
   label: "Compare Options"
   display_options:
-    cell_width: "50%"           # Width of each cell
+    cell_width: "auto"          # Cell width; "auto" splits the row evenly
     show_labels: true           # Show A/B labels
     labels: ["Option A", "Option B"]  # Custom labels
     vertical_on_mobile: true    # Stack vertically on mobile

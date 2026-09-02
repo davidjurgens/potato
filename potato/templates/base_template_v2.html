@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=11">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=13">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=1">
@@ -767,12 +767,12 @@
     <script src="{{ url_for('static', filename='span-core.js') }}?v=17"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=2"></script>
     <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->
-    <script src="{{ url_for('static', filename='display-logic.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='display-logic.js') }}?v=4"></script>
     <!-- Instance display manager (for new instance_display configuration) -->
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=3"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=31"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=32"></script>
     <!-- Shared geometry for the bottom-anchored floating widgets below; must
          load before them. Unconditional: tiny, and several may be enabled at
          once (see the combined showcase example). -->
@@ -824,7 +824,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=29"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=31"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.
@@ -945,13 +945,19 @@
     <!-- Shared right-click-drag range selection + edge auto-scroll for Peaks views -->
     <script src="{{ url_for('static', filename='peaks-range-select.js') }}?v=2"></script>
     {% endif %}
+    <!-- Per-segment question forms, shared by the audio and video widgets.
+         Loaded before both, because each calls window.SegmentQuestions the
+         first time a segment is selected. -->
+    {% if (frontend_assets.audio_annotation | default(false)) or (frontend_assets.video_annotation | default(false)) %}
+    <script src="{{ url_for('static', filename='segment-questions.js') }}?v=1"></script>
+    {% endif %}
     <!-- Audio annotation manager -->
     {% if frontend_assets.audio_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=6"></script>
     {% endif %}
     <!-- Video annotation manager -->
     {% if frontend_assets.video_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=19"></script>
+    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=20"></script>
     {% endif %}
 
     <!-- Span link manager -->
@@ -970,11 +976,11 @@
     {% endif %}
 
     <!-- Entity linking for knowledge bases (Wikidata, UMLS) -->
-    <script src="{{ url_for('static', filename='entity-linking.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='entity-linking.js') }}?v=2"></script>
 
     <!-- Coreference chain manager -->
     {% if frontend_assets.coreference | default(false) %}
-    <script src="{{ url_for('static', filename='coreference-manager.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='coreference-manager.js') }}?v=6"></script>
     {% endif %}
 
     <!-- Conversation tree interaction -->

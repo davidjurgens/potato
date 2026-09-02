@@ -609,11 +609,31 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
 
                         var imageUrl = null;
 
+                        // The template stamps data-image-url with the rendered
+                        // instance whether or not that instance is a URL. On an
+                        // annotation page it is (text_key points at the image
+                        // field); on a phase page -- training, consent, a survey
+                        // -- it can be the practice question's prose, and taking
+                        // it on faith made the canvas fetch a sentence and blame
+                        // CORS. Every candidate is shape-checked before use.
+                        function looksLikeImageUrl(value) {{
+                            if (!value) return false;
+                            var v = String(value).trim();
+                            if (!v || /\\s/.test(v) || v.indexOf('<') !== -1) return false;
+                            if (/^(https?:\\/\\/|data:image\\/|blob:|file:\\/\\/)/i.test(v)) return true;
+                            // Relative and rooted paths: require an image extension so
+                            // a bare word is not mistaken for a filename.
+                            return /^[.\\/]?[^?#]*\\.(jpg|jpeg|png|gif|webp|svg|bmp|tif|tiff|avif)(\\?|#|$)/i.test(v);
+                        }}
+
                         // Method 1: Check data-image-url attribute (set by template when has_image_annotation=true)
                         if (textContent) {{
-                            imageUrl = textContent.getAttribute('data-image-url');
-                            if (imageUrl) {{
+                            var declaredUrl = textContent.getAttribute('data-image-url');
+                            if (looksLikeImageUrl(declaredUrl)) {{
+                                imageUrl = declaredUrl;
                                 console.log('[ImageAnnotation] Found URL from data-image-url:', imageUrl);
+                            }} else if (declaredUrl) {{
+                                console.log('[ImageAnnotation] Ignoring non-URL data-image-url:', declaredUrl);
                             }}
                         }}
 
@@ -629,7 +649,7 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                         // Method 3: If text content looks like a URL, use it directly
                         if (!imageUrl && textContent) {{
                             var textVal = textContent.textContent.trim();
-                            if (textVal.match(/^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|svg)/i)) {{
+                            if (looksLikeImageUrl(textVal)) {{
                                 imageUrl = textVal;
                                 console.log('[ImageAnnotation] Found URL from text content:', imageUrl);
                             }}
@@ -664,6 +684,13 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                             manager.loadImage(imageUrl);
                         }} else {{
                             console.warn('No image URL found for annotation');
+                            // Say what actually happened. Falling through silently
+                            // left an empty canvas that reads as a broken tool.
+                            if (typeof manager._showCanvasMessage === 'function') {{
+                                manager._showCanvasMessage(
+                                    'No image URL for this item. Check that the item data has an image URL '
+                                    + 'under text_key or source_field.');
+                            }}
                         }}
 
                         // Wire up toolbar buttons

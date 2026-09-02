@@ -104,7 +104,8 @@ labels:
 ```
 
 #### Questions Mode
-Each segment gets its own set of annotation questions:
+Each segment gets its own set of annotation questions. The annotator marks a
+region, selects it, and answers the questions in the Segment Details panel:
 
 ```yaml
 mode: questions
@@ -133,6 +134,33 @@ segment_schemes:
     name: speaker
     labels: ["host", "guest"]
 ```
+
+#### How segment questions work
+
+Each entry in `segment_schemes` is an ordinary annotation scheme, rendered by
+the same generator that renders a top-level one — so any annotation type works
+inside a segment, with the same layout, tooltips and validation messages.
+
+Answers are stored on the segment rather than on the item, keyed by the
+sub-scheme's `name`:
+
+```json
+{"segments": [
+  {"id": "segment_1", "start_time": 0.0, "end_time": 16.3, "label": "interruption",
+   "annotations": {"who_started": "Patient", "cues": ["Talking over"]}}
+]}
+```
+
+Two limits are worth knowing:
+
+- **Keybindings are not bound.** A segment's fields only exist while that
+  segment is selected, so a global key would fire against whichever segment
+  happened to be open. Answer them by clicking.
+- **`label_requirement` is not enforced** on a sub-scheme. Marking one required
+  would block Next on a question the annotator may not have opened yet. Use
+  `min_segments` to require segments, and check completeness in analysis.
+
+A runnable example is in `examples/audio/segment-questions/`.
 
 ### Label Configuration
 

@@ -2552,6 +2552,96 @@ def _validate_phase_instruments(phase: Dict[str, Any], phase_name: str) -> None:
         _validate_instrument_questions(inst_id, phase_name)
 
 
+# YAML 1.1 spells booleans a lot of ways, and PyYAML applies all of them to a
+# bare scalar in a list. `labels: [Yes, No]` -- the most ordinary label pair
+# there is -- reaches Potato as `[True, False]`.
+def _label_shape_error(value, path, index, key):
+    """Why `value` cannot be a label, or None if it can.
+
+    Mirrors what `identifier_utils.validate_schema_config` accepts: a string, or
+    a dict carrying a `name`. That check runs in the schema generator, which is
+    reached at BOOT and logs rather than raising, so a config with a bad label
+    validated clean, started clean, and then rendered an error card where the
+    question should have been. Checking the element type here is what lets
+    `--strict` say so.
+    """
+    if isinstance(value, str):
+        return None
+    if isinstance(value, dict):
+        if 'name' not in value:
+            return (f"{path}.{key}[{index}] is a mapping without a 'name' key: "
+                    f"{value!r}")
+        if not isinstance(value['name'], str):
+            return (f"{path}.{key}[{index}].name must be a string, got "
+                    f"{type(value['name']).__name__}: {value['name']!r}")
+        return None
+
+    if isinstance(value, bool):
+        # The overwhelmingly common cause, and the one whose error message is
+        # useless without this sentence: the config says `Yes`, the traceback
+        # says `True`, and nothing connects them.
+        spellings = 'Yes/No, On/Off, Y/N or True/False'
+        return (f"{path}.{key}[{index}] came through as the boolean "
+                f"{value!r}. YAML reads {spellings} in any capitalisation as a "
+                f"boolean, so a label written that way is not a string by the "
+                f"time Potato sees it. Quote it: "
+                f'{key}: ["Yes", "No"].')
+
+    return (f"{path}.{key}[{index}] must be a string or a mapping with a "
+            f"'name' key, got {type(value).__name__}: {value!r}")
+
+
+def validate_label_list_elements(scheme, path):
+    """Check every label-shaped list on a scheme for elements the generators reject.
+
+    Type-agnostic on purpose. Seven call sites validated that `labels` was a
+    list and none of them looked inside it, and each new annotation type added
+    another. Anything with a `labels` or `options` key gets checked here once.
+    """
+    for key in ('labels', 'options'):
+        values = scheme.get(key)
+        if not isinstance(values, list):
+            continue
+        for index, value in enumerate(values):
+            message = _label_shape_error(value, path, index, key)
+            if message:
+                raise ConfigValidationError(message)
+
+
+def _validate_segment_schemes(segment_schemes, path):
+    """Validate the sub-schemes an audio/video scheme asks per segment.
+
+    They are rendered through the same registry as any top-level scheme, so
+    they have to satisfy the same rules. Without this the failure surfaced as
+    an error card inside the segment panel at annotation time -- the same
+    generator-logs-at-boot problem that let `labels: [Yes, No]` through.
+
+    Nested segment_schemes are rejected: a segment cannot contain segments, and
+    the media types are the only ones that own a timeline.
+    """
+    nested_media = {'audio_annotation', 'video_annotation', 'tiered_annotation'}
+
+    for index, sub_scheme in enumerate(segment_schemes):
+        sub_path = f"{path}.segment_schemes[{index}]"
+
+        if not isinstance(sub_scheme, dict):
+            raise ConfigValidationError(f"{sub_path} must be a mapping")
+        if 'annotation_type' not in sub_scheme:
+            raise ConfigValidationError(f"{sub_path} missing 'annotation_type'")
+        if sub_scheme['annotation_type'] in nested_media:
+            raise ConfigValidationError(
+                f"{sub_path}.annotation_type cannot be "
+                f"'{sub_scheme['annotation_type']}': a segment question cannot "
+                "itself own a timeline."
+            )
+
+        # `description` is optional here and defaults to the name, because a
+        # per-segment question is already labelled by the panel it sits in.
+        checked = dict(sub_scheme)
+        checked.setdefault('description', checked.get('name', ''))
+        validate_single_annotation_scheme(checked, sub_path)
+
+
 def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None:
     """
     Validate a single annotation scheme.
@@ -2652,6 +2742,11 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                     f"{path} (type '{annotation_type}') missing required field(s): "
                     f"{', '.join(missing)}"
                 )
+
+    # Label element types, for every type that has labels. The blocks below
+    # check that `labels` is a non-empty list and stop there; the element type
+    # is only checked in the generator, at boot, where it logs.
+    validate_label_list_elements(scheme, path)
 
     # Type-specific validation (deep structural checks beyond registry required_fields)
     if annotation_type in ['radio', 'multiselect', 'select']:
@@ -2891,6 +2986,7 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
                 raise ConfigValidationError(f"{path}.segment_schemes must be a list")
             if not scheme['segment_schemes']:
                 raise ConfigValidationError(f"{path}.segment_schemes cannot be empty for mode '{mode}'")
+            _validate_segment_schemes(scheme['segment_schemes'], path)
 
         # Validate optional numeric fields
         if 'min_segments' in scheme:
@@ -2925,6 +3021,11 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if 'max_segments' in scheme and scheme['max_segments'] is not None:
             if not isinstance(scheme['max_segments'], int) or scheme['max_segments'] < 1:
                 raise ConfigValidationError(f"{path}.max_segments must be a positive integer or null")
+
+        if 'segment_schemes' in scheme:
+            if not isinstance(scheme['segment_schemes'], list):
+                raise ConfigValidationError(f"{path}.segment_schemes must be a list")
+            _validate_segment_schemes(scheme['segment_schemes'], path)
 
         if 'timeline_height' in scheme:
             if not isinstance(scheme['timeline_height'], int) or scheme['timeline_height'] < 30:

@@ -5186,6 +5186,12 @@ function selectPairwiseTile(tile) {
     }
     if (hiddenInput) {
         hiddenInput.value = value;
+        // Every other hidden-input widget (bws, ranking, triage) marks its input
+        // touched here. Pairwise did not, so syncAnnotationsFromDOM -- which
+        // deliberately ignores untouched hidden inputs, because browsers restore
+        // their .value across a reload -- skipped the answer, and so did the
+        // display-logic DOM fallback.
+        hiddenInput.setAttribute('data-modified', 'true');
         // Trigger annotation save
         registerAnnotation(hiddenInput);
         // Trigger change event for validation
@@ -5229,6 +5235,12 @@ function selectPairwiseOption(btn) {
     }
     if (hiddenInput) {
         hiddenInput.value = value;
+        // Every other hidden-input widget (bws, ranking, triage) marks its input
+        // touched here. Pairwise did not, so syncAnnotationsFromDOM -- which
+        // deliberately ignores untouched hidden inputs, because browsers restore
+        // their .value across a reload -- skipped the answer, and so did the
+        // display-logic DOM fallback.
+        hiddenInput.setAttribute('data-modified', 'true');
         // Trigger annotation save
         registerAnnotation(hiddenInput);
         // Trigger change event for validation
@@ -5273,6 +5285,9 @@ function restorePairwiseAnnotations() {
         if (schema && labelName && currentAnnotations[schema] && currentAnnotations[schema][labelName]) {
             const savedValue = currentAnnotations[schema][labelName];
             hiddenInput.value = savedValue;
+            // Mark it touched, as bws and ranking do on restore. An unmarked
+            // hidden input is invisible to syncAnnotationsFromDOM.
+            hiddenInput.setAttribute('data-modified', 'true');
 
             // Select the appropriate tile or button
             if (savedValue === 'tie' || savedValue === 'neither') {
@@ -5318,6 +5333,7 @@ function restorePairwiseAnnotations() {
             if (!dim || !currentAnnotations[schema][dim]) return;
             const val = currentAnnotations[schema][dim];
             input.value = val;
+            input.setAttribute('data-modified', 'true');
 
             const row = input.closest('.pairwise-dimension-row');
             if (!row) return;

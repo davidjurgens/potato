@@ -185,6 +185,15 @@
         // Listen for span creation events
         document.addEventListener('spanCreated', handleSpanCreated);
 
+        // Nothing in Potato dispatches `spanCreated`, so this listener only ever
+        // ran for spans that existed at boot: draw a new mention and it came
+        // back without a link icon, which reads as entity linking being off for
+        // that span. Watch the overlay container instead. addLinkIconsToSpans()
+        // is idempotent -- it skips any overlay that already has an icon -- so
+        // re-running it on every overlay change is safe, and it keeps working if
+        // the span layer ever does start emitting the event.
+        observeOverlayChanges();
+
         // Add click handlers to existing spans with link icons
         addLinkIconsToSpans();
 
@@ -214,6 +223,29 @@
     /**
      * Add link icons to all span overlays (only for schemas with entity linking enabled)
      */
+    /**
+     * Re-apply link icons whenever the overlay layer changes.
+     *
+     * Overlays are re-rendered wholesale on every span change and on instance
+     * navigation, so this fires often; the callback is debounced to one pass per
+     * frame rather than one per mutation record.
+     */
+    function observeOverlayChanges() {
+        if (typeof MutationObserver === 'undefined') return;
+
+        const container = document.getElementById('span-overlays') || document.body;
+        let pending = false;
+        const observer = new MutationObserver(() => {
+            if (pending) return;
+            pending = true;
+            requestAnimationFrame(() => {
+                pending = false;
+                addLinkIconsToSpans();
+            });
+        });
+        observer.observe(container, {childList: true, subtree: true});
+    }
+
     function addLinkIconsToSpans() {
         const enabledSchemas = getSchemasWithEntityLinking();
         if (enabledSchemas.size === 0) {

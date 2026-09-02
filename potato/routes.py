@@ -7040,7 +7040,8 @@ def track_interactions():
     }
     """
     import time as time_module
-    from potato.interaction_tracking import get_or_create_behavioral_data
+    from potato.interaction_tracking import (
+        get_or_create_behavioral_data, normalize_instance_id)
 
     if 'username' not in session:
         return jsonify({"error": "Not authenticated"}), 401
@@ -7051,7 +7052,10 @@ def track_interactions():
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
-    instance_id = data.get('instance_id')
+    # Unnormalized, a phase page's null id created a second behavioral-data
+    # bucket keyed "null" beside the real "__phase_page__" one, and the
+    # navigation events landed in it.
+    instance_id = normalize_instance_id(data.get('instance_id'))
     events = data.get('events', [])
 
     user_state = get_user_state(username)
@@ -7133,7 +7137,8 @@ def track_ai_usage():
     }
     """
     import time as time_module
-    from potato.interaction_tracking import get_or_create_behavioral_data, AIUsageEvent
+    from potato.interaction_tracking import (
+        get_or_create_behavioral_data, normalize_instance_id, AIUsageEvent)
 
     if 'username' not in session:
         return jsonify({"error": "Not authenticated"}), 401
@@ -7144,11 +7149,13 @@ def track_ai_usage():
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
-    instance_id = data.get('instance_id')
+    # Same phase-page case as track_annotation_change: AI assistance offered on
+    # a training or survey page has a null instance id and was dropped.
+    instance_id = normalize_instance_id(data.get('instance_id'))
     schema_name = data.get('schema_name')
     event_type = data.get('event_type')  # 'request', 'response', 'accept', 'reject'
 
-    if not instance_id or not schema_name or not event_type:
+    if not schema_name or not event_type:
         return jsonify({"error": "Missing required fields"}), 400
 
     user_state = get_user_state(username)
@@ -7224,7 +7231,8 @@ def track_annotation_change():
     }
     """
     import time as time_module
-    from potato.interaction_tracking import get_or_create_behavioral_data, AnnotationChange
+    from potato.interaction_tracking import (
+        get_or_create_behavioral_data, normalize_instance_id, AnnotationChange)
 
     if 'username' not in session:
         return jsonify({"error": "Not authenticated"}), 401
@@ -7239,7 +7247,14 @@ def track_annotation_change():
     schema_name = data.get('schema_name')
     action = data.get('action')
 
-    if not instance_id or not schema_name or not action:
+    # Phase pages (consent, instructions, training, prestudy/poststudy surveys)
+    # have no instance id, so every change made on one arrived with instance_id
+    # null and was rejected by the guard below. The phase-stamping block further
+    # down exists specifically to record which phase a change happened in, and it
+    # was unreachable for the only pages it was written for.
+    instance_id = normalize_instance_id(instance_id)
+
+    if not schema_name or not action:
         return jsonify({"error": "Missing required fields"}), 400
 
     user_state = get_user_state(username)

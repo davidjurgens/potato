@@ -1498,14 +1498,33 @@ class AudioAnnotationManager {
         const contentEl = this.questionsEl.querySelector('.segment-questions-content');
         if (!contentEl) return;
 
-        // Generate form for segment questions
-        let html = `<p class="segment-questions-header">Annotating: ${this._escapeHtml(segmentData.label)} (${this._formatTime(segmentData.startTime)} - ${this._formatTime(segmentData.endTime)})</p>`;
+        const header = document.createElement('p');
+        header.className = 'segment-questions-header';
+        header.textContent = `Annotating: ${segmentData.label} `
+            + `(${this._formatTime(segmentData.startTime)} - ${this._formatTime(segmentData.endTime)})`;
 
-        // TODO: Generate actual form fields based on segmentSchemes
-        // For now, show placeholder
-        html += '<p class="segment-questions-placeholder">Segment annotation questions will appear here.</p>';
+        contentEl.innerHTML = '';
+        contentEl.appendChild(header);
 
-        contentEl.innerHTML = html;
+        // The fields themselves come from the hidden <template> the server
+        // rendered from `segment_schemes`. This used to be a TODO above a
+        // placeholder paragraph, so every segment was stored with an empty
+        // `annotations` object no matter what the config asked for.
+        const fields = document.createElement('div');
+        fields.className = 'segment-questions-fields';
+        contentEl.appendChild(fields);
+
+        const rendered = window.SegmentQuestions && window.SegmentQuestions.render({
+            schemaName: this.config.schemaName,
+            container: fields,
+            segment: segmentData,
+            onChange: () => this._saveData(),
+        });
+
+        if (!rendered) {
+            fields.innerHTML = '<p class="segment-questions-placeholder">'
+                + 'No segment questions are configured for this schema.</p>';
+        }
     }
 
     /**

@@ -1209,10 +1209,20 @@ def load_training_data(config: dict) -> None:
     global training_items
     training_items = []
 
+    # A project whose text_key is not "text" -- an image task pointing it at the
+    # image URL field, say -- writes its practice question under that key. Accept
+    # either, and carry the key through to the Item below.
+    training_text_key = config.get("item_properties", {}).get("text_key", "text")
+
     for instance in training_instances:
         # Validate required fields
-        if 'id' not in instance or 'text' not in instance or 'correct_answers' not in instance:
+        if 'id' not in instance or 'correct_answers' not in instance:
             raise Exception(f"Training instance missing required fields: {instance}")
+        if 'text' not in instance and training_text_key not in instance:
+            raise Exception(
+                f"Training instance {instance['id']} has neither 'text' nor the "
+                f"configured text_key '{training_text_key}'"
+            )
 
         # Validate correct_answers correspond to annotation schemes
         for scheme_name in instance['correct_answers'].keys():
@@ -1232,15 +1242,23 @@ def load_training_data(config: dict) -> None:
         else:
             categories = []
 
-        # Create Item object for training instance
-        item_data = {
+        # Create Item object for training instance.
+        #
+        # Start from the instance itself rather than a fixed six keys. The old
+        # version copied id/text/correct_answers/explanation/displayed_text and
+        # threw the rest away, so an image project's `image_url` -- the field its
+        # text_key names, and the one the practice page needs -- never reached
+        # the Item. The page then fell back to the prose in `text` and asked the
+        # browser to load a sentence as an image.
+        question_text = instance.get(training_text_key) or instance.get('text', '')
+        item_data = dict(instance)
+        item_data.update({
             'id': instance['id'],
-            'text': instance['text'],
             'correct_answers': instance['correct_answers'],
             'explanation': instance.get('explanation', ''),
-            'displayed_text': get_displayed_text(instance['text']),
+            'displayed_text': get_displayed_text(question_text),
             'categories': categories  # Store normalized categories list
-        }
+        })
 
         training_item = Item(instance['id'], item_data)
         training_items.append(training_item)
@@ -2352,6 +2370,13 @@ def _training_page_context(user_state):
         # the image URL field — produced an EMPTY training question, so the
         # canvas had no image to load even once its assets were wired up.
         text_key = config.get("item_properties", {}).get("text_key", "text")
+        # `displayed_text` stays first: it is `get_displayed_text(question_text)`,
+        # so for a list-valued practice item it holds the formatted HTML while
+        # the raw field holds a Python list. What was broken was upstream --
+        # load_training_data derived it from `text` alone and dropped the field
+        # `text_key` names, so on an image project this whole chain resolved to
+        # the practice question's prose. It now derives from text_key when the
+        # instance carries it, which is what makes the branch below reachable.
         text = (data.get("displayed_text")
                 or data.get(text_key)
                 or data.get("text", ""))

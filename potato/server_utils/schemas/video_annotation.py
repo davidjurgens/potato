@@ -204,6 +204,14 @@ def _generate_html(
     escaped_name = escape_html_content(schema_name)
     description = escape_html_content(annotation_scheme.get('description', ''))
     config_json = json.dumps(js_config)
+
+    # Per-segment question forms. See audio_annotation for the same wiring;
+    # video had not even a placeholder, so `segmentSchemes` was inert.
+    from potato.server_utils.schemas.segment_questions import (
+        render_segment_question_template)
+    segment_questions_template, _ = render_segment_question_template(
+        js_config.get('segmentSchemes') or [], schema_name)
+
     timeline_height = js_config.get('timelineHeight', 70)
     overview_height = js_config.get('overviewHeight', 40)
 
@@ -393,6 +401,7 @@ def _generate_html(
                     <h4>Segment Details</h4>
                     <div class="segment-questions-content"></div>
                 </div>
+                {segment_questions_template}
 
                 <!-- Tracking panel (for tracking mode) -->
                 <div id="tracking-panel-{escaped_name}" class="tracking-panel" style="display: {'block' if mode in ['tracking', 'combined'] else 'none'};">

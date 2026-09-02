@@ -328,6 +328,20 @@ class DisplayLogicManager {
         document.querySelectorAll('select.annotation-input').forEach(select => {
             if (select.value) record(select, select.value);
         });
+        // Hidden inputs are the answer for every tile-based widget -- pairwise,
+        // bws, ranking, triage, and the rest of the `data-schema=` family. Without
+        // them a display_logic gate naming one of those schemas sees no answer at
+        // all on any page that reaches this fallback (phase pages, where
+        // annotation.js's currentAnnotations does not exist).
+        //
+        // Same data-modified/data-server-set guard syncAnnotationsFromDOM uses:
+        // browsers restore hidden input .value across a reload, which would
+        // otherwise leak the previous instance's answer into the gate.
+        document.querySelectorAll('input[type="hidden"].annotation-input').forEach(input => {
+            const touched = input.hasAttribute('data-modified')
+                || input.hasAttribute('data-server-set');
+            if (input.value && touched) record(input, input.value);
+        });
 
         return this.transformRawAnnotations(raw);
     }

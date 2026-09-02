@@ -8077,7 +8077,8 @@ video, with a waveform-style timeline.
   or `combined`
 - `frame_stepping` (boolean): Enable frame-by-frame stepping controls
 - `video_fps` (number): Frames per second, for frame/timecode display
-- `segment_schemes` (list): Nested schemas applied to each segment
+- `segment_schemes` (list): Nested schemas applied to each segment; answers
+  are stored on the segment under its `annotations` key
 - `min_segments` / `max_segments` (int)
 - `timeline_height` / `overview_height` (int)
 - `zoom_enabled`, `playback_rate_control`, `show_timecode` (boolean)
@@ -9506,7 +9507,7 @@ so they do not affect span offsets. See
   type: "pairwise"
   label: "Compare Options"
   display_options:
-    cell_width: "50%"           # Width of each cell
+    cell_width: "auto"          # Cell width; "auto" splits the row evenly
     show_labels: true           # Show A/B labels
     labels: ["Option A", "Option B"]  # Custom labels
     vertical_on_mobile: true    # Stack vertically on mobile
@@ -14756,7 +14757,8 @@ labels:
 ```
 
 #### Questions Mode
-Each segment gets its own set of annotation questions:
+Each segment gets its own set of annotation questions. The annotator marks a
+region, selects it, and answers the questions in the Segment Details panel:
 
 ```yaml
 mode: questions
@@ -14785,6 +14787,33 @@ segment_schemes:
     name: speaker
     labels: ["host", "guest"]
 ```
+
+#### How segment questions work
+
+Each entry in `segment_schemes` is an ordinary annotation scheme, rendered by
+the same generator that renders a top-level one — so any annotation type works
+inside a segment, with the same layout, tooltips and validation messages.
+
+Answers are stored on the segment rather than on the item, keyed by the
+sub-scheme's `name`:
+
+```json
+{"segments": [
+  {"id": "segment_1", "start_time": 0.0, "end_time": 16.3, "label": "interruption",
+   "annotations": {"who_started": "Patient", "cues": ["Talking over"]}}
+]}
+```
+
+Two limits are worth knowing:
+
+- **Keybindings are not bound.** A segment's fields only exist while that
+  segment is selected, so a global key would fire against whichever segment
+  happened to be open. Answer them by clicking.
+- **`label_requirement` is not enforced** on a sub-scheme. Marking one required
+  would block Next on a question the annotator may not have opened yet. Use
+  `min_segments` to require segments, and check completeness in analysis.
+
+A runnable example is in `examples/audio/segment-questions/`.
 
 ### Label Configuration
 
@@ -54160,7 +54189,7 @@ Most endpoints are session-authenticated: `POST /auth` with `username` and
 
 ## Examples catalog
 
-A derived index of the **213 example projects** in the repository, across 15
+A derived index of the **214 example projects** in the repository, across 15
 categories. Each entry records the annotation types and display types the config
 uses, the subsystems it switches on, whether it ships data and a README, and the
 command that runs it.

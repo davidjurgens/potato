@@ -276,6 +276,14 @@ def _generate_html(
     description = escape_html_content(annotation_scheme.get('description', ''))
     config_json = json.dumps(js_config)
 
+    # Per-segment question forms, rendered once into a hidden <template> the
+    # client clones per segment. Without this the panel showed a placeholder and
+    # every segment stored an empty `annotations` object.
+    from potato.server_utils.schemas.segment_questions import (
+        render_segment_question_template)
+    segment_questions_template, _ = render_segment_question_template(
+        js_config.get('segmentSchemes') or [], schema_name)
+
     # Determine display mode
     show_waveform = js_config.get('waveform', True)
     show_spectrogram = js_config.get('spectrogram', False)
@@ -437,6 +445,7 @@ def _generate_html(
                     <h4>Segment Details</h4>
                     <div class="segment-questions-content"></div>
                 </div>
+                {segment_questions_template}
 
                 <!-- Hidden input for storing annotation data -->
                 <input type="hidden"

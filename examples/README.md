@@ -216,7 +216,7 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 213 examples, generated from the configs themselves.
+All 214 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
 ### advanced/ (56)
@@ -360,7 +360,7 @@ The `Types` column lists the annotation types each one uses.
 | [`ollama-ai-demo/`](ai-assisted/ollama-ai-demo/) | AI-Assisted Product Review Analysis | `radio` |
 | [`span-ai-keywords-demo/`](ai-assisted/span-ai-keywords-demo/) | Span Annotation with AI & Admin Keywords | `span` |
 
-### audio/ (7)
+### audio/ (8)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -369,6 +369,7 @@ The `Types` column lists the annotation types each one uses.
 | [`audio-dialogue/`](audio/audio-dialogue/) | Podcast Dialogue Annotation | `likert`, `radio`, `span`, `span_link` |
 | [`audio-dialogue-sporc/`](audio/audio-dialogue-sporc/) | SPoRC Podcast Dialogue | `likert`, `radio`, `span`, `span_link` |
 | [`audio-with-context/`](audio/audio-with-context/) | Audio Segmentation with Context | `audio_annotation` |
+| [`segment-questions/`](audio/segment-questions/) | Interruptions in Consultations | `audio_annotation` |
 | [`tiered-annotation/`](audio/tiered-annotation/) | Tiered Annotation Example | `tiered_annotation` |
 | [`transcript-formats/`](audio/transcript-formats/) | Transcript Formats | `radio`, `span` |
 

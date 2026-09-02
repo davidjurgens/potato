@@ -4,7 +4,7 @@
     "agent-testing": 3,
     "agent-traces": 56,
     "ai-assisted": 6,
-    "audio": 7,
+    "audio": 8,
     "classification": 30,
     "conversation": 4,
     "crowdsourcing": 6,
@@ -16,7 +16,7 @@
     "testing": 2,
     "video": 8
   },
-  "count": 213,
+  "count": 214,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -2953,6 +2953,26 @@
       "path": "examples/audio/audio-with-context/config.yaml",
       "run": "potato start examples/audio/audio-with-context/config.yaml -p 8000",
       "task_name": "Audio Segmentation with Context"
+    },
+    {
+      "annotation_types": [
+        "audio_annotation"
+      ],
+      "category": "audio",
+      "config_keys": [],
+      "data_files": [
+        "data/consultations.json"
+      ],
+      "description": "",
+      "dir": "examples/audio/segment-questions",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "segment-questions",
+      "path": "examples/audio/segment-questions/config.yaml",
+      "run": "potato start examples/audio/segment-questions/config.yaml -p 8000",
+      "task_name": "Interruptions in Consultations"
     },
     {
       "annotation_types": [

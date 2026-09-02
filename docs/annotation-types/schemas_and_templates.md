@@ -423,7 +423,8 @@ video, with a waveform-style timeline.
   or `combined`
 - `frame_stepping` (boolean): Enable frame-by-frame stepping controls
 - `video_fps` (number): Frames per second, for frame/timecode display
-- `segment_schemes` (list): Nested schemas applied to each segment
+- `segment_schemes` (list): Nested schemas applied to each segment; answers
+  are stored on the segment under its `annotations` key
 - `min_segments` / `max_segments` (int)
 - `timeline_height` / `overview_height` (int)
 - `zoom_enabled`, `playback_rate_control`, `show_timecode` (boolean)

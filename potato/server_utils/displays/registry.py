@@ -534,9 +534,15 @@ def _register_builtin_displays():
             name="pairwise",
             renderer=PairwiseDisplay(),
             required_fields=["key"],
+            # Must stay in step with PairwiseDisplay.optional_fields -- that
+            # class attribute is what get_display_options() merges, while this
+            # copy feeds the docs and the generated config schema. This one had
+            # drifted twice: the default was still "50%" after the renderer
+            # moved to "auto", and `labels` was documented but never declared.
             optional_fields={
-                "cell_width": "50%",
+                "cell_width": "auto",
                 "show_labels": True,
+                "labels": None,
                 "vertical_on_mobile": True,
             },
             supports_span_target=False,

@@ -659,6 +659,7 @@ class ImageAnnotationManager {
                 return;
             }
             console.log('Image loaded successfully:', img.width, 'x', img.height);
+            this._clearCanvasMessage();
 
             this.image = img;
 
@@ -865,6 +866,15 @@ class ImageAnnotationManager {
         // Ignore no-op and zero-width callbacks: a hidden container reports 0,
         // and resizing to 0 would destroy the layout.
         if (!width || Math.abs(width - this.canvas.getWidth()) < 2) return;
+
+        // A canvas showing a message has no image and no annotations to relay
+        // out; it needs the message re-wrapped for the new width and nothing
+        // else. Falling through would run the image path against no image.
+        if (this._canvasMessage) {
+            this.canvas.setWidth(width);
+            this._showCanvasMessage(this._canvasMessage);
+            return;
+        }
 
         const state = this._serializeAnnotations();
         const activeTool = this.currentTool;
@@ -3931,9 +3941,21 @@ class ImageAnnotationManager {
         this.canvas.clear();
         this.canvas.setBackgroundColor('#f8f9fa', this.canvas.renderAll.bind(this.canvas));
 
-        const text = new fabric.Text(message, {
-            left: this.canvas.getWidth() / 2,
+        // Remembered so handleResize can redraw it at the new width. The canvas
+        // is constructed at the element's backing-store width and narrowed by
+        // the ResizeObserver a moment later, so a message laid out once at
+        // construction is laid out for a canvas twice the size it ends up.
+        this._canvasMessage = message;
+        this._announce(message);
+
+        // Textbox, not Text: fabric.Text is one unwrapped line, so any message
+        // longer than the canvas ran off its right edge and lost the half that
+        // said what to do about it.
+        const width = this.canvas.getWidth();
+        const text = new fabric.Textbox(message, {
+            left: width / 2,
             top: this.canvas.getHeight() / 2,
+            width: Math.max(160, width - 48),
             fontSize: 16,
             fill: '#dc3545',
             fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -3946,6 +3968,39 @@ class ImageAnnotationManager {
 
         this.canvas.add(text);
         this.canvas.renderAll();
+    }
+
+    /**
+     * Put a canvas message somewhere a screen reader can reach it.
+     *
+     * Text painted on a canvas is pixels. An annotator using a screen reader
+     * got an empty drawing surface and no explanation for it, which is the one
+     * case where the explanation is the whole point.
+     */
+    _announce(message) {
+        const container = document.getElementById(this.canvasId)
+            ?.closest('.image-annotation-container');
+        if (!container) return;
+
+        let region = container.querySelector('.image-annotation-message');
+        if (!region) {
+            region = document.createElement('p');
+            // sr-only: the canvas already shows this message to sighted users.
+            // A second visible copy under the canvas is the same sentence twice.
+            region.className = 'image-annotation-message sr-only';
+            region.setAttribute('role', 'alert');
+            container.appendChild(region);
+        }
+        region.textContent = message;
+    }
+
+    /** Drop a message once there is something real on the canvas. */
+    _clearCanvasMessage() {
+        this._canvasMessage = null;
+        const region = document.getElementById(this.canvasId)
+            ?.closest('.image-annotation-container')
+            ?.querySelector('.image-annotation-message');
+        if (region) region.remove();
     }
 
     /**

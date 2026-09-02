@@ -274,3 +274,37 @@
 .coref-mention-highlight-underline:hover {
     border-bottom-width: 4px;
 }
+
+/* Mention selection.
+ *
+ * Overlays carry `pointer-events: none` from span-styles.css so they do not
+ * block the drag that draws a span; the manager lifts it per overlay. These
+ * rules are the feedback for the selection that lift makes possible — without
+ * them a click registers in the panel's state and nothing on the text says so.
+ */
+.span-overlay-pure.coref-selectable,
+.span-overlay.coref-selectable,
+.span-overlay-ai.coref-selectable,
+.span-highlight.coref-selectable {
+    cursor: pointer;
+    transition: outline-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.span-overlay-pure.coref-selectable:hover,
+.span-overlay.coref-selectable:hover,
+.span-overlay-ai.coref-selectable:hover,
+.span-highlight.coref-selectable:hover {
+    outline: 2px dashed var(--primary, #6E56CF);
+    outline-offset: 2px;
+}
+
+.span-overlay-pure.coref-selected,
+.span-overlay.coref-selected,
+.span-overlay-ai.coref-selected,
+.span-highlight.coref-selected,
+.span-overlay-pure.coref-selected .span-highlight-segment,
+.span-overlay.coref-selected .span-highlight-segment {
+    outline: 3px solid var(--primary, #6E56CF) !important;
+    outline-offset: 2px;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--primary, #6E56CF) 40%, transparent);
+}

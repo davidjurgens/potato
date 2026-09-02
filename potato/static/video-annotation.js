@@ -880,6 +880,50 @@ class VideoAnnotationManager {
         this.activeAnnotationId = annotationId;
         this._updateAnnotationList();
         this._updateDeleteButton();
+        this._showQuestionsPanel(annotationId);
+    }
+
+    /**
+     * Show the per-segment question form for the selected segment.
+     *
+     * `segmentSchemes` reached the browser in the JS config and the string did
+     * not appear anywhere in this file: no panel, no placeholder, nothing. The
+     * segment was stored with an empty `annotations` object whatever the config
+     * asked for. The fields come from the hidden <template> the server renders
+     * from `segment_schemes`.
+     */
+    _showQuestionsPanel(segmentId) {
+        if (!this.questionsEl) return;
+
+        const segment = this.segments.find(s => s.id === segmentId);
+        if (!segment || !this.config.segmentSchemes || !this.config.segmentSchemes.length) {
+            this.questionsEl.style.display = 'none';
+            return;
+        }
+
+        const contentEl = this.questionsEl.querySelector('.segment-questions-content');
+        if (!contentEl) return;
+
+        const header = document.createElement('p');
+        header.className = 'segment-questions-header';
+        header.textContent = `Annotating: ${segment.label} `
+            + `(${this._formatTime(segment.startTime)} - ${this._formatTime(segment.endTime)})`;
+
+        contentEl.innerHTML = '';
+        contentEl.appendChild(header);
+
+        const fields = document.createElement('div');
+        fields.className = 'segment-questions-fields';
+        contentEl.appendChild(fields);
+
+        const rendered = window.SegmentQuestions && window.SegmentQuestions.render({
+            schemaName: this.config.schemaName,
+            container: fields,
+            segment: segment,
+            onChange: () => this._saveData(),
+        });
+
+        this.questionsEl.style.display = rendered ? 'block' : 'none';
     }
 
     /**

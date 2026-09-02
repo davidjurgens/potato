@@ -8,8 +8,8 @@
     "version": "2"
   },
   "annotation.js": {
-    "sha256": "60dcde7a34180881",
-    "version": "31"
+    "sha256": "2e4d12063b3f4990",
+    "version": "32"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -24,8 +24,8 @@
     "version": "4"
   },
   "audio-annotation.js": {
-    "sha256": "685b9a723f114db5",
-    "version": "5"
+    "sha256": "8b3d9a764de2fe3d",
+    "version": "6"
   },
   "audio-dialogue.css": {
     "sha256": "14b56e9a134afacb",
@@ -48,8 +48,8 @@
     "version": "1"
   },
   "coreference-manager.js": {
-    "sha256": "b3badff582310719",
-    "version": "1"
+    "sha256": "6079f8cf8a564aff",
+    "version": "6"
   },
   "css/boundary.css": {
     "sha256": "f53c04d1f22adff3",
@@ -100,16 +100,16 @@
     "version": "2"
   },
   "display-logic.js": {
-    "sha256": "9c0297322d7c37e7",
-    "version": "3"
+    "sha256": "d1111821ad185738",
+    "version": "4"
   },
   "document-bbox.js": {
     "sha256": "b53b7ebb08d21ec5",
     "version": "3"
   },
   "entity-linking.js": {
-    "sha256": "4dbfcbde35120f8e",
-    "version": "1"
+    "sha256": "c3ea7f6df2f1cd4a",
+    "version": "2"
   },
   "episode-timeline.css": {
     "sha256": "f938355bab7209db",
@@ -140,8 +140,8 @@
     "version": "15"
   },
   "image-annotation.js": {
-    "sha256": "d0e4962bf7a9f2ea",
-    "version": "29"
+    "sha256": "89747ee84ee735c9",
+    "version": "31"
   },
   "instance-display.js": {
     "sha256": "44f86cac34ef4ab1",
@@ -267,6 +267,10 @@
     "sha256": "a964fce2b19dc807",
     "version": "3"
   },
+  "segment-questions.js": {
+    "sha256": "b36087cf0e27b508",
+    "version": "1"
+  },
   "segmentation/gdino-session.js": {
     "sha256": "3fd30dae505c5826",
     "version": "1"
@@ -312,8 +316,8 @@
     "version": "1"
   },
   "styles.css": {
-    "sha256": "5e6bfe54aed980bc",
-    "version": "11"
+    "sha256": "c788787076d0a9c1",
+    "version": "13"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",
@@ -352,8 +356,8 @@
     "version": "3"
   },
   "video-annotation.js": {
-    "sha256": "0ce3a43000c77b1e",
-    "version": "19"
+    "sha256": "1b563c223401ae18",
+    "version": "20"
   },
   "visual_ai_assistant.js": {
     "sha256": "66eb1e15fcc9d23a",

@@ -10,6 +10,34 @@ from typing import Dict, List, Any, Optional
 import time
 
 
+#: Behavioral data is bucketed by instance id. Phase pages -- consent,
+#: instructions, training, prestudy and poststudy surveys -- have no instance:
+#: the annotation template leaves the id empty and the client posts null. They
+#: all share this one bucket, and the `phase`/`page` fields stamped server-side
+#: are what tell them apart.
+PHASE_PAGE_SENTINEL = "__phase_page__"
+
+#: What a missing instance id looks like by the time it has been through
+#: JSON and a template. `None` is the honest case; the strings are what
+#: `str(null)` and friends produce on the way.
+_MISSING_INSTANCE_IDS = frozenset({"", "null", "None", "undefined"})
+
+
+def normalize_instance_id(instance_id: Any) -> str:
+    """Map a phase page's absent instance id onto the shared sentinel.
+
+    Every tracking endpoint needs this and each one grew its own version, or
+    none at all: `track_annotation_change` rejected a null id outright, so no
+    change made on a survey or training page was ever recorded, and
+    `track_interactions` passed it through unnormalized, which created a
+    behavioral-data bucket literally keyed "null" alongside the real one.
+    """
+    if instance_id is None:
+        return PHASE_PAGE_SENTINEL
+    text = str(instance_id)
+    return PHASE_PAGE_SENTINEL if text in _MISSING_INSTANCE_IDS else text
+
+
 @dataclass
 class InteractionEvent:
     """
