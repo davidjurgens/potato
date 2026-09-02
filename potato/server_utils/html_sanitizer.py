@@ -163,6 +163,47 @@ DANGEROUS_PATTERNS = [
 ]
 
 
+# A well-formed HTML character reference: &name; &#1234; &#x1F60A;
+# Used to keep `html.escape` from turning an author's `&mdash;` into
+# `&amp;mdash;`, which renders on screen as the literal text "&mdash;".
+_CHAR_REF = re.compile(
+    r'&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});')
+
+
+def _escape_text(text: str, quote: bool = False) -> str:
+    """``html.escape`` for a text node, preserving character references.
+
+    ``html.escape`` rewrites every ``&``, so ``a &mdash; b`` came back as
+    ``a &amp;mdash; b`` and the annotator read a literal ``&mdash;``. It also
+    made the sanitizer non-idempotent: each pass added another ``amp;``, so
+    text that was sanitized on the way in and again on the way out decayed.
+
+    Only *text nodes* get this treatment. Character references in text can
+    never introduce markup — the browser resolves them to characters in an
+    already-parsed text node — so ``&lt;script&gt;`` still renders as the four
+    visible characters ``<scr`` … and not as an element.
+
+    ``href``, ``src`` and ``style`` values deliberately keep the blunt
+    ``html.escape`` (see ``_UNESCAPED_ATTRS``): an href of
+    ``java&Tab;script:alert(1)`` is inert once the ``&`` is escaped, and is a
+    live XSS vector if the reference survives.
+    """
+    out = []
+    pos = 0
+    for m in _CHAR_REF.finditer(text):
+        out.append(html.escape(text[pos:m.start()], quote=quote))
+        out.append(m.group(0))
+        pos = m.end()
+    out.append(html.escape(text[pos:], quote=quote))
+    return ''.join(out)
+
+
+# Attributes whose values must NOT keep character references: a reference can
+# reconstitute a URL scheme (``java&Tab;script:``) or a CSS function that the
+# raw-text DANGEROUS_PATTERNS scan cannot see.
+_UNESCAPED_ATTRS: Set[str] = {'href', 'src', 'srcset', 'poster', 'style'}
+
+
 def sanitize_html(text: str) -> Markup:
     """
     Sanitize HTML content while preserving legitimate span annotations.
@@ -208,7 +249,7 @@ def sanitize_html(text: str) -> Markup:
     for match in tag_pattern.finditer(text):
         # Add escaped text before this tag
         if match.start() > pos:
-            result.append(html.escape(text[pos:match.start()]))
+            result.append(_escape_text(text[pos:match.start()]))
 
         is_close = match.group(1) == '/'
         tag_name = match.group(2).lower()
@@ -233,7 +274,7 @@ def sanitize_html(text: str) -> Markup:
 
     # Add remaining text (escaped)
     if pos < len(text):
-        result.append(html.escape(text[pos:]))
+        result.append(_escape_text(text[pos:]))
 
     # Return as Markup to prevent Jinja2's auto-escape from escaping again
     return Markup(''.join(result))
@@ -296,8 +337,13 @@ def _sanitize_attributes(tag_name: str, attrs_str: str) -> str:
         if attr_name == 'class':
             attr_value = _sanitize_class(attr_value)
 
-        # Escape the value
-        escaped_value = html.escape(attr_value, quote=True)
+        # Escape the value. Everything except the URL/CSS attributes keeps its
+        # character references, so a data-label or title of "A&amp;B" survives a
+        # round trip instead of decaying into "A&amp;amp;B".
+        if attr_name in _UNESCAPED_ATTRS:
+            escaped_value = html.escape(attr_value, quote=True)
+        else:
+            escaped_value = _escape_text(attr_value, quote=True)
         sanitized.append(f'{attr_name}="{escaped_value}"')
 
     # Security: auto-add rel="noopener noreferrer" for links with target="_blank"

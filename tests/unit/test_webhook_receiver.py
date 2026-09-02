@@ -66,12 +66,30 @@ def _make_langsmith_payload(
 class TestValidateAuth:
     """Tests for WebhookReceiver.validate_auth()."""
 
-    def test_no_api_key_always_passes(self):
-        """When no api_key is configured, any request is accepted."""
+    def test_no_api_key_fails_closed(self):
+        """With no api_key configured, every request is refused.
+
+        This used to return True: enabling trace_ingestion without also setting
+        a key left /api/traces/webhook open to anyone who could reach the
+        server, and it writes items into the annotation task.
+        """
         receiver = WebhookReceiver(api_key="")
+        assert receiver.validate_auth({}) is False
+        assert receiver.validate_auth({"Authorization": "Bearer anything"}) is False
+        assert receiver.validate_auth({"X-API-Key": "random"}) is False
+
+    def test_no_api_key_with_explicit_opt_in_passes(self):
+        """allow_unauthenticated is the deliberate way back to an open receiver."""
+        receiver = WebhookReceiver(api_key="", allow_unauthenticated=True)
         assert receiver.validate_auth({}) is True
-        assert receiver.validate_auth({"Authorization": "Bearer anything"}) is True
         assert receiver.validate_auth({"X-API-Key": "random"}) is True
+
+    def test_opt_in_does_not_override_a_configured_key(self):
+        """A real key still has to match, opt-in or not."""
+        receiver = WebhookReceiver(api_key="secret123", allow_unauthenticated=True)
+        assert receiver.validate_auth({}) is False
+        assert receiver.validate_auth({"X-API-Key": "wrong"}) is False
+        assert receiver.validate_auth({"X-API-Key": "secret123"}) is True
 
     def test_bearer_token_correct(self):
         receiver = WebhookReceiver(api_key="secret123")

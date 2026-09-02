@@ -4,7 +4,7 @@ Maximize annotation variety by presenting items from different topic clusters.
 
 ## Overview
 
-Diversity ordering uses sentence-transformer embeddings to cluster similar items together, then samples items round-robin from different clusters. This ensures annotators see diverse content rather than similar items in sequence, which can:
+Diversity ordering uses sentence-transformer embeddings to cluster similar items together, then samples items round-robin from different clusters. Annotators therefore see varied content rather than runs of near-identical items, which can:
 
 - **Reduce annotator fatigue** from repetitive content
 - **Improve annotation quality** through varied context
@@ -21,7 +21,7 @@ diversity_ordering:
   prefill_count: 100
 ```
 
-## How It Works
+## Embedding, clustering, sampling
 
 1. **Startup**: First N items are embedded using sentence-transformers and clustered with k-means
 2. **Assignment**: Items are sampled round-robin from clusters, ensuring variety

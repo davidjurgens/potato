@@ -1,6 +1,6 @@
 # Span Linking Annotation
 
-Span linking allows annotators to create typed relationships between spans (text segments) that have already been annotated. This is useful for relation extraction tasks where you need to identify how entities relate to each other, such as "PERSON works_for ORGANIZATION" or "PERSON collaborates_with PERSON".
+Span linking lets annotators draw typed relationships between spans (text segments) that have already been annotated. This is useful for relation extraction tasks where you need to identify how entities relate to each other, such as "PERSON works_for ORGANIZATION" or "PERSON collaborates_with PERSON".
 
 ## Overview
 

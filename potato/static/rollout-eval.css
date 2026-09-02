@@ -1,0 +1,509 @@
+/*
+ * World-model rollout evaluation.
+ *
+ * ## Which values are tokens and which are not
+ *
+ * Structure — borders, radii, surfaces, spacing, the focus ring — comes from
+ * the `:root` block in styles.css, in the `var(--token, fallback)` form the
+ * rest of the annotation stylesheets use.
+ *
+ * Two kinds of value stay literal on purpose:
+ *
+ * - **The video letterbox (`#11151c`)** is also painted by the timeline canvas
+ *   in `rollout-eval.js`. It is not a UI surface and the light token palette
+ *   has no equivalent; if it moves it has to move in both places at once.
+ * - **Text that carries a caveat (`#495057`, `#5a6472`) and the warn/error
+ *   colours (`#8a5a00`, `#b02a37`)** are darker than the tokens on purpose.
+ *   `--muted-foreground` (`#71717a`) is 4.40:1 on `--muted` — *below* AA — and
+ *   `--destructive` (`#ef4444`) is 3.76:1 on white, so it is a fill colour and
+ *   not a text colour.
+ *
+ * ## The layout constraint that drives everything
+ *
+ * The panels only mean anything side by side: the whole point is to see the
+ * same frame in two rollouts at once. So the grid packs as many as fit and
+ * *wraps* rather than shrinking below a size a physics violation is visible
+ * at — a four-way comparison at 160px wide is four thumbnails nobody can judge.
+ */
+
+.rollout-eval-container fieldset {
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.rollout-eval-container .rollout-prompt,
+.rollout-eval-container .rollout-intervention {
+    margin: 0 0 var(--space-sm, 0.5rem);
+    font-size: var(--text-dense, 0.875rem);
+    line-height: 1.45;
+}
+
+/* The intervention is the premise of the counterfactual question, so it reads
+   as a quoted condition rather than as more prose. */
+.rollout-eval-container .rollout-intervention {
+    padding-left: var(--space-sm, 0.5rem);
+    border-left: 3px solid var(--primary, #6e56cf);
+    color: #495057;
+}
+
+/* ---------------------------------------------------------------------------
+   Panels
+   --------------------------------------------------------------------------- */
+
+.rollout-eval-container .rollout-panels {
+    display: grid;
+    /* `min(280px, 100%)`, not a bare 280px: with a bare minimum the track stays
+       280px wide in a narrower container and the PAGE scrolls sideways, which
+       is WCAG 1.4.10 (Reflow). 280 rather than 200 because below roughly that
+       an interpenetration or a texture drift is not visible at all, and a panel
+       you cannot judge from is worse than a panel that wrapped. */
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+    gap: var(--space-sm, 0.5rem);
+    margin-bottom: var(--space-sm, 0.5rem);
+}
+
+.rollout-eval-container .rollout-panel {
+    margin: 0;
+    /* Grid items default to `min-width: auto` — at least as wide as their
+       content — which inflates the track back past the container. */
+    min-width: 0;
+    padding: var(--space-xs, 0.25rem);
+    border: 2px solid transparent;
+    border-radius: var(--radius, 0.5rem);
+}
+
+/* The chosen panel is where a mark will land, so the indication cannot be
+   colour alone (WCAG 1.4.1): the border thickens and the choose button takes
+   the pressed treatment. */
+.rollout-eval-container .rollout-panel-chosen {
+    border-color: var(--primary, #6e56cf);
+    background: var(--muted, #f4f4f5);
+}
+
+.rollout-eval-container .rollout-video {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #11151c;
+    border-radius: var(--radius, 0.5rem);
+}
+
+.rollout-eval-container .rollout-panel figcaption {
+    font-size: var(--text-sm, 0.8125rem);
+    color: #5a6472;
+    padding-top: var(--space-xs, 0.25rem);
+    line-height: 1.3;
+}
+
+.rollout-eval-container .rollout-panel-broken .rollout-video {
+    display: none;
+}
+
+.rollout-eval-container .rollout-panel-broken figcaption {
+    color: #8a5a00;
+}
+
+.rollout-eval-container .rollout-panel-choose {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs, 0.25rem);
+    width: 100%;
+    /* 44px so a stylus or thumb can hit it; this is the gate on every marking
+       action, and a miss silently attributes a break to the wrong rollout. */
+    min-height: 44px;
+    padding: var(--space-xs, 0.25rem) var(--space-sm, 0.5rem);
+    margin-bottom: var(--space-xs, 0.25rem);
+    font: inherit;
+    font-size: var(--text-dense, 0.875rem);
+    text-align: left;
+    background: var(--background, #ffffff);
+    color: var(--foreground, #09090b);
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
+    cursor: pointer;
+}
+
+.rollout-eval-container .rollout-panel-choose[aria-pressed="true"] {
+    background: var(--primary, #6e56cf);
+    color: var(--primary-foreground, #ffffff);
+    border-color: var(--primary, #6e56cf);
+}
+
+.rollout-eval-container .rollout-panel-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5em;
+    padding: 0 0.25em;
+    font-variant-numeric: tabular-nums;
+    border: 1px solid currentColor;
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+    opacity: 0.75;
+}
+
+/* ---------------------------------------------------------------------------
+   Transport
+   --------------------------------------------------------------------------- */
+
+.rollout-eval-container .rollout-transport {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm, 0.5rem);
+    margin-bottom: var(--space-sm, 0.5rem);
+}
+
+.rollout-eval-container .rollout-transport button {
+    min-height: 44px;
+    /* Width too, not just height. The frame-step buttons hold a single glyph
+       and came out 33px wide, which is the smallest target on the surface and
+       also the one pressed most often -- frame-stepping is how a break-point
+       is actually located. */
+    min-width: 44px;
+    padding: var(--space-xs, 0.25rem) var(--space-sm, 0.5rem);
+    font: inherit;
+    font-size: var(--text-dense, 0.875rem);
+    background: var(--background, #ffffff);
+    color: var(--foreground, #09090b);
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
+    cursor: pointer;
+}
+
+.rollout-eval-container .rollout-transport button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.rollout-eval-container .rollout-clean-on {
+    background: var(--muted, #f4f4f5);
+    border-color: var(--primary, #6e56cf);
+}
+
+.rollout-eval-container .rollout-time,
+.rollout-eval-container .rollout-frame {
+    font-size: var(--text-dense, 0.875rem);
+    /* Tabular figures so a live readout does not shift the buttons beside it
+       every frame. */
+    font-variant-numeric: tabular-nums;
+    color: #495057;
+}
+
+/* ---------------------------------------------------------------------------
+   Timeline
+   --------------------------------------------------------------------------- */
+
+.rollout-eval-container .rollout-canvas {
+    display: block;
+    width: 100%;
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
+    /* The lanes are draggable targets, so they must not also scroll the page
+       under a touch gesture. */
+    touch-action: none;
+    cursor: pointer;
+}
+
+/* No :focus-visible rule here on purpose. The canvas is role="img" with no
+   tabindex -- every key is bound at document level and every action has a
+   button, so it is not a focus target. A focus ring on an element that cannot
+   be focused reads, to the next person, as though focus were handled. */
+
+/* ---------------------------------------------------------------------------
+   Focus and hover, once, for everything on this surface
+
+   `.annotation-form input, textarea, select:focus-visible` in styles.css does
+   NOT cover `button`, and the same file sets `outline: none` in twenty-five
+   places -- so every button here had no focus indicator at all and a keyboard
+   user tabbing through saw nothing. Ten focusable controls, no ring.
+   --------------------------------------------------------------------------- */
+
+.rollout-eval-container button:focus-visible,
+.rollout-eval-container label:focus-within {
+    outline: 3px solid var(--ring, #6e56cf);
+    outline-offset: 2px;
+}
+
+/* Hover is the only cue that a control is live before it is pressed, and the
+   panel button is the gate on every marking action -- a miss there silently
+   attributes a break to the wrong rollout. */
+.rollout-eval-container button:not(:disabled):hover {
+    border-color: var(--primary, #6e56cf);
+    background: var(--muted, #f4f4f5);
+}
+
+.rollout-eval-container .rollout-panel-choose[aria-pressed="true"]:hover {
+    /* The pressed panel keeps its fill; swapping to the muted surface on hover
+       would make the chosen panel look unchosen exactly while pointed at. */
+    background: var(--primary, #6e56cf);
+    border-color: var(--primary, #6e56cf);
+}
+
+.rollout-eval-container .rollout-violation-delete:not(:disabled):hover {
+    /* Not the shared violet: this is the one destructive control here, and
+       giving it the same hover as "Play" would flatten that distinction. */
+    border-color: #b02a37;
+    background: #fdf2f3;
+}
+
+.rollout-eval-container .rollout-winner-option:hover,
+.rollout-eval-container .rollout-cf-option:hover,
+.rollout-eval-container .rollout-rubric-point:hover {
+    border-color: var(--primary, #6e56cf);
+}
+
+.rollout-eval-container button,
+.rollout-eval-container .rollout-winner-option,
+.rollout-eval-container .rollout-cf-option {
+    /* Colour only, and short. Anything that moves would fight the frame-step
+       buttons, which are pressed repeatedly and fast. */
+    transition: background-color 120ms ease-out, border-color 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rollout-eval-container button,
+    .rollout-eval-container .rollout-winner-option,
+    .rollout-eval-container .rollout-cf-option {
+        transition: none;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Forms
+   --------------------------------------------------------------------------- */
+
+.rollout-eval-container .rollout-violation-form,
+.rollout-eval-container .rollout-preference,
+.rollout-eval-container .rollout-counterfactual {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: var(--space-sm, 0.5rem);
+    padding: var(--space-sm, 0.5rem);
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
+}
+
+/* The three blocks are not peers, and styling them identically said they were.
+   The violation form is a contextual editor for whatever is selected on the
+   timeline above -- it changes as the annotator clicks around, and it is
+   meaningless without the timeline. The other two are per-item questions that
+   stand alone.
+
+   So the violation form is *attached* to the timeline: square top corners, no
+   top border, no gap. The two questions sit apart from it and from each other
+   at the section rhythm. */
+.rollout-eval-container .rollout-violation-form {
+    margin-top: -1px;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    background: var(--muted, #f4f4f5);
+}
+
+.rollout-eval-container .rollout-preference {
+    margin-top: var(--space-lg, 1.5rem);
+}
+
+.rollout-eval-container .rollout-counterfactual {
+    margin-top: var(--space-md, 1rem);
+}
+
+/* The timeline is the top half of that pair, so it loses its own bottom
+   rounding to meet the editor. */
+.rollout-eval-container .rollout-canvas {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.rollout-eval-container .rollout-block-legend,
+.rollout-eval-container .rollout-violation-where {
+    flex-basis: 100%;
+    font-size: var(--text-dense, 0.875rem);
+    font-weight: 600;
+}
+
+/* The selected mark's description doubles as the form's heading, so when
+   nothing is selected it has to read as a state and not as a title. */
+.rollout-eval-container .rollout-violation-form:has(select:disabled)
+.rollout-violation-where {
+    font-weight: 400;
+    color: #5a6472;
+}
+
+.rollout-eval-container .rollout-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--text-sm, 0.8125rem);
+}
+
+.rollout-eval-container .rollout-field-wide {
+    flex: 1 1 14rem;
+}
+
+.rollout-eval-container .rollout-field select,
+.rollout-eval-container .rollout-field input {
+    min-height: 38px;
+    padding: var(--space-xs, 0.25rem);
+    font: inherit;
+    font-size: var(--text-dense, 0.875rem);
+    border: 1px solid var(--input, #e4e4e7);
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+}
+
+.rollout-eval-container .rollout-violation-delete {
+    min-height: 44px;
+    padding: var(--space-xs, 0.25rem) var(--space-sm, 0.5rem);
+    font: inherit;
+    font-size: var(--text-dense, 0.875rem);
+    color: #b02a37;
+    background: var(--background, #ffffff);
+    border: 1px solid #b02a37;
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+    cursor: pointer;
+}
+
+.rollout-eval-container .rollout-violation-delete:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.rollout-eval-container .rollout-winner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm, 0.5rem);
+}
+
+.rollout-eval-container .rollout-winner-option,
+.rollout-eval-container .rollout-cf-option {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs, 0.25rem);
+    min-height: 44px;
+    /* The radio itself is 16px; the label is the real target and was landing
+       at 39-42px wide for short option names. */
+    min-width: 44px;
+    padding: 0 var(--space-sm, 0.5rem);
+    font-size: var(--text-dense, 0.875rem);
+    border: 1px solid var(--border, #e4e4e7);
+    border-radius: var(--radius, 0.5rem);
+    cursor: pointer;
+}
+
+.rollout-eval-container .rollout-winner-option:has(input:checked),
+.rollout-eval-container .rollout-cf-option:has(input:checked) {
+    border-color: var(--primary, #6e56cf);
+    background: var(--muted, #f4f4f5);
+}
+
+.rollout-eval-container .rollout-rubric {
+    flex-basis: 100%;
+    display: grid;
+    gap: var(--space-xs, 0.25rem);
+}
+
+.rollout-eval-container .rollout-rubric-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm, 0.5rem);
+}
+
+.rollout-eval-container .rollout-rubric-name {
+    flex: 0 0 10rem;
+    font-size: var(--text-dense, 0.875rem);
+}
+
+.rollout-eval-container .rollout-rubric-scale {
+    display: inline-flex;
+    gap: var(--space-xs, 0.25rem);
+}
+
+.rollout-eval-container .rollout-rubric-point {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    min-height: 44px;
+    min-width: 44px;
+    justify-content: center;
+    padding: 0 var(--space-xs, 0.25rem);
+    font-size: var(--text-dense, 0.875rem);
+    cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------------
+   Help, status, announcements
+   --------------------------------------------------------------------------- */
+
+.rollout-eval-container .rollout-help {
+    margin: var(--space-sm, 0.5rem) 0 0;
+    font-size: var(--text-sm, 0.8125rem);
+    color: #5a6472;   /* see the header note on --muted-foreground */
+    line-height: 1.8;
+}
+
+.rollout-eval-container .rollout-help kbd {
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    padding: 0 0.25em;
+    border: 1px solid var(--border, #e4e4e7);
+    /* Half the panel radius: a key cap as round as the panel it sits in reads
+       as a button rather than as a key. */
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+    background: var(--muted, #f4f4f5);
+    color: var(--foreground, #09090b);
+}
+
+.rollout-eval-container .rollout-progress {
+    margin: var(--space-sm, 0.5rem) 0 0;
+    font-size: var(--text-dense, 0.875rem);
+    color: #495057;
+    min-height: 1.2em;
+}
+
+/* Something is still to do. Not colour alone (WCAG 1.4.1) -- the text itself
+   names the panels, so the tint is reinforcement rather than the signal. */
+.rollout-eval-container .rollout-progress[data-kind="pending"] {
+    color: #8a5a00;
+    font-weight: 600;
+}
+
+.rollout-eval-container .rollout-status {
+    margin: var(--space-xs, 0.25rem) 0 0;
+    font-size: var(--text-xs, 0.75rem);
+    color: #495057;
+    min-height: 1.2em;
+}
+
+.rollout-eval-container .rollout-status[data-kind="warn"] {
+    color: #8a5a00;   /* 4.6:1 on white */
+}
+
+.rollout-eval-container .rollout-status[data-kind="error"] {
+    color: #b02a37;   /* 5.9:1 on white */
+    font-weight: 600;
+}
+
+/* Live region for edits that only redraw canvas pixels or move a playhead.
+   Clipped rather than display:none — hidden content is not announced. */
+.rollout-eval-container .rollout-announce,
+.rollout-eval-container .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (max-width: 700px) {
+    .rollout-eval-container .rollout-rubric-name {
+        /* Below this the label and its five points cannot share a row without
+           the points wrapping mid-scale, which reads as two scales. */
+        flex-basis: 100%;
+    }
+}

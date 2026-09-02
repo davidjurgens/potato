@@ -78,7 +78,6 @@ annotation_schemes:
         color: "#9CA3AF"
 
 output_annotation_dir: {cls.test_dir}/output
-output_annotation_format: json
 """
         config_file = os.path.join(cls.test_dir, "config.yaml")
         with open(config_file, 'w') as f:
@@ -367,7 +366,6 @@ annotation_schemes:
       - name: entity
 
 output_annotation_dir: {cls.test_dir}/output
-output_annotation_format: json
 """
         config_file = os.path.join(cls.test_dir, "config.yaml")
         with open(config_file, 'w') as f:

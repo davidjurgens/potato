@@ -3,7 +3,7 @@ port: 9100
 annotation_task_name: Heterogeneous Coverage Example
 task_dir: .
 output_annotation_dir: annotation_output/heterogeneous-coverage/
-output_annotation_format: tsv
+export_annotation_format: tsv
 annotation_codebook_url: ''
 alert_time_each_instance: 10000000
 random_seed: 1234

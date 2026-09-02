@@ -1,0 +1,2 @@
+{"id": "scene_0001", "point_cloud": "clouds/scene_0001.bin", "calibration": {"file": "calib/scene_0001.txt", "images": {"P2": "images/scene_0001.png"}}, "notes": "Ego-forward sweep: a car ahead, a truck further out on the right, and a sign pole beyond it."}
+{"id": "scene_0002", "point_cloud": "clouds/scene_0002.bin", "calibration": {"file": "calib/scene_0002.txt", "images": {"P2": "images/scene_0002.png"}}, "notes": "A car close on the right, a truck far ahead, and two pedestrians side by side on the left."}

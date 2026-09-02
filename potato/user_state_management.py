@@ -1,9 +1,8 @@
 """
 User State Management Module
 
-This module provides comprehensive user state tracking and management for the Potato
-annotation platform. It handles user progress through annotation phases, instance
-assignments, annotation storage, and state persistence.
+User state tracking and management: progress through annotation phases, instance
+assignments, annotation storage, and persistence.
 
 Key Components:
 - UserStateManager: Singleton manager for all user states
@@ -93,6 +92,9 @@ class TrainingState:
         self.training_instances = []
         self.show_feedback = False
         self.feedback_message = ""
+        self.feedback_type = "info"
+        # Drives the feedback banner's styling: success | error | warning | info.
+        self.feedback_type = "info"
         self.allow_retry = False
         self.max_mistakes = max_mistakes
         self.max_mistakes_per_question = max_mistakes_per_question
@@ -224,16 +226,19 @@ class TrainingState:
         """Set the list of training instance IDs."""
         self.training_instances = instances
 
-    def set_feedback(self, show_feedback: bool, message: str, allow_retry: bool) -> None:
+    def set_feedback(self, show_feedback: bool, message: str, allow_retry: bool,
+                     feedback_type: str = "info") -> None:
         """Set feedback state for the current question."""
         self.show_feedback = show_feedback
         self.feedback_message = message
         self.allow_retry = allow_retry
+        self.feedback_type = feedback_type
 
     def clear_feedback(self) -> None:
         """Clear feedback state."""
         self.show_feedback = False
         self.feedback_message = ""
+        self.feedback_type = "info"
         self.allow_retry = False
 
     # =========================================================================
@@ -354,6 +359,7 @@ class TrainingState:
             'current_question_index': self.current_question_index,
             'training_instances': self.training_instances,
             'show_feedback': self.show_feedback,
+            'feedback_type': self.feedback_type,
             'feedback_message': self.feedback_message,
             'allow_retry': self.allow_retry,
             'max_mistakes': self.max_mistakes,
@@ -374,6 +380,7 @@ class TrainingState:
         training_state.current_question_index = data.get('current_question_index', 0)
         training_state.training_instances = data.get('training_instances', [])
         training_state.show_feedback = data.get('show_feedback', False)
+        training_state.feedback_type = data.get('feedback_type', 'info')
         training_state.feedback_message = data.get('feedback_message', "")
         training_state.allow_retry = data.get('allow_retry', False)
         training_state.max_mistakes = data.get('max_mistakes', -1)
@@ -644,12 +651,30 @@ class UserStateManager:
                 logger.debug(f"Creating InMemoryUserState for user: {user_id} (quota={quota})")
                 user_state = InMemoryUserState(user_id, quota)
 
+            self._apply_single_select_schemas(user_state)
             self.user_to_annotation_state[user_id] = user_state
             logger.debug(f"User state created and stored: {user_state}")
             logger.debug(f"Users after adding: {list(self.user_to_annotation_state.keys())}")
             logger.debug(f"=== ADD USER END ===")
 
             return user_state
+
+    def _apply_single_select_schemas(self, user_state: UserState) -> None:
+        """Tell a user state which schemas may hold at most one label (GH #167).
+
+        The manager is the only object with the config, so it resolves the set once and
+        hands it to the state rather than making the storage layer import config. The
+        set spans the global annotation schemes, every cohort's schemes, and the
+        SurveyFlow question schemes, so the invariant holds in every phase.
+        """
+        try:
+            from potato.server_utils.schema_exclusivity import all_single_select_schema_names
+            user_state._single_select_schemas = frozenset(
+                all_single_select_schema_names(self.config)
+            )
+        except Exception as e:  # never block user creation on this
+            logger.warning(f"Could not resolve single-select schemas: {e}")
+            user_state._single_select_schemas = frozenset()
 
     def get_or_create_user(self, user_id: str) -> UserState:
         """
@@ -1045,8 +1070,15 @@ class UserStateManager:
             if has_display_logic and self.config.get("exclude_hidden_survey_answers", True)
             else None
         )
+        # Resolve any pre-#167 duplicates in survey answers so the export marks the
+        # final answer rather than emitting two indistinguishable rows.
+        from potato.export.single_select import single_select_schema_names
+        ss_schemas = (single_select_schema_names(schemas)
+                      | single_select_schema_names(surveyflow_schemes))
         phase_responses = (
-            load_phase_responses_from_output_dir(output_dir, display_logic_schemes=dl_schemes)
+            load_phase_responses_from_output_dir(
+                output_dir, display_logic_schemes=dl_schemes,
+                single_select_schemas=ss_schemas)
             if self.config.get("export_include_phase_data", False)
             else []
         )
@@ -1086,6 +1118,7 @@ class UserStateManager:
         # TODO: make the user state type configurable between in-memory and DB-backed.
         user_state = InMemoryUserState.load(user_dir)
         user_state.prune_missing_assigned_instances()
+        self._apply_single_select_schemas(user_state)
 
         if user_state.get_user_id() in self.user_to_annotation_state:
             logger.warning(f'User "{user_state.get_user_id()}" already exists in the user state manager, but is being overwritten by load_state()')
@@ -1187,6 +1220,23 @@ class UserState:
     def get_label_annotations(self, instance_id):
         """
         Returns the label-based annotations for the instance.
+        """
+        raise NotImplementedError()
+
+    def clear_schema_labels(self, instance_id: str, schema_name: str) -> int:
+        """
+        Removes every stored label belonging to ``schema_name``.
+
+        Writes go to whichever container ``add_label_annotation`` would use: the
+        instance's labels during the annotation phase, otherwise the current phase
+        page's labels. This is what lets a single call cover annotation, consent,
+        instructions, training, prestudy and poststudy alike (GH #167).
+
+        Labels in ``schema_exclusivity.NON_EXCLUSIVE_LABEL_NAMES`` (notably
+        ``free_response``) are preserved.
+
+        Returns:
+            The number of labels removed.
         """
         raise NotImplementedError()
 
@@ -1462,6 +1512,11 @@ class UserState:
         # Save keyword highlight state for randomization consistency
         d['instance_id_to_keyword_highlight_state'] = self.instance_id_to_keyword_highlight_state
 
+        # Which order each scheme's options were shown in. Persisted so that a
+        # study can be corrected for position bias after the fact -- see
+        # potato/server_utils/presentation_order.py.
+        d['instance_id_to_presentation_order'] = self.instance_id_to_presentation_order
+
         # Save crowdsourcing platform metadata (provider, study/session IDs)
         d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
 
@@ -1579,6 +1634,8 @@ class UserState:
         # Restore keyword highlight state if present
         if 'instance_id_to_keyword_highlight_state' in j:
             user_state.instance_id_to_keyword_highlight_state = j['instance_id_to_keyword_highlight_state']
+        if 'instance_id_to_presentation_order' in j:
+            user_state.instance_id_to_presentation_order = j['instance_id_to_presentation_order']
 
         # Restore span link annotations if present
         if 'instance_id_to_link_to_value' in j:
@@ -1685,42 +1742,74 @@ class UserState:
         return self.training_state
 
     def update_training_answer(self, instance_id: str, annotations: Dict[str, Any]) -> None:
-        """Update training answer and track attempts."""
-        # Count attempts for this question
-        attempts = 1
-        if instance_id in self.training_state.completed_questions:
-            attempts = self.training_state.completed_questions[instance_id]['attempts'] + 1
+        """Record what the user answered for a training question.
 
-        # Store the annotations in the phase-specific storage
-        if self.current_phase_and_page[0] == UserPhase.TRAINING:
-            for schema_name, label_value in annotations.items():
-                # Create a Label object for storage
-                label = Label(schema_name, schema_name)  # Using schema_name as both schema and name
-                self.phase_to_page_to_label_to_value[UserPhase.TRAINING][self.current_phase_and_page[1]][label] = label_value
+        Answer *storage* is not done here — training answers arrive through the same
+        /updateinstance autosave as every other phase, so they already sit in
+        ``phase_to_page_to_label_to_value[TRAINING][page]`` keyed
+        ``Label(schema, label)``. This only keeps a per-question copy for reporting.
+
+        (It used to write ``Label(schema, schema)`` from raw form keys — a key shape
+        unlike any other phase, which also meant a ``schema:::label`` form field was
+        stored as a schema literally named that.)
+        """
+        record = self.training_state.completed_questions.setdefault(instance_id, {})
+        record['answers'] = dict(annotations)
+
+    def get_training_answers(self) -> Dict[str, Any]:
+        """The current training page's answers, collapsed to ``{schema: value}``.
+
+        Uses the shared collapse, so a multiselect compares as the list of selected
+        labels and a radio's ``free_response`` companion does not displace the chosen
+        option — the same semantics display logic and the exporter use.
+        """
+        from potato.server_utils.answer_collapse import collapse_answers
+
+        container = self._label_container('__phase_page__', create=False)
+        if not container:
+            return {}
+
+        by_schema: Dict[str, list] = {}
+        for label, value in container.items():
+            if isinstance(label, Label):
+                by_schema.setdefault(label.get_schema(), []).append(
+                    (label.get_name(), value))
+
+        schema_types = {}
+        try:
+            from potato.server_utils.schema_exclusivity import resolve_annotation_type
+            for schema in by_schema:
+                schema_types[schema] = resolve_annotation_type(schema, self.user_id)
+        except Exception:
+            pass
+
+        return collapse_answers(by_schema, schema_types=schema_types)
+
+    def clear_phase_page_annotations(self) -> int:
+        """Drop every stored answer on the current phase page.
+
+        Every training question shares one phase *page* key, so without this the next
+        question inherits the previous one's answers and grades against them. Uses the
+        non-creating container lookup so an untouched page is not materialised.
+        """
+        container = self._label_container('__phase_page__', create=False)
+        if not container:
+            return 0
+        removed = len(container)
+        container.clear()
+        return removed
 
     def check_training_pass(self, instance_id: str, correct_answers: Dict[str, Any]) -> bool:
-        """Check if the user's answer for a specific instance is correct."""
-        # Get the user's annotations for this instance
-        user_annotations = {}
-        if self.current_phase_and_page[0] == UserPhase.TRAINING:
-            page = self.current_phase_and_page[1]
-            for label, value in self.phase_to_page_to_label_to_value[UserPhase.TRAINING][page].items():
-                user_annotations[label.get_schema()] = value
+        """Grade the current training question against its gold answers."""
+        from potato.server_utils.training_grading import check_training_answer
 
-        # Compare user annotations with correct answers
-        is_correct = True
-        for schema_name, correct_value in correct_answers.items():
-            if schema_name not in user_annotations:
-                is_correct = False
-                break
-            if user_annotations[schema_name] != correct_value:
-                is_correct = False
-                break
+        user_annotations = self.get_training_answers()
+        is_correct = check_training_answer(user_annotations, correct_answers)
 
-        # Update training state with the result
         attempts = 1
         if instance_id in self.training_state.completed_questions:
-            attempts = self.training_state.completed_questions[instance_id]['attempts'] + 1
+            attempts = self.training_state.completed_questions[instance_id].get(
+                'attempts', 0) + 1
 
         self.training_state.add_answer(instance_id, is_correct, attempts)
         return is_correct
@@ -1853,6 +1942,12 @@ class InMemoryUserState(UserState):
         # a user labels for each instance.
         self.instance_id_to_label_to_value = defaultdict(dict)
 
+        # Schema names that may hold at most one label (GH #167). Populated by
+        # UserStateManager, the only place with access to the config. An empty default
+        # means the invariant simply isn't enforced — which is what bare unit tests
+        # that construct a UserState directly want, rather than a crash.
+        self._single_select_schemas = frozenset()
+
         # For non-annotation data, we save the responses for each page in separate
         # dictionaries to keep the data organized and make state-tracking easier.
         self.phase_to_page_to_label_to_value = defaultdict(lambda: defaultdict(dict))
@@ -1920,6 +2015,17 @@ class InMemoryUserState(UserState):
         # This ensures the same user sees the same highlights for an instance across navigation
         self.instance_id_to_keyword_highlight_state: Dict[str, Dict[str, Any]] = {}
 
+        # Which order each scheme's options were shown in, per instance.
+        # Maps instance_id -> {scheme_name: [label names in shown order]}.
+        #
+        # Kept HERE rather than only on behavioural data because
+        # `update_annotation_state` REPLACES instance_id_to_behavioral_data
+        # wholesale on every save, so anything written there at render time is
+        # destroyed by the first autosave. Same reason
+        # instance_id_to_keyword_highlight_state exists, and it is merged into
+        # the behavioural record on save by the same code path.
+        self.instance_id_to_presentation_order: Dict[str, Dict[str, list]] = {}
+
         # Span link annotations - stores relationships between spans
         # Maps instance_id -> {link_id -> SpanLink}
         self.instance_id_to_link_to_value: Dict[str, Dict[str, SpanLink]] = defaultdict(dict)
@@ -1962,6 +2068,26 @@ class InMemoryUserState(UserState):
             state: Dict with 'highlights', 'seed', 'settings' keys
         """
         self.instance_id_to_keyword_highlight_state[instance_id] = state
+
+    def get_presentation_order(self, instance_id: str) -> Dict[str, Any]:
+        """The order each scheme's options were shown in on this instance."""
+        return self.instance_id_to_presentation_order.get(instance_id, {})
+
+    def record_presentation_order(self, instance_id: str,
+                                  orders: Dict[str, Any]) -> None:
+        """
+        Record the shown order for schemes that do not already have one.
+
+        Never overwrites. The first render is what the annotator answered
+        against; a later re-render -- after an admin edits the config, say --
+        must not rewrite history and make a stored answer look as though it
+        was given under an arrangement nobody ever saw.
+        """
+        if not orders:
+            return
+        stored = self.instance_id_to_presentation_order.setdefault(instance_id, {})
+        for scheme_name, order in orders.items():
+            stored.setdefault(scheme_name, list(order))
 
     def add_new_assigned_data(self, new_assigned_data):
         """
@@ -2073,12 +2199,81 @@ class InMemoryUserState(UserState):
     def get_span_annotations(self):
         return self.span_annotations
 
-    def add_label_annotation(self, instance_id: str, label: Label, value: any) -> None:
+    def _label_container(self, instance_id: str, create: bool = True):
+        '''The dict that labels for this instance/page live in.
+
+        Annotation-phase writes are keyed by instance; every other phase (consent,
+        instructions, training, prestudy, poststudy) is keyed by phase+page. Both
+        add_label_annotation and clear_schema_labels must agree on this, or a clear
+        silently targets the wrong container — the second half of GH #167.
+
+        Both backing stores are defaultdicts, so read-only callers must pass
+        create=False; otherwise merely *looking* for stale labels would materialise an
+        empty entry and make an untouched instance look annotated to the exporter.
+        Returns None when create=False and nothing is stored yet.
+        '''
         if self.current_phase_and_page[0] == UserPhase.ANNOTATION:
-            self.instance_id_to_label_to_value[instance_id][label] = value
-        else:
-            self.phase_to_page_to_label_to_value[self.current_phase_and_page[0]][self.current_phase_and_page[1]][label] = value
-        #print('add_labels ->', self.instance_id_to_label_to_value)
+            if not create and instance_id not in self.instance_id_to_label_to_value:
+                return None
+            return self.instance_id_to_label_to_value[instance_id]
+        phase, page = self.current_phase_and_page
+        if not create:
+            pages = self.phase_to_page_to_label_to_value.get(phase)
+            if pages is None or page not in pages:
+                return None
+            return pages[page]
+        return self.phase_to_page_to_label_to_value[phase][page]
+
+    def add_label_annotation(self, instance_id: str, label: Label, value: any) -> None:
+        container = self._label_container(instance_id)
+
+        # Single-select invariant. A radio/likert/confidence schema renders one input
+        # per option, each with its own label_name, so writing a changed answer would
+        # otherwise leave the previous option sitting beside it (GH #167). Enforced
+        # here rather than only in the routes so that every write path — including
+        # /submit_annotation and the legacy /updateinstance format — is covered.
+        schema_name = label.get_schema()
+        # A falsy value is a "not selected" marker, not an answer. The legacy v1
+        # template posts the whole fieldset as {name: <bool>} pairs, so letting an
+        # unselected option evict the selected one would destroy the annotation.
+        _is_selection = value is not None and value is not False and value != ""
+        if _is_selection and schema_name in getattr(self, '_single_select_schemas', frozenset()):
+            from potato.server_utils.schema_exclusivity import is_exempt_label
+            if not is_exempt_label(label.get_name()):
+                for stale in [
+                    lbl for lbl in container
+                    if isinstance(lbl, Label)
+                    and lbl.get_schema() == schema_name
+                    and lbl != label
+                    and not is_exempt_label(lbl.get_name())
+                ]:
+                    logger.warning(
+                        "Superseding single-select annotation %s:%s=%r with %s:%s=%r "
+                        "for user %s (%s)",
+                        schema_name, stale.get_name(), container[stale],
+                        schema_name, label.get_name(), value,
+                        self.user_id, instance_id,
+                    )
+                    del container[stale]
+
+        container[label] = value
+
+    def clear_schema_labels(self, instance_id: str, schema_name: str) -> int:
+        '''Removes every stored label for a schema. See UserState.clear_schema_labels.'''
+        from potato.server_utils.schema_exclusivity import is_exempt_label
+
+        container = self._label_container(instance_id, create=False)
+        if not container:
+            return 0
+        stale = [
+            lbl for lbl in container
+            if isinstance(lbl, Label)
+            and lbl.get_schema() == schema_name
+            and not is_exempt_label(lbl.get_name())
+        ]
+        for lbl in stale:
+            del container[lbl]
+        return len(stale)
 
     def add_span_annotation(self, instance_id: str, label: SpanAnnotation, value: any) -> None:
         '''Adds a set of span annotations to the instance or if the user is not
@@ -2448,7 +2643,14 @@ class InMemoryUserState(UserState):
         if self.max_assignments >= 0:
             # Explicit cap: the user may annotate up to this many items, but should
             # still finish cleanly if the dataset/eligible pool is exhausted first.
-            return len(self.get_annotated_instance_ids()) < self.max_assignments and has_available_items
+            # Injected attention checks and gold items do not count against it --
+            # assignment already discounts them, and if this did not, the two
+            # disagreed and the annotator was declared finished holding an
+            # unreached item.
+            from potato.quality_control import count_dataset_items
+
+            annotated = count_dataset_items(self.get_annotated_instance_ids())
+            return annotated < self.max_assignments and has_available_items
 
         return has_available_items
 
@@ -2840,6 +3042,11 @@ class InMemoryUserState(UserState):
         # Save keyword highlight state for randomization consistency
         d['instance_id_to_keyword_highlight_state'] = self.instance_id_to_keyword_highlight_state
 
+        # Which order each scheme's options were shown in. Persisted so that a
+        # study can be corrected for position bias after the fact -- see
+        # potato/server_utils/presentation_order.py.
+        d['instance_id_to_presentation_order'] = self.instance_id_to_presentation_order
+
         # Save span link annotations
         d['instance_id_to_link_to_value'] = {}
         for instance_id, links in self.instance_id_to_link_to_value.items():
@@ -2974,6 +3181,8 @@ class InMemoryUserState(UserState):
         # Restore keyword highlight state if present
         if 'instance_id_to_keyword_highlight_state' in j:
             user_state.instance_id_to_keyword_highlight_state = j['instance_id_to_keyword_highlight_state']
+        if 'instance_id_to_presentation_order' in j:
+            user_state.instance_id_to_presentation_order = j['instance_id_to_presentation_order']
 
         # Restore span link annotations if present
         if 'instance_id_to_link_to_value' in j:

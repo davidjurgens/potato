@@ -5,7 +5,7 @@ task_dir: .
 data_files:
   - data/toxicity-pool.jsonl
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 item_properties:
   id_key: id

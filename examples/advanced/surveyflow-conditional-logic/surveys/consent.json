@@ -3,6 +3,7 @@
         "id": "consent_info",
         "name": "consent_info",
         "annotation_type": "pure_display",
+    "allow_html": true,
         "description": "<h3>Conditional SurveyFlow Demo</h3><p>This demo shows how SurveyFlow questions (consent, prestudy, poststudy) can be shown or hidden based on earlier answers, using the same <code>display_logic</code> grammar as the main annotation schemes.</p><p>Click <strong>I agree</strong> to continue.</p>"
     },
     {

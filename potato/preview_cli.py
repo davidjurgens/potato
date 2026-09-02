@@ -10,8 +10,9 @@ Usage:
     potato preview config.yaml              # Summary output (default)
     potato preview config.yaml --format html    # HTML output
     potato preview config.yaml --format json    # JSON output
+    potato preview config.yaml --screenshot out.png   # render it and report browser errors
 
-    # Or run as module:
+    # Or run as a module:
     python -m potato.preview_cli config.yaml
 """
 
@@ -54,12 +55,23 @@ def load_config(config_path: str) -> Dict[str, Any]:
     return config
 
 
-def validate_config(config: Dict[str, Any]) -> List[str]:
+def validate_config(
+    config: Dict[str, Any], config_path: Optional[str] = None
+) -> List[str]:
     """
     Validate configuration and return list of issues.
 
+    The checks below are the cheap ones that only need the parsed dict. When
+    `config_path` is supplied we additionally run the server's own validator
+    (`validate_yaml_structure`, via `validate_cli.validate_config_file`) so
+    preview and `potato validate` agree. Without that delegation preview
+    reported a clean bill of health for configs the live server rejects at
+    boot — a display type the preview accepted and the server did not, for
+    instance.
+
     Args:
         config: Configuration dictionary
+        config_path: Path the dictionary was loaded from, if known
 
     Returns:
         List of validation error/warning messages
@@ -72,11 +84,30 @@ def validate_config(config: Dict[str, Any]) -> List[str]:
         if field not in config:
             issues.append(f"ERROR: Missing required field '{field}'")
 
-    # Data source validation
-    has_data_files = config.get('data_files') and len(config.get('data_files', [])) > 0
-    has_data_directory = bool(config.get('data_directory'))
-    if not has_data_files and not has_data_directory:
-        issues.append("ERROR: Must have either 'data_files' or 'data_directory'")
+    # Data source validation. Ask the server's own helper rather than
+    # re-deriving the answer here — this check used to know only about
+    # data_files and data_directory, and so rejected the data_sources configs
+    # (live database ingestion) that the server loads fine.
+    try:
+        from potato.server_utils.config_module import (
+            DATA_SOURCE_REQUIRED_MESSAGE,
+            config_has_data_source,
+        )
+    except Exception:
+        has_data_source = bool(
+            config.get('data_files') or config.get('data_directory')
+            or config.get('data_sources')
+        )
+        message = (
+            "At least one data source must be configured: "
+            "'data_files', 'data_directory', 'data_sources', or "
+            "'batch_assignment.groups[].data_file'"
+        )
+    else:
+        has_data_source = config_has_data_source(config)
+        message = DATA_SOURCE_REQUIRED_MESSAGE
+    if not has_data_source:
+        issues.append(f"ERROR: {message}")
 
     # Annotation schemes validation
     has_schemes = 'annotation_schemes' in config
@@ -98,6 +129,31 @@ def validate_config(config: Dict[str, Any]) -> List[str]:
         if phases_with_schemes:
             issues.append(f"ERROR: Both top-level and phase-level annotation_schemes found in: {', '.join(phases_with_schemes)}")
 
+    issues.extend(_deep_validation_issues(config_path))
+
+    return issues
+
+
+def _deep_validation_issues(config_path: Optional[str]) -> List[str]:
+    """Run the full server validator and translate its report into issue lines.
+
+    Imported lazily: `validate_cli` pulls in `config_module`, and
+    `tests/unit/test_boot_import_weight.py` holds `potato.preview_cli` to a
+    light import graph.
+    """
+    if not config_path:
+        return []
+
+    try:
+        from potato.validate_cli import validate_config_file
+    except Exception as e:  # pragma: no cover - defensive
+        logger.debug("Deep validation unavailable: %s", e)
+        return []
+
+    report = validate_config_file(config_path)
+    issues = [f"ERROR: {e}" for e in report.errors]
+    issues += [f"WARNING: {w}" for w in report.unknown_keys]
+    issues += [f"WARNING: {w}" for w in report.other_warnings]
     return issues
 
 
@@ -404,23 +460,24 @@ def generate_layout_html(schemes: List[Dict[str, Any]]) -> str:
     return "\n".join(html_parts)
 
 
-def main():
+def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point for preview CLI."""
     parser = argparse.ArgumentParser(
+        prog="potato preview",
         description="Preview annotation task configuration",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m potato.preview_cli config.yaml              # Summary output
-  python -m potato.preview_cli config.yaml --format html    # Full HTML page preview
-  python -m potato.preview_cli config.yaml --format json    # JSON output
-  python -m potato.preview_cli config.yaml --layout-only    # Just the task layout HTML snippet
+  potato preview config.yaml              # Summary output
+  potato preview config.yaml --format html    # Full HTML page preview
+  potato preview config.yaml --format json    # JSON output
+  potato preview config.yaml --layout-only    # Just the task layout HTML snippet
 
   # Save HTML to file:
-  python -m potato.preview_cli config.yaml --format html > preview.html
+  potato preview config.yaml --format html > preview.html
 
   # Get just the annotation schema div for embedding:
-  python -m potato.preview_cli config.yaml --layout-only > task_layout.html
+  potato preview config.yaml --layout-only > task_layout.html
 """
     )
 
@@ -440,12 +497,26 @@ Examples:
         help='Output only the task layout HTML snippet (no wrapper page). This is the HTML that goes inside {{ TASK_LAYOUT }}.'
     )
     parser.add_argument(
+        '--screenshot',
+        metavar='PATH',
+        help=(
+            'Boot the task in a headless browser, save a PNG here, and report '
+            'anything the browser complained about. Needs Playwright: '
+            "pip install 'potato-annotation[preview]' && playwright install chromium"
+        ),
+    )
+    parser.add_argument(
+        '--phase',
+        default='annotation',
+        help='Workflow phase to render with --screenshot (default: annotation)',
+    )
+    parser.add_argument(
         '--verbose', '-v',
         action='store_true',
         help='Enable verbose output'
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -455,7 +526,7 @@ Examples:
         config = load_config(args.config_file)
 
         # Validate
-        issues = validate_config(config)
+        issues = validate_config(config, args.config_file)
 
         # Get schemes
         schemes = get_annotation_schemes(config)
@@ -464,6 +535,20 @@ Examples:
 
         # Detect conflicts
         conflicts = detect_keybinding_conflicts(schemes)
+
+        # A screenshot is a different question from "what does this config
+        # declare": it boots the task and reports what the browser did with it.
+        if args.screenshot:
+            from potato.preview_render import capture_task
+
+            capture = capture_task(
+                args.config_file, phase=args.phase, out_path=args.screenshot
+            )
+            if args.format == 'json':
+                print(json.dumps(capture.to_dict(), indent=2))
+            else:
+                print(capture.summary())
+            return 0 if capture.clean else 1
 
         # Generate output
         if args.layout_only:
@@ -479,21 +564,22 @@ Examples:
         # Exit with error code if there are issues (skip for layout-only mode)
         if not args.layout_only:
             error_count = len([i for i in issues if i.startswith('ERROR')])
-            sys.exit(1 if error_count > 0 else 0)
+            return 1 if error_count > 0 else 0
+        return 0
 
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+        return 1
     except yaml.YAMLError as e:
         print(f"Error: Invalid YAML in configuration file: {e}", file=sys.stderr)
-        sys.exit(1)
+        return 1
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         if args.verbose:
             import traceback
             traceback.print_exc()
-        sys.exit(1)
+        return 1
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

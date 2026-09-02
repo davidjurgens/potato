@@ -1,8 +1,8 @@
 """
 Database module for Potato annotation platform.
 
-This module provides database connectivity and management for user state persistence.
-It supports both MySQL and file-based storage backends.
+Database connectivity and management for user state persistence, over either
+MySQL or file-based storage.
 """
 
 from .connection import DatabaseManager

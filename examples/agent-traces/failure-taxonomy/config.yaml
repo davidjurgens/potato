@@ -20,7 +20,7 @@ item_properties:
 
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 instance_display:
   layout:
@@ -61,5 +61,5 @@ annotation_schemes:
     name: rationale
     description: "Briefly justify the failure modes you selected (which step, why)"
     textarea:
-      on: true
+      "on": true
       rows: 3

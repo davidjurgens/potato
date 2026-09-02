@@ -1,6 +1,6 @@
 # Quality Control Features
 
-Potato provides comprehensive quality control features to ensure high-quality annotations in your projects. This guide covers five key features:
+Five quality control features, all optional and independent of each other:
 
 1. **Attention Checks** - Verify annotator engagement with known-answer items
 2. **Gold Standards** - Track accuracy against expert-labeled items
@@ -67,7 +67,7 @@ Create a JSON file with your attention check items:
 - `text` (required): The text to display to annotators
 - `expected_answer` (required): Dictionary mapping schema names to expected values
 
-### How It Works
+### When a check is injected and what happens next
 
 1. Attention check items are loaded at server startup
 2. Based on `frequency` or `probability`, checks are injected into the annotation flow
@@ -86,7 +86,7 @@ View attention check statistics in the admin dashboard at `/admin`:
 
 ## Gold Standards
 
-Gold standards are expert-labeled items used to measure annotator accuracy. By default, gold standards are **silent** - results are recorded for admin review in the dashboard, but annotators don't see feedback. This allows you to track quality without influencing annotator behavior.
+Gold standards are expert-labeled items used to measure annotator accuracy. By default, gold standards are **silent** - results are recorded for admin review in the dashboard, but annotators don't see feedback. You therefore track quality without influencing annotator behavior.
 
 ### Configuration
 
@@ -156,6 +156,53 @@ gold_standards:
 - `explanation` (optional): Explanation shown to annotators
 - `difficulty` (optional): Metadata for analysis
 
+### Gold Standards for Drawn Answers
+
+Image annotation gold standards work, and are graded by **overlap rather than
+equality** — two annotators never produce byte-identical geometry, so a string
+comparison would fail every drawn answer no matter how well it was drawn.
+
+The `gold_label` value is the same JSON the annotation client stores: a list of
+objects with normalized (0–1) coordinates.
+
+```json
+[
+  {
+    "id": "gold_img_001",
+    "image": "images/street_042.jpg",
+    "gold_label": {
+      "objects": "[{\"type\": \"bbox\", \"label\": \"car\", \"coordinates\": {\"x\": 0.12, \"y\": 0.40, \"width\": 0.22, \"height\": 0.18}}]"
+    },
+    "explanation": "The parked car on the left; the reflection in the window is not a second car."
+  }
+]
+```
+
+An answer passes when **every** gold shape is matched by a drawn shape of the
+**same label** at or above the IoU tolerance, with no extra shapes. Right place,
+wrong label is a failure — that is what a gold standard exists to catch.
+
+```yaml
+quality_control:
+  geometry_iou_tolerance: 0.5   # default; also accepted inside gold_standards
+```
+
+| Tolerance | Effect |
+|---|---|
+| `0.5` (default) | The Pascal VOC / COCO detection convention. The annotator clearly found and outlined the right object. |
+| `0.75`–`0.9` | Strict. Appropriate for segmentation work where boundary precision is the skill being tested. |
+| `0.25`–`0.4` | Loose. Appropriate for "did you spot it at all" screening, or for small objects where a few pixels dominate the IoU. |
+
+!!! tip "IoU punishes small objects"
+
+    A fixed pixel error costs far more IoU on a small object than a large one.
+    If your gold items are dominated by small objects, a 0.5 tolerance is
+    stricter in practice than it sounds — consider lowering it or choosing
+    larger gold objects.
+
+The same comparator grades training-phase practice questions, so a project's
+gold standards and its training answers are held to the same standard.
+
 ### Feedback Display
 
 After submitting a gold standard item, annotators see:
@@ -206,7 +253,7 @@ gold_standards:
 
 ## Pre-annotation Support
 
-Pre-annotation allows you to pre-fill annotation forms with model predictions, useful for:
+Pre-annotation pre-fills the form with model predictions, which is useful for:
 - Active learning workflows
 - Correcting model outputs
 - Bootstrapping from existing annotations
@@ -260,7 +307,7 @@ For span annotations:
 }
 ```
 
-### How It Works
+### When predictions are applied
 
 1. When an item is loaded, the predictions field is extracted
 2. If the annotator hasn't already annotated this item, predictions are used to pre-fill the form
@@ -459,6 +506,42 @@ Step-level QC is particularly useful for:
 - **Code review** tasks with multiple files to review
 
 Step-level agreement metrics (Cohen's kappa) are computed per annotator pair for step-level schemas and available in the admin dashboard.
+
+---
+
+## Writing-Process Signals (free-text quality)
+
+Attention checks and gold standards work on *categorical* answers. They cannot
+tell you whether a free-text rationale was written by the annotator or pasted in
+from an LLM — the finished text usually looks fine either way.
+
+[Keystroke logging](../advanced/keystroke_logging.md) adds a complementary
+signal for free-text fields by recording *how* the response was produced:
+
+```yaml
+keystroke_logging:
+  enabled: true
+  detection:
+    enabled: true
+    on_external_insert: flag   # allow | warn | block | flag
+```
+
+This produces per-response flags — `paste_dominant`, `silent_insertion`,
+`transcription_rhythm`, `offscreen_composition`, `implausible_speed`,
+`synthetic_input` — each carrying the evidence that fired it. They surface in
+the **Writing Process** panel of the admin dashboard and in the
+`typing_dynamics.csv` export.
+
+!!! warning "These flags are not attention checks"
+    A failed attention check is a discrete, defensible fact: the annotator gave
+    a known-wrong answer. A writing-process flag is a **statistical signal about
+    a behaviour that has innocent explanations** — fast typists, mobile
+    keyboards, dictation, assistive technology. Do not wire them to automatic
+    rejection.
+
+    See [false positives](../advanced/writing_process_detection.md#false-positives)
+    and [the ethics guide](../advanced/keystroke_logging_ethics.md) before using
+    them in any decision that affects an annotator.
 
 ---
 

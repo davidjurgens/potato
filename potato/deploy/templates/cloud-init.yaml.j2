@@ -1,0 +1,76 @@
+#cloud-config
+# First-boot provisioning for a Potato droplet.
+#
+# This only prepares the machine. The bundle arrives over SFTP afterwards,
+# because DigitalOcean caps user_data at 64 KB and a project with data files
+# passes that immediately.
+#
+# Keep this idempotent and quiet on failure paths: everything here runs before
+# anyone can watch it, and the only forensics are /var/log/cloud-init-output.log.
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - ca-certificates
+  - curl
+  - sqlite3
+  - ufw
+
+write_files:
+  # The image is pulled and run by a systemd unit rather than by cloud-init, so
+  # a reboot brings the task back without anyone logging in.
+  - path: /etc/systemd/system/potato.service
+    permissions: '0644'
+    content: |
+{{ potato_service | indent(6, true) }}
+
+  - path: /etc/caddy/Caddyfile
+    permissions: '0644'
+    content: |
+{{ caddyfile | indent(6, true) }}
+
+  - path: /etc/systemd/system/caddy-potato.service
+    permissions: '0644'
+    content: |
+{{ caddy_service | indent(6, true) }}
+
+runcmd:
+  # Docker from the convenience script: the distro package lags far enough
+  # behind that compose plugin availability varies by image.
+  - [ sh, -c, "command -v docker >/dev/null 2>&1 || (curl -fsSL https://get.docker.com | sh)" ]
+  - [ systemctl, enable, --now, docker ]
+
+  - [ mkdir, -p, "{{ data_dir }}" ]
+  - [ mkdir, -p, "{{ app_dir }}" ]
+{% if volume_device %}
+  # Format only if the volume is blank; a re-attached volume carries the study's
+  # data and must never be reformatted.
+  - [ sh, -c, "blkid {{ volume_device }} >/dev/null 2>&1 || mkfs.ext4 -F {{ volume_device }}" ]
+  - [ sh, -c, "grep -q '{{ data_dir }}' /etc/fstab || echo '{{ volume_device }} {{ data_dir }} ext4 defaults,nofail,discard 0 2' >> /etc/fstab" ]
+  - [ mount, -a ]
+  - [ mkdir, -p, "{{ data_dir }}/caddy" ]
+{% endif %}
+
+  # Both directories are bind-mounted into a container that runs as uid 1000.
+  # Created by root they are unwritable by the server, which then dies during
+  # boot on its first log write. This has to come after `mount -a`, because
+  # mounting the volume replaces the directory that was just chowned.
+  - [ chown, -R, "1000:1000", "{{ app_dir }}" ]
+  - [ chown, -R, "1000:1000", "{{ data_dir }}" ]
+
+  # The firewall is belt-and-braces: DigitalOcean's own firewall already blocks
+  # everything else, but a cloud firewall deleted by hand in the console should
+  # not silently expose port {{ app_port }}.
+  - [ ufw, allow, "22/tcp" ]
+  - [ ufw, allow, "80/tcp" ]
+  - [ ufw, allow, "443/tcp" ]
+  - [ ufw, --force, enable ]
+
+  - [ sh, -c, "docker pull {{ image }}" ]
+  - [ sh, -c, "docker pull {{ caddy_image }}" ]
+  - [ systemctl, daemon-reload ]
+  - [ systemctl, enable, potato.service ]
+  - [ systemctl, enable, caddy-potato.service ]
+
+final_message: "potato host ready after $UPTIME seconds"

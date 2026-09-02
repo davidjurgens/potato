@@ -117,6 +117,13 @@ def _register_builtin_exporters():
     from .coco_exporter import COCOExporter
     from .yolo_exporter import YOLOExporter
     from .pascal_voc_exporter import PascalVOCExporter
+    from .cityscapes_exporter import CityscapesExporter
+    from .cvat_exporter import CVATExporter
+    from .darwin_exporter import DarwinExporter
+    from .davis_exporter import DAVISExporter
+    from .kitti_exporter import KITTIExporter
+    from .labelme_exporter import LabelMeExporter
+    from .mot_exporter import MOTExporter
     from .conll_2003_exporter import CoNLL2003Exporter
     from .conll_u_exporter import CoNLLUExporter
     from .mask_exporter import MaskExporter
@@ -128,18 +135,40 @@ def _register_builtin_exporters():
     from .parquet_exporter import ParquetExporter
     from .tabular_exporter import CSVExporter, TSVExporter, JSONLExporter
     from .codebook_exporter import CodebookExporter
+    from .qdpx_exporter import QDPXExporter
     from .quotation_report_exporter import QuotationReportExporter
+    from .convokit_exporter import ConvoKitExporter
+    from .keystroke_exporter import KeystrokeExporter
+    from .annotation_telemetry_exporter import AnnotationTelemetryExporter
+    from .episode_exporter import EpisodeJsonlExporter
 
     exporters = [
         COCOExporter(),
         YOLOExporter(),
         PascalVOCExporter(),
+        # Close the round trips: both formats were import-only, and a
+        # one-way import means a team cannot move back or hand corrected
+        # annotations to a colleague still on the source tool.
+        CVATExporter(),
+        LabelMeExporter(),
+        # Closing the remaining migration round trips. Darwin in particular
+        # matters both ways: an import-only path lets a team move off V7 but
+        # never hand work back to a colleague still on it.
+        DarwinExporter(),
+        KITTIExporter(),
+        MOTExporter(),
+        CityscapesExporter(),
+        DAVISExporter(),
         CoNLL2003Exporter(),
         CoNLLUExporter(),
         MaskExporter(),
         EAFExporter(),
         TextGridExporter(),
         AgentEvalExporter(),
+        # Embodied episodes: a per-frame sidecar keyed by
+        # (episode_id, frame_index), so the read-only source
+        # dataset is never rewritten.
+        EpisodeJsonlExporter(),
         CodingEvalExporter(),
         TrajectoryCorrectionExporter(),
         ParquetExporter(),
@@ -147,7 +176,18 @@ def _register_builtin_exporters():
         TSVExporter(),
         JSONLExporter(),
         CodebookExporter(),
+        # REFI-QDA project exchange: the format qualitative researchers
+        # actually move projects with, and the only way a Potato project can
+        # be handed to a colleague on NVivo, ATLAS.ti or MAXQDA.
+        QDPXExporter(),
         QuotationReportExporter(),
+        # Reads and writes the ConvoKit format with the standard library only,
+        # so it belongs here rather than among the optional exporters below.
+        ConvoKitExporter(),
+        # Reads the project SQLite database rather than user_state.json; falls
+        # back to JSONL when pyarrow is absent, so it has no hard dependency.
+        KeystrokeExporter(),
+        AnnotationTelemetryExporter(),
     ]
 
     # Optional exporters with external dependencies

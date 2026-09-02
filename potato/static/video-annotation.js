@@ -434,7 +434,24 @@ class VideoAnnotationManager {
      * Get current frame number
      */
     getCurrentFrame() {
-        return Math.floor(this.videoEl.currentTime * this.videoMetadata.fps);
+        // The epsilon is not a rounding preference; it is the whole point.
+        //
+        // `seekToFrame(n)` sets currentTime = n / fps, and the browser stores
+        // that as a float a hair BELOW the exact value: asking for frame 14 of
+        // a 12 fps clip gives back 1.166666, and 1.166666 * 12 is 13.999992.
+        // A plain floor therefore answers 13 — so seeking to a frame and
+        // drawing on it filed the annotation one frame early, every time, for
+        // every annotator. Measured in a real browser at frames 14, 26 and 40.
+        //
+        // Floor is still right for a time in the MIDDLE of a frame, which is
+        // where playback leaves it; only the representation error is absorbed.
+        // The tolerance is in FRAMES and has to clear the browser's own
+        // rounding: currentTime comes back truncated to six decimal places, so
+        // the error in frames is fps * 1e-6 — 1.2e-5 at 12 fps, 3e-5 at 30.
+        // A thousandth of a frame is far above that and far below any time a
+        // seek or playback actually lands on (33 microseconds at 30 fps).
+        const fps = this.videoMetadata.fps;
+        return Math.floor(this.videoEl.currentTime * fps + 1e-3);
     }
 
     /**
@@ -618,6 +635,48 @@ class VideoAnnotationManager {
 
         videoDebugLog('Created segment:', segment);
         return segment;
+    }
+
+    /**
+     * Hide or show segments by label.
+     *
+     * The video half of the shared per-class show/hide (see
+     * label-visibility.js, which owns the state). A timeline of stacked
+     * segments is as unreadable as an image of stacked boxes, and the
+     * annotator wants the same affordance in both.
+     *
+     * Hidden segments are removed from the Peaks *view* only — they stay in
+     * `this.segments`, so they are still saved and exported. Hiding a class
+     * must never delete work.
+     *
+     * @param {Set<string>} hidden - Label names to hide
+     */
+    applyLabelVisibility(hidden) {
+        this.hiddenLabels = hidden || new Set();
+        if (!this.peaks) {
+            this._updateAnnotationList();
+            return;
+        }
+
+        this.segments.forEach(seg => {
+            const shouldHide = this.hiddenLabels.has(seg.label);
+            const onTimeline = !!this.peaks.segments.getSegment(seg.id);
+
+            if (shouldHide && onTimeline) {
+                this.peaks.segments.removeById(seg.id);
+            } else if (!shouldHide && !onTimeline) {
+                this.peaks.segments.add({
+                    id: seg.id,
+                    startTime: seg.startTime,
+                    endTime: seg.endTime,
+                    labelText: seg.label,
+                    color: seg.color,
+                    editable: true,
+                });
+            }
+        });
+
+        this._updateAnnotationList();
     }
 
     /**
@@ -955,6 +1014,12 @@ class VideoAnnotationManager {
                 break;
 
             case 'k': // Mark keyframe
+                // Plain k only. Ctrl/Cmd+K sets a TRACKING keyframe in
+                // tracking-ui.js, and both handlers are bound to `document`,
+                // so an unguarded letter case fires on the modified press too
+                // -- one keystroke would mark a keyframe here AND pin a
+                // tracking keyframe there.
+                if (event.ctrlKey || event.metaKey) break;
                 event.preventDefault();
                 this.markKeyframe(this.activeLabel);
                 break;
@@ -1129,6 +1194,10 @@ class VideoAnnotationManager {
         if (this.segments.length > 0) {
             html += '<div class="annotation-group"><h5>Segments</h5>';
             for (const segment of this.segments) {
+                // Keep the list in step with the timeline: a hidden class that
+                // still appears in the list is worse than no filter at all,
+                // because it reads as "the timeline lost my segment".
+                if (this.hiddenLabels && this.hiddenLabels.has(segment.label)) continue;
                 const isActive = this.activeAnnotationId === segment.id;
                 html += `
                     <div class="annotation-item ${isActive ? 'active' : ''}" data-id="${segment.id}">
@@ -1245,6 +1314,14 @@ class VideoAnnotationManager {
         if (this.inputEl) {
             this.inputEl.value = JSON.stringify(data);
             console.log('[VideoAnnotation] Set input value, length:', this.inputEl.value.length);
+            // Assigning `.value` fires nothing; without this the shared
+            // autosave in annotation.js cannot see the timeline change and the
+            // work reaches the server only when the annotator navigates.
+            // Suppressed while hydrating so restoring the server's own answer
+            // does not mark an untouched instance as answered.
+            if (!this._hydrating) {
+                this.inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+            }
         } else {
             console.error('[VideoAnnotation] ERROR: inputEl is null, cannot save data!');
         }

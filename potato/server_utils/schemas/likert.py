@@ -4,7 +4,7 @@ Likert Scale Layout
 Generates a likert scale rating interface with radio buttons arranged horizontally.
 Each button represents a point on the scale between min_label and max_label.
 
-This module provides functionality for creating HTML-based Likert scale interfaces
+Creating HTML-based Likert scale interfaces
 that can be used for collecting ordinal data responses. The scale supports:
 - Customizable number of points
 - Optional numeric display
@@ -107,20 +107,40 @@ def _generate_likert_layout_internal(annotation_scheme):
     """
 
     # Generate scale points
+    #
+    # `value` is the scale point itself, always. It used to come from
+    # generate_element_value(), which returns str(index % 10) under
+    # sequential_key_binding — so a 10-point scale stored point 10 as "0", and an
+    # 11-point scale gave points 1 and 11 the same value. The exported column
+    # `<schema>.10` then read 0, which is not an ordinal and defeats the entire point
+    # of a likert. With bad_text_label enabled, point 10 also collided with bad_text's
+    # hardcoded value="0".
+    #
+    # The keyboard shortcut lives in `data-key`, matching radio.py. The keydown handler
+    # (static/annotation.js) matches exclusively on data-key and likert never emitted
+    # one, so `sequential_key_binding: true` on a likert gave no working shortcuts at
+    # all — it only corrupted the stored value. This is a leftover from the
+    # pre-data-key design that every other schema was migrated off.
+    sequential = (annotation_scheme.get("sequential_key_binding")
+                  and annotation_scheme["size"] <= 10)
     for i in range(1, annotation_scheme["size"] + 1):
         label = f"{i}"
         identifiers = generate_element_identifier(annotation_scheme['name'], label, "radio")
-        key_value = generate_element_value(label, i, annotation_scheme)
+        point_value = label
 
         # Handle key bindings: use allocated keys if available, else fallback
+        shortcut_key = None
         if label in allocated_map:
             shortcut_key = allocated_map[label]
-            key_bindings.append((shortcut_key, f"{identifiers['schema']}: {shortcut_key}"))
+            key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
             logger.debug(f"Added allocated key binding '{shortcut_key}' for point {i}")
-        elif not allocated_keys and (annotation_scheme.get("sequential_key_binding")
-            and annotation_scheme["size"] < 10):
-            key_bindings.append((key_value, f"{identifiers['schema']}: {key_value}"))
-            logger.debug(f"Added key binding '{key_value}' for point {i}")
+        elif not allocated_keys and sequential:
+            # Point 10 is reached with the "0" key, as on a keyboard's number row.
+            shortcut_key = str(i % 10)
+            key_bindings.append((shortcut_key, f"{identifiers['schema']}: {label}"))
+            logger.debug(f"Added key binding '{shortcut_key}' for point {i}")
+
+        data_key_attr = f'data-key="{escape_html_content(shortcut_key)}"' if shortcut_key else ""
 
         # Show the point number by default (unlabeled circles are a
         # usability defect); honor an explicit displaying_score: false.
@@ -133,11 +153,12 @@ def _generate_likert_layout_internal(annotation_scheme):
                                type="radio"
                                id="{identifiers['id']}"
                                name="{identifiers['name']}"
-                               value="{escape_html_content(key_value)}"
+                               value="{escape_html_content(point_value)}"
                                schema="{identifiers['schema']}"
                                label_name="{identifiers['label_name']}"
                                selection_constraint="single"
                                validation="{validation}"
+                               {data_key_attr}
                                onclick="onlyOne(this);registerAnnotation(this);">
                         <label class="shadcn-likert-button" for="{identifiers['id']}"></label>
                         {f'<span class="shadcn-likert-label">{escape_html_content(label_content)}</span>' if label_content else ''}
@@ -157,13 +178,19 @@ def _generate_likert_layout_internal(annotation_scheme):
         bad_text_identifiers = generate_element_identifier(annotation_scheme['name'], "bad_text", "radio")
         schematic += f"""
             <div class="shadcn-likert-bad-text" style="width: 100%;">
+                <!-- value is the label name, not "0": that hardcoded 0 collided with
+                     scale point 10 under sequential_key_binding, and onlyOne()
+                     de-duplicates by value, so the two could not uncheck each other.
+                     selection_constraint marks it as part of the same single-select
+                     group as the scale points, which it always was. -->
                 <input class="{bad_text_identifiers['schema']} shadcn-likert-input annotation-input"
                        type="radio"
                        id="{bad_text_identifiers['id']}"
                        name="{bad_text_identifiers['name']}"
-                       value="0"
+                       value="{bad_text_identifiers['label_name']}"
                        schema="{bad_text_identifiers['schema']}"
                        label_name="{bad_text_identifiers['label_name']}"
+                       selection_constraint="single"
                        validation="{validation}"
                        onclick="onlyOne(this);registerAnnotation(this);">
                 <label class="shadcn-likert-button" for="{bad_text_identifiers['id']}"></label>

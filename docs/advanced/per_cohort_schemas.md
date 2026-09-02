@@ -61,7 +61,7 @@ Per-cohort schemes also work with `auto_assign_annotators: true`. **Give each
 group a `name`** so the schema binding resolves — unnamed auto-groups fall back
 to the global schemes.
 
-## How it works
+## Template baking and cohort resolution
 
 At startup, Potato bakes one annotation page template per cohort that binds its
 own scheme set (plus the default). At request time, a user's cohort is resolved

@@ -1,10 +1,10 @@
 # Training Phase Documentation
 
-The training phase is an optional component of the annotation workflow that allows administrators to provide users with practice questions and feedback before they begin the main annotation task. This helps ensure annotation quality and user understanding of the task requirements.
+The training phase is an optional step before the main task, in which annotators answer practice questions and get feedback on their answers. It is where a misunderstanding of the guidelines surfaces cheaply, before it is spread across a corpus.
 
 ## Overview
 
-The training phase provides:
+The training phase gives you:
 - **Practice Questions**: Users answer questions with known correct answers
 - **Immediate Feedback**: Users receive feedback on their answers with explanations
 - **Retry Functionality**: Users can retry incorrect answers until they get them right
@@ -249,7 +249,7 @@ GET /admin/user_state/{user_id}
 
 1. **Consistent Format**: Ensure training data matches your annotation schemes
 2. **Clear Examples**: Use unambiguous examples with obvious correct answers
-3. **Comprehensive Coverage**: Include examples for all possible annotation values
+3. **Cover every label**: include at least one training example for each annotation value
 4. **Helpful Explanations**: Provide explanations that help users understand the task
 
 ## Troubleshooting
@@ -330,7 +330,7 @@ training:
 
 ## Integration with Existing Workflows
 
-The training phase integrates seamlessly with existing annotation workflows:
+The training phase fits into an existing annotation workflow as follows:
 
 1. **Phase Progression**: Users automatically advance through phases
 2. **State Persistence**: Training progress is saved and restored

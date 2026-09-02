@@ -1,0 +1,102 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Long guidelines — the three places annotator-facing instructions can live
+#
+# Most examples in this repo describe the task in one `description:` line per
+# scheme, which is all a three-label demo needs. A real codebook does not fit
+# there. Potato gives you three separate surfaces, and the difference between
+# them is *when* the annotator reads the text:
+#
+#   1. An `instructions` PHASE   — read once, before the first item. Point it at
+#                                  an .html file and write as much as you like.
+#   2. `annotation_instructions` — a collapsible <details> banner at the top of
+#                                  every annotation screen. Open by default,
+#                                  and the annotator can fold it away. This is
+#                                  the reference they consult mid-task.
+#   3. `annotation_codebook_url` — a "Codebook" button in the nav bar, opening
+#                                  the full document in a new tab. Use it when
+#                                  the codebook is long enough that it wants a
+#                                  page of its own, or lives outside Potato.
+#
+# Use all three the way this config does: the phase teaches, the banner reminds,
+# the button holds the authoritative document. For a codebook whose entries are
+# per-label and should sit in a sidebar next to the labels themselves, see
+# examples/advanced/codebook-sidebar/.
+#
+# Run from the repo root:
+#   python potato/flask_server.py start examples/advanced/long-guidelines/config.yaml -p 8000
+
+annotation_task_name: "Politeness — Long Guidelines"
+task_dir: .
+output_annotation_dir: annotation_output/
+export_annotation_format: jsonl
+
+data_files:
+- data/politeness.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 10000000
+
+# Files under media/ are served at /media/<path>, so the codebook document ships
+# with the project instead of relying on an external host that may go away.
+media_directory: media
+
+# ---------------------------------------------------------------------------
+# 1. The instructions PHASE — read once, before annotating.
+#    An .html file gets rendered as-is, so tables, lists and worked examples all
+#    work. A .json file here would instead be a survey (see the consent phase).
+# ---------------------------------------------------------------------------
+phases:
+  order:
+  - guidelines
+  - annotation
+  guidelines:
+    type: instructions
+    file: surveys/instructions.html
+
+# ---------------------------------------------------------------------------
+# 2. The collapsible banner — present on EVERY annotation screen.
+#    Keep this shorter than the phase page: it is the reminder, not the teaching
+#    material. HTML is passed through the project sanitizer, so <script> and
+#    friends are stripped but formatting survives.
+# ---------------------------------------------------------------------------
+annotation_instructions: |
+  <p>Rate how the message lands <strong>on the person receiving it</strong>, not
+  whether you would have written it that way.</p>
+  <ul>
+    <li><strong>Polite</strong> — the writer visibly softens the imposition:
+        hedges, thanks, an offer to make things easier.</li>
+    <li><strong>Neutral</strong> — plain business. No softening, but nothing
+        that stings. Most routine messages land here.</li>
+    <li><strong>Impolite</strong> — sarcasm, blame, a pointed reminder, or a
+        demand with no acknowledgment of the reader's time.</li>
+  </ul>
+  <p><em>The two rules that settle most disagreements:</em> terse is not
+  impolite (a bare imperative is Neutral), and politeness markers can be
+  sarcastic (&ldquo;thanks for <em>finally</em> getting to this&rdquo; is
+  Impolite). When genuinely torn, choose Neutral.</p>
+
+# ---------------------------------------------------------------------------
+# 3. The Codebook button in the nav bar. Any URL works — this one is served
+#    from media/ so the example is self-contained, but pointing at a Google Doc,
+#    a wiki page or a PDF is equally valid.
+# ---------------------------------------------------------------------------
+annotation_codebook_url: /media/codebook.html
+
+annotation_schemes:
+- annotation_type: radio
+  name: politeness
+  description: How polite is this workplace message?
+  labels:
+  - Polite
+  - Neutral
+  - Impolite
+  sequential_key_binding: true
+
+site_dir: default

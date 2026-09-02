@@ -1,7 +1,7 @@
 """
 Directory Watcher Module
 
-This module provides functionality for loading annotation instances from a directory
+Loading annotation instances from a directory
 and optionally watching that directory for new or modified files. When watching is
 enabled, a background thread periodically scans the directory and dynamically loads
 new instances or updates existing ones.

@@ -1,6 +1,6 @@
 # Loading Data from a Directory
 
-This guide explains how to load annotation instances from all files in a directory, with optional live watching for new or modified files.
+Point Potato at a directory and it loads every file in it as annotation instances, optionally watching for new or modified files while the server runs.
 
 ## Overview
 
@@ -68,7 +68,7 @@ The directory watcher supports the same formats as `data_files`:
 
 Each file can contain multiple instances. The `id_key` and `text_key` from `item_properties` determine which fields contain the instance ID and text content.
 
-## How It Works
+## Scan order and watch behavior
 
 ### At Startup
 

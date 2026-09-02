@@ -1,7 +1,7 @@
 """
 Base classes and types for data sources.
 
-This module defines the abstract base class for all data sources and
+The abstract base class for all data sources and
 common types used throughout the data sources subsystem.
 """
 

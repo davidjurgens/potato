@@ -3,7 +3,7 @@ port: 8000
 annotation_task_name: Search Example
 task_dir: .
 output_annotation_dir: annotation_output/search-example/
-output_annotation_format: tsv
+export_annotation_format: tsv
 data_files:
 - data/search-example.json
 item_properties:

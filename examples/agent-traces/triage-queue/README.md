@@ -33,7 +33,7 @@ shows every remaining item ranked by priority, with the reason that flagged it.
 | Low quality score | `score < 0.5`          | 60       |
 | (no match)        | —                      | 0        |
 
-Highest matching rule wins. Omit `rules` entirely to use the turnkey defaults
+Highest matching rule wins. Omit `rules` entirely to use the defaults
 (error / negative feedback / low score). For runtime-ingested traces (webhook /
 Langfuse) the same scorer runs as each trace arrives.
 

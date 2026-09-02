@@ -66,6 +66,9 @@ def _make_trace_config(test_name="create_app_trace"):
             "trace_ingestion": {
                 "enabled": True,
                 "api_key": "",
+                # An empty api_key fails closed; these tests check the routes
+                # exist, so they opt in rather than authenticate.
+                "allow_unauthenticated": True,
                 "notify_annotators": False,
             },
         },

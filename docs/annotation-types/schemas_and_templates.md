@@ -44,6 +44,74 @@ All annotation schemas share these **required fields**:
 
 Additional fields are specific to each annotation type and may be required or optional.
 
+## Annotation Type Reference
+
+`annotation_type` accepts the values below. The sections after this table cover the common ones in detail; for the rest, the Details column links to the guide that does. The Example column names a runnable project for every type that has one. Run one from the repository root with `python potato/flask_server.py start <example>/config.yaml -p 8000`.
+
+| Type | What it does | Details | Example |
+|---|---|---|---|
+| `agent_interaction_graph` | Clickable agent-interaction graph: mark critical-path nodes + flag problematic edges | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/interaction-graph/` |
+| `agent_scorecard` | Per-agent + per-team scorecard with optional milestones (MultiAgentBench-style) | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/agent-scorecard/` |
+| `audio_annotation` | Audio segmentation and annotation with waveform visualization | [below](#10-audio-annotation-audio_annotation) | `examples/audio/audio-annotation/` |
+| `bws` | Best-Worst Scaling: select the best and worst item from a set | [below](#31-best-worst-scaling-bws) | `examples/classification/iterative-bws/` |
+| `card_sort` | Drag-and-drop card sorting into predefined or user-created groups | [below](#21-card-sorting-card_sort) | `examples/classification/card-sort/` |
+| `code_review` | GitHub PR-style code review with inline comments and file ratings | [below](#24-code-review-code_review) | `examples/agent-traces/coding-agent-review/` |
+| `confidence` | Confidence rating meta-annotation for any primary annotation | [below](#33-confidence-rating-confidence) | `examples/classification/confidence-calibrated/` |
+| `conjoint` | Discrete choice conjoint analysis with side-by-side profile comparison | [below](#22-conjoint-analysis-conjoint) | `examples/classification/conjoint/` |
+| `consensus_tracking` | Tag discussion acts per turn (proposal/agreement/disagreement/decision/concession) with cross-turn links to referenced proposals | [multi agent discussion](../agent-evaluation/multi_agent_discussion.md) | `examples/agent-traces/debate-judging/` |
+| `constant_sum` | Allocate a fixed budget of points across categories | [below](#34-constant-sum-points-allocation-constant_sum) | `examples/classification/constant-sum/` |
+| `context_attribution` | Tag how each turn uses earlier context (used correctly / hallucinated / ignored) with links to the source turn | [agent task recipes](../agent-evaluation/agent_task_recipes.md) | `examples/agent-traces/context-attribution/` |
+| `coreference` | Coreference chain annotation for grouping mentions of the same entity | [below](#13-coreference-chains-coreference) | `examples/span/coreference/` |
+| `emergent_behavior` | Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/emergent-behavior/` |
+| `episode_annotation` | Embodied robot episode: synchronized video streams and time-series lanes with phase, outcome and dense-reward annotation | [episodes](embodied/episodes.md) | `examples/embodied/lerobot-episode/` |
+| `error_span` | MQM-style error span annotation with typed severity for quality evaluation | [below](#20-error-span-with-typed-severity-error_span) | `examples/classification/error-span/` |
+| `event_annotation` | N-ary event annotation with triggers and typed arguments | [below](#30-event-annotation-event_annotation) | `examples/span/event-annotation/` |
+| `extractive_qa` | SQuAD-style extractive question answering with answer span highlighting | [below](#17-extractive-qa-extractive_qa) | `examples/classification/extractive-qa/` |
+| `failure_attribution` | Multi-agent failure attribution: responsible agent + decisive step + reason | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/failure-attribution/` |
+| `grounding_eval` | Grounding evaluation: bind referring expressions to image regions or points, with an explicit not-present answer | [vlm grounding](../agent-evaluation/vlm_grounding.md) | `examples/ai-assisted/grounding-eval/` |
+| `gui_trajectory` | Computer-use/GUI agent step review: per-step screenshot + action correctness + click grounding | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/gui-trajectory/` |
+| `handoff_review` | Annotate agent-to-agent handoffs: inter-agent misalignment flags + quality | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/handoff-review/` |
+| `hierarchical_multiselect` | Hierarchical tree-structured multi-label selection | [below](#38-hierarchical-multi-label-selection-hierarchical_multiselect) | `examples/classification/hierarchical-multiselect/` |
+| `image_annotation` | Image annotation with bounding boxes, polygons, freeform drawing, and landmarks | [below](#9-image-annotation-image_annotation) | `examples/image/image-annotation/` |
+| `likert` | Likert scale rating | [below](#2-likert-scale-likert) | `examples/classification/likert/` |
+| `multi_document_event` | Cross-document event annotation: template slots filled with evidence from many documents | [multi document events](../advanced/multi_document_events.md) | `examples/advanced/multi-document-events/` |
+| `multimodal_reasoning` | Interleaved text/image/tool reasoning trace: per-step coherence + visual-hallucination rating | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/multimodal-reasoning/` |
+| `multirate` | Rate multiple items on a scale | [below](#7-multi-rate-multirate) | `examples/classification/multirate/` |
+| `multiselect` | Multiple-choice checkbox selection | [below](#3-multiple-choice-multiselect) | `examples/classification/check-box/` |
+| `number` | Numeric input field | [below](#8-number-input-number) | `examples/advanced/all-annotation-types/` |
+| `pairwise` | Pairwise comparison of two items (binary selection or scale rating) | [below](#29-pairwise-comparison-pairwise) | `examples/classification/pairwise-scale/` |
+| `process_reward` | Per-step process reward signals for PRM training | [below](#23-process-reward-process_reward) | `examples/agent-traces/cot-process-reward/` |
+| `pure_display` | Display-only content (instructions, headers) | [below](#27-display-only-pure_display) | `examples/advanced/all-annotation-types/` |
+| `radio` | Single-choice radio button selection | [below](#1-single-choice-radio) | `examples/classification/single-choice/` |
+| `range_slider` | Dual-thumb slider for selecting an acceptable range | [below](#37-range-slider-dual-thumb-range_slider) | `examples/classification/range-slider/` |
+| `ranking` | Drag-and-drop ranking of items by preference or relevance | [below](#36-ranking-drag-and-drop-ranking) | `examples/classification/ranking/` |
+| `region_caption` | Region captioning: a free-text description per region drawn on the image, with caption agreement over matched regions | [vlm grounding](../agent-evaluation/vlm_grounding.md) | `examples/image/region-captioning/` |
+| `rollout_evaluation` | World-model rollout evaluation: frame-locked video panels with temporal violation localization, preference and counterfactual plausibility | [world model eval](../agent-evaluation/world_model_eval.md) | `examples/agent-traces/world-model-rollouts/` |
+| `rubric_eval` | Multi-criteria rubric evaluation grid for LLM and text quality assessment | [below](#18-rubric-evaluation-rubric_eval) | `examples/classification/rubric-eval/` |
+| `select` | Dropdown selection | [below](#25-dropdown-selection-select) | `examples/advanced/all-annotation-types/` |
+| `semantic_differential` | Bipolar adjective scales for measuring connotative meaning | [below](#35-semantic-differential-semantic_differential) | `examples/classification/semantic-differential/` |
+| `slider` | Slider for selecting a value in a range | [below](#5-slider-slider) | `examples/classification/slider/` |
+| `soft_label` | Probability distribution across labels via constrained sliders | [below](#32-soft-label-probability-distribution-soft_label) | `examples/classification/soft-label/` |
+| `span` | Text span annotation/highlighting with optional entity linking to knowledge bases | [below](#4-text-span-selection-span) | `examples/span/span-labeling/` |
+| `span_link` | Create relationships/links between spans (e.g., PERSON works_for ORGANIZATION) | [below](#26-span-linking-span_link) | `examples/span/span-linking/` |
+| `spatial_annotation` | 3D point cloud annotation with oriented cuboids, points, polylines, and per-point segments | [point cloud](spatial/point_cloud.md) | `examples/spatial/kitti-cuboids/` |
+| `speech_transcript` | Aligned-transcript speech-error annotation: per-segment ASR/TTS error tags + correction | [transcript formats](multimedia/transcript_formats.md) | `examples/agent-traces/speech-transcript/` |
+| `table_grid` | Table-cell structure annotation: rows x cols grid + per-cell role (header/data/empty) | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/table-grid/` |
+| `temporal_grounding` | Video temporal grounding: mark gold event intervals with live IoU vs predicted | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/temporal-grounding/` |
+| `text` | Free-form text input | [below](#6-text-input-text) | `examples/classification/text-box/` |
+| `text_edit` | Inline text editing with diff tracking for post-editing and correction tasks | [below](#19-text-edit-post-edit-text_edit) | `examples/classification/text-edit/` |
+| `tiered_annotation` | Hierarchical multi-tier annotation for audio/video (ELAN-style) | [below](#15-tiered-annotation-tiered_annotation) | `examples/audio/tiered-annotation/` |
+| `tool_call_review` | Per-tool-call correctness review (right tool / args / ordering) | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/tool-call-review/` |
+| `tool_contention` | Tool/resource-contention timeline: per-agent lanes + shared-resource collision classification | [multi agent annotation](../agent-evaluation/multi_agent_annotation.md) | `examples/agent-traces/tool-contention/` |
+| `trajectory_edit` | Per-step trajectory correction/editing for SFT/DPO training data | [trajectory correction](../agent-evaluation/trajectory_correction.md) | `examples/agent-traces/trajectory-correction/` |
+| `trajectory_eval` | Per-step trajectory evaluation with error taxonomy and severity scoring | [below](#39-trajectory-evaluation-trajectory_eval) | `examples/agent-traces/trajectory-evaluation/` |
+| `tree_annotation` | Annotation of conversation tree nodes with path selection | [below](#14-conversation-tree-tree_annotation) | `examples/span/conversation-tree/` |
+| `triage` | Binary accept/reject triage for rapid data curation | [below](#12-triage-triage) | `examples/advanced/triage/` |
+| `vas` | Continuous visual analog scale for fine-grained magnitude estimation | [below](#16-visual-analog-scale-vas) | `examples/classification/vas/` |
+| `video` | Video player display | [below](#28-video-player-video) | `examples/video/video-player/` |
+| `video_annotation` | Video annotation with temporal segments, frame classification, keyframes, and object tracking | [below](#11-video-annotation-video_annotation) | `examples/video/video-frame-annotation/` |
+| `voice_interaction` | Voice/full-duplex turn-taking: dual-track timeline + barge-in/overlap classification | [multimodal agent annotation](../agent-evaluation/multimodal_agent_annotation.md) | `examples/agent-traces/voice-interaction/` |
+
 ## Supported Annotation Types
 
 ### 1. Single Choice (`radio`)
@@ -274,24 +342,49 @@ annotation_schemes:
 
 ### 9. Image Annotation (`image_annotation`)
 
-Allows annotators to draw bounding boxes, polygons, and place landmarks on images.
+Allows annotators to draw bounding boxes, polygons, open polylines, ellipses and
+freeform shapes, place landmark points, and paint segmentation masks on images.
 
 **Required Fields:**
-- `labels` (list): Array of label categories for annotations
+- `labels` (list): Label categories. Entries may be plain strings, or objects
+  with `name`, `color`, `key_value`, and (for COCO round-tripping) `label_id`.
+- `tools` (list): Which drawing tools to enable. One or more of
+  `bbox`, `polygon`, `polyline`, `ellipse`, `freeform`, `landmark`,
+  `keypoint_set`, `cuboid_2d`, `brush`, `eraser`, `fill`.
 
 **Optional Fields:**
-- `annotation_mode` (string): Drawing mode - "bbox", "polygon", or "landmark"
-- `allow_multiple` (boolean): Allow multiple annotations per image
+- `source_field` (string): Instance field holding the image URL
+- `zoom_enabled` / `pan_enabled` (boolean, default `true`)
+- `min_annotations` / `max_annotations` (int)
+- `brush_size` / `eraser_size` (int, default 20), `mask_opacity` (float, default 0.5)
+- `fill_mode` (`"region"` default, or `"empty"`), `fill_tolerance` (0–255, default 32)
+- `keybinding_profile` (`"v7"` default, or `"legacy"`)
+- `carry_over` (`false` default, `"prompt"`, or `"auto"`)
+- `ai_support` (object): AI-assisted detection settings
 
 **Example:**
 ```yaml
 annotation_schemes:
-  - annotation_type: "image_annotation"
-    name: "object_detection"
+  - annotation_type: image_annotation
+    name: object_detection
     description: "Draw boxes around all vehicles"
-    labels: ["car", "truck", "motorcycle", "bicycle"]
-    annotation_mode: "bbox"
+    source_field: image_url
+    tools:
+      - bbox
+      - polygon
+      - brush
+    labels:
+      - name: car
+        color: "#FF6B6B"
+        key_value: "1"
+      - name: truck
+        color: "#4ECDC4"
+        key_value: "2"
 ```
+
+There is **no** `annotation_mode` or `allow_multiple` option — enable multiple
+entries in `tools` instead, and use `min_annotations` / `max_annotations` to
+control how many annotations an image may carry.
 
 See [Image Annotation](multimedia/image_annotation.md) for detailed documentation.
 
@@ -319,24 +412,40 @@ See [Audio Annotation](multimedia/audio_annotation.md) for detailed documentatio
 
 ### 11. Video Annotation (`video_annotation`)
 
-Allows frame-by-frame labeling of video content with playback controls.
+Temporal segmentation, frame classification, keyframes, and object tracking on
+video, with a waveform-style timeline.
 
 **Required Fields:**
-- `labels` (list): Array of label categories
+- `labels` (list): Label categories
 
 **Optional Fields:**
-- `annotation_mode` (string): "frame" for frame-by-frame, "segment" for time segments
-- `frame_step` (number): Frame advance increment
+- `mode` (string): One of `segment` (default), `frame`, `keyframe`, `tracking`,
+  or `combined`
+- `frame_stepping` (boolean): Enable frame-by-frame stepping controls
+- `video_fps` (number): Frames per second, for frame/timecode display
+- `segment_schemes` (list): Nested schemas applied to each segment
+- `min_segments` / `max_segments` (int)
+- `timeline_height` / `overview_height` (int)
+- `zoom_enabled`, `playback_rate_control`, `show_timecode` (boolean)
+- `tracking_options` (object): Settings for `tracking` mode
 
 **Example:**
 ```yaml
 annotation_schemes:
-  - annotation_type: "video_annotation"
-    name: "action_recognition"
+  - annotation_type: video_annotation
+    name: action_recognition
     description: "Label the action being performed"
-    labels: ["walking", "running", "sitting", "standing"]
-    annotation_mode: "frame"
+    mode: segment
+    frame_stepping: true
+    labels:
+      - name: walking
+        color: "#FF6B6B"
+      - name: running
+        color: "#4ECDC4"
 ```
+
+There is **no** `annotation_mode` or `frame_step` option; the keys are `mode`
+and `frame_stepping`, and `mode` accepts five values, not two.
 
 See [Video Annotation](multimedia/video_annotation.md) for detailed documentation.
 

@@ -114,6 +114,9 @@ class DiversityManager:
         self.cluster_members: Dict[int, List[str]] = {}  # cluster_id -> [instance_ids]
         self.user_cluster_states: Dict[str, ClusterState] = {}  # user_id -> state
         self.num_clusters: int = config.num_clusters
+        #: Set by use_embedder(); reported by the corpus map so the admin can
+        #: see what produced the points rather than assuming it was text.
+        self.embedder_spec = None
 
         # Threading for async operations
         self._embedding_executor = ThreadPoolExecutor(max_workers=4)
@@ -138,9 +141,9 @@ class DiversityManager:
                 self.logger.info("Using custom embedding function")
                 self._embed_function = config.custom_embedding_function
             else:
-                self.logger.info(f"Loading sentence-transformer model: {config.model_name}")
-                from sentence_transformers import SentenceTransformer  # lazy: heavy import
-                self.model = SentenceTransformer(config.model_name)
+                # Loaded on first use, not here: a project whose embedder turns
+                # out to be CLIP (or a lab's own encoder) would otherwise pay
+                # for a sentence-transformer it never calls, at boot.
                 self._embed_function = self._embed_with_model
 
             self.enabled = True
@@ -154,8 +157,37 @@ class DiversityManager:
             self.enabled = False
 
     def _embed_with_model(self, texts: List[str]) -> Any:
-        """Embed texts using the loaded sentence-transformer model."""
+        """Embed texts using the sentence-transformer model, loading it once."""
+        if self.model is None:
+            self.logger.info(
+                "Loading sentence-transformer model: %s", self.config.model_name)
+            from sentence_transformers import SentenceTransformer  # lazy: heavy
+            self.model = SentenceTransformer(self.config.model_name)
         return self.model.encode(texts, show_progress_bar=False)
+
+    def use_embedder(self, embedder) -> bool:
+        """Embed through a resolved project embedder instead of plain text.
+
+        Everything downstream — batching, the disk cache, clustering, diverse
+        ordering — works on opaque references, so pointing this at an image or
+        audio backend makes the whole diversity path modality-agnostic without
+        touching any of it.
+
+        Args:
+            embedder: a ``potato.embedders.ResolvedEmbedder``
+
+        Returns:
+            True when the embedder was adopted.
+        """
+        if embedder is None or not embedder.available:
+            return False
+        self._embed_function = embedder.backend.embed
+        self.embedder_spec = embedder.spec
+        self.logger.info(
+            "Diversity/corpus embeddings: %s backend, model %s, field '%s' (%s)",
+            embedder.spec.backend, embedder.spec.model,
+            embedder.spec.source_field, embedder.spec.chosen_because)
+        return True
 
     def _get_cache_dir(self) -> str:
         """Get the cache directory path."""

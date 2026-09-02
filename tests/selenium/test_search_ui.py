@@ -150,12 +150,26 @@ class TestSearchClaimDisabled(unittest.TestCase):
         if hasattr(self, "driver"):
             self.driver.quit()
 
-    def test_toggle_hidden_when_claim_disabled(self):
-        time.sleep(1.5)  # allow the enable-probe to resolve
-        toggle = self.driver.find_element(By.ID, "search-panel-toggle")
-        self.assertFalse(
-            toggle.is_displayed(),
-            "Search toggle must stay hidden when annotator_claim is off")
+    def test_panel_absent_when_claim_disabled(self):
+        """Absent rather than hidden, so the enable-probe never runs.
+
+        The panel used to load on every annotation page and probe
+        /api/search, which answers 403 when annotator_claim is off -- one
+        console error per page view for a feature the task did not have.
+        """
+        time.sleep(1.0)
+        self.assertEqual(
+            [], self.driver.find_elements(By.ID, "search-panel-toggle"),
+            "Search panel must not be rendered when annotator_claim is off")
+        self.assertNotIn(
+            "search.js", self.driver.page_source,
+            "search.js must not load when annotator_claim is off")
+        failures = [
+            e for e in self.driver.get_log("browser")
+            if "/api/search" in e.get("message", "")
+        ]
+        self.assertEqual([], failures,
+                         f"Search endpoint was still called: {failures}")
 
 
 if __name__ == "__main__":

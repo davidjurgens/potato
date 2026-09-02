@@ -2,7 +2,7 @@
 annotation_task_name: MQM Translation Quality Evaluation
 task_dir: .
 output_annotation_dir: annotation_output/error-span/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/error-span-example.json

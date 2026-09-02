@@ -1,7 +1,7 @@
 """
 OpenAI Vision AI Endpoint
 
-This module provides integration with OpenAI's vision models (GPT-4o, GPT-4o-mini)
+Integration with OpenAI's vision models (GPT-4o, GPT-4o-mini)
 for visual analysis and annotation assistance.
 """
 
@@ -28,9 +28,17 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
     Configuration options:
     - model: Model to use (gpt-4o, gpt-4o-mini) (default: gpt-4o)
     - api_key: OpenAI API key (can also use OPENAI_API_KEY env var)
+    - base_url: An OpenAI-compatible server to talk to instead of OpenAI --
+      vLLM, SGLang, LM Studio, llama.cpp, LiteLLM, OpenRouter. Setting it also
+      makes the API key optional, because self-hosted servers usually have none
+      and requiring a placeholder just to reach a local GPU is a papercut that
+      sends people to write their own endpoint class.
     - max_tokens: Maximum response tokens (default: 1000)
     - temperature: Sampling temperature (default: 0.1)
     - detail: Image detail level - 'low', 'high', or 'auto' (default: auto)
+    - json_mode: Request ``response_format={"type": "json_object"}`` (default
+      True). Servers without constrained decoding reject it; the endpoint
+      detects that and retries once without, so this rarely needs setting.
     """
 
     # Capabilities declaration for OpenAI vision models (GPT-4o, GPT-4o-mini)
@@ -56,17 +64,63 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
 
         import os
 
+        base_url = self.ai_config.get("base_url") or self.ai_config.get("api_base")
+        if base_url:
+            # Accept either the server root or an OpenAI-style ".../v1", the
+            # same tolerance VLLMEndpoint applies -- people paste both.
+            base_url = str(base_url).rstrip("/")
+            if not base_url.endswith("/v1"):
+                base_url = base_url + "/v1"
+
         api_key = self.ai_config.get("api_key") or os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            raise AIEndpointRequestError(
-                "OpenAI API key is required. Set it in config or OPENAI_API_KEY env var."
-            )
+            if not base_url:
+                raise AIEndpointRequestError(
+                    "OpenAI API key is required. Set it in config or OPENAI_API_KEY env var."
+                )
+            # The client insists on a non-empty key even when the server
+            # ignores it entirely.
+            api_key = "not-needed"
 
         timeout = self.ai_config.get("timeout", 60)
         self.detail = self.ai_config.get("detail", "auto")
+        self.json_mode = bool(self.ai_config.get("json_mode", True))
 
-        self.client = openai.OpenAI(api_key=api_key, timeout=timeout)
-        logger.info(f"OpenAI Vision client initialized with model: {self.model}")
+        kwargs = {"api_key": api_key, "timeout": timeout}
+        if base_url:
+            kwargs["base_url"] = base_url
+        self.client = openai.OpenAI(**kwargs)
+        self.base_url = base_url
+        logger.info("OpenAI Vision client initialized with model: %s%s",
+                    self.model, f" at {base_url}" if base_url else "")
+
+    def _create(self, messages):
+        """One chat completion, retrying without JSON mode if it is rejected.
+
+        An OpenAI-compatible server built without constrained decoding answers
+        ``response_format`` with a 400. Failing the whole request there would
+        make every such server look like it has no vision support, when in
+        fact only the JSON guarantee is missing -- and the responses are then
+        parsed leniently anyway (``parseStringToJson``).
+        """
+        kwargs = dict(
+            model=self.model,
+            messages=messages,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+        )
+        if self.json_mode:
+            try:
+                return self.client.chat.completions.create(
+                    response_format={"type": "json_object"}, **kwargs)
+            except Exception as exc:  # noqa: BLE001
+                if "response_format" not in str(exc):
+                    raise
+                logger.info(
+                    "Server rejected JSON mode (%s); retrying without it and "
+                    "parsing leniently.", exc)
+                self.json_mode = False
+        return self.client.chat.completions.create(**kwargs)
 
     def _get_default_model(self) -> str:
         """Get the default OpenAI vision model."""
@@ -84,14 +138,7 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
             Parsed response
         """
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                response_format={"type": "json_object"},
-            )
-
+            response = self._create([{"role": "user", "content": prompt}])
             content = response.choices[0].message.content
             return self.parseStringToJson(content)
 
@@ -130,13 +177,7 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
                 content.append(image_content)
 
             # Make request
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": content}],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                response_format={"type": "json_object"},
-            )
+            response = self._create([{"role": "user", "content": content}])
 
             response_content = response.choices[0].message.content
             logger.debug(f"OpenAI vision response: {response_content[:500] if response_content else 'empty'}")

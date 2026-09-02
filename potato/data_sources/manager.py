@@ -1,7 +1,7 @@
 """
 Data Source Manager
 
-This module provides the central manager for all data sources, implementing
+The central manager for all data sources, implementing
 the singleton pattern for thread-safe access across the application.
 """
 

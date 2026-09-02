@@ -21,7 +21,7 @@ item_properties:
 # Task directory
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Instance Display Configuration
 instance_display:

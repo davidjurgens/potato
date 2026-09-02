@@ -151,6 +151,101 @@
     padding: 0 1px;
 }
 
+/* Paraphrases and heavy rewrites are shown whole rather than diffed: a word
+   diff of a full rewording interleaves the two versions into an unreadable
+   run, and the annotator has to read the new wording to judge it. */
+.boundary-textpair {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.boundary-textblock {
+    display: block;
+    background: #faf9ff;
+    border: 1px solid #e8e6f5;
+    border-left-width: 3px;
+    border-radius: 9px;
+    padding: 8px 12px 10px;
+    line-height: 1.55;
+    color: #26233d;
+    word-break: break-word;
+}
+
+.boundary-textblock.is-original {
+    border-left-color: #c9c5e4;
+    color: #55516f;
+}
+
+.boundary-textblock.is-edited {
+    border-left-color: #6e56cf;
+    background: #f4f1ff;
+}
+
+.boundary-textlabel {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #7a769a;
+    margin-bottom: 3px;
+}
+
+.boundary-textblock.is-edited .boundary-textlabel { color: #5b46b0; }
+
+.boundary-textbody { display: block; white-space: pre-wrap; }
+
+/* Image probes: the item as labelled, next to the same image transformed by
+   the browser. Side by side above 380px, stacked below it. */
+.boundary-imgpair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+@media (max-width: 420px) {
+    .boundary-imgpair { grid-template-columns: 1fr; }
+}
+
+.boundary-imgblock {
+    background: #faf9ff;
+    border: 1px solid #e8e6f5;
+    border-left-width: 3px;
+    border-left-color: #c9c5e4;
+    border-radius: 9px;
+    padding: 8px 8px 10px;
+}
+
+.boundary-imgblock.is-edited {
+    border-left-color: #6e56cf;
+    background: #f4f1ff;
+}
+
+.boundary-imgstage {
+    position: relative;
+    margin-top: 4px;
+    line-height: 0;
+}
+
+.boundary-imgstage img {
+    width: 100%;
+    height: auto;
+    max-height: 190px;
+    object-fit: contain;
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+/* The occluder is part of the probe, not decoration: it is the evidence
+   being withheld, so it reads as a deliberate block rather than a glitch. */
+.boundary-occluder {
+    position: absolute;
+    background: #26233d;
+    border-radius: 3px;
+    pointer-events: none;
+}
+
 .boundary-hint {
     margin-top: 6px;
     font-size: 0.8rem;

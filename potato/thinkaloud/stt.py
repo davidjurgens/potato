@@ -2,7 +2,8 @@
 
 All backends run on the local machine — no cloud APIs, no per-token cost.
 
-- ``faster_whisper``: CTranslate2 Whisper (``pip install faster-whisper``).
+- ``faster_whisper``: CTranslate2 Whisper
+  (``pip install "potato-annotation[transcribe]"``).
   Decodes complete webm/ogg/wav blobs via PyAV, so the frontend restarts
   MediaRecorder per chunk to keep every blob independently decodable.
 - ``mock``: echoes the ``mock_text`` provided with the request. For tests and
@@ -53,8 +54,8 @@ class FasterWhisperSTT(STTBackend):
             from faster_whisper import WhisperModel  # noqa: F401
         except ImportError as e:
             raise STTError(
-                "Think-Aloud needs the faster-whisper package for local "
-                "speech-to-text: pip install faster-whisper"
+                "Think-Aloud needs faster-whisper for local speech-to-text: "
+                'pip install "potato-annotation[transcribe]"'
             ) from e
         self._model_size = model_size
         self._language = language
@@ -102,8 +103,8 @@ def create_stt(kind: str, model: str = "tiny.en", language: str = "en") -> STTBa
             if kind == "faster_whisper":
                 raise
             raise STTError(
-                "No local STT backend available. Install one with: "
-                "pip install faster-whisper  (or set thinkaloud.stt: mock "
-                "for development)"
+                'No local STT backend available. Install one with: pip '
+                'install "potato-annotation[transcribe]"  (or set '
+                "thinkaloud.stt: mock for development)"
             )
     raise STTError(f"Unknown STT backend '{kind}'")

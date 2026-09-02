@@ -9,17 +9,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{annotation_task_name}}</title>
 
+    <!-- Warm the HTTP cache for the next instance's media. Navigation is a full
+         page reload, so this has to be a real prefetch hint rather than
+         anything JS holds in memory. Empty on phase pages, which have no
+         "next instance".
+         Deliberately no `as`/`crossorigin`: those pin the request mode, and a
+         CORS-mode prefetch will not satisfy the no-CORS image/video request
+         that follows, so the file would be fetched twice. -->
+    {% for url in prefetch_urls | default([]) %}
+    <link rel="prefetch" href="{{ url }}">
+    {% endfor %}
+
     <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap CSS (vendored at /static/vendor/bootstrap-5.3.3.min.css) -->
+    <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
 
     <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Font Awesome (vendored at /static/vendor/font-awesome-6.7.2/; the CSS
+         references ../webfonts, so the whole directory has to ship together) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=4">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=11">
 
     <!-- Span Annotation Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=1">
 
     <!-- Turn-Level Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='turn-annotations.css') }}?v=1">
@@ -32,9 +46,47 @@
 
     {% set frontend_assets = frontend_assets | default({}) %}
 
-    <!-- Image Annotation Styles -->
-    {% if frontend_assets.image_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=2">
+    <!-- Image Annotation Styles.
+         Also loaded for spatial_annotation and episode_annotation: both render
+         the SAME .tool-btn / .label-btn markup on purpose (so per-class
+         show/hide works with no new wiring), and those buttons are styled
+         here. Gating this on image_annotation alone left a point-cloud page
+         with unstyled toolbars -- and then, exactly the same way, an episode
+         page whose phase buttons had no colour swatch. -->
+    {% if frontend_assets.image_annotation | default(false)
+          or frontend_assets.spatial_annotation | default(false)
+          or frontend_assets.episode_annotation | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='image-annotation.css') }}?v=15">
+    {% endif %}
+
+    <!-- Point cloud viewer styles -->
+    {% if frontend_assets.spatial_annotation | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='pointcloud/pc-viewer.css') }}?v=5">
+    {% endif %}
+
+    <!-- Depth map display styles -->
+    {% if frontend_assets.depth_map | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='depth-viewer.css') }}?v=2">
+    {% endif %}
+
+    <!-- Embodied episode timeline styles -->
+    {% if frontend_assets.episode_annotation | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='episode-timeline.css') }}?v=2">
+    {% endif %}
+
+    <!-- World-model rollout evaluation styles -->
+    {% if frontend_assets.rollout_evaluation | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='rollout-eval.css') }}?v=3">
+    {% endif %}
+
+    <!-- Grounding evaluation styles -->
+    {% if frontend_assets.grounding_eval | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='grounding-eval.css') }}?v=1">
+    {% endif %}
+
+    <!-- Region captioning styles -->
+    {% if frontend_assets.region_caption | default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='region-caption.css') }}?v=1">
     {% endif %}
 
     <!-- Audio Annotation Styles -->
@@ -94,11 +146,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/coreference.css') }}">
     {% endif %}
 
-    <!-- Segmentation Tool Styles -->
-    {% if frontend_assets.segmentation_tools | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/segmentation.css') }}">
-    {% endif %}
-
     <!-- Conversation Tree Styles -->
     {% if frontend_assets.conversation_tree | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/conversation-tree.css') }}">
@@ -138,7 +185,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/codebook.css') }}?v=12">
 
     <!-- jQuery (required for span annotation) -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+    <!-- jQuery (vendored). Span annotation does not work without it, so this
+         was the asset that broke text annotation outright on an air-gapped host. -->
+    <script src="{{ url_for('static', filename='vendor/jquery-3.6.0.min.js') }}"></script>
 
     <!-- Project-level base CSS (injected from base_css config option) -->
     {{ PROJECT_BASE_CSS | safe }}
@@ -255,6 +304,31 @@
         </div>
     </nav>
 
+    {# Recording notice. Rendered server-side rather than by the tracker so it
+       is present even if keystroke_tracker.js fails to load, and so it cannot
+       be suppressed by disabling scripts. Empty string => disclosure is off. #}
+    {% if keystroke_logging_enabled | default(false)
+          and keystroke_client_config and keystroke_client_config.disclosure_text %}
+    <div class="keystroke-disclosure" id="keystroke-disclosure" role="note">
+        <span class="keystroke-disclosure-icon" aria-hidden="true">&#9998;</span>
+        <span class="keystroke-disclosure-text">{{ keystroke_client_config.disclosure_text }}</span>
+    </div>
+    {% endif %}
+
+    {# Same reasoning for drawing telemetry: rendered server-side so it survives
+       a failed script load and cannot be suppressed by disabling scripts.
+       Reuses the keystroke notice's styling because it is the same kind of
+       statement, and two differently-styled recording notices on one page would
+       read as two unrelated systems. #}
+    {% if annotation_telemetry_enabled | default(false)
+          and annotation_telemetry_client_config
+          and annotation_telemetry_client_config.disclosure_text %}
+    <div class="keystroke-disclosure" id="annotation-telemetry-disclosure" role="note">
+        <span class="keystroke-disclosure-icon" aria-hidden="true">&#9998;</span>
+        <span class="keystroke-disclosure-text">{{ annotation_telemetry_client_config.disclosure_text }}</span>
+    </div>
+    {% endif %}
+
     <div class="container-fluid">
         <!-- Main annotation area -->
         <div id="task_layout" class="shadcn-card mb-2 {% if has_image_annotation or has_video_annotation or has_audio_annotation %}media-annotation{% else %}text-annotation{% endif %}">
@@ -333,9 +407,13 @@
                             <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" data-image-url="{{instance | sanitize_html}}">{{instance | sanitize_html}}</div>
                         </div>
                         {% else %}
-                        {% if is_annotation_page %}
-                                {% if ui_lang.text_to_annotate|default('Text to Annotate:') %}
-                                <h5 class="instance-text-heading">{{ ui_lang.text_to_annotate|default('Text to Annotate:') }}</h5>
+                        {# Training shows its practice question here too. Gated on a
+                           separate flag defaulting to is_annotation_page so every
+                           non-training render is unchanged. #}
+                        {% if show_instance_text | default(is_annotation_page) %}
+                                {% set _heading = instance_text_heading | default(ui_lang.text_to_annotate|default('Text to Annotate:')) %}
+                                {% if _heading %}
+                                <h5 class="instance-text-heading">{{ _heading }}</h5>
                                 {% endif %}
                                 <div id="instance-text" class="p-3 border rounded instance-text-container" style="background-color: var(--light-bg); position: relative;">
                                     <div id="text-content" data-original-text="{{instance_plain_text | sanitize_html}}" style="position: relative; z-index: 1; pointer-events: auto;">{{instance | sanitize_html}}
@@ -437,6 +515,29 @@
                     </script>
                     {% endif %}
 
+                    {# Training chrome: practice progress and answer feedback. Behind a
+                       default(false) flag so every other phase renders identically. #}
+                    {% if is_training_page | default(false) %}
+                    <div class="training-progress mb-3">
+                        <span class="training-progress-label">
+                            {{ ui_lang.training_question|default('Question') }}
+                            {{ training_current_question }} / {{ training_total_questions }}
+                        </span>
+                        <span class="training-progress-score">
+                            {{ ui_lang.training_correct|default('Correct') }}:
+                            {{ training_correct_count }}
+                            &middot;
+                            {{ ui_lang.training_mistakes|default('Mistakes') }}:
+                            {{ training_mistake_count }}
+                        </span>
+                    </div>
+                    {% if training_show_feedback and training_feedback %}
+                    <div class="feedback-alert feedback-{{ training_feedback_type|default('info') }}" role="alert">
+                        {{ training_feedback }}
+                    </div>
+                    {% endif %}
+                    {% endif %}
+
                     <!-- Annotation forms -->
                     <div id="annotation-forms">
                         {{ TASK_LAYOUT }}
@@ -458,7 +559,12 @@
             <div id="prev-btn-placeholder"></div>
             {% endif %}
             <button class="shadcn-button shadcn-button-primary" id="next-btn" onclick="navigateToNext()">
+                {%- if is_training_page | default(false) %}
+                {{ training_allow_retry and ui_lang.try_again|default('Try Again')
+                   or ui_lang.submit_answer|default('Submit Answer') }}<i class="fas fa-check ms-2"></i>
+                {%- else %}
                 {{ ui_lang.next_button }}<i class="fas fa-arrow-right ms-2"></i>
+                {%- endif %}
             </button>
         </div>
 
@@ -478,7 +584,8 @@
     </div>
 
     <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Bootstrap JS bundle (vendored; includes Popper) -->
+    <script src="{{ url_for('static', filename='vendor/bootstrap-5.3.3.bundle.min.js') }}"></script>
 
     <!-- Configuration from server -->
     <script type="text/javascript">
@@ -637,27 +744,46 @@
     </script>
 
     <!-- Load annotation JavaScript -->
-    <script src="{{ url_for('static', filename='interaction_tracker.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='span-core.js') }}?v=15"></script>
-    <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='interaction_tracker.js') }}?v=2"></script>
+    <!-- Keystroke logging / typing dynamics on free-text fields (conditional).
+         Loads after interaction_tracker.js because it hooks setInstanceId to
+         cut typing sessions on the same navigation boundary. -->
+    {% if keystroke_logging_enabled | default(false) %}
+    <script type="text/javascript">
+        window.keystrokeConfig = {{ keystroke_client_config | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='keystroke_tracker.js') }}?v=1"></script>
+    {% endif %}
+    <!-- Annotation telemetry / drawing dynamics on geometry schemas
+         (conditional). Loads after interaction_tracker.js for the same reason
+         as the keystroke tracker: it hooks setInstanceId so both behavioural
+         subsystems cut their sessions on the same navigation boundary. -->
+    {% if annotation_telemetry_enabled | default(false) %}
+    <script type="text/javascript">
+        window.annotationTelemetryConfig = {{ annotation_telemetry_client_config | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='annotation_telemetry.js') }}?v=2"></script>
+    {% endif %}
+    <script src="{{ url_for('static', filename='span-core.js') }}?v=17"></script>
+    <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=2"></script>
     <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->
-    <script src="{{ url_for('static', filename='display-logic.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='display-logic.js') }}?v=3"></script>
     <!-- Instance display manager (for new instance_display configuration) -->
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=3"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=25"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=31"></script>
     <!-- Shared geometry for the bottom-anchored floating widgets below; must
          load before them. Unconditional: tiny, and several may be enabled at
          once (see the combined showcase example). -->
-    <script src="{{ url_for('static', filename='floating-panel-utils.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='floating-panel-utils.js') }}?v=5"></script>
     <!-- Boundary Lab: counterfactual boundary probing (conditional) -->
     {% if boundary_enabled | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/boundary.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/boundary.css') }}?v=5">
     <script type="text/javascript">
         window.boundaryConfig = {{ boundary_client_config | tojson }};
     </script>
-    <script src="{{ url_for('static', filename='boundary-probe.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='boundary-probe.js') }}?v=6"></script>
     {% endif %}
     <!-- Device routing: send phones/tablets to /pocket when the task supports
          it; warn them when it doesn't. Unconditional — the "not mobile
@@ -688,32 +814,144 @@
     <!-- Sub-agent run-tree sidebar (agent_trace display) -->
     <script src="{{ url_for('static', filename='run-tree.js') }}?v=1"></script>
 
-    <!-- Fabric.js for image annotation (loaded from CDN) -->
+    <!-- Fabric.js for image annotation. Vendored, not CDN: image annotation is
+         entirely non-functional without it, and several research deployments
+         run air-gapped. See scripts/vendor_assets.py for the manifest. -->
     {% if frontend_assets.image_annotation | default(false) %}
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="{{ url_for('static', filename='vendor/fabric-5.3.1.min.js') }}"></script>
+    <!-- Sparse tiled mask store, loaded before image-annotation.js because the
+         manager constructs a MaskBuffer on the first brush stroke and on every
+         restore of a saved mask. -->
+    <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=29"></script>
     {% endif %}
-    <!-- Visual AI Assistant for image/video annotation (loaded conditionally) -->
-    {% if ai_enabled and ((frontend_assets.image_annotation | default(false)) or (frontend_assets.video_annotation | default(false))) %}
-    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=1"></script>
-    <!-- Option Highlight Manager for dimming less-likely options -->
+
+    <!-- Deep zoom, for images too large to send to a browser as one file.
+         Gated on the schema's own `viewer: deepzoom`, because OpenSeadragon is
+         a 277 KB download that a project annotating ordinary photographs must
+         not pay for. Vendored for the same reason as fabric: without it the
+         viewer does not degrade, it simply has no image. -->
+    <!-- Grounding evaluation: binds referring expressions to regions drawn on
+         the image annotation canvas beside it. Gated on its own container so a
+         plain image project does not load it. -->
+    {% if frontend_assets.grounding_eval | default(false) %}
+    <script src="{{ url_for('static', filename='grounding-eval.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- Region captioning: a description per region drawn on the image
+         annotation canvas beside it. -->
+    {% if frontend_assets.region_caption | default(false) %}
+    <script src="{{ url_for('static', filename='region-caption.js') }}?v=2"></script>
+    {% endif %}
+
+    {% if frontend_assets.deepzoom | default(false) %}
+    <script src="{{ url_for('static', filename='vendor/openseadragon-5.0.1.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='deepzoom-viewer.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- Interactive segmentation. Loaded only when a schema configures the
+         `sam` tool, because the ONNX runtime is a 13 MB download that no other
+         project should pay for. The runtime itself is fetched lazily on first
+         use, not here. -->
+    {% if frontend_assets.segmentation | default(false) %}
+    <script src="{{ url_for('static', filename='segmentation/model-session.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='segmentation/sam-preprocess.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='segmentation/sam-session.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='segmentation/sam-tool.js') }}?v=2"></script>
+    {% endif %}
+
+    <!-- Open-vocabulary detection from a typed phrase. Gated separately from
+         the magic wand: the two models are independent, and this one is a
+         145 MB download. `model-session.js` is shared, so it loads for either
+         and the condition covers both. -->
+    {% if frontend_assets.text_prompt | default(false) %}
+    {% if not frontend_assets.segmentation | default(false) %}
+    <script src="{{ url_for('static', filename='segmentation/model-session.js') }}?v=1"></script>
+    {% endif %}
+    <script src="{{ url_for('static', filename='segmentation/wordpiece.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='segmentation/gdino-session.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='segmentation/text-prompt-tool.js') }}?v=2"></script>
+    {% endif %}
+
+    <!-- 3D point cloud annotation. three.js is vendored, not CDN-loaded, and
+         is gated on the schema because it is a 670 KB download. Pinned to the
+         last UMD global build: 0.161+ ships ES modules only, which would need
+         an import map and would not work from a file:// mirror. -->
+    {% if frontend_assets.spatial_annotation | default(false) %}
+    <script src="{{ url_for('static', filename='vendor/three-0.160.0.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-wire.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-calibration.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-octree.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-mpr.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=5"></script>
+    {% endif %}
+
+    <!-- Depth maps. A display type, so it is gated on the display's wrapper
+         class rather than on a schema. -->
+    {% if frontend_assets.depth_map | default(false) %}
+    <script src="{{ url_for('static', filename='depth-viewer.js') }}?v=2"></script>
+    {% endif %}
+
+    <!-- Embodied episode timeline -->
+    {% if frontend_assets.episode_annotation | default(false) %}
+    <script src="{{ url_for('static', filename='episode-timeline.js') }}?v=1"></script>
+    {% endif %}
+
+    <!-- World-model rollout evaluation -->
+    {% if frontend_assets.rollout_evaluation | default(false) %}
+    <script src="{{ url_for('static', filename='rollout-eval.js') }}?v=5"></script>
+    {% endif %}
+
+    <!-- Per-class show/hide, shared by image and video annotation -->
+    {% if frontend_assets.label_visibility | default(false) %}
+    <script src="{{ url_for('static', filename='label-visibility.js') }}?v=2"></script>
+    {% endif %}
+
+    <!-- Visual AI Assistant for image/video annotation (loaded conditionally).
+         Also loaded for text prompting, which has no server endpoint at all:
+         the model runs in the browser, but the accept/reject review panel it
+         needs lives here. Gating this on `ai_enabled` alone left text-prompt
+         projects finding objects with nowhere to show them. -->
+    {% if (ai_enabled or frontend_assets.text_prompt | default(false))
+          and ((frontend_assets.image_annotation | default(false)) or (frontend_assets.video_annotation | default(false))) %}
+    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=5"></script>
+    {% endif %}
+
+    <!-- Option highlighting dims the less-likely *discrete options* of a radio,
+         multiselect, likert or select scheme. Nothing about it is visual, but it
+         used to be loaded inside the condition above purely because it was added
+         next to visual_ai_assistant.js — so it required the project to also have
+         an image or video scheme. examples/advanced/option-highlight is a plain
+         text radio task, which meant the feature was dead in the very example
+         that ships to demonstrate it: /api/option_highlights answered correctly
+         and no client ever asked. Gate it on ai_support alone. -->
+    {% if ai_enabled %}
     <script src="{{ url_for('static', filename='option_highlight_manager.js') }}?v=2"></script>
     {% endif %}
 
+    <!-- VLM critique review queue. Image only: it crops each annotated region,
+         so there is nothing for it to do on a video timeline. -->
+    {% if ai_enabled and (frontend_assets.image_annotation | default(false)) %}
+    <script src="{{ url_for('static', filename='annotation_critique.js') }}?v=4"></script>
+    {% endif %}
+
     <!-- Peaks.js for audio/video annotation (stored locally for reliability) -->
-    {% if (frontend_assets.audio_annotation | default(false)) or (frontend_assets.video_annotation | default(false)) %}
+    <!-- tiered_annotation belongs here too: its overview and zoomed waveform views are
+         Peaks views. Without this gate the schema loaded, logged "Peaks.js not
+         available", and left "Loading overview..." on screen forever. -->
+    {% if (frontend_assets.audio_annotation | default(false)) or (frontend_assets.video_annotation | default(false)) or (frontend_assets.tiered_annotation | default(false)) %}
     <script src="{{ url_for('static', filename='peaks.min.js') }}"></script>
     <!-- Shared right-click-drag range selection + edge auto-scroll for Peaks views -->
     <script src="{{ url_for('static', filename='peaks-range-select.js') }}?v=2"></script>
     {% endif %}
     <!-- Audio annotation manager -->
     {% if frontend_assets.audio_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=5"></script>
     {% endif %}
     <!-- Video annotation manager -->
     {% if frontend_assets.video_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=16"></script>
+    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=19"></script>
     {% endif %}
 
     <!-- Span link manager -->
@@ -739,11 +977,6 @@
     <script src="{{ url_for('static', filename='coreference-manager.js') }}?v=1"></script>
     {% endif %}
 
-    <!-- Segmentation tools -->
-    {% if frontend_assets.segmentation_tools | default(false) %}
-    <script src="{{ url_for('static', filename='segmentation-tools.js') }}?v=1"></script>
-    {% endif %}
-
     <!-- Conversation tree interaction -->
     {% if frontend_assets.conversation_tree | default(false) %}
     <script src="{{ url_for('static', filename='conversation-tree.js') }}?v=1"></script>
@@ -751,8 +984,8 @@
 
     <!-- Video tracking interpolation and UI -->
     {% if frontend_assets.tracking | default(false) %}
-    <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=11"></script>
     {% endif %}
 
     <!-- Triage annotation manager -->
@@ -762,7 +995,7 @@
 
     <!-- Tiered annotation manager (ELAN-style hierarchical annotation) -->
     {% if frontend_assets.tiered_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=4"></script>
     {% endif %}
 
     <!-- Document bounding box annotation -->
@@ -775,10 +1008,20 @@
     <script src="{{ url_for('static', filename='pdf-bbox.js') }}?v=3"></script>
     {% endif %}
 
+    <!-- Shared PDF.js loader: must precede every consumer below -->
+    {% if frontend_assets.pdf_link | default(false) or frontend_assets.pdf_viewer | default(false) %}
+    <script src="{{ url_for('static', filename='js/pdfjs-loader.js') }}?v=1"></script>
+    {% endif %}
+
     <!-- PDF multi-page anchor + cross-page linking -->
     {% if frontend_assets.pdf_link | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='pdf-link-mode.css') }}?v=1">
-    <script src="{{ url_for('static', filename='pdf-link-mode.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='pdf-link-mode.js') }}?v=5"></script>
+    {% endif %}
+
+    <!-- Plain PDF.js viewer (default annotation_mode for a pdf display) -->
+    {% if frontend_assets.pdf_viewer | default(false) %}
+    <script src="{{ url_for('static', filename='js/pdf-viewer.js') }}?v=1"></script>
     {% endif %}
 
     {% if agent_proxy_enabled | default(false) %}
@@ -837,9 +1080,12 @@
         });
     </script>
 
-    <!-- Universal Memos sidebar (self-hides if annotation_ui.memos is off:
-         the API returns 503 and the toggle stays hidden) -->
+    <!-- Universal Memos sidebar. Rendered only when annotation_ui.memos is
+         on (or qda/solo mode implies it) -- the client used to load it always
+         and probe /api/memos to find out, which cost every annotator a 503 per
+         page for a feature they did not have. -->
     {% if is_annotation_page %}
+    {% if memos_enabled | default(false) %}
     <button type="button" id="memo-panel-toggle" class="memo-panel-toggle" hidden>
         &#128221; Notes
     </button>
@@ -868,11 +1114,13 @@
             </div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='memos.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='memos.js') }}?v=3"></script>
+    {% endif %}
 
-    <!-- Annotator search-and-claim sidebar (self-hides unless
-         search.annotator_claim is enabled: the enable-probe only gets
-         400 when the feature is on and the user is authed). -->
+    <!-- Annotator search-and-claim sidebar. Rendered only when
+         search.annotator_claim is on; the client still probes once to confirm
+         the session is authed, since the server flag cannot know that. -->
+    {% if search_claim_enabled | default(false) %}
     <button type="button" id="search-panel-toggle" class="search-panel-toggle" hidden>
         &#128269; Find
     </button>
@@ -892,10 +1140,12 @@
         </div>
     </div>
     <script src="{{ url_for('static', filename='search.js') }}?v=3"></script>
+    {% endif %}
 
-    <!-- Universal Codebook tray (self-hides unless the codebook is
-         enabled: the enable-probe is not 200 otherwise). The composer
-         only appears when codebook_mode is extensible/open. -->
+    <!-- Universal Codebook tray, rendered only when a codebook is configured.
+         The composer inside it still appears only when codebook_mode is
+         extensible/open, which the tray payload reports. -->
+    {% if codebook_ui_enabled | default(false) %}
     <button type="button" id="cb-panel-toggle" class="cb-panel-toggle" hidden>
         &#127991; Codebook
     </button>
@@ -986,7 +1236,8 @@
             <div id="cb-mode-hint" class="cb-mode-hint"></div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='codebook.js') }}?v=12"></script>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=15"></script>
+    {% endif %}
     {% endif %}
 </body>
 </html>

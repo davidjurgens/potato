@@ -1,0 +1,378 @@
+{
+  "agent-chat.js": {
+    "sha256": "210674014068214f",
+    "version": "1"
+  },
+  "ai_assistant_manager.js": {
+    "sha256": "7e827f3f06c33283",
+    "version": "2"
+  },
+  "annotation.js": {
+    "sha256": "60dcde7a34180881",
+    "version": "31"
+  },
+  "annotation_critique.js": {
+    "sha256": "8c0e8764bdd834f1",
+    "version": "4"
+  },
+  "annotation_telemetry.js": {
+    "sha256": "4f6d34d46702ff1f",
+    "version": "2"
+  },
+  "audio-annotation.css": {
+    "sha256": "9f06d0fad872c3e9",
+    "version": "4"
+  },
+  "audio-annotation.js": {
+    "sha256": "685b9a723f114db5",
+    "version": "5"
+  },
+  "audio-dialogue.css": {
+    "sha256": "14b56e9a134afacb",
+    "version": "3"
+  },
+  "audio-dialogue.js": {
+    "sha256": "b2738a5168ffaa33",
+    "version": "3"
+  },
+  "boundary-probe.js": {
+    "sha256": "75c624a0f877f90e",
+    "version": "6"
+  },
+  "codebook.js": {
+    "sha256": "52c78d82786477ea",
+    "version": "15"
+  },
+  "conversation-tree.js": {
+    "sha256": "9181c59ed2b15736",
+    "version": "1"
+  },
+  "coreference-manager.js": {
+    "sha256": "b3badff582310719",
+    "version": "1"
+  },
+  "css/boundary.css": {
+    "sha256": "f53c04d1f22adff3",
+    "version": "5"
+  },
+  "css/codebook.css": {
+    "sha256": "a84f8ac6393636dc",
+    "version": "12"
+  },
+  "css/live-agent.css": {
+    "sha256": "e5dd8cb6d35c5d49",
+    "version": "1"
+  },
+  "css/llm-chat-sidebar.css": {
+    "sha256": "74cd5b513de4b812",
+    "version": "1"
+  },
+  "css/memos.css": {
+    "sha256": "f2a07b5f862b7aee",
+    "version": "2"
+  },
+  "css/search.css": {
+    "sha256": "8dfdb84e238d4ee2",
+    "version": "2"
+  },
+  "css/thinkaloud.css": {
+    "sha256": "de53b4e35a2f57e2",
+    "version": "1"
+  },
+  "css/truth-serum.css": {
+    "sha256": "02c79d937977c083",
+    "version": "1"
+  },
+  "deepzoom-viewer.js": {
+    "sha256": "3460c245a4e260fe",
+    "version": "1"
+  },
+  "depth-viewer.css": {
+    "sha256": "42db20efa77dca28",
+    "version": "2"
+  },
+  "depth-viewer.js": {
+    "sha256": "dd95701e4bf3ead7",
+    "version": "2"
+  },
+  "device-routing.js": {
+    "sha256": "f52d7fbb29b8ca21",
+    "version": "2"
+  },
+  "display-logic.js": {
+    "sha256": "9c0297322d7c37e7",
+    "version": "3"
+  },
+  "document-bbox.js": {
+    "sha256": "b53b7ebb08d21ec5",
+    "version": "3"
+  },
+  "entity-linking.js": {
+    "sha256": "4dbfcbde35120f8e",
+    "version": "1"
+  },
+  "episode-timeline.css": {
+    "sha256": "f938355bab7209db",
+    "version": "2"
+  },
+  "episode-timeline.js": {
+    "sha256": "ef0e60f89afd0413",
+    "version": "1"
+  },
+  "event-annotation.js": {
+    "sha256": "5bc3f646dba34275",
+    "version": "1"
+  },
+  "floating-panel-utils.js": {
+    "sha256": "0c81c4cfae319503",
+    "version": "5"
+  },
+  "grounding-eval.css": {
+    "sha256": "0913d758fc309574",
+    "version": "1"
+  },
+  "grounding-eval.js": {
+    "sha256": "883d7b4f342a1b9d",
+    "version": "1"
+  },
+  "image-annotation.css": {
+    "sha256": "88845c2142b515ff",
+    "version": "15"
+  },
+  "image-annotation.js": {
+    "sha256": "d0e4962bf7a9f2ea",
+    "version": "29"
+  },
+  "instance-display.js": {
+    "sha256": "44f86cac34ef4ab1",
+    "version": "3"
+  },
+  "interaction_tracker.js": {
+    "sha256": "efe5dc811c72a00a",
+    "version": "2"
+  },
+  "js/pdf-viewer.js": {
+    "sha256": "64b0d86af915fb89",
+    "version": "1"
+  },
+  "js/pdfjs-loader.js": {
+    "sha256": "a03661d0428901c5",
+    "version": "1"
+  },
+  "keystroke_tracker.js": {
+    "sha256": "39b68a580e71b1e4",
+    "version": "1"
+  },
+  "label-visibility.js": {
+    "sha256": "cd90e8806852a329",
+    "version": "2"
+  },
+  "live-agent-viewer.js": {
+    "sha256": "b019b3accc059e6d",
+    "version": "1"
+  },
+  "llm-chat-sidebar.js": {
+    "sha256": "5da18161a8320499",
+    "version": "1"
+  },
+  "mask-buffer.js": {
+    "sha256": "707a6ff7071fa865",
+    "version": "1"
+  },
+  "memos.js": {
+    "sha256": "031f31d592ecdeb9",
+    "version": "3"
+  },
+  "multi-agent-discussion.css": {
+    "sha256": "276ac528ca3f2b51",
+    "version": "1"
+  },
+  "multi-agent-discussion.js": {
+    "sha256": "03a62e40820b5bf4",
+    "version": "1"
+  },
+  "multi-document-event.css": {
+    "sha256": "4d3b34eafb844441",
+    "version": "2"
+  },
+  "multi-document-event.js": {
+    "sha256": "00599286574cd8e0",
+    "version": "4"
+  },
+  "option_highlight_manager.js": {
+    "sha256": "bb9254e571a8ecf9",
+    "version": "2"
+  },
+  "pdf-bbox.js": {
+    "sha256": "d3114fbbb9a05d54",
+    "version": "3"
+  },
+  "pdf-link-mode.css": {
+    "sha256": "563401a9e7b38403",
+    "version": "1"
+  },
+  "pdf-link-mode.js": {
+    "sha256": "3f6e8969e0d06d39",
+    "version": "5"
+  },
+  "peaks-range-select.js": {
+    "sha256": "a24dae28e18fe906",
+    "version": "2"
+  },
+  "pointcloud/pc-calibration.js": {
+    "sha256": "c592330881d09edc",
+    "version": "1"
+  },
+  "pointcloud/pc-mpr.js": {
+    "sha256": "7b9ff3d7f69f9dc4",
+    "version": "1"
+  },
+  "pointcloud/pc-octree.js": {
+    "sha256": "11e79ec8beef3418",
+    "version": "1"
+  },
+  "pointcloud/pc-viewer.css": {
+    "sha256": "dfef3a4d86b1da61",
+    "version": "5"
+  },
+  "pointcloud/pc-viewer.js": {
+    "sha256": "a6650e0634eecfaa",
+    "version": "5"
+  },
+  "pointcloud/pc-wire.js": {
+    "sha256": "482b899ec60b7947",
+    "version": "2"
+  },
+  "region-caption.css": {
+    "sha256": "8f898abad57c7a4b",
+    "version": "1"
+  },
+  "region-caption.js": {
+    "sha256": "9fb776bd08350f28",
+    "version": "2"
+  },
+  "rollout-eval.css": {
+    "sha256": "ba9d2abeb5a3da52",
+    "version": "3"
+  },
+  "rollout-eval.js": {
+    "sha256": "bd9f596d492ea01b",
+    "version": "5"
+  },
+  "run-tree.js": {
+    "sha256": "074d3ccc44b64809",
+    "version": "1"
+  },
+  "search.js": {
+    "sha256": "a964fce2b19dc807",
+    "version": "3"
+  },
+  "segmentation/gdino-session.js": {
+    "sha256": "3fd30dae505c5826",
+    "version": "1"
+  },
+  "segmentation/model-session.js": {
+    "sha256": "79988d21e29e6bd0",
+    "version": "1"
+  },
+  "segmentation/sam-preprocess.js": {
+    "sha256": "4104e5d1fb9b99cc",
+    "version": "1"
+  },
+  "segmentation/sam-session.js": {
+    "sha256": "af7028bb2ec2044b",
+    "version": "5"
+  },
+  "segmentation/sam-tool.js": {
+    "sha256": "03ab38561b135f99",
+    "version": "2"
+  },
+  "segmentation/text-prompt-tool.js": {
+    "sha256": "6bd3856093c5e809",
+    "version": "2"
+  },
+  "segmentation/wordpiece.js": {
+    "sha256": "3c1799186e9d88fd",
+    "version": "1"
+  },
+  "span-core.js": {
+    "sha256": "a3124907afb07101",
+    "version": "17"
+  },
+  "span-link-manager.js": {
+    "sha256": "643b3403ec23892e",
+    "version": "16"
+  },
+  "span-link-styles.css": {
+    "sha256": "244fc855ca30f10c",
+    "version": "5"
+  },
+  "span-styles.css": {
+    "sha256": "f917576d7ae6c929",
+    "version": "1"
+  },
+  "styles.css": {
+    "sha256": "5e6bfe54aed980bc",
+    "version": "11"
+  },
+  "thinkaloud.js": {
+    "sha256": "cfad75fe88b69eb4",
+    "version": "2"
+  },
+  "tiered-annotation.js": {
+    "sha256": "e91d262ff291f6c7",
+    "version": "4"
+  },
+  "tracking-interpolation.js": {
+    "sha256": "da8bd01cf9b79b92",
+    "version": "2"
+  },
+  "tracking-ui.js": {
+    "sha256": "0206d81480029d19",
+    "version": "11"
+  },
+  "triage.js": {
+    "sha256": "65c15915212fc2a8",
+    "version": "1"
+  },
+  "truth-serum.js": {
+    "sha256": "9795b4dd43262680",
+    "version": "2"
+  },
+  "turn-annotations.css": {
+    "sha256": "5e961c420f64a143",
+    "version": "1"
+  },
+  "turn-annotations.js": {
+    "sha256": "2f58c72a0d1f8f46",
+    "version": "1"
+  },
+  "video-annotation.css": {
+    "sha256": "517aeca9517f0ffb",
+    "version": "3"
+  },
+  "video-annotation.js": {
+    "sha256": "0ce3a43000c77b1e",
+    "version": "19"
+  },
+  "visual_ai_assistant.js": {
+    "sha256": "66eb1e15fcc9d23a",
+    "version": "5"
+  },
+  "web-agent-overlays.js": {
+    "sha256": "ba2cd17c89c458af",
+    "version": "1"
+  },
+  "web-agent-playback.js": {
+    "sha256": "a8c78bffdd6b21cb",
+    "version": "1"
+  },
+  "web-agent-recorder.js": {
+    "sha256": "3344eeff539f2cef",
+    "version": "1"
+  },
+  "web-agent-viewer.js": {
+    "sha256": "f71fc56115e7d605",
+    "version": "1"
+  }
+}

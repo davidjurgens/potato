@@ -1,9 +1,8 @@
 """
 Item State Management Module
 
-This module provides the core data structures and management logic for annotation items
-in the Potato platform. It handles item storage, assignment strategies, and tracking
-of annotation progress across users.
+The core data structures and management logic for annotation items: item
+storage, assignment strategies, and annotation progress across users.
 
 The module includes:
 - Item class: Represents individual annotation items with metadata
@@ -31,6 +30,8 @@ import logging
 import threading
 import json
 import os
+
+from potato.item_store import build_store as build_item_store
 
 # Singleton instance of the ItemStateManager with thread-safe lock
 ITEM_STATE_MANAGER = None
@@ -116,16 +117,108 @@ class Item:
             item_data: Dictionary containing the item's data (text, context, etc.)
         """
         self.item_id = item_id
-        self.item_data = item_data
-        self.metadata = {}
+        self._item_data = item_data
+        # Set when a paged store owns this item's payload; see the note on the
+        # item_data property. None under the default in-memory store, which is
+        # what keeps that path free of any lookup at all.
+        self._store = None
 
-        # This data structure keeps the label-based annotations the user has
-        # completed so far
-        self.labels = {}
+        # metadata, labels and span_annotations are created on first use rather
+        # than in the constructor. Three empty dicts cost 192 bytes per item —
+        # measured, and half of the whole resident cost of an item whose
+        # payload has been paged out — and the overwhelming majority of items
+        # never receive any of the three. `scripts/benchmark_item_store.py`
+        # reproduces the figure.
+        #
+        # Lazily, and not via __slots__, which saves a further 48 bytes and
+        # would turn any attribute assignment anywhere in the codebase, a fork
+        # or a plugin into an AttributeError. 96% of the saving for none of
+        # that.
+        self._metadata = None
+        self._labels = None
+        self._span_annotations = None
 
-        # This data structure keeps the span-based annotations the user has
-        # completed so far
-        self.span_annotations = {}
+    @property
+    def metadata(self):
+        """
+        Item metadata. Created on first access, including a read.
+
+        Created on *read* because callers mutate what they are given —
+        ``automation/actions.py:48`` does ``item.metadata["triage_priority"] = p``
+        — and handing back a fresh dict each time would accept that write and
+        drop it.
+        """
+        data = self.__dict__.get("_metadata")
+        if data is None:
+            data = self.__dict__["_metadata"] = {}
+        return data
+
+    @metadata.setter
+    def metadata(self, value):
+        self.__dict__["_metadata"] = value
+
+    @property
+    def labels(self):
+        """
+        Label annotations. **Nothing in the tree reads or writes this** —
+        annotations live in ``UserState``, as this class's docstring says — but
+        it is kept because it has been public for years and a fork may use it.
+        """
+        data = self.__dict__.get("_labels")
+        if data is None:
+            data = self.__dict__["_labels"] = {}
+        return data
+
+    @labels.setter
+    def labels(self, value):
+        self.__dict__["_labels"] = value
+
+    @property
+    def span_annotations(self):
+        """Span annotations. Vestigial in the same way as :attr:`labels`."""
+        data = self.__dict__.get("_span_annotations")
+        if data is None:
+            data = self.__dict__["_span_annotations"] = {}
+        return data
+
+    @span_annotations.setter
+    def span_annotations(self, value):
+        self.__dict__["_span_annotations"] = value
+
+    @property
+    def item_data(self):
+        """
+        The item's raw data, faulted in from the store when it has been paged out.
+
+        The payload is the only part of an ``Item`` that can be evicted, and
+        this property is why. ``metadata``, ``labels`` and ``span_annotations``
+        are written *through the live object* — the overlap sampler, the
+        automation engine and adaptive boost all call ``add_metadata`` on an
+        item they were handed and expect it to stick — so evicting whole items
+        and rebuilding them on demand would drop those writes silently, under
+        memory pressure, which is the worst possible way to lose a write.
+
+        Under the default in-memory store ``_store`` is None and this is a
+        plain attribute read.
+        """
+        data = self.__dict__.get("_item_data")
+        if data is None:
+            store = self.__dict__.get("_store")
+            if store is not None:
+                data = store.load_payload(self.__dict__.get("item_id"))
+        return data
+
+    @item_data.setter
+    def item_data(self, value):
+        store = self.__dict__.get("_store")
+        if store is not None:
+            # Write through, and do not keep a strong copy: the store's cache
+            # decides how long it stays resident. Keeping one here would make
+            # every updated item permanently unevictable.
+            store.store_payload(self.__dict__.get("item_id"), value)
+            self.__dict__["_item_data"] = None
+        else:
+            self.__dict__["_item_data"] = value
 
     def __getattr__(self, name):
         """Expose raw data fields as attributes for template access.
@@ -141,9 +234,13 @@ class Item:
         never shadowed. Names absent from the data dict still raise
         AttributeError so Jinja's Undefined handling and copy/pickle behave.
         """
-        if name.startswith("__") and name.endswith("__"):
+        if name.startswith("_"):
+            # Underscored names are never data fields, and answering for them
+            # would recurse: the item_data property reads self._item_data,
+            # which lands back here before __init__ has set it (during
+            # unpickling, or copy).
             raise AttributeError(name)
-        data = self.__dict__.get("item_data")
+        data = self.item_data
         if isinstance(data, dict) and name in data:
             return data[name]
         raise AttributeError(name)
@@ -188,11 +285,21 @@ class Item:
         return self.get_text()
 
     def get_metadata(self, metadata_name: str):
-        """Get metadata value by name"""
-        return self.metadata.get(metadata_name, None)
+        """
+        Get metadata value by name.
+
+        Reads ``_metadata`` rather than the property so that asking an item
+        whether it has metadata does not give it any. Every assignment
+        strategy calls this on every candidate item on every request; going
+        through the property would materialize a dict for the whole corpus on
+        the first pass and undo the laziness completely.
+        """
+        data = self.__dict__.get("_metadata")
+        return data.get(metadata_name, None) if data else None
 
     def __str__(self):
-        return f"Item(id:{self.item_id}, data:{self.item_data}, metadata:{self.metadata})"
+        return (f"Item(id:{self.item_id}, data:{self.item_data}, "
+                f"metadata:{self.__dict__.get('_metadata') or {}})")
 
 class Label:
     """
@@ -710,6 +817,10 @@ class AssignmentStrategy(Enum):
     - PSYCHOMETRIC: Routes items by expected information gain under a live
       IRT model (annotator ability x item uncertainty); confident items
       stop consuming annotation budget
+    - MODEL_REVIEW: Serves prelabelled items least-confident first, for
+      human QC of model output. Items the model predicted NOTHING on are
+      excluded -- they have no confidence to rank and reviewing them is a
+      separate job (see potato/model_review.py)
     """
     RANDOM = 'random'
     FIXED_ORDER = 'fixed_order'
@@ -722,6 +833,7 @@ class AssignmentStrategy(Enum):
     BATCH = 'batch'
     PRIORITY = 'priority'
     PSYCHOMETRIC = 'psychometric'
+    MODEL_REVIEW = 'model_review'
 
     def fromstr(phase: str) -> AssignmentStrategy:
         """
@@ -736,31 +848,16 @@ class AssignmentStrategy(Enum):
         Raises:
             ValueError: If the string doesn't match any known strategy
         """
-        phase = phase.lower()
-        if phase == "random":
-            return AssignmentStrategy.RANDOM
-        elif phase == "fixed_order":
-            return AssignmentStrategy.FIXED_ORDER
-        elif phase == "active_learning":
-            return AssignmentStrategy.ACTIVE_LEARNING
-        elif phase == "llm_confidence":
-            return AssignmentStrategy.LLM_CONFIDENCE
-        elif phase == "max_diversity":
-            return AssignmentStrategy.MAX_DIVERSITY
-        elif phase == "least_annotated":
-            return AssignmentStrategy.LEAST_ANNOTATED
-        elif phase == "category_based":
-            return AssignmentStrategy.CATEGORY_BASED
-        elif phase == "diversity_clustering":
-            return AssignmentStrategy.DIVERSITY_CLUSTERING
-        elif phase == "batch":
-            return AssignmentStrategy.BATCH
-        elif phase == "priority":
-            return AssignmentStrategy.PRIORITY
-        elif phase == "psychometric":
-            return AssignmentStrategy.PSYCHOMETRIC
-        else:
-            raise ValueError(f"Unknown phase: {phase}")
+        # Derived from the enum rather than a hand-written if/elif chain.
+        # The chain was a fourth registration point that nothing forced you to
+        # remember: a strategy added to the enum, to the config whitelist and
+        # to both assignment branches would still raise "Unknown phase" the
+        # first time a real config used it.
+        wanted = (phase or "").lower()
+        for strategy in AssignmentStrategy:
+            if strategy.value == wanted:
+                return strategy
+        raise ValueError(f"Unknown phase: {phase}")
 
 
 class ItemStateManager:
@@ -786,9 +883,10 @@ class ItemStateManager:
         # Thread-safe lock for concurrent access to item data
         self._lock = threading.RLock()
 
-        # This data structure keeps the ordering of the items that are being annotated
-        # and a mapping from item ID to the Item object
-        self.instance_id_to_instance = OrderedDict()
+        # Where item payloads live. In-memory by default — see potato/item_store.py
+        # for the measurement behind that default and for what the paged
+        # alternative does and does not evict.
+        self._store = build_item_store(config)
 
         self.instance_id_ordering = []
 
@@ -1064,7 +1162,7 @@ class ItemStateManager:
 
     def _item_batch_annotators(self, instance_id: str) -> Set[str]:
         """Return annotators allowed by an item's batch annotator key."""
-        item = self.instance_id_to_instance.get(instance_id)
+        item = self._store.get(instance_id)
         if item is None:
             return set()
         item_data = item.get_data()
@@ -1266,7 +1364,7 @@ class ItemStateManager:
 
     def has_item(self, instance_id: str) -> bool:
         """Returns True if the item is in the state manager"""
-        return instance_id in self.instance_id_to_instance
+        return instance_id in self._store
 
     def add_item(self, instance_id: str, instance_data: dict):
         """
@@ -1281,10 +1379,10 @@ class ItemStateManager:
         """
         with self._lock:
             item = Item(instance_id, instance_data)
-            if instance_id in self.instance_id_to_instance:
+            if instance_id in self._store:
                 raise ValueError(f"Duplicate Item ID! Item with ID {instance_id} already exists in the state manager")
 
-            self.instance_id_to_instance[instance_id] = item
+            self._store.put(instance_id, item)
             self.instance_id_ordering.append(instance_id)
             self.remaining_instance_ids.append(instance_id)
 
@@ -1340,9 +1438,9 @@ class ItemStateManager:
             bool: True if the item was updated, False if the item doesn't exist
         """
         with self._lock:
-            if instance_id not in self.instance_id_to_instance:
+            item = self._store.get(instance_id)
+            if item is None:
                 return False
-            item = self.instance_id_to_instance[instance_id]
             # Update item_data while preserving labels, span_annotations, and metadata
             item.item_data = instance_data
             return True
@@ -1504,7 +1602,7 @@ class ItemStateManager:
 
         Returns -1 to mean unlimited (matching the legacy convention).
         """
-        item = self.instance_id_to_instance.get(instance_id)
+        item = self._store.get(instance_id)
         if item is not None:
             per_item = item.get_metadata('required_annotations')
             if per_item is not None:
@@ -1518,6 +1616,39 @@ class ItemStateManager:
         """True if the item has reached its annotator cap (per-item or global)."""
         cap = self._get_annotator_cap_for_item(instance_id)
         return cap >= 0 and len(self.instance_annotators[instance_id]) >= cap
+
+    def _model_review_candidates(self, user_state: 'UserState') -> list:
+        """
+        Prelabelled items this user has not seen, least confident first.
+
+        Shared by the assignment branch and by
+        ``has_unlabeled_items_for_user`` on purpose: two implementations of
+        "what is available" is how an assignment strategy comes to report
+        work it will not hand out, which /annotate experiences as a redirect
+        loop.
+        """
+        from potato import model_review
+
+        qc = self.config.get('pre_annotation', {}) or {}
+        field_name = qc.get('field', 'predictions')
+        schema_names = [s.get('name') for s in
+                        self.config.get('annotation_schemes', []) or []
+                        if s.get('name')]
+
+        summaries = []
+        for iid in list(self.remaining_instance_ids):
+            if self._item_is_saturated(iid):
+                if iid in self.remaining_instance_ids:
+                    self.remaining_instance_ids.remove(iid)
+                continue
+            if self._already_with_user(user_state, iid):
+                continue
+            item = self._store.get(iid)
+            data = item.get_data() if item is not None else {}
+            summaries.append(model_review.summarize_predictions(
+                iid, data, field_name, schema_names))
+
+        return model_review.review_order(summaries)
 
     def has_unlabeled_items_for_user(self, user_state: 'UserState') -> bool:
         """Check whether any items remain for this user to annotate (read-only)."""
@@ -1534,6 +1665,13 @@ class ItemStateManager:
                 if not user_state.has_annotated(iid):
                     return True
             return False
+
+        if self.assignment_strategy == AssignmentStrategy.MODEL_REVIEW:
+            # Without this branch the generic loop below reports items as
+            # available that the strategy will then refuse to serve (every
+            # item the model predicted nothing on), and /annotate
+            # redirect-loops between "you have work" and "there is none".
+            return bool(self._model_review_candidates(user_state))
 
         if self.assignment_strategy == AssignmentStrategy.PSYCHOMETRIC:
             # Early-stopped (resolved) items are excluded from assignment, so
@@ -1596,6 +1734,38 @@ class ItemStateManager:
 
     def is_assignment_paused(self) -> bool:
         return self._assignment_paused
+
+    def _dataset_assignment_count(self, user_state) -> int:
+        """How many of the user's assigned items came out of the dataset.
+
+        Attention checks and gold items are injected into the queue by the
+        platform, not drawn from the pool, but they land in
+        ``assigned_instance_ids`` like anything else. Counting them against the
+        per-annotator quota means every injected check costs the annotator one
+        real item: on a six-item task with two checks and the default quota, two
+        articles are simply never served, and the only visible sign is a
+        progress bar that ends early.
+        """
+        assigned = user_state.get_assigned_instance_ids()
+        try:
+            from potato.quality_control import count_dataset_items
+        except Exception:
+            return len(assigned)
+        return count_dataset_items(assigned)
+
+    def _already_with_user(self, user_state, iid) -> bool:
+        """True when the user already holds this item, annotated or not.
+
+        Assignment tops up incrementally: three items up front, then one at a
+        time as the annotator works. A strategy that filters only on
+        ``has_annotated`` will happily re-pick an item the user has been given
+        but not yet reached. ``assign_instance`` drops the duplicate silently,
+        the strategy still reports one item assigned, and the queue stops
+        growing -- which is how ``assignment_strategy: random`` on a six-item
+        task hands an annotator three items and then nothing, with the progress
+        counter simply stopping early and no warning anywhere.
+        """
+        return iid in user_state.get_assigned_instance_ids() or user_state.has_annotated(iid)
 
     def assign_instances_to_user(self, user_state: UserState) -> int:
         """
@@ -1664,7 +1834,7 @@ class ItemStateManager:
             return 0
 
         # Determine how many instances to assign
-        current_assignments = user_state.get_assigned_instance_count()
+        current_assignments = self._dataset_assignment_count(user_state)
         max_assignments = user_state.get_max_assignments()
 
         if max_assignments > 0:
@@ -1715,7 +1885,7 @@ class ItemStateManager:
                 if cap >= 0 and annotation_count >= cap:
                     self.logger.debug(f"[ASSIGNMENT] Skipping {iid}: reached annotation cap")
                     continue
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
                 else:
                     self.logger.debug(f"User {getattr(user_state, 'user_id', None)} already annotated {iid}, skipping.")
@@ -1726,7 +1896,7 @@ class ItemStateManager:
             to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
             self.logger.debug(f"Randomly assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
-                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                user_state.assign_instance(self._store.get(item_id))
             return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.LEAST_ANNOTATED:
             # Least annotated strategy: prioritize items with fewest annotations
@@ -1746,7 +1916,7 @@ class ItemStateManager:
             candidates.sort(key=lambda x: (x[1], x[0]))
             assigned = 0
             for item_id, _ in candidates[:instances_to_assign]:
-                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                user_state.assign_instance(self._store.get(item_id))
                 assigned += 1
             return assigned
         elif self.assignment_strategy == AssignmentStrategy.FIXED_ORDER:
@@ -1758,7 +1928,7 @@ class ItemStateManager:
                         self.remaining_instance_ids.remove(iid)
                     continue
                 if iid not in user_state.get_assigned_instance_ids():
-                    user_state.assign_instance(self.instance_id_to_instance[iid])
+                    user_state.assign_instance(self._store.get(iid))
                     assigned += 1
                     if assigned >= instances_to_assign:
                         break
@@ -1771,7 +1941,7 @@ class ItemStateManager:
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
@@ -1784,7 +1954,7 @@ class ItemStateManager:
             sorted_items = sorted(item_disagreement_scores.keys(), key=lambda x: item_disagreement_scores[x], reverse=True)
             assigned = 0
             for item_id in sorted_items[:instances_to_assign]:
-                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                user_state.assign_instance(self._store.get(item_id))
                 assigned += 1
             return assigned
         elif self.assignment_strategy == AssignmentStrategy.ACTIVE_LEARNING:
@@ -1800,14 +1970,14 @@ class ItemStateManager:
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
             to_assign = unlabeled_items[:instances_to_assign]
             self.logger.debug(f"Active learning: assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
-                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                user_state.assign_instance(self._store.get(item_id))
             return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.LLM_CONFIDENCE:
             # LLM confidence assignment strategy (currently falls back to random)
@@ -1817,14 +1987,25 @@ class ItemStateManager:
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
                     continue
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
             if not unlabeled_items:
                 return 0
             to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
             self.logger.debug(f"LLM confidence (random fallback): assigning items {to_assign} to user {getattr(user_state, 'user_id', None)}")
             for item_id in to_assign:
-                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                user_state.assign_instance(self._store.get(item_id))
+            return len(to_assign)
+        elif self.assignment_strategy == AssignmentStrategy.MODEL_REVIEW:
+            candidates = self._model_review_candidates(user_state)
+            if not candidates:
+                return 0
+            to_assign = candidates[:instances_to_assign]
+            self.logger.debug(
+                f"Model review: assigning {to_assign} (least confident first) "
+                f"to user {getattr(user_state, 'user_id', None)}")
+            for item_id in to_assign:
+                user_state.assign_instance(self._store.get(item_id))
             return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.CATEGORY_BASED:
             # Category-based assignment strategy
@@ -1865,7 +2046,7 @@ class ItemStateManager:
                 if self._item_is_saturated(iid):
                     continue
                 # Skip if user already annotated this item
-                if not user_state.has_annotated(iid):
+                if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
 
             self.logger.debug(f"Category-based: {len(unlabeled_items)} unlabeled items available for user {user_id}")
@@ -1878,7 +2059,7 @@ class ItemStateManager:
             self.logger.debug(f"Category-based: assigning items {to_assign} to user {user_id}")
 
             for item_id in to_assign:
-                user_state.assign_instance(self.instance_id_to_instance[item_id])
+                user_state.assign_instance(self._store.get(item_id))
 
             return len(to_assign)
         elif self.assignment_strategy == AssignmentStrategy.DIVERSITY_CLUSTERING:
@@ -1915,7 +2096,7 @@ class ItemStateManager:
                 # Assign items from diverse order
                 assigned = 0
                 for item_id in diverse_order[:instances_to_assign]:
-                    user_state.assign_instance(self.instance_id_to_instance[item_id])
+                    user_state.assign_instance(self._store.get(item_id))
                     assigned += 1
 
                 return assigned
@@ -1948,7 +2129,7 @@ class ItemStateManager:
                 if ranked is not None:
                     assigned = 0
                     for item_id in ranked[:instances_to_assign]:
-                        user_state.assign_instance(self.instance_id_to_instance[item_id])
+                        user_state.assign_instance(self._store.get(item_id))
                         assigned += 1
                     return assigned
                 # rank_items returned None: cold start — random assignment
@@ -1981,7 +2162,7 @@ class ItemStateManager:
             order_index = {iid: i for i, iid in enumerate(self.instance_id_ordering)}
 
             def _priority_of(iid):
-                p = self.instance_id_to_instance[iid].get_metadata("triage_priority")
+                p = self._store.get(iid).get_metadata("triage_priority")
                 return p if p is not None else 0
 
             ascending = bool(self.triage_scorer) and self.triage_scorer.order == "asc"
@@ -1992,7 +2173,7 @@ class ItemStateManager:
             ))
             assigned = 0
             for iid in candidates[:instances_to_assign]:
-                user_state.assign_instance(self.instance_id_to_instance[iid])
+                user_state.assign_instance(self._store.get(iid))
                 assigned += 1
             return assigned
         else:
@@ -2005,7 +2186,7 @@ class ItemStateManager:
                         self.remaining_instance_ids.remove(iid)
                     continue
                 if iid not in user_state.get_assigned_instance_ids():
-                    user_state.assign_instance(self.instance_id_to_instance[iid])
+                    user_state.assign_instance(self._store.get(iid))
                     assigned += 1
                     if assigned >= instances_to_assign:
                         break
@@ -2030,7 +2211,7 @@ class ItemStateManager:
             str(user_id), assign_auto=True
         )
         for item_id in candidate_ids:
-            if item_id not in self.instance_id_to_instance:
+            if item_id not in self._store:
                 self.logger.warning(
                     "Batch assignment references unknown item %s for user %s",
                     item_id,
@@ -2048,7 +2229,7 @@ class ItemStateManager:
             if user_state.has_annotated(item_id):
                 continue
 
-            user_state.assign_instance(self.instance_id_to_instance[item_id])
+            user_state.assign_instance(self._store.get(item_id))
             already_assigned.add(item_id)
             assigned += 1
             if assigned >= instances_to_assign:
@@ -2145,7 +2326,7 @@ class ItemStateManager:
                 break
 
             # Assign the selected instance
-            user_state.assign_instance(self.instance_id_to_instance[selected_item])
+            user_state.assign_instance(self._store.get(selected_item))
             assigned_count += 1
 
             self.logger.debug(
@@ -2169,7 +2350,7 @@ class ItemStateManager:
 
         to_assign = self.random.sample(unlabeled_items, min(instances_to_assign, len(unlabeled_items)))
         for item_id in to_assign:
-            user_state.assign_instance(self.instance_id_to_instance[item_id])
+            user_state.assign_instance(self._store.get(item_id))
 
         return len(to_assign)
 
@@ -2522,11 +2703,11 @@ class ItemStateManager:
                     continue
 
                 # Check if instance exists in our manager
-                if instance_id not in self.instance_id_to_instance:
+                if instance_id not in self._store:
                     continue
 
                 # Assign the verification instance
-                item = self.instance_id_to_instance[instance_id]
+                item = self._store.get(instance_id)
                 user_state.assign_instance(item)
 
                 # Mark this as a verification task in the user's metadata
@@ -2565,13 +2746,58 @@ class ItemStateManager:
         # For now, it's a placeholder
         return None
 
+    # ------------------------------------------------------------------
+    # The item accessors.
+    #
+    # Every consumer outside this class goes through these rather than
+    # reaching into the container. That is not tidiness: while the container
+    # *was* a dict that every module indexed by name, no backend could ever
+    # be put behind it, and `tests/unit/test_item_store.py` fails the build
+    # if a new direct reference appears.
+    # ------------------------------------------------------------------
+
     def get_instance_ids(self) -> list[str]:
         """Get all instance IDs in the manager"""
-        return list(self.instance_id_to_instance.keys())
+        return self._store.ids()
 
     def get_item(self, instance_id: str) -> Item:
-        """Get an item by its ID"""
-        return self.instance_id_to_instance[instance_id]
+        """The item, raising KeyError when it is absent."""
+        item = self._store.get(instance_id)
+        if item is None:
+            raise KeyError(instance_id)
+        return item
+
+    def find_item(self, instance_id: str):
+        """The item, or None. The ``.get()`` half of the old dict access."""
+        return self._store.get(instance_id)
+
+    def iter_items(self):
+        """
+        ``(instance_id, Item)`` pairs, lazily.
+
+        Prefer this to :meth:`items` anywhere the loop does not need the whole
+        corpus at once — a report that iterates is the case a paged store can
+        serve in constant memory, and ``.items()`` on a dict was a hard floor
+        that no backend could lower.
+        """
+        return self._store.iter_items()
+
+    def item_count(self) -> int:
+        return len(self._store)
+
+    @property
+    def instance_id_to_instance(self):
+        """
+        Deprecated. The live id-to-``Item`` mapping.
+
+        Kept because it was the public surface for years and third-party
+        configs and forks index it directly. It is a **view of real state**,
+        not a rebuilt copy — a copy would silently discard ``add_metadata``
+        writes made through it — so it stays correct; it is just no longer the
+        way to reach an item. Under a paged store, reading payloads through it
+        faults them in one at a time, which is the right incentive.
+        """
+        return self._store.as_mapping()
 
     def get_annotators_for_item(self, instance_id: str) -> set[str]:
         """Get the set of annotators who have worked on this item"""
@@ -2605,7 +2831,7 @@ class ItemStateManager:
 
     def items(self) -> list[Item]:
         """Get all items in the manager"""
-        return list(self.instance_id_to_instance.values())
+        return [item for _, item in self._store.iter_items()]
 
     def register_annotator(self, instance_id: str, user_id: str):
         """
@@ -2639,7 +2865,7 @@ class ItemStateManager:
             if 2 <= current_count and current_cap >= 0 and current_cap < boost_to:
                 threshold = self.adaptive_boost.get('threshold', 0.5)
                 if self._calculate_disagreement_score(instance_id) >= threshold:
-                    item = self.instance_id_to_instance.get(instance_id)
+                    item = self._store.get(instance_id)
                     if item is not None:
                         item.add_metadata('required_annotations', boost_to)
                         self.logger.info(
@@ -2695,7 +2921,7 @@ class ItemStateManager:
         new_order_set = set(new_order)
 
         # Filter out instances that don't exist in our manager
-        valid_new_order = [instance_id for instance_id in new_order if instance_id in self.instance_id_to_instance]
+        valid_new_order = [instance_id for instance_id in new_order if instance_id in self._store]
 
         # Find instances that are not in the new order
         remaining_instances = [instance_id for instance_id in self.instance_id_ordering if instance_id not in new_order_set]
@@ -2713,7 +2939,7 @@ class ItemStateManager:
 
     def clear(self):
         """Clear all data from the manager (for testing)"""
-        self.instance_id_to_instance.clear()
+        self._store.clear()
         self.instance_id_ordering.clear()
         self.remaining_instance_ids.clear()
         self.completed_instance_ids.clear()

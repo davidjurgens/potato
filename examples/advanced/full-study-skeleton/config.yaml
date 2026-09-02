@@ -1,0 +1,92 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+annotation_task_name: Full Study Skeleton
+task_dir: .
+output_annotation_dir: annotation_output/
+
+data_files: [data/items.json]
+item_properties:
+  id_key: id
+  text_key: body
+
+instance_display:
+  fields:
+    - {key: title, type: text, label: Title}
+    - {key: body, type: text, label: Item, span_target: true}
+  layout: {direction: vertical, gap: 10px}
+  resizable: false                 # otherwise one line of text gets a 130px card
+
+base_css: static/study.css
+annotation_instructions: >-
+  <p><b>Reminder.</b> One line per rule, not the full definitions. Those live on
+  the instructions page.</p>
+
+annotation_schemes:
+  - annotation_type: span
+    name: evidence
+    description: Highlight the part that decides your answer.
+    target_field: body             # names the span_target field above
+    labels: [Evidence, Counter-evidence]
+    humanize_labels: false
+    sequential_key_binding: true
+    show_span_labels: true
+
+  - annotation_type: radio
+    name: category
+    description: Which category is this?
+    labels: [A, B, C, Unclear]     # always have a "none" or "unclear" option
+    humanize_labels: false
+    sequential_key_binding: true
+    label_requirement: {required: true}
+
+  - annotation_type: likert        # ordered judgement -> ordinal metric
+    name: severity
+    description: How severe is it?
+    size: 3
+    min_label: Low
+    max_label: High
+    humanize_labels: false
+    labels: [Low, Medium, High]    # label every point, not just the ends
+    sequential_key_binding: true
+    label_requirement: {required: true}
+
+  - annotation_type: text          # follow-up, hidden until it applies
+    name: why_unclear
+    description: What made it unclear?
+    multiline: true                # without this a `text` scheme is a one-line <input>
+    rows: 3
+    min_chars: 10
+    display_logic:
+      show_when:
+        - {schema: category, operator: equals, value: Unclear}
+
+num_annotators_per_item: 3
+assignment_strategy: random
+random_seed: 1
+max_annotations_per_user: 12       # every annotator sees all 12 items
+require_fully_annotated: true
+
+training:
+  enabled: true
+  data_file: data/training.json
+  allow_retry: true
+  feedback: {enabled: true}
+
+attention_checks:
+  enabled: true
+  frequency: 4
+  items_file: data/attention.json
+  min_response_time: 5
+  failure_handling: {action: warn}
+
+agreement_metrics: {enabled: true}
+
+phases:
+  order: [consent, instructions, training, annotation, poststudy]
+  consent:      {type: consent,      title: Consent,        file: pages/consent.jsonl}
+  instructions: {type: instructions, title: Instructions,   file: pages/instructions.jsonl}
+  training:     {type: training,     title: Practice}
+  annotation:   {type: annotation}
+  poststudy:    {type: poststudy,    title: Last questions, file: pages/poststudy.jsonl}
+
+login: {type: password}
+user_config: {allow_all_users: true}

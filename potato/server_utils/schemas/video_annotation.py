@@ -273,6 +273,11 @@ def _generate_html(
                     <option value="cubic">Cubic (smooth)</option>
                     <option value="constant">Constant (hold)</option>
                 </select>
+                <button type="button" class="tracking-btn tracking-propagate-btn"
+                        data-action="propagate"
+                        title="Track this object through the following frames">Track forward</button>
+                <span class="tracking-propagate-status" role="status"
+                      aria-live="polite" aria-atomic="true"></span>
             </div>
         '''
 
@@ -657,9 +662,22 @@ def _generate_html(
 
                                 // Sync canvas size with video
                                 function syncTrackingCanvasSize() {{
-                                    // Use clientWidth/clientHeight for display size
-                                    var w = videoEl.clientWidth || videoEl.offsetWidth || 640;
-                                    var h = videoEl.clientHeight || videoEl.offsetHeight || 360;
+                                    // The backing store has to match the
+                                    // canvas's OWN displayed box, not the
+                                    // video's.
+                                    //
+                                    // The stylesheet insets the overlay by
+                                    // 45px to clear the native video controls,
+                                    // so sizing the backing to the video's
+                                    // height made a 400-tall buffer display in
+                                    // a 355-tall box: everything drawn on it,
+                                    // including boxes drawn by hand, appeared
+                                    // squashed by 11% and sat above the object
+                                    // it belonged to.
+                                    var w = trackingCanvas.clientWidth
+                                        || videoEl.clientWidth || videoEl.offsetWidth || 640;
+                                    var h = trackingCanvas.clientHeight
+                                        || videoEl.clientHeight || videoEl.offsetHeight || 360;
                                     if (w > 0 && h > 0) {{
                                         trackingCanvas.width = w;
                                         trackingCanvas.height = h;
@@ -700,6 +718,18 @@ def _generate_html(
                                                     this.disabled = true;
                                                 }}
                                             }}
+                                        }} else if (action === 'propagate') {{
+                                            // Disabled for the duration: the
+                                            // request takes seconds per frame,
+                                            // and a second press would start a
+                                            // second run over the same frames.
+                                            var button = this;
+                                            button.disabled = true;
+                                            Promise.resolve(
+                                                trackingManager.propagateForward()
+                                            ).finally(function() {{
+                                                button.disabled = false;
+                                            }});
                                         }}
                                     }});
                                 }});
@@ -734,6 +764,21 @@ def _generate_html(
                             }}
                         }} else if (trackingMode === 'tracking' || trackingMode === 'combined') {{
                             console.warn('[VideoAnnotation] TrackingUIManager not loaded, tracking features unavailable');
+                        }}
+
+                        // Per-class show/hide, shared with image annotation.
+                        // A timeline of stacked segments is as unreadable as an
+                        // image of stacked boxes; the shared manager owns the
+                        // state and this only applies it to the timeline.
+                        if (typeof LabelVisibilityManager !== 'undefined') {{
+                            manager.labelVisibility = new LabelVisibilityManager({{
+                                schemaName: config.schemaName || '{escaped_name}',
+                                projectKey: (window.config || {{}}).annotation_task_name,
+                                container: container,
+                                onChange: function(hidden) {{
+                                    manager.applyLabelVisibility(hidden);
+                                }},
+                            }});
                         }}
 
                         // Set default label

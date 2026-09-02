@@ -11,6 +11,46 @@ import re
 import pytest
 
 
+def extract_js_function(js_code, name, limit=None):
+    """Return the full source of a top-level JS function, braces balanced.
+
+    Steps over the parameter list before counting body braces. Counting from
+    the `function` keyword reads a destructured parameter — `({ background =
+    false } = {})` — as the body and stops at its closing brace, handing back
+    the signature alone; every substring assertion against it then passes or
+    fails for the wrong reason.
+    """
+    match = re.search(rf'(async\s+)?function\s+{name}\s*\(', js_code)
+    if not match:
+        return None
+    start = match.start()
+
+    paren_depth = 0
+    body_start = None
+    for i in range(match.end() - 1, len(js_code)):
+        ch = js_code[i]
+        if ch == '(':
+            paren_depth += 1
+        elif ch == ')':
+            paren_depth -= 1
+            if paren_depth == 0:
+                body_start = js_code.find('{', i)
+                break
+    if body_start is None or body_start == -1:
+        return None
+
+    depth = 0
+    end = len(js_code) if limit is None else min(body_start + limit, len(js_code))
+    for i in range(body_start, end):
+        if js_code[i] == '{':
+            depth += 1
+        elif js_code[i] == '}':
+            depth -= 1
+            if depth == 0:
+                return js_code[start:i + 1]
+    return js_code[start:end]
+
+
 class TestSaveAnnotationsReturnValue:
     """Verify saveAnnotations() returns false on HTTP errors."""
 
@@ -24,24 +64,7 @@ class TestSaveAnnotationsReturnValue:
 
     def _extract_function(self, name):
         """Extract a function body from the JS code."""
-        # Find function start
-        pattern = rf'(async\s+)?function\s+{name}\s*\('
-        match = re.search(pattern, self.js_code)
-        if not match:
-            return None
-        start = match.start()
-        # Find matching closing brace by counting
-        depth = 0
-        in_func = False
-        for i in range(start, len(self.js_code)):
-            if self.js_code[i] == '{':
-                depth += 1
-                in_func = True
-            elif self.js_code[i] == '}':
-                depth -= 1
-                if in_func and depth == 0:
-                    return self.js_code[start:i + 1]
-        return self.js_code[start:start + 3000]
+        return extract_js_function(self.js_code, name)
 
     def test_save_returns_false_on_http_error(self):
         """saveAnnotations() must return false when response.ok is false."""
@@ -180,22 +203,7 @@ class TestAnnotationDataInputLoading:
 
     def _get_full_function(self, name):
         """Extract the complete function body by brace matching."""
-        pattern = rf'(async\s+)?function\s+{name}\s*\('
-        match = re.search(pattern, self.js_code)
-        if not match:
-            return None
-        start = match.start()
-        depth = 0
-        in_func = False
-        for i in range(start, min(start + 20000, len(self.js_code))):
-            if self.js_code[i] == '{':
-                depth += 1
-                in_func = True
-            elif self.js_code[i] == '}':
-                depth -= 1
-                if in_func and depth == 0:
-                    return self.js_code[start:i + 1]
-        return self.js_code[start:start + 10000]
+        return extract_js_function(self.js_code, name, limit=20000)
 
     def test_load_annotations_includes_data_inputs(self):
         """loadAnnotations() must read annotation-data-input elements."""
@@ -220,9 +228,39 @@ class TestAnnotationDataInputLoading:
         )
 
     def test_save_and_load_both_handle_data_inputs(self):
-        """Both save and load paths must handle annotation-data-input."""
+        """Both save and load paths must handle annotation-data-input.
+
+        `saveAnnotations` may collect them itself or delegate to
+        `collectAnnotationDataInputs`, which is shared with the beforeunload
+        flush — that flush used to build its own payload and omit these
+        entirely, so a closed tab posted an answer with the canvas schemas
+        missing. What matters is that the save path reaches them, not where the
+        querySelectorAll lives.
+        """
         save_func = self._get_full_function('saveAnnotations')
         load_func = self._get_full_function('loadAnnotations')
 
-        assert "annotation-data-input" in save_func, "save must handle data inputs"
+        collects_directly = "annotation-data-input" in save_func
+        delegates = "collectAnnotationDataInputs" in save_func
+        assert collects_directly or delegates, "save must handle data inputs"
+
+        if delegates:
+            collector = self._get_full_function('collectAnnotationDataInputs')
+            assert collector and "annotation-data-input" in collector, (
+                "saveAnnotations delegates to collectAnnotationDataInputs, and "
+                "that function does not read the data inputs")
+
         assert "annotation-data-input" in load_func, "load must handle data inputs"
+
+    def test_the_unload_flush_collects_data_inputs_too(self):
+        """
+        `flushPendingSave` posts through sendBeacon during unload. It built its
+        payload from `currentAnnotations` alone, so the canvas and timeline
+        schemas were absent from it — which the server reads as cleared rather
+        than unmentioned.
+        """
+        flush = self._get_full_function('flushPendingSave')
+        assert flush, "flushPendingSave is gone; the unload path needs re-checking"
+        assert ("collectAnnotationDataInputs" in flush
+                or "annotation-data-input" in flush), (
+            "the unload flush posts without the .annotation-data-input values")

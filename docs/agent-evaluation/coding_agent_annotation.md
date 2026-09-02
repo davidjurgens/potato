@@ -1,10 +1,10 @@
 # Coding Agent Trace Annotation
 
-Potato supports annotation of agentic coding system traces -- sessions from tools like Claude Code, OpenCode, Cursor, Aider, SWE-Agent, and other AI coding assistants. This guide covers how to set up coding agent evaluation projects.
+Potato annotates agentic coding sessions -- traces from Claude Code, OpenCode, Cursor, Aider, SWE-Agent, and other AI coding assistants.
 
 ## Overview
 
-Coding agent traces consist of sequences of tool calls (file reads, edits, terminal commands, searches) interleaved with agent reasoning. Potato renders these with purpose-built formatting:
+Coding agent traces consist of sequences of tool calls (file reads, edits, terminal commands, searches) interleaved with agent reasoning. Potato renders them as:
 
 - **Code diffs** (Edit/Write): Red/green unified diff view
 - **Terminal blocks** (Bash): Dark monospace terminal styling
@@ -94,9 +94,49 @@ python -m potato.trace_converter -i traces.json --auto-detect -o data/converted.
 ```
 
 The `claude_code` converter handles:
+- Claude Code's own session transcripts (`~/.claude/projects/<project>/<session>.jsonl`)
 - Anthropic Messages API format (content blocks with `tool_use`/`tool_result`)
 - Pre-structured `structured_turns` format
 - Generic `turns` or `steps` format with tool calls
+
+### Annotating your own Claude Code sessions
+
+Claude Code writes one JSONL file per session under
+`~/.claude/projects/<slugified-working-directory>/<session-id>.jsonl`. Point the
+converter straight at one:
+
+```bash
+python -m potato.trace_converter \
+  -i ~/.claude/projects/-home-me-myrepo/3c853f0f-....jsonl \
+  --auto-detect -o data/session.jsonl
+```
+
+One session becomes one trace, not one per line. What you get:
+
+| In the transcript | In the trace |
+|---|---|
+| `user` / `assistant` messages | conversation turns |
+| `tool_use` + matching `tool_result` | a tool call with its output, typed for the display |
+| `parentUuid` chain | only the surviving path — rewound attempts are dropped and counted |
+| `isSidechain` messages | `sidechain_runs`, kept out of the main turns |
+| `cwd`, `gitBranch`, `version`, `usage` | the metadata table |
+| slash commands (`/clear` and friends) | dropped; they are the CLI talking to itself |
+
+Two things to know before planning a study around this:
+
+- **Thinking text is not on disk.** Transcripts keep the `thinking` block and its
+  signature and drop the content — measured at 6393 blocks across 40 local
+  sessions, none with text. The trace reports the count so the gap is visible.
+  If you need reasoning to annotate, capture it live with
+  `claude -p --output-format stream-json` or the Agent SDK instead.
+- **The on-disk shape belongs to the CLI, not to a published API.** Every row
+  carries a `version`. Treat the reader as best-effort across upgrades: it
+  ignores record types it does not know, and raises rather than handing back an
+  empty trace if a file stops parsing into messages.
+
+Transcripts also carry absolute paths, branch names, environment details and
+whatever source the session read. Redact before sharing a dataset, and get
+consent from whoever's sessions they are.
 
 ## Configuration
 
@@ -285,7 +325,8 @@ live_coding_agent:
     base_url: http://localhost:11434
   working_dir: ./workspace
   max_turns: 20
-  sandbox_mode: worktree          # worktree (default), docker, direct
+  sandbox_mode: container         # container (default), bubblewrap, trusted
+  container_cli: docker           # or podman
 ```
 
 ### Agent Backends
@@ -296,13 +337,79 @@ live_coding_agent:
 | Anthropic API | `anthropic_tool_use` | `ANTHROPIC_API_KEY` env var |
 | Claude Agent SDK | `claude_sdk` | `claude-agent-sdk` package installed |
 
-### Sandbox Modes
+### Sandbox modes
 
-| Mode | Description | Best For |
-|------|------------|---------|
-| `worktree` | Git worktree per session (lightweight copy) | Production use, safe isolation |
-| `docker` | Docker container with mounted workspace | Maximum isolation |
-| `direct` | Agent works directly in working_dir | Development, simple setup |
+Annotators can edit a tool call and re-execute it. That includes `Bash`, so the
+sandbox is what stops an edited command reaching the host. Pick the strongest
+one your machine supports.
+
+| Mode | Boundary | Needs |
+|------|----------|-------|
+| `container` (default) | Namespaces, cgroups, seccomp. No network, read-only root, runs as `nobody`, all capabilities dropped | `docker` or `podman` |
+| `bubblewrap` | Namespaces, no daemon, no root | `bwrap`, Linux |
+| `trusted` | None | An explicit acknowledgement |
+
+Set `container_cli: podman` for rootless containers, which need no root daemon.
+
+To go further, install a drop-in container runtime and name it:
+
+```yaml
+live_coding_agent:
+  sandbox_mode: container
+  container_runtime: runsc     # gVisor: intercepts syscalls in userspace
+  # container_runtime: kata    # Kata: a hardware VM per container
+```
+
+Potato passes the value straight through as `--runtime`, so nothing else
+changes.
+
+#### Running without a container runtime
+
+On a shared cluster or a machine where Docker is not an option, `bubblewrap` is
+usually available and needs neither a daemon nor root:
+
+```yaml
+live_coding_agent:
+  sandbox_mode: bubblewrap
+```
+
+It is a weaker boundary than a container, with no cgroup limits, and it needs
+unprivileged user namespaces, which some hardened kernels turn off. Potato
+checks for both at startup and refuses to run if either is missing.
+
+#### Trusted mode
+
+If you control the host and trust your annotators, run without a sandbox:
+
+```yaml
+live_coding_agent:
+  sandbox_mode: trusted
+  acknowledge_untrusted_code_execution: true
+```
+
+Both keys are required. Without the second, the server refuses to start. Tool
+calls then run as the Potato user with no isolation, and Potato logs a banner
+saying so on every boot. Deployment preflight rejects this mode for a public
+host.
+
+`worktree`, `docker` and `direct` still parse, and map onto the ladder above.
+`worktree` and `direct` become `trusted` and need the acknowledgement key:
+a git worktree is on the same host, as the same user, with the same network, so
+`cd /` leaves it. It keeps the agent's edits off your main checkout, which is
+worth having, but it is not a security boundary. `docker` becomes `container`,
+which fails loudly when Docker is missing instead of silently running tools on
+the host the way `docker` used to.
+
+#### Workspace copies and Docker-in-Docker
+
+The agent works on a **copy** of `working_dir`, made per session, so its edits
+never touch the original. Copies live in `.potato-sandboxes` beside
+`working_dir`; set `sandbox_root` to move them.
+
+If Potato itself runs inside a container, do not mount the host Docker socket to
+get container mode. That is equivalent to giving the sandbox host root. Use
+rootless Podman, `bubblewrap`, or `trusted` inside an already-isolated
+container.
 
 ### Controls
 

@@ -90,11 +90,14 @@ class BoundaryManager:
     # -------------------------------------------------------------- probes --
     def get_or_generate_probes(self, instance_id: str, schema: str, label: str,
                                labels: List[str], text: str,
-                               item_data: Optional[Dict[str, Any]] = None
+                               item_data: Optional[Dict[str, Any]] = None,
+                               media_reference: Optional[str] = None
                                ) -> List[Dict[str, Any]]:
         """Return cached probes for (instance, schema, label), generating on miss.
 
-        Probes are shared across annotators by design.
+        Probes are shared across annotators by design. ``media_reference`` makes
+        them visual: the item is an image, so the probes transform the picture
+        instead of editing text that is not there.
         """
         key = (str(instance_id), schema, label)
         with self._lock:
@@ -103,7 +106,8 @@ class BoundaryManager:
             return cached
 
         probes: List[Probe] = self.generator.generate(
-            str(instance_id), schema, label, labels, text, item_data=item_data
+            str(instance_id), schema, label, labels, text, item_data=item_data,
+            media_reference=media_reference,
         )
         records = [p.to_dict() for p in probes]
         with self._lock:

@@ -137,9 +137,17 @@ class TestMaskZoomSynchronization(unittest.TestCase):
         # Wait for manager initialization
         max_wait = 5
         for _ in range(max_wait * 10):
+            # Return a BOOLEAN, never the fabric canvas itself. Fabric's Canvas
+            # holds DOM references (lowerCanvasEl/upperCanvasEl/wrapperEl);
+            # returning it makes Selenium serialize those into element handles
+            # that are stale by the time they cross back, which raised
+            # StaleElementReferenceException on every test in this file — a
+            # harness defect that looked like a mask-alignment failure.
             manager_ready = self.driver.execute_script("""
                 var container = document.querySelector('.image-annotation-container');
-                return container && container.annotationManager && container.annotationManager.canvas;
+                return !!(container && container.annotationManager
+                          && container.annotationManager.canvas
+                          && container.annotationManager.image);
             """)
             if manager_ready:
                 return True

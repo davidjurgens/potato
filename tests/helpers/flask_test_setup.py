@@ -9,6 +9,7 @@ import sys
 import time
 import tempfile
 import json
+import warnings
 import yaml
 import threading
 import requests
@@ -160,7 +161,29 @@ def clear_all_global_state():
         pass
 
 class FlaskTestServer:
-    """A test server that can be started and stopped for integration tests."""
+    """A test server that can be started and stopped for integration tests.
+
+    **One at a time.** The server runs in a thread inside the pytest process,
+    not as a subprocess, so every instance shares the same process-wide
+    singletons — `get_item_state_manager()`, `get_user_state_manager()` and the
+    config module. Starting a second server while a first is still serving
+    silently rebinds all three to the second project, and from that moment both
+    ports answer with the second project's data.
+
+    That is not hypothetical. A dashboard test that started an "annotators
+    agree" project and an "annotators disagree" project, then compared the two
+    rendered reports, got byte-identical pages: both showed the disagreeing
+    numbers, while the JSON fetched from each server at its own setup time was
+    correct. The bug was in the test, and nothing in the harness said so.
+
+    Sequence them instead — start, use, `stop_server()`, then start the next.
+    Overlap is detected at `start_server()` and reported; set
+    `POTATO_STRICT_TEST_SERVERS=1` to turn that report into a failure.
+    """
+
+    #: Every instance currently serving, so an overlap can be named rather than
+    #: silently producing wrong data.
+    _live: "list[FlaskTestServer]" = []
 
     def __init__(self, app_factory=None, config=None, debug=False, port=None, config_file=None, test_data_file=None):
         # Support both old and new constructor patterns
@@ -209,8 +232,6 @@ class FlaskTestServer:
                 config['persist_sessions'] = False
 
                 # Add missing required config keys if not present
-                if 'output_annotation_format' not in config:
-                    config['output_annotation_format'] = 'jsonl'
                 if 'site_dir' not in config:
                     config['site_dir'] = 'output'
                 if 'alert_time_each_instance' not in config:
@@ -348,8 +369,41 @@ class FlaskTestServer:
         """Alias for start() method for backward compatibility."""
         return self._start_server(config_dir)
 
+    def _warn_if_another_server_is_live(self):
+        """Name an overlap rather than letting it corrupt the results.
+
+        See the class docstring: two live servers share one set of singletons,
+        and the newer one wins for both.
+        """
+        # Only servers still holding a WSGI server count. A test that lets its
+        # server fall out of scope without calling stop_server() leaves an
+        # entry behind, and counting those turned a real signal into 1039
+        # errors across the suite — a guard that cries wolf is worse than none.
+        for stale in [s for s in FlaskTestServer._live
+                      if getattr(s, "_wsgi_server", None) is None]:
+            FlaskTestServer._live.remove(stale)
+
+        others = [s for s in FlaskTestServer._live if s is not self]
+        if not others:
+            return
+        detail = ", ".join(
+            f"port {s.port} ({getattr(s, 'temp_config_file', None) or 'config'})"
+            for s in others)
+        message = (
+            f"FlaskTestServer on port {self.port} is starting while "
+            f"{len(others)} other server(s) are still serving: {detail}. "
+            f"They share this process's item/user state and config singletons, "
+            f"so BOTH ports will now answer with THIS project's data. "
+            f"Stop the previous server before starting this one.")
+        if os.environ.get("POTATO_STRICT_TEST_SERVERS") == "1":
+            raise RuntimeError(message)
+        warnings.warn(message, RuntimeWarning, stacklevel=3)
+
     def _start_server(self, config_dir=None):
         """Internal method to start the Flask server in a separate thread."""
+        self._warn_if_another_server_is_live()
+        if self not in FlaskTestServer._live:
+            FlaskTestServer._live.append(self)
         # Handle config_dir parameter for backward compatibility
         if config_dir is not None:
             # This is the old pattern - we need to handle config file creation
@@ -600,6 +654,27 @@ class FlaskTestServer:
                             print(f"[DEBUG] Started {started} live ingestion worker(s)")
                 except Exception as e:
                     print(f"[DEBUG] Error starting live ingestion: {e}")
+
+                # Initialize quality control manager if any QC feature is on.
+                # This mirrors flask_server._initialize_from_config(); without
+                # it get_quality_control_manager() returns None here, so
+                # attention checks, gold standards and pre-annotations all
+                # silently do nothing in server tests while working live.
+                qc_enabled = (
+                    config.get('attention_checks', {}).get('enabled', False) or
+                    config.get('gold_standards', {}).get('enabled', False) or
+                    config.get('pre_annotation', {}).get('enabled', False)
+                )
+                if qc_enabled:
+                    try:
+                        from potato.quality_control import init_quality_control_manager
+                        qc_task_dir = config.get(
+                            'task_dir',
+                            os.path.dirname(config.get('config_file', '')))
+                        init_quality_control_manager(config, qc_task_dir)
+                        print("[DEBUG] Quality control manager initialized successfully")
+                    except Exception as e:
+                        print(f"[DEBUG] Error initializing quality control manager: {e}")
 
                 # Initialize adjudication manager if configured
                 if config.get('adjudication', {}).get('enabled', False):
@@ -988,6 +1063,18 @@ class FlaskTestServer:
                     from flask import send_from_directory
                     return send_from_directory(test_data_dir, filename)
 
+                @app.route('/test-image/<path:filename>')
+                def serve_test_image(filename):
+                    """Serve test images from the tests/data directory.
+
+                    Image-annotation tests need a real image over HTTP: a
+                    data: URI cannot be used, because sanitize_html blocks the
+                    `data:` scheme outright (it is an XSS vector), so the URL
+                    never survives into the rendered instance text.
+                    """
+                    from flask import send_from_directory
+                    return send_from_directory(test_data_dir, filename)
+
                 # Use make_server instead of app.run() for proper shutdown support
                 from werkzeug.serving import make_server
                 self._wsgi_server = make_server('0.0.0.0', self.port, app, threaded=True)
@@ -1139,7 +1226,7 @@ class FlaskTestServer:
             # Fall back to API endpoint
             response = self.session.get(
                 f"{self.base_url}/admin/user_state/{username}",
-                headers={"X-API-Key": "admin_api_key"},
+                headers={"X-API-Key": self.resolve_admin_key()},
                 timeout=5
             )
 
@@ -1161,6 +1248,9 @@ class FlaskTestServer:
 
     def stop_server(self):
         """Stop the Flask server."""
+        if self in FlaskTestServer._live:
+            FlaskTestServer._live.remove(self)
+
         # Shutdown the WSGI server if it exists
         if hasattr(self, '_wsgi_server') and self._wsgi_server is not None:
             try:
@@ -1200,22 +1290,45 @@ class FlaskTestServer:
         """Property to maintain compatibility with existing tests."""
         return None  # The app is not directly accessible in this implementation
 
+    def resolve_admin_key(self) -> str:
+        """The key the server will actually accept.
+
+        `self.admin_api_key` is stamped into the config when the server starts,
+        so it is the answer nearly always. The fallback asks the same resolver
+        the request handler uses (config, then POTATO_ADMIN_API_KEY, then the
+        generated `{task_dir}/admin_api_key.txt`) for a server handed a config
+        that already named a key.
+
+        This exists because `get()` and `post()` used to send the literal
+        string ``admin_api_key`` instead of either -- a value no server has
+        ever issued. It went unnoticed because the endpoints under test did
+        not check.
+        """
+        key = getattr(self, "admin_api_key", None)
+        if key:
+            return key
+        try:
+            from potato.server_utils.admin_key import get_admin_api_key
+            from potato.server_utils.config_module import config
+            return get_admin_api_key(config) or ""
+        except Exception:
+            return ""
+
+    def _with_admin_key(self, path: str, kwargs: dict) -> dict:
+        if path.startswith('/admin/'):
+            headers = dict(kwargs.get('headers') or {})
+            headers.setdefault('X-API-Key', self.resolve_admin_key())
+            kwargs['headers'] = headers
+        return kwargs
+
     def get(self, path: str, **kwargs) -> requests.Response:
         """Make a GET request to the server using the session."""
-        # Add admin API key for admin endpoints
-        if path.startswith('/admin/'):
-            headers = kwargs.get('headers', {})
-            headers['X-API-Key'] = 'admin_api_key'
-            kwargs['headers'] = headers
+        kwargs = self._with_admin_key(path, kwargs)
         return self.session.get(f"{self.base_url}{path}", **kwargs)
 
     def post(self, path: str, **kwargs) -> requests.Response:
         """Make a POST request to the server using the session."""
-        # Add admin API key for admin endpoints
-        if path.startswith('/admin/'):
-            headers = kwargs.get('headers', {})
-            headers['X-API-Key'] = 'admin_api_key'
-            kwargs['headers'] = headers
+        kwargs = self._with_admin_key(path, kwargs)
         return self.session.post(f"{self.base_url}{path}", **kwargs)
 
 

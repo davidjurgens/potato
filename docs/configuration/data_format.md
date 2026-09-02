@@ -48,10 +48,10 @@ html tags are used to create two seperate boxes for the finding pairs.
 
 
 ## Displaying a list or a dictionary of instances
-Potato allows you to easily display a list or a dictionary of instance and you could easily set
-`list_as_text` as `True`.
+Potato can display an instance that is a list or a dictionary rather than a string. Set
+`list_as_text` to `True`.
 
-If you are using a list of instances, you could also define whether adding a prefix to the text
+For a list of instances, you can also add a prefix to each line
 ``` yaml
 "list_as_text": {
   "text_list_prefix_type": 'alphabet'
@@ -84,6 +84,41 @@ biased caused by the ordering effect. You can access the displayed content in th
 },
 ```
 
+
+## Conversational corpora (ConvoKit)
+
+A ConvoKit corpus is converted into a Potato data file with `potato convokit`
+rather than reshaped by hand:
+
+```bash
+potato convokit conversations-gone-awry-corpus -o data/awry.jsonl
+```
+
+Each item carries the conversation's turns, with every turn's `turn_id` set to
+the real ConvoKit utterance id so annotations can be exported back onto the
+corpus:
+
+```json
+{
+  "id": "convo:146743638.12652.12652",
+  "conversation": [
+    {"turn_id": "146743638.12652.12652", "speaker": "Sirex98", "text": "...",
+     "reply_to": null, "timestamp": 1185295934.0, "depth": 0,
+     "meta": {"toxicity": 0.0}}
+  ],
+  "conversation_tree": {"id": "146743638.12652.12652", "children": []},
+  "text": "Sirex98: ...",
+  "convo_meta": {"page_title": "User talk:2005"},
+  "_convokit": {"corpus": "conversations-gone-awry-corpus", "unit": "conversation"}
+}
+```
+
+The `_convokit` block is import provenance. It is never rendered — only keys
+listed in `instance_display.fields` are — but it must survive into any data file
+you post-process, because the ConvoKit exporter uses it to map annotations back.
+
+See the [ConvoKit integration guide](../integrations/convokit.md) for
+granularity options, metadata handling, and the export path.
 
 ## File Encoding
 
@@ -143,11 +178,10 @@ output formats, including: csv, tsv, json, or jsonl.
 # necessary to restart annotation.
 "output_annotation_dir": "annotation_output/folder_name/",
 
-# The output format for the all-annotator data. Allowed formats are:
-# * jsonl
-# * json (same output as jsonl)
-# * csv
-# * tsv
-#
-"output_annotation_format": "json", 
+# Write a periodic export of everyone's annotations to
+# <output_annotation_dir>/exports/<format>/. Any format the export registry
+# knows works here: csv, tsv, jsonl, parquet, huggingface, coco and two dozen
+# more. Leave it out and no export runs; the per-annotator JSON is written
+# either way.
+"export_annotation_format": "jsonl",
 ```

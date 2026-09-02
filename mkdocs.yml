@@ -12,11 +12,13 @@ nav:
         - Administrator Guide: guides/admin-guide.md
         - Developer Guide: guides/developer-guide.md
         - Testing: guides/testing.md
+        - Contributing: guides/contributing.md
         - Crowdsourcing Guide: guides/crowdsourcing-guide.md
         - Agent Evaluation Guide: guides/agent-evaluation-guide.md
         - AI-Assisted Annotation: guides/ai-assisted-annotation-guide.md
         - Working with Transcripts: guides/working_with_transcripts.md
         - Hotkey Review Mode: guides/hotkey_review_mode.md
+        - Bringing a Project Into Potato: guides/migrating-into-potato.md
     - Configuration:
         - Overview: configuration/configuration.md
         - Configuration Reference: configuration/config_reference.md
@@ -53,11 +55,24 @@ nav:
             - PDF Cross-Page Linking: annotation-types/text/pdf_cross_page_linking.md
         - Multimedia:
             - Image Annotation: annotation-types/multimedia/image_annotation.md
+            - Interactive Segmentation: annotation-types/multimedia/segmentation.md
+            - Text Prompting: annotation-types/multimedia/text_prompting.md
             - Audio Annotation: annotation-types/multimedia/audio_annotation.md
             - Audio Dialogue: annotation-types/multimedia/audio_dialogue.md
             - Video Annotation: annotation-types/multimedia/video_annotation.md
             - Tiered Annotation: annotation-types/multimedia/tiered_annotation.md
+            - Image Annotation Formats: annotation-types/multimedia/image_formats.md
+            - Media Ingest (TIFF, HEIC, RAW, video): annotation-types/multimedia/media_ingest.md
+            - Deep Zoom & Tiling: annotation-types/multimedia/deep_zoom.md
+            - Video Annotation Formats: annotation-types/multimedia/video_formats.md
             - Transcript Formats: annotation-types/multimedia/transcript_formats.md
+        - Spatial (3D):
+            - Point Cloud Annotation: annotation-types/spatial/point_cloud.md
+            - Calibration and 2D Verification: annotation-types/spatial/calibration.md
+            - Depth Maps: annotation-types/spatial/depth_maps.md
+        - Embodied:
+            - Episode Annotation: annotation-types/embodied/episodes.md
+            - Robot Dataset Formats: annotation-types/embodied/robot_formats.md
         - Measurement:
             - Visual Analog Scale: annotation-types/measurement/vas.md
             - Range Slider: annotation-types/measurement/range_slider.md
@@ -73,6 +88,7 @@ nav:
             - Card Sorting: annotation-types/structured/card_sort.md
     - Workflow Phases:
         - Multi-Phase Workflows: workflow/surveyflow.md
+        - Guidelines and Codebooks: workflow/annotation_guidelines.md
         - Training Phase: workflow/training_phase.md
         - Quality Control: workflow/quality_control.md
         - Annotation Navigation: workflow/annotation_navigation.md
@@ -94,6 +110,8 @@ nav:
         - Automation Rules: agent-evaluation/automation_rules.md
         - CI Evaluation: agent-evaluation/ci_evaluation.md
         - Judge Alignment: agent-evaluation/judge_alignment.md
+        - World-Model & Rollout Evaluation: agent-evaluation/world_model_eval.md
+        - VLM Grounding & Pointing: agent-evaluation/vlm_grounding.md
         - Semantic Curation: agent-evaluation/semantic_curation.md
         - Model Arena: agent-evaluation/model_arena.md
         - Trace Analytics & Alerts: agent-evaluation/trace_analytics.md
@@ -115,22 +133,36 @@ nav:
     - AI & Intelligence:
         - AI Support: ai-intelligence/ai_support.md
         - Visual AI Support: ai-intelligence/visual_ai_support.md
+        - The Model Zoo: ai-intelligence/model_zoo.md
+        - Annotation Critique: ai-intelligence/annotation_critique.md
         - Chat Support: ai-intelligence/chat_support.md
         - AI Integration Internals: ai-intelligence/ai_integration_internals.md
         - Option Highlighting: ai-intelligence/option_highlighting.md
         - Active Learning Guide: ai-intelligence/active_learning_guide.md
+        - Vision Active Learning: ai-intelligence/vision_active_learning.md
         - Active Learning Strategies: ai-intelligence/active_learning_strategies.md
         - ICL Labeling: ai-intelligence/icl_labeling.md
         - HuggingFace Models: ai-intelligence/huggingface_models.md
         - Judge Calibration: ai-intelligence/judge_calibration.md
+        - Reviewing Model Output: ai-intelligence/model_review.md
+        - AI Costs and Spend Caps: ai-intelligence/ai_costs.md
     - Advanced Features:
         - MACE: advanced/mace.md
         - Embedding Visualization: advanced/embedding_visualization.md
         - Survey Instruments: advanced/survey_instruments.md
         - Category-Based Assignment: advanced/category_assignment.md
         - Task Assignment: advanced/task_assignment.md
+        - Agreement Over Time: advanced/agreement_drift.md
+        - Presentation Order: advanced/presentation_order.md
+        - Near-Duplicate Detection: advanced/near_duplicates.md
         - Behavioral Tracking: advanced/behavioral_tracking.md
+        - Keystroke Logging: advanced/keystroke_logging.md
+        - Writing-Process Detection: advanced/writing_process_detection.md
+        - Keystroke Logging Ethics: advanced/keystroke_logging_ethics.md
+        - Annotation Telemetry: advanced/annotation_telemetry.md
         - Qualitative Data Analysis (QDA): advanced/qda.md
+        - Embeddings and the Corpus Map: advanced/embeddings.md
+        - Geometry Agreement: advanced/geometry_agreement.md
         - Codebook: advanced/codebook.md
         - Memos: advanced/memos.md
         - Cases: advanced/cases.md
@@ -159,18 +191,24 @@ nav:
         - Productivity: administration/productivity.md
     - Data & Export:
         - Export Formats: data-export/export_formats.md
+        - CV Format Matrix: data-export/format_matrix.md
+        - Single-Select Integrity: data-export/single-select-integrity.md
         - HuggingFace Export: data-export/huggingface_export.md
         - HuggingFace Datasets: data-export/datasets_integration.md
         - HuggingFace Spaces: data-export/huggingface_spaces.md
         - Potato on HuggingFace: data-export/potato_on_huggingface.md
         - Publishing Datasets: data-export/publishing_datasets.md
     - Tools:
+        - Import CLI: tools/import_cli.md
         - Preview CLI: tools/preview_cli.md
+        - MCP Server: tools/mcp_server.md
+        - Agent Instructions: tools/authoring-agents.md
         - Migration CLI: tools/migration_cli.md
         - Simulator: tools/simulator.md
         - Debugging Guide: tools/debugging_guide.md
     - Integrations:
         - Webhooks: integrations/webhooks.md
+        - ConvoKit: integrations/convokit.md
         - LangChain Integration: integrations/langchain_integration.md
         - Tracing SDK (potato_trace): integrations/tracing_sdk.md
     - Deployment:
@@ -184,13 +222,24 @@ nav:
         - Expert Annotators: deployment/expert_annotators.md
         - Longitudinal Studies: deployment/longitudinal-studies.md
         - MTurk Integration: deployment/mturk_integration.md
-        - Open Sourcing: deployment/open-sourcing.md
+        - Deploying a Task: deployment/one-command-deploy.md
+        - Your Own Machine: deployment/deploy-local.md
+        - Temporary Public URL: deployment/deploy-share.md
+        - Docker: deployment/docker.md
+        - DigitalOcean: deployment/deploy-digitalocean.md
+        - Render: deployment/deploy-render.md
+        - HuggingFace Spaces: deployment/deploy-huggingface.md
+        - Getting Annotations Back: deployment/deploy-pull.md
         - Reverse Proxy: deployment/reverse-proxy.md
+        - Air-Gapped Deployment: deployment/air_gap.md
         - Scaling: deployment/scaling.md
     - API Reference:
         - API Reference: api-reference/api_reference.md
         - Machine-Readable Specs: api-reference/machine_readable.md
     - Release Notes:
+        - v2.8.2: releasenotes/v2.8.2.md
+        - v2.8.1: releasenotes/v2.8.1.md
+        - v2.8.0: releasenotes/v2.8.0.md
         - v2.7.1: releasenotes/v2.7.1.md
         - v2.7.0: releasenotes/v2.7.0.md
         - v2.6.2: releasenotes/v2.6.2.md

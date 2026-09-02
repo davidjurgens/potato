@@ -1,7 +1,7 @@
 """
 Credential management for data sources.
 
-This module provides secure credential handling including:
+Secure credential handling including:
 - Environment variable substitution in configuration values
 - Support for .env files
 - Service account and API key management

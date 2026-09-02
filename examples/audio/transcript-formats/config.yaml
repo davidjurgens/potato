@@ -38,7 +38,7 @@ data_files:
   - data/transcripts.json
 
 output_annotation_dir: annotation_output/transcript-formats/
-output_annotation_format: json
+export_annotation_format: jsonl
 
 item_properties:
   id_key: id

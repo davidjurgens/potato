@@ -1,6 +1,6 @@
 # Annotation Filtering
 
-This guide covers how to filter data based on prior annotation decisions. This is useful for multi-phase annotation workflows where the output of one task feeds into another.
+Filtering the item pool by what annotators already decided, so the output of one annotation phase becomes the input to the next.
 
 ## Common Use Cases
 

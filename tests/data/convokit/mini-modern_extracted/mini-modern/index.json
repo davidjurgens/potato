@@ -1,0 +1,34 @@
+{
+ "utterances-index": {
+  "is_section_header": [
+   "<class 'bool'>"
+  ],
+  "toxicity": [
+   "<class 'float'>"
+  ],
+  "stance": [
+   "<class 'str'>"
+  ],
+  "parsed": [
+   "<class 'list'>"
+  ]
+ },
+ "speakers-index": {
+  "editor_since": [
+   "<class 'int'>"
+  ]
+ },
+ "conversations-index": {
+  "page_title": [
+   "<class 'str'>"
+  ],
+  "derailed": [
+   "<class 'bool'>"
+  ],
+  "split": [
+   "<class 'str'>"
+  ]
+ },
+ "overall-index": {},
+ "version": 3
+}

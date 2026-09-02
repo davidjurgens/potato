@@ -1,0 +1,109 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Annotating a robot demonstration.
+#
+# Two synchronized camera views above, the arm's own signals as lanes below,
+# and one timeline through all of it. The annotator marks what the robot was
+# doing and when, says whether it worked, and draws how well it was going.
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/embodied/lerobot-episode/config.yaml -p 8000
+#
+# Regenerate the episodes with:
+#   python examples/embodied/lerobot-episode/generate_episode.py
+#
+# The two episodes differ in one way that matters: the second one's gripper
+# closes on nothing. That is visible in the `gripper` and `wrist_force` lanes
+# well before it is obvious in the video -- which is the case dense time-series
+# annotation exists for, and why the lanes are next to the video rather than
+# behind a tab.
+#
+# The episodes are in Potato's own manifest format, which needs no extra
+# dependency. LeRobot v2 (pyarrow), RoboMimic/ALOHA HDF5 (h5py) and RLDS
+# (tensorflow_datasets) load through the same `source_field`.
+
+port: 8000
+annotation_task_name: "Robot episode review"
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+data_files:
+  - data/episodes.json
+
+item_properties:
+  id_key: id
+  text_key: note
+
+user_config:
+  allow_all_users: true
+
+annotation_schemes:
+  - annotation_type: episode_annotation
+    name: episode_review
+    description: "Mark the phases, judge the outcome, and draw the progress."
+    # The item field holding the path to the episode. Resolved under
+    # media_directory and read by /api/episode, so a ten-minute demonstration
+    # is not carried in the item JSON.
+    source_field: episode
+
+    # Which layers to collect. Each costs very different amounts of annotator
+    # time -- dense reward is minutes per episode, phases are seconds -- so a
+    # project usually wants a subset.
+    layers:
+      - phases
+      - outcome
+      - reward
+
+    # The phase taxonomy. These are manipulation phases; a navigation or
+    # locomotion episode needs an entirely different set, which is why this is
+    # a config value rather than a fixed list.
+    phases:
+      - name: reach
+        color: "#4ECDC4"
+        key_value: "1"
+      - name: grasp
+        color: "#FFD93D"
+        key_value: "2"
+      - name: transport
+        color: "#6C8AE4"
+        key_value: "3"
+      - name: place
+        color: "#95E1A3"
+        key_value: "4"
+      - name: retract
+        color: "#C9A0DC"
+        key_value: "5"
+
+    # Three outcomes, not two. "Partial" is the modal result in real robot data
+    # and forcing it into success or failure destroys the signal that makes the
+    # dataset worth annotating in the first place.
+    outcomes:
+      - success
+      - partial
+      - failure
+
+    failure_causes:
+      - missed grasp
+      - object slipped
+      - collision
+      - wrong object
+      - wrong placement
+      - timeout / stalled
+
+    # The dense progress-reward curve's range.
+    reward_range: [0.0, 1.0]
+
+    # Which series lanes to draw. Omit for the first `max_lanes`; a real arm
+    # has fourteen joints plus velocities, and twenty-eight lanes are each
+    # twelve pixels tall and none of them legible.
+    series_shown:
+      - gripper
+      - wrist_force
+      - shoulder_lift
+      - elbow
+
+  - annotation_type: text
+    name: notes
+    description: "Anything the phases and the outcome do not capture?"

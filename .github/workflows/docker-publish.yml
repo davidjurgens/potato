@@ -1,0 +1,204 @@
+name: Publish Docker image
+
+# Publishes the canonical Potato image to GitHub Container Registry. Every
+# `potato deploy` target pulls from here rather than pip-installing on the host,
+# where the numpy/pandas/scipy/scikit-learn build is an out-of-memory kill on a
+# 1 GB VM and minutes of wall clock on a 2 GB one.
+#
+# Tags:
+#   latest, <version>, sha-<short>   core dependencies only  (~700 MB)
+#   latest-all, <version>-all        plus the `all` extras   (~1.5 GB)
+#
+# <version> comes from setup.py, so cutting a release tags the image with it
+# automatically. A tag push builds; a branch push to master builds `latest`; a
+# pull request builds without pushing, so a broken Dockerfile fails in review
+# rather than after merge.
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+    paths:
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - '.dockerignore'
+      - 'setup.py'
+      - 'MANIFEST.in'
+      - 'potato/**'
+      - '.github/workflows/docker-publish.yml'
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - '.dockerignore'
+      - 'setup.py'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - extras: ''
+            suffix: ''
+          - extras: 'all'
+            suffix: '-all'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from setup.py
+        id: version
+        run: |
+          version=$(python -c "import re,pathlib; \
+            print(re.search(r\"version='([^']+)'\", \
+            pathlib.Path('setup.py').read_text()).group(1))")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Building potato ${version}"
+
+      # arm64 matters: Apple Silicon laptops are the common `deploy up
+      # --provider local` host, and emulating amd64 there is unusably slow.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
+            suffix=${{ matrix.suffix }},onlatest=true
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+
+      # Built for the runner's own architecture and loaded into its daemon, not
+      # pushed. buildx cannot load a multi-platform image, and the smoke test
+      # needs something it can actually run — so amd64 is what gets exercised.
+      # arm64 exists for Apple Silicon laptops; every deploy target is amd64.
+      #
+      # The layers land in the gha cache, so the push step below rebuilds
+      # nothing for amd64 and only compiles arm64.
+      - name: Build for testing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          build-args: |
+            POTATO_EXTRAS=${{ matrix.extras }}
+          load: true
+          tags: potato-smoke:candidate
+          cache-from: type=gha,scope=potato${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=potato${{ matrix.suffix }}
+
+      # An image that cannot serve a task is worse than no image, because
+      # `deploy up` pulls it and fails on the host. This runs before the push,
+      # so a broken build never reaches the tag — and it runs on pull requests
+      # too, where nothing is pushed at all.
+      - name: Smoke test the built image
+        run: |
+          set -euo pipefail
+          tag=potato-smoke:candidate
+
+          # A copy, because the server writes into the project directory and the
+          # checkout belongs to the runner account, not to uid 1000. Handing the
+          # directory over is what the DigitalOcean cloud-init does; the
+          # alternative a laptop user takes is --user "$(id -u):$(id -g)".
+          project=/tmp/potato-smoke-project
+          rm -rf "$project"
+          cp -r examples/classification/single-choice "$project"
+          sudo chown -R 1000:1000 "$project"
+
+          docker run -d --name potato-smoke -p 8000:7860 \
+            -v "$project:/app" \
+            "$tag"
+
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then
+              echo "healthy after ${i}s"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "never became healthy; container logs:" >&2
+              docker logs potato-smoke >&2
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # /health only proves the process is up. Ask for the login page too,
+          # so a missing template or static asset fails here.
+          curl -fsS http://127.0.0.1:8000/ | grep -qi potato
+
+          # Both checks below expect the container to refuse and exit non-zero,
+          # so their output is captured rather than piped into grep: under
+          # `set -o pipefail` a pipeline reports the failing `docker run` even
+          # when grep matched, which reads as "the guard did not fire" for a
+          # guard that fired correctly.
+
+          # The workers guard is a data-integrity control; assert it holds in
+          # the published image rather than trusting the file on disk.
+          guard=$(docker run --rm -e GUNICORN_WORKERS=4 \
+                    -v "$project:/app" "$tag" 2>&1 || true)
+          if echo "$guard" | grep -q "per-process"; then
+            echo "multi-worker guard is active"
+          else
+            echo "multi-worker guard did not fire" >&2
+            echo "$guard" | tail -20 >&2
+            exit 1
+          fi
+
+          # An unwritable /app is the most likely first failure for anyone
+          # mounting a directory they own, so the diagnosis has to survive in
+          # the published image. Without this the symptom is a PermissionError
+          # thirty frames into a gunicorn traceback.
+          readonly_project=/tmp/potato-smoke-readonly
+          rm -rf "$readonly_project"
+          cp -r examples/classification/single-choice "$readonly_project"
+          sudo chown -R 0:0 "$readonly_project"
+          refusal=$(docker run --rm -v "$readonly_project:/app" "$tag" 2>&1 || true)
+          if echo "$refusal" | grep -q "not writable by uid"; then
+            echo "unwritable-mount diagnosis is intact"
+          else
+            echo "unwritable /app did not produce an actionable error" >&2
+            echo "$refusal" | tail -20 >&2
+            exit 1
+          fi
+
+          docker rm -f potato-smoke
+
+      # Only now, with the image proven to boot, serve and refuse correctly.
+      # amd64 comes from the cache the test build populated; arm64 is compiled
+      # here. A pull request stops short of this and pushes nothing.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            POTATO_EXTRAS=${{ matrix.extras }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=potato${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=potato${{ matrix.suffix }}

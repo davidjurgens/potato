@@ -10,6 +10,9 @@
 
     var config = window.ADJ_CONFIG || {};
     var schemes = window.ANNOTATION_SCHEMES || [];
+    //: Image behind the current item, for the geometry overlay in the
+    //: adjudication forms. Empty for non-image items.
+    var currentImageUrl = '';
     var queue = [];
     var currentItemId = null;
     var currentQueueIndex = -1;
@@ -213,6 +216,12 @@
         var item = data.item;
         var itemText = data.item_text || '';
         var itemData = data.item_data || {};
+
+        // The image behind any geometry annotation. For image projects the
+        // instance text IS the image URL (item_properties.text_key points at
+        // the image field), with the raw item as a fallback for projects that
+        // display something else as text.
+        currentImageUrl = findImageUrl(itemText, itemData);
         var decision = data.decision;
 
         // Show item view, hide empty state
@@ -412,6 +421,20 @@
     /**
      * Render annotator response cards and decision forms for each schema
      */
+    /** Best guess at the item's image URL, or '' if it has none. */
+    function findImageUrl(itemText, itemData) {
+        var looksLikeImage = function (v) {
+            return typeof v === 'string' &&
+                /^(https?:\/\/|\/)[^\s]+\.(jpe?g|png|gif|webp|bmp|svg|tiff?)(\?|$)/i.test(v);
+        };
+        if (looksLikeImage(itemText)) return itemText;
+        var keys = ['image_url', 'image', 'img_url', 'url', 'file_name', 'image_path'];
+        for (var i = 0; i < keys.length; i++) {
+            if (looksLikeImage(itemData[keys[i]])) return itemData[keys[i]];
+        }
+        return '';
+    }
+
     function renderResponsesAndForms(item) {
         var responsesContainer = document.getElementById('adj-responses-container');
         var decisionsContainer = document.getElementById('adj-decision-forms');
@@ -545,7 +568,7 @@
             // Decision form
             var formHtml = '<div class="adj-decision-schema">';
             formHtml += '<div class="adj-decision-schema-name">' + AdjudicationForms.escapeHtml(schemaName) + '</div>';
-            formHtml += AdjudicationForms.renderForm(schema, item.annotations, item.behavioral_data, config, item.span_annotations);
+            formHtml += AdjudicationForms.renderForm(schema, item.annotations, item.behavioral_data, config, item.span_annotations, currentImageUrl);
             formHtml += '</div>';
 
             decisionsContainer.innerHTML += formHtml;

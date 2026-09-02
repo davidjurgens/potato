@@ -1,4 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+/* Outfit is vendored under vendor/outfit/ rather than imported from Google:
+ * an @import is invisible to the template's asset guard, so this one
+ * survived the air-gap work, and it sent every annotator's IP to a third
+ * party on every page load. */
+@import url('vendor/outfit/outfit.css');
 
 :root {
   /* Typography */
@@ -9,6 +13,13 @@
   --text-xs: 0.75rem;     /* 12px — badges, fine print */
   --text-sm: 0.8125rem;   /* 13px — help text, captions */
   --text-base: 1rem;      /* 16px — body, labels, UI text */
+  /* 14px — dense expert chrome: annotation toolbars, timeline transports,
+     slab captions. Added because the gap between 13px and 16px was being
+     filled ad hoc: 0.85 / 0.875 / 0.88 / 0.9 / 0.92 / 0.95rem and a bare 14px
+     all appear across the stylesheets, ~170 declarations of the same
+     intention at seven different sizes. New dense surfaces use this; the
+     existing call sites are a separate sweep. */
+  --text-dense: 0.875rem;
   --text-md: 1.0625rem;   /* 17px — schema titles */
   --text-lg: 1.1875rem;   /* 19px — instance text to annotate */
   --text-xl: 1.25rem;     /* 20px — page headings */
@@ -338,10 +349,36 @@ body {
   white-space: normal;
   margin-top: 0.5rem;
   border: 1px solid #e5e7eb;
+  /* A per-label rationale set runs to ~700px, and the panel is absolutely
+     positioned inside `.shadcn-card`, which sets `overflow: hidden` to keep the
+     media canvas inside its rounded corners. Unbounded, the panel was simply
+     sliced off mid-sentence at the card edge. Bounding it here keeps it a
+     self-contained, scrollable component instead of relying on the card to
+     clip it, without touching the card's own overflow. */
+  max-height: 22rem;
+  overflow-y: auto;
 }
 
 .tooltip.active {
   display: block;
+  /* Bootstrap ships `.tooltip { ... opacity: 0 }` for its own JS tooltips, which
+     it fades in by adding `.show`. Potato's AI assistant panels reuse the class
+     name `.tooltip` and toggle `.active` instead, and never restored the
+     opacity — so hint, keyword and rationale panels opened, laid out, filled
+     with model output, and painted nothing at all. `.tooltip.active` outranks
+     Bootstrap's single-class rule, so this is where it has to be set. */
+  opacity: 1;
+}
+
+/* The card and its content pane both clip (`overflow: hidden` / `overflow-y:
+   auto`) to keep the media canvas inside the rounded corners and to let long
+   forms scroll. An AI panel is absolutely positioned *inside* that context, so
+   a rationale set taller than the remaining card was sliced off mid-sentence —
+   the model's answer was on the page and unreadable. Lift the clip only while a
+   panel is actually open, so the normal scrolling behaviour is untouched. */
+.shadcn-card:has(.tooltip.active),
+.shadcn-card-content:has(.tooltip.active) {
+  overflow: visible;
 }
 
 /* Close button for tooltip */
@@ -1137,11 +1174,27 @@ input[type="range"]::-moz-range-thumb {
   padding: var(--space-sm) var(--space-md);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* Was `center`. As a column flex container, that made every child shrink to
+   * its content on the cross axis — including the <fieldset>, which then became
+   * ~200px wide inside an 860px box. `.shadcn-span-options` is a
+   * `repeat(auto-fill, minmax(180px, 1fr))` grid resolved against that fieldset,
+   * so it only ever got ONE column: five labels stacked in a narrow centred
+   * strip with two thirds of the box empty beside them. */
+  align-items: stretch;
   width: fit-content;
   max-width: 100%;
   font-family: var(--font-sans);
   position: relative;
+}
+
+/* The fieldset is the grid's containing block, so it has to carry the box's
+ * width or the label grid cannot use it. The `[schema]` in the selector is not
+ * decoration: `fieldset[schema] { width: fit-content }` further down this file
+ * has the same specificity as a bare `.shadcn-span-container > fieldset` and
+ * comes later, so the plain form of this rule loses. */
+.shadcn-span-container > fieldset[schema] {
+  width: 100%;
+  min-width: 0;
 }
 
 .shadcn-span-title {
@@ -2226,6 +2279,133 @@ fieldset[schema] {
   .dialogue-speaker.speaker-color-3 { color: #fbbf24; }
   .dialogue-speaker.speaker-color-4 { color: #a78bfa; }
   .dialogue-speaker.speaker-color-5 { color: #22d3ee; }
+}
+
+/* -----------------------------------------------------------------------
+   THREADED DIALOGUE: reply indentation, timestamps, per-turn metadata chips
+
+   Every decoration below is drawn with ::before/::after `content` or with
+   padding driven by a custom property. None of it introduces a text node.
+
+   That is a hard requirement, not a stylistic preference: span offsets are
+   measured against the dialogue container's textContent, which the server
+   reproduces in reconstruct_dialogue_dom_text() (displays/base.py) to slice
+   the annotated substring. Pseudo-element content is not part of textContent,
+   so this chrome is invisible to that calculation and every existing dialogue
+   span task keeps byte-identical offsets. Do not convert any of these to real
+   elements containing text.
+   ----------------------------------------------------------------------- */
+
+.dialogue-display-content.indent-replies .dialogue-turn {
+  --turn-depth: 0;
+  margin-left: calc(var(--turn-depth) * 22px);
+  position: relative;
+}
+
+/* Vertical thread guide showing which turns share a parent. */
+.dialogue-display-content.indent-replies.show-reply-lines
+  .dialogue-turn[data-depth]:not([data-depth="0"])::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border, #e2e8f0);
+  border-radius: 1px;
+}
+
+/* Depth badge, so nesting stays legible past the indent cap. */
+.dialogue-display-content.indent-replies
+  .dialogue-turn[data-depth]:not([data-depth="0"])::after {
+  content: "↳ depth " attr(data-depth);
+  position: absolute;
+  right: 8px;
+  top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground, #94a3b8);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+/* The focus turn of an utterance-level item: everything else is context. */
+.dialogue-display-content .dialogue-turn[data-focus="true"] {
+  outline: 2px solid var(--primary, #6366f1);
+  outline-offset: 2px;
+}
+
+.dialogue-display-content .dialogue-turn:not([data-focus="true"]) {
+  /* Context turns read as secondary without becoming unreadable. */
+  opacity: 1;
+}
+
+.dialogue-display-content:has(.dialogue-turn[data-focus="true"])
+  .dialogue-turn:not([data-focus="true"]) {
+  opacity: 0.72;
+}
+
+/* Timestamp and per-turn metadata, rendered as a single chrome line. */
+.dialogue-display-content.show-timestamps .dialogue-turn[data-timestamp],
+.dialogue-display-content.show-meta-chips .dialogue-turn[data-meta-chips] {
+  padding-top: calc(var(--space-md, 12px) + 14px);
+}
+
+/* One absolutely-positioned chrome strip per turn carrying both signals.
+   The attributes live on .dialogue-text because attr() can only read the
+   attributes of the element its pseudo-element belongs to. */
+.dialogue-display-content.show-timestamps .dialogue-turn[data-timestamp] > .dialogue-text::before,
+.dialogue-display-content.show-meta-chips .dialogue-turn[data-meta-chips] > .dialogue-text::before {
+  position: absolute;
+  top: 6px;
+  left: var(--space-lg, 16px);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 90px);
+  pointer-events: none;
+}
+
+.dialogue-display-content.show-timestamps
+  .dialogue-turn[data-timestamp] > .dialogue-text::before {
+  content: attr(data-turn-timestamp);
+}
+
+.dialogue-display-content.show-meta-chips
+  .dialogue-turn[data-meta-chips] > .dialogue-text::before {
+  content: attr(data-turn-meta-chips);
+}
+
+.dialogue-display-content.show-timestamps.show-meta-chips
+  .dialogue-turn[data-timestamp][data-meta-chips] > .dialogue-text::before {
+  content: attr(data-turn-timestamp) "   ·   " attr(data-turn-meta-chips);
+}
+
+/* Highlight the parent of the hovered turn (wired in dialogue-threading.js). */
+.dialogue-display-content .dialogue-turn.thread-parent-highlight {
+  box-shadow: inset 3px 0 0 var(--primary, #6366f1);
+  background-color: rgba(99, 102, 241, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  .dialogue-display-content.indent-replies.show-reply-lines
+    .dialogue-turn[data-depth]:not([data-depth="0"])::before {
+    background: #334155;
+  }
+
+  .dialogue-display-content .dialogue-turn.thread-parent-highlight {
+    background-color: rgba(129, 140, 248, 0.12);
+  }
+}
+
+@media (max-width: 640px) {
+  /* Deep threads must not push text off a narrow screen. */
+  .dialogue-display-content.indent-replies .dialogue-turn {
+    margin-left: calc(min(var(--turn-depth), 3) * 10px);
+  }
 }
 
 /* Pairwise comparison layout */
@@ -3958,7 +4138,12 @@ body > .container-fluid {
   color: var(--primary-color);
 }
 
-.potato-navbar .adjudicate-btn {
+/* The Codebook link (annotation_codebook_url) is a sibling of these buttons in
+   .navbar-end and had no rule of its own, so it fell back to the default anchor
+   colour: link-blue on the purple navbar, effectively unreadable. It is the same
+   kind of control, so it gets the same treatment. */
+.potato-navbar .adjudicate-btn,
+.potato-navbar .codebook-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -3973,7 +4158,8 @@ body > .container-fluid {
   transition: background 0.15s ease;
 }
 
-.potato-navbar .adjudicate-btn:hover {
+.potato-navbar .adjudicate-btn:hover,
+.potato-navbar .codebook-btn:hover {
   background: rgba(255,255,255,0.25);
   color: white;
 }
@@ -6263,10 +6449,36 @@ body > .container-fluid {
   transition: box-shadow 0.15s ease;
 }
 
-/* Annotation form card — clean presentation, no uniform border */
-#annotation-forms > .annotation_schema > .annotation-form {
-  border-left: none;
-  padding-left: 0;
+/* NOTE: there used to be a blanket reset here —
+ *
+ *   #annotation-forms > .annotation_schema > .annotation-form {
+ *     border-left: none; padding-left: 0; }
+ *
+ * — described as "clean presentation, no uniform border". Nothing gives a plain
+ * .annotation-form a left border or left padding to remove, so the rule had no
+ * upside; what it did have was an id in its selector, which let it outrank every
+ * schema container's own card. `.event-annotation-container`,
+ * `.audio-annotation-container`, `.span-link-container`, `.mde-container` and the
+ * `.shadcn-*-container` family all declare a border and shorthand padding, and
+ * this stripped the LEFT side of both, leaving panels bordered on three sides
+ * with their content flush against the missing edge. It also erased the left
+ * edge of the red `.annotation-form.required-unfilled` outline, so the
+ * "please answer this" affordance was visibly broken on every schema. */
+
+/* Event annotation is read together with the span schema it references — the
+ * labels create the entities, the panel wires them into events. Left to the
+ * default flow the label box takes the full row (see .shadcn-span-container in
+ * the full-width list) and the event panel lands underneath it in a narrow
+ * column, so the two halves of one task are never on screen together. Pair them
+ * into two columns instead; flex-wrap still stacks them on a narrow viewport. */
+#annotation-forms > .annotation_schema:has(.event-annotation-container)
+  > .shadcn-span-container,
+#annotation-forms > .annotation_schema:has(.event-annotation-container)
+  > .event-annotation-container {
+  flex: 1 1 340px;
+  width: auto;
+  max-width: none;
+  min-width: 0;
 }
 
 /* Annotation schema description text (below legend) — styled as help text */
@@ -6571,3 +6783,94 @@ body > .container-fluid {
   color: hsl(0 84% 50%);
 }
 
+
+/* ---------------------------------------------------------------------------
+   Training phase
+   Ported from the standalone training.html, which used to be a separate page.
+   Training now renders through base_template_v2 like every other phase, so its
+   chrome lives here rather than in a template-local <style> block.
+   Feedback classes are keyed by feedback_type: success | error | warning | info.
+   --------------------------------------------------------------------------- */
+.training-progress {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    color: var(--text-muted, #6c757d);
+}
+
+.training-progress-label {
+    font-weight: 600;
+}
+
+.feedback-alert {
+    border-radius: 0.5rem;
+    border: none;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.feedback-success {
+    background-color: #d4edda;
+    color: #155724;
+    border-left: 4px solid #28a745;
+}
+
+.feedback-error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-left: 4px solid #dc3545;
+}
+
+.feedback-warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border-left: 4px solid #ffc107;
+}
+
+.feedback-info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border-left: 4px solid #17a2b8;
+}
+
+/* ---------------------------------------------------------------------------
+   Keystroke logging disclosure notice
+   Rendered under the navbar on every page that can hold a free-text field,
+   whenever keystroke_logging.disclose_to_annotators is on. Deliberately not
+   dismissible: it is a standing statement about what the task records, not a
+   one-time alert. Kept visually quiet so it reads as a status line rather than
+   a warning -- an alarming banner would bias how people write, which is the
+   very behaviour being measured.
+--------------------------------------------------------------------------- */
+.keystroke-disclosure {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 1rem;
+    background-color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+.keystroke-disclosure-icon {
+    flex: 0 0 auto;
+    opacity: 0.75;
+}
+
+.keystroke-disclosure-text {
+    flex: 1 1 auto;
+}
+
+/* Two collections can be on at once -- typing dynamics on free-text answers
+   and drawing dynamics on the canvas. Each is a separate opt-in and each keeps
+   its own line, because merging them would let one notice imply consent to the
+   other. But stacked with a full border between them they read as two
+   competing banners, so only the last one carries the separating rule and the
+   pair reads as one statement about what the task records. */
+.keystroke-disclosure + .keystroke-disclosure {
+    border-top: none;
+    padding-top: 0;
+}

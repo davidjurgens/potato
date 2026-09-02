@@ -84,6 +84,7 @@ def _rows_from_item_state(config: Dict[str, Any]):
     text_key = (config.get("item_properties") or {}).get("text_key", "text")
     cap = search_settings(config)["max_instances"]
     ism = get_item_state_manager()
+    skipped = 0
     for i, iid in enumerate(ism.get_instance_ids()):
         if i >= cap:
             logger.warning(
@@ -91,10 +92,37 @@ def _rows_from_item_state(config: Dict[str, Any]):
             break
         data = ism.get_item(iid).get_data()
         if isinstance(data, dict):
-            text = data.get(text_key) or ism.get_item(iid).get_text()
+            text = data.get(text_key)
+            if not isinstance(text, str) or not text.strip():
+                text = _searchable_text(data)
         else:
             text = str(data)
-        yield str(iid), text if isinstance(text, str) else str(text)
+        if not isinstance(text, str) or not text.strip():
+            # Better to have nothing to find than to find ids. `get_text()`
+            # returns an item's first string value, so a media corpus used to
+            # index "img_01", "img_02" — a full-text index of its own filenames.
+            skipped += 1
+            continue
+        yield str(iid), text
+    if skipped:
+        logger.info(
+            "search: %d instance(s) had no indexable text (media-only items); "
+            "name a caption field with item_properties.text_key to include them",
+            skipped)
+
+
+#: Fields worth indexing when the configured text_key is absent — a caption or
+#: a transcript is real text about the item; a file path is not.
+_TEXTUAL_FALLBACKS = ("caption", "description", "transcript", "prompt",
+                      "question", "title", "content", "message")
+
+
+def _searchable_text(data: Dict[str, Any]) -> Optional[str]:
+    for key in _TEXTUAL_FALLBACKS:
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
 
 
 def init_search_from_item_state(

@@ -84,7 +84,7 @@ live_agent:
     height: 720
     width: 1280
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 persist_sessions: false
 port: 9757
 random_seed: 1234

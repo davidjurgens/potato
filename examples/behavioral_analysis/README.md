@@ -1,10 +1,10 @@
 # Behavioral Data Analysis Examples
 
-This directory contains examples and tools for analyzing behavioral tracking data collected by Potato's interaction tracking system.
+Tools for analyzing the behavioral tracking data Potato's interaction tracker collects.
 
 ## Contents
 
-- **`analyze_behavioral_data.ipynb`**: Jupyter notebook with comprehensive analysis examples
+- **`analyze_behavioral_data.ipynb`**: Jupyter notebook with worked analyses
 - **`example_behavioral_data.json`**: Sample behavioral data for testing and learning
 
 ## Quick Start
@@ -70,6 +70,6 @@ The notebook demonstrates:
 
 ## See Also
 
-- [Behavioral Tracking Documentation](../../docs/behavioral_tracking.md)
-- [Admin Dashboard](../../docs/admin_dashboard.md) - Real-time monitoring
-- [Quality Control](../../docs/quality_control.md) - Automated quality checks
+- [Behavioral Tracking Documentation](../../docs/advanced/behavioral_tracking.md)
+- [Admin Dashboard](../../docs/administration/admin_dashboard.md) - Real-time monitoring
+- [Quality Control](../../docs/workflow/quality_control.md) - Automated quality checks

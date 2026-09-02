@@ -19,6 +19,15 @@ class VisualAIAssistantManager {
         this.annotationType = options.annotationType;
         this.annotationId = options.annotationId;
         this.annotationManager = options.annotationManager;
+        // Review-only mode: keep the suggestion controls, drop the buttons
+        // that call the server.
+        //
+        // Text prompting runs its model in the BROWSER, so a project can have
+        // suggestions to review with no AI endpoint configured anywhere.
+        // Rendering Detect / Auto / Hint there gives the annotator three
+        // buttons whose only possible outcome is an error, which is worse than
+        // not offering them.
+        this.serverAssists = options.serverAssists !== false;
 
         // Suggestion storage
         this.suggestions = [];
@@ -66,7 +75,7 @@ class VisualAIAssistantManager {
         // Create AI toolbar
         this.toolbar = document.createElement('div');
         this.toolbar.className = 'ai-toolbar';
-        this.toolbar.innerHTML = `
+        const serverButtons = this.serverAssists ? `
             <div class="ai-toolbar-group">
                 <span class="ai-toolbar-label">AI Assist:</span>
                 <button type="button" class="ai-btn" data-action="detect" title="Detect objects">
@@ -78,7 +87,9 @@ class VisualAIAssistantManager {
                 <button type="button" class="ai-btn" data-action="hint" title="Get a hint">
                     <span class="ai-btn-icon">💡</span> Hint
                 </button>
-            </div>
+            </div>` : '';
+        this.toolbar.innerHTML = `
+            ${serverButtons}
             <div class="ai-suggestion-controls" style="display: none;">
                 <span class="suggestion-count">0 suggestions</span>
                 <button type="button" class="ai-btn ai-btn-accept" data-action="accept-all" title="Accept all suggestions">
@@ -344,6 +355,12 @@ class VisualAIAssistantManager {
                 case 'keyframe_detection':
                     this.requestSuggestion(action);
                     break;
+                case 'critique':
+                    // Not routed through requestSuggestion: critique POSTs the
+                    // annotations that exist rather than GETting new ones, and
+                    // its result is a review queue rather than canvas overlays.
+                    this.requestCritique();
+                    break;
                 case 'accept-all':
                     this.acceptAllSuggestions();
                     break;
@@ -402,6 +419,32 @@ class VisualAIAssistantManager {
             this._showError(error.message);
         } finally {
             this.isLoading = false;
+            this._showLoading(false);
+        }
+    }
+
+    /**
+     * Ask a vision model to review the annotations already on the canvas.
+     *
+     * Only meaningful for images: it crops each region, so there is nothing to
+     * crop on a video timeline until tubelet critique exists.
+     */
+    async requestCritique() {
+        if (this.annotationType !== 'image_annotation') {
+            this._showError('Review is only available for image annotation.');
+            return;
+        }
+        if (typeof AnnotationCritiqueReview === 'undefined') {
+            this._showError('The review panel did not load. Reload the page.');
+            return;
+        }
+        if (!this.critiqueReview) {
+            this.critiqueReview = new AnnotationCritiqueReview(this.annotationManager);
+        }
+        this._showLoading(true);
+        try {
+            await this.critiqueReview.run();
+        } finally {
             this._showLoading(false);
         }
     }
@@ -473,6 +516,13 @@ class VisualAIAssistantManager {
 
         detections.forEach((detection, index) => {
             const suggestionId = `suggestion_${Date.now()}_${index}`;
+            // Reported at render, not at request: the latency that matters is
+            // how long the annotator looked at the suggestion, and the model's
+            // own inference time is not part of that.
+            this._telemetry('ai_suggest', {
+                shape: 'bbox',
+                meta: { sid: suggestionId, src: 'detection' },
+            });
 
             // Denormalize bbox coordinates
             const bbox = detection.bbox;
@@ -695,6 +745,11 @@ class VisualAIAssistantManager {
         const suggestion = this.suggestions.find(s => s.id === suggestionId);
         if (!suggestion) return;
 
+        this._telemetry('ai_accept', {
+            shape: suggestion.type === 'detection' ? 'bbox' : 'unknown',
+            meta: { sid: suggestionId },
+        });
+
         if (suggestion.type === 'detection') {
             this._convertDetectionToAnnotation(suggestion);
         } else if (suggestion.type === 'segment') {
@@ -713,9 +768,30 @@ class VisualAIAssistantManager {
      * @param {string} suggestionId - ID of the suggestion to reject
      */
     rejectSuggestion(suggestionId) {
+        // Only report a rejection of something that was actually offered, so
+        // clearSuggestions() on an empty list cannot deflate the accept rate.
+        if (this.suggestions.some(s => s.id === suggestionId)) {
+            this._telemetry('ai_reject', { meta: { sid: suggestionId } });
+        }
         this._removeSuggestionVisual(suggestionId);
         this.suggestions = this.suggestions.filter(s => s.id !== suggestionId);
         this._updateSuggestionControls();
+    }
+
+    /**
+     * Report one interaction to the telemetry tracker, if it is loaded.
+     *
+     * Scoped to the annotation manager's schema so the suggestion and the shape
+     * it becomes land in the same session; an assistant with no manager
+     * attached has nothing to attribute the event to and reports nothing.
+     */
+    _telemetry(action, detail) {
+        if (typeof window.recordAnnotationTelemetry !== 'function') return;
+        const schema = this.annotationManager
+            && this.annotationManager.config
+            && this.annotationManager.config.schemaName;
+        if (!schema) return;
+        window.recordAnnotationTelemetry(schema, action, detail || {});
     }
 
     /**
@@ -755,17 +831,29 @@ class VisualAIAssistantManager {
             console.log('[VisualAI] Using modified detection data:', detection);
         }
 
-        this.annotationManager.setLabel(detection.label, this._getLabelColor(detection.label));
+        const color = this._getLabelColor(detection.label);
+        this.annotationManager.setLabel(detection.label, color);
 
-        // Create annotation from bbox
-        this.annotationManager.addAnnotation({
+        // `detection.bbox` is already normalized to [0, 1]: the server returns
+        // normalized boxes (see VisualDetectionFormat) and the 'modified'
+        // handler in _renderDetections re-normalizes after any user edit. The
+        // client contract wants that under `coordinates`, not `bbox` — passing
+        // `bbox` was one of the two reasons accepting a detection did nothing.
+        const added = this.annotationManager.addAnnotation({
             type: 'bbox',
             label: detection.label,
-            bbox: detection.bbox,
-            confidence: detection.confidence,
-            source: 'ai_suggestion',
-            modified: detection.modified || false
+            color: color,
+            coordinates: {
+                x: detection.bbox.x,
+                y: detection.bbox.y,
+                width: detection.bbox.width,
+                height: detection.bbox.height
+            }
         });
+
+        if (!added) {
+            console.warn('[VisualAI] Detection was rejected by addAnnotation:', detection);
+        }
     }
 
     /**

@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Polygon and mask tracking across video frames.
+# Run from repo root:
+#   python potato/flask_server.py start examples/video/polygon-tracking/config.yaml -p 8000
+
+annotation_task_name: "Polygon Tracking"
+
+data_files:
+  - data/clips.json
+
+item_properties:
+  id_key: id
+  text_key: video_url
+
+annotation_schemes:
+  - annotation_type: video_annotation
+    name: shape_tracking
+    description: >-
+      Track an object by tracing it at a few keyframes. Boxes and polygons are
+      interpolated between keyframes; masks are held from the nearest one and
+      marked, so a frame nobody drew never looks like one somebody did.
+    source_field: video_url
+    mode: tracking
+    labels:
+      - name: subject
+        color: "#FF6B6B"
+      - name: background_object
+        color: "#4ECDC4"
+    tracking_options:
+      interpolation: linear
+      auto_advance_frames: 5
+    video_fps: 30
+    show_timecode: true
+    frame_stepping: true
+
+user_config:
+  allow_all_users: true
+
+task_dir: .
+media_directory: media
+output_annotation_dir: annotation_output
+
+port: 8000

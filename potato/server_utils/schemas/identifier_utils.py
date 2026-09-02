@@ -1,7 +1,7 @@
 """
 Identifier Utilities for Schema Generation
 
-This module provides centralized functions for generating consistent identifiers
+Centralized functions for generating consistent identifiers
 and validating schema configurations across all annotation schema types.
 """
 
@@ -175,13 +175,25 @@ def humanize_label(text: str) -> str:
 def display_label_text(label_data: Any, annotation_scheme: dict) -> str:
     """Resolve the *visible* text for a label.
 
-    Precedence: explicit ``displayed_label`` on a dict label  >
-    humanized name (default, when ``humanize_labels`` is not disabled) >
-    raw name. Stored value is unaffected by this function.
+    Precedence: ``displayed_label`` > ``text`` > ``label`` > humanized name
+    (default, when ``humanize_labels`` is not disabled) > raw name. The
+    stored value is unaffected by this function.
+
+    Three spellings because three already existed in the wild and only the
+    first was read:
+
+    * ``displayed_label`` -- what the code has always honored.
+    * ``text`` -- what ``docs/configuration/config_reference.md`` documents
+      as "Display text shown to annotators". A config following the docs
+      verbatim rendered the humanized *name* instead.
+    * ``label`` -- what the bundled survey instruments use, in 1688 options
+      across 30 files. Annotators saw "less_hs" and "not_strong_dem" rather
+      than "Less than high school" and "Not very strong Democrat".
     """
     if isinstance(label_data, Mapping):
-        if label_data.get("displayed_label"):
-            return str(label_data["displayed_label"])
+        for display_key in ("displayed_label", "text", "label"):
+            if label_data.get(display_key):
+                return str(label_data[display_key])
         name = label_data.get("name", "")
     else:
         name = label_data

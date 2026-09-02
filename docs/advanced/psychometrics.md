@@ -1,7 +1,7 @@
 # Psychometrics: Labels with Error Bars
 
-Potato can treat your annotation study as what it actually is — a measurement
-instrument. The psychometrics layer fits an item response theory (IRT) model
+An annotation study is a measurement instrument, and Potato can score it as
+one. The psychometrics layer fits an item response theory (IRT) model
 **live**, as annotations stream in, jointly estimating:
 
 - the **true label of every item as a probability** (not a raw vote count),

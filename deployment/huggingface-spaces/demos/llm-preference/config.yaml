@@ -18,7 +18,7 @@ list_as_text:
 
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 annotation_instructions: |
   <h4>Task: LLM Response Comparison</h4>

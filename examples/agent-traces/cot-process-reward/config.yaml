@@ -25,7 +25,7 @@ item_properties:
 
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Split the long `reasoning` string into a list of steps written to `cot_steps`.
 # `strategy: auto` tries markers -> numbered -> blank lines -> sentences.

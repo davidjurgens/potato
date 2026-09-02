@@ -1,9 +1,8 @@
 """
 Prompt Optimizer for Solo Mode
 
-This module implements DSPy-style automatic prompt optimization.
-It uses labeled examples to iteratively improve prompts for better
-accuracy while maintaining brevity.
+DSPy-style automatic prompt optimization: uses labeled examples to improve a
+prompt's accuracy without letting it grow.
 """
 
 import json

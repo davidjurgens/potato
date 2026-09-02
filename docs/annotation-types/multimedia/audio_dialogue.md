@@ -112,8 +112,11 @@ Timestamps may be numbers (seconds) or `HH:MM:SS[.,]mmm` strings. A stable
 used to persist per-turn ratings and speaker assignments, so keep it stable
 across re-ingests.
 
-> ASR and diarization (Whisper, WhisperX, pyannote) run **upstream** of Potato.
-> Potato ingests their output; it does not transcribe or diarize.
+> Transcripts usually arrive from upstream ASR — Whisper, WhisperX, pyannote, or
+> a cloud API — and Potato ingests their output. It can also produce them
+> itself: `potato transcripts --transcribe --diarize` runs Whisper and speaker
+> clustering locally, behind the optional `potato-annotation[transcribe]` extra.
+> See [Working with Transcripts](../../guides/working_with_transcripts.md).
 
 ## Configuration
 

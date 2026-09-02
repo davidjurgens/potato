@@ -72,7 +72,6 @@ def test_config(test_data_dir, test_data_file):
         "task_dir": os.path.abspath(test_data_dir),
         "data_files": [os.path.basename(test_data_file)],
         "output_annotation_dir": "output",
-        "output_annotation_format": "json",
         "item_properties": {"id_key": "id", "text_key": "text"},
         "annotation_schemes": [
             {

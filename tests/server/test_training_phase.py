@@ -460,3 +460,153 @@ class TestTrainingDisabled:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestTrainingRendersAndGrades:
+    """The training phase used to render no questions at all.
+
+    `training.html` carried a literal `{{ TASK_LAYOUT }}` — a build-time placeholder
+    that nothing substituted at request time — so `<div id="annotation-forms">` was
+    always empty. Every existing integration test asserted only `status_code == 200`,
+    which an empty page satisfies perfectly, and the one suite that would have caught
+    it was `pytest.mark.skip`ped. Assert on the markup, not the status code.
+
+    Grading was independently broken: it read `dict(request.form)`, whose field names
+    are `schema` for radio/likert but `schema:::label` for every other type, so only
+    those two could ever match a gold answer.
+    """
+
+    @pytest.fixture(scope="class")
+    def training_server(self):
+        import json as _json
+        from tests.helpers.test_utils import (
+            create_test_directory, create_test_data_file, create_test_config,
+            cleanup_test_directory,
+        )
+        from tests.helpers.flask_test_setup import FlaskTestServer
+        from tests.helpers.port_manager import find_free_port
+
+        test_dir = create_test_directory("training_renders")
+        try:
+            create_test_data_file(
+                test_dir, [{"id": f"item_{i}", "text": f"Item {i}"} for i in range(1, 3)])
+            with open(os.path.join(test_dir, "training_data.json"), "w") as f:
+                _json.dump({"training_instances": [
+                    {"id": "t1", "text": "A practice item",
+                     "correct_answers": {"sentiment": "positive",
+                                         "topics": ["quality", "price"]},
+                     "explanation": "Because."},
+                    {"id": "t2", "text": "Another practice item",
+                     "correct_answers": {"sentiment": "negative"},
+                     "explanation": "Because."},
+                ]}, f)
+
+            config_file = create_test_config(
+                test_dir,
+                [
+                    {"annotation_type": "radio", "name": "sentiment",
+                     "description": "Sentiment?", "labels": ["positive", "negative"]},
+                    {"annotation_type": "multiselect", "name": "topics",
+                     "description": "Topics?", "labels": ["quality", "price", "speed"]},
+                ],
+                data_files=["test_data.jsonl"],
+                annotation_task_name="Training Renders",
+                phases={"order": ["training", "annotation"],
+                        "training": {"type": "training"}},
+                additional_config={"training": {
+                    "enabled": True, "data_file": "training_data.json",
+                    "passing_criteria": {"min_correct": 2}, "allow_retry": True}},
+            )
+            srv = FlaskTestServer(port=find_free_port(), config_file=config_file)
+            if not srv.start():
+                pytest.fail("Failed to start training test server")
+            srv.test_dir = test_dir
+            yield srv
+            srv.stop()
+        finally:
+            cleanup_test_directory(test_dir)
+
+    @staticmethod
+    def _login(server, user):
+        s = requests.Session()
+        s.post(f"{server.base_url}/register",
+               data={"email": user, "pass": "pw", "action": "signup"})
+        s.post(f"{server.base_url}/auth",
+               data={"email": user, "pass": "pw", "action": "login"})
+        return s
+
+    @staticmethod
+    def _save(session, server, annotations):
+        """What the browser autosaves before the Next button posts."""
+        return session.post(
+            f"{server.base_url}/updateinstance",
+            json={"instance_id": "__phase_page__", "annotations": annotations,
+                  "span_annotations": []})
+
+    @staticmethod
+    def _submit(session, server):
+        """What the shared Next button posts."""
+        return session.post(
+            f"{server.base_url}/annotate",
+            json={"action": "next_instance", "instance_id": "__phase_page__"},
+            allow_redirects=True)
+
+    def test_training_page_renders_the_annotation_form(self, training_server):
+        s = self._login(training_server, "renders@test.com")
+        page = s.get(f"{training_server.base_url}/").text
+
+        # The class attribute is "<schema> shadcn-radio-input annotation-input", so
+        # match the marker class rather than the start of the attribute.
+        assert "annotation-input" in page, (
+            "the training page rendered no annotation inputs — TASK_LAYOUT was not "
+            "substituted")
+        assert 'data-schema-name="sentiment"' in page
+        assert 'data-schema-name="topics"' in page
+
+    def test_training_page_shows_the_question_text(self, training_server):
+        s = self._login(training_server, "qtext@test.com")
+        page = s.get(f"{training_server.base_url}/").text
+        assert "A practice item" in page, "the practice question text was not displayed"
+
+    def test_multiselect_answer_grades_correctly(self, training_server):
+        """The type that could never be graded before: its form fields are named
+        `topics:::quality`, which never matched the `topics` gold key, and
+        dict(request.form) kept only the first value anyway."""
+        s = self._login(training_server, "multi@test.com")
+        self._save(s, training_server, {
+            "sentiment:positive": "positive",
+            "topics:quality": "quality",
+            "topics:price": "price",
+        })
+        self._submit(s, training_server)
+
+        page = s.get(f"{training_server.base_url}/").text
+        assert "Another practice item" in page, (
+            "a correct multiselect answer did not advance to the next question")
+
+    def test_wrong_answer_keeps_the_question_and_explains(self, training_server):
+        s = self._login(training_server, "wrong@test.com")
+        self._save(s, training_server, {"sentiment:negative": "negative"})
+        self._submit(s, training_server)
+
+        page = s.get(f"{training_server.base_url}/").text
+        assert "A practice item" in page, "a wrong answer should not advance"
+        assert "feedback-alert" in page and "Because." in page
+
+    def test_next_question_does_not_inherit_the_previous_answer(self, training_server):
+        """Every training question shares one phase page key, so without an explicit
+        clear question 2 is graded against question 1's stored answer."""
+        s = self._login(training_server, "inherit@test.com")
+        self._save(s, training_server, {
+            "sentiment:positive": "positive",
+            "topics:quality": "quality",
+            "topics:price": "price",
+        })
+        self._submit(s, training_server)
+
+        # Now on question 2, whose gold answer is sentiment=negative. Submitting
+        # nothing must be graded wrong, not silently pass on the stale 'positive'.
+        self._submit(s, training_server)
+        page = s.get(f"{training_server.base_url}/").text
+        assert "Another practice item" in page, (
+            "question 2 was graded against question 1's leftover answer")

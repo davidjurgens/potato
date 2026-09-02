@@ -63,7 +63,6 @@ server_name: Audio Annotation Integration Test
 annotation_task_name: Audio Annotation Integration Test
 task_dir: {cls.test_dir}
 output_annotation_dir: {cls.test_dir}/annotation_output/
-output_annotation_format: json
 alert_time_each_instance: 10000000
 
 data_files:
@@ -621,7 +620,6 @@ server_name: Audio Fallback Test
 annotation_task_name: Audio Fallback Test
 task_dir: {cls.test_dir}
 output_annotation_dir: {cls.test_dir}/annotation_output/
-output_annotation_format: json
 alert_time_each_instance: 10000000
 
 data_files:

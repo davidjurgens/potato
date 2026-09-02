@@ -3,7 +3,7 @@ task_dir: .
 port: 9001
 annotation_task_name: Simple Video as Input Example
 output_annotation_dir: annotation_output/simple-video-annotation/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/video-as-input.json

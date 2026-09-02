@@ -359,37 +359,22 @@ class TestLegacyUserConfigRule:
 
 
 class TestLegacyOutputFormatRule:
-    """Tests for output format suggestions."""
+    """Tests for the output_annotation_format rename."""
 
-    def test_detects_csv_format(self):
-        """Test that CSV format is detected."""
-        config = {
-            "output_annotation_format": "csv",
-            "annotation_schemes": []
-        }
+    def test_detects_the_deprecated_key(self):
+        """Any value of the deprecated key is worth renaming."""
         rule = LegacyOutputFormatRule()
-        assert rule.applies(config) is True
+        for value in ["csv", "tsv", "json", "jsonl", ""]:
+            config = {"output_annotation_format": value, "annotation_schemes": []}
+            assert rule.applies(config) is True, value
 
-    def test_detects_tsv_format(self):
-        """Test that TSV format is detected."""
-        config = {
-            "output_annotation_format": "tsv",
-            "annotation_schemes": []
-        }
+    def test_ignores_a_config_without_the_key(self):
+        """A config that never had it is left alone."""
         rule = LegacyOutputFormatRule()
-        assert rule.applies(config) is True
+        assert rule.applies({"annotation_schemes": []}) is False
 
-    def test_no_detection_for_json(self):
-        """Test that JSON format is not flagged."""
-        config = {
-            "output_annotation_format": "json",
-            "annotation_schemes": []
-        }
-        rule = LegacyOutputFormatRule()
-        assert rule.applies(config) is False
-
-    def test_adds_note_about_json(self):
-        """Test that a note about JSON is added."""
+    def test_renames_onto_export_annotation_format(self):
+        """The value moves to the key that is actually read."""
         config = {
             "output_annotation_format": "csv",
             "annotation_schemes": []
@@ -397,12 +382,46 @@ class TestLegacyOutputFormatRule:
         rule = LegacyOutputFormatRule()
         migrated, changes = rule.migrate(config)
 
-        # Config should not be modified
-        assert migrated["output_annotation_format"] == "csv"
-
-        # But a note should be added
+        assert "output_annotation_format" not in migrated
+        assert migrated["export_annotation_format"] == "csv"
         assert len(changes) == 1
-        assert "json" in changes[0].lower()
+        assert "export_annotation_format" in changes[0]
+
+    def test_maps_json_to_jsonl(self):
+        """'json' is not a registered export format; 'jsonl' is."""
+        config = {
+            "output_annotation_format": "json",
+            "annotation_schemes": []
+        }
+        migrated, changes = LegacyOutputFormatRule().migrate(config)
+
+        assert migrated["export_annotation_format"] == "jsonl"
+        assert "no exporter has that name" in changes[0]
+
+    def test_an_explicit_replacement_wins(self):
+        """A config that already sets the live key keeps its own value."""
+        config = {
+            "output_annotation_format": "tsv",
+            "export_annotation_format": "parquet",
+            "annotation_schemes": []
+        }
+        migrated, changes = LegacyOutputFormatRule().migrate(config)
+
+        assert migrated["export_annotation_format"] == "parquet"
+        assert "output_annotation_format" not in migrated
+        assert len(changes) == 1
+
+    def test_drops_an_empty_value_without_enabling_export(self):
+        """An empty legacy value must not switch auto-export on."""
+        config = {
+            "output_annotation_format": "",
+            "annotation_schemes": []
+        }
+        migrated, changes = LegacyOutputFormatRule().migrate(config)
+
+        assert "output_annotation_format" not in migrated
+        assert "export_annotation_format" not in migrated
+        assert len(changes) == 1
 
 
 class TestMigrateConfig:
@@ -442,7 +461,7 @@ class TestMigrateConfig:
         """Test that modern configs have no changes."""
         config = {
             "login": {"type": "open"},
-            "output_annotation_format": "json",
+            "export_annotation_format": "jsonl",
             "annotation_schemes": [
                 {
                     "annotation_type": "text",

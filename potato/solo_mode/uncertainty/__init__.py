@@ -1,7 +1,7 @@
 """
 Uncertainty Estimation Module
 
-This module provides pluggable strategies for estimating LLM prediction uncertainty.
+Pluggable strategies for estimating LLM prediction uncertainty.
 
 Available strategies:
 - DirectConfidenceEstimator: Ask model for confidence score (0-100)

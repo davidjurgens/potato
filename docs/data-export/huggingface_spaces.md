@@ -30,7 +30,7 @@ When deploying on Spaces with `hf_oauth: true` in the README front matter, Huggi
 
 ```yaml
 authentication:
-  type: oauth
+  method: oauth
   providers:
     huggingface:
       client_id: "${OAUTH_CLIENT_ID}"
@@ -41,7 +41,7 @@ authentication:
 
 The `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` environment variables are automatically set by HuggingFace Spaces.
 
-### How It Works
+### The HuggingFace sign-in flow
 
 1. User clicks "Sign in with HuggingFace" on the login page
 2. Redirected to HuggingFace for authentication

@@ -155,6 +155,87 @@ class TestConformity:
         assert room.current_item.majority_label() is None
 
 
+class TestConformityIsMeasuredAgainstThePeers:
+    """Whose majority is it?
+
+    Conformity is moving toward *the group*, so the majority a change is
+    scored against must leave out the changer's own vote. Counting it made
+    every two-person disagreement a permanent 1-1 tie, so `majority_at_time`
+    was always None and `toward_majority` never incremented — in the smallest
+    and most common norming room, the data this feature exists to collect was
+    silently never collected. Reproduced live: bob moved Sarcastic -> Sincere
+    onto alice's Sincere and the room reported total_changes 1,
+    toward_majority 0.
+    """
+
+    def two_person_room(self):
+        room = make_room()
+        room.join("bob")
+        room.vote("alice", "Sincere")
+        room.vote("bob", "Sarcastic")
+        room.reveal("alice")
+        return room
+
+    def test_a_two_person_change_is_recorded_as_conformity(self):
+        room = self.two_person_room()
+        room.vote("bob", "Sincere")
+        change = room.current_item.changes[0]
+        assert change["majority_at_time"] == "Sincere"
+        assert change["to"] == change["majority_at_time"]
+
+    def test_moving_away_from_the_other_member_is_not_conformity(self):
+        room = make_room()
+        room.join("bob")
+        room.vote("alice", "Sincere")
+        room.vote("bob", "Sincere")
+        room.reveal("alice")
+        room.vote("bob", "Sarcastic")
+        change = room.current_item.changes[0]
+        assert change["majority_at_time"] == "Sincere"
+        assert change["to"] != change["majority_at_time"]
+
+    def test_a_two_two_split_has_a_peer_majority(self):
+        room = make_room()
+        for name in ("bob", "carol", "dave"):
+            room.join(name)
+        room.vote("alice", "Sarcastic")
+        room.vote("bob", "Sarcastic")
+        room.vote("carol", "Sincere")
+        room.vote("dave", "Sincere")
+        room.reveal("alice")
+        # dave's peers are 2-1 for Sarcastic even though the room is 2-2.
+        room.vote("dave", "Sarcastic")
+        assert room.current_item.changes[0]["majority_at_time"] == "Sarcastic"
+
+    def test_a_genuine_peer_tie_still_reports_none(self):
+        """Excluding the changer must not invent a majority that isn't there."""
+        room = make_room()
+        for name in ("bob", "carol"):
+            room.join(name)
+        room.vote("alice", "Sarcastic")
+        room.vote("bob", "Sincere")
+        room.vote("carol", "Sarcastic")
+        room.reveal("alice")
+        # carol's peers: alice Sarcastic, bob Sincere — a real 1-1 tie.
+        room.vote("carol", "Sincere")
+        assert room.current_item.changes[0]["majority_at_time"] is None
+
+    def test_the_displayed_majority_still_counts_everyone(self):
+        """The reveal panel reports the room's majority, not anyone's peers."""
+        room = self.two_person_room()
+        room.vote("bob", "Sincere")
+        item = room.current_item
+        assert item.majority_label() == "Sincere"
+        assert item.to_dict(include_votes=True)["majority_label"] == "Sincere"
+
+    def test_a_lone_member_has_no_peers(self):
+        room = make_room()
+        room.vote("alice", "Sarcastic")
+        room.reveal("alice")
+        room.vote("alice", "Sincere")
+        assert room.current_item.changes[0]["majority_at_time"] is None
+
+
 class TestBlindRedaction:
     def test_blind_vote_events_carry_no_label_in_public_view(self):
         room = make_room()

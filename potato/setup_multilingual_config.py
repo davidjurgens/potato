@@ -1,9 +1,8 @@
 """
 Multilingual Configuration Setup Module
 
-This module provides functionality for setting up multilingual annotation tasks.
-It processes a base configuration and creates language-specific configurations
-for each supported language, including:
+Sets up multilingual annotation tasks: reads a base configuration and writes one
+language-specific configuration per supported language, including:
 
 - Language-specific survey flow files
 - Translated configuration files

@@ -1,0 +1,2 @@
+{"id": "u0", "conversation_id": "u0", "text": "Root post.", "speaker": "alice", "meta": {}, "reply_to": null, "timestamp": 1.0}
+{"id": "u1", "conversation_id": "u0", "text": "A reply.", "speaker": "bob", "meta": {}, "reply_to": "u0", "timestamp": 2.0}

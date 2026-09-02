@@ -1,7 +1,7 @@
 """
 Local file data source.
 
-This module provides data loading from local files, supporting
+Data loading from local files, supporting
 JSON, JSONL, CSV, and TSV formats with partial reading support.
 """
 

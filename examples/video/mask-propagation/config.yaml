@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Run from the repo root:
+#   potato download-models sam2_video_tiny
+#   python examples/video/mask-propagation/make_clip.py
+#   python potato/flask_server.py start examples/video/mask-propagation/config.yaml -p 8000
+
+annotation_task_name: "Track through an occlusion"
+task_dir: .
+output_annotation_dir: annotation_output/
+export_annotation_format: jsonl
+
+data_files:
+  - data/clips.json
+
+item_properties:
+  id_key: id
+  text_key: video_url
+
+media_directory: media
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  - annotation_type: video_annotation
+    name: tracks
+    description: "Draw the disc once, then press Track forward"
+    source_field: video_url
+    mode: tracking
+    labels:
+      - name: disc
+        color: "#d1495b"
+      - name: distractor
+        color: "#2f9e6f"
+
+    tracking_options:
+      interpolation: linear
+      auto_advance_frames: 5
+
+    # Model-assisted tracking. SAM 2 keeps a memory of the object across
+    # frames, so it can lose the disc behind the bar and pick it up again
+    # afterwards. Frames where the object is hidden come back empty; the model
+    # decides that itself rather than being asked to guess.
+    #
+    #   potato download-models sam2_video_tiny
+    #
+    # This one runs on the server. The cost is per frame, the model is five
+    # graphs, and the video is already on disk.
+    propagation:
+      max_frames: 48
+
+    video_fps: 12
+    show_timecode: true
+    frame_stepping: true

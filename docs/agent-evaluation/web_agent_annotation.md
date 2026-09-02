@@ -4,7 +4,7 @@ Potato supports both **reviewing** and **creating** web agent browsing traces th
 
 ## Overview
 
-Web agent annotation provides two modes:
+Web agent annotation has two modes:
 
 1. **Review Mode** — View pre-recorded agent browsing traces step-by-step with screenshot overlays showing clicks, bounding boxes, mouse paths, and scroll indicators. Annotators evaluate agent behavior using per-step and trajectory-level annotation schemes.
 
@@ -150,7 +150,7 @@ instance_display:
         max_steps: 50
 ```
 
-### How It Works
+### What gets recorded during a live session
 
 1. The annotator sees a task description and a browser iframe
 2. They browse the website while their interactions are recorded

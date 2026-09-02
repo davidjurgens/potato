@@ -75,12 +75,23 @@ class RoomItemState:
     # Post-reveal changes: {user, from, to, majority_at_time, ts}
     changes: List[Dict[str, Any]] = field(default_factory=list)
 
-    def majority_label(self) -> Optional[str]:
-        """Most common current vote; None on empty or tie."""
-        if not self.current_votes:
+    def majority_label(self, exclude: Optional[str] = None) -> Optional[str]:
+        """Most common current vote; None on empty or tie.
+
+        ``exclude`` drops one member's own vote from the count, which is what
+        conformity means: did this person move toward *the group*? Counting
+        their own vote made a two-person disagreement a permanent 1-1 tie, so
+        ``majority_at_time`` was always None and ``toward_majority`` could
+        never increment — in the smallest and most common norming room, the
+        conformity data the feature exists to collect was never collected.
+        The same error muted 2-2 splits in a four-person room, where the
+        changer's peers are in fact 2-1.
+        """
+        votes = {u: v for u, v in self.current_votes.items() if u != exclude}
+        if not votes:
             return None
         counts: Dict[str, int] = {}
-        for label in self.current_votes.values():
+        for label in votes.values():
             counts[label] = counts.get(label, 0) + 1
         best = max(counts.values())
         winners = [label for label, c in counts.items() if c == best]
@@ -273,7 +284,9 @@ class Room:
             }, ts)
         if previous == label:
             raise RoomError("That is already your vote")
-        majority = item.majority_label()
+        # The majority among everyone *else*: moving toward your own vote is
+        # not conformity, and including it makes a 1-1 room permanently tied.
+        majority = item.majority_label(exclude=username)
         change = {
             "user": username, "from": previous, "to": label,
             "majority_at_time": majority,

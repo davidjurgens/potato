@@ -1,6 +1,6 @@
 # Triage Annotation Schema
 
-The triage annotation schema provides a Prodigy-style binary accept/reject/skip interface optimized for rapid data curation tasks. This schema is ideal for filtering large datasets quickly, performing data quality checks, or any task requiring quick binary decisions.
+The triage schema is a Prodigy-style accept/reject/skip interface for going through a dataset quickly. Use it to filter a large corpus, spot-check data quality, or make any other one-key binary call.
 
 ## Overview
 

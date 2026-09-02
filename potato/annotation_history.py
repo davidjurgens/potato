@@ -1,9 +1,8 @@
 """
 Annotation History Module
 
-This module provides comprehensive tracking of all annotation actions with fine-grained
-timestamp metadata. It enables performance analysis, quality assurance, and future
-undo functionality.
+Records every annotation action with fine-grained timestamp metadata, which is
+what performance analysis, quality assurance and a future undo are built on.
 
 Key Components:
 - AnnotationAction: Dataclass representing a single annotation action

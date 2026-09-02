@@ -19,22 +19,60 @@ from .edge_case_rules import EdgeCaseCategory, EdgeCaseRule
 
 logger = logging.getLogger(__name__)
 
-# Guarded imports
-try:
-    from sentence_transformers import SentenceTransformer
-    import numpy as np
-    from sklearn.cluster import KMeans
-    _SENTENCE_TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    _SENTENCE_TRANSFORMERS_AVAILABLE = False
-    np = None
-    KMeans = None
+# Availability is probed WITHOUT importing the heavy stack — see the same note
+# in potato/similarity.py and potato/diversity_manager.py.
+#
+# A guarded try/except only defers the cost when the package is MISSING, which
+# was already free. When sentence-transformers is installed, a module-level
+# import pulls transformers + torch into every process that imports this module,
+# and this one is reachable from solo mode's rule clustering — a feature most
+# projects never switch on. find_spec answers "installed?" without executing it.
+import importlib.util
 
 try:
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    _SKLEARN_AVAILABLE = True
-except ImportError:
-    _SKLEARN_AVAILABLE = False
+    import numpy as np
+except ImportError:  # numpy is light and used throughout; absence disables this
+    np = None
+
+_SENTENCE_TRANSFORMERS_AVAILABLE = (
+    np is not None
+    and importlib.util.find_spec("sentence_transformers") is not None
+    and importlib.util.find_spec("sklearn") is not None
+)
+_SKLEARN_AVAILABLE = importlib.util.find_spec("sklearn") is not None
+
+#: Bound on first use by the loaders below. Module-level names so the import is
+#: paid once per process and stays patchable.
+SentenceTransformer = None
+KMeans = None
+TfidfVectorizer = None
+
+
+def _sentence_transformer_class():
+    """Import ``SentenceTransformer`` at first use, never at import time."""
+    global SentenceTransformer
+    if SentenceTransformer is None:
+        from sentence_transformers import SentenceTransformer as _SentenceTransformer
+        SentenceTransformer = _SentenceTransformer
+    return SentenceTransformer
+
+
+def _kmeans_class():
+    """Import ``sklearn.cluster.KMeans`` at first use."""
+    global KMeans
+    if KMeans is None:
+        from sklearn.cluster import KMeans as _KMeans
+        KMeans = _KMeans
+    return KMeans
+
+
+def _tfidf_vectorizer_class():
+    """Import ``sklearn.feature_extraction.text.TfidfVectorizer`` at first use."""
+    global TfidfVectorizer
+    if TfidfVectorizer is None:
+        from sklearn.feature_extraction.text import TfidfVectorizer as _TfidfVectorizer
+        TfidfVectorizer = _TfidfVectorizer
+    return TfidfVectorizer
 
 
 AGGREGATION_PROMPT_TEMPLATE = """You are analyzing a cluster of edge case rules discovered during annotation.
@@ -104,7 +142,7 @@ class RuleClusterer:
                 self.solo_config.embedding, 'model_name', 'all-MiniLM-L6-v2'
             )
             try:
-                self._model = SentenceTransformer(model_name)
+                self._model = _sentence_transformer_class()(model_name)
             except Exception as e:
                 logger.warning(f"Could not load sentence-transformer model: {e}")
                 return None
@@ -166,7 +204,8 @@ class RuleClusterer:
             return None
 
         try:
-            vectorizer = TfidfVectorizer(max_features=256, stop_words='english')
+            vectorizer = _tfidf_vectorizer_class()(max_features=256,
+                                                   stop_words='english')
             embeddings = vectorizer.fit_transform(texts).toarray()
             return embeddings
         except Exception as e:
@@ -197,9 +236,10 @@ class RuleClusterer:
             return [(0.0, 0.0)] * len(rules)
 
         try:
-            import numpy as _np
-            emb_array = _np.array(embeddings)
-        except (ImportError, Exception):
+            if np is None:
+                raise ImportError("numpy is not installed")
+            emb_array = np.array(embeddings)
+        except Exception:  # ImportError is one of these; listing both said nothing
             # Raw fallback: first 2 dimensions
             result = []
             for e in embeddings:
@@ -256,15 +296,11 @@ class RuleClusterer:
         if embeddings is None or len(rules) == 0:
             return {0: rules}
 
-        if not _SENTENCE_TRANSFORMERS_AVAILABLE and np is None:
-            try:
-                import numpy as _np
-            except ImportError:
-                return {0: rules}
-
-        _np = np
-        if _np is None:
-            import numpy as _np
+        if np is None:
+            # KMeans is numpy all the way down, so there is nothing to cluster
+            # with. (The three `_np` bindings this replaces were assigned and
+            # then never read.)
+            return {0: rules}
 
         target_size = self.solo_config.edge_case_rules.target_cluster_size
         n_clusters = max(1, len(rules) // target_size + 1)
@@ -276,9 +312,7 @@ class RuleClusterer:
             return {0: rules}
 
         try:
-            from sklearn.cluster import KMeans as _KMeans
-
-            kmeans = _KMeans(
+            kmeans = _kmeans_class()(
                 n_clusters=n_clusters,
                 random_state=42,
                 n_init=10,

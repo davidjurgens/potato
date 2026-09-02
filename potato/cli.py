@@ -2,7 +2,7 @@
 """
 Command Line Interface for Potato Annotation Platform
 
-This module provides the main CLI entry point for running the Potato annotation server.
+The main CLI entry point for running the Potato annotation server.
 It serves as a bridge between the command line and the Flask server application.
 
 The CLI can be invoked directly or through the potato command after installation.

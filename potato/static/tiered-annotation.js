@@ -1645,6 +1645,10 @@ class TieredAnnotationManager {
 
         const data = this.serialize();
         this.inputEl.value = JSON.stringify(data);
+        // Assigning `.value` fires nothing; the shared autosave in
+        // annotation.js listens for this, and without it the work reaches the
+        // server only when the annotator navigates.
+        this.inputEl.dispatchEvent(new Event('change', { bubbles: true }));
 
         tieredDebugLog('Saved data:', data);
     }

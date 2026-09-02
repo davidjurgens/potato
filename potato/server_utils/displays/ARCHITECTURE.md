@@ -1,6 +1,6 @@
 # Display Type System Architecture
 
-This document describes the design contracts and extension points for the
+The design contracts and extension points for the
 display type system in `potato/server_utils/displays/`.
 
 ## Overview

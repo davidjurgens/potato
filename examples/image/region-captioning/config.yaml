@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+port: 8000
+annotation_task_name: Region captioning
+task_dir: .
+output_annotation_dir: annotation_output/
+export_annotation_format: jsonl
+
+data_files:
+  - data/scenes.json
+
+item_properties:
+  id_key: id
+  text_key: image
+
+media_directory: media
+
+user_config:
+  allow_all_users: true
+  users: []
+
+# Two annotators per item so /admin/iaa has something to compare. Caption
+# agreement is the point of the example, and it is undefined with one.
+automatic_assignment:
+  "on": true
+  output_filename: assigned_user_data.json
+  sampling_strategy: random
+  labels_per_instance: 3
+  instance_per_annotator: 10
+  test_question_per_annotator: 0
+  users: []
+
+num_annotators_per_item:
+  default: 2
+
+annotation_schemes:
+  # The canvas. A region_caption schema needs an image_annotation schema beside
+  # it — it owns the description attached to each region, not the drawing.
+  #
+  # It follows the canvas through `addAnnotationChangeListener`, NOT the
+  # `onAnnotationChange` slot: the image schema's own bootstrap assigns that
+  # slot, and an assignment silently discards whatever was already there.
+  - annotation_type: image_annotation
+    name: region
+    description: "Draw a region around each thing you want to describe"
+    source_field: image
+    tools: [bbox, polygon]
+    labels:
+      - name: object
+        color: "#6e56cf"
+
+  - annotation_type: region_caption
+    name: captions
+    description: "Describe each region you drew"
+
+    placeholder: "e.g. a red mug with a chipped handle"
+
+    # A caption short enough to be a label is not a caption. The minimum is a
+    # nudge rather than a block — the schema warns, it does not refuse.
+    min_length: 10
+    max_length: 300
+
+    # Warn once before advancing with regions still undescribed. Warn-then-allow
+    # rather than block: an annotator who genuinely cannot describe a region
+    # needs a way past, and a hard gate turns that into a junk caption.
+    require_all: true
+
+    # How captions are compared on /admin/iaa.
+    #
+    #   token     (default) 1 - Jaccard over content tokens. Always available,
+    #             and a LOWER BOUND: it scores "a man in a red shirt" against
+    #             "person wearing a crimson top" as complete disagreement.
+    #   embedding cosine distance between sentence embeddings. Needs
+    #             `pip install sentence-transformers`. Better, not perfect —
+    #             it puts that same pair at 0.6, not near 0.
+    #
+    # The report states which distance it ACTUALLY used, so a silent fallback
+    # to `token` cannot be mistaken for a semantic measurement.
+    agreement_distance: token

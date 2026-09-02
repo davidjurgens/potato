@@ -861,8 +861,13 @@ class TestUserStateTrainingMethods:
         annotations = {"sentiment": "positive"}
         user_state.update_training_answer("train_1", annotations)
 
-        # Verify that annotations were stored in phase-specific storage
-        assert len(user_state.phase_to_page_to_label_to_value[UserPhase.TRAINING]["training_page"]) > 0
+        # update_training_answer no longer writes annotation storage. Answers reach
+        # phase_to_page_to_label_to_value through the ordinary /updateinstance autosave,
+        # keyed Label(schema, label) like every other phase; this method used to write
+        # Label(schema, schema) from raw form keys, a shape nothing else could read.
+        # It now only keeps a per-question record for reporting.
+        record = user_state.training_state.completed_questions["train_1"]
+        assert record["answers"] == {"sentiment": "positive"}
 
     def test_check_training_pass_correct(self):
         """Test checking training pass with correct answer."""

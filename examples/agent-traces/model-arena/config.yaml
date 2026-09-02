@@ -21,7 +21,7 @@ item_properties:
 
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Multi-model arena. Each entry is a provider config (AIEndpointFactory).
 arena:

@@ -16,7 +16,12 @@ from .identifier_utils import (
 )
 
 
-from item_state_management import SpanAnnotation
+# Absolute, package-qualified: the bare `from item_state_management import ...`
+# form only resolves when potato/ itself is on sys.path (flask_server inserts it),
+# so `python -m potato.validate_cli` and the console script both died importing
+# the registry. It also risked a second SpanAnnotation class with a distinct
+# identity from the one flask_server imports.
+from potato.item_state_management import SpanAnnotation
 
 logger = logging.getLogger(__name__)
 

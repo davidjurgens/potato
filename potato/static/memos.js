@@ -13,7 +13,31 @@
     var API = "/api/memos";
     var state = { instanceId: null, memos: [], editingId: null, enabled: false };
 
+    // Navigation is a full page reload, so "open by default" would otherwise
+    // re-open the panel on every item, overriding an annotator who closed it.
+    // The dismissal is remembered for the tab session only.
+    var DISMISSED = "potato.memoPanel.dismissed";
+
     function el(id) { return document.getElementById(id); }
+
+    function dismissed() {
+        try { return sessionStorage.getItem(DISMISSED) === "1"; }
+        catch (e) { return false; }   // storage blocked: treat as not dismissed
+    }
+
+    function setDismissed(value) {
+        try {
+            if (value) sessionStorage.setItem(DISMISSED, "1");
+            else sessionStorage.removeItem(DISMISSED);
+        } catch (e) { /* storage blocked: the default just applies each load */ }
+    }
+
+    function openPanel() {
+        var panel = el("memo-panel"), toggle = el("memo-panel-toggle");
+        if (!panel || !toggle) return;
+        panel.hidden = false;
+        toggle.hidden = true;
+    }
 
     function currentInstanceId() {
         var input = el("instance_id");
@@ -90,10 +114,20 @@
         });
     }
 
+    // The GET currently outstanding, as {iid, promise}. init() and
+    // annotation.js's loadCurrentInstance() both call load() on a page load
+    // and used to fetch the same instance's notes twice. Sharing only an
+    // *in-flight* request keeps the refreshes after an add, edit or delete
+    // honest -- those run once the first one has settled, so they never fold
+    // into it.
+    var inFlight = null;
+
     function load() {
-        state.instanceId = currentInstanceId();
-        if (!state.instanceId) return Promise.resolve();
-        return api("GET", "?instance_id=" + encodeURIComponent(state.instanceId))
+        var iid = currentInstanceId();
+        if (!iid) return Promise.resolve();
+        if (inFlight && inFlight.iid === iid) return inFlight.promise;
+        state.instanceId = iid;
+        var pending = api("GET", "?instance_id=" + encodeURIComponent(iid))
             .then(function (res) {
                 if (res.status === 503) { state.enabled = false; return null; }
                 state.enabled = true;
@@ -105,8 +139,14 @@
                 if (!data) return;
                 state.memos = data.memos || [];
                 render();
+                if (data.open_by_default && !dismissed()) openPanel();
             })
-            .catch(function () { /* network: leave panel as-is */ });
+            .catch(function () { /* network: leave panel as-is */ })
+            .then(function () {
+                if (inFlight && inFlight.promise === pending) inFlight = null;
+            });
+        inFlight = { iid: iid, promise: pending };
+        return pending;
     }
 
     function resetComposer() {
@@ -186,8 +226,8 @@
         var close = el("memo-panel-close");
         if (toggle && panel) {
             toggle.addEventListener("click", function () {
-                panel.hidden = false;
-                toggle.hidden = true;
+                openPanel();
+                setDismissed(false);
                 render();
             });
         }
@@ -195,6 +235,8 @@
             close.addEventListener("click", function () {
                 panel.hidden = true;
                 toggle.hidden = false;
+                // Closing it means closing it, not closing it until the next item.
+                setDismissed(true);
             });
         }
         var add = el("memo-add-btn");

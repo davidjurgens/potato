@@ -1,6 +1,6 @@
 # Pairwise Comparison Annotation
 
-The pairwise annotation schema allows annotators to compare two items side by side and indicate their preference. It supports two modes:
+The pairwise annotation schema puts two items side by side and asks which one the annotator prefers. It supports two modes:
 
 1. **Binary Mode**: Click on the preferred tile (A or B), with optional tie button
 2. **Scale Mode**: Use a slider to rate how much one option is preferred over the other

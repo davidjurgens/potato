@@ -1,6 +1,6 @@
 # Hierarchical Multi-Label Selection
 
-The hierarchical multiselect schema allows annotators to select labels from a tree-structured taxonomy. Parent nodes can be expanded or collapsed, and selecting a parent optionally auto-selects or auto-deselects its children. An optional search box enables rapid navigation of large taxonomies.
+The hierarchical multiselect schema lets annotators pick labels out of a tree-structured taxonomy. Parent nodes can be expanded or collapsed, and selecting a parent optionally auto-selects or auto-deselects its children. An optional search box enables rapid navigation of large taxonomies.
 
 ## Overview
 
@@ -9,7 +9,7 @@ Flat multi-label checkboxes become unwieldy when label spaces have hundreds of e
 - Renders the taxonomy as an expandable/collapsible tree
 - Supports arbitrary nesting depth
 - Optionally propagates selections up or down the hierarchy
-- Provides a search/filter box for large taxonomies
+- Has a search/filter box for large taxonomies
 - Enforces an optional maximum selection limit
 
 ## Research Basis
@@ -143,7 +143,7 @@ Labels appear in the order they were selected. Both parent and child labels can 
 
 ## Troubleshooting
 
-**Tree is too deep to navigate easily:** Set `show_search: true` and `expand_depth: 0` so the tree starts collapsed and annotators use search to find specific nodes.
+**Tree is too deep to navigate:** Set `show_search: true` and `expand_depth: 0` so the tree starts collapsed and annotators search for the node they want.
 
 **Auto-selection creates unexpected behavior:** When `auto_select_children: true`, deselecting a parent does not automatically deselect its children. Annotators must deselect children manually. Make this behavior explicit in the task instructions.
 

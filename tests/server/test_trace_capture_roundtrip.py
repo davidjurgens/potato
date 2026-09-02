@@ -20,7 +20,12 @@ def flask_server(request):
         "annotation_type": "radio", "name": "ok",
         "description": "ok?", "labels": ["yes", "no"],
     }]
-    extra = {"trace_ingestion": {"enabled": True, "api_key": "", "notify_annotators": False}}
+    # No api_key, so the receiver only accepts anonymous posts when the admin
+    # says so explicitly. These tests are about ingestion, not auth: the
+    # refusal itself is covered in tests/unit/test_webhook_receiver.py.
+    extra = {"trace_ingestion": {"enabled": True, "api_key": "",
+                                 "allow_unauthenticated": True,
+                                 "notify_annotators": False}}
     with TestConfigManager(
         "trace_capture", annotation_schemes,
         additional_config=extra, admin_api_key="test-admin-api-key",

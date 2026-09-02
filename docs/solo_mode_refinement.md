@@ -1,6 +1,8 @@
 # Solo Mode: Validated Prompt Refinement
 
-This document describes the validated refinement framework for the solo mode pipeline.
+Solo mode rewrites its labeling prompt from human-LLM disagreements. Every
+candidate rewrite is scored on held-out data and rejected unless it beats the
+prompt already in use.
 
 ## Problem
 

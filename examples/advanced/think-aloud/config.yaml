@@ -3,7 +3,7 @@ port: 8000
 annotation_task_name: "Think-Aloud — Politeness"
 task_dir: .
 output_annotation_dir: annotation_output/think-aloud/
-output_annotation_format: jsonl
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 data_files:
 - data/politeness.json
@@ -28,7 +28,7 @@ annotation_schemes:
 # is stored as the rationale. To commit a label by voice they say a set phrase
 # ("I label this Polite", "my answer is neutral", "final answer impolite"),
 # detected by a rule-based parser — no LLM anywhere. Speech-to-text runs
-# fully locally via faster-whisper:  pip install faster-whisper
+# fully locally via faster-whisper:  pip install "potato-annotation[transcribe]"
 # (first recording downloads the ~39MB tiny.en model).
 # Review transcripts at /thinkaloud/review (admin; --debug passes).
 thinkaloud:

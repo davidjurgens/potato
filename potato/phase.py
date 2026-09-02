@@ -1,7 +1,7 @@
 """
 User Phase Management System
 
-This module defines the phases that users progress through during the annotation process.
+The phases that users progress through during the annotation process.
 Each phase represents a distinct stage in the annotation workflow, from initial login
 to completion of the annotation task.
 

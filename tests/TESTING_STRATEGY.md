@@ -1,12 +1,11 @@
 # Potato Testing Strategy
 
-## Overview
+Potato's tests are in three tiers: unit tests under `tests/unit/`, server
+integration tests under `tests/server/`, and browser tests under
+`tests/selenium/`. Each tier trades speed for realism, and the suite is shaped
+so that most of the checking happens in the fast tier.
 
-The Potato annotation platform uses a comprehensive testing strategy that combines unit tests, integration tests, and end-to-end tests to ensure reliability, maintainability, and confidence in the codebase.
-
-## Testing Pyramid
-
-Our testing approach follows the testing pyramid principle:
+## Testing pyramid
 
 ```
     /\
@@ -107,7 +106,7 @@ Our testing approach follows the testing pyramid principle:
 ## Test Infrastructure
 
 ### FlaskTestServer Class
-The `FlaskTestServer` class provides a complete Flask server environment for integration testing:
+`FlaskTestServer` starts a real Flask server for a test class:
 
 - **Production Mode**: Runs server in production mode (`debug=False`)
 - **Admin Authentication**: Automatically adds admin API key headers
@@ -116,7 +115,7 @@ The `FlaskTestServer` class provides a complete Flask server environment for int
 - **Cleanup**: Proper server shutdown and resource cleanup
 
 ### BaseSeleniumTest Class
-The `BaseSeleniumTest` class provides a complete browser testing environment:
+`BaseSeleniumTest` sets up the browser and gets a user logged in:
 
 - **Automatic Setup**: User registration, login, and browser setup
 - **Headless Mode**: Chrome runs in headless mode for CI compatibility
@@ -148,7 +147,7 @@ The `BaseSeleniumTest` class provides a complete browser testing environment:
 ### Test Execution Strategy
 1. **Unit Tests**: Run first for quick feedback
 2. **Integration Tests**: Run after unit tests pass
-3. **E2E Tests**: Run last for comprehensive validation
+3. **E2E Tests**: Run last, since they are the slowest and the most brittle
 
 ### CI/CD Pipeline
 ```yaml
@@ -178,40 +177,24 @@ stages:
 - **Function Coverage**: Percentage of functions called
 - **Endpoint Coverage**: Percentage of HTTP endpoints tested
 
-## Quality Assurance
+## Writing a test
 
-### Test Quality Metrics
-- **Test Reliability**: Tests should be stable and not flaky
-- **Test Maintainability**: Tests should be easy to understand and modify
-- **Test Performance**: Tests should run efficiently
-- **Test Coverage**: Tests should cover critical functionality
+Structure each test as arrange, act, assert, and let it check one thing, so a
+failure names the defect rather than a region of code. Name tests and helpers
+after the behavior under test. Cover the failure path alongside the success
+path, and use data that resembles real data at a size you can hold in your head.
 
-### Code Quality
-- **Test Documentation**: All tests should be well-documented
-- **Test Naming**: Test names should be descriptive and clear
-- **Test Organization**: Tests should be logically organized
-- **Test Patterns**: Use consistent patterns across test files
+A flaky test costs more than no test, because it teaches people to re-run
+rather than to read. When production code changes, change the tests with it in
+the same commit; a test that has drifted from the code it guards is worse than
+absent, since it still reports green.
 
-## Best Practices
+### Debugging a failure
 
-### Writing Tests
-1. **Arrange-Act-Assert**: Use clear test structure
-2. **Descriptive Names**: Use descriptive test and function names
-3. **Single Responsibility**: Each test should test one thing
-4. **Edge Cases**: Test both success and failure scenarios
-5. **Realistic Data**: Use realistic but controlled test data
-
-### Test Maintenance
-1. **Regular Review**: Review and update tests regularly
-2. **Refactoring**: Refactor tests when code changes
-3. **Documentation**: Keep test documentation up to date
-4. **Performance**: Monitor test performance and optimize
-
-### Debugging Tests
-1. **Debug Output**: Use print statements for debugging
-2. **Verbose Mode**: Run tests with `-v -s` flags
-3. **Isolation**: Run individual tests to isolate issues
-4. **Logs**: Check server and browser logs for errors
+Run the single test in isolation first (`pytest path::Class::test -v -s`), which
+separates a real failure from an ordering or port collision. `-s` lets `print`
+through. When the failure is in a server or browser test, the server log and the
+browser console usually say more than the assertion did.
 
 ## Future Enhancements
 
@@ -227,9 +210,3 @@ stages:
 2. **Flaky Test Detection**: Identify and fix unreliable tests
 3. **Coverage Trends**: Monitor coverage over time
 4. **Test Quality Metrics**: Track test maintainability and reliability
-
-## Conclusion
-
-The Potato testing strategy provides comprehensive coverage across all layers of the application, from individual functions to complete user workflows. This multi-layered approach ensures that the platform is reliable, maintainable, and ready for production use.
-
-By following these testing principles and using the provided infrastructure, developers can confidently add new features and make changes to the codebase while maintaining high quality and reliability.

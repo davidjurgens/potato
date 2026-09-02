@@ -1,0 +1,105 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Keystroke calibration: generating labeled training data in-project
+#
+# The detection rules in potato/typing_detect.py are transparent heuristics with
+# hand-set thresholds. If you want a real classifier, you need labeled examples
+# of BOTH composed and transcribed writing -- from your own annotators, on your
+# own task, in your own interface.
+#
+# This example generates them. The training phase asks the annotator to copy a
+# supplied passage verbatim: those sessions are genuine TRANSCRIPTION exemplars.
+# Their normal answers in the annotation phase are COMPOSED exemplars. Same
+# people, same keyboards, same interface -- which is exactly the comparison the
+# published work relies on (Crossley et al., EDM 2024, built their corpus the
+# same way).
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/keystroke-calibration/config.yaml -p 8000
+#
+# Then, once you have data from enough annotators:
+#   python -m potato.typing_detect calibrate examples/advanced/keystroke-calibration/config.yaml
+#
+# See docs/advanced/writing_process_detection.md
+
+annotation_task_name: keystroke-calibration
+task_dir: .
+output_annotation_dir: annotation_output/
+export_annotation_format: csv
+
+data_files:
+  - data/keystroke-calibration-example.json
+
+item_properties:
+  id_key: id
+  text_key: text
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 10000000
+
+keystroke_logging:
+  enabled: true
+  fidelity: events
+  store_events: true
+  classify_paste_source: true
+  disclose_to_annotators: true
+
+  detection:
+    enabled: true
+    # Turn this on after running the calibrate command below. Until a fit is
+    # saved, the built-in defaults stay in force.
+    calibrate: false
+    on_external_insert: flag
+
+# The transcription task. Sessions recorded during the training phase carry
+# phase="training" in the typing_sessions table, which is how you separate the
+# transcription exemplars from the composed ones:
+#
+#   SELECT phase, count(*), round(avg(iki_log_cv),3), round(avg(revision_ratio),3)
+#   FROM typing_sessions GROUP BY phase;
+#
+# Expect the training (copied) rows to show markedly lower rhythm variance and
+# near-zero revision -- the copy-typing signature.
+training:
+  enabled: true
+  data_file: data/transcription-passages.json
+  allow_retry: true
+  # Nobody should be blocked by a calibration exercise, so a "failure" just
+  # moves on rather than looping them back through it.
+  failure_action: move_to_done
+  # References the `response` scheme defined below by NAME. The training phase
+  # reuses the very textarea the annotation phase uses, which is what we want:
+  # identical field, identical interface, only the task differs. The two classes
+  # are separated by `phase`, not by schema name.
+  annotation_schemes:
+    - response
+
+annotation_schemes:
+  - annotation_type: text
+    name: response
+    description: "Answer in your own words. Take as long as you need."
+    labels:
+      - response
+    multiline: true
+    rows: 8
+    label_requirement:
+      required: true
+
+# The `training:` block above configures the task, but it does NOT by itself
+# insert a training step into the workflow -- the phase order has to name it.
+# Without this block the annotator goes straight to `annotation` and no
+# transcription exemplars are ever collected.
+phases:
+  order:
+    - training
+    - annotation
+  training:
+    type: training
+  annotation:
+    type: annotation
+
+base_html_template: default
+header_file: default
+site_dir: default

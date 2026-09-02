@@ -1,7 +1,7 @@
 """
 Flask Server Driver
 
-This module provides the main Flask server implementation for the annotation platform.
+The main Flask server implementation for the annotation platform.
 Features include:
 - User authentication and session management
 - Annotation state tracking
@@ -92,7 +92,6 @@ from potato.solo_mode.routes import solo_mode_bp
 
 from potato.qda_mode import init_qda_mode_manager
 
-from potato.create_task_cli import create_task_cli
 from potato.server_utils.arg_utils import arguments
 from potato.server_utils.config_module import init_config, config
 from potato.server_utils.schemas.span import render_span_annotations
@@ -309,10 +308,15 @@ def _resolve_generated_template_path(html_file: str) -> str:
         return html_file
     if os.path.isabs(html_file) and os.path.exists(html_file):
         return html_file
+    from potato.server_utils.generated_templates import (
+        resolve_generated_templates_dir)
+
     site_dir = config.get("site_dir") or ""
-    candidate = os.path.join(site_dir, "generated", html_file)
-    if os.path.exists(candidate):
-        return candidate
+    if site_dir:
+        candidate = os.path.join(
+            resolve_generated_templates_dir(site_dir, create=False), html_file)
+        if os.path.exists(candidate):
+            return candidate
     return html_file
 
 
@@ -322,6 +326,33 @@ def _resolve_generated_template_path(html_file: str) -> str:
 # rather than a silent asset-loading miss.
 FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "image_annotation": ("image-annotation-container",),
+    # Interactive segmentation, keyed on the tool button the schema renders.
+    # Gated separately from image_annotation because the ONNX runtime is a
+    # 13 MB fetch that a project drawing only boxes should never pay for.
+    "segmentation": ('data-tool="sam"',),
+    # Text-prompt detection, keyed on the prompt box. Separate from
+    # `segmentation` because the two models are independent — a project can
+    # have either, both, or neither — and this one is a 145 MB fetch.
+    "text_prompt": ("data-text-prompt",),
+    # Deep zoom. Gated separately from image_annotation because OpenSeadragon
+    # is a 277 KB download that a project annotating ordinary photographs must
+    # not pay for.
+    "deepzoom": ("deepzoom-host",),
+    # 3D point cloud annotation. Gated separately from image_annotation
+    # because three.js is a 670 KB download that a 2D project must not pay for.
+    "spatial_annotation": ("pointcloud-annotation-container",),
+    # Depth maps. A display type rather than a schema, so the marker comes from
+    # the display's own wrapper.
+    "depth_map": ("depth-display",),
+    # Embodied robot episodes: synchronized video plus time-series lanes.
+    "episode_annotation": ("episode-annotation-container",),
+    # World-model rollout evaluation: frame-locked video panels.
+    "rollout_evaluation": ("rollout-eval-container",),
+    # Grounding evaluation. Needs the image annotation assets too, but those
+    # are gated on their own marker and a grounding project always renders an
+    # image_annotation schema beside this one.
+    "grounding_eval": ("grounding-eval-container",),
+    "region_caption": ("region-caption-container",),
     "audio_annotation": ("audio-annotation-container",),
     "video_annotation": ("video-annotation-container",),
     "span_link": ("span-link-container",),
@@ -335,10 +366,17 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "document_bbox": ("document-bbox-mode", "document-bbox-container", "document-bbox-canvas"),
     "pdf_bbox": ("pdf-bbox-mode", "pdf-bbox-container", "pdf-bbox-canvas"),
     "pdf_link": ("pdf-link-mode",),
+    # Plain PDF.js viewer: the default annotation_mode ("span") for a PDF
+    # display. Marker matches the class pdf_display._render_pdfjs emits.
+    "pdf_viewer": ("pdf-plain-mode",),
     "web_agent_viewer": ('class="web-agent-viewer"', 'class="live-agent-viewer"'),
     "web_agent_playback": ('data-auto-playback="true"',),
     "web_agent_recorder": ("web-agent-recorder",),
     "live_coding_agent": ("live-coding-agent-viewer",),
+    # Per-class show/hide is shared across modalities. Keyed on the label-button
+    # convention that image and video annotation already render identically, so
+    # any surface adopting that markup gets the feature without new wiring.
+    "label_visibility": ("label-btn",),
 }
 
 
@@ -357,12 +395,71 @@ def _detect_frontend_assets_for_page(html_file: str, display_html: str = "") -> 
 
     detected = {key: has_any(*markers) for key, markers in FRONTEND_ASSET_MARKERS.items()}
 
-    # segmentation_tools is an alias — loaded whenever image_annotation is present
-    detected["segmentation_tools"] = detected["image_annotation"]
     # span_link also loads when coreference is present
     detected["span_link"] = detected["span_link"] or detected["coreference"]
 
     return detected
+
+
+# Extensions worth warming the HTTP cache for. Text is not here: it arrives in
+# the page itself, so there is nothing to prefetch.
+_PREFETCHABLE_SUFFIXES = (
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".svg",
+    ".mp3", ".wav", ".ogg", ".m4a", ".flac",
+    ".mp4", ".webm", ".mov", ".mkv",
+    ".pdf",
+)
+
+# Several media fields on one item are normal (a video plus its poster frame);
+# a hundred are not. Cap it so a wide table cannot flood the connection pool
+# and slow down the page the annotator is actually looking at.
+_MAX_PREFETCH_URLS = 4
+
+
+def _looks_prefetchable(value) -> bool:
+    if not isinstance(value, str) or len(value) > 2048:
+        return False
+    candidate = value.split("?", 1)[0].split("#", 1)[0].strip().lower()
+    if not candidate:
+        return False
+    if not (candidate.startswith(("/", "http://", "https://"))):
+        return False
+    return candidate.endswith(_PREFETCHABLE_SUFFIXES)
+
+
+def _next_instance_prefetch_urls(user_state) -> list:
+    """Media URLs on the instance the annotator will see next.
+
+    Navigation is a full page reload, so a JS-side prefetch would be thrown
+    away. Emitting ``<link rel="prefetch">`` instead warms the *HTTP* cache,
+    which survives the reload — that is the whole mechanism.
+
+    Returns [] for anything unexpected. A prefetch is an optimisation; it must
+    never be the reason a page fails to render.
+    """
+    try:
+        ordering = getattr(user_state, "instance_id_ordering", None)
+        index = getattr(user_state, "current_instance_index", -1)
+        if not ordering or index < 0 or index + 1 >= len(ordering):
+            return []
+
+        ism = get_item_state_manager()
+        next_id = ordering[index + 1]
+        if not ism.has_item(next_id):
+            return []
+
+        data = ism.get_item(next_id).get_data() or {}
+        urls = []
+        for value in data.values():
+            if _looks_prefetchable(value):
+                if value not in urls:
+                    urls.append(value)
+                if len(urls) >= _MAX_PREFETCH_URLS:
+                    break
+        return urls
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug(f"Skipping media prefetch: {exc}")
+        return []
 
 
 def _apply_annotation_filter(items: list, filter_config: dict, id_key: str) -> list:
@@ -966,10 +1063,10 @@ def load_user_data(config: dict):
         user_state = usm.get_user_state(user_id)
         if user_state:
             for instance_id in user_state.instance_id_to_label_to_value:
-                if instance_id in ism.instance_id_to_instance:
+                if ism.has_item(instance_id):
                     ism.register_annotator(instance_id, user_id)
             for instance_id in user_state.instance_id_to_span_to_value:
-                if instance_id in ism.instance_id_to_instance:
+                if ism.has_item(instance_id):
                     ism.register_annotator(instance_id, user_id)
             # Collect assigned + annotated items so auto-batch cohort pins can be
             # reconstructed below (they are otherwise in-memory only and reset on
@@ -986,6 +1083,53 @@ def load_user_data(config: dict):
     ism.rebuild_auto_batch_pins_from_users(user_id_to_instance_ids)
 
     logger.info("Loaded user data for %d users" % len(usm.get_user_ids()))
+    _warn_on_orphaned_schemes(config, usm)
+
+
+def _warn_on_orphaned_schemes(config: dict, usm) -> None:
+    """Warn when saved annotations name a scheme the config no longer defines.
+
+    Editing `annotation_schemes` after people have annotated is silent in every
+    direction. An item stays "annotated" whatever it was annotated *with*, so a
+    renamed or newly added scheme is never put back in front of anyone who
+    already finished, and the three surfaces that report on the study disagree
+    without saying so: the overview reports 100% complete, agreement reports
+    zero items for every configured scheme, and the CSV export -- which is
+    driven by what was stored rather than by the config -- comes out with
+    columns named after schemes that no longer exist.
+
+    This does not repair anything. It puts the mismatch in the boot log, which
+    is the only place the operator is already looking.
+    """
+    configured = {s.get("name") for s in (config.get("annotation_schemes") or [])
+                  if isinstance(s, dict) and s.get("name")}
+    if not configured:
+        return
+
+    stored: dict[str, int] = {}
+    for user_id in usm.get_user_ids():
+        user_state = usm.get_user_state(user_id)
+        if not user_state:
+            continue
+        for labels in user_state.instance_id_to_label_to_value.values():
+            for label in labels:
+                schema = getattr(label, "schema", None)
+                if schema and schema not in configured:
+                    stored[schema] = stored.get(schema, 0) + 1
+
+    if not stored:
+        return
+
+    named = ", ".join(f"{name} ({count} answer(s))"
+                      for name, count in sorted(stored.items()))
+    logger.warning(
+        "Saved annotations name %d scheme(s) that annotation_schemes no longer "
+        "defines: %s. Items already annotated stay annotated, so nobody who "
+        "finished will be shown the current schemes, agreement will report zero "
+        "items for them, and exports will carry the old names. If this was a "
+        "rename, keep the old name or start a new output_annotation_dir.",
+        len(stored), named,
+    )
 
 def load_training_data(config: dict) -> None:
     """
@@ -1304,23 +1448,41 @@ def _prefill_diversity_embeddings(dm, config: dict) -> None:
         config: Application configuration
     """
     from tqdm import tqdm
+    from potato.embedders import resolve
 
     ism = get_item_state_manager()
-    text_key = config.get("item_properties", {}).get("text_key", "text")
-
-    # Collect texts for prefill
     items = list(ism.items())[:dm.config.prefill_count]
-    texts = {}
-
-    for item in items:
-        item_data = item.get_data()
-        text = item_data.get(text_key, item.get_text())
-        texts[item.get_id()] = text
-
-    if not texts:
+    if not items:
         return
 
-    print(f"Prefilling {len(texts)} embeddings for diversity ordering...")
+    # Which field, and which encoder? Asking the project rather than assuming
+    # text: `item.get_text()` falls back to an item's first string value, so a
+    # vision corpus used to embed its own instance ids and say nothing about it.
+    samples = [item.get_data() for item in items[:50]]
+    embedder = resolve(config, samples=samples,
+                       cache_dir=config.get("output_annotation_dir"))
+    if not embedder.available:
+        logger.warning("Diversity embeddings unavailable: %s",
+                       embedder.spec.unavailable_reason)
+        print(f"Skipping embeddings: {embedder.spec.unavailable_reason}")
+        return
+    dm.use_embedder(embedder)
+
+    texts = {}
+    for item in items:
+        reference = embedder.reference_for(item.get_data())
+        if reference is not None:
+            texts[item.get_id()] = reference
+
+    if not texts:
+        logger.warning(
+            "Diversity embeddings: no item carried the field '%s'",
+            embedder.spec.source_field)
+        return
+
+    print(f"Prefilling {len(texts)} embeddings "
+          f"({embedder.spec.backend}/{embedder.spec.model} "
+          f"over '{embedder.spec.source_field}')...")
 
     # Track progress with tqdm
     completed = [0]
@@ -1687,9 +1849,10 @@ def load_phase_data(config: dict) -> None:
                             "_".join(config["annotation_task_name"].split(" "))
                             + "-" + "%s.html" % phase_name
                         )
-                        generated_dir = os.path.join(config["site_dir"], "generated")
-                        if not os.path.exists(generated_dir):
-                            os.makedirs(generated_dir)
+                        from potato.server_utils.generated_templates import (
+                            resolve_generated_templates_dir)
+                        generated_dir = resolve_generated_templates_dir(
+                            config["site_dir"])
                         output_html_fname = os.path.join(generated_dir, site_name)
                         with open(output_html_fname, "wt", encoding="utf-8") as outf:
                             outf.write(html_template)
@@ -1789,13 +1952,17 @@ def load_phase_data(config: dict) -> None:
         except Exception as e:
             from potato.server_utils.config_module import ConfigValidationError
             if isinstance(e, ConfigValidationError):
-                # Configuration errors (e.g. invalid display_logic on a survey
-                # question) must fail fast rather than being logged-and-skipped:
-                # silently dropping a consent/prestudy phase would let users
-                # bypass required gating.
                 raise
+            # A phase that cannot be built must abort the boot, not be dropped.
+            # Logging and continuing produced studies that launched and were
+            # completed by annotators with the entire post-study survey
+            # missing -- the only trace was one ERROR line in the startup log.
+            # Same reasoning as consent/prestudy gating: a phase the author
+            # asked for and did not get is never the safe outcome.
             logger.error(f"Failed to load phase '{phase_name}': {e}")
-            continue
+            raise ConfigValidationError(
+                f"Failed to load phase '{phase_name}': {e}"
+            ) from e
 
     # Validate display_logic on SurveyFlow questions now that every phase's
     # questions are known. This covers what the config-load validator misses
@@ -2164,6 +2331,59 @@ def go_to_id(user_id: str, instance_index: int):
     user_state = get_user_state(user_id)
     user_state.go_to_index(int(instance_index))
 
+def _training_page_context(user_state):
+    """Template context specific to a training page.
+
+    Training renders through the same generated page as every other phase, but the
+    shared template's defaults are annotation-shaped: they hide the instance text
+    outside the annotation phase, and they know nothing about practice questions.
+    This supplies the difference — the question text, the progress counters, and the
+    feedback from the last attempt (all of which TrainingState already persists).
+    """
+    training_state = user_state.get_training_state()
+    instance = user_state.get_current_training_instance()
+
+    text = ""
+    instance_id = ""
+    if instance is not None:
+        data = instance.get_data()
+        # Respect the project's configured text_key. Hardcoding
+        # displayed_text/text meant an image project — whose text_key points at
+        # the image URL field — produced an EMPTY training question, so the
+        # canvas had no image to load even once its assets were wired up.
+        text_key = config.get("item_properties", {}).get("text_key", "text")
+        text = (data.get("displayed_text")
+                or data.get(text_key)
+                or data.get("text", ""))
+        instance_id = instance.get_id()
+
+    total = len(training_state.training_instances)
+    return {
+        "is_training_page": True,
+        # The shared template hides #instance-text unless this is set; without it the
+        # practice question never appears on screen.
+        "show_instance_text": True,
+        "instance_text_heading": "Training Question",
+        "instance": text,
+        "instance_plain_text": text,
+        "instance_id": instance_id,
+        "training_current_question": min(training_state.get_current_question_index() + 1,
+                                         total) if total else 0,
+        "training_total_questions": total,
+        "training_correct_count": training_state.get_correct_answer_count(),
+        "training_mistake_count": training_state.get_total_mistakes(),
+        "training_show_feedback": training_state.show_feedback,
+        "training_feedback": training_state.feedback_message,
+        "training_feedback_type": getattr(training_state, "feedback_type", "info"),
+        "training_allow_retry": training_state.allow_retry,
+        # Practice questions are answered in order and there is nothing to go back to.
+        "can_go_back": False,
+        "jumping_to_id_disabled": True,
+        "finished": training_state.get_current_question_index(),
+        "total_count": total,
+    }
+
+
 def get_current_page_html(config, username):
     """
     Returns the HTML for the current page that the user is on.
@@ -2203,6 +2423,61 @@ def get_current_page_html(config, username):
         'can_go_back': usm.can_user_go_back(username),
         'jumping_to_id_disabled': config.get('jumping_to_id_disabled', False),
     }
+    # Phase pages render through this path rather than render_page_with_annotations,
+    # so the keystroke-tracker wiring has to be repeated here. Without it, typing
+    # dynamics would be captured on the annotation page only — and the endpoint
+    # stamps phase/page precisely so that free-text answers in surveys and the
+    # training phase can be attributed too.
+    from potato.server_utils.config_module import get_keystroke_client_config
+    keystroke_client_config = get_keystroke_client_config(config)
+    context['keystroke_client_config'] = keystroke_client_config
+    context['keystroke_logging_enabled'] = (
+        keystroke_client_config["enabled"]
+        and keystroke_client_config["fidelity"] != "off"
+    )
+
+    # Same for drawing telemetry, and for the same reason: the TRAINING phase
+    # renders real annotation schemes through this path, so telemetry gated only
+    # on the annotation path would silently collect nothing during training --
+    # which is exactly where a new annotator's drawing behaviour is most worth
+    # measuring.
+    from potato.server_utils.config_module import (
+        get_annotation_telemetry_client_config)
+    telemetry_client_config = get_annotation_telemetry_client_config(config)
+    context['annotation_telemetry_client_config'] = telemetry_client_config
+    context['annotation_telemetry_enabled'] = (
+        telemetry_client_config["enabled"]
+        and telemetry_client_config["fidelity"] != "off"
+    )
+
+    # Phase pages are rendered from the SAME template as the annotation page, so
+    # they need the same asset gating. Without this, `frontend_assets` defaults
+    # to {} and neither fabric.js nor image-annotation.js is loaded — which made
+    # image annotation completely non-functional during TRAINING: the canvas
+    # element rendered and nothing ever initialized it. Audio, video, and span
+    # practice questions had the same problem.
+    #
+    # This is the two-render-path hazard: anything conditional added to
+    # base_template_v2.html must be wired here as well as in
+    # render_page_with_annotations, or the feature silently works on only half
+    # the workflow.
+    annotation_schemes = config.get("annotation_schemes", []) or []
+    # The detector resolves the template path itself.
+    context['frontend_assets'] = _detect_frontend_assets_for_page(html_fname)
+    context['has_image_annotation'] = any(
+        scheme.get("annotation_type") == "image_annotation"
+        for scheme in annotation_schemes
+    )
+    context['ai_enabled'] = config.get("ai_support", {}).get("enabled", False)
+    # Same two-path hazard. The sidebars sit behind `is_annotation_page` as
+    # well, so today this only keeps the flags defined rather than falling
+    # through to Jinja's `default(false)` -- but a page that renders the
+    # annotation template must carry every variable that template reads, or
+    # the next person to widen that condition gets a silent no-op.
+    context.update(_annotation_sidebar_flags(config))
+
+    if phase == UserPhase.TRAINING:
+        context.update(_training_page_context(user_state))
     rendered_html = render_template(html_fname, **context)
     soup = BeautifulSoup(rendered_html, "html.parser")
 
@@ -2223,7 +2498,10 @@ def get_current_page_html(config, username):
             if input_field.get('type') == 'checkbox' or input_field.get('type') == 'radio':
                 if value:
                     if input_field.get('type') == 'radio':
-                        if input_field.get('value') == value:
+                        # See the annotation-page restore below: label_name is the
+                        # identity, `value` only disambiguates when several inputs
+                        # share one label_name.
+                        if len(input_fields) == 1 or input_field.get('value') == value:
                             input_field['checked'] = True
                     else:
                         input_field['checked'] = True
@@ -2274,6 +2552,22 @@ def get_current_page_html(config, username):
         target = soup.body if soup.body else soup
         target.append(script_tag)
 
+        # The collapse in display-logic.js needs each schema's annotation_type to know
+        # that, say, a multiselect answered on an earlier page collapses to the full
+        # list of selected labels rather than one arbitrary member. Types for schemas
+        # on the CURRENT page are read from the DOM (every generator stamps
+        # data-annotation-type on the schema form); prior-phase schemas have no markup
+        # here, so ship their types alongside the answers.
+        prior_types = {}
+        for scheme in (config.get("_surveyflow_schemes") or []):
+            if isinstance(scheme, dict) and scheme.get("name") in prior_raw:
+                prior_types[scheme["name"]] = scheme.get("annotation_type")
+        if prior_types:
+            types_json = easy_json(prior_types).replace("<", "\\u003c")
+            types_tag = soup.new_tag("script")
+            types_tag.string = "window.priorPhaseAnswerTypes = " + types_json + ";"
+            target.append(types_tag)
+
     return str(soup)
 
 def _sanitize_codebook_url(url: str) -> str:
@@ -2323,12 +2617,74 @@ def _scheme_has_required_annotation(user_state, instance_id: str, scheme: dict) 
     return False
 
 
+def _flat_annotations_for_instance(user_state, instance_id: str) -> dict:
+    """`{schema: value}` for one instance, in the shape display_logic compares.
+
+    Mirrors `flatten_phase_annotations`, which does the same job for phase
+    pages; annotation pages key by `Label` objects rather than by page, so the
+    flattening differs even though the comparison afterwards is identical.
+    """
+    flat: dict = {}
+    for label_key, value in (
+        user_state.instance_id_to_label_to_value.get(instance_id, {}) or {}
+    ).items():
+        if not hasattr(label_key, "get_schema"):
+            continue
+        schema = label_key.get_schema()
+        name = label_key.get_name() if hasattr(label_key, "get_name") else None
+        if not value:
+            continue
+        existing = flat.get(schema)
+        # A multiselect contributes one entry per ticked label, so collect them
+        # into a list; single-choice schemes keep the label name, which is what
+        # `equals` is written against in a config.
+        if existing is None:
+            flat[schema] = name if name is not None else value
+        elif isinstance(existing, list):
+            existing.append(name)
+        else:
+            flat[schema] = [existing, name]
+    return flat
+
+
+def _hidden_scheme_names(user_state, instance_id: str) -> set:
+    """Schemes whose `display_logic` condition is not met for this instance."""
+    schemes = config.get("annotation_schemes", []) or []
+    if not any(isinstance(s, dict) and s.get("display_logic") for s in schemes):
+        return set()
+    try:
+        from potato.server_utils.display_logic import compute_hidden_schemas
+        return compute_hidden_schemas(
+            schemes, _flat_annotations_for_instance(user_state, instance_id))
+    except Exception:
+        logger.warning(
+            "display_logic could not be evaluated for %s; required-answer "
+            "checking will treat every scheme as visible", instance_id,
+            exc_info=True)
+        return set()
+
+
 def _instance_meets_required_annotation_rules(user_state, instance_id: str) -> list:
-    """Return the names of required schemes that are still unsatisfied."""
+    """Return the names of required schemes that are still unsatisfied.
+
+    A scheme hidden by its own `display_logic` is skipped. Without that, a
+    required follow-up behind a condition is unsatisfiable the moment the
+    condition is false: the annotator cannot see the question, cannot answer
+    it, and every save is refused with a 400 they are never shown. The task
+    validates, previews and screenshots cleanly, so nothing catches it before
+    an annotator is stuck on the first item that takes the other branch.
+
+    `display_logic` plus `required` is the natural way to write a gated
+    follow-up, which is why this has to work rather than be documented around.
+    """
+    hidden = _hidden_scheme_names(user_state, instance_id)
     unsatisfied = []
     for scheme in config.get("annotation_schemes", []):
+        name = scheme.get("name", "unknown")
+        if name in hidden:
+            continue
         if _scheme_is_required(scheme) and not _scheme_has_required_annotation(user_state, instance_id, scheme):
-            unsatisfied.append(scheme.get("name", "unknown"))
+            unsatisfied.append(name)
     return unsatisfied
 
 
@@ -2352,6 +2708,58 @@ def _annotator_dashboard_enabled() -> bool:
     if isinstance(raw, dict):
         return bool(raw.get("enabled", False))
     return False
+
+
+_SIDEBAR_GATE_WARNED: set[str] = set()
+
+
+def _annotation_sidebar_flags(cfg) -> dict:
+    """Which of the three universal sidebars this task actually has.
+
+    Memos, search-and-claim and the codebook tray used to be *self-gating*: the
+    template loaded all three on every annotation page and each one probed its
+    own API to find out whether the feature was on. Almost no task enables any
+    of them, so the common case was nine failed requests per page view -- five
+    503s from the codebook blueprint, two from memos, a 403 from search -- and
+    a console noisy enough to hide a real error.
+
+    The server already knows the answer, so it says so here and the template
+    omits the markup and the script entirely. Each predicate is imported from
+    the blueprint that enforces it, so the client and the API cannot disagree
+    about what is enabled.
+    """
+    def gate(name, fn):
+        # A broken subsystem degrades to "off", matching what already happens
+        # to its blueprint: routes.py registers all three inside a try, so an
+        # import failure has always meant the feature is absent. Warn once
+        # rather than per request -- this runs on every page render.
+        try:
+            return bool(fn())
+        except Exception:
+            if name not in _SIDEBAR_GATE_WARNED:
+                _SIDEBAR_GATE_WARNED.add(name)
+                logger.warning(
+                    "%s gate is unavailable; the sidebar will stay off", name,
+                    exc_info=True)
+            return False
+
+    def memos():
+        from potato.memos.api import memos_enabled
+        return memos_enabled(cfg)
+
+    def codebook():
+        from potato.codebook.api import codebook_enabled
+        return codebook_enabled(cfg)
+
+    def search_claim():
+        from potato.search.service import search_settings
+        return (search_settings(cfg) or {}).get("annotator_claim")
+
+    return {
+        "memos_enabled": gate("memos", memos),
+        "codebook_ui_enabled": gate("codebook", codebook),
+        "search_claim_enabled": gate("search", search_claim),
+    }
 
 
 def render_page_with_annotations(username: str):
@@ -2439,6 +2847,14 @@ def render_page_with_annotations(username: str):
             k: v for k, v in item_data.items()
             if isinstance(v, (str, int, float, bool, list))
         }
+        # Pairwise candidates come from the item's own data and are laid out by
+        # the client in the order it receives them, so swapping them means
+        # permuting the list HERE -- there is no markup to reorder afterwards.
+        # Always showing A before B is the position bias the whole feature
+        # exists for: it does not cancel across annotators, it inflates
+        # agreement while biasing the estimate.
+        _apply_pairwise_order(var_elems["instance_data"], user_state,
+                              username, instance_id)
 
     # also save the displayed text in the metadata dict
     # instance_id_to_data[instance_id]['displayed_text'] = text
@@ -2458,6 +2874,16 @@ def render_page_with_annotations(username: str):
     # NOTE2: We have to this here to account for any keyword highlighting before
     # the instance text gets marked up in the post-processing below
     span_annotations = get_span_annotations_for_user_on(username, instance_id)
+    if not span_annotations:
+        # Span pre-annotations have to be applied HERE, not in the soup walk
+        # below that handles every other schema type. Spans are not an input
+        # value: they are markup baked into the instance text, and by the time
+        # that walk runs the text has already been rendered. Without this a
+        # config with `pre_annotation.enabled` and a span scheme fell through
+        # to "not yet supported" and showed the annotator nothing -- which is
+        # exactly what an imported brat/CoNLL/QDPX project produces.
+        span_annotations = _span_annotations_from_pre_annotations(
+            pre_annotation_data, config)
     if span_annotations is not None and len(span_annotations) > 0:
         # Mark up the instance text where the annotated spans were
         text = render_span_annotations(text, span_annotations)
@@ -2631,6 +3057,25 @@ def render_page_with_annotations(username: str):
                 "rationale_on_flip": bc.rationale_on_flip,
             }
     boundary_enabled = boundary_client_config is not None
+    # Keystroke logging (typing dynamics on free-text fields): conditional asset
+    # + JS config. Detection thresholds stay server-side; see
+    # get_keystroke_client_config.
+    from potato.server_utils.config_module import get_keystroke_client_config
+    keystroke_client_config = get_keystroke_client_config(config)
+    keystroke_logging_enabled = (
+        keystroke_client_config["enabled"]
+        and keystroke_client_config["fidelity"] != "off"
+    )
+    # Annotation telemetry (drawing dynamics on geometry schemas): conditional
+    # asset + JS config. Screening thresholds stay server-side; see
+    # get_annotation_telemetry_client_config.
+    from potato.server_utils.config_module import (
+        get_annotation_telemetry_client_config)
+    annotation_telemetry_client_config = get_annotation_telemetry_client_config(config)
+    annotation_telemetry_enabled = (
+        annotation_telemetry_client_config["enabled"]
+        and annotation_telemetry_client_config["fidelity"] != "off"
+    )
     # Truth Serum (surprisingly-popular scoring): conditional assets + JS config
     truth_serum_client_config = None
     if config.get("truth_serum", {}).get("enabled", False):
@@ -2680,6 +3125,10 @@ def render_page_with_annotations(username: str):
             has_instance_display = False  # Fall back to legacy mode
 
     frontend_assets = _detect_frontend_assets_for_page(html_file, display_html)
+
+    # Warm the HTTP cache for the next instance's media while the annotator
+    # works on this one, so Next does not begin with a blank wait.
+    prefetch_urls = _next_instance_prefetch_urls(user_state)
 
     # Get IBWS round info if active
     ibws_round_info = None
@@ -2738,12 +3187,17 @@ def render_page_with_annotations(username: str):
         span_targets=display_template_vars.get("span_targets", []),
         multi_span_mode=display_template_vars.get("multi_span_mode", False),
         frontend_assets=frontend_assets,
+        prefetch_urls=prefetch_urls,
         # Agent proxy (for conditional loading of agent-chat assets)
         agent_proxy_enabled=agent_proxy_enabled,
         # Chat support (for conditional loading of llm-chat-sidebar assets)
         chat_enabled=chat_enabled,
         # Boundary Lab (counterfactual boundary probing)
         boundary_enabled=boundary_enabled,
+        keystroke_logging_enabled=keystroke_logging_enabled,
+        keystroke_client_config=keystroke_client_config,
+        annotation_telemetry_enabled=annotation_telemetry_enabled,
+        annotation_telemetry_client_config=annotation_telemetry_client_config,
         boundary_client_config=boundary_client_config,
         # Truth Serum (surprisingly-popular scoring)
         truth_serum_enabled=truth_serum_enabled,
@@ -2773,6 +3227,9 @@ def render_page_with_annotations(username: str):
         jumping_to_id_disabled=config.get("jumping_to_id_disabled", False),
         # Hotkey review mode (auto-advance when all required schemas complete)
         review_mode=config.get("review_mode", {}) or {},
+        # Universal sidebars (memos / search-and-claim / codebook tray). Off
+        # unless the task enables them; see _annotation_sidebar_flags.
+        **_annotation_sidebar_flags(config),
         # ai=ai_hints,
         **kwargs
     )
@@ -2809,18 +3266,41 @@ def render_page_with_annotations(username: str):
                 # a radio when input.value == value, and the radio's value
                 # attribute is the label name. This matches how a returning
                 # user's restored annotations are stored.
-                if isinstance(predicted_value, str) and predicted_value in scheme.get('label2value', {}):
-                    annotations[schema_name][predicted_value] = predicted_value
-                elif isinstance(predicted_value, list):
-                    # Multi-select: multiple values
-                    for val in predicted_value:
-                        if val in scheme.get('label2value', {}):
-                            annotations[schema_name][val] = val
+                known = scheme.get('label2value', {})
+                for name in _prelabel_names(predicted_value):
+                    if name in known:
+                        annotations[schema_name][name] = name
             elif scheme['annotation_type'] in ['text']:
                 if "labels" not in scheme:
                     annotations[schema_name]['text_box'] = str(predicted_value)
             elif scheme['annotation_type'] in ['likert', 'slider', 'number']:
                 annotations[schema_name]['slider'] = str(predicted_value)
+            elif scheme['annotation_type'] == 'image_annotation':
+                # Image annotations live in a single hidden input under the
+                # "_data" label. The DOM walk below has a dedicated fallback for
+                # it (`if not input_fields and label == "_data"`), which sets the
+                # value plus data-server-set='true' -- exactly the path a
+                # returning user's saved annotations already take, and which
+                # ImageAnnotationManager._loadExistingAnnotations() deserializes.
+                #
+                # The value must be a JSON *array* of client-shaped objects; see
+                # potato.export.cv_utils.to_client_object.
+                if isinstance(predicted_value, str):
+                    annotations[schema_name]['_data'] = predicted_value
+                elif isinstance(predicted_value, list):
+                    annotations[schema_name]['_data'] = json.dumps(predicted_value)
+                else:
+                    logger.warning(
+                        f"Pre-annotation for image schema {schema_name} must be a "
+                        f"list of annotation objects or a JSON string, got "
+                        f"{type(predicted_value).__name__}"
+                    )
+            elif scheme['annotation_type'] == 'span':
+                # Already applied, further up, by
+                # _span_annotations_from_pre_annotations(). Spans are markup in
+                # the instance text rather than an input value, so they cannot
+                # be set by this DOM walk -- the text was rendered before it.
+                pass
             else:
                 logger.debug(f"Pre-annotation not yet supported for {scheme['annotation_type']}")
 
@@ -2893,10 +3373,15 @@ def render_page_with_annotations(username: str):
 
                     if input_field.get('type') == 'checkbox' or input_field.get('type') == 'radio':
                         if value:
-                            # For radio buttons, only check if the value matches
-                            # (multiple radios share the same schema/label_name but have different values)
                             if input_field.get('type') == 'radio':
-                                if input_field.get('value') == value:
+                                # label_name is the identity; `value` is only a
+                                # tie-break for the rare case where several inputs
+                                # share one label_name. Requiring an exact value match
+                                # here means any change to how a value is derived
+                                # silently stops old answers restoring — a likert
+                                # stored under sequential_key_binding, for instance,
+                                # kept its label_name but had its value rewritten.
+                                if len(input_fields) == 1 or input_field.get('value') == value:
                                     input_field['checked'] = True
                             else:
                                 # For checkboxes, set checked
@@ -2955,15 +3440,32 @@ def render_page_with_annotations(username: str):
                             option = input_field.findChildren("option", {"value": value})[0]
                             option["selected"] = "selected"
 
-    # randomize the order of options for schemas that support it
-    selected_schemas_for_option_randomization = []
-    for it in config['annotation_schemes']:
-        if it.get('option_randomization') and it['annotation_type'] in ('multirate', 'radio', 'multiselect', 'select'):
-            selected_schemas_for_option_randomization.append(it['description'])
+    # Record which order every ordered scheme's options are shown in, and
+    # shuffle the ones configured for it.
+    #
+    # Recording happens whether or not randomization is on. A fixed order
+    # biases every annotator the same way, which INFLATES agreement while
+    # biasing the estimate -- so a study that ran without randomization can
+    # only be corrected afterwards if we wrote down what was actually shown.
+    from potato.server_utils import presentation_order as _order
 
+    shown_orders = _order.orders_for_item(
+        config.get('annotation_schemes', []), username, instance_id)
+    # Re-read what comes back: an item rendered before is answered against the
+    # order it was FIRST shown in, not the one we would derive now.
+    shown_orders = _order.record(user_state, instance_id, shown_orders)
 
-        soup = randomize_options(soup, selected_schemas_for_option_randomization,
-                                 map_user_id_to_digit(username))
+    randomized = {
+        it['description']: shown_orders.get(it.get('name'))
+        for it in config.get('annotation_schemes', [])
+        if _order.wants_randomization(it) and shown_orders.get(it.get('name'))
+    }
+    if randomized:
+        # Called ONCE, outside the loop. It used to sit inside it, so the soup
+        # was re-shuffled once per configured scheme with a partially-built
+        # name list -- and with a seed from the builtin hash(), which is salted
+        # per process, so the order changed on every server restart.
+        soup = randomize_options(soup, randomized)
 
     # If the admin has turned on AI hints, add them to the page
     soup = add_ai_hints(soup, instance_id)
@@ -3207,91 +3709,179 @@ def render_page_with_annotations_WEIRD(username):
         annotation_codebook_url=_sanitize_codebook_url(config.get("annotation_codebook_url", "")),
     )
 
-def randomize_options(soup, legend_names, seed):
-    random.seed(seed)
+def _apply_pairwise_order(instance_data, user_state, username, instance_id):
+    """
+    Permute a pairwise scheme's candidate list, and record where each came from.
 
-    # Find all fieldsets in the soup
+    The record is a list of SOURCE INDICES, not label names: the candidates are
+    per-item text, so "this annotator saw the item that was second in the data
+    first" is the only fact an analyst can condition on afterwards.
+
+    Reuses an order already recorded for this item rather than deriving a fresh
+    one, so a reload shows the same arrangement -- an annotator shown a
+    different pairing on every visit is being asked a different question each
+    time.
+    """
+    from potato.server_utils import presentation_order as _order
+
+    for scheme in config.get('annotation_schemes', []) or []:
+        name = scheme.get("name")
+        if not name:
+            continue
+        order = _order.item_order(scheme, instance_data, username, instance_id)
+        if not order:
+            continue
+
+        recorded = _order.record(user_state, instance_id, {name: order}).get(name)
+        if recorded and len(recorded) == len(order):
+            try:
+                order = [int(i) for i in recorded]
+            except (TypeError, ValueError):
+                logger.warning("Ignoring a malformed recorded order for %s/%s",
+                               instance_id, name)
+
+        items_key = scheme.get("items_key", "text")
+        items = instance_data.get(items_key)
+        if isinstance(items, list) and len(items) == len(order):
+            instance_data[items_key] = [items[i] for i in order]
+
+
+def randomize_options(soup, orders):
+    """
+    Reorder a scheme's options to match an order decided upstream.
+
+    Args:
+        soup: The rendered page.
+        orders: ``{legend text: [label names in the order to show]}``, from
+            :func:`potato.server_utils.presentation_order.orders_for_item`.
+
+    Three things changed here, each of which had made the feature not work:
+
+    1. **The order is an input, not a decision.** It used to shuffle in place
+       with ``random.seed(seed)``. That both reached into the global random
+       stream every other caller in the process shares, and left the server
+       unable to say what it had shown -- so the order could never be recorded
+       and a study could never be corrected for position bias afterwards.
+    2. **The seed is stable.** It came from the builtin ``hash()``, which is
+       salted per process, so every option set re-ordered on each server
+       restart -- an annotator returning to an item was asked a different
+       question. It also collapsed to nine distinct values, so annotators
+       collided.
+    3. **It runs once.** The call sat inside the loop that built its own
+       argument, so it re-shuffled the soup once per configured scheme.
+
+    Matching is still by legend text, which is the scheme ``description``,
+    because that is what the generated markup carries. Two schemes sharing a
+    description are therefore reordered together; that is a pre-existing
+    limitation of the markup, not of the ordering.
+    """
+    if not orders:
+        return soup
+
     fieldsets = soup.find_all('fieldset')
     if not fieldsets:
         logger.debug("No fieldsets found.")
         return soup
 
-    # Initialize a variable to track whether the legend is found
-    legend_found = False
+    def reorder(nodes, wanted, key):
+        """Nodes in `wanted` order; anything unnamed keeps its relative place."""
+        by_name = {}
+        for node in nodes:
+            name = key(node)
+            if name is not None:
+                by_name.setdefault(name, []).append(node)
+        ordered = []
+        for name in wanted:
+            ordered.extend(by_name.pop(name, []))
+        # An option present in the DOM but absent from the recorded order --
+        # a dynamic option, or a config edited mid-study. Appending rather
+        # than dropping it keeps the annotator able to answer.
+        for leftovers in by_name.values():
+            ordered.extend(leftovers)
+        return ordered
 
-    # Iterate through each fieldset
     for fieldset in fieldsets:
-        # Find the legend within the current fieldset
         legend = fieldset.find('legend')
-        if legend and legend.string in legend_names:
-            # Legend found, set the flag
-            legend_found = True
+        wanted = orders.get(legend.string) if legend else None
+        if not wanted:
+            continue
 
-            # Determine the parent form's annotation type
-            parent_form = fieldset.find_parent('form')
-            annotation_type = parent_form.get('data-annotation-type', '') if parent_form else ''
+        parent_form = fieldset.find_parent('form')
+        annotation_type = parent_form.get('data-annotation-type', '') if parent_form else ''
 
-            if annotation_type == 'multirate':
-                # Multirate: shuffle <tr> rows in table (skip header row)
-                table = fieldset.find('table')
-                if not table:
-                    logger.debug("Table not found within the fieldset.")
-                    continue
-                tr_elements = table.find_all('tr')[1:]
-                random.shuffle(tr_elements)
-                for tr in tr_elements:
-                    table.append(tr)
+        if annotation_type == 'multirate':
+            table = fieldset.find('table')
+            if not table:
+                logger.debug("Table not found within the fieldset.")
+                continue
+            rows = table.find_all('tr')[1:]
+            for row in reorder(rows, wanted, _row_label):
+                table.append(row)
 
-            elif annotation_type == 'radio':
-                # Radio: shuffle <div class="shadcn-radio-option"> elements
-                options_container = fieldset.find('div', class_='shadcn-radio-options')
-                if not options_container:
-                    options_container = fieldset
-                option_divs = options_container.find_all('div', class_='shadcn-radio-option', recursive=False)
-                if option_divs:
-                    random.shuffle(option_divs)
-                    for div in option_divs:
-                        options_container.append(div)
+        elif annotation_type == 'radio':
+            container = (fieldset.find('div', class_='shadcn-radio-options')
+                         or fieldset)
+            options = container.find_all('div', class_='shadcn-radio-option',
+                                         recursive=False)
+            for div in reorder(options, wanted, _option_label):
+                container.append(div)
 
-            elif annotation_type == 'multiselect':
-                # Multiselect: shuffle checkbox option divs within the grid
-                grid = fieldset.find('div', class_='shadcn-multiselect-grid')
-                if not grid:
-                    grid = fieldset
-                option_divs = grid.find_all('div', class_='shadcn-multiselect-option', recursive=False)
-                if option_divs:
-                    random.shuffle(option_divs)
-                    for div in option_divs:
-                        grid.append(div)
+        elif annotation_type == 'multiselect':
+            grid = fieldset.find('div', class_='shadcn-multiselect-grid') or fieldset
+            options = grid.find_all('div', class_='shadcn-multiselect-option',
+                                    recursive=False)
+            for div in reorder(options, wanted, _option_label):
+                grid.append(div)
 
-            elif annotation_type == 'select':
-                # Select: shuffle <option> elements (skip first if it's a placeholder)
-                select_el = fieldset.find('select')
-                if select_el:
-                    options = select_el.find_all('option')
-                    # Keep placeholder (first option with empty value) in place
-                    placeholder = None
-                    shuffleable = []
-                    for opt in options:
-                        if not placeholder and (opt.get('value', '') == '' or opt.get('disabled') is not None):
-                            placeholder = opt
-                        else:
-                            shuffleable.append(opt)
-                    random.shuffle(shuffleable)
-                    # Clear and re-insert
-                    select_el.clear()
-                    if placeholder:
-                        select_el.append(placeholder)
-                    for opt in shuffleable:
-                        select_el.append(opt)
-            else:
-                logger.debug(f"Unsupported annotation type for randomization: {annotation_type}")
-
-    # Check if any legend was found
-    if not legend_found:
-        logger.debug("No matching legends found within any fieldset.")
+        elif annotation_type == 'select':
+            select_el = fieldset.find('select')
+            if not select_el:
+                continue
+            placeholder = None
+            shuffleable = []
+            for opt in select_el.find_all('option'):
+                if not placeholder and (opt.get('value', '') == ''
+                                        or opt.get('disabled') is not None):
+                    placeholder = opt
+                else:
+                    shuffleable.append(opt)
+            ordered = reorder(shuffleable, wanted,
+                              lambda o: o.get('value') or (o.string or '').strip())
+            select_el.clear()
+            if placeholder:
+                select_el.append(placeholder)
+            for opt in ordered:
+                select_el.append(opt)
+        else:
+            logger.debug("Unsupported annotation type for randomization: %s",
+                         annotation_type)
 
     return soup
+
+
+def _option_label(node):
+    """The label name a radio/checkbox option div stands for."""
+    field = node.find(['input', 'select', 'textarea'])
+    if field is not None:
+        for attr in ('label_name', 'value'):
+            value = field.get(attr)
+            if value:
+                return value
+    label = node.find('label')
+    return label.get_text(strip=True) if label else None
+
+
+def _row_label(row):
+    """The option name a multirate row stands for."""
+    field = row.find('input')
+    if field is not None:
+        for attr in ('label_name', 'schema'):
+            value = field.get(attr)
+            if value:
+                return value
+    cell = row.find(['th', 'td'])
+    return cell.get_text(strip=True) if cell else None
+
 
 def filter_dynamic_options(soup, schemes, instance_data):
     """
@@ -3351,15 +3941,6 @@ def filter_dynamic_options(soup, schemes, instance_data):
 
     return soup
 
-
-def map_user_id_to_digit(user_id_str):
-    # Convert the user_id_str to an integer using a hash function
-    user_id_hash = hash(user_id_str)
-
-    # Map the hashed value to a single-digit integer using modulus
-    digit = abs(user_id_hash) % 9 + 1  # Add 1 to avoid 0
-
-    return digit
 
 def get_total_annotations():
     """
@@ -3489,6 +4070,115 @@ def get_annotations_for_user_on(username, instance_id):
     return processed_annotations
 
 
+def _prelabel_names(predicted_value):
+    """
+    The label names in a categorical pre-annotation, whatever shape it is in.
+
+    A model that reports confidence writes
+    ``[{"label": "positive", "confidence": 0.31}]``, not ``["positive"]`` --
+    which is the shape `ai_prelabel` and every importer produce. This used to
+    test ``dict in label2value`` and raise ``TypeError: unhashable type:
+    'dict'`` from inside the annotation-page render, so the whole page 500'd
+    and the annotator saw a stack trace rather than an item.
+
+    Anything with no recognisable name is skipped rather than raising: a
+    malformed prediction should cost its own highlight, not the page.
+    """
+    if isinstance(predicted_value, str):
+        return [predicted_value]
+    if isinstance(predicted_value, dict):
+        predicted_value = [predicted_value]
+    if not isinstance(predicted_value, list):
+        return []
+
+    names = []
+    for entry in predicted_value:
+        if isinstance(entry, str):
+            names.append(entry)
+        elif isinstance(entry, dict):
+            name = entry.get('label') or entry.get('name')
+            if isinstance(name, str):
+                names.append(name)
+    return names
+
+
+def _span_annotations_from_pre_annotations(pre_annotation_data, config):
+    """
+    Build SpanAnnotation objects out of a span scheme's pre-annotations.
+
+    Every other schema type takes its pre-annotation through the soup walk in
+    ``render_page_with_annotations``, which sets an input's value. Spans have
+    no such input -- they are markup rendered into the instance text before the
+    template ever sees it -- so they need their own path, and without one a
+    span scheme silently ignored ``pre_annotation`` entirely.
+
+    Args:
+        pre_annotation_data: ``{schema_name: value}`` from
+            ``QualityControlManager.extract_pre_annotations``, or None.
+        config: The task config, read for which schemes are spans.
+
+    Returns:
+        A list of SpanAnnotation, empty when there is nothing to render.
+    """
+    if not pre_annotation_data:
+        return []
+
+    span_schemes = {
+        scheme.get("name")
+        for scheme in config.get("annotation_schemes", [])
+        if scheme.get("annotation_type") == "span"
+    }
+    if not span_schemes:
+        return []
+
+    spans = []
+    for schema_name, predicted in pre_annotation_data.items():
+        if schema_name not in span_schemes:
+            continue
+        if isinstance(predicted, str):
+            # Accept the JSON-string form for the same reason image
+            # pre-annotations do: a data file written by hand often quotes it.
+            try:
+                predicted = json.loads(predicted)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Pre-annotation for span schema %s is a string that is not "
+                    "JSON; ignoring it", schema_name)
+                continue
+        if not isinstance(predicted, list):
+            logger.warning(
+                "Pre-annotation for span schema %s must be a list of span "
+                "dicts, got %s", schema_name, type(predicted).__name__)
+            continue
+
+        for entry in predicted:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                start = int(entry["start"])
+                end = int(entry["end"])
+            except (KeyError, TypeError, ValueError):
+                logger.warning(
+                    "Skipping a pre-annotated span on %s with no usable "
+                    "start/end: %r", schema_name, entry)
+                continue
+            name = entry.get("name") or entry.get("label") or ""
+            if not name:
+                continue
+            spans.append(SpanAnnotation(
+                schema=schema_name,
+                name=name,
+                title=entry.get("title") or name,
+                start=start,
+                end=end,
+                id=entry.get("id"),
+                target_field=entry.get("target_field"),
+                additional_parts=entry.get("additional_parts"),
+            ))
+
+    return spans
+
+
 def get_span_annotations_for_user_on(username, instance_id):
     """
     Returns the span annotations made by this user on the instance.
@@ -3575,25 +4265,20 @@ def configure_app(flask_app):
     Returns:
         The configured Flask application instance
     """
+
     global app
     app = flask_app
 
-    # Set application configuration
-    # Use a random secret key if sessions shouldn't persist, otherwise use the configured one
-    if config.get("persist_sessions", False):
-        secret_key = config.get("secret_key") or os.environ.get("POTATO_SECRET_KEY")
-        if not secret_key:
-            raise ValueError(
-                "persist_sessions is enabled but no secret_key is configured. "
-                "Set 'secret_key' in your config file or POTATO_SECRET_KEY environment variable."
-            )
-        app.secret_key = secret_key
-    else:
-        # Generate a random secret key to ensure sessions don't persist between restarts
-        import secrets
-        app.secret_key = secrets.token_hex(32)
+    # Continuous backup to a HuggingFace Dataset, when configured. Started here
+    # rather than in run_server() so it runs on the WSGI factory path too --
+    # which is every container, and precisely where an ephemeral filesystem
+    # makes it the only copy of the data.
+    from potato.server_utils.hf_backup import init_backup
+    init_backup(config)
 
-    app.permanent_session_lifetime = timedelta(days=config.get("session_lifetime_days", 2))
+    # Set application configuration
+    from potato.server_utils.session_config import configure_session
+    configure_session(app, config)
 
     # Configure routes from the routes module
     from routes import configure_routes
@@ -3603,6 +4288,38 @@ def configure_app(flask_app):
     _register_web_agent_blueprints_if_needed(app, config)
 
     return app
+
+
+def _preflight_coding_agent_sandbox(config):
+    """Check the configured agent sandbox is usable, and say what it is.
+
+    Raises on an unusable sandbox instead of starting: a server that accepts
+    annotators while unable to contain their tool calls is worse than one that
+    refuses to boot with an actionable message.
+    """
+    from potato.sandbox import SandboxSettings, preflight, startup_report
+
+    settings = SandboxSettings.from_config(config.get("live_coding_agent", {}))
+
+    reason = preflight(settings)
+    if reason:
+        raise RuntimeError(
+            "Live coding agent sandbox is not usable: %s" % reason
+        )
+
+    for line in startup_report(settings).split("\n"):
+        if settings.is_isolated_mode():
+            logger.info(line)
+        else:
+            logger.warning(line)
+
+    if settings.mode == "container":
+        # A previous crash leaves one container per session with nothing left
+        # running to reap it.
+        from potato.sandbox.container import sweep_orphaned_containers
+        swept = sweep_orphaned_containers(settings.container_cli)
+        if swept:
+            logger.info("Swept %d orphaned sandbox container(s)", swept)
 
 
 def _register_web_agent_blueprints_if_needed(flask_app, config):
@@ -3663,6 +4380,11 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         flask_app.config["live_coding_agent_enabled"] = True
         logger.info("Registered live coding agent blueprint (live_coding_agent display type detected)")
 
+        # Annotators can edit and execute tool calls through this blueprint, so
+        # the sandbox is the security boundary. Validate it now rather than at
+        # the first tool call, which would strand an annotator mid-task.
+        _preflight_coding_agent_sandbox(config)
+
         import atexit
         def _cleanup_coding_agent_sessions():
             try:
@@ -3678,6 +4400,20 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         from potato.routes_trace_ingestion import trace_ingestion_bp
         flask_app.register_blueprint(trace_ingestion_bp)
         flask_app.config["trace_ingestion"] = trace_ingestion_config
+        if not trace_ingestion_config.get("api_key"):
+            if trace_ingestion_config.get("allow_unauthenticated"):
+                logger.warning(
+                    "trace_ingestion is enabled with allow_unauthenticated: true and no "
+                    "api_key -- /api/traces/webhook accepts writes from anyone who can "
+                    "reach this server."
+                )
+            else:
+                logger.warning(
+                    "trace_ingestion is enabled but no api_key is set, so the webhook "
+                    "endpoints will reject every request. Set trace_ingestion.api_key, "
+                    "or trace_ingestion.allow_unauthenticated: true to accept anonymous "
+                    "posts."
+                )
         logger.info("Registered trace ingestion blueprint")
 
         # Start Langfuse poller if configured. Guard against `sources:` being
@@ -3743,6 +4479,16 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         import atexit
         atexit.register(lambda: (get_automation_manager() and get_automation_manager().shutdown()))
         logger.info("Registered automation-rules blueprint")
+
+    # MCP control surface. Config-gated like the blueprints below, and with an
+    # extra refusal: register_mcp_routes() declines under debug: true unless
+    # mcp.allow_debug is set, because debug disables admin auth server-wide.
+    try:
+        from potato.mcp_server.routes import register_mcp_routes
+
+        register_mcp_routes(flask_app, config)
+    except Exception as e:
+        logger.warning("Could not register the MCP control surface: %s", e)
 
     # Semantic curation (Catalog): embedding index + similarity search + slices.
     if config.get("curation", {}).get("enabled", False):
@@ -3844,11 +4590,13 @@ def create_app(config_file=None):
 
     # Configure Jinja2 to look in both main templates and generated templates directories
     real_templates_dir = os.path.join(cur_program_dir, 'templates')
-    generated_templates_dir = os.path.join(real_templates_dir, 'generated')
-
-    # Ensure the generated directory exists
-    if not os.path.exists(generated_templates_dir):
-        os.makedirs(generated_templates_dir, exist_ok=True)
+    # Not necessarily inside the package: an ordinary (non-editable) install
+    # leaves site-packages read-only for the serving user, so this may resolve
+    # to a writable directory elsewhere. The generator uses the same resolver,
+    # which is what keeps the two in agreement.
+    from potato.server_utils.generated_templates import (
+        resolve_generated_templates_dir)
+    generated_templates_dir = resolve_generated_templates_dir(real_templates_dir)
 
     # Add the generated directory to the template search path
     from jinja2 import ChoiceLoader, FileSystemLoader
@@ -4237,7 +4985,9 @@ def _init_waveform_service(config: dict) -> None:
             cache_dir=cache_dir,
             look_ahead=look_ahead,
             cache_max_size=cache_max_size,
-            client_fallback_max_duration=client_fallback_max_duration
+            client_fallback_max_duration=client_fallback_max_duration,
+            # Local media paths from request bodies resolve inside this.
+            task_dir=config.get("task_dir", "."),
         )
 
         if waveform_service.is_available:
@@ -4615,31 +5365,10 @@ def run_server(args):
                 logger.info("Webhook emitter stopped")
         atexit.register(cleanup_webhook_emitter)
 
-    # Initialize HuggingFace CommitScheduler for live backup if configured
-    hf_backup = config.get('huggingface_backup', {})
-    if hf_backup.get('enabled', False):
-        try:
-            from huggingface_hub import CommitScheduler
-            task_dir = config.get('task_dir', '.')
-            output_dir = os.path.join(
-                task_dir,
-                config.get('output_annotation_dir', 'annotation_output')
-            )
-            hf_token = hf_backup.get('token') or os.environ.get('HF_TOKEN')
-            scheduler = CommitScheduler(
-                repo_id=hf_backup['repo_id'],
-                folder_path=output_dir,
-                token=hf_token,
-                private=hf_backup.get('private', True),
-                every=hf_backup.get('schedule_minutes', 5),
-            )
-            logger.info("HuggingFace CommitScheduler initialized: %s (every %d min)",
-                        hf_backup['repo_id'], hf_backup.get('schedule_minutes', 5))
-        except ImportError:
-            logger.warning("huggingface_hub not installed, skipping CommitScheduler. "
-                           "Install with: pip install huggingface_hub>=0.20.0")
-        except Exception as e:
-            logger.error("Failed to initialize HuggingFace CommitScheduler: %s", e)
+    # The HuggingFace backup used to be started here. It now runs from
+    # configure_app(), because this function is only reached by `potato start`:
+    # every container starts through the create_app WSGI factory, so a backup
+    # wired here never ran on the hosts whose disks do not survive a restart.
 
     # Initialize WaveformService for audio annotation if configured
     _init_waveform_service(config)
@@ -4663,10 +5392,60 @@ def run_server(args):
     # Run the Flask app
     host = config.get("host", "0.0.0.0")
     port = config.get("port", 8000)
+
+    # --ssl-cert/--ssl-key used to be parsed and then dropped, so the server
+    # served plaintext while the operator thought it was serving TLS.
+    ssl_context = None
+    if config.get("ssl_cert") and config.get("ssl_key"):
+        ssl_context = (config["ssl_cert"], config["ssl_key"])
+        logger.info("Serving over HTTPS using cert %s", config["ssl_cert"])
+
+    # Two different things are spelled `debug`. Potato's own conveniences
+    # (skip login, debug phases, verbose logging) are safe to keep wherever
+    # the operator asked for them. Flask's `debug=True` additionally serves the
+    # Werkzeug interactive debugger, which is a remote console for anyone who
+    # can reach a traceback. Those are separable, and only the second one has
+    # to be refused off loopback.
+    from potato.server_utils.admin_key import is_loopback_bind
+
+    debug_requested = config.get("debug", False)
+    loopback = is_loopback_bind({"host": host})
+
+    if debug_requested and not loopback:
+        if os.environ.get("POTATO_ALLOW_REMOTE_DEBUG") != "1":
+            raise SystemExit(
+                "Refusing to start: debug is enabled and the server is bound "
+                "to %s rather than loopback.\n"
+                "  debug disables parts of the admin authentication and, with "
+                "the built-in server, exposes the Werkzeug interactive "
+                "debugger.\n"
+                "  Bind to 127.0.0.1, remove `debug: true`, or set "
+                "POTATO_ALLOW_REMOTE_DEBUG=1 if you accept the risk."
+                % host
+            )
+        logger.warning(
+            "=" * 70 + "\n"
+            "debug is enabled on %s, a non-loopback bind, allowed only "
+            "because POTATO_ALLOW_REMOTE_DEBUG=1 is set.\n"
+            "The Werkzeug interactive debugger is still withheld.\n"
+            + "=" * 70, host,
+        )
+
+    # The interactive debugger is never served off loopback, override or not.
+    werkzeug_debug = bool(debug_requested and loopback)
+
+    if debug_requested:
+        logger.warning(
+            "debug is on. Bound to %s. Admin bypass: %s. Werkzeug debugger: %s.",
+            host,
+            "active (loopback)" if loopback else "withheld (not loopback)",
+            "on" if werkzeug_debug else "off",
+        )
+
     # Use threaded=True so background LLM calls (solo mode refinement,
     # edge case synthesis, etc.) don't block the HTTP server.
-    app.run(host=host, port=port, debug=config.get("debug", False),
-            use_reloader=False, threaded=True)
+    app.run(host=host, port=port, debug=werkzeug_debug,
+            use_reloader=False, threaded=True, ssl_context=ssl_context)
 
 
 # Define the main entry point for the Flask server
@@ -4682,6 +5461,56 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == 'transcripts':
         from potato.transcript_cli import main as transcripts_main
         sys.exit(transcripts_main(sys.argv[2:]))
+
+    # ``convokit`` is dispatched the same way and for the same reason: it takes a
+    # corpus name or path rather than a config file.
+    if len(sys.argv) > 1 and sys.argv[1] == 'convokit':
+        from potato.convokit.cli import main as convokit_main
+        sys.exit(convokit_main(sys.argv[2:]))
+
+    # ``import`` generates a project from an existing annotation file (COCO,
+    # ...), so it takes input paths rather than a config file.
+    if len(sys.argv) > 1 and sys.argv[1] == 'import':
+        from potato.importers.cli import main as import_main
+        sys.exit(import_main(sys.argv[2:]))
+
+    # ``download-models`` fetches segmentation weights. Dispatched here for the
+    # same reason as the others: it takes a model name, not a config file.
+    if len(sys.argv) > 1 and sys.argv[1] == 'download-models':
+        from potato.models_cli import main as models_main
+        sys.exit(models_main(sys.argv[2:]))
+
+    # ``deploy`` puts a task on a host and takes it down again. It has its own
+    # subcommands and flag set, so it does not fit the mode + config_file
+    # positional shape the server parser uses.
+    if len(sys.argv) > 1 and sys.argv[1] == 'deploy':
+        from potato.deploy.cli import main as deploy_main
+        sys.exit(deploy_main(sys.argv[2:]))
+
+    # ``share`` serves a task on a temporary public URL through a tunnel.
+    if len(sys.argv) > 1 and sys.argv[1] == 'share':
+        from potato.deploy.share_cli import main as share_main
+        sys.exit(share_main(sys.argv[2:]))
+
+    # ``validate`` and ``preview`` inspect a config without starting anything.
+    # They take a config file like the server modes do, but each carries flags
+    # (--strict/--json, --format/--layout-only) that would collide with the
+    # server parser's, and registering them there would pull all ~24 server
+    # flags into their --help.
+    if len(sys.argv) > 1 and sys.argv[1] == 'validate':
+        from potato.validate_cli import main as validate_main
+        sys.exit(validate_main(sys.argv[2:]))
+
+    if len(sys.argv) > 1 and sys.argv[1] == 'preview':
+        from potato.preview_cli import main as preview_main
+        sys.exit(preview_main(sys.argv[2:]))
+
+    # ``mcp`` runs the Model Context Protocol server that coding agents connect
+    # to. Its own subcommands (serve/tools/config), and `serve` takes a --root
+    # rather than a config file.
+    if len(sys.argv) > 1 and sys.argv[1] == 'mcp':
+        from potato.mcp_server.cli import main as mcp_main
+        sys.exit(mcp_main(sys.argv[2:]))
 
     # Parse command line arguments
     args = arguments()
@@ -4714,6 +5543,10 @@ def main():
         logger.info("Starting codebook initialization")
         from potato.codebook_cli import main as codebook_main
         sys.exit(codebook_main([args.config_file]))
+    elif args.mode == 'repair-annotations':
+        logger.info("Starting single-select annotation repair")
+        from potato.repair_cli import run_repair
+        sys.exit(run_repair(args))
 
     logger.info("Annotation platform shutdown complete")
 

@@ -1,7 +1,7 @@
 """
 Solo Mode Phase Controller
 
-This module defines the Solo Mode workflow phases and state machine.
+The Solo Mode workflow phases and state machine.
 
 Phase State Machine:
     SETUP → PROMPT_REVIEW → EDGE_CASE_SYNTHESIS → EDGE_CASE_LABELING

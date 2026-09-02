@@ -39,6 +39,13 @@ PERSISTENCE_TEST_MAP = {
     "multirate": "tests/selenium/test_annotation_persistence.py",
     "span": "tests/selenium/test_format_span_ui.py",
     "image_annotation": "tests/selenium/test_annotation_persistence.py",
+    "spatial_annotation": "tests/jest/pc-viewer-state.test.js",
+    # Navigate-away-and-back, never a refresh: browsers cache form state
+    # across reload and produce false positives (invariant 2).
+    "episode_annotation": "tests/playwright/test_episode_annotation.py",
+    "rollout_evaluation": "tests/playwright/test_rollout_evaluation.py",
+    "grounding_eval": "tests/playwright/test_grounding_eval.py",
+    "region_caption": "tests/playwright/test_region_caption.py",
     "audio_annotation": "tests/selenium/test_audio_annotation_ui.py",
     "video_annotation": "tests/selenium/test_annotation_persistence.py",
     "pairwise": "tests/selenium/test_pairwise_ui.py",
@@ -102,6 +109,11 @@ EXEMPT_FROM_FILE_CHECK = {
     # Selenium persistence tests still to be written (hidden-input JSON
     # persistence contract is unit-covered in the meantime):
     "multi_document_event", "consensus_tracking", "context_attribution",
+    # 3D needs a WebGL context, which neither jsdom nor a headless Selenium
+    # run reliably provides, so its save/restore contract is covered by a Jest
+    # test that drives the manager against a stub scene. The rendering itself
+    # is verified in a real browser instead -- see the Wave 8 plan.
+    "spatial_annotation",
 }
 
 

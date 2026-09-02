@@ -24,6 +24,25 @@ from .registry import export_registry
 logger = logging.getLogger(__name__)
 
 
+def _behavioral_changes(user_state: dict, instance_id: str) -> list:
+    """The ``annotation_changes`` recorded against one instance, or an empty list."""
+    from potato.export.single_select import behavioral_changes
+    return behavioral_changes(user_state, instance_id)
+
+
+def _typing_summaries(user_state: dict, instance_id: str) -> dict:
+    """The ``typing_summaries`` recorded against one instance, or an empty dict.
+
+    The sketch that travels with the annotation. Raw keystroke streams live in
+    the project's SQLite database and are exported separately by the
+    ``keystrokes`` exporter.
+    """
+    bd = (user_state.get("instance_id_to_behavioral_data") or {}).get(instance_id)
+    if not isinstance(bd, dict):
+        return {}
+    return bd.get("typing_summaries") or {}
+
+
 def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
     """
     Load user annotations from the Potato output directory.
@@ -90,6 +109,17 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
                 "spans": {},
                 "links": {},
                 "image_annotations": {},
+                # Timestamped revision trail for this instance. Exporters use it to
+                # resolve a single-select schema that was stored with several values
+                # by pre-#167 servers; the persisted label order alone cannot (it is
+                # first-write order, not recency). Leading underscore keeps it out of
+                # the flattened output.
+                "_changes": _behavioral_changes(user_state, instance_id),
+                # Per-field typing-dynamics sketch (pauses, bursts, revisions,
+                # pastes) plus the detector verdict. Same underscore convention:
+                # kept out of the flattened columns, written to its own sidecar
+                # file by the tabular exporters.
+                "_typing": _typing_summaries(user_state, instance_id),
             }
 
             # Process span data.
@@ -143,12 +173,22 @@ def load_phase_responses_from_output_dir(
     output_dir: str,
     display_logic_schemes: list = None,
     exclude_hidden: bool = True,
+    single_select_schemas: set = None,
 ) -> list:
     """
     Load phase/surveyflow responses from the Potato output directory.
 
     Reads phase_to_page_to_label_to_value from each user's user_state.json
     and flattens into a list of records.
+
+    Every record carries a ``sequence`` index — its position within that page's stored
+    responses. Row order in the CSV previously conveyed nothing a consumer could rely
+    on; ``sequence`` makes the ordering explicit and stable (GH #167 suggestion 3).
+
+    When ``single_select_schemas`` is given, schemas that may hold at most one answer
+    but were found holding several (data written before the #167 fix) are resolved to
+    their final answer: the winner is tagged ``superseded: False`` and the stale rows
+    ``superseded: True``, so nothing is dropped but the real answer is unambiguous.
 
     Server-side enforcement of conditional survey logic: if
     ``display_logic_schemes`` (the survey/phase scheme dicts, some carrying
@@ -161,10 +201,14 @@ def load_phase_responses_from_output_dir(
     behavior is unchanged (all responses returned, no ``hidden`` field).
 
     Returns:
-        List of dicts with keys: user_id, phase, page, schema, label_name, value
-        (and ``hidden`` when ``display_logic_schemes`` is provided).
+        List of dicts with keys: user_id, phase, page, sequence, schema, label_name,
+        value (plus ``hidden`` when ``display_logic_schemes`` is provided, and
+        ``superseded`` when ``single_select_schemas`` is provided).
     """
+    from potato.export.single_select import resolve_final_label, phase_changes
+
     responses = []
+    single_select_schemas = single_select_schemas or set()
 
     if not os.path.isdir(output_dir):
         return responses
@@ -187,37 +231,53 @@ def load_phase_responses_from_output_dir(
         # Compute which schemas this user's answers hide. Cross-page aware:
         # all phases are merged into one annotation context so a poststudy
         # question can depend on a prestudy answer.
+        #
+        # The collapse is given the schema types and the behavioral trail, so the
+        # hidden-set is decided by the SAME resolution that stamps `superseded` on
+        # the emitted rows below. Previously the two ran different rules and could
+        # disagree — marking row A the winner while having hidden the schema on the
+        # strength of row B.
         hidden_schemas = set()
         if display_logic_schemes:
             from potato.server_utils.display_logic import (
                 flatten_phase_annotations,
                 compute_hidden_schemas,
             )
+            from potato.export.single_select import phase_changes
+            dl_types = {
+                s.get("name"): s.get("annotation_type")
+                for s in display_logic_schemes
+                if isinstance(s, dict) and s.get("name")
+            }
             flat = {}
             for _phase, _pages in phase_data.items():
-                flat.update(flatten_phase_annotations(_pages))
+                flat.update(flatten_phase_annotations(
+                    _pages, schema_types=dl_types,
+                    changes=phase_changes(user_state, _phase, None)))
             hidden_schemas = compute_hidden_schemas(display_logic_schemes, flat)
 
-        def _emit(phase, page, schema, label_name, value):
+        def _emit(phase, page, sequence, schema, label_name, value, winners):
+            record = {
+                "user_id": user_id, "phase": phase, "page": page,
+                "sequence": sequence,
+                "schema": schema, "label_name": label_name, "value": value,
+            }
             if display_logic_schemes:
                 is_hidden = schema in hidden_schemas
                 if is_hidden and exclude_hidden:
                     return
-                responses.append({
-                    "user_id": user_id, "phase": phase, "page": page,
-                    "schema": schema, "label_name": label_name,
-                    "value": value, "hidden": is_hidden,
-                })
-            else:
-                responses.append({
-                    "user_id": user_id, "phase": phase, "page": page,
-                    "schema": schema, "label_name": label_name, "value": value,
-                })
+                record["hidden"] = is_hidden
+            if schema in winners:
+                # Only tagged for schemas that actually held more than one answer,
+                # so a healthy export is unchanged apart from the sequence column.
+                record["superseded"] = label_name != winners[schema]
+            responses.append(record)
 
         for phase, pages in phase_data.items():
             for page, label_values in pages.items():
                 # label_values is a list of [[{schema, name}, value], ...]
                 if isinstance(label_values, list):
+                    parsed = []
                     for entry in label_values:
                         if isinstance(entry, (list, tuple)) and len(entry) == 2:
                             label_obj, value = entry
@@ -226,10 +286,27 @@ def load_phase_responses_from_output_dir(
                                 label_name = label_obj.get("name", "")
                             else:
                                 schema, label_name = str(label_obj), ""
-                            _emit(phase, page, schema, label_name, value)
+                            parsed.append((schema, label_name, value))
                 elif isinstance(label_values, dict):
-                    for label_obj, value in label_values.items():
-                        _emit(phase, page, str(label_obj), "", value)
+                    parsed = [(str(label_obj), "", value)
+                              for label_obj, value in label_values.items()]
+                else:
+                    continue
+
+                # Resolve any single-select schema that ended up with several answers.
+                winners = {}
+                by_schema = {}
+                for schema, label_name, _ in parsed:
+                    by_schema.setdefault(schema, []).append(label_name)
+                for schema, names in by_schema.items():
+                    if schema in single_select_schemas and len(names) > 1:
+                        winner, _method = resolve_final_label(
+                            schema, names, phase_changes(user_state, phase, page))
+                        if winner is not None:
+                            winners[schema] = winner
+
+                for sequence, (schema, label_name, value) in enumerate(parsed):
+                    _emit(phase, page, sequence, schema, label_name, value, winners)
 
     return responses
 
@@ -270,17 +347,39 @@ def load_items_from_data_files(config: dict, config_dir: str) -> dict:
             continue
 
         with open(path, "r") as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    item = json.loads(line)
-                    item_id = str(item.get(id_key, f"item_{line_num}"))
-                    items[item_id] = item
-                except json.JSONDecodeError:
-                    # Try CSV/TSV
-                    logger.debug(f"Line {line_num} in {path} is not JSON, skipping")
+            content = f.read()
+
+        # A whole-file JSON array is as legal a Potato data file as JSON Lines
+        # is — `load_instance_data` accepts both — but reading line by line
+        # yields nothing at all for a pretty-printed array, leaving
+        # ExportContext.items empty and silently stripping every exporter of the
+        # item data it needs. Try the array form first, then fall back.
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            payload = None
+
+        if isinstance(payload, list):
+            for position, item in enumerate(payload, 1):
+                if isinstance(item, dict):
+                    items[str(item.get(id_key, f"item_{position}"))] = item
+            continue
+        if isinstance(payload, dict):
+            items[str(payload.get(id_key, "item_1"))] = payload
+            continue
+
+        for line_num, line in enumerate(content.splitlines(), 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                # CSV/TSV rows and stray text land here.
+                logger.debug(f"Line {line_num} in {path} is not JSON, skipping")
+                continue
+            if isinstance(item, dict):
+                items[str(item.get(id_key, f"item_{line_num}"))] = item
 
     return items
 

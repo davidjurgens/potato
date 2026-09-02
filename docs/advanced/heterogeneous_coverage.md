@@ -6,8 +6,8 @@ For most NLP projects, the right design is the textbook recipe:
 > One annotator handles most items, with two or three annotators overlapping
 > on a 5 to 10 percent sample to monitor quality.
 
-This page explains how to express that and several related patterns through
-the `num_annotators_per_item` and `per_annotator_quota` config blocks.
+That design, and several related ones, are expressed through the
+`num_annotators_per_item` and `per_annotator_quota` config blocks.
 
 ## The canonical config key
 
@@ -130,6 +130,42 @@ Once overlap-sample items saturate, agreement statistics are available at
 | multi-label (multiselect, hierarchical_multiselect, card_sort) | mean Jaccard, MASI-α |
 | ranking (ranking, bws, pairwise) | Kendall's τ, Spearman footrule |
 | span (span, error_span, event_annotation, coreference, extractive_qa) | token-level κ (BIO), span F1 (exact + partial), Krippendorff's α<sub>U</sub>, γ (Mathet) |
+| geometry (image_annotation) | mean agreement, mean matched IoU, detection F1, mean object count difference |
+| temporal (audio_annotation, video_annotation) | mean agreement, mean matched IoU (temporal), detection F1, mean segment count difference |
+
+### Agreement over drawn and timed annotations
+
+Boxes, polygons, masks, points, and audio/video segments are compared by
+**overlap**, not equality — two annotators never produce byte-identical
+geometry. Objects are paired across annotators with the Hungarian algorithm at a
+0.5 IoU threshold (the Pascal VOC / COCO detection convention), and four numbers
+are reported because annotators disagree in distinguishable ways:
+
+| Metric | Question it answers |
+|---|---|
+| `mean_agreement` | Overall, penalizing both sloppy boundaries and missed objects. This is the number adjudication routes on. |
+| `mean_matched_iou` | *Given* both annotators found the object, do they agree where it is? |
+| `detection_f1` | Did they find the same objects at all? |
+| `mean_object_count_diff` | The crudest signal, and often the first to move. |
+
+Reading them together is the point. High `mean_matched_iou` with low
+`detection_f1` means your annotators draw well but miss things — a coverage
+problem, fixed with better instructions. The reverse means they find everything
+but trace it carelessly — a precision problem, fixed with training.
+
+!!! note "Why not Krippendorff's α over IoU?"
+
+    Because IoU distance is bounded in [0, 1], randomly paired shapes saturate
+    at distance ≈ 1, expected disagreement collapses to ≈ 1, and α degenerates
+    to `1 − mean distance` — the chance correction does no work. Worse, it
+    misleads: Braylan, Alonso & Lease
+    ([WWW 2022](https://arxiv.org/abs/2212.09503)) measured α ranking L2 (0.687)
+    *above* IoU (0.505) and GIoU (0.507) on bounding boxes, inverting the
+    ordering their distribution-based measures give. α remains sound for
+    detection and classification agreement, where a real base rate exists.
+
+Free-text schemas are **omitted** from the report rather than scored. Absent is
+honest; a number would not be.
 
 Set `?format=html` for the rendered table:
 

@@ -1,6 +1,6 @@
 # Preview CLI
 
-The Potato Preview CLI allows you to validate annotation configurations and preview how schemas will render without running the full server. This is useful for rapid prototyping, debugging, and CI/CD validation.
+The preview CLI validates an annotation configuration and shows how its schemas will render, without starting the server. Use it while drafting a config, when debugging one, and in CI.
 
 ## Overview
 
@@ -129,7 +129,52 @@ Output:
 |--------|-------|-------------|
 | `--format` | `-f` | Output format: `summary`, `html`, or `json` |
 | `--layout-only` | `-l` | Output only task layout HTML snippet |
+| `--screenshot` | | Render the task in a browser and save a PNG here |
+| `--phase` | | Phase to render with `--screenshot` (default: `annotation`) |
 | `--verbose` | `-v` | Enable verbose/debug output |
+
+## Rendering the task
+
+`--screenshot` starts the task on a spare port, opens it in a headless browser,
+and saves a picture of the annotation page:
+
+```bash
+potato preview config.yaml --screenshot preview.png
+```
+
+The console output matters more than the image. The browser is listening while
+the page loads, so the command reports every uncaught exception, `console.error`
+and failed request:
+
+```
+Rendered with 0 console error(s) and 1 uncaught exception(s).
+Screenshot: preview.png
+  uncaught: labels is not iterable
+```
+
+Validation cannot catch this. The config is well-formed, the server serves it,
+and the interface is broken anyway. Most annotation UI bugs are this shape:
+canvases, timelines, deep-zoom viewers and span managers are all built by
+JavaScript after the HTML arrives, so nothing server-side sees them fail.
+
+Requests to optional subsystems are counted separately. The codebook, memos and
+search-and-claim panels poll their own endpoints when a task enables them, and a
+few of those calls are probes that expect to be refused: the codebook tray asks
+whether the annotator may curate, and a plain annotator gets a 403. With none of
+those features on, the count is zero.
+
+Exit code is `0` when the page rendered with nothing to report and `1` otherwise,
+so this works in CI. `--format json` gives the same information as a dict.
+
+This needs Playwright, which is not installed by default:
+
+```bash
+pip install 'potato-annotation[preview]'
+playwright install chromium
+```
+
+Without it, `--screenshot` still validates the config and returns the
+server-rendered HTML, with a note about what is missing.
 
 ## Configuration Validation
 

@@ -1,7 +1,7 @@
 """
 Utility functions for handling Amazon Mechanical Turk APIs.
 
-This module provides wrapper classes for interacting with the MTurk API
+Wrapper classes for interacting with the MTurk API
 via boto3 to manage HITs and assignments.
 
 The MTurk API requires AWS credentials and uses different endpoints for

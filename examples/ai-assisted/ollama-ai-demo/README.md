@@ -1,6 +1,6 @@
 # Ollama AI-Assisted Annotation Demo
 
-This example demonstrates all of Potato's AI enhancement features using a **local Ollama instance** - no cloud API keys required!
+Every one of Potato's AI features, driven by a **local Ollama instance**. No cloud API key needed.
 
 ## AI Features Demonstrated
 
@@ -146,7 +146,7 @@ ai_support:
 
 ## Switching to Cloud Providers
 
-To use OpenAI, Anthropic, or other cloud providers instead, see the [AI Support Documentation](../../../docs/ai_support.md).
+To use OpenAI, Anthropic, or other cloud providers instead, see the [AI Support Documentation](../../../docs/ai-intelligence/ai_support.md).
 
 Example OpenAI config:
 ```yaml

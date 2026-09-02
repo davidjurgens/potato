@@ -1,7 +1,7 @@
 """
 Simulator manager for orchestrating multiple simulated users.
 
-This module provides the SimulatorManager class that manages multiple
+The SimulatorManager class that manages multiple
 SimulatedUser instances, handling parallel execution and result aggregation.
 """
 

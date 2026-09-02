@@ -124,7 +124,7 @@ chat_support:
       Focus on helping them understand the text.
 ```
 
-## How It Works
+## The sidebar, from the annotator's side
 
 1. A toggle button appears in the navigation bar (right side)
 2. Clicking it opens a sidebar with a chat interface

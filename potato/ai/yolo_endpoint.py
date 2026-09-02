@@ -1,7 +1,7 @@
 """
 YOLO AI Endpoint for Object Detection
 
-This module provides integration with YOLO models (via ultralytics) for
+Integration with YOLO models (via ultralytics) for
 local object detection inference. Supports YOLOv8 and YOLO-World models.
 """
 

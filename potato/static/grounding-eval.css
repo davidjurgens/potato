@@ -1,0 +1,281 @@
+/*
+ * Grounding evaluation.
+ *
+ * The list of referring expressions is the primary control, so it is styled as
+ * a list of answers rather than as a menu: each row carries its own state, and
+ * the state is legible without colour because "located" and "not present" are
+ * the answer, not decoration.
+ *
+ * Colours come from the tokens in styles.css. The three literals below are
+ * deliberate: --muted-foreground is 4.40:1 on --muted and --destructive is
+ * 3.76:1 on white, neither of which clears AA at this size.
+ */
+
+.grounding-eval-container {
+    margin: var(--space-md, 1rem) 0;
+}
+
+.grounding-eval-fieldset {
+    border: 1px solid var(--border, #dee2e6);
+    border-radius: var(--radius, 6px);
+    padding: var(--space-md, 1rem);
+    margin: 0;
+}
+
+.grounding-eval-legend {
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 0 0.5rem;
+    color: var(--heading-color, #212529);
+}
+
+/* -- the expression list --------------------------------------------------- */
+
+.grounding-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.grounding-item {
+    margin: 0;
+}
+
+.grounding-expression-btn {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    width: 100%;
+    /* 44px: this is the primary control and is used on tablets with a stylus. */
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    background: var(--background, #fff);
+    border: 1px solid var(--border, #dee2e6);
+    border-radius: var(--radius, 6px);
+    color: var(--text-color, #212529);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    cursor: pointer;
+    transition: background-color 120ms ease-out, border-color 120ms ease-out;
+}
+
+.grounding-expression-btn:hover {
+    background: var(--muted, #f8f9fa);
+}
+
+/* styles.css sets `outline: none` in 25 places and its :focus-visible rules
+   cover input/textarea/select but NOT button, so without this every control
+   here is keyboard-invisible. */
+.grounding-eval-container button:focus-visible {
+    outline: 3px solid var(--ring, #6e56cf);
+    outline-offset: 2px;
+}
+
+.grounding-item.active .grounding-expression-btn {
+    border-color: var(--primary, #6e56cf);
+    box-shadow: inset 3px 0 0 var(--primary, #6e56cf);
+}
+
+.grounding-expression-text {
+    flex: 1;
+}
+
+/* The state, as fill rather than as a badge alone: scanning a 30-phrase list
+   for what is left has to work at a glance. */
+.grounding-item.state-located .grounding-expression-btn {
+    background: #e6f4ea;
+}
+
+.grounding-item.state-absent .grounding-expression-btn {
+    background: #f6f6f7;
+}
+
+.grounding-item.state-unanswered .grounding-expression-btn {
+    background: #fdf6e7;
+}
+
+.grounding-state {
+    font-size: 0.75rem;
+    font-variant: small-caps;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    color: #495057;
+}
+
+.grounding-has-prediction {
+    font-size: 0.6875rem;
+    color: #5a6472;
+    white-space: nowrap;
+}
+
+.grounding-warning {
+    padding: 0.75rem;
+    border-radius: var(--radius, 6px);
+    background: #fff8e6;
+    color: #8a5a00;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+/* -- controls -------------------------------------------------------------- */
+
+.grounding-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: var(--space-md, 1rem);
+}
+
+.grounding-absent-btn,
+.grounding-clear-btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.5rem 0.875rem;
+    border-radius: var(--radius, 6px);
+    border: 1px solid var(--border, #dee2e6);
+    background: var(--background, #fff);
+    color: var(--text-color, #212529);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background-color 120ms ease-out;
+}
+
+.grounding-absent-btn:hover,
+.grounding-clear-btn:hover {
+    background: var(--muted, #f8f9fa);
+}
+
+.grounding-help {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: #495057;
+    max-width: 62ch;
+}
+
+.grounding-verdict {
+    margin-top: var(--space-md, 1rem);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.grounding-verdict label {
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.grounding-progress {
+    margin: var(--space-md, 1rem) 0 0 0;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: #495057;
+    max-width: 70ch;
+}
+
+.grounding-eval-container.error .grounding-progress {
+    color: #b02a37;
+}
+
+.grounding-announce.sr-only,
+.grounding-eval-container .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .grounding-expression-btn,
+    .grounding-absent-btn,
+    .grounding-clear-btn {
+        transition: none;
+    }
+}
+
+/* -- caption grounding (hallucination localization) ------------------------ */
+
+.grounding-caption-panel {
+    margin-bottom: var(--space-md, 1rem);
+    padding-bottom: var(--space-md, 1rem);
+    border-bottom: 1px solid var(--border, #dee2e6);
+}
+
+.grounding-caption-help {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: #495057;
+    max-width: 70ch;
+}
+
+.grounding-caption {
+    padding: 0.75rem;
+    border: 1px solid var(--border, #dee2e6);
+    border-radius: var(--radius, 6px);
+    background: var(--background, #fff);
+    font-size: 1rem;
+    line-height: 1.7;   /* room for the marks not to collide between lines */
+    max-width: 75ch;
+    /* The whole point of this panel is selecting text in it. */
+    user-select: text;
+    cursor: text;
+}
+
+.grounding-caption:focus-visible {
+    outline: 3px solid var(--ring, #6e56cf);
+    outline-offset: 2px;
+}
+
+/* A grounded phrase and an ungrounded one must be distinguishable from each
+   other and from unmarked text without relying on hue alone, so they differ in
+   underline as well as fill. */
+.grounding-span {
+    padding: 0.05em 0.1em;
+    border-radius: 2px;
+    background: transparent;
+    color: inherit;
+}
+
+.grounding-span.state-located {
+    background: #e6f4ea;
+    border-bottom: 2px solid #1e7e34;
+}
+
+.grounding-span.state-absent {
+    background: #fdecea;
+    border-bottom: 2px dashed #b02a37;
+}
+
+.grounding-span.state-unanswered {
+    background: #fdf6e7;
+    border-bottom: 2px dotted #8a5a00;
+}
+
+.grounding-add-span-btn {
+    margin-top: 0.5rem;
+    min-height: 44px;
+    padding: 0.5rem 0.875rem;
+    border-radius: var(--radius, 6px);
+    border: 1px solid var(--border, #dee2e6);
+    background: var(--background, #fff);
+    color: var(--text-color, #212529);
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.grounding-add-span-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+}

@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+port: 8000
+annotation_task_name: Grounding evaluation
+task_dir: .
+output_annotation_dir: annotation_output/
+export_annotation_format: jsonl
+
+data_files:
+  - data/scenes.json
+
+item_properties:
+  id_key: id
+  text_key: image
+
+media_directory: media
+
+user_config:
+  allow_all_users: true
+  users: []
+
+annotation_schemes:
+  # The canvas the regions are drawn on. A grounding_eval schema needs an
+  # image_annotation schema beside it: it owns the phrase-to-region mapping,
+  # not the drawing.
+  - annotation_type: image_annotation
+    name: region
+    description: "Draw the region for the selected phrase"
+    source_field: image
+    tools: [bbox, polygon, landmark]
+    labels:
+      - name: referent
+        color: "#6e56cf"
+
+  - annotation_type: grounding_eval
+    name: grounding
+    description: "What does each phrase refer to?"
+
+    # `box` is the RefCOCO convention. Use `point` for Molmo-style pointing
+    # evaluation, or `mask` where a box is too coarse to be an answer.
+    region_type: box
+
+    # Where the phrases live on the item. Use `expression_source: spans` with a
+    # `caption_field` instead to select phrases out of a model's caption —
+    # that is hallucination localization.
+    expressions_field: expressions

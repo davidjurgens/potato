@@ -1,10 +1,10 @@
-include potato/templates/congrats.html
-include potato/templates/home.html
-include potato/templates/id_login_home.html
-include potato/templates/signup.html
-include potato/templates/error.html
+graft potato/templates
+# Runtime output, not source: the server writes per-task and per-cohort
+# templates into this directory at startup. It is gitignored, but MANIFEST.in
+# does not read .gitignore, so without this a release cut from a working tree
+# would ship thousands of the maintainer's own task templates.
+prune potato/templates/generated
 include potato/schemas/*.json
-recursive-include potato/base_html/ *
 recursive-include potato/static/ *
 recursive-include potato/i18n/ *.yaml
 global-exclude .DS_Store

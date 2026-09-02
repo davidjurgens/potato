@@ -40,6 +40,43 @@ AUTH_DECORATORS = {
     "login_required": "login",
     "_login_required": "login",
     "same_origin_required": "same-origin",
+    # Applied directly rather than through an `admin_required = ...` alias --
+    # potato/crowdsourcing/admin_api.py does this on every route.
+    "require_permission": "admin",
+    # Guards written into the view body instead of as a decorator. Everything in
+    # potato/routes.py works this way, which is why ~187 operations used to be
+    # published with no x-potato-auth at all and read as unauthenticated.
+    "inline:admin_api_key": "admin",
+    "inline:admin_access": "admin",
+    "inline:adjudicator": "adjudicator",
+    "inline:session_username": "login",
+    # Reachable only when the server runs with debug: true. Not authentication,
+    # but it is the reason the endpoint is not open in a real deployment.
+    "inline:debug_only": "debug-only",
+    # The MCP surface's own gate: a per-agent bearer token plus the tool
+    # allowlist. Not RBAC, and deliberately not the shared admin key.
+    "mcp_tool": "agent-token",
+    "inline:agent_token": "agent-token",
+}
+
+# Module-level singletons whose methods carry their own authorization, mapped to
+# the module those methods are defined in.
+_DELEGATE_OWNERS = {
+    "admin_dashboard": "potato.admin",
+}
+
+# How many times to fold callee markers into callers. Two hops covers every
+# chain in the tree today (view -> helper -> guard); the cap just bounds the
+# loop against a future cycle.
+_MAX_DELEGATION_DEPTH = 4
+
+# Function calls in a view body that authorize the request.
+_INLINE_AUTH_CALLS = {
+    "validate_admin_api_key": "inline:admin_api_key",
+    "_validate_admin_api_key": "inline:admin_api_key",
+    "check_admin_access": "inline:admin_access",
+    "verify_token": "inline:agent_token",
+    "_check_adjudicator_auth": "inline:adjudicator",
 }
 
 # Blueprints create_app() registers conditionally, with the config that enables
@@ -66,6 +103,8 @@ OPTIONAL_BLUEPRINTS: List[Tuple[str, str, str]] = [
      "instance_display field of type live_coding_agent"),
     ("potato.routes_trace_ingestion", "trace_ingestion_bp",
      "trace_ingestion configured"),
+    ("potato.mcp_server.routes", "mcp_bp",
+     "mcp.enabled: true, and every tool named in mcp.tools"),
 ]
 
 # Flask converter -> (OpenAPI type, format)
@@ -94,6 +133,7 @@ def scan_auth_decorators() -> Dict[Tuple[str, str], List[str]]:
     runtime but leaves the source unambiguous.
     """
     found: Dict[Tuple[str, str], List[str]] = {}
+    calls: Dict[Tuple[str, str], List[Tuple[str, str]]] = {}
     root = _package_root()
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in {"__pycache__", "static", "templates"}]
@@ -118,12 +158,114 @@ def scan_auth_decorators() -> Dict[Tuple[str, str], List[str]]:
                     name = getattr(target, "attr", None) or getattr(target, "id", None)
                     if name in AUTH_DECORATORS:
                         names.append(name)
+                names.extend(_inline_auth_markers(node))
                 if names:
                     found.setdefault((module, node.name), [])
                     for name in names:
                         if name not in found[(module, node.name)]:
                             found[(module, node.name)].append(name)
+                calls[(module, node.name)] = _delegated_calls(node, module)
+
+    _propagate_delegated_auth(found, calls)
     return found
+
+
+def _delegated_calls(fn: ast.AST, module: str) -> List[Tuple[str, str]]:
+    """Callees whose own auth markers should count as this function's.
+
+    Most blueprints put the session check in a small per-module helper -- the
+    codebook API calls `_context()`, which returns early when the session has no
+    username -- and the admin routes delegate to `admin_dashboard.<method>()`,
+    whose first statement is `self.check_admin_access()`. Looking only at the
+    view body classified all of those as unauthenticated.
+    """
+    out: List[Tuple[str, str]] = []
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Call):
+            continue
+        target = node.func
+        if isinstance(target, ast.Name):
+            out.append((module, target.id))
+        elif isinstance(target, ast.Attribute):
+            owner = getattr(target.value, "id", None)
+            if owner in _DELEGATE_OWNERS:
+                out.append((_DELEGATE_OWNERS[owner], target.attr))
+    return out
+
+
+def _propagate_delegated_auth(found, calls) -> None:
+    """Fold callee auth markers into their callers, to a fixed point.
+
+    Bounded by the number of functions, and idempotent, so a helper that itself
+    calls a guarded helper still resolves.
+    """
+    for _ in range(_MAX_DELEGATION_DEPTH):
+        changed = False
+        for key, callees in calls.items():
+            inherited = []
+            for callee in callees:
+                for marker in found.get(callee, ()):
+                    if marker not in inherited:
+                        inherited.append(marker)
+            if not inherited:
+                continue
+            existing = found.setdefault(key, [])
+            for marker in inherited:
+                if marker not in existing:
+                    existing.append(marker)
+                    changed = True
+        if not changed:
+            return
+
+
+def _inline_auth_markers(fn: ast.AST) -> List[str]:
+    """Find authorization performed in a function body rather than by decorator.
+
+    Recognizes the two idioms used across potato/routes.py: calling one of the
+    shared guard helpers (`validate_admin_api_key`, `check_admin_access`,
+    `_check_adjudicator_auth`), and testing the session directly
+    (`"username" not in session`, `session.get("username")`).
+    """
+    markers: List[str] = []
+
+    def note(marker: str) -> None:
+        if marker not in markers:
+            markers.append(marker)
+
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call):
+            target = node.func
+            name = getattr(target, "attr", None) or getattr(target, "id", None)
+            if name in _INLINE_AUTH_CALLS:
+                note(_INLINE_AUTH_CALLS[name])
+            elif name == "get" and _is_session(getattr(target, "value", None)):
+                if node.args and _is_username(node.args[0]):
+                    note("inline:session_username")
+            elif name == "get" and getattr(getattr(target, "value", None), "id", None) == "config":
+                first = node.args[0] if node.args else None
+                if isinstance(first, ast.Constant) and first.value == "debug":
+                    note("inline:debug_only")
+        elif isinstance(node, ast.Compare):
+            if not any(isinstance(op, (ast.In, ast.NotIn)) for op in node.ops):
+                continue
+            if _is_username(node.left) and any(
+                _is_session(c) for c in node.comparators
+            ):
+                note("inline:session_username")
+        elif isinstance(node, ast.Subscript) and _is_session(node.value):
+            if _is_username(node.slice):
+                note("inline:session_username")
+
+    return markers
+
+
+def _is_session(node: Optional[ast.AST]) -> bool:
+    name = getattr(node, "attr", None) or getattr(node, "id", None)
+    return name in {"session", "flask_session"}
+
+
+def _is_username(node: ast.AST) -> bool:
+    return isinstance(node, ast.Constant) and node.value == "username"
 
 
 def _flask_path_to_openapi(rule: str) -> Tuple[str, List[Dict[str, Any]]]:
@@ -178,6 +320,33 @@ def _unique_operation_id(base: str, path: str, used: set) -> str:
     return candidate
 
 
+def _lookup_auth(auth_map, view_func) -> List[str]:
+    """Find a view's auth markers, tolerating how the module was imported.
+
+    `scan_auth_decorators()` keys everything by its package path
+    (`potato.routes`), but `configure_routes()` reaches routes.py with a bare
+    `from routes import ...` -- which works because running the server puts
+    `potato/` on sys.path -- so those views report `__module__ == "routes"`.
+    Looking up only the package path silently missed every view in that module,
+    which is why the published spec showed no auth for the ~187 `core`
+    operations even though most of them check the session or the admin key.
+    """
+    name = getattr(view_func, "__name__", "")
+    if not name:
+        return []
+    module = getattr(view_func, "__module__", "") or ""
+    candidates = [module]
+    if module and not module.startswith("potato."):
+        candidates.append(f"potato.{module}")
+    if module.startswith("potato."):
+        candidates.append(module[len("potato."):])
+    for candidate in candidates:
+        auth = auth_map.get((candidate, name))
+        if auth:
+            return auth
+    return []
+
+
 def _collect(app, auth_map, gate=None, seen=None, used_ids=None) -> Dict[str, Dict[str, Any]]:
     """Turn a Flask app's url_map into OpenAPI path items."""
     paths: Dict[str, Dict[str, Any]] = {}
@@ -193,10 +362,7 @@ def _collect(app, auth_map, gate=None, seen=None, used_ids=None) -> Dict[str, Di
 
         path, params = _flask_path_to_openapi(str(rule))
         view_func = app.view_functions.get(rule.endpoint)
-        auth = auth_map.get(
-            (getattr(view_func, "__module__", ""), getattr(view_func, "__name__", "")),
-            [],
-        )
+        auth = _lookup_auth(auth_map, view_func)
         tag = rule.endpoint.split(".")[0] if "." in rule.endpoint else "core"
 
         for method in methods:
@@ -222,9 +388,14 @@ def _collect(app, auth_map, gate=None, seen=None, used_ids=None) -> Dict[str, Di
             if auth:
                 operation["x-potato-auth"] = auth
                 levels = {AUTH_DECORATORS[a] for a in auth}
-                operation["responses"]["401"] = {"description": "Authentication required"}
+                if levels - {"debug-only"}:
+                    operation["responses"]["401"] = {"description": "Authentication required"}
                 if "admin" in levels:
                     operation["responses"]["403"] = {"description": "Admin role required"}
+                if "debug-only" in levels:
+                    operation["responses"]["403"] = {
+                        "description": "Only available when the server runs with debug: true"
+                    }
             if gate:
                 operation["x-potato-requires-config"] = gate
 

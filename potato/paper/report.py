@@ -170,6 +170,89 @@ def methods_paragraph(m: Dict[str, Any], s: Style) -> str:
     return " ".join(parts)
 
 
+def data_quality_paragraph(m: Dict[str, Any], s: Style) -> str:
+    """
+    The precautions paragraph a reviewer asks for.
+
+    Data quality from online panels gets challenged as a matter of routine, and
+    what settles it is a statement of what was *done* -- which checks ran, at
+    what rate, with what exclusion rule, and how many people it excluded -- not
+    a better agreement number.
+
+    Every sentence here is generated from what the config actually declares. A
+    project with no quality control says so plainly rather than being handed
+    boilerplate about precautions it did not take, because a methods paragraph
+    that overstates is worse than none at all.
+    """
+    qc = m.get("quality_control") or {}
+    parts = []
+
+    attention = qc.get("attention_checks") or {}
+    if attention.get("enabled"):
+        sentence = "Attention checks were interleaved with the annotation items"
+        if attention.get("frequency"):
+            sentence += f", one every {attention['frequency']} items"
+        elif attention.get("probability"):
+            sentence += (f", presented with probability "
+                         f"{attention['probability']}")
+        if attention.get("block_threshold"):
+            sentence += (f"; annotators were blocked from continuing after "
+                         f"{attention['block_threshold']} failures")
+        parts.append(sentence + ".")
+
+    gold = qc.get("gold_standards") or {}
+    if gold.get("enabled"):
+        sentence = "Gold-standard items with known answers were injected"
+        if gold.get("frequency"):
+            sentence += f" every {gold['frequency']} items"
+        if gold.get("min_accuracy") is not None:
+            sentence += (f", and annotators falling below "
+                         f"{gold['min_accuracy']:.0%} accuracy")
+            if gold.get("evaluation_count"):
+                sentence += f" over {gold['evaluation_count']} such items"
+            sentence += " were flagged"
+        parts.append(sentence + ".")
+
+    training = qc.get("training") or {}
+    if training.get("enabled"):
+        sentence = ("Annotators completed a training phase against items with "
+                    "known answers before reaching the main task")
+        criteria = training.get("passing_criteria") or {}
+        if criteria.get("min_correct"):
+            sentence += f", passing on {criteria['min_correct']} correct answers"
+        elif criteria.get("require_all_correct"):
+            sentence += ", passing only on a perfect score"
+        if criteria.get("max_mistakes", -1) not in (None, -1):
+            sentence += (f" and failing after {criteria['max_mistakes']} "
+                         f"mistakes")
+        parts.append(sentence + ".")
+
+        reached = training.get("n_reached")
+        if reached:
+            failed = training.get("n_failed", 0)
+            parts.append(
+                f"Of the {reached} annotator{'s' if reached != 1 else ''} who "
+                f"reached that gate, {training.get('n_passed', 0)} passed and "
+                f"{failed} {'were' if failed != 1 else 'was'} excluded.")
+
+    overlap = (qc.get("overlap") or {}).get("num_annotators_per_item")
+    if overlap and overlap >= 2:
+        parts.append(
+            f"Each item was independently annotated by {overlap} annotators, "
+            f"which is the overlap the agreement statistics above are computed "
+            f"over.")
+
+    if not parts:
+        return (
+            "No attention checks, gold-standard items or training gate were "
+            "configured for this collection, so no annotator was screened out "
+            "on a quality criterion. Reviewers commonly ask what precautions "
+            "were taken against inattentive responding; if any were applied "
+            "outside Potato, describe them here.")
+
+    return " ".join(parts)
+
+
 def limitations_paragraph(m: Dict[str, Any], s: Style) -> str:
     parts = []
     single = m["instances_single_annotated"]

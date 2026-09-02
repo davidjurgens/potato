@@ -13,7 +13,7 @@ task_dir: .
 port: 8000
 annotation_task_name: Object Detection Demo
 output_annotation_dir: annotation_output/simple-image-annotation/
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Data file containing image URLs
 data_files:

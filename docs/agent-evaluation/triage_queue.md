@@ -40,7 +40,7 @@ triage:
 assignment_strategy: priority
 ```
 
-If you omit `rules` (and `signal_field`), a turnkey default set is used: error
+If you omit `rules` (and `signal_field`), a default set is used: error
 status (100), negative feedback (80), score < 0.5 (60).
 
 ### Condition operators

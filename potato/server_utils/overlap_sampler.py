@@ -44,7 +44,7 @@ def apply_overlap_sample(item_state_manager, config: dict) -> Dict[str, int]:
     seed = int(overlap.get("seed", item_state_manager.random_seed))
     rng = _random.Random(seed)
 
-    all_ids = list(item_state_manager.instance_id_to_instance.keys())
+    all_ids = item_state_manager.get_instance_ids()
     if not all_ids:
         return {}
 
@@ -52,7 +52,7 @@ def apply_overlap_sample(item_state_manager, config: dict) -> Dict[str, int]:
     strata: Dict[Optional[str], List[str]] = defaultdict(list)
     if stratify_by:
         for iid in all_ids:
-            item = item_state_manager.instance_id_to_instance[iid]
+            item = item_state_manager.get_item(iid)
             data = item.get_data() if hasattr(item, "get_data") else {}
             key = data.get(stratify_by) if isinstance(data, dict) else None
             # Also accept the indexed category if it matches
@@ -74,7 +74,7 @@ def apply_overlap_sample(item_state_manager, config: dict) -> Dict[str, int]:
         rng_local.shuffle(ids_sorted)
         target = max(1, int(round(len(ids_sorted) * fraction)))
         for iid in ids_sorted[:target]:
-            item = item_state_manager.instance_id_to_instance[iid]
+            item = item_state_manager.get_item(iid)
             # Don't clobber an existing per-item override (operator may have
             # set one via item_data; respect that authority).
             if item.get_metadata(_METADATA_KEY) is not None:

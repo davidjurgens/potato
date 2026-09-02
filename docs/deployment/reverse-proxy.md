@@ -9,7 +9,7 @@ https://host/app2/  ->  http://127.0.0.1:8001/
 ```
 
 This is common in locked-down environments where opening additional public ports
-is restricted. The catch: the v2.5 annotation UI loads static assets and performs
+is restricted. The v2.5 annotation UI loads static assets and performs
 annotation actions through **root-relative** URLs (`/static/...`, `/updateinstance`,
 `/annotate`, `/api/current_instance`, `/media/...`). When Potato is mounted under
 `/app1`, those URLs resolve against the public *root* instead of the mounted app,
@@ -23,7 +23,7 @@ which shows up as:
 Potato can apply a deployment prefix to both server-generated URLs and the
 client-side requests so these deployments work without per-site nginx hacks.
 
-## How it works
+## What SCRIPT_NAME controls
 
 Both options below converge on the WSGI `SCRIPT_NAME`. The app reads
 `SCRIPT_NAME` (surfaced as `request.script_root`) as the single source of truth

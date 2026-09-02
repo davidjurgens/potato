@@ -1,6 +1,6 @@
 # Tiered Annotation (ELAN-style Hierarchical Annotation)
 
-Tiered annotation provides a hierarchical multi-tier annotation interface for audio and video content. This schema is inspired by [ELAN](https://archive.mpi.nl/tla/elan), a widely-used tool for linguistic annotation, and supports parent-child relationships between annotation tiers.
+Tiered annotation is a stack of time-aligned annotation tiers over audio or video, with parent-child relationships between them. The model follows [ELAN](https://archive.mpi.nl/tla/elan), the standard tool for this in linguistics.
 
 ## Overview
 

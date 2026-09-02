@@ -4,7 +4,6 @@
   "annotation_task_name": "Radio Annotation Test",
   "task_dir": "output/radio-annotation",
   "output_annotation_dir": "output/radio-annotation",
-  "output_annotation_format": "csv",
   "annotation_codebook_url": "",
   "max_annotations_per_user": 10,
   "assignment_strategy": "fixed_order",

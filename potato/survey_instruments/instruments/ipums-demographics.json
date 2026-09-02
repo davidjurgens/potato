@@ -13,7 +13,7 @@
     {
       "name": "ipums_age",
       "description": "What is your age in completed years?",
-      "annotation_type": "textbox",
+      "annotation_type": "text",
       "label_requirement": {"required": true}
     },
     {

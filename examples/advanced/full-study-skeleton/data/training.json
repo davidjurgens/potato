@@ -1,0 +1,12 @@
+{
+  "training_instances": [
+    {"id": "t1",
+     "text": "Worked example one. The model answer is A.",
+     "correct_answers": {"category": "A", "severity": "Low"},
+     "explanation": "Why A is right, in a sentence the annotator can act on."},
+    {"id": "t2",
+     "text": "Worked example two. Nothing here decides the category, so it is Unclear.",
+     "correct_answers": {"category": "Unclear", "severity": "Low"},
+     "explanation": "Unclear is a real answer, not a way of skipping the item."}
+  ]
+}

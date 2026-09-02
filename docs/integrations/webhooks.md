@@ -1,6 +1,6 @@
 # Webhooks
 
-Potato can send outgoing webhook notifications when annotation events occur, enabling integration with external pipelines, Slack alerts, and custom automation.
+Potato POSTs to a URL of yours when an annotation event happens, so an external pipeline, a Slack channel, or your own automation can react to it.
 
 ## Configuration
 

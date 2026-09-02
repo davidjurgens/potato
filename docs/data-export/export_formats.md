@@ -48,7 +48,7 @@ Each `user_state.json` contains the complete annotation state for that user:
 }
 ```
 
-> **Note:** The older `output_annotation_format` config key is legacy and has no effect. Use `export_annotation_format` for auto-export (see below).
+> **Note:** `output_annotation_format` is deprecated. The loader reads it as `export_annotation_format` and logs a warning, turning `json` into `jsonl` because no exporter is called `json`. It will stop being read in a later release. `potato migrate <config> --to-v2` renames it for you.
 
 ## Auto-Export
 
@@ -107,22 +107,20 @@ python -m potato.export --config config.yaml --format coco --output ./export/ \
 
 The Common Objects in Context format, widely used for object detection and instance segmentation.
 
-**Best for:** Image bounding boxes, polygons, keypoints
+**Best for:** Image bounding boxes, polygons, segmentation masks
 
 **Output Structure:**
 ```
-export/
-├── annotations/
-│   └── instances.json
-└── images/
-    └── (symlinked or copied images)
+<output-dir>/
+└── annotations.json
 ```
 
-**annotations/instances.json:**
+A single file is written. **Images are not copied or symlinked** — the exported
+`file_name` values point at wherever your images already live.
+
+**annotations.json:**
 ```json
 {
-    "info": {"description": "Potato export", "version": "1.0"},
-    "licenses": [],
     "images": [
         {"id": 1, "file_name": "image_001.jpg", "width": 1920, "height": 1080}
     ],
@@ -143,10 +141,39 @@ export/
 }
 ```
 
+No `info` or `licenses` block is emitted. A few strict COCO consumers require
+them; add `"info": {}` and `"licenses": []` if yours does.
+
+**Category IDs** come from `label_id` on each label when present, so a file
+imported from COCO exports with its original (often sparse) numbering intact.
+Labels without one are numbered from 1 upward.
+
+**Segmentation:** polygons export as `segmentation: [[x1, y1, ...]]`; masks
+export as COCO compressed RLE with `iscrowd: 1` unless the annotation carries an
+explicit `iscrowd: 0`. Landmarks are skipped with a warning — COCO keypoints are
+not yet emitted.
+
+**Image dimensions are required.** They are read from `image_width`/`image_height`
+(or `width`/`height`) on each data item. Without them the export writes
+`width: 0, height: 0` and box geometry cannot be validated.
+
 **Usage:**
 ```bash
 python -m potato.export -c config.yaml -f coco -o ./coco_export/
 ```
+
+**Importing COCO** is covered in
+[Image Annotation Formats](../annotation-types/multimedia/image_formats.md).
+
+!!! warning "Fixed: box and polygon export before this release"
+    Every CV exporter (COCO, YOLO, Pascal VOC) read flat, absolute-pixel fields
+    that the annotation UI has never written — it stores coordinates normalized
+    and nested under `coordinates`. As a result **bounding boxes exported as
+    `[0, 0, 0, 0]` with `area: 0`, and polygons were silently dropped**, for any
+    annotation made in the browser. Masks were unaffected.
+
+    The unit tests hand-built the flat shape, so they passed throughout. If you
+    have COCO/YOLO/VOC exports produced before this release, re-export them.
 
 ### YOLO (yolo)
 
@@ -241,6 +268,36 @@ export/
 python -m potato.export -c config.yaml -f pascal_voc -o ./voc_export/
 ```
 
+### REFI-QDA project exchange (qdpx)
+
+The interchange format NVivo, ATLAS.ti, MAXQDA, Quirkos and QDA Miner read and
+write. Exporting one hands a Potato project to a colleague who uses any of
+them, or archives it in a form that outlives this tool.
+
+```bash
+python -m potato.export -c config.yaml -f qdpx -o ./export/
+```
+
+A `.qdpx` is a ZIP holding `project.qde` (REFI-QDA XML) and one UTF-8 `.txt`
+per annotated item under `sources/`. Codes carry their hierarchy, descriptions
+and colours; span annotations become `PlainTextSelection` elements with a
+`Coding` each; annotators become `Users`.
+
+Two things worth knowing:
+
+- **`endPosition` is inclusive.** REFI-QDA 1.5 §10.2 defines a selection by
+  "the first and the last character", where Potato's `end` is exclusive. The
+  exporter writes `end - 1`, and the importer measures both readings against
+  the source text rather than assuming, because exporting tools disagree.
+- **`flatten_subcodes`.** ATLAS.ti supports one level of subcode and silently
+  mangles anything deeper. Passing this option re-parents every code to the top
+  level and renames it `Parent > Child > Grandchild`, so you control the loss
+  instead of discovering it. Potato warns when your codebook is deep enough for
+  this to matter.
+
+Two exports of an unchanged project are byte-identical: the GUIDs REFI-QDA
+requires are derived from what they name, so an export can be diffed.
+
 ### CoNLL-2003 (conll_2003)
 
 CoNLL-2003 format for named entity recognition.
@@ -296,23 +353,29 @@ python -m potato.export -c config.yaml -f conll_u -o ./conllu_export/
 
 ### Segmentation Masks (mask)
 
-Export polygon/segmentation annotations as binary mask images.
+Export brush/fill mask annotations as PNG images, one per label per image.
 
-**Best for:** Semantic segmentation, instance segmentation
+**Best for:** Semantic segmentation
+
+**Requires:** `Pillow` (`pip install Pillow`)
 
 **Output Structure:**
 ```
-export/
-├── images/
-│   └── image_001.jpg
-├── masks/
-│   └── image_001.png
-└── class_mapping.json
+<output-dir>/
+├── image_001_road_mask.png
+├── image_001_sky_mask.png
+└── image_002_road_mask.png
 ```
 
+Files are written flat as `{image-stem}_{label}_mask.png`. **Images are not
+copied**, and no class-mapping file is written.
+
 **Mask Format:**
-- PNG images with pixel values corresponding to class IDs
-- 0 = background, 1+ = class indices
+- RGBA PNG, one file per (image, label) pair
+- Mask pixels take the label's configured colour at alpha 200; everything else
+  is fully transparent
+- Only `type: "mask"` annotations are exported. Polygons and boxes are ignored
+  by this format — use COCO for those.
 
 **Usage:**
 ```bash
@@ -531,6 +594,66 @@ python -m potato.export --config config.yaml --format quotation_report \
 |--------|---------|-------------|
 | `include_memos` | `false` | Also append one row per [memo](../advanced/memos.md): `schema="(memo)"`, `code=<visibility>`, `text=<memo body>`, offsets from the memo anchor when span-anchored. |
 
+### ConvoKit (convokit)
+
+Writes annotations back onto the utterances and conversations they were made
+about, as [ConvoKit](../integrations/convokit.md) metadata. Requires items
+imported with `potato convokit`, whose turns carry real ConvoKit utterance ids —
+the mapping is a direct lookup, not a match by position or text.
+
+```bash
+# Overlay files that drop into an existing corpus (default)
+python -m potato.export --config config.yaml --format convokit -o out/
+
+# A complete corpus directory with the annotations merged in
+python -m potato.export --config config.yaml --format convokit \
+  --option mode=corpus -o annotated-corpus/
+```
+
+**Overlay mode** writes one `info.<field>.jsonl` per field, in exactly the shape
+`corpus.load_info()` reads:
+
+```json
+{"id": "146743638.12667.12652", "value": {"alice": ["personal_attack"]}}
+```
+
+```python
+from convokit import Corpus, download
+corpus = Corpus(filename=download("conversations-gone-awry-corpus"))
+corpus.load_info("utterance", ["potato_turn_problems"])
+```
+
+A `potato_export_manifest.json` records which object type each field targets,
+since `load_info` makes the caller name it and the filename does not encode it.
+
+**Corpus mode** writes `utterances.jsonl`, `speakers.json`, `conversations.json`,
+`corpus.json`, and `index.json`. Metadata skipped on import is not re-emitted;
+the fields involved are listed in `corpus.json` so the output is not mistaken for
+a faithful copy of the source.
+
+| Annotation | Lands on |
+|---|---|
+| Instance scheme, conversation-unit items | Conversation metadata |
+| Instance scheme, utterance-unit items | Utterance metadata |
+| `turn_level` scheme | Utterance metadata, keyed by `turn_id` |
+| Span | Utterance metadata, split onto the utterances it covers |
+
+A span crossing a comment boundary is split into one entry per utterance, each
+with offsets relative to that utterance's own text, sharing a `span_group` so the
+pieces can be recombined.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `mode` | `info` | `info` for overlay files, `corpus` for a full dump |
+| `aggregate` | `none` | `none` keeps `{user_id: value}`; `majority` or `mean` adds an aggregate and moves the per-annotator dict to `<field>_raw` |
+| `field_prefix` | `potato_` | Prefix for written fields. Underscore, not a dot — MongoDB rejects `.` in keys |
+| `include_spans` | `true` | Map span annotations onto utterances |
+| `corpus_dir` | – | Existing corpus directory, for `write_into_corpus` |
+| `write_into_corpus` | `false` | Write overlays directly into `corpus_dir` |
+
+Per-annotator data is never discarded, in any mode. Every field is accompanied by
+`<field>_n_annotators`.
+
 ## Programmatic Export
 
 Use the export registry directly in Python:
@@ -589,15 +712,16 @@ export_registry.register(MyExporter())
 
 ## Format Compatibility Matrix
 
-| Annotation Type | COCO | YOLO | Pascal VOC | CoNLL-2003 | CoNLL-U | Mask | Parquet | CSV/TSV | EAF/TextGrid | Agent Eval |
-|----------------|------|------|------------|------------|---------|------|---------|---------|--------------|------------|
-| Bounding boxes | Yes | Yes | Yes | - | - | - | Yes | Yes | - | - |
-| Polygons | Yes | - | - | - | - | Yes | Yes | - | - | - |
-| Keypoints | Yes | - | - | - | - | - | Yes | - | - | - |
-| Text spans | - | - | - | Yes | Yes | - | Yes | Yes | - | - |
-| Classifications | Partial | - | - | - | - | - | Yes | Yes | - | - |
-| Tiered segments | - | - | - | - | - | - | Yes | - | Yes | - |
-| Agent traces | - | - | - | - | - | - | Yes | - | - | Yes |
+| Annotation Type | COCO | YOLO | Pascal VOC | CoNLL-2003 | CoNLL-U | Mask | Parquet | CSV/TSV | EAF/TextGrid | Agent Eval | ConvoKit |
+|----------------|------|------|------------|------------|---------|------|---------|---------|--------------|------------|----------|
+| Bounding boxes | Yes | Yes | Yes | - | - | - | Yes | Yes | - | - | - |
+| Polygons | Yes | - | - | - | - | Yes | Yes | - | - | - | - |
+| Keypoints | Yes | - | - | - | - | - | Yes | - | - | - | - |
+| Text spans | - | - | - | Yes | Yes | - | Yes | Yes | - | - | Yes |
+| Classifications | Partial | - | - | - | - | - | Yes | Yes | - | - | Yes |
+| Tiered segments | - | - | - | - | - | - | Yes | - | Yes | - | - |
+| Agent traces | - | - | - | - | - | - | Yes | - | - | Yes | - |
+| Per-turn labels | - | - | - | - | - | - | Yes | - | - | Yes | Yes |
 
 ## Best Practices
 

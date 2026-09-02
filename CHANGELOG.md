@@ -2,6 +2,143 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [2.8.2] - The Fixes 2.8.1 Said It Had
+
+**2.8.1 did not contain the SSRF or debug-mode fixes its release notes and
+advisories claimed.** The code was never written; the release notes were. If you
+upgraded to 2.8.1 for either of those, you were not protected. Upgrade to 2.8.2.
+
+The RCE fix (the agent sandbox), the admin config read authorization and the
+trace-ingestion webhook fix were real in 2.8.1 and are unchanged here.
+
+**Unauthenticated SSRF, now actually fixed.** `/api/audio/proxy`,
+`/api/waveform/generate`, `/api/video/waveform/generate` and
+`/api/video/metadata` require a login, and every caller-supplied URL goes
+through one shared guard. It resolves the host and refuses loopback, private,
+link-local, reserved, multicast, CGNAT and cloud-metadata addresses; rejects a
+host that resolves to any blocked address, since a mixed answer is a rebinding
+primitive; connects to the address it validated rather than re-resolving the
+name; re-validates every redirect hop; and caps the response. It fails closed on
+a name that will not resolve, where the old `web_proxy` validator allowed it.
+The proxy no longer sends `Access-Control-Allow-Origin: *`. Local paths handed
+to waveform generation resolve inside `task_dir`, closing a file-existence
+oracle.
+
+**Debug mode, now actually hardened.** The admin bypass applies only on a
+loopback bind. The server refuses to start with `debug: true` on any other
+interface unless `POTATO_ALLOW_REMOTE_DEBUG=1` is set. The Werkzeug interactive
+debugger is never served off loopback, override or not. The admin dashboard
+echoes the admin key only to a caller who already presented it, so the debug
+bypass and RBAC roles no longer disclose it. Local debugging on 127.0.0.1 is
+unchanged.
+
+Also: `potato preview` binds its throwaway server to loopback.
+
+**[Full Release Notes →](docs/releasenotes/v2.8.2.md)**
+
+---
+
+## [2.8.1] - Security Fixes (partly incomplete — see 2.8.2)
+
+> **Correction:** this entry claimed five fixes. Two of them, the SSRF and the
+> debug-mode hardening, were not in the release. They shipped in 2.8.2. The
+> descriptions below are left as published, with this note, rather than
+> rewritten.
+
+Closes three security issues, and claimed two more that were not included.
+
+**Unauthenticated SSRF** through `/api/audio/proxy` and the two waveform
+endpoints, which fetched any URL a caller supplied and, for the proxy, returned
+the body, reaching cloud metadata services, internal APIs and anything else on
+the host's network. All four now require a login and share one URL guard that
+blocks private and metadata addresses, pins the resolved address against DNS
+rebinding, and re-checks redirects.
+
+**Unauthenticated remote code execution** through the live coding agent, whose
+routes had no login check at all and whose replay endpoint executed
+caller-supplied tool calls with `shell=True` on the host. The sandbox meant to
+contain this did not: `sandbox_mode: docker` was never implemented and silently
+fell back to no isolation, and the default `worktree` is a git worktree on the
+same host as the same user. Rebuilt as a ladder that never falls back and checks at startup:
+`container` (Docker or Podman, no network, read-only root, unprivileged,
+optionally gVisor or Kata), `bubblewrap`, or `trusted` with an explicit
+acknowledgement.
+
+**Admin config readable without the admin key**: the endpoint authorized its
+write branch and not its read branch. Found because the test harness had been
+exercising the debug bypass rather than the real check.
+
+**Trace-ingestion webhook accepted everyone** when no `api_key` was configured,
+so enabling the feature disabled its authentication. Now fails closed.
+
+**Debug mode on a reachable interface** no longer grants admin, no longer puts
+the admin key in the rendered HTML, and no longer hands Flask's interactive
+debugger to a non-loopback bind.
+
+**Breaking:** `sandbox_mode` defaults to `container`, and `worktree`/`direct`
+map to `trusted` and require `acknowledge_untrusted_code_execution: true`.
+Existing live-coding-agent configs will not start until they choose a rung.
+`output_annotation_format` is deprecated in favour of `export_annotation_format`
+and folds automatically.
+
+Also: server-side sidebar gating, quality-control items no longer eating an
+annotator's quota, a required-but-hidden scheme no longer blocking saving,
+sixteen schema types landing in their configured `layout.groups` group, an MCP
+server and browser-backed `potato preview --screenshot`, and
+`potato deploy local` / `potato deploy share`.
+
+**[Full Release Notes →](docs/releasenotes/v2.8.1.md)**
+
+---
+
+## [2.8.0] - Vision, and the Statistics to Check It
+
+Potato's image, video, 3D, embodied and world-model surfaces were rebuilt from a
+thin layer over the text machinery into the main body of the tool, and the
+agreement statistics were extended to cover them. **Chance-corrected agreement
+over geometry and over time** — detection, localization, classification, a
+geometry scale reported as σ and a KS test, STAPLE for latent mask consensus, and
+temporal boundary agreement reported as a tolerance sweep rather than at one
+threshold. This also fixed adjudication, which compared annotation *keys* and so
+scored every image pair at 1.0: two annotators who agreed on nothing looked
+unanimous and no image was ever routed for review.
+
+Everything under it: five new geometry primitives (`polyline`, `keypoint_set`,
+`ellipse`, `cuboid_2d`, `tubelet`) plus instance-keyed masks; **interactive
+segmentation in the browser** with vendored ONNX Runtime Web, so a default
+install segments with no GPU and no network; **text prompting** via Grounding
+DINO and **SAM 2 video mask propagation** (measured at 0.974–0.979 IoU per frame
+with no decay), behind a single model zoo; **deep zoom** with masks at the
+source's full resolution; 15 importers and 29 exporters with a format matrix a
+test keeps honest; media ingest for TIFF, HEIC, RAW, HEVC and ProRes; **point
+clouds** with octree LOD, calibration and 2D projection, **depth maps**, and
+orthographic slab views; **embodied episodes** (LeRobot v2, RLDS, HDF5, ROS
+bags); **world-model rollout evaluation** with break-point agreement; and **VLM
+grounding, pointing and region captioning**.
+
+Also: threaded conversation rendering and ConvoKit import/export both ways;
+opt-in keystroke logging with composed/transcribed/pasted detection; live
+database ingestion ([#166](https://github.com/davidjurgens/potato/issues/166));
+machine-checkable config and OpenAPI specs generated from the registries, with CI
+failing on drift; the admin Instances tab de-quadratified (15.1 s → 23 ms at
+2,000 items) with two columns that had never worked; every frontend asset
+vendored, closing an offline break and a per-page-load IP leak to Google; and the
+packaging fix from [#164](https://github.com/davidjurgens/potato/pull/164) —
+**wheels from 2.7.1 and earlier were missing every template in a subdirectory**,
+breaking solo mode, the admin pages, judge calibration and the corpus map for
+anyone who installed from PyPI.
+
+Single-select schemas no longer persist every value clicked
+([#167](https://github.com/davidjurgens/potato/issues/167)), with
+`potato repair-annotations` for already-corrupted state.
+
+**Breaking:** image annotation keyboard shortcuts now follow V7 conventions by
+default. Set `keybinding_profile: legacy` to keep the old table.
+
+**[Full Release Notes →](docs/releasenotes/v2.8.0.md)**
+
+---
+
 ## [2.7.1] - Transcripts In, Without the Reformatting
 
 Direct support for speech that was transcribed elsewhere: **21 transcript and subtitle input formats** (up from 6) spanning ASR output (Whisper, WhisperX, whisper.cpp, Whisper TSV, AWS Transcribe, Deepgram, AssemblyAI, Rev.ai, SPoRC), subtitles and captions (SRT, WebVTT, ASS/SSA, TTML/DFXP, YouTube json3 and srv1/srv2/srv3), and forced-alignment import (CTM, Praat TextGrid, ELAN EAF — so tiered annotations now round-trip). Transcripts can live in **sidecar files** beside the media instead of being inlined into the data file, a `potato transcripts` CLI converts a directory of ASR output into a ready-to-annotate data file, and all four transcript-consuming schemas share one format vocabulary. Word-level timings and confidence are preserved. New reference and guide pages, plus a six-format example. Pure stdlib, no new dependencies, fully back-compatible. Also fixes a `user_input()` ReferenceError thrown by the instance-jump input in the base templates.
@@ -128,4 +265,4 @@ See [MIGRATION.md](MIGRATION.md) for detailed instructions on upgrading from v1.
 
 ## New Features Guide
 
-See [docs/new_features_v2.md](docs/new_features_v2.md) for detailed documentation on new features.
+See the [v2.0.0 release notes](docs/releasenotes/v2.0.0.md) for detailed documentation on new features.

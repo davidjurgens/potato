@@ -56,7 +56,10 @@ def _get_webhook_receiver():
     """
     ingestion_config = current_app.config.get("trace_ingestion", {})
     api_key = ingestion_config.get("api_key", "")
-    return WebhookReceiver(api_key=api_key)
+    return WebhookReceiver(
+        api_key=api_key,
+        allow_unauthenticated=bool(ingestion_config.get("allow_unauthenticated", False)),
+    )
 
 
 def _inject_trace(trace: dict):

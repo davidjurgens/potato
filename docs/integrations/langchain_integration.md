@@ -37,7 +37,7 @@ result = executor.invoke(
 handler.flush()
 ```
 
-## How It Works
+## From callback to trace
 
 1. The callback handler hooks into LangChain's callback system
 2. It collects all run events (chain, LLM, tool, retriever starts/ends)

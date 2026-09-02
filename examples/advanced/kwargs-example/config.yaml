@@ -3,7 +3,7 @@ port: 9001
 annotation_task_name: Example for using kwargs
 task_dir: .
 output_annotation_dir: annotation_output/kwargs-example/
-output_annotation_format: tsv
+export_annotation_format: tsv
 annotation_codebook_url: ''
 data_files:
 - data/kwarg-example.csv

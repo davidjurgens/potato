@@ -1,0 +1,4 @@
+{"id": "x0", "conversation_id": "x0", "text": "Orphan reply.", "speaker": "alice", "meta": {}, "reply-to": "missing", "timestamp": null}
+{"id": "x1", "conversation_id": "x0", "text": "Cycle A.", "speaker": "bob", "meta": {}, "reply-to": "x2", "timestamp": null}
+{"id": "x2", "conversation_id": "x0", "text": "Cycle B.", "speaker": "bob", "meta": {}, "reply-to": "x1", "timestamp": 5.0}
+{"id": "x0", "conversation_id": "x0", "text": "Duplicate, should be ignored.", "speaker": "carol", "meta": {}, "reply-to": null, "timestamp": 6.0}

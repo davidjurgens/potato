@@ -1,0 +1,39 @@
+---
+title: {{ title }}
+emoji: 🥔
+colorFrom: yellow
+colorTo: yellow
+sdk: docker
+app_port: 7860
+pinned: false
+tags:
+  - annotation
+  - potato
+---
+
+# {{ title }}
+
+{{ summary }}
+
+Built with **[Potato](https://www.potatoannotator.com)**, an open-source
+annotation platform for NLP, agentic and GenAI research, configured entirely
+through YAML.
+
+{% if backup_repo %}
+Annotations are backed up to `{{ backup_repo }}` every {{ backup_minutes }}
+minutes. A Space's filesystem does not survive a rebuild or a restart, so that
+dataset — not this Space — is where the data actually lives.
+{% else %}
+> **Annotations here are not backed up.** A Space's filesystem is wiped on
+> rebuild and on restart, so anything collected is lost when either happens.
+> Deploy with a HuggingFace token to mirror annotations into a Dataset repo.
+{% endif %}
+
+## Running it yourself
+
+```bash
+pip install potato-annotation
+potato start {{ config_rel }} -p 8000
+```
+
+Deployed with `potato deploy up {{ config_rel }} --provider huggingface`.

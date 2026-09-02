@@ -14,7 +14,7 @@ python potato/flask_server.py start examples/agent-traces/model-arena/config.yam
 Open the admin dashboard → **Arena**. Configure real models in `config.yaml`
 (set `endpoint_type`, `model`, and any keys/base_url for your providers).
 
-## How it works
+## One arena round
 
 1. Enter a prompt → it's sent to every configured model concurrently (one model
    failing never blocks the others).

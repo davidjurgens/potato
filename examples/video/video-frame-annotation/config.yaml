@@ -20,7 +20,7 @@ port: 8000
 annotation_task_name: Video Frame Annotation Example
 task_dir: .
 output_annotation_dir: annotation_output/video-frame-annotation/
-output_annotation_format: json
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 
 data_files:

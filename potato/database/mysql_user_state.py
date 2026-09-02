@@ -1,7 +1,7 @@
 """
 MySQL-backed UserState implementation for Potato annotation platform.
 
-This module provides a database-backed implementation of the UserState interface,
+A database-backed implementation of the UserState interface,
 storing all user state data in MySQL tables for persistence and scalability.
 """
 
@@ -46,6 +46,12 @@ class MysqlUserState(UserState):
         self.user_id = user_id
         self.db_manager = db_manager
         self.max_assignments = max_assignments
+
+        # Schema names that may hold at most one label (GH #167). Populated by
+        # UserStateManager, which is the only place with access to the config.
+        # An empty default means the invariant is simply not enforced, which is what
+        # bare unit tests want — never a crash.
+        self._single_select_schemas = frozenset()
 
         # Thread-safe cache lock
         self._cache_lock = threading.Lock()
@@ -467,9 +473,56 @@ class MysqlUserState(UserState):
             """, (self.user_id,))
             return {row[0] for row in cursor.fetchall()}
 
+    def clear_schema_labels(self, instance_id: str, schema_name: str) -> int:
+        """Remove every stored label for a schema. See UserState.clear_schema_labels.
+
+        Targets label_annotations during the annotation phase and phase_annotations
+        otherwise, mirroring add_label_annotation's own branch.
+        """
+        from potato.server_utils.schema_exclusivity import NON_EXCLUSIVE_LABEL_NAMES
+
+        phase, page = self.get_current_phase_and_page()
+        exempt = tuple(sorted(NON_EXCLUSIVE_LABEL_NAMES))
+        placeholders = ", ".join(["%s"] * len(exempt)) if exempt else None
+
+        with self.db_manager.get_connection() as conn:
+            cursor = conn.cursor()
+            if phase == UserPhase.ANNOTATION:
+                sql = """
+                    DELETE FROM label_annotations
+                    WHERE user_id = %s AND instance_id = %s AND schema_name = %s
+                """
+                params = [self.user_id, instance_id, schema_name]
+            else:
+                sql = """
+                    DELETE FROM phase_annotations
+                    WHERE user_id = %s AND phase_name = %s AND page_name = %s
+                      AND schema_name = %s
+                """
+                params = [self.user_id, str(phase), page, schema_name]
+            if placeholders:
+                sql += f" AND label_name NOT IN ({placeholders})"
+                params.extend(exempt)
+            cursor.execute(sql, tuple(params))
+            removed = cursor.rowcount
+            conn.commit()
+        return removed if removed and removed > 0 else 0
+
     def add_label_annotation(self, instance_id: str, label: Label, value: Any) -> None:
         """Add a label annotation."""
         phase, page = self.get_current_phase_and_page()
+
+        # Single-select invariant (GH #167): a radio/likert/confidence schema stores one
+        # row per *option*, so a changed answer would otherwise insert a second row
+        # beside the old one instead of updating it. Clear the schema first.
+        schema_name = label.get_schema()
+        # A falsy value is a "not selected" marker, not an answer (the legacy v1
+        # template posts the whole fieldset as {name: <bool>} pairs).
+        _is_selection = value is not None and value is not False and value != ""
+        if _is_selection and schema_name in getattr(self, '_single_select_schemas', frozenset()):
+            from potato.server_utils.schema_exclusivity import is_exempt_label
+            if not is_exempt_label(label.get_name()):
+                self.clear_schema_labels(instance_id, schema_name)
 
         if phase == UserPhase.ANNOTATION:
             # Store in label_annotations table

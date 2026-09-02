@@ -155,20 +155,28 @@ def _generate_input_attributes(annotation_scheme):
     """
     Generate additional input attributes for number constraints.
 
+    Both spellings of each bound are honored. ``min_value``/``max_value`` match
+    the slider and vas schemas; ``min``/``max``/``step`` are what the registry
+    has always advertised and what the shipped examples and configuration docs
+    use (examples/advanced/all-annotation-types/config.yaml). Reading only the
+    first pair meant every documented `min:`/`max:`/`step:` on a number scheme
+    rendered an unconstrained input. The ``*_value`` form wins when both appear.
+
     Args:
-        annotation_scheme (dict): Configuration containing min/max values
+        annotation_scheme (dict): Configuration containing min/max/step values
 
     Returns:
         str: Space-separated attribute string
     """
     attrs = []
 
-    if "min_value" in annotation_scheme:
-        attrs.append(f'min="{annotation_scheme["min_value"]}"')
-        logger.debug(f"Setting minimum value: {annotation_scheme['min_value']}")
-
-    if "max_value" in annotation_scheme:
-        attrs.append(f'max="{annotation_scheme["max_value"]}"')
-        logger.debug(f"Setting maximum value: {annotation_scheme['max_value']}")
+    for attr, keys in (("min", ("min_value", "min")),
+                       ("max", ("max_value", "max")),
+                       ("step", ("step",))):
+        for key in keys:
+            if key in annotation_scheme:
+                attrs.append(f'{attr}="{escape_html_content(str(annotation_scheme[key]))}"')
+                logger.debug("Setting %s from '%s': %s", attr, key, annotation_scheme[key])
+                break
 
     return " ".join(attrs)

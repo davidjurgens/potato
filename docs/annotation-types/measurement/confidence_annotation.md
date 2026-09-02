@@ -4,7 +4,7 @@ The confidence annotation schema pairs any primary annotation with an explicit c
 
 ## Overview
 
-Annotator confidence is systematically underused in NLP datasets. Recording it explicitly allows researchers to:
+Annotator confidence is systematically underused in NLP datasets. Recording it explicitly lets researchers:
 
 - Filter low-confidence annotations before model training
 - Weight annotations by confidence during aggregation

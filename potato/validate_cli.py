@@ -39,6 +39,7 @@ import yaml
 from potato.server_utils.config_module import (
     ConfigValidationError,
     ConfigSecurityError,
+    normalize_config_before_validation,
     validate_yaml_structure,
 )
 
@@ -130,6 +131,10 @@ def validate_config_file(config_file: str) -> ValidationReport:
 
     config_file_dir = os.path.dirname(os.path.abspath(config_file))
     try:
+        # Same pre-validation pass the server runs, so validate does not report
+        # errors a running server would not have (unexpanded ${ENV_VAR}s,
+        # a defaulted task_dir).
+        config_data = normalize_config_before_validation(config_data, config_file_dir)
         validate_yaml_structure(
             config_data,
             project_dir=config_file_dir,
@@ -152,7 +157,7 @@ def validate_config_file(config_file: str) -> ValidationReport:
     return report
 
 
-def _format_human(report: ValidationReport) -> str:
+def _format_human(report: ValidationReport, strict: bool = False) -> str:
     lines = []
     lines.append(f"Config: {report.config_file}")
     if report.errors:
@@ -173,11 +178,28 @@ def _format_human(report: ValidationReport) -> str:
     lines.append("")
     if report.ok and not report.unknown_keys and not report.other_warnings:
         lines.append("OK — no issues found.")
-    elif report.ok and report.unknown_keys:
+    elif report.ok and strict and report.unknown_keys:
+        # --strict makes unknown keys fatal, and the exit code says so, so the
+        # summary must not say "OK". It used to, alongside advice to re-run
+        # with the flag that was already set.
         lines.append(
-            f"OK with {len(report.unknown_keys)} unknown-key warning(s). "
-            "Re-run with --strict to fail on unknown keys."
+            f"FAILED — {len(report.unknown_keys)} unrecognized key(s); "
+            f"--strict treats these as errors."
         )
+    elif report.ok:
+        # A valid config with warnings still exits 0, so it must not say FAILED.
+        counts = []
+        if report.unknown_keys:
+            counts.append(f"{len(report.unknown_keys)} unknown-key warning(s)")
+        if report.other_warnings:
+            counts.append(f"{len(report.other_warnings)} warning(s)")
+        summary = f"OK with {' and '.join(counts)}."
+        if report.unknown_keys and not strict:
+            # Under --strict this advice contradicts the command that produced
+            # it, and unknown keys are already an error, so there is nothing to
+            # re-run.
+            summary += " Re-run with --strict to fail on unknown keys."
+        lines.append(summary)
     else:
         lines.append(f"FAILED — {len(report.errors)} error(s).")
     return "\n".join(lines)
@@ -224,7 +246,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.emit_json:
         print(json.dumps(report.to_dict(), indent=2))
     elif not args.quiet or fatal or report.unknown_keys or report.other_warnings:
-        print(_format_human(report))
+        print(_format_human(report, strict=args.strict))
 
     return 1 if fatal else 0
 

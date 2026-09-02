@@ -125,13 +125,20 @@ def _is_port_available(port: int) -> bool:
     """
     Check if a port is available for binding.
 
-    This is inherently racy (TOCTOU), but combined with retry logic
-    in find_free_port(), it provides reliable port allocation.
+    The probe must bind exactly the way the server under test binds, or it answers a
+    different question than the one being asked. FlaskTestServer's werkzeug server
+    listens on ``0.0.0.0`` without ``SO_REUSEADDR``; this probe used to set
+    ``SO_REUSEADDR`` and bind ``localhost``, which succeeds even when another process
+    already holds ``0.0.0.0:port``. find_free_port() then handed out a busy port, the
+    server failed to start with "Port N is in use by another program", and the test
+    silently talked to whatever *was* listening there — a different server, with a
+    different admin key, yielding inscrutable 403s.
+
+    Still inherently racy (TOCTOU), which is why find_free_port() retries.
     """
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind(('localhost', port))
+            s.bind(('0.0.0.0', port))
             return True
     except (socket.error, OSError):
         return False

@@ -1,6 +1,6 @@
 # Coreference Chain Annotation
 
-Coreference annotation allows annotators to group text spans that refer to the same entity. This is essential for tasks like entity resolution, pronoun resolution, and discourse analysis.
+Coreference annotation lets annotators group text spans that refer to the same entity. This is essential for tasks like entity resolution, pronoun resolution, and discourse analysis.
 
 ## Overview
 

@@ -1,6 +1,6 @@
 # Configuration Migration Tool
 
-Potato includes a migration tool to help upgrade configuration files from older formats to the current v2 format. This tool automatically detects and applies necessary changes while preserving your existing settings.
+Potato's migration tool upgrades a configuration file from an older format to v2. It detects what needs changing, applies it, and leaves your other settings alone.
 
 ## Usage
 
@@ -121,11 +121,13 @@ annotation_schemes:
       required: true
 ```
 
-### 5. Output Format Suggestions
+### 5. Deprecated Output Format Key
 
-Provides recommendations when using older output formats:
+Renames `output_annotation_format`, which nothing has read since the v2 storage rewrite:
 
-- If `output_annotation_format` is set to `csv` or `tsv`, suggests using `json` for richer annotation data support (spans, metadata)
+- The value moves to `export_annotation_format`, which writes a periodic export to `output_annotation_dir/exports/<format>/`
+- `json` becomes `jsonl`, because the export registry has no exporter called `json`
+- An empty value, or a config that already sets `export_annotation_format`, drops the old key without turning auto-export on
 
 ### 6. Site Configuration Notes
 

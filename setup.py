@@ -54,6 +54,17 @@ _FORMAT_DEPS = [
     "pygments>=2.17.0",
     "openpyxl>=3.1.0",
 ]
+# Headless-browser rendering for `potato preview --screenshot`, which boots a
+# task and reports what the browser did with it. Optional: without it preview
+# still validates and still returns the server-rendered HTML.
+# Model Context Protocol server, so coding agents can discover annotation types,
+# validate configs and render tasks. Imported lazily by `potato mcp`.
+_MCP_DEPS = [
+    "mcp>=1.2.0",
+]
+_PREVIEW_DEPS = [
+    "playwright>=1.40.0",
+]
 _VIZ_DEPS = [
     "umap-learn>=0.5.0",
 ]
@@ -70,16 +81,57 @@ _AUTH_DEPS = [
 _LANGCHAIN_DEPS = [
     "langchain-core>=0.1.0",
 ]
+# Optional server-side vision stack. Browser segmentation needs none of this:
+# ONNX Runtime Web is vendored under potato/static/ and runs the default models
+# with no Python dependency at all. These cover the server endpoints
+# (`ai_type: sam`, `sam3`, SAM 2 video propagation) and decoding the image
+# formats browsers cannot display.
+#
+# segment-anything is deliberately absent. Meta publishes it from GitHub, not
+# PyPI, and the `segment-anything` name on PyPI is an anonymous upload with no
+# homepage -- not something to pull into every `potato[vision]` install. The
+# endpoint's error message names the official source instead.
+_VISION_DEPS = [
+    "onnxruntime>=1.17.0",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "pillow-heif>=0.15.0",
+    "rawpy>=0.19.0",
+    "imageio>=2.31.0",
+]
 # SQL data sources, including live cursor-based ingestion. The driver is
 # separate and backend-specific: psycopg2-binary for PostgreSQL, pymysql for
 # MySQL. SQLite needs nothing beyond the standard library.
 _DB_DEPS = [
     "sqlalchemy>=2.0",
 ]
+# Local speech-to-text and speaker diarization. faster-whisper is Whisper
+# compiled through CTranslate2: no cloud API, no per-minute charge, and it runs
+# on CPU. Used by `potato transcripts --transcribe` and by Think-Aloud Mode's
+# live captioning.
+#
+# sherpa-onnx supplies the diarization Whisper has no model for. It is a ~9 MB
+# wheel running ONNX Runtime, deliberately chosen over pyannote.audio, which
+# would pull PyTorch and Lightning and require a Hugging Face token for gated
+# weights.
+#
+# Both download their model weights on first use, so an air-gapped machine
+# needs them staged once from a networked machine (POTATO_MODEL_CACHE for
+# diarization, a local CTranslate2 model directory for Whisper).
+_TRANSCRIBE_DEPS = [
+    "faster-whisper>=1.0.0",
+    "sherpa-onnx>=1.10.0",
+]
+# `potato deploy` to a VM provider. Only the SSH transport is extra: the API
+# clients use `requests` and the templates use Jinja2, both core dependencies.
+# paramiko 3.0+ is required for Ed25519Key.generate.
+_DEPLOY_DEPS = [
+    "paramiko>=3.0.0",
+]
 
 setup(
     name="potato-annotation",
-    version='2.7.1',
+    version='2.8.2',
     author="Potato Development Team",
     author_email="jurgens@umich.edu",
     description="A flexible, stand-alone, web-based platform for text annotation tasks",
@@ -114,6 +166,10 @@ setup(
         "ai": _AI_DEPS,
         "formats": _FORMAT_DEPS,
         "viz": _VIZ_DEPS,
+        "preview": _PREVIEW_DEPS,
+        "mcp": _MCP_DEPS,
+        # Everything a coding agent needs: the MCP server plus browser rendering.
+        "agent": _MCP_DEPS + _PREVIEW_DEPS,
         "export": _EXPORT_DEPS,
         "huggingface": _HF_DEPS,
         # Dataset publishing: HuggingFace push + parquet output. Zenodo and the
@@ -123,7 +179,12 @@ setup(
         "auth": _AUTH_DEPS,
         "langchain": _LANGCHAIN_DEPS,
         "db": _DB_DEPS,
-        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS,
+        "deploy": _DEPLOY_DEPS,
+        "vision": _VISION_DEPS,
+        "transcribe": _TRANSCRIBE_DEPS,
+        # `all` deliberately excludes `vision`: torch is a multi-gigabyte
+        # install, and nothing in the default experience needs it.
+        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _DEPLOY_DEPS + _PREVIEW_DEPS + _MCP_DEPS + _TRANSCRIBE_DEPS,
     },
     include_package_data=True,
     entry_points={
@@ -137,18 +198,23 @@ setup(
         ],
     },
     package_data={
-        # NOTE: All of potato/static/ is shipped via MANIFEST.in
-        # (`recursive-include potato/static/ *`) together with
-        # include_package_data=True above. Do NOT re-add static subdirectories
-        # here — they are already packaged recursively, and per-subdir globs
-        # only invite drift as new static/ folders are added.
+        # Templates and static assets are shipped recursively via MANIFEST.in
+        # together with include_package_data=True above. Do not add per-folder
+        # globs here; new nested asset directories should be included without
+        # requiring packaging changes.
         "potato": [
-            "templates/*.html",
             "i18n/*.yaml",
-            # Generated config JSON Schema. Shipped so editors and tooling can
-            # resolve it offline from an installed wheel, without reaching the
-            # docs site. Regenerate: python scripts/generate_config_schema.py
+            # Generated specs: the config JSON Schema and the examples catalog.
+            # Shipped so editors, agents and the MCP server resolve them offline
+            # from an installed wheel, without reaching the docs site. The
+            # examples catalog especially -- `examples/` itself is not packaged,
+            # so this JSON is the only record of it a wheel has. Regenerate:
+            #   python scripts/generate_config_schema.py
+            #   python scripts/generate_examples_manifest.py
             "schemas/*.json",
+            # cloud-init, Caddyfile and systemd unit templates. A provider
+            # renders these from an installed wheel, so they must ship.
+            "deploy/templates/*.j2",
         ],
     },
 )

@@ -1,6 +1,6 @@
 # AI Support in Potato
 
-Potato provides integrated AI support to enhance annotation workflows with intelligent hints, keyword highlighting, and label suggestions. This feature uses Large Language Models (LLMs) to provide contextual assistance to annotators without revealing the correct answers.
+With AI support on, an LLM writes hints, highlights keywords, and suggests labels while the annotator works. It does not reveal an answer; the annotator still decides.
 
 > **Using a HuggingFace model?** See [Using HuggingFace Models in Potato](huggingface_models.md) for the `huggingface` endpoint and OpenAI-compatible `base_url` setup across hints, solo mode, and judge calibration.
 
@@ -429,7 +429,7 @@ export OPENAI_API_KEY="sk-..."
 
 For better security and portability, you can move endpoint-specific details (API keys, server URLs, model names) into a separate `ai-config.yaml` file. This file is gitignored by default, so secrets and environment-specific URLs never get committed to version control.
 
-### How It Works
+### Referencing an external prompt file
 
 Your main `config.yaml` references the external file:
 
@@ -645,7 +645,7 @@ ai_support:
       on_prev: 3
 ```
 
-This configuration provides a complete AI-assisted annotation setup with caching, multi-schema support, and automatic pre-generation for optimal user experience.
+That configuration turns on caching, covers several schemas, and pre-generates suggestions for the next few instances so the annotator does not wait on the model.
 
 ## LLM Confidence Methods for Active Learning
 

@@ -4,7 +4,7 @@ Iterative Best-Worst Scaling extends standard BWS with an adaptive, Quicksort-li
 
 Based on: *"Baby Bear: Seeking a Just Right Rating Scale for Scalar Annotations"* ([arxiv 2408.09765](https://arxiv.org/abs/2408.09765))
 
-## How It Works
+## Rounds, and what each one adds
 
 Standard BWS generates all tuples upfront and produces relative rankings. IBWS adds rounds:
 

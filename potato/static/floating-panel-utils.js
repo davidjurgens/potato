@@ -11,9 +11,14 @@
  *
  * Naively lifting the card above the nav row just moves the problem — it then
  * covers the label radios, which is worse. So instead of one hard-coded nudge,
- * place() scores a few candidate positions against everything the annotator
- * needs to click (nav buttons, annotation inputs, and any other open widget)
- * and picks the one that covers the fewest.
+ * place() scans candidate positions and scores each against everything the
+ * annotator needs to reach (nav buttons, the navbar, annotation inputs, other
+ * open widgets), picking the one that costs least.
+ *
+ * The cost is weighted rather than counted: covering Next or the navbar takes
+ * away navigation and logout, covering a label radio is a nuisance. Measured on
+ * an 812px-tall viewport, an equal-count score sent Boundary Lab's expanded
+ * flip form straight over the header — clearing Next by climbing above it.
  *
  * Always measure the LAYOUT box (offsetWidth/offsetHeight, clientHeight) for
  * the placement maths: these cards slide in with a translateY animation, and a
@@ -24,6 +29,17 @@
 
     var GAP = 12;
     var STEP = 20;   // horizontal scan resolution, in px
+    var VSTEP = 24;  // vertical scan resolution, in px
+
+    // Not everything the annotator needs costs the same to cover. Losing Next
+    // or the navbar means losing the ability to move on or to log out; losing a
+    // label radio while answering a probe is a nuisance. Counting them equally
+    // let a tall card pick "sit on the navbar" over "sit on the radios", which
+    // is the wrong trade. Weights, not counts.
+    var W_NAV = 4;      // Previous / Next
+    var W_CHROME = 4;   // the top navbar: progress, jump-to, logout
+    var W_PANEL = 2;    // another open widget
+    var W_INPUT = 1;    // an annotation input
 
     /**
      * Rendered and non-empty.
@@ -43,19 +59,26 @@
 
     /** Everything the annotator must be able to click while a card is open. */
     function protectedRects(panel) {
-        var els = [];
+        var out = [];
+        function add(el, weight) {
+            if (visible(el)) out.push({ rect: el.getBoundingClientRect(), weight: weight });
+        }
+
         ['prev-btn', 'next-btn'].forEach(function (id) {
-            var b = document.getElementById(id);
-            if (visible(b)) els.push(b);
+            add(document.getElementById(id), W_NAV);
         });
-        [].push.apply(els, [].slice.call(
-            document.querySelectorAll('input.annotation-input')).filter(visible));
+        // The navbar carries progress, the instance jump box and Logout. It was
+        // missing from this set, so a card tall enough to need lifting cleared
+        // Next by climbing over the whole header instead.
+        [].slice.call(document.querySelectorAll('.potato-navbar'))
+            .forEach(function (el) { add(el, W_CHROME); });
+        [].slice.call(document.querySelectorAll('input.annotation-input'))
+            .forEach(function (el) { add(el, W_INPUT); });
         // Other open widgets must not be covered either (the combined showcase
         // example runs several of these at once).
-        [].push.apply(els, [].slice.call(
-            document.querySelectorAll('.ts-panel, .boundary-panel, .ta-pill'))
-            .filter(function (p) { return p !== panel && visible(p); }));
-        return els.map(function (el) { return el.getBoundingClientRect(); });
+        [].slice.call(document.querySelectorAll('.ts-panel, .boundary-panel, .ta-pill'))
+            .forEach(function (p) { if (p !== panel) add(p, W_PANEL); });
+        return out;
     }
 
     function overlaps(a, b) {
@@ -63,10 +86,12 @@
                  a.bottom <= b.top || a.top >= b.bottom);
     }
 
-    /** How many protected rects a candidate box would cover. */
+    /** Total weight of the protected rects a candidate box would cover. */
     function score(box, rects) {
         var n = 0;
-        for (var i = 0; i < rects.length; i++) if (overlaps(box, rects[i])) n++;
+        for (var i = 0; i < rects.length; i++) {
+            if (overlaps(box, rects[i].rect)) n += rects[i].weight;
+        }
         return n;
     }
 
@@ -113,8 +138,15 @@
         // Candidate positions. A coarse set (authored / centred only) is not
         // enough: with several widgets open, a clean side-by-side arrangement
         // can exist and still be missed, so scan the bottom band properly.
+        //
+        // The vertical scan matters for the same reason: with only "authored"
+        // and "lifted clear of Next" to choose from, a card too tall for either
+        // to be clean has to pick one of two bad spots. Scanning finds the
+        // middle placements that clear both the navbar and the nav row.
         var bottoms = [baseBottom];
         if (Math.abs(lifted - baseBottom) > 1) bottoms.push(lifted);
+        var maxBottom = viewportH - h - GAP;
+        for (var y = GAP; y <= maxBottom; y += VSTEP) bottoms.push(y);
         var lefts = [baseLeft];
         var maxLeft = viewportW - w - GAP;
         for (var x = GAP; x <= maxLeft; x += STEP) lefts.push(x);

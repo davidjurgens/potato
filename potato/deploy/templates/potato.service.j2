@@ -1,0 +1,33 @@
+[Unit]
+Description=Potato annotation server
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=exec
+Restart=always
+RestartSec=5
+# The image pull on first start can be slow on a small droplet.
+TimeoutStartSec=600
+
+# Nothing here is a secret. The environment file is, and it is 0600.
+Environment=POTATO_CONTAINER={{ container_name }}
+EnvironmentFile={{ env_file }}
+
+ExecStartPre=-/usr/bin/docker rm -f {{ container_name }}
+ExecStart=/usr/bin/docker run \
+    --name {{ container_name }} \
+    --rm \
+    --env-file {{ env_file }} \
+    -p 127.0.0.1:{{ app_port }}:7860 \
+    -v {{ app_dir }}:/app \
+    -v {{ data_dir }}:/data \
+    -w /app \
+    --label potato-deploy=1 \
+    --label potato-name={{ deployment_name }} \
+    {{ image }}
+
+ExecStop=/usr/bin/docker stop --time=30 {{ container_name }}
+
+[Install]
+WantedBy=multi-user.target

@@ -5,11 +5,16 @@
 annotation_task_name: "PDF Entity Annotation"
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Data files
 data_files:
   - data/pdf-example.json
+
+# PDFs are served from here. They are local so the example works offline and
+# without cross-origin fetches — remote PDF URLs are blocked by CORS unless the
+# host opts in, which most do not.
+media_directory: media
 
 # Item properties
 item_properties:

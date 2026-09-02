@@ -2,7 +2,7 @@
   "info": {
     "description": "Generated from the live Flask url_map \u2014 see potato/server_utils/openapi_spec.py.\n\nMost endpoints are session-authenticated: POST /auth with `username` and `password` as form data, then reuse the session cookie. `x-potato-auth` records the decorators guarding an operation, and `x-potato-requires-config` marks operations that only exist when the named config is enabled.\n\nResponse schemas are intentionally not modelled; this spec is an authoritative index of what exists, not a payload contract.",
     "title": "Potato HTTP API",
-    "version": "2.7.1"
+    "version": "2.8.2"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -12,11 +12,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle requests to the home page.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       },
       "post": {
@@ -24,11 +34,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle requests to the home page.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -38,11 +58,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Main adjudication page.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -62,11 +88,18 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get full item detail for adjudication.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:adjudicator",
+          "inline:session_username"
         ]
       }
     },
@@ -76,11 +109,18 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get the next item to adjudicate.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:adjudicator",
+          "inline:session_username"
         ]
       }
     },
@@ -90,11 +130,18 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get the adjudication queue.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:adjudicator",
+          "inline:session_username"
         ]
       }
     },
@@ -114,11 +161,18 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get similar items for a specific instance (lazy-loading endpoint).",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:adjudicator",
+          "inline:session_username"
         ]
       }
     },
@@ -138,11 +192,18 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Skip an adjudication item.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:adjudicator",
+          "inline:session_username"
         ]
       }
     },
@@ -152,11 +213,18 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get adjudication progress statistics.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:adjudicator",
+          "inline:session_username"
         ]
       }
     },
@@ -166,11 +234,18 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Submit an adjudication decision.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:adjudicator",
+          "inline:session_username"
         ]
       }
     },
@@ -180,11 +255,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Serve the admin dashboard page.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key",
+          "inline:debug_only"
         ]
       }
     },
@@ -194,11 +279,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get all available instances for navigation purposes.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -208,11 +302,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Per-annotator LLM-cheating / low-effort detection (E2), no ground truth.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -222,11 +325,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Admin dashboard overview of adjudication status.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -236,11 +348,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Per-agent aggregation of turn-level annotations across the dataset.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -250,11 +371,43 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get inter-annotator agreement metrics.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
+        ]
+      }
+    },
+    "/admin/api/ai-cost": {
+      "get": {
+        "operationId": "get_admin_ai_cost",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "What AI has cost this project, and what the next judge run would cost.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -264,11 +417,43 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get detailed annotation history data with filtering options.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
+        ]
+      }
+    },
+    "/admin/api/annotation_process": {
+      "get": {
+        "operationId": "get_admin_api_annotation_process",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Per-annotator drawing-dynamics rollup: how geometry annotations were made.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -278,11 +463,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get detailed annotator data including timing information.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -292,11 +486,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get behavioral analytics data for all annotators.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -306,11 +509,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get current BWS scoring status and cached scores.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -320,11 +532,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Generate BWS scores from current annotations.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -334,11 +555,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Clear the data source cache.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -348,11 +578,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get pairwise code co-occurrence across instances.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -362,11 +601,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get a codes-by-instance-attribute crosstab.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -376,11 +624,22 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Get or update system configuration.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key",
+          "inline:debug_only",
+          "inline:admin_access"
         ]
       },
       "post": {
@@ -388,11 +647,22 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Get or update system configuration.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key",
+          "inline:debug_only",
+          "inline:admin_access"
         ]
       }
     },
@@ -402,10 +672,19 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -415,11 +694,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Materialize local annotator sets as a Prolific participant group.",
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -429,11 +717,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Provider + study status overview for the admin dashboard.",
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -443,10 +740,19 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       },
       "post": {
@@ -454,10 +760,19 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -477,11 +792,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Set up (and optionally dispatch) bulk bonuses.",
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -501,10 +825,19 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -524,10 +857,19 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -547,10 +889,19 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -578,10 +929,19 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -601,10 +961,19 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -624,10 +993,19 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -637,10 +1015,19 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -650,11 +1037,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Subscribe this server's /webhooks/prolific endpoint to Prolific events.",
         "tags": [
           "crowd_admin"
+        ],
+        "x-potato-auth": [
+          "require_permission"
         ]
       }
     },
@@ -664,11 +1060,66 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get crowdsourcing platform statistics (MTurk, Prolific).",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
+        ]
+      }
+    },
+    "/admin/api/data/archive": {
+      "get": {
+        "operationId": "get_admin_api_data_archive",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Download everything collected, as a gzipped tar.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
+    "/admin/api/data/manifest": {
+      "get": {
+        "operationId": "get_admin_api_data_manifest",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "What a data archive would contain, and how large it would be.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -678,11 +1129,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "List all data sources with their status.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -692,11 +1152,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Report polling status and ingestion statistics for every live source.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -716,11 +1185,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Report polling status and statistics for one live source.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -740,11 +1218,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Run one poll immediately, without waiting for the next interval.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -764,11 +1251,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Load more items from a specific data source.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -788,11 +1284,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Refresh a data source (re-fetch from remote).",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -802,11 +1307,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get visualization data for the embedding scatter plot.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -816,11 +1330,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Force re-computation of embeddings and UMAP projection.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -830,11 +1353,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Reorder the annotation queue based on selected instances.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -844,11 +1376,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get embedding visualization statistics.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -858,11 +1399,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Run an export in the requested format and return the result.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -872,11 +1422,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "List available export formats with metadata.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -886,11 +1445,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get current IBWS ordinal ranking.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -900,11 +1468,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get current IBWS round status and progress.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -914,11 +1491,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get accuracy metrics.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -928,11 +1514,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get current high-confidence examples.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -942,11 +1537,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get LLM predictions with filtering.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -956,11 +1560,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get ICL labeler status and statistics.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -970,11 +1583,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Manually trigger ICL operations.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -984,11 +1606,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Agent-metric induction (E11): mine recurring evaluation metrics from the",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -998,11 +1629,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get paginated instances data with sorting and filtering.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -1012,11 +1652,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Auto-calibrate the judge: re-run with human corrections injected as",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -1026,11 +1675,43 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Run/re-run the judge over human-annotated instances.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
+    "/admin/api/judge-position-bias": {
+      "post": {
+        "operationId": "post_admin_judge_position_bias",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Is the judge judging, or just picking whatever is listed first?",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -1040,11 +1721,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Admin dashboard overview of MACE competence estimation results.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -1054,11 +1744,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get MACE predicted labels, optionally filtered by schema and instance.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -1068,11 +1767,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Manually trigger a MACE recomputation.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -1082,11 +1790,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Get dashboard overview data.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access",
+          "inline:debug_only"
         ]
       }
     },
@@ -1096,11 +1814,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Soft-label / perspectivist export (E3): per-item label distributions,",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -1110,11 +1837,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get quality control metrics (attention checks, gold standards).",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -1124,11 +1860,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get aggregate analysis data for all annotation schemas/questions.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -1138,11 +1883,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Manually reclaim a specific instance assignment from a user.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -1208,7 +1962,54 @@
           "review_workflow"
         ],
         "x-potato-auth": [
-          "_admin_required"
+          "_admin_required",
+          "inline:session_username"
+        ]
+      }
+    },
+    "/admin/api/rollout/alignment": {
+      "get": {
+        "operationId": "get_admin_rollout_alignment",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Score the recorded rollout-judge predictions against the human consensus.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
+    "/admin/api/rollout/judge-batch": {
+      "post": {
+        "operationId": "post_admin_rollout_judge_batch",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Run the rollout judge over every rollout item in the project.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -1218,10 +2019,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "search"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:admin_access"
         ]
       }
     },
@@ -1231,11 +2042,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get a list of stale instance assignments (assigned but not annotated past timeout).",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -1245,11 +2065,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get step-level inter-annotator agreement metrics for agent traces.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -1259,11 +2088,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get step-level quality control metrics.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -1273,11 +2111,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get comprehensive suspicious activity analysis.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -1287,11 +2134,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Reset server state for testing purposes.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:debug_only"
         ]
       }
     },
@@ -1311,11 +2164,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Set the maximum number of instances for a specific user.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -1325,11 +2187,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get webhook configuration and delivery stats.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -1339,11 +2210,43 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Send a test webhook event to verify endpoint connectivity.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
+    "/admin/api/writing_process": {
+      "get": {
+        "operationId": "get_admin_api_writing_process",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Per-annotator typing-dynamics rollup: how free-text responses were produced.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
         ]
       }
     },
@@ -1556,6 +2459,53 @@
         "x-potato-requires-config": "automation.enabled: true"
       }
     },
+    "/admin/calibration": {
+      "get": {
+        "operationId": "get_admin_calibration",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Past calibration rounds, who is eligible, and how a live round is going.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
+    "/admin/calibration/start": {
+      "post": {
+        "operationId": "post_admin_calibration_start",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Send annotators back through the training exercise.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key",
+          "inline:session_username"
+        ]
+      }
+    },
     "/admin/catalog": {
       "get": {
         "operationId": "get_curation_catalog_page",
@@ -1626,6 +2576,54 @@
         "x-potato-requires-config": "curation.enabled: true"
       }
     },
+    "/admin/catalog/api/duplicates": {
+      "get": {
+        "operationId": "get_curation_api_duplicates",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Near-duplicate groups in this project.",
+        "tags": [
+          "curation"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "curation.enabled: true"
+      }
+    },
+    "/admin/catalog/api/duplicates/exclude": {
+      "post": {
+        "operationId": "post_curation_api_exclude_duplicates",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Stop assigning the duplicates in the given groups.",
+        "tags": [
+          "curation"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "curation.enabled: true"
+      }
+    },
     "/admin/catalog/api/search": {
       "post": {
         "operationId": "post_curation_api_search",
@@ -1663,6 +2661,7 @@
             "description": "Admin role required"
           }
         },
+        "summary": "Every slice a picker should offer: saved ones plus the built-ins.",
         "tags": [
           "curation"
         ],
@@ -1945,11 +2944,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Admin API to generate a password reset token for a user.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -2075,11 +3083,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Health check endpoint for administrators.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key",
+          "inline:debug_only"
         ]
       }
     },
@@ -2089,11 +3107,43 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Inter-annotator agreement over the overlap-sample items.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
+    "/admin/iaa/drift": {
+      "get": {
+        "operationId": "get_admin_iaa_drift",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Agreement per time window, with codebook markers and a drift verdict.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -2103,11 +3153,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get state for all items in the system.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -2127,11 +3186,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Get detailed state for a specific item.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -2141,11 +3209,43 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "LLM-judge \u2194 human alignment report: Cohen's \u03ba, confusion, disagreements.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
+    "/admin/model-review": {
+      "get": {
+        "operationId": "get_admin_model_review",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "The human-QC picture over model prelabels.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -2287,11 +3387,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Admin API to reset a user's password.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -2323,11 +3432,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Get overall system state including user and item statistics.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key",
+          "inline:debug_only"
         ]
       }
     },
@@ -2337,11 +3456,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Signal-based triage queue: items ranked by their quality signal.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -2361,11 +3489,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Get detailed state for a specific user.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key",
+          "inline:debug_only"
         ]
       }
     },
@@ -2375,11 +3513,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Finish the chat and write conversation data to the item.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -2389,11 +3533,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Send a message to the agent and get a response.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -2403,11 +3553,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get the current agent chat session status (for page refresh recovery).",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -2417,11 +3573,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle annotation page requests.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       },
       "post": {
@@ -2429,11 +3595,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle annotation page requests.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -2443,11 +3619,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Serve the API-based frontend interface.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -2457,10 +3639,46 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/annotation_telemetry/{instance_id}": {
+      "get": {
+        "operationId": "get_get_annotation_telemetry",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Drawing-dynamics summaries for one instance, for the current user.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -2472,7 +3690,7 @@
             "description": "Success"
           }
         },
-        "summary": "Proxy endpoint for fetching external audio files with Range request support.",
+        "summary": "Proxy an external audio file so the browser can read it for waveform",
         "tags": [
           "core"
         ]
@@ -2494,11 +3712,37 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get behavioral data for a specific instance.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/calibration": {
+      "get": {
+        "operationId": "get_get_item_calibration",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Camera calibration for one item, so 3D boxes can be drawn onto its images.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -2559,11 +3803,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get chat history for a specific instance.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -2573,11 +3823,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Send a message to the LLM chat assistant and get a response.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -2611,11 +3867,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Full change-log for the before->after delta view. Admin only.",
         "tags": [
           "codebook"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:admin_access"
         ]
       }
     },
@@ -2625,11 +3891,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Fold src into dst retroactively (append-only). Admin only.",
         "tags": [
           "codebook"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:admin_access"
         ]
       }
     },
@@ -2639,10 +3915,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "codebook"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:admin_access"
         ]
       }
     },
@@ -2662,10 +3948,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "codebook"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:admin_access"
         ]
       }
     },
@@ -2685,10 +3981,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "tags": [
           "codebook"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:admin_access"
         ]
       }
     },
@@ -2698,11 +4004,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Split a code by annotator retroactively. Admin only.",
         "tags": [
           "codebook"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:admin_access"
         ]
       }
     },
@@ -2712,11 +4028,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
         "summary": "Project-wide stale instances (all users) for oversight. Admin",
         "tags": [
           "codebook"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:admin_access"
         ]
       }
     },
@@ -2978,17 +4304,43 @@
         ]
       }
     },
+    "/api/critique_annotations": {
+      "post": {
+        "operationId": "post_critique_annotations",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Ask a vision model to review this user's annotations on the current image.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
     "/api/current_instance": {
       "get": {
         "operationId": "get_get_current_instance",
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get the current instance information for the current user.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -2998,11 +4350,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get list of configured knowledge bases.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -3030,11 +4388,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get detailed information about a specific entity.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -3044,11 +4408,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Search a knowledge base for entities matching a query.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -3058,9 +4428,65 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Update a span annotation with entity linking information.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/episode/{filepath}": {
+      "get": {
+        "operationId": "get_episode_manifest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Read an episode and return the manifest the timeline consumes.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/api/episodes/{filepath}": {
+      "get": {
+        "operationId": "get_episode_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "What is inside a multi-episode source, without reading any of it.",
         "tags": [
           "core"
         ]
@@ -3082,11 +4508,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get event annotations for a specific instance.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -3114,11 +4546,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Delete a specific event annotation.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -3128,10 +4566,40 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
+        ]
+      }
+    },
+    "/api/grounding/expressions": {
+      "get": {
+        "operationId": "get_grounding_expressions",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "The current item's referring expressions, and any model predictions.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -3141,11 +4609,37 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Record human verification of an LLM prediction.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/image_annotations/previous": {
+      "get": {
+        "operationId": "get_get_previous_image_annotations",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Return this user's image annotations for the item BEFORE their current one.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -3155,11 +4649,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get the full raw data for the current instance.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -3179,11 +4679,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get keyword highlights for a specific instance.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -3203,11 +4709,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get link annotations (span relationships) for a specific instance.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -3235,11 +4747,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Delete a specific link annotation.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -3483,7 +5001,8 @@
           "live_agent"
         ],
         "x-potato-auth": [
-          "_login_required"
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_agent"
       }
@@ -3628,11 +5147,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "List all branches for a session.",
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3653,11 +5178,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "List all checkpoints for a session.",
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3686,11 +5217,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get diff from a step to current state.",
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3711,10 +5248,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3735,10 +5278,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3759,11 +5308,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Replay from a step with optional new instructions or edited actions.",
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3784,10 +5339,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3808,11 +5369,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Rollback to a specific step.",
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3823,10 +5390,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3837,11 +5410,18 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Start a new coding agent session.",
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3862,10 +5442,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3886,10 +5472,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3910,11 +5502,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "SSE event stream for a coding agent session.",
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3935,11 +5533,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Switch to a different branch.",
         "tags": [
           "live_coding_agent"
+        ],
+        "x-potato-auth": [
+          "_login_required"
         ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
       }
@@ -3960,12 +5564,291 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "live_coding_agent"
         ],
+        "x-potato-auth": [
+          "_login_required"
+        ],
         "x-potato-requires-config": "instance_display field of type live_coding_agent"
+      }
+    },
+    "/api/mcp/manifest": {
+      "get": {
+        "operationId": "get_mcp_manifest",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "What this task exposes. Requires a token but no particular tool grant.",
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/add_items": {
+      "post": {
+        "operationId": "post_mcp_tool_add_items",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/assign_items": {
+      "post": {
+        "operationId": "post_mcp_tool_assign_items",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/delete_annotations": {
+      "post": {
+        "operationId": "post_mcp_tool_delete_annotations",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/export_data": {
+      "post": {
+        "operationId": "post_mcp_tool_export_data",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/get_agreement": {
+      "post": {
+        "operationId": "post_mcp_tool_get_agreement",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/get_config": {
+      "post": {
+        "operationId": "post_mcp_tool_get_config",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/get_item": {
+      "post": {
+        "operationId": "post_mcp_tool_get_item",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/get_progress": {
+      "post": {
+        "operationId": "post_mcp_tool_get_progress",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/get_status": {
+      "post": {
+        "operationId": "post_mcp_tool_get_status",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/list_annotators": {
+      "post": {
+        "operationId": "post_mcp_tool_list_annotators",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/list_items": {
+      "post": {
+        "operationId": "post_mcp_tool_list_items",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
+      }
+    },
+    "/api/mcp/tools/submit_annotation": {
+      "post": {
+        "operationId": "post_mcp_tool_submit_annotation",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "tags": [
+          "mcp"
+        ],
+        "x-potato-auth": [
+          "mcp_tool",
+          "inline:agent_token"
+        ],
+        "x-potato-requires-config": "mcp.enabled: true, and every tool named in mcp.tools"
       }
     },
     "/api/memos": {
@@ -4036,17 +5919,43 @@
         ]
       }
     },
+    "/api/model-review/verdict": {
+      "post": {
+        "operationId": "post_model_review_verdict",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Record a reviewer's verdict on one item's prelabels.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
     "/api/option_highlights/config": {
       "get": {
         "operationId": "get_get_option_highlighting_config",
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get the option highlighting configuration.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4056,11 +5965,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Trigger prefetching of option highlights for upcoming items.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4080,11 +5995,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get AI-suggested option highlights for a specific annotation.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4094,11 +6015,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Return LLM-suggested per-step process rewards for one process_reward schema.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4108,11 +6035,57 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "A reviewer's open assignments (login-scoped, no admin needed).",
         "tags": [
           "review_workflow"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/rollout/judge": {
+      "post": {
+        "operationId": "post_rollout_judge",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Ask a vision model where each rollout stops making sense.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/rollout/set": {
+      "get": {
+        "operationId": "get_rollout_set",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Build and return the current item's rollout manifest.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4136,11 +6109,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Annotator-facing corpus search. Gated by search.annotator_claim;",
         "tags": [
           "search"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4150,11 +6129,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Pull a matching instance into the requesting annotator's queue.",
         "tags": [
           "search"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4164,10 +6149,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "sessions"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4201,10 +6192,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "sessions"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4224,10 +6221,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "sessions"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4247,11 +6250,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get span annotations as structured data for frontend rendering.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4271,11 +6280,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Clear all span annotations for a specific instance and user.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4366,17 +6381,43 @@
         "x-potato-requires-config": "trace_ingestion configured"
       }
     },
+    "/api/track/propagate": {
+      "post": {
+        "operationId": "post_propagate_video_track",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Track one object forward from a prompted frame.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
     "/api/track_ai_usage": {
       "post": {
         "operationId": "post_track_ai_usage",
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Track AI assistance request, response, and user decisions.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4386,11 +6427,37 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Track annotation changes from the frontend.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/track_annotation_telemetry": {
+      "post": {
+        "operationId": "post_track_annotation_telemetry",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Receive completed drawing sessions from the annotation telemetry tracker.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4400,11 +6467,67 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Receive batched interaction events from the frontend.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/track_typing": {
+      "post": {
+        "operationId": "post_track_typing",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Receive completed typing sessions from the keystroke tracker.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
+        ]
+      }
+    },
+    "/api/typing_summary/{instance_id}": {
+      "get": {
+        "operationId": "get_get_typing_summary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "summary": "Typing-dynamics summaries for one instance, for the current user.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4617,11 +6740,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle authentication requests.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       },
       "post": {
@@ -4629,11 +6762,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle authentication requests.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -4653,11 +6796,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the OAuth callback after user authenticates with provider.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -4725,7 +6878,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -4746,7 +6900,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -4801,11 +6956,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Handle Clerk SSO login process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       },
       "post": {
@@ -4813,11 +6974,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Handle Clerk SSO login process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4827,10 +6994,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "codebook_page"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -4840,11 +7013,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the consent phase of the annotation process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       },
       "post": {
@@ -4852,11 +7035,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the consent phase of the annotation process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -4946,7 +7139,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "event_template.enabled: true or corpus_map.enabled: true"
       }
@@ -5036,7 +7230,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "event_template.enabled: true or corpus_map.enabled: true"
       }
@@ -5137,7 +7332,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "event_template.enabled: true or corpus_map.enabled: true"
       }
@@ -5230,7 +7426,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ],
         "x-potato-requires-config": "corpus_map.enabled: true"
       }
@@ -5868,11 +8065,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the done phase of the annotation process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       },
       "post": {
@@ -5880,11 +8087,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the done phase of the annotation process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -5920,10 +8137,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -5933,11 +8160,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Get annotations for the current user and instance.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -5947,11 +8180,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle requests to go to a specific instance.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       },
       "post": {
@@ -5959,9 +8202,33 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle requests to go to a specific instance.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "get_health",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Unauthenticated liveness probe for containers and load balancers.",
         "tags": [
           "core"
         ]
@@ -5973,11 +8240,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the instructions phase of the annotation process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       },
       "post": {
@@ -5985,11 +8262,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the instructions phase of the annotation process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -6129,11 +8416,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle login requests - render the auth page directly",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       },
       "post": {
@@ -6141,11 +8438,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle login requests - render the auth page directly",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -6175,6 +8482,269 @@
         ]
       }
     },
+    "/media/depth/{filepath}": {
+      "get": {
+        "operationId": "get_media_depth",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "``GET /media/depth/<path>`` \u2014 a depth map, in whichever form is asked for.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/iiif/{filepath}/info.json": {
+      "get": {
+        "operationId": "get_media_iiif_info",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "IIIF Image API 3.0 ``info.json`` over the same pyramid.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/iiif/{filepath}/{region}/{size}/{rotation}/{quality_format}": {
+      "get": {
+        "operationId": "get_media_iiif_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "region",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "size",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "rotation",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quality_format",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "A IIIF ``{region}/{size}/{rotation}/{quality}.{format}`` request.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/info/{filepath}": {
+      "get": {
+        "operationId": "get_media_info",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Describe a source without rendering it.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/pointcloud/{filepath}": {
+      "get": {
+        "operationId": "get_media_point_cloud",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Serve a point cloud as the PNT1 buffer the 3D viewer fetches.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/proxy/{filepath}": {
+      "get": {
+        "operationId": "get_media_proxy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Serve a transcoded rendering of ``filepath``, caching the result.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/tiles/{filepath}.dzi": {
+      "get": {
+        "operationId": "get_media_tile_descriptor",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "The DZI descriptor, plus the same geometry as JSON for the client.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/media/tiles/{filepath}_files/{level}/{column}_{row}.{ext}": {
+      "get": {
+        "operationId": "get_media_tile_image",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "level",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "column",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ext",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "tags": [
+          "core"
+        ]
+      }
+    },
     "/media/{filepath}": {
       "get": {
         "operationId": "get_serve_media",
@@ -6195,6 +8765,31 @@
           }
         },
         "summary": "Serve a local media file from the project's media directory.",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/models/{filepath}": {
+      "get": {
+        "operationId": "get_serve_model_file",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "filepath",
+            "required": true,
+            "schema": {
+              "format": "path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Serve a downloaded segmentation model or the ONNX runtime.",
         "tags": [
           "core"
         ]
@@ -6232,10 +8827,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "pocket"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -6255,7 +8856,8 @@
           "pocket"
         ],
         "x-potato-auth": [
-          "api_login_required"
+          "api_login_required",
+          "inline:session_username"
         ]
       }
     },
@@ -6275,7 +8877,8 @@
           "pocket"
         ],
         "x-potato-auth": [
-          "api_login_required"
+          "api_login_required",
+          "inline:session_username"
         ]
       }
     },
@@ -6365,11 +8968,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the poststudy phase of the annotation process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       },
       "post": {
@@ -6377,11 +8990,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the poststudy phase of the annotation process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -6391,11 +9014,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the prestudy phase of the annotation process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       },
       "post": {
@@ -6403,11 +9036,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the prestudy phase of the annotation process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -6417,11 +9060,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Read-only, opt-in progress dashboard for annotators.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -6431,11 +9084,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "JSON progress numbers for the annotator dashboard (read-only).",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -6564,11 +9223,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Register a new user and initialize their user state.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -6624,10 +9293,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "rooms"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -6637,10 +9312,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "rooms"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -6660,7 +9341,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -6729,7 +9411,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -6759,7 +9442,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -6788,7 +9472,8 @@
           "rooms"
         ],
         "x-potato-auth": [
-          "api_login_required"
+          "api_login_required",
+          "inline:session_username"
         ]
       }
     },
@@ -6817,7 +9502,8 @@
           "rooms"
         ],
         "x-potato-auth": [
-          "api_login_required"
+          "api_login_required",
+          "inline:session_username"
         ]
       }
     },
@@ -6847,7 +9533,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -6877,7 +9564,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -6907,7 +9595,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -6937,7 +9626,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -6967,7 +9657,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -6996,7 +9687,8 @@
           "rooms"
         ],
         "x-potato-auth": [
-          "api_login_required"
+          "api_login_required",
+          "inline:session_username"
         ]
       }
     },
@@ -7026,7 +9718,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -7046,10 +9739,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "rooms"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -7084,10 +9783,16 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "tags": [
           "sessions"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -7097,10 +9802,20 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         },
+        "summary": "Stop the development server.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
         ]
       }
     },
@@ -7120,7 +9835,8 @@
           "solo_mode"
         ],
         "x-potato-auth": [
-          "login_required"
+          "login_required",
+          "inline:session_username"
         ]
       },
       "post": {
@@ -7138,7 +9854,8 @@
           "solo_mode"
         ],
         "x-potato-auth": [
-          "login_required"
+          "login_required",
+          "inline:session_username"
         ]
       }
     },
@@ -8054,11 +10771,17 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
           }
         },
         "summary": "Serve the span annotation API-based frontend interface.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username"
         ]
       }
     },
@@ -8068,11 +10791,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "DEPRECATED: Handle annotation submission requests.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -8107,7 +10840,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -8148,7 +10882,8 @@
           "thinkaloud"
         ],
         "x-potato-auth": [
-          "api_login_required"
+          "api_login_required",
+          "inline:session_username"
         ]
       }
     },
@@ -8169,7 +10904,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -8201,11 +10937,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the training phase of the annotation process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       },
       "post": {
@@ -8213,11 +10959,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "Handle the training phase of the annotation process.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },
@@ -8260,7 +11016,8 @@
           "truth_serum"
         ],
         "x-potato-auth": [
-          "api_login_required"
+          "api_login_required",
+          "inline:session_username"
         ]
       }
     },
@@ -8281,7 +11038,8 @@
         ],
         "x-potato-auth": [
           "api_login_required",
-          "same_origin_required"
+          "same_origin_required",
+          "inline:session_username"
         ]
       }
     },
@@ -8336,11 +11094,21 @@
         "responses": {
           "200": {
             "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Only available when the server runs with debug: true"
           }
         },
         "summary": "PRIMARY ANNOTATION ENDPOINT: Handle all annotation updates for instances.",
         "tags": [
           "core"
+        ],
+        "x-potato-auth": [
+          "inline:session_username",
+          "inline:debug_only"
         ]
       }
     },

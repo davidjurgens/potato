@@ -26,6 +26,12 @@ class SchemaKind(str, Enum):
     MULTILABEL = "multilabel"
     RANKING = "ranking"
     SPAN = "span"
+    GEOMETRY = "geometry"    # 2D shapes: boxes, polygons, masks, points
+    TEMPORAL = "temporal"    # labelled time ranges: audio and video segments
+    EPISODE = "episode"      # robot demonstrations: phases + outcome + reward
+    ROLLOUT = "rollout"      # world-model rollouts: break-points + preference
+    CAPTION = "caption"      # free text about a region: agreement over meaning
+    GROUNDING = "grounding"  # referring expression -> region: detection + where
     TEXT = "text"            # free-form text, no automatic IAA
     UNSUPPORTED = "unsupported"
 
@@ -68,12 +74,17 @@ _KIND_BY_TYPE = {
     # Text
     "textbox": SchemaKind.TEXT,
     "text_edit": SchemaKind.TEXT,
+    # Geometry / temporal (stored as a JSON blob under a single ``_data`` key)
+    "image_annotation": SchemaKind.GEOMETRY,
+    "audio_annotation": SchemaKind.TEMPORAL,
+    "video_annotation": SchemaKind.TEMPORAL,
+    "episode_annotation": SchemaKind.EPISODE,
+    "rollout_evaluation": SchemaKind.ROLLOUT,
+    "region_caption": SchemaKind.CAPTION,
+    "grounding_eval": SchemaKind.GROUNDING,
     # Skipped
     "pure_display": SchemaKind.UNSUPPORTED,
     "video": SchemaKind.UNSUPPORTED,
-    "audio_annotation": SchemaKind.UNSUPPORTED,
-    "video_annotation": SchemaKind.UNSUPPORTED,
-    "image_annotation": SchemaKind.UNSUPPORTED,
 }
 
 
@@ -81,8 +92,12 @@ def classify_schema(scheme: Dict[str, Any]) -> SchemaKind:
     """Classify a schema definition into an IAA-relevant kind."""
     atype = (scheme.get("annotation_type") or "").strip().lower()
     kind = _KIND_BY_TYPE.get(atype, SchemaKind.UNSUPPORTED)
-    # Downgrade multiselect with max_choices == 1 to NOMINAL
-    if kind == SchemaKind.MULTILABEL and atype == "multiselect":
+    # A multi-label schema capped at one choice is nominal, and scoring it with
+    # a set-valued metric would understate agreement. The cap was previously
+    # only honored for `annotation_type: multiselect`, which accepts neither
+    # key — `max_selections` belongs to hierarchical_multiselect, so the
+    # downgrade could never fire. Gate on the kind alone.
+    if kind == SchemaKind.MULTILABEL:
         max_choices = scheme.get("max_choices") or scheme.get("max_selections")
         if max_choices == 1:
             return SchemaKind.NOMINAL
@@ -102,6 +117,57 @@ def metrics_for_schema(scheme: Dict[str, Any]) -> List[str]:
             "token_level_kappa", "span_f1_exact", "span_f1_partial",
             "krippendorff_alpha_u", "gamma_mathet",
         ],
+        SchemaKind.GEOMETRY: [
+            "mean_agreement", "mean_matched_iou", "detection_f1",
+            "mean_object_count_diff",
+            # Chance-corrected, and the ones to quote in a paper.
+            "sigma", "ks", "detection_alpha", "classification_alpha",
+        ],
+        SchemaKind.TEMPORAL: [
+            "mean_agreement", "mean_matched_iou", "detection_f1",
+            "mean_object_count_diff",
+        ],
+        # Three groups rather than a flat list, because an episode annotation
+        # is three different kinds of answer and blending them would hide which
+        # one the annotators disagreed about -- and they have different fixes.
+        SchemaKind.EPISODE: [
+            "phases.mean_agreement", "phases.mean_matched_iou",
+            "phases.detection_f1",
+            "outcome.outcome_alpha",
+            "reward.reward_icc", "reward.reward_pearson_r",
+            "reward.reward_coverage",
+        ],
+        # Four groups, and a tolerance sweep behind them. Reporting one number
+        # would hide which of "does it break", "when", "why" and "how badly"
+        # the annotators disagreed about, and every one of them depends on the
+        # tolerance window the sweep varies.
+        SchemaKind.ROLLOUT: [
+            "detection.alpha", "localization.mean_offset",
+            "localization.sigma", "localization.ks",
+            "category.alpha", "severity.alpha",
+            "preference.alpha", "counterfactual.alpha",
+            "coverage.answered_fraction",
+        ],
+        # Alpha plus the RAW mean distance, because alpha is chance-corrected
+        # and this is not: a corpus whose captions are all near-identical can
+        # have an undefined or negative alpha alongside excellent raw
+        # agreement, and only the pair explains what happened.
+        SchemaKind.CAPTION: [
+            "alpha", "mean_pairwise_distance",
+            "matching.n_matched_regions", "matching.n_unmatched_regions",
+        ],
+        # Three groups, because "is it there", "where is it" and "did anyone
+        # answer" are separate findings with separate fixes: a low detection
+        # alpha means the expression is ambiguous, a low localization score
+        # means the drawing is sloppy, and low coverage means neither number
+        # rests on much. `pointing` appears only for `region_type: point`,
+        # where IoU is meaningless and distance replaces it.
+        SchemaKind.GROUNDING: [
+            "detection.alpha", "detection.percent_agreement",
+            "localization.mean_iou", "localization.median_iou",
+            "pointing.mean_pairwise_distance",
+            "coverage.answered_fraction",
+        ],
         SchemaKind.TEXT: [],
         SchemaKind.UNSUPPORTED: [],
     }
@@ -119,33 +185,141 @@ def _label_value(label) -> Any:
     return getattr(label, "name", None) or getattr(label, "value", None)
 
 
+def _schema_values(ustate, instance_id: str, schema_name: str):
+    """
+    ``{label_name: value}`` for one schema on one item, or ``None``.
+
+    ``get_label_annotations`` returns the *flat* ``{Label: value}`` container,
+    not a mapping keyed by schema name. Regrouping is shared with adjudication
+    via :func:`annotation_values.group_by_schema` so the two cannot drift.
+    """
+    from potato.server_utils import annotation_values
+
+    stored = ustate.get_label_annotations(instance_id)
+    if not stored:
+        return None
+    return annotation_values.group_by_schema(stored).get(schema_name)
+
+
 def _gather_labels(
+    instance_ids: Iterable[str],
+    user_states: Dict[str, Any],
+    schema_name: str,
+    numeric: bool = False,
+):
+    """
+    Per item, return {user_id: [values]} for one schema.
+
+    The value of a categorical answer is the *label name* whose stored value is
+    truthy: radio stores ``{"positive": True}`` and likert ``{"2": "2"}``, so in
+    both the name carries the answer.
+
+    Historically this looked the schema up by name in the flat ``{Label: value}``
+    container. A string never hashes to a ``Label``, so the lookup always missed
+    and every metric in this module reported NaN over zero items for every
+    schema of every kind. Fixed here; pinned by
+    ``tests/unit/test_iaa_dispatcher_gathering.py``.
+    """
+    from potato.server_utils import annotation_values
+
+    rows: Dict[str, Dict[str, Any]] = {}
+    for iid in instance_ids:
+        per_user: Dict[str, Any] = {}
+        for uid, ustate in user_states.items():
+            values = _schema_values(ustate, iid, schema_name)
+            if not values:
+                continue
+            names = annotation_values.selected_labels(values)
+            if not names:
+                continue
+            if numeric:
+                vals = [v for v in (_as_number(n, values) for n in names)
+                        if v is not None]
+                if not vals:
+                    continue
+            else:
+                vals = names
+            per_user[uid] = vals
+        if per_user:
+            rows[iid] = per_user
+    return rows
+
+
+def _as_number(name: str, values: Any) -> Optional[float]:
+    """
+    Numeric reading of one selected option.
+
+    Likert-style schemas put the number in the label *name* (``{"2": "2"}``);
+    sliders and number inputs put it in the stored *value*. Try the name first,
+    then the value, rather than assuming either.
+    """
+    try:
+        return float(name)
+    except (TypeError, ValueError):
+        pass
+    if isinstance(values, dict):
+        try:
+            return float(values.get(name))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _gather_blobs(
+    instance_ids: Iterable[str],
+    user_states: Dict[str, Any],
+    schema_name: str,
+    scheme: Dict[str, Any],
+):
+    """
+    Per item, return {user_id: [canonical objects]} for a ``_data``-blob schema.
+
+    Image, audio, video and tiered annotation all serialize through the same
+    ``annotation-data-input`` convention — one JSON string under a ``_data``
+    label — so one gatherer covers every modality and
+    ``annotation_values.comparable_value`` decides whether that blob becomes 2D
+    shapes or timeline segments.
+    """
+    from potato.server_utils import annotation_values
+
+    rows: Dict[str, Dict[str, Any]] = {}
+    for iid in instance_ids:
+        per_user: Dict[str, Any] = {}
+        for uid, ustate in user_states.items():
+            values = _schema_values(ustate, iid, schema_name)
+            if values is None:
+                continue
+            objects = annotation_values.comparable_value(scheme, values)
+            if not isinstance(objects, list):
+                continue
+            # An empty list is a real answer ("nothing here"), so it is kept:
+            # two annotators who both find nothing agree.
+            per_user[uid] = objects
+        if len(per_user) >= 2:
+            rows[iid] = per_user
+    return rows
+
+
+def _gather_raw(
     instance_ids: Iterable[str],
     user_states: Dict[str, Any],
     schema_name: str,
 ):
     """
-    Per item, return {user_id: <single value or list of values>} for one schema.
+    Per item, ``{user_id: stored_value}`` with no interpretation at all.
 
-    For nominal/ordinal/continuous schemas the value is a scalar (the chosen
-    label name or numeric rating). For multi-label schemas, it's a list.
+    For schemas whose blob holds several independent layers, where deciding
+    what "the value" is belongs to the measure rather than to the gatherer.
     """
     rows: Dict[str, Dict[str, Any]] = {}
     for iid in instance_ids:
-        per_user: Dict[str, Any] = {}
+        per_user = {}
         for uid, ustate in user_states.items():
-            labels_by_schema = ustate.get_label_annotations(iid)
-            if not labels_by_schema:
+            values = _schema_values(ustate, iid, schema_name)
+            if values is None:
                 continue
-            labels = labels_by_schema.get(schema_name)
-            if not labels:
-                continue
-            vals = [_label_value(l) for l in labels]
-            vals = [v for v in vals if v is not None]
-            if not vals:
-                continue
-            per_user[uid] = vals
-        if per_user:
+            per_user[uid] = values
+        if len(per_user) >= 2:
             rows[iid] = per_user
     return rows
 
@@ -331,7 +505,145 @@ def _aggregate_ranking(rows):
     }
 
 
-def _aggregate_span(span_rows, item_lookup):
+def _aggregate_blobs(rows, scheme: Dict[str, Any], match_threshold: float = 0.5):
+    """
+    Agreement over 2D shapes or timeline segments.
+
+    Four numbers, because annotators disagree in distinguishable ways and one
+    scalar would hide which:
+
+    ``mean_agreement``          overall, penalizing both bad boundaries and
+                                missed objects (the measure adjudication routes on)
+    ``mean_matched_iou``        boundary quality *given* both annotators found
+                                the object — high here with low detection_f1
+                                means they draw well but miss things
+    ``detection_f1``            did they find the same objects at all
+    ``mean_object_count_diff``  the crudest signal, and often the first to move
+
+    Deliberately **not** Krippendorff's alpha over IoU. Because IoU distance is
+    bounded in [0, 1], randomly paired shapes saturate at distance ~1, expected
+    disagreement collapses to ~1, and alpha degenerates to ``1 - mean distance``
+    with no working chance correction. Braylan, Alonso & Lease (WWW 2022,
+    arXiv:2212.09503) measured the consequence on exactly these tasks: alpha
+    ranks L2 (0.687) above IoU (0.505) and GIoU (0.507) for bounding boxes,
+    inverting the ordering their distribution-based measures and practitioners
+    both give. Chance-corrected detection/classification alpha and the
+    sigma/KS measures are tracked separately.
+    """
+    from potato.server_utils import annotation_values
+    from potato.server_utils.iaa import geometry
+
+    temporal = annotation_values.supports_temporal(scheme)
+    sim_fn = geometry.temporal_similarity if temporal else None
+
+    agreements: List[float] = []
+    matched_ious: List[float] = []
+    detection_f1s: List[float] = []
+    count_diffs: List[float] = []
+    annotators = set()
+    n_items = 0
+
+    for iid, per_user in rows.items():
+        users = sorted(per_user)
+        if len(users) < 2:
+            continue
+        annotators.update(users)
+        n_items += 1
+        for i in range(len(users)):
+            for j in range(i + 1, len(users)):
+                a = per_user[users[i]]
+                b = per_user[users[j]]
+
+                d = annotation_values.distance(scheme, a, b, match_threshold)
+                if d is not None:
+                    agreements.append(1.0 - d)
+
+                count_diffs.append(abs(len(a) - len(b)))
+
+                if not a or not b:
+                    # One annotator marked nothing. Detection F1 is 1.0 only when
+                    # BOTH found nothing; otherwise it is a total detection miss.
+                    detection_f1s.append(1.0 if not a and not b else 0.0)
+                    continue
+
+                matches, _un_a, _un_b = geometry.match_instances(
+                    a, b, match_threshold, sim_fn=sim_fn)
+                detection_f1s.append(2.0 * len(matches) / (len(a) + len(b)))
+                matched_ious.extend(score for _i, _j, score in matches)
+
+    def _mean(xs):
+        return sum(xs) / len(xs) if xs else float("nan")
+
+    result = {
+        "mean_agreement": _mean(agreements),
+        "mean_matched_iou": _mean(matched_ious),
+        "detection_f1": _mean(detection_f1s),
+        "mean_object_count_diff": _mean(count_diffs),
+        "n_items": n_items,
+        "n_annotators": len(annotators),
+    }
+
+    # The chance-corrected measures this docstring promised. Spatial only:
+    # the sigma baseline is built from between-ITEM distances, and for temporal
+    # segments "a segment from another clip" is not a meaningful comparison
+    # when clips differ in length.
+    if not temporal and n_items:
+        try:
+            from potato.server_utils.iaa import geometry_agreement as ga
+
+            report = ga.geometry_agreement(rows, threshold=match_threshold)
+            result["sigma"] = report["localization"]["sigma"]
+            result["ks"] = report["localization"]["ks"]
+            result["detection_alpha"] = report["detection"]["alpha"]
+            result["classification_alpha"] = report["classification"]["alpha"]
+            # Carry the reasons through: a bare NaN in an admin table cannot
+            # be told apart from a broken computation.
+            for source, key in (("detection", "detection_alpha_note"),
+                                ("classification", "classification_alpha_note")):
+                note = report[source].get("undefined_because")
+                if note:
+                    result[key] = note
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("geometry agreement failed: %s", exc)
+
+    return result
+
+
+def _parse_caption_rows(rows):
+    """
+    ``{item: {annotator: [{"region", "caption"}]}}`` from the stored blobs.
+
+    Parsed here rather than in the measure because the measure is also called
+    directly with already-parsed data by tests and by analysis scripts, and a
+    function that accepted both shapes would have to guess which it got.
+    """
+    import json as _json
+
+    parsed = {}
+    for item_id, per_user in rows.items():
+        entries = {}
+        for user_id, stored in per_user.items():
+            value = stored
+            if isinstance(value, dict):
+                value = next(iter(value.values()), None)
+            if isinstance(value, str):
+                try:
+                    value = _json.loads(value)
+                except ValueError:
+                    continue
+            if isinstance(value, dict):
+                captions = value.get("captions")
+                if isinstance(captions, list):
+                    entries[user_id] = captions
+        if len(entries) >= 2:
+            parsed[item_id] = entries
+    return parsed
+
+
+def _aggregate_span(span_rows, find_item):
+    """``find_item`` is a ``id -> Item or None`` callable, not a mapping: the
+    span length has to come from the item, and a mapping would have to be
+    materialized first — see potato/item_store.py."""
     token_kappas = []
     f1_exact = []
     f1_partial = []
@@ -342,7 +654,7 @@ def _aggregate_span(span_rows, item_lookup):
     for iid, per_user in span_rows.items():
         if len(per_user) < 2:
             continue
-        item = item_lookup.get(iid)
+        item = find_item(iid)
         length = _text_length_for_item(item)
         if length <= 0:
             continue
@@ -439,9 +751,20 @@ def _pairwise_rank_mean(seqs_by_user, fn):
 # Top-level entry point
 # ---------------------------------------------------------------------------
 
-def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str, Any]) -> Dict[str, Any]:
+def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str, Any],
+                        instance_ids: Optional[Iterable[str]] = None) -> Dict[str, Any]:
     """
     Compute IAA across the overlap-sample items that have reached their cap.
+
+    Args:
+        instance_ids: Restrict the report to these items. Used by
+            :mod:`potato.server_utils.iaa.drift` to score one time window at a
+            time -- the windowed report has to run the SAME metric per schema
+            as the whole-project one, or a drop between two windows could be
+            an artefact of two different measures rather than a real change.
+            Items outside the set are excluded before the cap check, so a
+            window keeps only the items that both fall in it and are
+            saturated.
 
     Returns a dict shape:
         {
@@ -471,8 +794,11 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
         return {"schemas": {}, "items": {}, "n_overlap_items": 0}
 
     # Overlap items: per-item cap >= 2 AND saturated.
+    wanted = set(instance_ids) if instance_ids is not None else None
     overlap_items = []
-    for iid, item in item_state_manager.instance_id_to_instance.items():
+    for iid, item in item_state_manager.iter_items():
+        if wanted is not None and iid not in wanted:
+            continue
         cap = item_state_manager._get_annotator_cap_for_item(iid)
         if cap is None or cap < 2:
             continue
@@ -506,9 +832,41 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
             continue
         if kind == SchemaKind.SPAN:
             rows = _gather_spans(overlap_items, user_states, name)
-            metrics = _aggregate_span(rows, item_state_manager.instance_id_to_instance)
+            metrics = _aggregate_span(rows, item_state_manager.find_item)
+        elif kind == SchemaKind.EPISODE:
+            from potato.server_utils.iaa import episodes as episode_iaa
+            # The raw stored blob, not a pre-parsed one: the episode report
+            # parses each layer itself so it cannot drift from what the
+            # timeline wrote.
+            rows = _gather_raw(overlap_items, user_states, name)
+            metrics = episode_iaa.episode_report(rows, scheme)
+        elif kind == SchemaKind.CAPTION:
+            from potato.server_utils.iaa import captions as caption_iaa
+
+            rows = _gather_raw(overlap_items, user_states, name)
+            metrics = caption_iaa.region_caption_report(
+                _parse_caption_rows(rows),
+                distance=(scheme.get("agreement_distance") or "token"))
+        elif kind == SchemaKind.GROUNDING:
+            from potato.server_utils.iaa import grounding as grounding_iaa
+            # Raw, like the episode and rollout reports: the blob holds three
+            # independent layers and the measure that scores each one parses it,
+            # so the report cannot drift from what the client wrote.
+            rows = _gather_raw(overlap_items, user_states, name)
+            metrics = grounding_iaa.grounding_report(rows, scheme)
+        elif kind == SchemaKind.ROLLOUT:
+            from potato.server_utils.iaa import rollouts as rollout_iaa
+            # Raw for the same reason the episode report takes it raw: the four
+            # layers are parsed by the measure that scores them, so the report
+            # cannot drift from what the client wrote.
+            rows = _gather_raw(overlap_items, user_states, name)
+            metrics = rollout_iaa.rollout_report(rows, scheme)
+        elif kind in (SchemaKind.GEOMETRY, SchemaKind.TEMPORAL):
+            rows = _gather_blobs(overlap_items, user_states, name, scheme)
+            metrics = _aggregate_blobs(rows, scheme)
         else:
-            rows = _gather_labels(overlap_items, user_states, name)
+            rows = _gather_labels(overlap_items, user_states, name,
+                                  numeric=(kind == SchemaKind.CONTINUOUS))
             if kind == SchemaKind.NOMINAL:
                 metrics = _aggregate_nominal(rows)
             elif kind == SchemaKind.ORDINAL:
@@ -535,6 +893,30 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
         "items": item_report,
         "n_overlap_items": len(overlap_items),
     }
+
+
+def json_safe(value: Any) -> Any:
+    """
+    Replace NaN/Infinity with ``None`` so a report can be serialized as JSON.
+
+    An undefined metric is legitimately NaN in Python, but ``NaN`` is **not
+    valid JSON** (RFC 8259). Python's own ``json`` emits the bare token and its
+    own loader accepts it, which hides the problem locally — but simplejson,
+    Go, Rust and, critically, the browser's ``JSON.parse`` all reject it. So
+    ``/admin/iaa`` produced a response strict clients could not read at all,
+    and before the gathering fix every metric was NaN, meaning *every* response.
+
+    ``null`` is also the more honest encoding: "this metric is not defined for
+    this data", rather than a number that happens to compare false with itself.
+    """
+    if isinstance(value, dict):
+        return {k: json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(v) for v in value]
+    if isinstance(value, float) and (value != value or value in (
+            float("inf"), float("-inf"))):
+        return None
+    return value
 
 
 def _extract_schemes(config: Dict[str, Any]):

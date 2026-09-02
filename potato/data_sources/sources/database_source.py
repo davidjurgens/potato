@@ -1,7 +1,7 @@
 """
 SQL Database data source.
 
-This module provides data loading from SQL databases using SQLAlchemy,
+Data loading from SQL databases using SQLAlchemy,
 supporting PostgreSQL, MySQL, SQLite, and other databases.
 """
 

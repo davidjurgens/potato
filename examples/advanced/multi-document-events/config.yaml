@@ -74,4 +74,4 @@ corpus_map:
   cluster_labeling: { enabled: true, use_llm: false }
 
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl

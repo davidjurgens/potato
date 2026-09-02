@@ -33,7 +33,7 @@ data_files:
   - data/audio-dialogue-example.json
 
 output_annotation_dir: annotation_output/audio-dialogue/
-output_annotation_format: json
+export_annotation_format: jsonl
 
 item_properties:
   id_key: id

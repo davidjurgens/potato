@@ -1,7 +1,7 @@
 """
 Solo Mode Module
 
-This module provides human-LLM collaborative annotation for single annotators.
+Human-LLM collaborative annotation for single annotators.
 Solo Mode enables efficient dataset labeling through:
 
 1. Prompt synthesis from task descriptions

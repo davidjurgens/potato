@@ -1,6 +1,6 @@
 # Annotating Agent Traces with Potato
 
-This guide covers how to use Potato for evaluating AI agent traces (trajectories). Potato provides all the infrastructure needed for rigorous agent evaluation: multi-annotator coordination, rich annotation schemas, inter-annotator agreement, quality control, and crowdsourcing support.
+Potato renders an agent's run step by step and collects human judgements about it, with the same annotation schemas, multi-annotator coordination, agreement statistics, quality control, and crowdsourcing support it uses for text.
 
 ## Overview
 
@@ -101,7 +101,7 @@ instance_display:
 
 ### Rich: Agent Trace Display
 
-The `agent_trace` display type provides purpose-built rendering with step cards:
+The `agent_trace` display renders each step as a card:
 
 ```yaml
 instance_display:
@@ -351,7 +351,7 @@ python -m potato.trace_converter --list-formats
 | `multi_agent` | CrewAI, AutoGen, LangGraph | Auto-detected: `agents`+`steps[].agent`, `messages[].sender`, `events[].node` |
 | `mcp` | Model Context Protocol | `interactions[].method` (tools/call, resources/read, prompts/get) |
 | `aider` | Aider code editing | Chat history with edit blocks and file changes |
-| `claude_code` | Claude Code CLI | Session traces with tool calls and file edits |
+| `claude_code` | Claude Code CLI | `~/.claude/projects/*/*.jsonl` session transcripts (`uuid` + `sessionId` rows), plus Anthropic Messages API payloads |
 | `web_agent` | Generic web agent | `actions[].action_type` with DOM selectors and screenshots |
 | `swe_agent_trajectory` | SWE-Agent trajectory | Full trajectory with `history[].action/observation` pairs |
 

@@ -26,6 +26,11 @@ except ImportError:
 
 from tests.helpers.flask_test_setup import FlaskTestServer
 from tests.helpers.port_manager import find_free_port
+from tests.helpers.teardown_watchdog import (
+    TEST_TEARDOWN_TIMEOUT_SECONDS,
+    bounded_teardown,
+    use_capture_manager,
+)
 from tests.helpers.test_utils import create_test_directory, create_test_data_file, create_test_config
 
 
@@ -33,14 +38,33 @@ from tests.helpers.test_utils import create_test_directory, create_test_data_fil
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "playwright: mark test as requiring Playwright browser")
+    # So a teardown hang's stack dump survives pytest's fd-level capture.
+    use_capture_manager(config.pluginmanager.getplugin("capturemanager"))
+
+
+#: Browser tests need longer than the 30s global timeout in pytest.ini: a
+#: canvas test starts a server, launches a browser, loads an image, drives real
+#: mouse events, and navigates between instances. Raising the GLOBAL timeout
+#: would weaken the protection on the fast unit suite, so it is scoped here.
+BROWSER_TEST_TIMEOUT_SECONDS = 120
 
 
 def pytest_collection_modifyitems(config, items):
+    skip_pw = None
     if not HAS_PLAYWRIGHT:
-        skip_pw = pytest.mark.skip(reason="playwright not installed (pip install pytest-playwright)")
-        for item in items:
-            if "playwright" in item.keywords or "tests/playwright" in str(item.fspath):
-                item.add_marker(skip_pw)
+        skip_pw = pytest.mark.skip(
+            reason="playwright not installed (pip install pytest-playwright)")
+
+    for item in items:
+        is_playwright = ("playwright" in item.keywords
+                         or "tests/playwright" in str(item.fspath))
+        if not is_playwright:
+            continue
+        if skip_pw is not None:
+            item.add_marker(skip_pw)
+        # Respect an explicit per-test timeout; only supply the default.
+        if item.get_closest_marker("timeout") is None:
+            item.add_marker(pytest.mark.timeout(BROWSER_TEST_TIMEOUT_SECONDS))
 
 
 # ---------- browser fixtures ----------
@@ -57,8 +81,9 @@ def browser_instance():
         args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
     )
     yield browser
-    browser.close()
-    pw.stop()
+    with bounded_teardown("browser_instance"):
+        browser.close()
+        pw.stop()
 
 
 @pytest.fixture
@@ -69,7 +94,10 @@ def context(browser_instance):
         ignore_https_errors=True,
     )
     yield ctx
-    ctx.close()
+    # Silent: this runs after every test, and one banner per test is noise.
+    with bounded_teardown("context", seconds=TEST_TEARDOWN_TIMEOUT_SECONDS,
+                             announce=False):
+        ctx.close()
 
 
 @pytest.fixture
@@ -77,20 +105,36 @@ def page(context):
     """Single page within the isolated context."""
     pg = context.new_page()
     yield pg
-    pg.close()
+    with bounded_teardown("page", seconds=TEST_TEARDOWN_TIMEOUT_SECONDS, announce=False):
+        pg.close()
 
 
 # ---------- server fixtures ----------
 
-def _make_server(annotation_schemes, port=None, extra_config=None):
-    """Helper to build and start a FlaskTestServer with given schemes."""
+def _make_server(annotation_schemes, port=None, extra_config=None, num_items=3,
+                 items=None):
+    """Helper to build and start a FlaskTestServer with given schemes.
+
+    ``create_test_data_file`` requires the data rows, and ``create_test_config`` takes
+    ``data_files`` (plural) with paths relative to the test dir — passing neither
+    correctly raised TypeError before any server was started.
+
+    Pass ``items`` to supply the rows directly; image and video schemas need
+    fields (``image_url``, ``video_url``) the default text rows do not have.
+    """
     test_dir = create_test_directory("playwright")
-    data_file = create_test_data_file(test_dir)
+    data_file = create_test_data_file(
+        test_dir,
+        items if items is not None else
+        [{"id": f"instance_{i}", "text": f"Test instance {i}"}
+         for i in range(num_items)],
+    )
     config_file = create_test_config(
         test_dir,
         annotation_schemes=annotation_schemes,
-        data_file=data_file,
+        data_files=[data_file],
         annotation_task_name="Playwright Test",
+        additional_config=extra_config or {},
     )
 
     if port is None:
@@ -115,7 +159,8 @@ def _default_server():
     ]
     srv = _make_server(schemes)
     yield srv
-    srv.stop()
+    with bounded_teardown("_default_server"):
+        srv.stop()
 
 
 @pytest.fixture
@@ -142,5 +187,7 @@ def make_server():
 
     yield _factory
 
-    for s in servers:
-        s.stop()
+    with bounded_teardown("make_server", seconds=TEST_TEARDOWN_TIMEOUT_SECONDS,
+                             announce=False):
+        for s in servers:
+            s.stop()

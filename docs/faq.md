@@ -1,7 +1,7 @@
 # Frequently Asked Questions
 
-Short, direct answers to common questions about Potato, annotation, and agent
-(agentic) evaluation. See the linked guides for detail.
+Answers to common questions about Potato, annotation, and agent (agentic)
+evaluation. See the linked guides for detail.
 
 ## What is Potato?
 
@@ -76,7 +76,7 @@ inter-annotator agreement.
 
 ## What annotation types does Potato support?
 
-20+ schemes: radio/checkbox/Likert, span/NER, spans linking, coreference, ranking,
+61 schemes: radio/checkbox/Likert, span/NER, spans linking, coreference, ranking,
 best-worst scaling, pairwise/conjoint comparison, sliders, soft labels, rubric
 grids, and agent-specific schemes (trajectory eval, process-reward, code review).
 See the [Schema Gallery](annotation-types/schemas_and_templates.md).

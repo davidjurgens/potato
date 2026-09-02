@@ -2,22 +2,57 @@
 Utility functions around parsing arguments.
 """
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
+
+
+#: Commands `flask_server.main()` intercepts from sys.argv before this parser
+#: runs. They cannot be `mode` choices -- each has its own flag grammar -- but
+#: leaving them out of `--help` entirely hid `validate` and `preview`, which is
+#: the loop every piece of Potato's agent-facing documentation is built around.
+#: An agent that trusted `--help` concluded the documented workflow did not
+#: exist in its build.
+#:
+#: `tests/unit/test_cli_dispatch.py` checks this list against the tokens really
+#: dispatched, so a new command cannot be added without appearing here.
+STAGE1_COMMANDS = {
+    "validate": "check a config the way the server checks it at boot",
+    "preview": "show what a config declares, and render it in a browser",
+    "mcp": "run the MCP server for coding agents",
+    "import": "build a project from an existing annotation file",
+    "transcripts": "convert transcripts into annotation data",
+    "convokit": "build a project from a ConvoKit corpus",
+    "deploy": "put a task on a host, and take it down again",
+    "share": "serve a task on a temporary public URL",
+    "download-models": "fetch segmentation model weights",
+}
+
+STAGE1_HELP = "other commands:\n" + "\n".join(
+    f"  {name:<17}{summary}" for name, summary in STAGE1_COMMANDS.items()
+) + "\n\nRun `potato <command> --help` for that command's own options."
 
 
 def arguments():
     """
     Creates and returns the arg parser for Potato on the command line.
     """
-    parser = ArgumentParser()
+    parser = ArgumentParser(
+        epilog=STAGE1_HELP,
+        formatter_class=RawDescriptionHelpFormatter,
+    )
     parser.set_defaults(show_path=False, show_similarity=False)
 
     parser.add_argument(
         "mode",
-        choices=['start', 'migrate', 'reset-password', 'codebook', 'transcripts'],
+        # `transcripts` and `convokit` are deliberately absent: flask_server.main()
+        # intercepts both from sys.argv before this parser ever runs, so listing
+        # them here advertised modes that could not be reached. Any command
+        # dispatched in that first stage must stay out of these choices --
+        # tests/unit/test_cli_dispatch.py enforces that the two sets are disjoint.
+        choices=['start', 'migrate', 'reset-password', 'codebook',
+                 'repair-annotations'],
         help=(
             "set the mode when potato is used, currently supporting: start, "
-            "migrate, reset-password, codebook, transcripts"
+            "migrate, reset-password, codebook, repair-annotations"
         ),
         default="start",
     )
@@ -91,6 +126,17 @@ def arguments():
         type=lambda x: str(x).lower() == 'true',
         dest="require_password",
         help="Whether to require password authentication (true/false). If not specified, uses config file value.",
+        default=None,
+    )
+
+    parser.add_argument(
+        "--host",
+        action="store",
+        type=str,
+        dest="host",
+        help="interface to bind to (default: 0.0.0.0). Use 127.0.0.1 to accept "
+             "only local connections, e.g. when fronting the server with a tunnel "
+             "or reverse proxy.",
         default=None,
     )
 
@@ -169,6 +215,24 @@ def arguments():
         dest="username",
         help="[reset-password mode] Username to reset password for",
         default=None,
+    )
+
+    # Annotation repair arguments (GH #167)
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        dest="apply",
+        help="[repair-annotations mode] Write the repairs. Without this the run is a "
+             "dry run that only reports what would change.",
+        default=False,
+    )
+    parser.add_argument(
+        "--no-backup",
+        action="store_true",
+        dest="no_backup",
+        help="[repair-annotations mode] Do not write user_state.json.bak before "
+             "overwriting. Only meaningful with --apply.",
+        default=False,
     )
 
     return parser.parse_args()

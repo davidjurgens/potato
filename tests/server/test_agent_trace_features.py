@@ -41,7 +41,6 @@ def create_yaml_config(test_dir, config_dict):
     config_dict.setdefault("task_dir", os.path.abspath(test_dir))
     config_dict.setdefault("output_annotation_dir",
                            os.path.join(os.path.abspath(test_dir), "output"))
-    config_dict.setdefault("output_annotation_format", "json")
     config_dict.setdefault("require_password", False)
     config_dict.setdefault("user_config", {"allow_all_users": True})
     config_dict.setdefault("secret_key", "test-secret")

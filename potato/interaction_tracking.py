@@ -1,7 +1,7 @@
 """
 Interaction tracking data structures and utilities for behavioral analysis.
 
-This module provides dataclasses for tracking user interactions during annotation,
+Dataclasses for tracking user interactions during annotation,
 including clicks, focus changes, navigation, AI assistance usage, and annotation changes.
 All data is designed to be serializable for persistence and later analysis.
 """
@@ -116,17 +116,29 @@ class AnnotationChange:
         schema_name: Which schema was modified
         label_name: Which label was affected (if applicable)
         action: Type of change ("select", "deselect", "update", "clear")
+        old_label: The label the answer moved AWAY from. Single-select schemas
+            (radio/likert/confidence) store one entry per option, so a revision changes
+            the label as well as the value — recording only old_value cannot express
+            "moved from scale point 5 to scale point 4".
         old_value: Previous value (if any)
         new_value: New value after the change
         source: What triggered the change ("user", "ai_accept", "prefill", "keyboard")
+        phase: Workflow phase the change happened in ("annotation", "prestudy", ...).
+            Behavioral data is bucketed by instance id, and every non-annotation page
+            shares the sentinel "__phase_page__", so without phase/page the trail
+            cannot say which survey a change belongs to.
+        page: The phase page name, for non-annotation phases.
     """
     timestamp: float
     schema_name: str
     action: str
     label_name: Optional[str] = None
+    old_label: Optional[str] = None
     old_value: Any = None
     new_value: Any = None
     source: str = "user"
+    phase: Optional[str] = None
+    page: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -134,23 +146,33 @@ class AnnotationChange:
             'timestamp': self.timestamp,
             'schema_name': self.schema_name,
             'label_name': self.label_name,
+            'old_label': self.old_label,
             'action': self.action,
             'old_value': self.old_value,
             'new_value': self.new_value,
             'source': self.source,
+            'phase': self.phase,
+            'page': self.page,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AnnotationChange':
-        """Reconstruct from serialized dictionary."""
+        """Reconstruct from serialized dictionary.
+
+        Every field added after the original release is read with .get(), so records
+        written by older Potato versions deserialize unchanged.
+        """
         return cls(
             timestamp=data.get('timestamp', 0),
             schema_name=data.get('schema_name', ''),
             label_name=data.get('label_name'),
+            old_label=data.get('old_label'),
             action=data.get('action', ''),
             old_value=data.get('old_value'),
             new_value=data.get('new_value'),
             source=data.get('source', 'user'),
+            phase=data.get('phase'),
+            page=data.get('page'),
         )
 
 
@@ -214,6 +236,25 @@ class BehavioralData:
         focus_time_by_element: Milliseconds spent focused on each element
         scroll_depth_max: Maximum scroll percentage reached (0-100)
         keyword_highlights_shown: Keyword highlights displayed (from randomization feature)
+        presentation_order: Which order each scheme's options were shown in,
+            ``{schema_name: [label names]}``. Recorded whether or not
+            randomization is on, because a fixed order biases every annotator
+            the same way -- which inflates agreement while biasing the
+            estimate -- and the only way to correct a study afterwards is to
+            know what each annotator actually saw. See
+            potato/server_utils/presentation_order.py.
+        chat_history: Messages exchanged with the LLM assistant sidebar
+        typing_summaries: Per-field typing-dynamics sketch, keyed
+            "{schema}:::{label}". Only the compact summary lives here — the raw
+            keystroke event streams go to SQLite (potato/typing_store.py), because
+            user_state.json is fully re-serialized on every annotation save and a
+            single long response is thousands of events. See
+            potato/typing_dynamics.py.
+        annotation_telemetry: Per-schema drawing-dynamics sketch, keyed by
+            schema name. Same split and same reasoning as typing_summaries —
+            raw event streams live in SQLite
+            (potato/annotation_telemetry_store.py). See
+            potato/annotation_telemetry.py.
     """
     instance_id: str
     session_start: float = field(default_factory=time.time)
@@ -226,7 +267,10 @@ class BehavioralData:
     focus_time_by_element: Dict[str, int] = field(default_factory=dict)
     scroll_depth_max: float = 0.0
     keyword_highlights_shown: List[Dict[str, Any]] = field(default_factory=list)
+    presentation_order: Dict[str, List[str]] = field(default_factory=dict)
     chat_history: List[ChatMessage] = field(default_factory=list)
+    typing_summaries: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    annotation_telemetry: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -251,10 +295,13 @@ class BehavioralData:
             'focus_time_by_element': self.focus_time_by_element,
             'scroll_depth_max': self.scroll_depth_max,
             'keyword_highlights_shown': self.keyword_highlights_shown,
+            'presentation_order': self.presentation_order,
             'chat_history': [
                 e.to_dict() if hasattr(e, 'to_dict') else e
                 for e in self.chat_history
             ],
+            'typing_summaries': self.typing_summaries,
+            'annotation_telemetry': self.annotation_telemetry,
         }
 
     @classmethod
@@ -294,6 +341,7 @@ class BehavioralData:
         bd.focus_time_by_element = data.get('focus_time_by_element', {})
         bd.scroll_depth_max = data.get('scroll_depth_max', 0.0)
         bd.keyword_highlights_shown = data.get('keyword_highlights_shown', [])
+        bd.presentation_order = data.get('presentation_order', {}) or {}
 
         # Reconstruct chat history
         chat_history = data.get('chat_history', [])
@@ -301,6 +349,11 @@ class BehavioralData:
             ChatMessage.from_dict(e) if isinstance(e, dict) else e
             for e in chat_history
         ]
+
+        # Read with .get() so states written before typing dynamics existed
+        # deserialize unchanged.
+        bd.typing_summaries = data.get('typing_summaries', {})
+        bd.annotation_telemetry = data.get('annotation_telemetry', {})
 
         return bd
 
@@ -329,16 +382,21 @@ class BehavioralData:
     def add_annotation_change(self, schema_name: str, action: str,
                              label_name: Optional[str] = None,
                              old_value: Any = None, new_value: Any = None,
-                             source: str = "user") -> None:
+                             source: str = "user", old_label: Optional[str] = None,
+                             phase: Optional[str] = None,
+                             page: Optional[str] = None) -> None:
         """Record an annotation change."""
         self.annotation_changes.append(AnnotationChange(
             timestamp=time.time(),
             schema_name=schema_name,
             label_name=label_name,
+            old_label=old_label,
             action=action,
             old_value=old_value,
             new_value=new_value,
             source=source,
+            phase=phase,
+            page=page,
         ))
 
     def add_navigation(self, action: str, from_instance: Optional[str] = None,
@@ -360,6 +418,25 @@ class BehavioralData:
         """Update maximum scroll depth if new depth is greater."""
         if depth > self.scroll_depth_max:
             self.scroll_depth_max = depth
+
+    def set_typing_summary(self, schema_name: str, label_name: str,
+                          summary: Dict[str, Any]) -> None:
+        """Store the typing-dynamics sketch for one free-text field.
+
+        Keyed the same way annotation labels are (`schema:::label`), so a field
+        can be joined back to its annotation without a separate mapping.
+        """
+        self.typing_summaries[f"{schema_name}:::{label_name}"] = summary
+
+    def set_annotation_telemetry(self, schema_name: str,
+                                 summary: Dict[str, Any]) -> None:
+        """Store the drawing-dynamics sketch for one geometry schema.
+
+        Keyed by schema alone rather than `schema:::label`: a drawn annotation
+        is stored under the single `_data` key, so there is no label to key on
+        and inventing one would create a join that does not exist.
+        """
+        self.annotation_telemetry[schema_name] = summary
 
     def finalize_session(self) -> None:
         """Mark session as ended and calculate total time."""

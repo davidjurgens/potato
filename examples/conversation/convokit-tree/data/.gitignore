@@ -1,0 +1,3 @@
+# Corpus text is downloaded on demand, never committed.
+*.jsonl
+*.json

@@ -5,7 +5,7 @@
 > cause real bugs when broken, and the drift tests. This file is the detailed
 > index — the regression table below and the per-directory READMEs go deeper.
 
-This directory contains comprehensive tests for the Potato annotation platform, covering both backend functionality and frontend user interface testing.
+This directory holds Potato's tests, backend and frontend.
 
 ## Recent Bugs and Their Tests
 
@@ -72,9 +72,9 @@ with TestConfigManager("my_test", annotation_schemes) as test_config:
 ### Server Tests (`tests/server/`)
 Server tests use the `FlaskTestServer` class to test against real Flask server instances. These are integration tests that verify actual HTTP endpoints and server behavior.
 
-**📖 [Server Test Documentation](server/README.md)** - Complete guide to server testing
-**📋 [Quick Reference](server/QUICK_REFERENCE.md)** - Common patterns and code snippets
-**📝 [Test Template](server/test_template.py)** - Template for creating new server tests
+**[Server Test Documentation](server/README.md)** - Complete guide to server testing
+**[Quick Reference](server/QUICK_REFERENCE.md)** - Common patterns and code snippets
+**[Test Template](server/test_template.py)** - Template for creating new server tests
 
 **Key Server Test Files:**
 - **`test_backend_state.py`** - User and item state management
@@ -89,7 +89,7 @@ Server tests use the `FlaskTestServer` class to test against real Flask server i
 ### Selenium Tests (`tests/selenium/`)
 Frontend tests using Selenium WebDriver to test the user interface and browser interactions.
 
-**📖 [Selenium Test Documentation](selenium/README.md)** - Complete guide to Selenium testing
+**[Selenium Test Documentation](selenium/README.md)** - Complete guide to Selenium testing
 
 **Key Selenium Test Files:**
 - **`test_frontend_span_system.py`** - Span annotation UI testing
@@ -100,7 +100,7 @@ Frontend tests using Selenium WebDriver to test the user interface and browser i
 ### Unit Tests (`tests/unit/`)
 Pure unit tests that test individual functions and classes without external dependencies. These tests use mocking to isolate components.
 
-**📖 [Unit Test Documentation](unit/README.md)** - Complete guide to unit testing
+**[Unit Test Documentation](unit/README.md)** - Complete guide to unit testing
 
 **Key Unit Test Files:**
 
@@ -149,7 +149,7 @@ Pure unit tests that test individual functions and classes without external depe
 ### Integration Tests (`tests/integration/`)
 End-to-end tests using real Flask servers and Selenium browsers. These tests verify complete user journeys from registration to annotation completion.
 
-**📖 [Integration Test Documentation](integration/README.md)** - Complete guide to integration testing
+**[Integration Test Documentation](integration/README.md)** - Complete guide to integration testing
 
 **Key Integration Test Files:**
 - **`base.py`** - IntegrationTestServer and BaseIntegrationTest classes
@@ -169,13 +169,13 @@ Use them to validate refinement-cycle triggering, prompt-version evolution,
 hybrid-dual-track fallback, and background LLM-labeling throughput when a
 config or strategy change affects the end-to-end flow.
 
-**📖 [Smoke Test Documentation](smoke/README.md)** — usage, expected output,
+**[Smoke Test Documentation](smoke/README.md)** — usage, expected output,
 setup requirements.
 
 ### Jest Frontend Tests (`tests/jest/`)
 JavaScript unit tests for frontend functionality using jsdom.
 
-**📖 [Jest Test Documentation](jest/README.md)** - Complete guide to Jest testing
+**[Jest Test Documentation](jest/README.md)** - Complete guide to Jest testing
 
 **Key Jest Test Files:**
 - **`annotation-functions.test.js`** - Core annotation functions (updateAnnotation, validation)
@@ -211,10 +211,43 @@ JavaScript unit tests for frontend functionality using jsdom.
 - **User Isolation**: Each test gets unique user account
 - **Session Persistence**: Maintains user sessions across requests
 
+### Playwright Tests (Browser, `tests/playwright/`)
+- **BasePlaywrightTest**: mirrors `BaseSeleniumTest` — register/login, plus
+  `verify_server_annotations()` against `/get_annotations`
+- **Auto-skipped** when playwright is not installed; marked `@pytest.mark.playwright`
+- **120s per-test timeout**, applied by the directory's conftest. The global
+  30s in `pytest.ini` is too short for start-server → launch-browser →
+  load-image → drive-mouse → navigate, and raising it globally would weaken
+  the fast unit suite.
+- **Canvas helpers** for image annotation, because a fabric canvas is a single
+  `<canvas>`: no shape has a DOM node, so nothing can be asserted with a
+  selector.
+
+| Helper | Purpose |
+|--------|---------|
+| `image_manager_ready()` | Wait for the manager **and its loaded image** — drawing before the image loads silently produces nothing |
+| `draw_bbox_on_image()` / `paint_stroke_on_image()` | Coordinates as **image-relative fractions (0–1)**. The image is scaled and centred, so canvas (0,0) is usually outside it and drawing there yields negative — correct but unintended — coordinates |
+| `read_annotation_data()` | Parse the hidden input the save path collects, **not** the manager's in-memory state, which would hide serialization bugs |
+| `assert_persists_across_navigation()` | Next → Previous, never `refresh()` |
+
+**Persistence is always tested by navigating away and back.** Browsers restore
+form state across a refresh, so a refresh-based test passes even when the server
+stored nothing — a recurring source of false positives in this repo.
+
+Image fixtures live in `tests/data/` and are served at `/test-image/` (matching
+the existing `/test-audio/` and `/test-video/` routes). A `data:` URI cannot be
+used: `sanitize_html` blocks the `data:` scheme as an XSS vector, so the URL is
+stripped out of the rendered instance text and no image ever loads.
+
 ### Unit Tests (Isolated)
 - **Mock Interfaces**: No external dependencies
 - **Fast Execution**: Quick feedback for development
 - **Pure Functions**: Test individual components in isolation
+- **Drift guards**: several tests fail when a generated artifact or a
+  hand-maintained list falls out of step with the code —
+  `test_static_asset_versions.py` (a `?v=` cache-buster not bumped after an edit),
+  `test_no_new_cdn_assets.py` (a new external dependency), plus the config-schema,
+  OpenAPI, and docs-nav drift tests. Each prints the exact command to fix it.
 
 ## Annotation Types Tested
 
@@ -399,7 +432,7 @@ The test suite has been partially consolidated to reduce duplication and improve
 
 **Status:** 19 active files (infrastructure issues resolved)
 - `test_frontend_span_system.py` - 11 tests, all passing
-- `test_span_annotation_selenium.py` - 22 tests, comprehensive coverage
+- `test_span_annotation_selenium.py` - 22 tests
 - `test_comprehensive_span_annotation_selenium.py` - 20 tests, pytest fixtures
 - Various overlay, positioning, and persistence tests
 

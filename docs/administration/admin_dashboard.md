@@ -1,8 +1,8 @@
-# Admin Dashboard Documentation
+# Admin Dashboard
 
 ## Overview
 
-The Admin Dashboard provides comprehensive monitoring and management capabilities for the Potato annotation platform. It offers real-time insights into annotation progress, annotator performance, instance statistics, and system configuration management.
+The admin dashboard is a web view of a running Potato project. It shows annotation progress, per-annotator timing and performance, per-instance statistics, and it lets you change assignment settings without restarting the server.
 
 ## Access and Authentication
 
@@ -45,7 +45,7 @@ If you didn't configure an API key explicitly, find it in one of these ways:
 
 ### 1. Overview Tab
 
-The Overview tab provides high-level system statistics and progress indicators.
+The Overview tab holds project-wide counts and progress.
 
 **Key Metrics:**
 - **Total Users**: Number of registered annotators
@@ -62,7 +62,7 @@ The Overview tab provides high-level system statistics and progress indicators.
 
 ### 2. Annotators Tab
 
-The Annotators tab provides detailed information about each annotator's performance and timing.
+The Annotators tab lists each annotator with their timing and throughput.
 
 **Annotator Metrics:**
 - **User ID**: Unique identifier for each annotator
@@ -82,7 +82,7 @@ The Annotators tab provides detailed information about each annotator's performa
 
 ### 3. Instances Tab
 
-The Instances tab provides a paginated view of all annotation instances with detailed statistics.
+The Instances tab is a paginated list of every annotation instance and its statistics.
 
 **Instance Metrics:**
 - **Instance ID**: Unique identifier for each instance
@@ -90,7 +90,9 @@ The Instances tab provides a paginated view of all annotation instances with det
 - **Annotations**: Number of annotations received
 - **Completion %**: Percentage of target annotations reached
 - **Most Frequent Label**: Most commonly selected label
-- **Disagreement**: Measure of annotator disagreement (0-1 scale)
+- **Disagreement**: The share of annotations that did not choose the modal
+  label, so 0.0 is unanimity and 0.67 is three annotators picking three
+  different labels
 - **Average Time**: Mean time spent annotating this instance
 - **Annotators**: List of users who annotated this instance
 
@@ -106,7 +108,7 @@ The Instances tab provides a paginated view of all annotation instances with det
 
 ### 4. Questions Tab
 
-The Questions tab provides aggregate analysis for each annotation schema/question defined in your configuration.
+The Questions tab aggregates responses for each annotation schema in your configuration.
 
 **Analysis by Annotation Type:**
 
@@ -136,7 +138,7 @@ For **Span** questions:
 
 ### 5. Behavioral Analytics Tab
 
-The Behavioral Analytics tab provides comprehensive insights into annotator behavior patterns, AI assistance usage, and quality indicators derived from interaction tracking data.
+The Behavioral Analytics tab reports what the interaction tracker recorded: how annotators worked, how they used AI assistance, and which sessions look like low effort.
 
 **Summary Statistics:**
 - **Users with Data**: Number of users with behavioral tracking data
@@ -148,7 +150,7 @@ The Behavioral Analytics tab provides comprehensive insights into annotator beha
 
 **AI Assistance Usage Section:**
 
-Displays AI assistance metrics when available:
+AI assistance metrics, shown when there are any:
 - **Total Requests**: Number of times annotators requested AI help
 - **Accepted**: Number of AI suggestions accepted
 - **Rejected**: Number of AI suggestions rejected
@@ -157,7 +159,7 @@ Displays AI assistance metrics when available:
 
 **Quality Indicators Section:**
 
-Displays metrics that help identify potential quality issues:
+Metrics that point at possible quality problems:
 - **High Suspicion Users**: Count of users with suspicious behavior patterns
 - **Fast Annotation Rate**: Percentage of annotations completed in under 2 seconds
 - **Low Interaction Rate**: Percentage of instances with minimal interaction
@@ -165,12 +167,12 @@ Displays metrics that help identify potential quality issues:
 
 **Interaction Types Breakdown:**
 
-Visual display of interaction types recorded:
+The interaction types recorded:
 - clicks, focus_in, focus_out, navigation, save, keypress, etc.
 
 **Change Sources Breakdown:**
 
-Shows how annotation changes were made:
+How each annotation change was made:
 - `user`: Direct user interaction
 - `ai_accept`: User accepted AI suggestion
 - `keyboard`: Keyboard shortcut used
@@ -199,9 +201,38 @@ The suspicion score is calculated based on:
 
 Users with suspicion scores above 50% are highlighted in red.
 
+**Writing Process Panel:**
+
+Shown in the Behavioral tab only when
+[keystroke logging](../advanced/keystroke_logging.md) is enabled. Reports how
+each annotator produced their free-text responses:
+
+- **Median IKI**: Typical inter-keystroke interval
+- **Rhythm CV**: Dispersion of log inter-key intervals. Low = metronomic = the copy-typing signature
+- **Pauses ≥2s /100ch**: Thinking pauses, normalized by response length
+- **Pasted**: Share of characters that arrived by paste
+- **Silent Insert**: Share of inserted characters with no corresponding keystroke
+- **Flags**: Which detection rules fired, and how often
+- **Risk**: `writing_process_risk`, a ranking aid
+
+Each flagged session is listed beneath its annotator with the **evidence** that
+fired it — the actual feature values, not just a verdict label.
+
+`writing_process_risk` is deliberately kept **separate** from the suspicion
+score above. Those four weights sum to 1.0 and every existing deployment's
+numbers are calibrated against them; folding in a new term would silently
+reinterpret historical scores.
+
+!!! warning "A ranking, not a finding"
+    Writing-process flags have innocent explanations — fast typists, mobile
+    keyboards, IME users, dictation, assistive technology. The panel renders a
+    caveat above the table for this reason. Read the per-session evidence, and
+    see [false positives](../advanced/writing_process_detection.md#false-positives)
+    before acting on any flag.
+
 ### 6. Crowdsourcing Tab
 
-The Crowdsourcing tab provides dedicated monitoring for workers from crowdsourcing platforms like Prolific and Amazon Mechanical Turk (MTurk).
+The Crowdsourcing tab breaks the same statistics out by platform for Prolific and Amazon Mechanical Turk (MTurk) workers.
 
 **Summary Statistics:**
 - **Total Workers**: All workers across platforms
@@ -239,7 +270,7 @@ This tab is particularly useful for:
 
 ### 7. Configuration Tab
 
-The Configuration tab allows administrators to modify system settings in real-time.
+The Configuration tab changes assignment settings on a running server.
 
 **Configurable Settings:**
 - **Max Annotations per User**: Limit annotations per user (-1 for unlimited)
@@ -249,8 +280,12 @@ The Configuration tab allows administrators to modify system settings in real-ti
   - `fixed_order`: Sequential assignment
   - `least_annotated`: Prioritize items with fewest annotations
   - `max_diversity`: Prioritize items with highest disagreement
-  - `active_learning`: ML-based assignment with intelligent instance prioritization
-  - `llm_confidence`: LLM-based assignment (placeholder)
+  - `active_learning`: Serves the pool in active-learning order (needs `active_learning.enabled`)
+  - `llm_confidence`: Not implemented — falls back to random selection
+
+  The dashboard exposes this subset. See
+  [Available Strategies](../configuration/configuration.md#available-strategies)
+  for all eleven.
 
 **Configuration Management:**
 - Real-time updates without server restart
@@ -265,7 +300,7 @@ GET /admin/api/overview
 Headers: X-API-Key: admin_api_key
 ```
 
-Returns comprehensive system overview including user statistics, annotation progress, and configuration summary.
+Returns user statistics, annotation progress, and a configuration summary.
 
 ### Annotators Data
 ```
@@ -346,7 +381,7 @@ GET /admin/api/behavioral_analytics
 Headers: X-API-Key: admin_api_key
 ```
 
-Returns comprehensive behavioral analytics data for all annotators.
+Returns the behavioral analytics for every annotator.
 
 **Response Structure:**
 ```json
@@ -395,7 +430,61 @@ Returns comprehensive behavioral analytics data for all annotators.
       "ai_accept_rate": 0.7,
       "suspicion_score": 0.15
     }
-  ]
+  ],
+  "writing_process": { "enabled": false }
+}
+```
+
+The `writing_process` block is `{"enabled": false}` unless
+[keystroke logging](../advanced/keystroke_logging.md) is configured.
+
+### Writing Process
+```
+GET /admin/api/writing_process
+Headers: X-API-Key: admin_api_key
+```
+
+The same `writing_process` block on its own, so the panel can refresh without
+recomputing the whole behavioral rollup.
+
+**Response Structure:**
+```json
+{
+  "enabled": true,
+  "fidelity": "events",
+  "detection_enabled": true,
+  "calibrated": false,
+  "summary": {
+    "total_users": 25,
+    "total_sessions": 480,
+    "users_with_flags": 3,
+    "flag_totals": {"paste_dominant": 4, "silent_insertion": 4}
+  },
+  "users": [
+    {
+      "user_id": "user_017",
+      "sessions": 20,
+      "chars": 4820,
+      "iki_median_ms": 133.0,
+      "iki_log_cv": 0.145,
+      "pause_2s_per_100_chars": 0.27,
+      "pasted_char_fraction": 0.61,
+      "mean_silent_insert_ratio": 0.58,
+      "flag_counts": {"paste_dominant": 4},
+      "flagged_sessions": [
+        {
+          "instance_id": "item_12",
+          "schema": "rationale",
+          "level": "suspect",
+          "flags": ["paste_dominant"],
+          "evidence": {"paste_dominant": {"pasted_fraction": 0.983}},
+          "explanations": ["98% of the final text arrived by paste rather than typing."]
+        }
+      ],
+      "writing_process_risk": 0.34
+    }
+  ],
+  "caveat": "Writing-process flags are evidence for human review, not proof of misconduct..."
 }
 ```
 
@@ -416,7 +505,7 @@ GET /admin/api/suspicious_activity
 Headers: X-API-Key: admin_api_key
 ```
 
-Returns comprehensive suspicious activity analysis including:
+Returns the suspicious-activity analysis:
 - Users with suspicious activity
 - Suspicious actions details (fast actions, burst patterns)
 - Suspicious scores and levels
@@ -447,7 +536,7 @@ Updates system configuration with provided values.
 
 ### Annotator Timing Metrics
 
-The dashboard tracks comprehensive timing data for each annotator:
+The dashboard tracks five timing figures for each annotator:
 
 1. **Total Working Time**: Cumulative time spent across all annotations
 2. **Average Time per Annotation**: Mean time per individual annotation
@@ -474,19 +563,28 @@ Timing data is extracted from:
 
 ### Large Datasets
 
-For projects with many instances or annotators:
+The dashboard reads the same in-memory item store and per-user state the
+annotation server uses. It issues no SQL of its own, so nothing here is bounded
+by a database index.
 
-1. **Pagination**: Instances are paginated to avoid overwhelming the browser
-2. **Lazy Loading**: Data is loaded only when tabs are accessed
-3. **Caching**: API responses can be cached for better performance
-4. **Efficient Queries**: Database queries are optimized for large datasets
+`GET /admin/api/instances` computes a row for every instance before it filters,
+sorts and paginates — it has to, because sorting by disagreement means knowing
+the disagreement everywhere. What it does not do is ask each annotator for that
+instance separately: one pass over annotators builds the per-instance
+aggregates, so the cost tracks the number of annotations that exist rather than
+instances × annotators. A page of 25 rows takes roughly 150 ms over 5,000
+instances with 20 annotators, and 750 ms over 20,000.
+
+The instance list is paginated rather than sent to the browser whole, and a
+tab's data is fetched only when you open that tab.
+
+The one cache in the admin surface is the remote data-source download cache,
+cleared by `POST /admin/api/cache/clear`. API responses are not cached.
 
 ### Real-time Updates
 
-The dashboard provides:
-- Manual refresh buttons for each section
-- Automatic data loading when switching tabs
-- Real-time configuration updates
+Each section has a manual refresh button, switching tabs reloads that tab's
+data, and configuration changes take effect immediately.
 
 ## Troubleshooting
 
@@ -522,26 +620,26 @@ When `debug: true` is set in the configuration:
 
 ## Best Practices
 
-### Monitoring Workflow
+### Monitoring workflow
 
-1. **Regular Check-ins**: Monitor the overview tab regularly for progress
-2. **Annotator Performance**: Review annotator metrics to identify issues
-3. **Instance Analysis**: Use the instances tab to find problematic items
-4. **Configuration Tuning**: Adjust settings based on observed patterns
+Check the Overview tab for progress, the Annotators tab for anyone whose
+metrics have drifted, and the Instances tab for items that are stuck or
+contested. Adjust the assignment settings when a pattern shows up rather than
+in advance.
 
-### Data Analysis
+### Reading the data
 
-1. **Timing Patterns**: Look for unusual timing patterns that might indicate issues
-2. **Disagreement Analysis**: High disagreement scores may indicate unclear instructions
-3. **Completion Tracking**: Monitor completion percentages to ensure even distribution
-4. **Performance Optimization**: Use timing data to optimize assignment strategies
+Unusual timing is worth a look in both directions: too fast suggests low
+effort, too slow suggests a confusing item. A high disagreement score on many
+items usually means the instructions are unclear rather than that the
+annotators are careless. Watch completion percentages so work stays evenly
+spread, and use the timing figures to pick an assignment strategy.
 
 ### Security
 
-1. **API Key Management**: Keep the API key secure and change it if compromised
-2. **Access Control**: Limit access to the admin dashboard to authorized personnel
-3. **Session Management**: Log out when finished to clear session data
-4. **Audit Logging**: Monitor admin actions for security purposes
+Keep the API key secret and replace it if it leaks. Give dashboard access only
+to people who need it, log out when you are done so the session key is cleared,
+and review admin actions periodically.
 
 ## Future Enhancements
 

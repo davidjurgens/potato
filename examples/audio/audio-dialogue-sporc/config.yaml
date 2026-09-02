@@ -39,7 +39,7 @@ data_files:
   - data/sporc-sample.json
 
 output_annotation_dir: annotation_output/audio-dialogue-sporc/
-output_annotation_format: json
+export_annotation_format: jsonl
 
 item_properties:
   id_key: id

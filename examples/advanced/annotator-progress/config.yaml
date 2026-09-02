@@ -3,7 +3,7 @@ port: 9001
 annotation_task_name: Annotator Progress Dashboard Example
 task_dir: .
 output_annotation_dir: annotation_output/annotator-progress/
-output_annotation_format: tsv
+export_annotation_format: tsv
 annotation_codebook_url: ''
 data_files:
 - data/annotator-progress-example.json

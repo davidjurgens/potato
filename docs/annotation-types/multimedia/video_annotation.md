@@ -1,12 +1,12 @@
 # Video Annotation
 
-This guide covers the video annotation schema in Potato, which allows annotators to mark temporal segments, classify frames, and annotate keyframes in video content.
+The `video_annotation` schema lets annotators mark temporal segments, classify individual frames, and attach notes to keyframes.
 
 > **New in v2.0**: Video annotation with frame-level precision, timeline visualization, and keyboard-driven workflow.
 
 ## Overview
 
-The `video_annotation` schema provides comprehensive video annotation capabilities:
+The schema covers:
 
 - **Temporal Segment Marking**: Mark start and end points to create labeled segments
 - **Frame-by-Frame Navigation**: Step through video frame by frame for precise annotations
@@ -144,10 +144,10 @@ For marking important moments in the video.
 For object tracking across video frames with keyframe-based bounding box annotation.
 
 **Features:**
-- Canvas overlay for drawing bounding boxes directly on the video
+- Canvas overlay for drawing directly on the video
 - Track multiple objects across frames with color-coded labels
-- Automatic interpolation between keyframes
-- Keyframe-based workflow: annotate key positions and let the system interpolate
+- **Boxes and polygons** both interpolate between keyframes; masks are held
+- Keyframe-based workflow: annotate key positions and let the system fill in
 
 **Tracking-Specific Options:**
 
@@ -156,17 +156,89 @@ For object tracking across video frames with keyframe-based bounding box annotat
 | `tracking_options.interpolation` | string | `"linear"` | Interpolation method between keyframes |
 | `tracking_options.auto_advance_frames` | integer | `5` | Frames to auto-advance after placing keyframe |
 
+**Model-assisted tracking**
+
+Draw the object once, press **Track forward**, and SAM 2 follows it through the
+frames that follow. Each result arrives as a keyframe you can scrub through and
+correct.
+
+```bash
+potato download-models sam2_video_tiny   # 181 MB, once per install
+```
+
+The model keeps a memory of what the object looked like on earlier frames and
+conditions each new frame on it, so it can lose an object behind an occluder and
+pick it up again on the other side. It also decides for itself when the object
+is hidden, and hands back an empty frame when it is. That is the answer you want
+while correcting: a guessed mask on an occluded frame is work to undo.
+
+Measured on a moving object against known ground truth: per-frame IoU of 0.974
+to 0.979 across the sequence, with no decay from the first frame to the last.
+Roughly 1.3 seconds per frame on a CPU; considerably faster on a GPU.
+
+Segmentation and text prompting run in the browser; this one runs on the
+server. You pay the cost once per frame instead of once per prompt, the model is
+five graphs, and the video file is already sitting on the server. A hundred
+frames in the browser would be minutes of a frozen tab. A run is capped at 120
+frames by default, and says so when it stops early.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `propagation.max_frames` | integer | `120` | Upper bound on one request |
+
 **Interpolation Methods:**
 - `linear` - Linear interpolation between keyframes (smooth movement)
 - `cubic` - Cubic/smooth interpolation (natural motion curves)
 - `constant` - Constant/hold interpolation (box stays in place until next keyframe)
 
+**Shape kinds**
+
+A track is not always a box.
+
+| Kind | Between keyframes |
+|---|---|
+| Box | Interpolated, by the method above |
+| Polygon | Interpolated by **arc-length resampling** (see below) |
+| Mask | **Held** from the nearest keyframe, and marked as held |
+
+Polygon tracks cannot simply interpolate vertex-to-vertex. Two outlines of the
+same object rarely have the same vertex count, and even when they do, an
+annotator who starts tracing at the nose on one frame and the tail on the next
+produces two correct outlines whose vertices correspond to nothing —
+interpolating them pairwise turns the shape inside out halfway between
+keyframes. Potato resamples both outlines to equal fractions of their perimeter
+and rotates the second to the offset that best matches the first, so differing
+vertex counts and start points both work.
+
+Masks are **not** blended. Averaging two rasters produces a shape that is
+neither — ghost regions where the object was and where it will be, with holes
+between. Potato holds the nearest keyframe and draws a hollow circle marker on
+held frames, so an annotator can always tell a frame somebody drew from a frame
+nobody did.
+
 **Tracking Workflow:**
-1. Click **+ Track** to create a new object track
-2. Draw a bounding box on the video at the current frame
-3. Advance to another frame using frame stepping (`,` and `.` keys)
-4. Draw another bounding box for the same object
-5. The system interpolates the box position between keyframes
+1. Press `t` (or click **+ Track**) to create a new object track
+2. Draw a shape on the video at the current frame
+3. Advance to another frame using frame stepping (`,` and `.`)
+4. Draw the same object again
+5. The system interpolates between the keyframes
+6. Scrub with `<` and `>` to jump between this track's keyframes
+7. Press `Ctrl/Cmd+K` on any interpolated frame to pin it as a real keyframe
+
+**Tracking keyboard shortcuts**
+
+| Key | Action |
+|---|---|
+| `t` | New track |
+| `,` / `.` | Step one frame back / forward |
+| `<` / `>` (Shift+`,` / Shift+`.`) | Previous / next **keyframe** of the active track |
+| `Ctrl/Cmd+K` | Pin the current interpolated shape as a keyframe |
+| `Delete` / `Backspace` | Delete the selected keyframe |
+| `Escape` | Deselect |
+
+`,` and `.` step frames; the shifted pair jumps keyframes. This mirrors video
+editors, where `,`/`.` are frames and `<`/`>` are markers — and it keeps the two
+handlers from firing on the same press.
 
 **Example Configuration:**
 
@@ -235,7 +307,21 @@ annotation_schemes:
 Enables all annotation types in one interface.
 
 - Segment, frame, and keyframe controls all available
-- Useful for comprehensive video analysis tasks
+- Useful when a video needs both segment and frame-level labels
+
+## Showing and Hiding Classes
+
+A timeline of stacked segments becomes unreadable in the same way a densely
+boxed image does, so video shares the per-class show/hide used by
+[image annotation](image_annotation.md#showing-and-hiding-classes). Each label
+in the toolbar carries an eye toggle; hiding a class removes its segments from
+the timeline and the annotation list.
+
+- Hiding is **presentation only** — hidden segments are still saved and exported.
+- The state persists per project and schema, so a class stays hidden as the
+  annotator moves between items.
+
+Nothing needs to be configured; the toggles appear automatically.
 
 ## Keyboard Shortcuts
 

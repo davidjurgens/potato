@@ -19,7 +19,7 @@ import asyncio
 import logging
 import os
 import re
-from typing import Optional, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,13 @@ class PlaywrightSession:
         self.context = None
         self.page = None
         self._playwright = None
+        # Browser-side failures, collected as they happen. A page that renders
+        # but throws is the failure mode no server-side check can see, and it
+        # is invisible unless something is listening when it happens.
+        self.console_messages: List[Dict[str, str]] = []
+        self.console_errors: List[str] = []
+        self.page_errors: List[str] = []
+        self.failed_requests: List[Dict[str, Any]] = []
 
     async def start(self, url: str) -> bool:
         """Launch browser and navigate to URL."""
@@ -109,6 +116,7 @@ class PlaywrightSession:
             )
 
             self.page = await self.context.new_page()
+            self._attach_diagnostics(self.page)
 
             url = normalize_url(url)
 
@@ -139,6 +147,61 @@ class PlaywrightSession:
             logger.error(f"Failed to start Playwright session: {e}")
             await self.stop()
             return False
+
+    def _attach_diagnostics(self, page) -> None:
+        """Record console output, uncaught exceptions and failed requests."""
+
+        def on_console(message):
+            entry = {"type": message.type, "text": message.text}
+            location = getattr(message, "location", None)
+            if location:
+                entry["location"] = (
+                    f"{location.get('url', '')}:{location.get('lineNumber', '')}"
+                )
+            self.console_messages.append(entry)
+            if message.type == "error":
+                self.console_errors.append(message.text)
+
+        def on_page_error(error):
+            self.page_errors.append(str(error))
+
+        def on_response(response):
+            if response.status >= 400:
+                self.failed_requests.append(
+                    {"url": response.url, "status": response.status}
+                )
+
+        page.on("console", on_console)
+        page.on("pageerror", on_page_error)
+        page.on("response", on_response)
+
+    def clear_diagnostics(self) -> None:
+        """Drop collected console output, e.g. between navigations."""
+        self.console_messages.clear()
+        self.console_errors.clear()
+        self.page_errors.clear()
+        self.failed_requests.clear()
+
+    async def wait_for_selector(self, selector: str, timeout_ms: int = 10000) -> bool:
+        """Wait for an element to appear. False on timeout rather than raising."""
+        if not self.page:
+            return False
+        try:
+            await self.page.wait_for_selector(selector, timeout=timeout_ms)
+            return True
+        except Exception as e:
+            logger.debug("wait_for_selector(%s) timed out: %s", selector, e)
+            return False
+
+    async def content(self) -> Optional[str]:
+        """Rendered HTML of the current page."""
+        if not self.page:
+            return None
+        try:
+            return await self.page.content()
+        except Exception as e:
+            logger.error(f"Reading page content failed: {e}")
+            return None
 
     async def screenshot(self) -> Optional[bytes]:
         """Capture current page screenshot as PNG bytes."""

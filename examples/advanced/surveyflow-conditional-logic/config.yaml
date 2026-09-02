@@ -2,7 +2,7 @@
 annotation_task_name: SurveyFlow Conditional Logic
 task_dir: .
 output_annotation_dir: annotation_output/surveyflow-conditional-logic/
-output_annotation_format: jsonl
+export_annotation_format: jsonl
 annotation_codebook_url: ''
 
 # Include survey/phase responses in exports. With conditional questions this

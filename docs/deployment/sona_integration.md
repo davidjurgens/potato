@@ -4,7 +4,7 @@
 pools (students participating for course credit). Potato integrates with
 SONA's web-study workflow, including **automatic server-side credit granting**.
 
-## How it works
+## The survey-code flow
 
 1. In SONA, create a web study and set the study URL to your Potato server
    with the `%SURVEY_CODE%` placeholder:

@@ -1,0 +1,121 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Two views of one conversation: a branching tree and a flat thread
+#
+# A reply tree and a reading order answer different questions. "Who is this
+# answering?" is obvious in a tree and easy to lose in a list; "what exactly did
+# they say?" is the reverse. This example shows both views of the same
+# conversation side by side.
+#
+# The two views agree because they use the same ids: `potato convokit` sets each
+# turn's `turn_id` AND each tree node's `id` to the ConvoKit utterance id. So a
+# per-node label applied in the tree and a per-turn label applied in the thread
+# are stored under the same key and refer to the same utterance.
+#
+# The division of labour between the fields is deliberate:
+#
+#   * `conversation_tree` carries the STRUCTURAL judgement — where the thread
+#     turns, which branch went wrong. It is not a span target: collapsing a
+#     subtree changes the rendered text, so span offsets could not be stable.
+#   * `conversation` carries the TEXTUAL judgement — spans, and per-turn labels
+#     that want the full text in reading order.
+#
+# Get the data:
+#   ./setup_data.sh
+#
+# Then run from the repository root:
+#   python potato/flask_server.py start examples/conversation/convokit-tree/config.yaml -p 8000
+
+annotation_task_name: "Thread Structure and Text"
+
+data_files:
+  - data/threads.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+task_dir: .
+output_annotation_dir: annotation_output
+export_annotation_format: jsonl
+
+instance_display:
+  layout:
+    direction: vertical
+    gap: 20px
+
+  fields:
+    # Promoted with --promote-meta rather than showing the raw `convo_meta` dict.
+    - key: page_title
+      type: text
+      label: "Wikipedia page"
+
+    # STRUCTURE. Per-node widgets attach here; node ids are utterance ids.
+    - key: conversation_tree
+      type: conversation_tree
+      label: "Thread structure"
+      display_options:
+        collapsed_depth: 4
+        node_style: card
+        show_node_ids: false
+
+    # TEXT. The same utterances in reading order, indented by reply depth,
+    # and the target for span annotation.
+    - key: conversation
+      type: dialogue
+      label: "Full thread"
+      span_target: true
+      display_options:
+        show_turn_numbers: true
+        indent_replies: true
+        show_reply_lines: true
+        show_timestamps: true
+        timestamp_format: relative
+
+annotation_schemes:
+  # --- whole thread ----------------------------------------------------------
+  - annotation_type: radio
+    name: derailed
+    description: "Does this thread derail?"
+    labels:
+      - "no"
+      - "yes"
+    sequential_key_binding: true
+
+  # --- per node, bound to the TREE ------------------------------------------
+  # `turn_binding.field` decides which view a scheme attaches to. This one is
+  # about position in the thread, so it belongs on the tree.
+  - annotation_type: radio
+    name: branch_role
+    description: "Role"
+    labels:
+      - opens
+      - escalates
+      - de_escalates
+      - tangent
+    turn_level: true
+    turn_binding:
+      field: conversation_tree
+
+  # --- per turn, bound to the FLAT view -------------------------------------
+  # This one is about what was said, so it belongs where the text reads.
+  - annotation_type: likert
+    name: hostility
+    description: "Hostility"
+    size: 5
+    min_label: "Civil"
+    max_label: "Hostile"
+    turn_level: true
+    turn_binding:
+      field: conversation
+
+  # --- spans, on the flat view only -----------------------------------------
+  - annotation_type: span
+    name: evidence
+    description: "Highlight the language behind your judgement"
+    labels:
+      - insult
+      - dismissal
+      - accusation
+
+user_config:
+  allow_all_users: true

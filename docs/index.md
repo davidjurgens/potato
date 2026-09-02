@@ -42,8 +42,8 @@ Generated, machine-checkable specs built from the running code — prefer these
 over prose when writing a config or calling the API.
 
 - **[Machine-Readable Specs](api-reference/machine_readable.md)** - How to use all four, with editor setup and CI validation
-- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 56 annotation types and 23 display types
-- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 390 HTTP paths, with per-operation auth and config gating
+- [Config JSON Schema](schemas/potato-config.schema.json) - Every valid `config.yaml` key, all 61 annotation types and 24 display types
+- [OpenAPI 3.1 Spec](api-reference/openapi.json) - All 419 HTTP paths, with per-operation auth and config gating
 - [llms.txt](llms.txt) - Curated documentation index ([llms.txt standard](https://llmstxt.org))
 - [llms-full.txt](llms-full.txt) - Every documentation page inlined into one file
 
@@ -54,6 +54,13 @@ over prose when writing a config or calling the API.
 - [Instance Display](annotation-types/instance_display.md) - Display images, video, audio, and text separately from annotation collection
 - [Conditional Logic](configuration/conditional_logic.md) - Show/hide questions based on prior answers
 - [Image Annotation](annotation-types/multimedia/image_annotation.md) - Bounding boxes, polygons, and landmarks
+- [Image Annotation Formats](annotation-types/multimedia/image_formats.md) - Import COCO (polygons, RLE masks, crowd regions) with no preprocessing, and export back
+- [Deep Zoom & Tiling](annotation-types/multimedia/deep_zoom.md) - Annotate images too large to send to a browser as one file, with masks painted at the source's full resolution and no GPU texture limit
+- [Point Cloud Annotation (3D)](annotation-types/spatial/point_cloud.md) - Oriented 3D boxes on lidar: KITTI, PCD, PLY and LAS, converted server-side
+- [Calibration and 2D Verification](annotation-types/spatial/calibration.md) - Project 3D boxes into the camera images, so a box is checkable rather than a guess
+- [Depth Maps](annotation-types/spatial/depth_maps.md) - 16-bit PNG, NPY, PFM and EXR depth with a near/far window and a readout in metres
+- [Embodied Episode Annotation](annotation-types/embodied/episodes.md) - Robot demonstrations: synchronized video, signal lanes, phases, outcomes and dense reward
+- [Robot Dataset Formats](annotation-types/embodied/robot_formats.md) - LeRobot v2, RoboMimic/ALOHA HDF5, RLDS/TFDS, and Potato's own manifest
 - [Audio Annotation](annotation-types/multimedia/audio_annotation.md) - Audio segmentation with waveform visualization
 - [Audio Dialogue](annotation-types/multimedia/audio_dialogue.md) - Podcast/interview turn annotation: speaker bubbles, per-turn audio playback, ratings, spans, and cross-turn linking
 - [Video Annotation](annotation-types/multimedia/video_annotation.md) - Frame-by-frame video labeling
@@ -122,6 +129,8 @@ over prose when writing a config or calling the API.
 
 - **[Coding Agent Annotation](agent-evaluation/coding_agent_annotation.md)** - Evaluate agentic coding systems (Claude Code, SWE-Agent, Aider) with diff rendering, PRM annotation, and code review
 - **[CoT Process Reward (LLM pre-label + verify)](agent-evaluation/process_reward_cot.md)** - Segment a long chain-of-thought into steps, have an LLM pre-label each step's reward, and have a human verify — fast PRM data collection
+- **[VLM Grounding & Pointing](agent-evaluation/vlm_grounding.md)** - Bind referring expressions to regions or points, with an explicit not-present answer, and localize what a caption says that is not there
+- **[World-Model & Rollout Evaluation](agent-evaluation/world_model_eval.md)** - Frame-locked video panels; mark the frame where a generated rollout stops making sense, and measure whether annotators agree on *when*
 - [Agent Traces](agent-evaluation/agent_traces.md) - Evaluate AI agent traces and trajectories
 - [Turn-Level Annotation](agent-evaluation/turn_level_annotation.md) - Bind any rating/tagging/comment schema per-turn with declarative filters (by speaker, agent, step type, tool)
 - [Multi-Agent Discussion](agent-evaluation/multi_agent_discussion.md) - Annotate agent-to-agent discussions/debates with agent identity, addressees, reply threading, and consensus tracking
@@ -181,6 +190,9 @@ over prose when writing a config or calling the API.
 - [Admin Dashboard](administration/admin_dashboard.md) - Monitoring and management
 - [Annotator Progress Dashboard](administration/annotator_dashboard.md) - Opt-in, read-only progress view for annotators
 - [Behavioral Tracking](advanced/behavioral_tracking.md) - User behavior analytics
+- [Keystroke Logging](advanced/keystroke_logging.md) - Content-blind typing dynamics on free-text fields
+- [Writing-Process Detection](advanced/writing_process_detection.md) - Tell composed text from transcribed or LLM-pasted text
+- [Keystroke Logging Ethics](advanced/keystroke_logging_ethics.md) - IRB, consent, and participant rights
 - [Annotation History](administration/annotation_history.md) - Tracking annotation changes
 
 ## Data & Output
@@ -236,7 +248,7 @@ over prose when writing a config or calling the API.
 
 ## Contributing
 
-- [Contributing Guide](deployment/open-sourcing.md) - How to contribute to Potato
+- [Contributing Guide](guides/contributing.md) - How to contribute to Potato
 
 ---
 
@@ -280,6 +292,7 @@ over prose when writing a config or calling the API.
 | Use Solo Mode for collaborative annotation | [Solo Mode](solo-mode/solo_mode.md) |
 | Export annotations to Parquet | [Export Formats](data-export/export_formats.md#parquet-parquet) |
 | Export to COCO/YOLO/CoNLL | [Export Formats](data-export/export_formats.md) |
+| Import COCO annotations (RLE masks included) | [Image Annotation Formats](annotation-types/multimedia/image_formats.md) |
 | Push annotations to HuggingFace Hub | [HuggingFace Export](data-export/huggingface_export.md) |
 | Deploy on HuggingFace Spaces | [HuggingFace Spaces](data-export/huggingface_spaces.md) |
 | Run behind a `/app1/` reverse proxy | [Reverse Proxy / URL Prefix](deployment/reverse-proxy.md) |
@@ -303,7 +316,7 @@ Ready-to-use example configurations are available in the `examples/` directory:
 # Run a simple radio button example
 python potato/flask_server.py start examples/classification/single-choice/config.yaml -p 8000
 
-# Run a sophisticated layout example (content moderation, dialogue QA, medical review)
+# Run a custom layout example (content moderation, dialogue QA, medical review)
 python potato/flask_server.py start examples/custom-layouts/content-moderation/config.yaml -p 8000
 ```
 
@@ -316,7 +329,7 @@ See the [examples](https://github.com/davidjurgens/potato/tree/main/examples) di
 - `audio/` - Audio annotation examples
 - `advanced/` - Advanced features (conditional logic, quality control, etc.)
 - `agent-traces/` - Agent trace evaluation examples (RAG, GUI agents, comparisons)
-- `custom-layouts/` - Sophisticated custom layout examples
+- `custom-layouts/` - Custom layout examples
 
 ---
 

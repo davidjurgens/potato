@@ -60,7 +60,6 @@ class TestAdjudicationPhase3UI(unittest.TestCase):
             "task_dir": os.path.abspath(cls.test_dir),
             "data_files": ["test_data.jsonl"],
             "output_annotation_dir": "output",
-            "output_annotation_format": "json",
             "item_properties": {"id_key": "id", "text_key": "text"},
             "annotation_schemes": [
                 {

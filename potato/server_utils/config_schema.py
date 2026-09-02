@@ -24,7 +24,12 @@ Usage:
     schema = build_config_schema()
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+
+from potato.server_utils.schema_examples import (
+    example_scheme_for,
+    example_source_for,
+)
 
 # Published location of the generated artifact. Used as the schema's $id and as
 # the URL that `# yaml-language-server: $schema=` lines point at.
@@ -64,29 +69,70 @@ _DATA_SOURCE_TYPES = [
 ]
 
 
-def _leaf_schema(key: str, int_fields: set, bool_fields: set) -> Dict[str, Any]:
+def _documented(path: str) -> Dict[str, Any]:
+    """Description/type/default/examples for a dotted path, if we have them.
+
+    Nested sub-keys used to come out of here as a bare `{}` -- the schema knew
+    `attention_checks.failure_handling` existed and nothing else about it. The
+    docs table is keyed by dotted path precisely so those can be filled in.
+    """
+    from potato.server_utils.config_key_docs import (
+        UNSET,
+        get_key_doc,
+        json_schema_type,
+    )
+
+    doc = get_key_doc(path)
+    if doc is None:
+        return {}
+
+    out: Dict[str, Any] = {}
+    declared = json_schema_type(doc)
+    if declared is not None:
+        out["type"] = declared
+    if doc.summary:
+        out["description"] = doc.summary
+    if doc.default is not UNSET:
+        out["default"] = doc.default
+    if doc.example is not None:
+        out["examples"] = [doc.example]
+    return out
+
+
+def _leaf_schema(
+    key: str, int_fields: set, bool_fields: set, path: Optional[str] = None
+) -> Dict[str, Any]:
     """Type a leaf config key using the server's own coercion tables."""
+    schema = _documented(path or key)
+
+    # config_module's coercion tables stay authoritative for the keys they
+    # cover: they are what the server actually enforces at load time.
     if key in int_fields:
-        return {"type": "integer"}
-    if key in bool_fields:
-        return {"type": "boolean"}
-    return {}
+        schema["type"] = "integer"
+    elif key in bool_fields:
+        schema["type"] = "boolean"
+    return schema
 
 
-def _object_schema(sub_keys, int_fields: set, bool_fields: set) -> Dict[str, Any]:
+def _object_schema(
+    sub_keys, int_fields: set, bool_fields: set, path: Optional[str] = None
+) -> Dict[str, Any]:
     """Build a nested object schema from a KNOWN_CONFIG_KEYS set-or-dict value."""
     if isinstance(sub_keys, dict):
         names = sub_keys.keys()
     else:
         names = sub_keys
-    return {
-        "type": "object",
-        "properties": {
-            name: _leaf_schema(name, int_fields, bool_fields)
-            for name in sorted(names)
-        },
-        "additionalProperties": True,
+
+    schema = _documented(path) if path else {}
+    schema["type"] = "object"
+    schema["properties"] = {
+        name: _leaf_schema(
+            name, int_fields, bool_fields, f"{path}.{name}" if path else name
+        )
+        for name in sorted(names)
     }
+    schema["additionalProperties"] = True
+    return schema
 
 
 def _annotation_schemes_schema(schemas: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -127,6 +173,20 @@ def _annotation_schemes_schema(schemas: List[Dict[str, Any]]) -> Dict[str, Any]:
             "then": then,
         })
 
+    # A worked example per type, lifted from the example config the docs table
+    # links to. `x-potato-examples` rather than JSON Schema's `examples`: sixty
+    # whole schemes on `items` would drown editor completion, and what a reader
+    # actually wants is a lookup from type name to a config that runs.
+    examples_by_type: Dict[str, Any] = {}
+    for schema in schemas:
+        example = example_scheme_for(schema["name"])
+        if example:
+            entry: Dict[str, Any] = {"scheme": example}
+            source = example_source_for(schema["name"])
+            if source:
+                entry["source"] = source
+            examples_by_type[schema["name"]] = entry
+
     known_fields: Dict[str, Any] = {
         "annotation_type": {
             "description": "Annotation type, as registered in the schema registry.",
@@ -153,6 +213,14 @@ def _annotation_schemes_schema(schemas: List[Dict[str, Any]]) -> Dict[str, Any]:
         for field_name in schema["required_fields"]:
             known_fields.setdefault(field_name, {})
 
+    # Keys read by shared helpers rather than by any one generator, so no
+    # registry entry lists them. Omitting them made an editor underline
+    # `layout:` and `label_requirement:` on the types that never spelled
+    # them out. See registry.UNIVERSAL_OPTIONAL_FIELDS.
+    from potato.server_utils.schemas.registry import UNIVERSAL_OPTIONAL_FIELDS
+    for field_name in sorted(UNIVERSAL_OPTIONAL_FIELDS):
+        known_fields.setdefault(field_name, {})
+
     item: Dict[str, Any] = {
         "type": "object",
         "required": ["annotation_type", "name", "description"],
@@ -162,11 +230,14 @@ def _annotation_schemes_schema(schemas: List[Dict[str, Any]]) -> Dict[str, Any]:
     if conditionals:
         item["allOf"] = conditionals
 
-    return {
+    out: Dict[str, Any] = {
         "type": "array",
         "description": "The annotation form. Each entry renders one widget.",
         "items": item,
     }
+    if examples_by_type:
+        out["x-potato-examples"] = examples_by_type
+    return out
 
 
 def _instance_display_schema(displays: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -230,9 +301,9 @@ def build_config_schema() -> Dict[str, Any]:
     properties: Dict[str, Any] = {}
     for key, sub_keys in sorted(KNOWN_CONFIG_KEYS.items()):
         if sub_keys is None:
-            properties[key] = _leaf_schema(key, int_fields, bool_fields)
+            properties[key] = _leaf_schema(key, int_fields, bool_fields, key)
         else:
-            properties[key] = _object_schema(sub_keys, int_fields, bool_fields)
+            properties[key] = _object_schema(sub_keys, int_fields, bool_fields, key)
 
     # Hand-shaped overrides for the keys with real internal structure.
     properties["item_properties"] = {

@@ -191,6 +191,68 @@
     white-space: nowrap;
 }
 
+/* --------------------------------------------------------------------------
+   Overlapping codes
+
+   A chip sits 22px above the line it labels, which at line-height 1.8 lands on
+   the glyphs of the line above. Coding a passage with several overlapping codes
+   — the normal case in qualitative work, not an edge case — then papers the
+   text over with chips. Two things fix it: a gutter tall enough for a chip to
+   live in, and collapsing chips that would still collide with each other.
+   -------------------------------------------------------------------------- */
+
+/* Opened only when labels are actually being drawn, so span tasks without
+   labels keep the tighter setting. Set by SpanManager on the text container. */
+#instance-text.span-labels-on,
+.span-labels-on {
+    line-height: 2.35;
+}
+
+/* The second and later chips of a collision become a colour dot. The code is
+   still identifiable (colour, tooltip, accessible name) and the text stays
+   readable; hovering or focusing restores the full chip. */
+.span-controls.is-compact .span-label {
+    width: 12px;
+    height: 12px;
+    min-width: 12px;
+    padding: 0;
+    border-radius: 50%;
+    background-color: var(--span-colour, rgba(0, 0, 0, 0.85)) !important;
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    color: transparent;
+    overflow: hidden;
+    text-indent: -999px;
+}
+
+.span-controls.is-compact .span-delete-btn {
+    display: none;
+}
+
+.span-controls.is-compact:hover .span-label,
+.span-controls.is-compact:focus-within .span-label {
+    width: auto;
+    height: auto;
+    min-width: 0;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background-color: rgba(0, 0, 0, 0.85) !important;
+    border: none;
+    color: #fff;
+    text-indent: 0;
+}
+
+.span-controls.is-compact:hover .span-delete-btn,
+.span-controls.is-compact:focus-within .span-delete-btn {
+    display: inline-flex;
+}
+
+/* A collapsed chip that is hovered has to sit above its neighbours, or it
+   expands underneath them and is unreadable again. */
+.span-controls.is-compact:hover,
+.span-controls.is-compact:focus-within {
+    z-index: 40 !important;
+}
+
 #instance-text:focus {
     outline: none;
     border-color: #007bff;

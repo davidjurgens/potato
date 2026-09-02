@@ -1,8 +1,13 @@
 name: Docs & Generated Specs
 
-# The config JSON Schema, the OpenAPI spec, and llms-full.txt are generated from
-# the code but checked in, so they are only trustworthy if something fails when
-# the code moves and the artifacts do not. That is what this workflow is for.
+# The config JSON Schema, the OpenAPI spec, the examples manifest and
+# llms-full.txt are generated from the code but checked in, so they are only
+# trustworthy if something fails when the code moves and the artifacts do not.
+# That is what this workflow is for.
+#
+# Every script and test named below must be committed. A step that references a
+# path only present in someone's working tree fails on a fresh checkout, which
+# is all CI ever has.
 #
 # It deliberately does NOT run the full test suite — that needs browsers and a
 # lot of wall clock. It runs the drift guards, which are fast.
@@ -54,6 +59,9 @@ jobs:
       - name: llms-full.txt is current
         run: python scripts/generate_llms_full.py --check
 
+      - name: Examples manifest is current
+        run: python scripts/generate_examples_manifest.py --check
+
       - name: Drift guards
         run: |
           pytest -q \
@@ -61,7 +69,16 @@ jobs:
             tests/unit/test_openapi_drift.py \
             tests/unit/test_docs_nav_drift.py \
             tests/unit/test_config_reference_completeness.py \
-            tests/unit/test_display_registry_docs_sync.py
+            tests/unit/test_display_registry_docs_sync.py \
+            tests/unit/test_config_key_docs.py \
+            tests/unit/test_examples_manifest_drift.py \
+            tests/unit/test_doc_counts_match_registries.py \
+            tests/unit/test_import_shadowing.py \
+            tests/unit/test_cli_dispatch.py \
+            tests/unit/test_mcp_server.py \
+            tests/unit/test_mcp_live_surface.py \
+            tests/unit/test_annotation_sidebar_gating.py \
+            tests/unit/test_preview_render.py
 
   docs:
     name: Documentation builds

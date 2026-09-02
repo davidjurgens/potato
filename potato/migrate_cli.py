@@ -2,7 +2,7 @@
 """
 Config Migration Tool for Potato
 
-This module provides utilities to migrate Potato configuration files
+Utilities to migrate Potato configuration files
 from older formats to the current v2 format.
 
 Usage:
@@ -239,31 +239,73 @@ class LegacyUserConfigRule(MigrationRule):
         return config, changes
 
 
+def _fold_export_format(value: Any) -> Any:
+    """Map a legacy output format value onto a registered export format."""
+    from potato.server_utils.config_module import DEPRECATED_KEY_VALUE_ALIASES
+
+    value_map = DEPRECATED_KEY_VALUE_ALIASES.get("output_annotation_format", {})
+    if isinstance(value, str):
+        return value_map.get(value, value)
+    if isinstance(value, list):
+        return [value_map.get(v, v) if isinstance(v, str) else v for v in value]
+    return value
+
+
 class LegacyOutputFormatRule(MigrationRule):
-    """Suggest modern output format options."""
+    """Rename the dead output_annotation_format key onto its replacement."""
 
     def __init__(self):
         super().__init__(
             "output_format",
-            "Suggest modern output format options"
+            "Rename output_annotation_format to export_annotation_format"
         )
 
     def applies(self, config: Dict[str, Any]) -> bool:
-        """Check if config uses legacy output format."""
-        output_format = config.get("output_annotation_format", "")
-        return output_format in ["csv", "tsv"]
+        """Check whether the config carries the deprecated key."""
+        return "output_annotation_format" in config
 
     def migrate(self, config: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
-        """Add note about JSON format being recommended."""
+        """Fold the deprecated key onto export_annotation_format.
+
+        Nothing has read `output_annotation_format` since the v2 storage
+        rewrite: annotations go to `<output_annotation_dir>/<user>/
+        user_state.json` whatever it says. `export_annotation_format` writes a
+        periodic export in that format instead.
+        """
         config = copy.deepcopy(config)
         changes = []
 
-        output_format = config.get("output_annotation_format", "")
-        if output_format in ["csv", "tsv"]:
+        if "output_annotation_format" not in config:
+            return config, changes
+
+        value = config.pop("output_annotation_format")
+
+        if "export_annotation_format" in config:
             changes.append(
-                f"Note: output_annotation_format is '{output_format}'. "
-                f"Consider using 'json' for richer annotation data (spans, metadata)."
+                f"Removed output_annotation_format ('{value}'): it is "
+                f"deprecated and export_annotation_format was already set."
             )
+            return config, changes
+
+        if not value:
+            changes.append(
+                "Removed output_annotation_format: it was empty, and nothing "
+                "has read the key since the v2 storage rewrite."
+            )
+            return config, changes
+
+        folded = _fold_export_format(value)
+        config["export_annotation_format"] = folded
+
+        note = (
+            f"Renamed output_annotation_format to export_annotation_format "
+            f"('{folded}'). It never changed where annotations are stored; it "
+            f"now writes a periodic export to "
+            f"output_annotation_dir/exports/{folded}/."
+        )
+        if folded != value:
+            note += f" Value changed from '{value}': no exporter has that name."
+        changes.append(note)
 
         return config, changes
 

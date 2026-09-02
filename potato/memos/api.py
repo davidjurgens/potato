@@ -48,6 +48,29 @@ def memos_enabled(config: dict) -> bool:
     )
 
 
+def sidebar_open_by_default(config: dict) -> bool:
+    """Whether the notes sidebar should start open.
+
+    ``qda_mode.memos.show_sidebar_by_default`` was parsed, defaulted to True,
+    and reported by /qda/config — and read by nobody, so the sidebar always
+    started collapsed. The value is resolved through the QDA manager rather
+    than re-parsed here, so there is one parser for it.
+    """
+    if not (config.get("qda_mode") or {}).get("enabled"):
+        return False
+    try:
+        from potato.qda_mode.manager import get_qda_mode_manager
+        manager = get_qda_mode_manager()
+    except Exception:       # pragma: no cover - QDA package absent
+        return False
+    if manager is None:
+        return False
+    memos_cfg = getattr(manager.config, "memos", None)
+    if memos_cfg is None or not getattr(memos_cfg, "enabled", False):
+        return False
+    return bool(getattr(memos_cfg, "show_sidebar_by_default", False))
+
+
 def _default_visibility(config: dict) -> str:
     ui = config.get("annotation_ui") or {}
     v = ui.get("visibility") if isinstance(ui, dict) else None
@@ -114,7 +137,10 @@ def list_memos(task_dir, project, username, priv):
         task_dir, project=project, instance_id=instance_id,
         requester=username, is_privileged=priv,
     )
-    return jsonify({"memos": memos})
+    return jsonify({
+        "memos": memos,
+        "open_by_default": sidebar_open_by_default(_config()),
+    })
 
 
 @memos_bp.route("", methods=["POST"])

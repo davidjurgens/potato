@@ -1,6 +1,6 @@
 # Agent Evaluation Guide
 
-This guide covers evaluating AI agent systems with Potato, including coding agents, web agents, RAG pipelines, and multi-agent systems.
+Evaluating AI agent systems in Potato: coding agents, web agents, RAG pipelines, and multi-agent systems.
 
 ## Overview
 

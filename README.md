@@ -39,7 +39,7 @@ Open [http://localhost:8000](http://localhost:8000) and start annotating. Browse
 
 ## What Can You Annotate?
 
-Potato handles the full spectrum of annotation tasks — from traditional NLP labeling to evaluating the latest AI agent systems, to interpretive qualitative analysis.
+Potato covers traditional NLP labeling, AI agent evaluation, and interpretive qualitative analysis.
 
 The tables below are a **representative sample, not a complete list.** Schemes and data types compose freely, [custom layouts](examples/custom-layouts/) and raw HTML let you build interfaces beyond these, and [new schema types](docs/annotation-types/schemas_and_templates.md) can be added. If you don't see your task here, it's likely still possible.
 
@@ -51,7 +51,7 @@ The tables below are a **representative sample, not a complete list.** Schemes a
 | **Agent Traces** | Step-by-step evaluation of LLM agents, tool calls, ReAct chains, and multi-agent systems ([docs](docs/agent-evaluation/agent_traces.md)) |
 | **Web Agents** | Screenshot-based review with SVG click/scroll overlays, or live browsing with automatic trace recording ([docs](docs/agent-evaluation/web_agent_annotation.md)) |
 | **RAG Pipelines** | Retrieval relevance, answer faithfulness, citation accuracy, hallucination detection |
-| **Audio** | Waveform visualization, segment labeling, ELAN-style tiered annotation, and 21 transcript/subtitle formats read directly — Whisper, cloud ASR, SRT/VTT, YouTube captions, TextGrid/EAF ([docs](docs/annotation-types/multimedia/audio_annotation.md), [transcripts](docs/guides/working_with_transcripts.md)) |
+| **Audio** | Waveform visualization, segment labeling, ELAN-style tiered annotation, and 21 transcript/subtitle formats read directly — Whisper, cloud ASR, SRT/VTT, YouTube captions, TextGrid/EAF. No transcript? Potato runs Whisper and speaker diarization locally ([docs](docs/annotation-types/multimedia/audio_annotation.md), [transcripts](docs/guides/working_with_transcripts.md)) |
 | **Video** | Frame-by-frame labeling, temporal segments, playback sync ([docs](docs/annotation-types/multimedia/video_annotation.md)) |
 | **Images** | Bounding boxes, polygons, landmarks, classification ([docs](docs/annotation-types/multimedia/image_annotation.md)) |
 | **Dialogue** | Turn-level annotation, conversation trees, interactive chat evaluation, and diarized transcripts synced to their audio ([docs](docs/annotation-types/multimedia/audio_dialogue.md)) |
@@ -73,7 +73,7 @@ The tables below are a **representative sample, not a complete list.** Schemes a
 
 ## Agent & LLM Evaluation
 
-Potato provides purpose-built tooling for evaluating AI agents at every level of granularity.
+Potato reads traces from the major agent frameworks and evaluates them at the trajectory, step, span, or comparison level.
 
 ### Trace Formats
 
@@ -96,7 +96,7 @@ Supported formats: **OpenAI**, **Anthropic/Claude**, **ReAct**, **LangChain**, *
 
 ### Web Agent Viewer
 
-An interactive viewer for GUI agent traces — navigate step-by-step through screenshots with SVG overlays showing clicks, bounding boxes, mouse paths, and scroll actions. Annotators rate each step with inline controls while a filmstrip bar provides quick navigation.
+A viewer for GUI agent traces. You step through the screenshots one action at a time, with SVG overlays for clicks, bounding boxes, mouse paths, and scrolls. Annotators rate each step with inline controls, and a filmstrip bar jumps between steps.
 
 ### Ready-to-Use Agent Examples
 
@@ -117,18 +117,18 @@ An interactive viewer for GUI agent traces — navigate step-by-step through scr
 
 ## Qualitative Data Analysis (QDA)
 
-Potato isn't only for label-and-aggregate tasks — it also supports interpretive qualitative research, the kind of work done in tools like NVivo, ATLAS.ti, or MAXQDA, fully self-hosted and free.
+Potato also supports interpretive qualitative research, the kind of work done in NVivo, ATLAS.ti, or MAXQDA, self-hosted and free.
 
 | Capability | Description |
 |------------|-------------|
-| **Living codebook** | The codebook is an evolving markdown document of rules, definitions, examples, and rationales — not just a label list. Edit it in a full-page document view or inline while coding, with versioning, diff, and restore; semantic edits can re-flag affected excerpts for review ([docs](docs/advanced/codebook.md)) |
+| **Living codebook** | The codebook is an evolving markdown document of rules, definitions, examples, and rationales rather than a list of labels. Edit it in a full-page document view or inline while coding, with versioning, diff, and restore; semantic edits can re-flag affected excerpts for review ([docs](docs/advanced/codebook.md)) |
 | **In-vivo coding** | Create codes directly from a highlighted passage, in the participant's own words ([example](examples/advanced/codebook-invivo-example/)) |
 | **Memos** | Attach analytic notes to excerpts, codes, or the whole project as your interpretation develops ([docs](docs/advanced/memos.md)) |
 | **Cases** | Group instances into units of analysis — participants, interviews, documents, sites — for case-based comparison ([docs](docs/advanced/cases.md)) |
 | **Search** | Full-text search across your corpus and annotations to find, revisit, and code recurring patterns ([docs](docs/advanced/search.md)) |
 | **Codebook distillation** | Turn the human-authored codebook into an LLM prompt for AI-assisted coding |
 
-Enable it with `qda_mode`, which sensibly cascades these features on; see the [QDA Mode guide](docs/advanced/qda.md) and the runnable [`qda-mode-example`](examples/advanced/qda-mode-example/).
+Enable it with `qda_mode`, which turns these features on together; see the [QDA Mode guide](docs/advanced/qda.md) and the runnable [`qda-mode-example`](examples/advanced/qda-mode-example/).
 
 ---
 
@@ -136,7 +136,7 @@ Enable it with `qda_mode`, which sensibly cascades these features on; see the [Q
 
 ### LLM Label Suggestions
 
-Integrate any LLM provider to pre-annotate instances and suggest labels. Annotators review and correct — dramatically faster than labeling from scratch.
+Connect any LLM provider to pre-annotate instances and suggest labels. Annotators then review and correct rather than labeling from scratch, which is the point: correcting a draft is faster than producing one.
 
 Supported backends: **OpenAI**, **Anthropic**, **Ollama**, **vLLM**, **Gemini**, **HuggingFace**, **OpenRouter**
 
@@ -150,7 +150,7 @@ A human-LLM collaborative workflow where the system learns from annotator feedba
 
 ### Chat Assistant
 
-An LLM-powered sidebar where annotators can ask questions about difficult instances. The AI provides guidance informed by your task description and annotation guidelines — helping annotators think through decisions without auto-labeling ([docs](docs/ai-intelligence/chat_support.md)).
+An LLM-powered sidebar where annotators can ask questions about difficult instances. It answers from your task description and annotation guidelines, and never writes a label itself ([docs](docs/ai-intelligence/chat_support.md)).
 
 ---
 
@@ -200,7 +200,7 @@ Close the loop from production traces to graded, regression-gated evaluation:
 
 ## Authentication & Deployment
 
-Potato supports multiple authentication methods, from passwordless quick-start to enterprise SSO:
+Potato supports six authentication methods:
 
 | Method | Use Case |
 |--------|----------|
@@ -237,9 +237,9 @@ Ready-to-use templates organized by type in [`examples/`](examples/):
 Try Potato in your browser — no installation. A growing catalog of one-click demo Spaces
 covers classification, span/NER, agent-trace evaluation, multimodal, QDA, and more:
 
-- 🤗 **[Flagship demo](https://huggingface.co/spaces/Blablablab/potato)** — agent trace evaluation
-- 📋 **[Full demo catalog & collection](docs/data-export/potato_on_huggingface.md)** — every annotation type as a live Space
-- 🚀 **[Deploy your own](deployment/huggingface-spaces/deploy_spaces.md)** — `build_space.py` + `deploy_space.py` from a single manifest
+- **[Flagship demo](https://huggingface.co/spaces/Blablablab/potato)** — agent trace evaluation
+- **[Full demo catalog & collection](docs/data-export/potato_on_huggingface.md)** — every annotation type as a live Space
+- **[Deploy your own](deployment/huggingface-spaces/deploy_spaces.md)** — `build_space.py` + `deploy_space.py` from a single manifest
 
 ### Research Showcase
 
@@ -289,8 +289,8 @@ so they cannot drift from it.
 |----------|-------------------|
 | [`llms.txt`](https://potatoannotator.readthedocs.io/en/latest/llms.txt) | Curated index of the docs ([llms.txt standard](https://llmstxt.org)) |
 | [`llms-full.txt`](https://potatoannotator.readthedocs.io/en/latest/llms-full.txt) | Every documentation page in one file |
-| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 154 config keys, 56 annotation types, 23 display types — validates a `config.yaml` before the server runs |
-| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 390 HTTP paths, with per-operation auth and config gating |
+| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 160 config keys, 61 annotation types, 24 display types — validates a `config.yaml` before the server runs |
+| [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 419 HTTP paths, with per-operation auth and config gating |
 
 Every config in `examples/` carries a `# yaml-language-server: $schema=…`
 modeline, so editors validate it live. See
@@ -317,6 +317,13 @@ pytest --cov=potato --cov-report=html
 See the **[Testing guide](docs/guides/testing.md)** for which tier to write in,
 the test-file security rules, the annotation-persistence testing pattern, and
 the drift tests that keep the generated specs honest.
+
+## Contributing
+
+Bug fixes, new annotation types, documentation corrections and example projects
+are welcome. **[CONTRIBUTING.md](CONTRIBUTING.md)** covers setup and what to run
+before opening a PR; the **[full contributor guide](docs/guides/contributing.md)**
+covers the checklist for adding an annotation type and what reviewers look at.
 
 ---
 

@@ -88,7 +88,7 @@ def _generate_text_edit_layout_internal(annotation_scheme):
           data-schema-name="{escape_html_content(schema_name)}"
           data-source-field="{escape_html_content(source_field)}"
           {layout_attrs}>
-        <fieldset schema_name="{escape_html_content(schema_name)}">
+        <fieldset schema="{escape_html_content(schema_name)}">
             <legend class="shadcn-text-edit-title">{escape_html_content(description)}</legend>
 
             <div class="text-edit-source-block" id="{schema_name}-source">
@@ -98,12 +98,21 @@ def _generate_text_edit_layout_internal(annotation_scheme):
 
             <div class="text-edit-editor-block">
                 <div class="text-edit-editor-label">Edit below:</div>
-                <textarea class="text-edit-textarea annotation-input"
+                <!-- The editor is a UI control, NOT an annotation input.
+                     It used to carry `annotation-input` and the SAME schema/label_name
+                     as the hidden input below, so both wrote the one
+                     Label(schema, label) key. Which value survived depended on DOM
+                     sync order and on whether `data-modified` had been set: an
+                     annotator who accepted the pre-filled source text without typing
+                     never fired `oninput`, so the plain string was stored where every
+                     other record held the JSON blob. It also owned the `name` the
+                     server-side restore matches, which is why the raw JSON blob was
+                     injected into the visible editor on reload.
+                     oninput -> textEditOnInput still writes the hidden input and
+                     dispatches `change`, so saving is unaffected. -->
+                <textarea class="text-edit-textarea"
                           id="{schema_name}-editor"
-                          name="{identifiers['name']}"
-                          schema="{identifiers['schema']}"
-                          label_name="{identifiers['label_name']}"
-                          validation="{validation}"
+                          data-schema="{identifiers['schema']}"
                           rows="5"
                           oninput="textEditOnInput('{escape_html_content(schema_name)}')"></textarea>
             </div>
@@ -115,10 +124,15 @@ def _generate_text_edit_layout_internal(annotation_scheme):
                 {reset_btn}
             </div>
 
+            <!-- The canonical record: a JSON blob of edited/original text plus edit
+                 distances. It takes the plain `name` (not "-data") so the server-side
+                 restore, which looks up "schema:::label", targets THIS element and
+                 marks it data-server-set — rather than dumping the blob into the
+                 visible editor. -->
             <input type="hidden"
                    class="annotation-input text-edit-data-input"
                    id="{identifiers['id']}"
-                   name="{identifiers['name']}-data"
+                   name="{identifiers['name']}"
                    schema="{identifiers['schema']}"
                    label_name="{identifiers['label_name']}"
                    validation="{validation}"

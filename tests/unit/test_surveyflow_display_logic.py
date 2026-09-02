@@ -262,3 +262,93 @@ class TestExportHiddenExclusion:
         by_schema = {r["schema"]: r for r in rows}
         assert by_schema["experience_details"]["hidden"] is True
         assert by_schema["prior_experience"]["hidden"] is False
+
+
+class TestCollapseConsistencyInExport:
+    """The collapse that decides `hidden` and the one that stamps `superseded` must
+    agree, and the collapse must handle the shapes the frontend actually writes.
+
+    These are the GH #167 follow-ups: before the shared collapse, a multiselect
+    condition evaluated against one arbitrary selected label, a `free_response` value
+    out-voted the chosen option, and a question repeated across two pages collapsed to
+    a 2-element list server-side but a scalar in the browser — so the condition failed
+    server-side only and the answer was silently dropped from the export.
+    """
+
+    MULTISELECT_SCHEMES = [
+        {"name": "langs", "annotation_type": "multiselect",
+         "labels": ["en", "fr", "de"]},
+        # Deliberately conditions on 'en', the FIRST selection. The old collapse fell
+        # through to scalars[-1] and compared against 'fr' alone, so this condition
+        # failed and the dependent answer was dropped. Conditioning on 'fr' would pass
+        # either way and prove nothing.
+        {"name": "followup", "annotation_type": "text",
+         "display_logic": {
+             "show_when": [{"schema": "langs", "operator": "contains", "value": "en"}]
+         }},
+    ]
+
+    def test_multiselect_condition_sees_every_selected_label(self, tmp_path):
+        # Stored the way the current frontend writes it: {label: label}, no booleans.
+        phase_data = {"prestudy": {"prestudy": [
+            [{"schema": "langs", "name": "en"}, "en"],
+            [{"schema": "langs", "name": "fr"}, "fr"],
+            [{"schema": "followup", "name": "text_box"}, "some detail"],
+        ]}}
+        d = str(tmp_path / "out")
+        _write_user_state(d, "u1", phase_data)
+
+        rows = load_phase_responses_from_output_dir(
+            d, display_logic_schemes=self.MULTISELECT_SCHEMES)
+        schemas = {r["schema"] for r in rows}
+        # 'fr' IS among the selections, so followup is visible and must survive.
+        assert "followup" in schemas, (
+            "a multiselect condition evaluated against only one selected label")
+
+    def test_repeated_question_across_pages_is_not_dropped(self, tmp_path):
+        schemes = [
+            {"name": "consent", "annotation_type": "radio", "labels": ["Yes", "No"]},
+            {"name": "detail", "annotation_type": "text",
+             "display_logic": {
+                 "show_when": [{"schema": "consent", "operator": "equals", "value": "Yes"}]
+             }},
+        ]
+        # Same answer recorded on two pages of one phase, in the legacy boolean shape
+        # where the defect bites: the old collapse gathered BOTH into `selected` and
+        # produced ['Yes', 'Yes'], which fails `equals "Yes"`.
+        phase_data = {"prestudy": {
+            "page1": [[{"schema": "consent", "name": "Yes"}, True]],
+            "page2": [
+                [{"schema": "consent", "name": "Yes"}, True],
+                [{"schema": "detail", "name": "text_box"}, "kept"],
+            ],
+        }}
+        d = str(tmp_path / "out")
+        _write_user_state(d, "u1", phase_data)
+
+        rows = load_phase_responses_from_output_dir(d, display_logic_schemes=schemes)
+        assert "detail" in {r["schema"] for r in rows}, (
+            "a question repeated across pages collapsed to a list, failed the equals "
+            "condition, and its dependent answer was dropped from the export")
+
+    def test_free_response_does_not_override_the_chosen_option(self, tmp_path):
+        schemes = [
+            {"name": "source", "annotation_type": "radio",
+             "labels": ["Docs", "Other"], "has_free_response": True},
+            {"name": "why", "annotation_type": "text",
+             "display_logic": {
+                 "show_when": [{"schema": "source", "operator": "equals", "value": "Other"}]
+             }},
+        ]
+        phase_data = {"prestudy": {"prestudy": [
+            [{"schema": "source", "name": "Other"}, "Other"],
+            [{"schema": "source", "name": "free_response"}, "a blog post"],
+            [{"schema": "why", "name": "text_box"}, "because"],
+        ]}}
+        d = str(tmp_path / "out")
+        _write_user_state(d, "u1", phase_data)
+
+        rows = load_phase_responses_from_output_dir(d, display_logic_schemes=schemes)
+        assert "why" in {r["schema"] for r in rows}, (
+            "the free-response prose out-voted the chosen option, so the dependent "
+            "question was treated as hidden")

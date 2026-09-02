@@ -1,6 +1,6 @@
 # AI-Assisted In-Context Learning (ICL) Labeling
 
-Potato's ICL labeling feature enables AI-assisted annotation by using high-confidence human annotations as in-context examples to guide an LLM in labeling remaining data. The system tracks LLM confidence and routes some predictions back to humans for verification, enabling accuracy assessment and iterative improvement.
+ICL labeling feeds the LLM your highest-confidence human annotations as in-context examples, then has it label the rest of the data. The system tracks LLM confidence and routes some predictions back to humans for verification, enabling accuracy assessment and iterative improvement.
 
 ## Overview
 

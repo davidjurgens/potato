@@ -8,6 +8,7 @@ within the tests/ directory structure to comply with path security requirements.
 
 import os
 import json
+import warnings
 import yaml
 import tempfile
 import uuid
@@ -116,13 +117,34 @@ def create_test_config(
 
     # Add optional kwargs that are passed through
     optional_fields = [
-        "max_annotations_per_user", "assignment_strategy", "output_annotation_format",
+        "max_annotations_per_user", "assignment_strategy",
         "random_seed", "admin_api_key", "max_annotations_per_item",
-        "icl_labeling", "adjudication", "mace", "list_as_text"
+        "icl_labeling", "adjudication", "mace", "list_as_text",
+        "keystroke_logging", "annotation_telemetry",
+        "num_annotators_per_item", "per_annotator_quota",
+        "quality_control", "gold_standards", "attention_checks",
     ]
     for field in optional_fields:
         if field in kwargs:
             config[field] = kwargs[field]
+
+    # Anything not recognised is DROPPED, which silently produces a server that
+    # is not configured the way the test says it is — and a test that passes for
+    # the wrong reason. Warn loudly rather than swallowing it; add the key to
+    # ``optional_fields`` above (or pass it via ``additional_config``) to fix.
+    _known = set(optional_fields) | {
+        "annotation_task_name", "item_properties", "site_dir",
+        "alert_time_each_instance", "require_password", "authentication",
+        "persist_sessions", "debug", "port", "host", "secret_key",
+        "session_lifetime_days", "user_config", "phases", "additional_config",
+    }
+    for unknown in sorted(set(kwargs) - _known):
+        warnings.warn(
+            f"create_test_config ignored unknown option {unknown!r}; the test "
+            f"server will NOT be configured with it. Add it to optional_fields "
+            f"or pass it inside additional_config.",
+            stacklevel=2,
+        )
 
     # Support multi-phase workflows in tests
     if "phases" in kwargs:

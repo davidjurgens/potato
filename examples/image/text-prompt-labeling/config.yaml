@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+port: 8000
+annotation_task_name: Text-prompt labelling
+task_dir: .
+output_annotation_dir: annotation_output/
+export_annotation_format: jsonl
+
+data_files:
+  - data/photos.json
+
+item_properties:
+  id_key: id
+  text_key: image
+
+media_directory: media
+
+user_config:
+  allow_all_users: true
+  users: []
+
+automatic_assignment:
+  "on": true
+  output_filename: assigned_user_data.json
+  sampling_strategy: random
+  labels_per_instance: 3
+  instance_per_annotator: 10
+  test_question_per_annotator: 0
+  users: []
+
+annotation_schemes:
+  - annotation_type: image_annotation
+    name: objects
+    description: "Type what to look for, then accept or reject what comes back"
+    source_field: image
+
+    # `sam` earns its place here: an accepted box can be turned into a mask by
+    # the same decoder that serves click-to-segment, so the two models compose.
+    tools: [bbox, polygon, sam]
+
+    labels:
+      - name: cat
+        color: "#6e56cf"
+      - name: bus
+        color: "#2f9e6f"
+      - name: stop sign
+        color: "#d1495b"
+      - name: person
+        color: "#e08b1f"
+
+    # Open-vocabulary detection from a typed phrase.
+    #
+    # The model is Grounding DINO tiny (Apache-2.0), quantized to q4f16 and run
+    # in the browser through ONNX Runtime Web: no GPU, no server-side model, no
+    # network call once it is downloaded. First use fetches ~145 MB, which is
+    # why it is off by default and asks before it starts.
+    #
+    #     potato download-models grounding_dino_tiny
+    #
+    # Everything it returns is a SUGGESTION. Accepting one is a separate act,
+    # recorded as such — because a dataset assembled from unreviewed model
+    # output agrees with the model rather than with reality, and every quality
+    # measure, inter-annotator agreement included, looks better rather than
+    # worse when that happens.
+    text_prompt:
+      # Phrases the box starts with. An annotator can type anything; these are
+      # a starting point so a study can point everyone at the same vocabulary.
+      phrases: [cat, bus, stop sign]
+
+      # How sure the model must be about a box before it is offered at all.
+      # 0.3 is the model's own default. Lower it to see more and worse.
+      box_threshold: 0.3
+
+      # How strongly a token must score before it counts toward deciding WHICH
+      # phrase a box belongs to. Separate from box_threshold because "is there
+      # something here" and "what is it" are different questions.
+      text_threshold: 0.25
+
+      # Turn accepted boxes into masks with the SAM decoder. Needs the `sam`
+      # tool, and the schema refuses it without one rather than quietly
+      # storing boxes when the project asked for masks.
+      segment: false

@@ -60,13 +60,39 @@ def test_flask_server_import_does_not_load_heavy_ml():
         f"These must be lazily imported at point-of-use (see F-051).")
 
 
-def test_diversity_availability_probe_does_not_load_torch():
-    """Importing diversity_manager probes availability via find_spec, not import."""
+#: Every module that decides whether the embedding stack is available.
+#:
+#: All three had the same latent defect: a module-level
+#: `try: from sentence_transformers import ...` reads as deferral but only
+#: defers when the package is ABSENT — the case that was already free. With it
+#: installed the import ran at module import time and pulled in transformers +
+#: torch, whether or not the feature was ever switched on.
+#:
+#: `diversity_manager` was fixed under F-051; `similarity` and
+#: `rule_clusterer` kept the pattern and are covered here so the fix cannot be
+#: undone in one of them and stay green in the others.
+AVAILABILITY_PROBING_MODULES = [
+    "potato.diversity_manager",
+    "potato.similarity",
+    "potato.solo_mode.rule_clusterer",
+]
+
+
+@pytest.mark.skipif(
+    __import__("importlib.util", fromlist=["util"]).find_spec(
+        "sentence_transformers") is None,
+    reason="sentence-transformers is absent, so no import cost exists to "
+           "detect — this test would pass without proving anything.",
+)
+@pytest.mark.parametrize("module", AVAILABILITY_PROBING_MODULES)
+def test_availability_probe_does_not_load_torch(module):
+    """Importing the module probes availability via find_spec, not by importing."""
     code = (
-        "import sys; import potato.diversity_manager as d; "
+        f"import sys; import {module} as m; "
         "import json; "
-        "print(json.dumps({'available': bool(d._SENTENCE_TRANSFORMERS_AVAILABLE), "
-        "'torch': 'torch' in sys.modules}))"
+        "print(json.dumps({'available': bool(m._SENTENCE_TRANSFORMERS_AVAILABLE), "
+        "'torch': 'torch' in sys.modules, "
+        "'sentence_transformers': 'sentence_transformers' in sys.modules}))"
     )
     result = subprocess.run(
         [sys.executable, "-c", code],
@@ -75,9 +101,18 @@ def test_diversity_availability_probe_does_not_load_torch():
     assert result.returncode == 0, result.stderr
     import json
     info = json.loads(result.stdout.strip().splitlines()[-1])
-    # torch must NOT be loaded merely by importing the module / probing availability
+
+    # The probe must still give the right ANSWER — a module that reports
+    # "unavailable" would also load no torch, and would pass this test while
+    # silently disabling the feature on every machine that has the package.
+    assert info["available"] is True, (
+        f"{module} reports the embedding stack unavailable even though "
+        f"sentence-transformers is installed — the find_spec probe is wrong.")
+    assert info["sentence_transformers"] is False, (
+        f"importing {module} eagerly imported sentence_transformers; probe "
+        f"availability with importlib.util.find_spec instead (F-051).")
     assert info["torch"] is False, (
-        "importing potato.diversity_manager eagerly loaded torch (F-051)")
+        f"importing {module} eagerly loaded torch (F-051)")
 
 
 # Simulates the packaging bug where potato/ai/ai_cache.py imported the ollama

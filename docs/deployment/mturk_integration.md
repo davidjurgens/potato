@@ -12,7 +12,7 @@
     CloudResearch is also sunsetting its MTurk Toolkit (end of 2026) in favor of
     [Connect](crowdsourcing-platforms.md#cloudresearch-connect).
 
-This guide provides comprehensive instructions for deploying Potato annotation tasks on Amazon Mechanical Turk (MTurk).
+Deploying a Potato annotation task on Amazon Mechanical Turk (MTurk), end to end.
 
 ## Table of Contents
 
@@ -32,14 +32,14 @@ This guide provides comprehensive instructions for deploying Potato annotation t
 
 ## Overview
 
-Potato integrates with Amazon Mechanical Turk through the External Question HIT type. This allows you to:
+Potato integrates with Amazon Mechanical Turk through the External Question HIT type, so you can:
 
 - Host your annotation interface on your own server
 - Automatically authenticate workers using their MTurk worker ID
 - Handle HIT preview mode gracefully
-- Submit completed work back to MTurk seamlessly
+- Submit completed work back to MTurk
 
-### How It Works
+### The External Question flow
 
 1. You create an External Question HIT on MTurk pointing to your Potato server
 2. Workers click on your HIT and are redirected to your Potato server with URL parameters

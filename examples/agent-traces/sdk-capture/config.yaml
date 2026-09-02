@@ -22,7 +22,7 @@ item_properties:
 
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 
 # Receive traces from the potato_trace SDK (POST /api/traces/webhook).
 trace_ingestion:

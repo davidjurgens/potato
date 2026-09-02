@@ -1,7 +1,7 @@
 """
 Solo Mode Configuration
 
-This module defines the configuration dataclass and parsing logic for Solo Mode.
+The configuration dataclass and parsing logic for Solo Mode.
 """
 
 from dataclasses import dataclass, field

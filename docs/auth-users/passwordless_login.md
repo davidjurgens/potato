@@ -1,6 +1,6 @@
 # Passwordless Login
 
-Potato supports passwordless authentication for low-stakes annotation tasks where security is less critical than ease of access. This mode allows annotators to log in with just a username, without requiring a password.
+Potato supports passwordless authentication for low-stakes annotation tasks where security is less critical than ease of access. In this mode an annotator logs in with a username and no password.
 
 ## Overview
 
@@ -71,7 +71,7 @@ authentication:
   method: clerk
 ```
 
-## How It Works
+## Login with and without passwordless
 
 ### With Passwordless Enabled
 
@@ -92,7 +92,7 @@ In passwordless mode:
 Passwordless mode provides minimal security:
 
 - **No identity verification**: Anyone can claim any username
-- **Session hijacking**: Sessions can be easily impersonated
+- **Session hijacking**: nothing stops one person from resuming another's session
 - **No audit trail integrity**: User actions cannot be cryptographically verified
 
 **Recommended uses:**

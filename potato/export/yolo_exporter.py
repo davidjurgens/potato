@@ -14,11 +14,11 @@ from typing import Optional, Tuple
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     build_category_mapping,
-    polygon_to_bbox,
     normalize_bbox,
     extract_image_annotations,
     get_image_dimensions,
     get_image_filename,
+    normalize_annotation_object,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,38 +100,41 @@ class YOLOExporter(BaseExporter):
 
                     class_id = category_map[label]
 
-                    if obj_type == "bbox":
-                        x = obj.get("x", 0)
-                        y = obj.get("y", 0)
-                        w = obj.get("width", 0)
-                        h = obj.get("height", 0)
-                        cx, cy, nw, nh = normalize_bbox(x, y, w, h, img_w, img_h)
-                        image_labels[stem].append(
-                            f"{class_id} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}"
-                        )
-
-                    elif obj_type in ("polygon", "freeform"):
-                        points = obj.get("points", [])
-                        if not points:
-                            continue
-                        bx, by, bw, bh = polygon_to_bbox(points)
-                        cx, cy, nw, nh = normalize_bbox(bx, by, bw, bh, img_w, img_h)
-                        warnings.append(
-                            f"{obj_type} in {instance_id} converted to enclosing bbox"
-                        )
-                        image_labels[stem].append(
-                            f"{class_id} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}"
-                        )
-
-                    elif obj_type == "landmark":
+                    if obj_type == "landmark":
                         warnings.append(
                             f"Landmark in {instance_id} skipped (not supported in YOLO)"
                         )
+                        continue
 
-                    else:
+                    if obj_type not in ("bbox", "polygon", "freeform", "mask"):
                         warnings.append(
                             f"Unknown type '{obj_type}' in {instance_id}"
                         )
+                        continue
+
+                    # Reads the client's normalized `coordinates` shape and
+                    # returns absolute pixels; normalize_bbox re-normalizes to
+                    # YOLO's center-based convention below.
+                    canon = normalize_annotation_object(obj, img_w, img_h)
+                    if canon is None:
+                        warnings.append(
+                            f"Unusable {obj_type} in {instance_id}, skipping"
+                        )
+                        continue
+                    warnings.extend(
+                        f"{w} ({instance_id})" for w in canon["warnings"]
+                    )
+
+                    if obj_type != "bbox":
+                        warnings.append(
+                            f"{obj_type} in {instance_id} converted to enclosing bbox"
+                        )
+
+                    bx, by, bw, bh = canon["bbox"]
+                    cx, cy, nw, nh = normalize_bbox(bx, by, bw, bh, img_w, img_h)
+                    image_labels[stem].append(
+                        f"{class_id} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}"
+                    )
 
         # Write label files
         for stem, lines in image_labels.items():

@@ -1,10 +1,10 @@
 # Instance Display Configuration
 
-Instance display is a feature that separates **what content to show annotators** from **what annotations to collect**. This allows you to display any combination of content types (images, videos, audio, text) alongside any annotation schemes (radio buttons, checkboxes, spans, etc.).
+Instance display separates **what content to show annotators** from **what annotations to collect**, so any combination of content types (images, videos, audio, text) can sit alongside any annotation schemes (radio buttons, checkboxes, spans, and the rest).
 
 ## Why Use Instance Display?
 
-Previously, if you wanted to show an image with radio buttons for classification, you had to add an `image_annotation` schema with `min_annotations: 0` just to display the image. This was confusing and semantically incorrect.
+To show an image and classify it with radio buttons, declare the image under `instance_display` and the question under `annotation_schemes`. The `image_annotation` schema is for drawing on an image, not for displaying one.
 
 With `instance_display`, you can explicitly configure what content to display:
 
@@ -62,6 +62,7 @@ instance_display:
 | `audio` | Audio player | No |
 | `audio_dialogue` | **Diarized transcript synced to audio**: speaker bubbles, per-turn playback, per-turn ratings, spans, cross-turn linking | Yes |
 | `gallery` | Scrollable image gallery with captions | No |
+| `depth_map` | **Depth map**: near/far window, colormap, overlay on RGB, and the distance in metres under the cursor | No |
 | `dialogue` | Conversation turns | Yes |
 | `conversation_tree` | Conversation tree with collapsible branching nodes | No |
 | `multi_agent_discussion` | Multi-agent discussion with agent legend, colors, addressees, and filtering | Yes |
@@ -191,6 +192,41 @@ Or with structured data:
 ```json
 {"id": "conv_001", "conversation": [{"speaker": "Alice", "text": "Hello there!"}, {"speaker": "Bob", "text": "Hi, how are you?"}]}
 ```
+
+#### Threaded conversations
+
+When each turn names the turn it replies to, `dialogue` renders the reply
+structure — nesting depth is derived from `reply_to`, so nothing has to
+precompute it:
+
+```yaml
+- key: "thread"
+  type: "dialogue"
+  label: "Discussion"
+  display_options:
+    indent_replies: true         # indent by reply depth
+    max_indent_depth: 6          # cap the visual indent
+    show_reply_lines: true       # vertical thread guides
+    show_timestamps: true        # per-turn times
+    timestamp_format: relative   # relative | absolute | epoch
+    turn_meta_fields: [score]    # per-turn metadata chips
+    meta_key: meta               # where that metadata lives
+    depth_key: depth             # explicit depth, when the data has one
+    reply_to_key: reply_to       # where the parent reference lives
+```
+
+```json
+{"id": "t1", "thread": [
+  {"id": "m1", "speaker": "ana", "text": "Anyone tried the new API?"},
+  {"id": "m2", "speaker": "ben", "text": "Yes, works fine.", "reply_to": "m1"},
+  {"id": "m3", "speaker": "cy", "text": "Not for me.", "reply_to": "m2"}
+]}
+```
+
+The indentation, timestamps, and chips are drawn as CSS pseudo-element content,
+so they do not affect span offsets. See
+[Dialogue Annotation](structured/dialogue_annotation.md) for the full guide and
+[ConvoKit](../integrations/convokit.md) for importing conversational corpora.
 
 ### Pairwise Display
 

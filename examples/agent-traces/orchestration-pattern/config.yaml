@@ -15,7 +15,7 @@ item_properties:
   text_key: task
 task_dir: .
 output_annotation_dir: annotation_output
-output_annotation_format: json
+export_annotation_format: jsonl
 instance_display:
   layout: {direction: vertical, gap: 16px}
   fields:

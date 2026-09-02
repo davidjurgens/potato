@@ -1,12 +1,12 @@
 # Solo Mode Advanced Features
 
-This page documents advanced subsystems available in Solo Mode that go beyond the core 10-phase workflow described in the [Solo Mode guide](solo_mode.md). These features enable automated quality improvement, cost optimization, and deeper analysis of annotation patterns.
+Subsystems that sit on top of the core workflow described in the [Solo Mode guide](solo_mode.md): rule discovery, labeling functions, confusion analysis, confidence routing, prompt optimization, and edge-case synthesis. Each one is optional and off by default.
 
 ## Edge Case Rule Discovery
 
 Inspired by the Co-DETECT framework, the edge case rule system automatically discovers annotation rules from instances where the LLM has low confidence. Rules are extracted, clustered into categories, reviewed by the human annotator, and injected back into the annotation prompt.
 
-### How It Works
+### From a low-confidence label to a reviewed rule
 
 1. **Rule extraction**: When the LLM labels an instance with confidence below `confidence_threshold`, it generates a generalizable rule of the form "When \<condition\> → \<action\>".
 2. **Clustering**: Once enough rules accumulate (`min_rules_for_clustering`), they are clustered by semantic similarity using sentence embeddings and K-Means. Each cluster is summarized into a single category by the LLM.
@@ -58,7 +58,7 @@ Increase this to route more items from edge case rule clusters to the human anno
 
 Inspired by ALCHEmist (NeurIPS 2024), this system extracts reusable labeling functions from high-confidence LLM predictions. These functions can label new instances via keyword matching and majority voting — without additional API calls.
 
-### How It Works
+### Extraction, voting, acceptance
 
 1. **Extraction**: From predictions where the LLM reports high confidence (`min_confidence`), the system asks the LLM to identify generalizable patterns (keywords, conditions). Falls back to keyword frequency analysis if the LLM is unavailable.
 2. **Application**: For each new instance, all enabled labeling functions vote on a label using confidence-weighted majority voting.
@@ -98,7 +98,7 @@ Labeling functions are most effective when your data contains recurring patterns
 
 Enriches the standard confusion matrix with example instances, LLM reasoning, and optional root cause analysis with guideline suggestions.
 
-### How It Works
+### Grouping disagreements into patterns
 
 1. **Pattern detection**: Groups human-LLM disagreements by (predicted, actual) label pairs, filtering to pairs that occur at least `min_instances_for_pattern` times.
 2. **Enrichment**: Each confusion pattern includes up to 5 example instances with the original text, LLM reasoning, and confidence score.
@@ -137,7 +137,7 @@ Returns confusion matrix data with heatmap-ready cell values, per-label accuracy
 
 Provides rich aggregated data for visual exploration of human-LLM disagreements, including scatter plots, temporal timelines, per-label breakdowns, and a filterable disagreement list.
 
-### How It Works
+### What the explorer reads
 
 The explorer is read-only — it aggregates data from the validation tracker and predictions without modifying any state.
 
@@ -175,7 +175,7 @@ Accepts `?bucket_size=<N>` (clamped to [2, 100], default 10).
 
 Orchestrates an automated cycle of confusion analysis → guideline suggestions → prompt revision → re-annotation. Monitors agreement rate trends and stops when metrics plateau.
 
-### How It Works
+### One refinement cycle
 
 1. **Trigger**: After every `trigger_interval` human annotations, the loop checks whether a refinement cycle should run.
 2. **Analyze**: Runs confusion analysis on current disagreement patterns.
@@ -244,7 +244,7 @@ POST /solo/api/refinement/reject      # Reject a pending refinement candidate
 
 Implements cascaded model escalation: a cheap/fast model tries first, and if its confidence is below the tier threshold, the instance escalates to a more expensive/capable model. If all tiers fail, the instance is routed to the human.
 
-### How It Works
+### Escalating through the tiers
 
 For each instance:
 1. The first (cheapest) tier model labels the instance.
@@ -305,7 +305,7 @@ enabled. There is no dedicated routing-stats endpoint.
 
 DSPy-style automatic prompt optimization using labeled examples. The optimizer analyzes correct and incorrect predictions to iteratively improve the annotation prompt.
 
-### How It Works
+### One optimization pass
 
 1. **Collect examples**: Gathers labeled instances — both correctly and incorrectly predicted by the LLM.
 2. **Optimize**: Sends the current prompt along with sample correct (up to 5) and incorrect (up to 10) examples to the LLM. The LLM returns an improved prompt with a list of changes and rationale.
@@ -360,7 +360,7 @@ the prompt version history including who/what produced each version
 
 Proactively generates synthetic edge case examples to test and refine annotation prompts before large-scale labeling begins. Unlike edge case *rules* (which are discovered reactively from low-confidence predictions), the synthesizer *creates* hypothetical boundary examples.
 
-### How It Works
+### Synthesis, labeling, revision
 
 1. **Synthesis**: The LLM generates examples that lie on label boundaries, have ambiguous signals, require careful interpretation, and test specific guideline aspects.
 2. **Labeling**: The human annotator labels the synthesized examples.

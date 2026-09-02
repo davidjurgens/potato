@@ -3,7 +3,7 @@ port: 8000
 annotation_task_name: Cases Example
 task_dir: .
 output_annotation_dir: annotation_output/cases-example/
-output_annotation_format: tsv
+export_annotation_format: tsv
 data_files:
 - data/cases-example.json
 item_properties:

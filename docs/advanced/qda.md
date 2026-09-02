@@ -33,6 +33,48 @@ under QDA Mode — paid annotators must not reshape the shared codebook.
 Every default above can be overridden explicitly; QDA Mode only changes
 the *starting point*.
 
+## Coming from another QDA tool
+
+Potato reads and writes REFI-QDA `.qdpx`, the interchange format NVivo,
+ATLAS.ti, MAXQDA, Quirkos and QDA Miner all support:
+
+```bash
+python -m potato.importers --input project.qdpx --output-dir my-study/
+python -m potato.export -c my-study/config.yaml -f qdpx -o ./export/
+```
+
+The codebook keeps its hierarchy, along with the codings and which analyst
+made each one. See
+[Bringing a Project Into Potato](../guides/migrating-into-potato.md).
+
+## Interview audio
+
+Interviews arrive as audio, and Potato handles both halves of getting them
+ready to code.
+
+If you already have transcripts, it reads Whisper, WhisperX, whisper.cpp,
+Deepgram, AssemblyAI and AWS Transcribe output directly, in whichever of their
+formats you have, and it handles the trap those formats share: some report time
+in seconds and some in milliseconds.
+
+If you only have the recordings, it transcribes them:
+
+```bash
+pip install "potato-annotation[transcribe]"
+potato transcripts ./interviews --transcribe --diarize --num-speakers 2 \
+    -o data/interviews.json
+```
+
+That runs Whisper and speaker clustering on your own machine. The audio never
+leaves it. No account, no credits, no per-minute charge.
+
+Speaker labels come across when the upstream tool produced them, or from
+`--diarize`. Either way annotators can correct or supply them in the interface,
+which on a small corpus is usually faster than tuning a clustering threshold.
+
+See [Working with Transcripts](../guides/working_with_transcripts.md) for model
+choices, air-gapped installs, and the rest.
+
 ## Quick start
 
 ```yaml

@@ -1,6 +1,6 @@
 # Soft Label / Probability Distribution
 
-The soft label schema allows annotators to distribute probability mass across a set of labels using constrained sliders. Rather than committing to a single category, annotators express graded membership by allocating percentages that must sum to a fixed total (default 100). This captures genuine annotation uncertainty and reflects the natural subjectivity present in many NLP tasks.
+The soft label schema lets annotators spread probability mass across a set of labels with constrained sliders. Rather than committing to a single category, annotators express graded membership by allocating percentages that must sum to a fixed total (default 100). This captures genuine annotation uncertainty and reflects the natural subjectivity present in many NLP tasks.
 
 ## Overview
 

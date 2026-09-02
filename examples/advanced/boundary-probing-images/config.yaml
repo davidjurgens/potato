@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+#
+# Boundary Lab on images.
+#
+# After each label, the annotator is asked whether it survives a change to the
+# picture: greyscale, a mirror, a crop, part of it covered. The transforms are
+# applied by the browser to the same image — nothing is rendered server-side,
+# and remote media is never fetched by Potato.
+#
+#   invariance  colour removed, mirrored, cropped in — a label that depends on
+#               any of these will not replicate, so these double as quality
+#               control the same way paraphrase probes do for text
+#   flip        blurred, part of the scene covered — enough evidence is gone
+#               that the honest answer may change, and an annotator who never
+#               flips here is labelling from context rather than from the image
+#
+# Run from the repository root:
+#   python potato/flask_server.py start examples/advanced/boundary-probing-images/config.yaml -p 8000
+
+port: 8000
+annotation_task_name: "Boundary Lab — Scene Setting"
+task_dir: .
+output_annotation_dir: annotation_output/boundary-probing-images/
+export_annotation_format: jsonl
+annotation_codebook_url: ''
+
+data_files:
+- data/scenes.json
+
+item_properties:
+  id_key: id
+  text_key: image_url
+
+user_config:
+  allow_all_users: true
+  users: []
+
+alert_time_each_instance: 10000000
+
+instance_display:
+  fields:
+    - key: image_url
+      type: image
+      label: "Scene"
+
+annotation_schemes:
+- annotation_type: radio
+  name: setting
+  description: Where was this taken?
+  labels:
+  - Indoors
+  - Outdoors
+  - Can't tell
+  sequential_key_binding: true
+
+boundary_probing:
+  enabled: true
+  schema: setting
+  probes_per_item: 3
+  include_invariance: true
+  # Image items need no probe sources: the transforms are generated from the
+  # image itself, deterministically, so every annotator answers about exactly
+  # the same pictures.
+  rationale_on_flip: true

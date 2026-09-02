@@ -1,12 +1,12 @@
 # Solo Mode
 
-Solo Mode enables a single annotator to efficiently label large datasets with LLM assistance through collaborative annotation.
+One annotator plus an LLM, labeling a dataset that would normally need a team.
 
 > **Using a HuggingFace model?** See [Using HuggingFace Models in Potato](../ai-intelligence/huggingface_models.md) for wiring `solo_mode.labeling_models[]` to an HF-hosted model.
 
 ## Overview
 
-Solo Mode provides a streamlined workflow where a human annotator works alongside an LLM to annotate data. The system learns from human feedback, progressively improving its predictions until the human can step back and let the LLM complete the remaining annotations autonomously.
+A human annotator and an LLM work the same queue. The LLM proposes, the human corrects, and each correction feeds back into the prompt. As the two converge, the human hands over more of the queue until the LLM finishes the rest on its own.
 
 ### Key Features
 
@@ -81,7 +81,9 @@ solo_mode:
 
 ## Workflow Phases
 
-Solo Mode progresses through the following phases:
+Solo Mode progresses through twelve phases, plus a terminal `completed`
+state. The phase machine is `SoloPhase` in `potato/solo_mode/phase_controller.py`;
+not every path visits every phase.
 
 ### 1. Setup
 - Enter task description
@@ -118,20 +120,31 @@ Solo Mode progresses through the following phases:
 - Decide on correct label
 - Improve understanding of edge cases
 
-### 8. Periodic Review
+### 8. Active Annotation
+- The main annotation phase
+- The human labels prioritized instances while the LLM labels in the background
+- Returns here from periodic review, rule review, and a failed final validation
+
+### 9. Periodic Review
 - Periodically review low-confidence LLM labels
 - Approve or correct predictions
 - Maintain quality during autonomous phase
 
-### 9. Autonomous Labeling
+### 10. Rule Review
+- Review the edge case rules discovered from low-confidence labels
+- Approve or reject each clustered rule category
+- Send the prompt back for revision if the rules point at a larger problem
+
+### 11. Autonomous Labeling
 - Agreement threshold reached
 - LLM completes remaining instances
 - Human monitors progress
 
-### 10. Final Validation
+### 12. Final Validation
 - Validate sample of LLM-only labels
 - Confirm quality meets standards
 - Export final dataset
+- Failing validation returns the project to active annotation
 
 ## Uncertainty Estimation
 

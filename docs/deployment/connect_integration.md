@@ -4,7 +4,7 @@
 platform and the destination they migrate MTurk Toolkit users to — making it
 the most direct MTurk replacement for research studies.
 
-## How it works
+## The Project Link flow
 
 Connect's "Project Link" model matches Potato's external-URL flow:
 

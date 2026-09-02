@@ -1,7 +1,7 @@
 """
 Uncertainty Estimator Base Classes
 
-This module defines the abstract base class for uncertainty estimation strategies.
+The abstract base class for uncertainty estimation strategies.
 """
 
 from abc import ABC, abstractmethod

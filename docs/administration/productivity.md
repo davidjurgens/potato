@@ -7,8 +7,8 @@ for selecting options. For tasks where there are at most 10 options,
 keybindings can be assigned sequentially by default. When defining your
 annotation scheme, set the `sequential_key_binding` field to `True`.
 
-The first option will correspond to the \"1\" key, the second to the
-\"2\" key, \..., the tenth to the \"0\" key.
+The first option corresponds to the "1" key, the second to the "2" key, and
+so on to the tenth on "0".
 
 *Custom keybindings:* For greater control, custom keybindings can also
 be configured. In this case, pass in objects into the `labels` field of
@@ -315,7 +315,7 @@ your mouse over the response option.
 
 ## Active Learning
 
-Active learning uses machine learning to intelligently prioritize annotation tasks, helping you maximize the value of your annotation budget. For comprehensive configuration and usage instructions, see the [Active Learning Guide](../ai-intelligence/active_learning_guide.md).
+Active learning reorders the queue so annotators see the instances a model is least sure about first. The [Active Learning Guide](../ai-intelligence/active_learning_guide.md) covers configuration and use in full.
 
 ### Basic Configuration
 
@@ -336,14 +336,15 @@ active_learning:
   random_sample_percent: 20
 ```
 
-### Key Benefits
+### Why reorder at all
 
-- **Maximize annotation efficiency** by focusing on the most informative instances
-- **Reduce annotation costs** by requiring fewer annotations for the same model performance
-- **Improve model quality** by ensuring diverse and representative training data
-- **Scale annotation workflows** with intelligent instance prioritization
+Uncertain instances carry more information than confident ones, so a fixed
+annotation budget spent on them produces a better model than the same budget
+spent in dataset order. The cost is that your labeled set is no longer a
+random sample of the corpus, which matters if you intend to report distribution
+statistics over it.
 
-### How It Works
+### The active learning cycle
 
 1. **Training**: A machine learning classifier is trained on existing annotations
 2. **Prediction**: The model predicts confidence scores for unannotated instances
@@ -353,14 +354,13 @@ active_learning:
 
 For advanced features including LLM integration, model persistence, and multi-schema support, refer to the [Active Learning Guide](../ai-intelligence/active_learning_guide.md).
 
-## Automatic task assignent
+## Automatic task assignment
 
-Potato allows you to easily assign annotation tasks to different
-annotators, this is especially userful for crowdsourcing setting where
-you only need one annotator to work on a fixed amount of instances.
+Potato assigns annotation tasks to different annotators for you, which is
+most useful in a crowdsourcing setting where each instance needs only one
+annotator and each annotator gets a fixed amount of work.
 
-You can edit the automatic_assignmetn section in the configureation file
-for this function
+Edit the `automatic_assignment` section of the configuration file:
 
 ``` yaml
 "automatic_assignment": {
@@ -397,7 +397,7 @@ types for different schemes.
     ],
 
     # If true, numbers [1-len(labels)] will be bound to each
-    # label. Aannotations with more than 10 are not supported with this
+    # label. Annotations with more than 10 are not supported with this
     # simple keybinding and will need to use the full item specification
     # to bind all labels to keys.
     "sequential_key_binding": True,

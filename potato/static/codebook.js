@@ -279,6 +279,36 @@
     // palette must still gain runtime codes so they are usable as span
     // labels; span *persistence* itself is overlay-based and independent
     // of the palette.
+    /**
+     * The palette chip's fill for a runtime code.
+     *
+     * Built-in codes are rendered server-side at 0.4 alpha over their assigned
+     * colour; runtime codes were left transparent, so a minted code was a
+     * colourless chip that then highlighted in the same default purple as
+     * every other minted code. Both now come from the same hash.
+     */
+    function paletteTriple(name) {
+        if (typeof window.potatoPaletteColor === "function") {
+            return window.potatoPaletteColor(name);
+        }
+        var mgr = window.spanManager;
+        if (mgr && typeof mgr.paletteColorFor === "function") {
+            return mgr.paletteColorFor(name);
+        }
+        return "";
+    }
+
+    function chipColor(name) {
+        var triple = paletteTriple(name);
+        return triple ? "rgba" + triple.replace(")", ", 0.4)") : "";
+    }
+
+    /** Solid colour for a drawing palette button and its swatch. */
+    function chipColour(name) {
+        var triple = paletteTriple(name);
+        return triple ? "rgb" + triple : "";
+    }
+
     function reconcileSpanForm(form, tmpl, labels) {
         var schema = form.getAttribute("data-schema-name") || form.id;
         var have = optionValues(form);
@@ -298,8 +328,11 @@
             input.id = newId;
             input.checked = false;
             input.removeAttribute("data-key");
-            // label/title carry the code name; color is hash-derived in
-            // SpanManager (getSpanColor) so '' here is correct.
+            // The colour is hash-derived by SpanManager.paletteColorFor, so
+            // the chip below and the highlight this label draws agree without
+            // either side inventing a colour. '' here is right: the inline
+            // handler's colour argument is only a hint, and passing a stale
+            // one would override the resolved colour.
             input.setAttribute(
                 "onclick",
                 "onlyOne(this); changeSpanLabel(this, "
@@ -310,7 +343,7 @@
             var swatch = label.querySelector("span");
             if (swatch) {
                 swatch.textContent = name;
-                swatch.style.backgroundColor = "";   // no borrowed color
+                swatch.style.backgroundColor = chipColor(name);
             } else {
                 label.textContent = name;
             }
@@ -319,9 +352,50 @@
         });
     }
 
+    /**
+     * Drawing palettes (image, spatial, episode) render `.label-btn` buttons,
+     * not option inputs, and were skipped entirely — so in an image project
+     * you could mint a code and never draw with it. The buttons are wired by
+     * a delegated handler on the container, so a cloned button works with no
+     * extra binding; it needs the same dataset and colour the server emits.
+     */
+    function reconcileLabelButtons(form, tmpl, labels) {
+        var parent = tmpl.parentElement;
+        if (!parent) return;
+        var have = {};
+        parent.querySelectorAll(".label-btn").forEach(function (b) {
+            have[b.dataset.label] = true;
+        });
+
+        labels.forEach(function (name) {
+            if (have[name]) return;
+            var colour = chipColour(name) || "";
+            var node = tmpl.cloneNode(true);
+            node.dataset.label = name;
+            node.dataset.color = colour;
+            node.classList.remove("active");
+            node.setAttribute("aria-pressed", "false");
+            node.setAttribute("title", name);
+            node.style.setProperty("--label-color", colour);
+            var dot = node.querySelector(".label-color-dot");
+            if (dot) dot.style.backgroundColor = colour;
+            // textContent would drop the swatch; replace only the text node.
+            var text = null;
+            node.childNodes.forEach(function (child) {
+                if (child.nodeType === 3) text = child;
+            });
+            if (text) text.nodeValue = name;
+            else node.appendChild(document.createTextNode(name));
+            parent.appendChild(node);
+            have[name] = true;
+        });
+    }
+
     function reconcileForm(form, labels) {
         var span = form.querySelector(".shadcn-span-option");
         if (span) return reconcileSpanForm(form, span, labels);
+        var labelBtn = form.querySelector(".label-btn");
+        if (labelBtn) return reconcileLabelButtons(form, labelBtn, labels);
         var radio = form.querySelector(".shadcn-radio-option");
         var multi = form.querySelector(".shadcn-multiselect-item");
         var tmpl = radio || multi;
@@ -563,9 +637,20 @@
             .catch(function () { return cache || null; });
     }
 
+    // The instance whose tray/banner/worklist load has already been started.
+    // init() and annotation.js's loadCurrentInstance() both reach onInstance()
+    // on a page load, and each used to issue the whole chain -- two full
+    // codebook fetches, two provenance calls and two worklist calls for one
+    // page. A real navigation is a full reload, so this resets by itself;
+    // an in-page instance change still gets a fresh load because the id moved.
+    var loadedFor = null;
+
     function onInstance() {
         if (!el("cb-panel")) return;
-        syncCodebook(instanceId());
+        var iid = instanceId();
+        if (loadedFor === iid) return;
+        loadedFor = iid;
+        syncCodebook(iid);
         refreshProvenance();
         refreshAdmin();
     }
@@ -793,15 +878,23 @@
         }).join("");
     }
 
-    function populateAdmin() {
+    // `proposals` is the body of the probe request when populateAdmin is
+    // called straight from refreshAdmin's probe. Without it the probe and the
+    // populate both GET /admin/proposals, so an adjudicator paid for the same
+    // list twice on every instance.
+    function populateAdmin(proposals) {
         var codes = flatCodes();
         fillCodeSelect(el("cb-merge-src"), codes, "merge from…");
         fillCodeSelect(el("cb-merge-dst"), codes, "into…");
         fillCodeSelect(el("cb-split-src"), codes, "split…");
-        fetch(ADMIN_API + "/proposals")
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (d) { renderProposals(d && d.proposals); })
-            .catch(function () { /* best-effort */ });
+        if (proposals !== undefined) {
+            renderProposals(proposals);
+        } else {
+            fetch(ADMIN_API + "/proposals")
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (d) { renderProposals(d && d.proposals); })
+                .catch(function () { /* best-effort */ });
+        }
         fetch(ADMIN_API + "/changes")
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) { renderChanges(d && d.changes); })
@@ -819,7 +912,11 @@
         fetch(ADMIN_API + "/proposals").then(function (r) {
             adminOK = r.status === 200;
             sec.hidden = !adminOK;
-            if (adminOK) populateAdmin();
+            if (!adminOK) return null;
+            return r.json();
+        }).then(function (d) {
+            if (d === null) return;
+            populateAdmin((d && d.proposals) || []);
         }).catch(function () { sec.hidden = true; });
     }
 
@@ -1303,22 +1400,22 @@
 
     function init() {
         if (!window.config || !window.config.is_annotation_page) return;
+        // The tray markup is only in the page when the server says a codebook
+        // is configured, so its presence *is* the gate. This used to probe
+        // GET /api/codebook for a 200 and stay hidden on the 503 -- which meant
+        // every task without a codebook paid for the probe.
         if (!el("cb-panel")) return;
-        fetch(API).then(function (r) {
-            if (r.status === 200) {
-                var t = el("cb-panel-toggle");
-                if (t) t.hidden = false;
-                wire();
-                return r.json();
-            }
-            return null;
-        }).then(function (data) {
-            if (!data) return;
-            writeCache(data);
-            renderTray(data);
-            reconcileForms(data, instanceId());
-            refreshProvenance();
-        }).catch(function () { /* leave hidden */ });
+        var t = el("cb-panel-toggle");
+        if (t) t.hidden = false;
+        wire();
+        // The load itself belongs to annotation.js: its reconcile has to run
+        // after generateAnnotationForms(), and init() fires long before that.
+        // Doing it here as well is what produced the duplicate fetches. The
+        // timer is a safety net for a page that renders the tray without the
+        // annotation bootstrap -- it does nothing once onInstance() has run.
+        setTimeout(function () {
+            if (loadedFor === null) onInstance();
+        }, 2000);
     }
 
     if (document.readyState === "loading") {

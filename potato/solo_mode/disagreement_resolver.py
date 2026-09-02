@@ -1,9 +1,8 @@
 """
 Disagreement Resolver for Solo Mode
 
-This module handles detection and resolution of disagreements between
-human and LLM annotations. It provides type-specific disagreement detection
-and workflows for resolving conflicts.
+Detects and resolves disagreements between human and LLM annotations, with
+detection and resolution workflows per annotation type.
 """
 
 import logging

@@ -1,7 +1,7 @@
 """
 Database connection management for Potato annotation platform.
 
-This module provides connection pooling and management for MySQL database operations.
+Connection pooling and management for MySQL database operations.
 """
 
 import mysql.connector

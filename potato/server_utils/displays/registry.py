@@ -55,6 +55,18 @@ class DisplayDefinition:
     lazy_populated: bool = False
 
 
+#: Display types that accept ``span_target: true`` without satisfying the
+#: standard ``.text-content`` contract, because they anchor spans themselves.
+#: Each declares ``supports_span_target = False`` on its renderer -- correctly,
+#: since that flag is about the standard contract -- and then emits its own
+#: ``span-target-<type>`` class and handles the offsets.
+#:
+#:   pdf         - anchors into the PDF.js text layer
+#:   spreadsheet - anchors per cell rather than by character offset
+#:   agent_trace - anchors per step, using the step id
+CUSTOM_SPAN_TARGET_TYPES = frozenset({"pdf", "spreadsheet", "agent_trace"})
+
+
 class DisplayRegistry:
     """
     Centralized registry for display types.
@@ -213,7 +225,12 @@ class DisplayRegistry:
 
     def get_span_target_types(self) -> List[str]:
         """
-        Get all display type names that support span annotation.
+        Display types that support the standard span contract.
+
+        "Standard" means the renderer wraps its content in the
+        ``.text-content`` element that span offsets are measured against.
+        This is narrower than the set of types that accept a ``span_target``
+        field -- see :meth:`get_span_target_capable_types`.
 
         Returns:
             List of type names where supports_span_target is True
@@ -223,6 +240,20 @@ class DisplayRegistry:
             if self.type_supports_span_target(name):
                 types.append(name)
         return sorted(types)
+
+    def get_span_target_capable_types(self) -> List[str]:
+        """
+        Every display type that accepts ``span_target: true``.
+
+        The standard-contract types, plus the ones in
+        :data:`CUSTOM_SPAN_TARGET_TYPES` that implement their own anchoring.
+        Config validation must use this rather than
+        :meth:`get_span_target_types`, and rather than a list of its own --
+        a second hardcoded list is how ``eval_trace`` and ``coding_trace``
+        came to be rejected by the validator while declaring support in the
+        registry.
+        """
+        return sorted(set(self.get_span_target_types()) | CUSTOM_SPAN_TARGET_TYPES)
 
     def list_displays(self) -> List[Dict[str, Any]]:
         """
@@ -333,6 +364,7 @@ def _register_builtin_displays():
     Called automatically when this module is imported.
     """
     from .text_display import TextDisplay
+    from .depth_display import DepthDisplay
     from .image_display import ImageDisplay
     from .video_display import VideoDisplay
     from .audio_display import AudioDisplay
@@ -393,6 +425,22 @@ def _register_builtin_displays():
             description="Image display with optional zoom"
         ),
         DisplayDefinition(
+            name="depth_map",
+            renderer=DepthDisplay(),
+            required_fields=["key"],
+            optional_fields={
+                "depth_scale": None,
+                "colormap": "turbo",
+                "invert": False,
+                "rgb_field": None,
+                "overlay_opacity": 0.75,
+                "max_height": None,
+                "show_controls": True,
+            },
+            supports_span_target=False,
+            description="Depth map with windowing, colormap and a metre readout"
+        ),
+        DisplayDefinition(
             name="video",
             renderer=VideoDisplay(),
             required_fields=["key"],
@@ -424,13 +472,31 @@ def _register_builtin_displays():
             name="dialogue",
             renderer=DialogueDisplay(),
             required_fields=["key"],
+            # Must stay in step with DialogueDisplay.optional_fields — that class
+            # attribute is what get_display_options() actually merges, while this
+            # copy feeds the docs and the generated config schema.
             optional_fields={
                 "alternating_shading": True,
                 "speaker_extraction": True,
+                "speaker_key": "speaker",
+                "text_key": "text",
                 "show_turn_numbers": False,
+                "per_turn_ratings": None,
+                "indent_replies": False,
+                "max_indent_depth": 6,
+                "show_reply_lines": True,
+                "show_timestamps": False,
+                "timestamp_format": "relative",
+                "turn_meta_fields": None,
+                "meta_key": "meta",
+                "depth_key": "depth",
+                "reply_to_key": "reply_to",
             },
             supports_span_target=True,
-            description="Dialogue/conversation turns display"
+            description=(
+                "Dialogue/conversation turns, optionally threaded by reply-to "
+                "with timestamps and per-turn metadata"
+            )
         ),
         DisplayDefinition(
             name="audio_dialogue",
@@ -551,7 +617,13 @@ def _register_builtin_displays():
                 "node_style": "card",
                 "show_node_ids": False,
                 "max_depth": None,
+                "show_timestamps": False,
+                "turn_meta_fields": None,
+                "meta_key": "meta",
             },
+            # Not a span target: collapsed subtrees make the container's
+            # textContent depend on UI state, so span offsets would shift when a
+            # branch is expanded. Pair it with a `dialogue` field for spans.
             supports_span_target=False,
             description="Conversation tree with collapsible branching nodes"
         ),

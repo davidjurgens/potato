@@ -1,6 +1,6 @@
 # AI Integration Internals
 
-This document describes the internal architecture of Potato's AI support system, intended for developers who need to debug, extend, or modify the AI functionality.
+The internal architecture of Potato's AI support, for developers who need to debug, extend, or modify it.
 
 For user-facing configuration documentation, see [ai_support.md](ai_support.md).
 

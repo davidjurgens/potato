@@ -63,7 +63,6 @@ server_name: Pairwise Binary Test
 annotation_task_name: Pairwise Binary Annotation Test
 task_dir: {cls.test_dir}
 output_annotation_dir: {cls.test_dir}/annotation_output/
-output_annotation_format: json
 
 data_files:
   - data/pairwise_data.json
@@ -341,7 +340,6 @@ server_name: Pairwise Scale Test
 annotation_task_name: Pairwise Scale Annotation Test
 task_dir: {cls.test_dir}
 output_annotation_dir: {cls.test_dir}/annotation_output/
-output_annotation_format: json
 
 data_files:
   - data/scale_data.json
@@ -528,7 +526,6 @@ server_name: Pairwise Multi Test
 annotation_task_name: Multiple Pairwise Test
 task_dir: {cls.test_dir}
 output_annotation_dir: {cls.test_dir}/annotation_output/
-output_annotation_format: json
 
 data_files:
   - data/multi_data.json

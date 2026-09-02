@@ -143,6 +143,60 @@ def interpret_alpha(alpha: Optional[float]) -> str:
     return "low agreement"
 
 
+def _quality_control(project: ProjectData) -> Dict[str, Any]:
+    """
+    What quality-control precautions the project configured, and what they cost.
+
+    Reviewers and editors challenge data quality from online panels routinely,
+    and what satisfies them is a statement of the precautions taken -- not a
+    better number. Everything here is read from the config and the saved
+    states, so the paragraph describes what the project actually did rather
+    than what a template assumes it did.
+    """
+    config = project.config
+    # Both blocks are TOP-LEVEL config keys, not children of `quality_control`
+    # -- that key holds only the drawn-answer tolerance overrides. Reading them
+    # from the wrong place reports every project as having no precautions at
+    # all, which is the most damaging thing this paragraph could get wrong.
+    attention = config.get("attention_checks") or {}
+    gold = config.get("gold_standards") or {}
+    training = config.get("training") or {}
+
+    outcomes = Counter(project.training_outcomes.values())
+    overlap = config.get("num_annotators_per_item")
+
+    return {
+        "attention_checks": {
+            "enabled": bool(attention.get("enabled")),
+            "frequency": attention.get("frequency"),
+            "probability": attention.get("probability"),
+            "block_threshold": (attention.get("failure_handling") or {}).get(
+                "block_threshold"),
+        },
+        "gold_standards": {
+            "enabled": bool(gold.get("enabled")),
+            "frequency": gold.get("frequency"),
+            "min_accuracy": (gold.get("accuracy") or {}).get("min_threshold"),
+            "evaluation_count": (gold.get("accuracy") or {}).get(
+                "evaluation_count"),
+        },
+        "training": {
+            "enabled": bool(training.get("enabled")),
+            "passing_criteria": training.get("passing_criteria") or {},
+            # None, not 0, when nobody reached the gate: "0 excluded" and "we
+            # have no record" are different claims and a methods section must
+            # not make the stronger one by accident.
+            "n_reached": (sum(outcomes.values()) or None),
+            "n_passed": outcomes.get("passed") or 0,
+            "n_failed": outcomes.get("failed") or 0,
+        },
+        "overlap": {
+            "num_annotators_per_item": overlap if isinstance(overlap, int) else None,
+            "config_value": overlap,
+        },
+    }
+
+
 def compute_metrics(project: ProjectData) -> Dict[str, Any]:
     """All numbers the LaTeX report needs, per scheme and overall."""
     records = project.records
@@ -222,6 +276,7 @@ def compute_metrics(project: ProjectData) -> Dict[str, Any]:
             for s in project.skipped_schemes
         ],
         "annotators": annotators_out,
+        "quality_control": _quality_control(project),
         "timing": {
             "median_seconds_per_item": (
                 round(statistics.median(all_seconds), 1) if all_seconds else None),

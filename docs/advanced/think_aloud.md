@@ -1,8 +1,8 @@
 # Think-Aloud Mode: Voice Rationales, Zero LLM
 
-Before LLMs, the gold standard for understanding judgment was the think-aloud protocol —
-and it never survived contact with annotation tooling. Think-Aloud Mode lets annotators
-just *talk* while they work. The verbatim transcript is stored as the rationale
+The think-aloud protocol is the long-standing method for understanding how someone
+reaches a judgment, and it never made it into annotation tooling. Think-Aloud Mode
+lets annotators just *talk* while they work. The verbatim transcript is stored as the rationale
 (deliberately un-summarized: paraphrasing a think-aloud protocol would contaminate the
 very artifact you're collecting), and labels can be committed by voice using a set
 phrasing detected by a **rule-based parser** — no LLM anywhere in the pipeline.
@@ -10,7 +10,7 @@ phrasing detected by a **rule-based parser** — no LLM anywhere in the pipeline
 Speech-to-text runs **fully locally** via faster-whisper (CPU real-time with the 39 MB
 `tiny.en` model). No cloud APIs, no per-token cost, nothing leaves the machine.
 
-## How it works
+## A think-aloud session, start to finish
 
 1. The annotator taps **🎤 Think aloud** (bottom-center pill) and speaks freely.
    Recording carries across Next/Previous — tap once and keep talking for the
@@ -47,7 +47,7 @@ sufficient. Mishearings are absorbed by fuzzy label matching ("in polite" → *I
 ## Setup
 
 ```bash
-pip install faster-whisper   # local STT; first recording downloads the model (~39 MB)
+pip install "potato-annotation[transcribe]"   # local STT; first recording downloads the model (~39 MB)
 python potato/flask_server.py start examples/advanced/think-aloud/config.yaml -p 8000 --debug
 ```
 

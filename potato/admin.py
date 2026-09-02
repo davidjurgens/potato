@@ -1,7 +1,7 @@
 """
 Admin Dashboard Module
 
-This module provides comprehensive admin functionality for the annotation platform,
+Admin functionality for the annotation platform,
 including dashboard data generation, timing analysis, and configuration management.
 
 The admin dashboard offers:
@@ -114,6 +114,19 @@ class InstanceData:
     annotators: List[str]
     num_ai_instance: int
     average_time_per_annotation: Optional[float]
+
+def _unwrap_admin_result(result):
+    """Normalize an admin method's return to a plain dict.
+
+    Admin methods signal failure by returning ``(payload, status_code)``. When
+    one is embedded in another method's response rather than returned straight
+    to Flask, the tuple would land in the JSON as a two-element array; unwrap it
+    so the caller always sees a dict.
+    """
+    if isinstance(result, tuple):
+        return result[0]
+    return result
+
 
 class AdminDashboard:
     """
@@ -421,6 +434,13 @@ class AdminDashboard:
             ism = get_item_state_manager()
             items = ism.items()
 
+            # One pass over annotators for every statistic below. Asking the
+            # single-instance helpers for each item instead would re-walk every
+            # annotator per item, and the label helper would rebuild each
+            # annotator's whole annotation set on every one of those walks.
+            aggregates = self._build_instance_aggregates()
+            max_annotations = config.get("max_annotations_per_item", -1)
+
             # Convert items to InstanceData objects
             instances_data = []
             for item in items:
@@ -429,17 +449,21 @@ class AdminDashboard:
                 annotation_count = len(annotators) if annotators else 0
 
                 # Calculate completion percentage
-                max_annotations = config.get("max_annotations_per_item", -1)
                 if max_annotations > 0:
                     completion_percentage = min(100, (annotation_count / max_annotations) * 100)
                 else:
                     completion_percentage = 100 if annotation_count > 0 else 0
 
-                # Calculate most frequent label and disagreement
-                most_frequent_label, disagreement = self._calculate_label_statistics(item_id)
-
-                # Calculate average time per annotation
-                avg_time = self._calculate_average_time_per_annotation(item_id)
+                stats = aggregates.get(item_id)
+                if stats is None:
+                    most_frequent_label, disagreement = None, 0.0
+                    avg_time = None
+                    ai_count = 0
+                else:
+                    most_frequent_label, disagreement = self._label_stats_from_names(stats["labels"])
+                    timed = stats["timed_count"]
+                    avg_time = stats["total_seconds"] / timed if timed else None
+                    ai_count = stats["ai_count"]
 
                 instance_data = InstanceData(
                     id=item_id,
@@ -451,7 +475,7 @@ class AdminDashboard:
                     label_disagreement=disagreement,
                     annotators=list(annotators) if annotators else [],
                     average_time_per_annotation=avg_time,
-                    num_ai_instance=self._calculate_total_instance_ai(item_id)
+                    num_ai_instance=ai_count
                 )
                 instances_data.append(instance_data)
 
@@ -824,10 +848,120 @@ class AdminDashboard:
             else:
                 analysis["error"] = "No valid span annotations found"
 
+        elif annotation_type == "image_annotation":
+            analysis.update(self._analyze_geometry(scheme, all_annotations,
+                                                   item_annotations))
+
         else:
             analysis["error"] = f"Unsupported annotation type: {annotation_type}"
 
         return analysis
+
+    def _analyze_geometry(self, scheme: dict, all_annotations: list,
+                          item_annotations: dict) -> dict:
+        """
+        Summarize drawn annotations for the admin Questions view.
+
+        This view reported "Unsupported annotation type: image_annotation" —
+        an admin running an image project could see how many annotations
+        existed but nothing about them: not which classes were used, not
+        whether the dataset was balanced, not whether annotators agreed.
+
+        The counts are per INSTANCE, not per annotation: an image project's
+        interesting quantity is how many objects of each class exist, which a
+        histogram over opaque JSON blobs cannot show.
+        """
+        from potato.server_utils import annotation_values
+
+        scheme_def = {"annotation_type": "image_annotation",
+                      "name": scheme.get("name")}
+
+        label_counts = Counter()
+        type_counts = Counter()
+        per_image_counts = []
+        mask_fractions = []
+
+        for stored in all_annotations:
+            objects = annotation_values.geometry_objects(scheme_def, stored)
+            per_image_counts.append(len(objects))
+            for obj in objects:
+                if obj.get("label"):
+                    label_counts[obj["label"]] += 1
+                type_counts[obj.get("type") or "shape"] += 1
+                rle = obj.get("rle") or {}
+                counts, size = rle.get("counts") or [], rle.get("size") or []
+                if counts and len(size) == 2 and size[0] and size[1]:
+                    on = sum(counts[1::2])
+                    mask_fractions.append(on / (size[0] * size[1]))
+
+        declared = []
+        for label in scheme.get("labels", []) or []:
+            name = label.get("name") if isinstance(label, dict) else label
+            if name:
+                declared.append(name)
+        # Show declared classes even at zero — a class nobody ever used is the
+        # single most actionable thing on this screen.
+        ordered = declared + [l for l in label_counts if l not in declared]
+
+        total = sum(label_counts.values())
+        result = {
+            "visualization_type": "histogram",
+            "data": {
+                "labels": ordered,
+                "counts": [label_counts.get(l, 0) for l in ordered],
+                "percentages": [
+                    round(label_counts.get(l, 0) / total * 100, 1) if total else 0.0
+                    for l in ordered
+                ],
+            },
+            "shape_types": dict(type_counts),
+            "total_objects": total,
+            "images_annotated": len(per_image_counts),
+            "objects_per_image": (
+                round(sum(per_image_counts) / len(per_image_counts), 2)
+                if per_image_counts else 0.0
+            ),
+            "empty_images": sum(1 for n in per_image_counts if n == 0),
+            "unused_labels": [l for l in declared if not label_counts.get(l)],
+        }
+
+        if mask_fractions:
+            result["mask_coverage"] = {
+                "mean_fraction_of_image": round(sum(mask_fractions) / len(mask_fractions), 4),
+                "min": round(min(mask_fractions), 4),
+                "max": round(max(mask_fractions), 4),
+            }
+
+        agreement = self._geometry_agreement_percent(scheme_def, item_annotations)
+        if agreement is not None:
+            result["agreement_score"] = agreement
+
+        return result
+
+    def _geometry_agreement_percent(self, scheme_def: dict,
+                                    item_annotations: dict) -> Optional[float]:
+        """
+        Mean pairwise geometry agreement across items, as a percentage.
+
+        The generic ``_calculate_agreement_score`` counts identical values, and
+        two annotators never draw byte-identical shapes — so it reported near
+        zero agreement for even excellent annotation.
+        """
+        from potato.server_utils import annotation_values
+
+        scores = []
+        for annotations in (item_annotations or {}).values():
+            if not isinstance(annotations, list) or len(annotations) < 2:
+                continue
+            values = [annotation_values.comparable_value(scheme_def, a)
+                      for a in annotations]
+            for i in range(len(values)):
+                for j in range(i + 1, len(values)):
+                    d = annotation_values.distance(scheme_def, values[i], values[j])
+                    if d is not None:
+                        scores.append(1.0 - d)
+
+        return round(sum(scores) / len(scores) * 100, 1) if scores else None
 
     def _calculate_agreement_score(self, item_annotations: dict) -> float:
         """Calculate agreement score for categorical annotations."""
@@ -2075,7 +2209,17 @@ class AdminDashboard:
                 'quality_summary': quality_summary,
                 'interaction_types': dict(interaction_counts.most_common(20)),
                 'change_sources': dict(change_sources),
-                'users': sorted(user_stats, key=lambda x: -x['suspicion_score'])
+                'users': sorted(user_stats, key=lambda x: -x['suspicion_score']),
+                # Kept as a separate block with its own risk score rather than
+                # folded into suspicion_score: those four weights sum to 1.0 and
+                # every existing deployment's numbers are calibrated against
+                # them, so adding a term would silently reinterpret history.
+                'writing_process': _unwrap_admin_result(self.get_writing_process_data()),
+                # Same reasoning: its own block and its own risk score, so the
+                # drawing-process weights cannot silently reinterpret either of
+                # the two scores that already exist.
+                'annotation_process': _unwrap_admin_result(
+                    self.get_annotation_process_data()),
             }
 
         except Exception as e:
@@ -2083,6 +2227,295 @@ class AdminDashboard:
             import traceback
             traceback.print_exc()
             return {"error": f"Failed to get behavioral analytics data: {str(e)}"}, 500
+
+    #: Weights for writing_process_risk. Deliberately dominated by the two
+    #: signals with the least innocent explanation — text arriving from
+    #: off-screen, and input that was not user-generated at all. Rhythm and speed
+    #: contribute far less because a fast, fluent typist genuinely produces them.
+    WRITING_RISK_WEIGHTS = {
+        'paste_dominant': 0.30,
+        'silent_insertion': 0.30,
+        'offscreen_composition': 0.20,
+        'synthetic_input': 0.15,
+        'transcription_rhythm': 0.03,
+        'implausible_speed': 0.02,
+    }
+
+    def get_writing_process_data(self) -> Dict[str, Any]:
+        """Per-annotator typing-dynamics rollup for the admin dashboard.
+
+        Reads the project's typing-session store. Returns an ``enabled: False``
+        stub when keystroke logging is off or nothing has been recorded, so the
+        dashboard can hide the panel without special-casing errors.
+
+        ``writing_process_risk`` is the share of a user's sessions that fired
+        each flag, weighted by :attr:`WRITING_RISK_WEIGHTS`. It ranks who to look
+        at first. It is not evidence, and the per-session flags with their
+        evidence are what an adjudicator should actually read.
+        """
+        # Behavioural measurements of identifiable annotators. Gated like every
+        # other admin rollup — this must never be readable without the key.
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            from potato.server_utils.config_module import get_keystroke_logging_config
+            ks = get_keystroke_logging_config(config)
+        except Exception:
+            ks = {"enabled": False}
+
+        if not ks.get("enabled"):
+            return {"enabled": False, "reason": "keystroke_logging is not enabled"}
+
+        try:
+            from potato import typing_store
+            task_dir = config.get("task_dir") or "."
+            project = config.get("annotation_task_name") or "potato"
+            rollup = typing_store.aggregate_by_user(task_dir, project)
+        except Exception as e:
+            self.logger.warning(f"Could not read typing sessions: {e}")
+            return {"enabled": True, "error": str(e), "users": []}
+
+        if not rollup:
+            return {"enabled": True, "users": [], "reason": "No typing sessions recorded yet"}
+
+        flag_totals = Counter()
+        users = []
+
+        for row in rollup:
+            user_id = row["user_id"]
+            try:
+                sessions = typing_store.sessions_for_user(task_dir, project, user_id)
+            except Exception:
+                sessions = []
+
+            user_flags = Counter()
+            flagged_sessions = []
+            for s in sessions:
+                verdict = s.get("flags") or {}
+                names = verdict.get("flag_names") or []
+                for name in names:
+                    user_flags[name] += 1
+                    flag_totals[name] += 1
+                if names:
+                    flagged_sessions.append({
+                        "session_id": s["id"],
+                        "instance_id": s["instance_id"],
+                        "schema": s["schema_name"],
+                        "label": s["label_name"],
+                        "level": verdict.get("level", "review"),
+                        "flags": names,
+                        # The evidence is the point: an adjudicator should be able
+                        # to see the numbers, not just the label.
+                        "evidence": {
+                            f.get("name"): f.get("evidence")
+                            for f in verdict.get("flags", [])
+                        },
+                        "explanations": [f.get("explanation") for f in verdict.get("flags", [])],
+                    })
+
+            n = max(1, len(sessions))
+            risk = sum(
+                weight * (user_flags.get(flag, 0) / n)
+                for flag, weight in self.WRITING_RISK_WEIGHTS.items()
+            )
+
+            users.append({
+                "user_id": user_id,
+                "sessions": row.get("sessions", 0),
+                "instances": row.get("instances", 0),
+                "chars": row.get("chars") or 0,
+                "keystrokes": row.get("keystrokes") or 0,
+                "iki_median_ms": round(row.get("iki_median_ms") or 0, 1),
+                "iki_log_cv": round(row.get("iki_log_cv") or 0, 4),
+                "pause_2s_per_100_chars": round(row.get("pause_2s_per_100_chars") or 0, 3),
+                "revision_ratio": round(row.get("revision_ratio") or 0, 4),
+                "paste_events": row.get("paste_events") or 0,
+                "pasted_char_fraction": round(row.get("pasted_char_fraction") or 0, 4),
+                "mean_silent_insert_ratio": round(row.get("mean_silent_insert_ratio") or 0, 4),
+                "max_blur_before_insert_ms": row.get("max_blur_before_insert_ms") or 0,
+                "untrusted_events": row.get("untrusted_events") or 0,
+                "any_virtual_keyboard": row.get("any_virtual_keyboard", False),
+                "flag_counts": dict(user_flags),
+                "flagged_sessions": flagged_sessions[:25],
+                "writing_process_risk": round(risk, 4),
+            })
+
+        users.sort(key=lambda u: -u["writing_process_risk"])
+        total_sessions = sum(u["sessions"] for u in users)
+        flagged_users = [u for u in users if u["flag_counts"]]
+
+        return {
+            "enabled": True,
+            "fidelity": ks.get("fidelity", "events"),
+            "detection_enabled": ks.get("detection", {}).get("enabled", True),
+            "calibrated": bool(ks.get("detection", {}).get("calibrate")),
+            "users": users,
+            "summary": {
+                "total_users": len(users),
+                "total_sessions": total_sessions,
+                "users_with_flags": len(flagged_users),
+                "flag_totals": dict(flag_totals),
+            },
+            # Surfaced in the UI so nobody reads the ranking as an accusation.
+            "caveat": (
+                "Writing-process flags are evidence for human review, not proof of "
+                "misconduct. Fast, fluent typists and annotators on mobile keyboards "
+                "can legitimately resemble the patterns these rules look for. Read the "
+                "per-session evidence before acting."
+            ),
+        }
+
+    #: Weights for annotation_process_risk. Dominated by rubber-stamping
+    #: because it is the one signal here with a genuinely narrow innocent
+    #: explanation: a human cannot inspect a mask boundary in 300ms. Pace
+    #: contributes far less, because drawing boxes on obvious objects is
+    #: legitimately fast, and never_zoomed almost nothing, because it only
+    #: appears alongside another flag in the first place.
+    ANNOTATION_RISK_WEIGHTS = {
+        'rubber_stamping': 0.70,
+        'hasty': 0.25,
+        'never_zoomed': 0.05,
+    }
+
+    def get_annotation_process_data(self) -> Dict[str, Any]:
+        """Per-annotator drawing-dynamics rollup for the admin dashboard.
+
+        The geometry counterpart of :meth:`get_writing_process_data`, reading
+        the project's telemetry store. Returns an ``enabled: False`` stub when
+        annotation telemetry is off or nothing has been recorded, so the
+        dashboard can hide the panel without special-casing errors.
+
+        ``annotation_process_risk`` is the share of a user's sessions that fired
+        each flag, weighted by :attr:`ANNOTATION_RISK_WEIGHTS`. It ranks who to
+        look at first. It is not evidence, and the per-session flags with their
+        notes are what a reviewer should actually read.
+        """
+        # Behavioural measurements of identifiable annotators. Gated like every
+        # other admin rollup — this must never be readable without the key.
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            from potato.server_utils.config_module import (
+                get_annotation_telemetry_config)
+            at = get_annotation_telemetry_config(config)
+        except Exception:
+            at = {"enabled": False}
+
+        if not at.get("enabled"):
+            return {"enabled": False,
+                    "reason": "annotation_telemetry is not enabled"}
+
+        try:
+            from potato import annotation_telemetry_store as telemetry_store
+            task_dir = config.get("task_dir") or "."
+            project = config.get("annotation_task_name") or "potato"
+            rollup = telemetry_store.aggregate_by_user(task_dir, project)
+        except Exception as e:
+            self.logger.warning(f"Could not read telemetry sessions: {e}")
+            return {"enabled": True, "error": str(e), "users": []}
+
+        if not rollup:
+            return {"enabled": True, "users": [],
+                    "reason": "No drawing sessions recorded yet"}
+
+        flag_totals = Counter()
+        users = []
+
+        for row in rollup:
+            user_id = row["user_id"]
+            try:
+                sessions = telemetry_store.sessions_for_user(
+                    task_dir, project, user_id)
+            except Exception:
+                sessions = []
+
+            user_flags = Counter()
+            flagged_sessions = []
+            for s in sessions:
+                verdict = s.get("flags") or {}
+                names = verdict.get("flags") or []
+                for name in names:
+                    user_flags[name] += 1
+                    flag_totals[name] += 1
+                if names:
+                    flagged_sessions.append({
+                        "session_id": s["id"],
+                        "instance_id": s["instance_id"],
+                        "schema": s["schema_name"],
+                        "flags": names,
+                        # The evidence is the point: a reviewer should be able
+                        # to see the numbers, not just the label.
+                        "scores": verdict.get("scores") or {},
+                        "notes": verdict.get("notes") or {},
+                    })
+
+            n = max(1, len(sessions))
+            risk = sum(
+                weight * (user_flags.get(flag, 0) / n)
+                for flag, weight in self.ANNOTATION_RISK_WEIGHTS.items()
+            )
+
+            users.append({
+                "user_id": user_id,
+                "sessions": row.get("sessions", 0),
+                "instances": row.get("instances", 0),
+                "shapes": row.get("shapes") or 0,
+                # Split out because pace is measured over drawn shapes only:
+                # an accepted suggestion arrives through the same commit path,
+                # so counting it as drawing would flag the annotators who
+                # reviewed each one carefully before accepting.
+                "shapes_drawn": row.get("shapes_drawn") or 0,
+                "shapes_from_ai": row.get("shapes_from_ai") or 0,
+                "shapes_edited": row.get("shapes_edited") or 0,
+                "strokes": row.get("strokes") or 0,
+                "active_ms_per_shape": round(row.get("active_ms_per_shape") or 0, 1),
+                "shape_interval_median_ms": round(
+                    row.get("shape_interval_median_ms") or 0, 1),
+                "revision_ratio": round(row.get("revision_ratio") or 0, 4),
+                "max_zoom": round(row.get("max_zoom") or 1.0, 2),
+                "zoomed_fraction": round(row.get("zoomed_fraction") or 0, 4),
+                "ai_suggested": row.get("ai_suggested") or 0,
+                "ai_accepted": row.get("ai_accepted") or 0,
+                "ai_accept_rate": round(row.get("ai_accept_rate") or 0, 4),
+                "ai_accept_edited_rate": round(
+                    row.get("ai_accept_edited_rate") or 0, 4),
+                "ai_accept_latency_median_ms": (
+                    round(row["ai_accept_latency_median_ms"], 1)
+                    if row.get("ai_accept_latency_median_ms") is not None else None
+                ),
+                "flag_counts": dict(user_flags),
+                "flagged_sessions": flagged_sessions[:25],
+                "annotation_process_risk": round(risk, 4),
+            })
+
+        users.sort(key=lambda u: -u["annotation_process_risk"])
+        total_sessions = sum(u["sessions"] for u in users)
+        flagged_users = [u for u in users if u["flag_counts"]]
+
+        return {
+            "enabled": True,
+            "fidelity": at.get("fidelity", "events"),
+            "detection_enabled": at.get("detection", {}).get("enabled", True),
+            "calibrated": bool(at.get("detection", {}).get("calibrate")),
+            "users": users,
+            "summary": {
+                "total_users": len(users),
+                "total_sessions": total_sessions,
+                "users_with_flags": len(flagged_users),
+                "flag_totals": dict(flag_totals),
+            },
+            # Surfaced in the UI so nobody reads the ranking as an accusation.
+            "caveat": (
+                "Drawing-process flags are evidence for human review, not proof "
+                "of carelessness. A fast annotator working on obvious objects, "
+                "and an annotator whose AI suggestions are genuinely good, both "
+                "resemble the patterns these rules look for. Read the "
+                "per-session evidence — and look at the suggestions themselves "
+                "— before acting."
+            ),
+        }
 
     def get_adjudication_overview(self) -> Dict[str, Any]:
         """
@@ -2214,7 +2647,11 @@ class AdminDashboard:
 
     def _calculate_label_statistics(self, instance_id: str) -> Tuple[Optional[str], float]:
         """
-        Calculate most frequent label and disagreement for an instance.
+        Calculate most frequent label and disagreement for one instance.
+
+        Single-instance helper. To do this for many instances, use
+        :meth:`_build_instance_aggregates` instead — calling this in a loop is
+        what made the Instances tab quadratic (see that method's docstring).
 
         Args:
             instance_id: The instance ID to analyze
@@ -2230,30 +2667,127 @@ class AdminDashboard:
             for username in users:
                 user_state = usm.get_user_state(username)
                 if user_state:
-                    annotations = user_state.get_all_annotations()
-                    if instance_id in annotations:
-                        instance_annotations = annotations[instance_id]
-                        if "labels" in instance_annotations:
-                            for label, value in instance_annotations["labels"].items():
-                                if hasattr(label, 'label_name'):
-                                    all_labels.append(label.label_name)
-                                else:
-                                    all_labels.append(str(value))
+                    # get_label_annotations is an O(1) lookup. get_all_annotations()
+                    # rebuilds a dict of every instance this user has touched, which
+                    # is the same answer at many times the cost.
+                    labels = user_state.get_label_annotations(instance_id) or {}
+                    self._collect_label_names(labels, all_labels)
 
-            if not all_labels:
-                return None, 0.0
-
-            label_counts = Counter(all_labels)
-            most_frequent_label = label_counts.most_common(1)[0][0]
-            total_annotations = len(all_labels)
-            most_frequent_count = label_counts[most_frequent_label]
-            disagreement = 1 - (most_frequent_count / total_annotations)
-
-            return most_frequent_label, disagreement
+            return self._label_stats_from_names(all_labels)
 
         except Exception as e:
             self.logger.error(f"Error calculating label statistics for instance {instance_id}: {e}")
             return None, 0.0
+
+    @staticmethod
+    def _collect_label_names(labels: Dict[Any, Any], out: List[str]) -> None:
+        """Append one display name per stored label onto ``out``.
+
+        A ``Label`` carries the answer in its *name* -- ``sentiment:positive``
+        is stored as a Label named "positive" with the value ``True``. Reading
+        the value instead yields "True" for every option of every categorical
+        schema, so every item looks unanimous and disagreement is always 0.
+        That is what this column did until it was keyed on a ``label_name``
+        attribute ``Label`` does not have; the accessor is ``get_name()``, which
+        is what the Questions tab has always used.
+
+        Anything that is not a Label -- a bare string key, a free-text answer --
+        falls back to the string form of its value, which is the best available
+        stand-in for an answer with no label identity.
+        """
+        for label, value in labels.items():
+            name = None
+            if hasattr(label, 'get_name'):
+                name = label.get_name()
+            elif hasattr(label, 'label_name'):
+                name = label.label_name
+            elif hasattr(label, 'name'):
+                name = label.name
+            out.append(name if name else str(value))
+
+    @staticmethod
+    def _label_stats_from_names(all_labels: List[str]) -> Tuple[Optional[str], float]:
+        """Most frequent label and disagreement from a list of label names.
+
+        Disagreement is the share of annotations that did *not* pick the modal
+        label, so 0.0 is unanimity and it rises toward 1 as the votes spread out.
+        Ties go to whichever label was seen first, which is why callers must
+        accumulate in a stable annotator order.
+        """
+        if not all_labels:
+            return None, 0.0
+
+        label_counts = Counter(all_labels)
+        most_frequent_label = label_counts.most_common(1)[0][0]
+        total_annotations = len(all_labels)
+        most_frequent_count = label_counts[most_frequent_label]
+        return most_frequent_label, 1 - (most_frequent_count / total_annotations)
+
+    def _build_instance_aggregates(self) -> Dict[str, Dict[str, Any]]:
+        """Per-instance label / timing / AI aggregates, in one pass over annotators.
+
+        The Instances tab needs three statistics for every instance, and the
+        single-instance helpers each walk every annotator to produce one of
+        them. Called once per instance that is
+        ``instances x annotators`` walks, and because the label helper used to
+        reach for ``get_all_annotations()`` — which rebuilds a dict of every
+        instance a user has annotated — the real cost was quadratic in the
+        corpus. Measured before this method existed: 100 ms at 250 items,
+        488 ms at 500, 2.9 s at 1000, 15 s at 2000, all with five annotators
+        and all to return a single page of 25 rows.
+
+        This inverts the loop. One pass over annotators, each contributing to
+        the instances it actually touched, gives a dict every instance can be
+        looked up in for free. Cost is proportional to the number of
+        annotations that exist rather than to instances squared.
+
+        Annotators are visited in ``get_users()`` order and their labels
+        appended in storage order, which is the order the per-instance helper
+        used; ties in the modal label therefore resolve the same way.
+
+        Returns:
+            ``{instance_id: {"labels": [name, ...], "total_seconds": float,
+            "timed_count": int, "ai_count": int}}``, holding only instances
+            some annotator has touched.
+        """
+        usm = get_user_state_manager()
+        aggregates: Dict[str, Dict[str, Any]] = {}
+
+        def bucket(instance_id: str) -> Dict[str, Any]:
+            entry = aggregates.get(instance_id)
+            if entry is None:
+                entry = {"labels": [], "total_seconds": 0.0, "timed_count": 0, "ai_count": 0}
+                aggregates[instance_id] = entry
+            return entry
+
+        for username in get_users():
+            user_state = usm.get_user_state(username)
+            if not user_state:
+                continue
+
+            try:
+                annotations = user_state.get_all_annotations() or {}
+            except Exception as e:
+                self.logger.error(f"Error reading annotations for {username}: {e}")
+                annotations = {}
+
+            for instance_id, entry in annotations.items():
+                labels = entry.get("labels") if isinstance(entry, dict) else None
+                if labels:
+                    self._collect_label_names(labels, bucket(instance_id)["labels"])
+
+            behavioral = getattr(user_state, "instance_id_to_behavioral_data", None) or {}
+            for instance_id, behavioral_data in behavioral.items():
+                if not behavioral_data:
+                    continue
+                target = bucket(instance_id)
+                target["ai_count"] += self._extract_behavioral_ai_count(behavioral_data)
+                seconds = self._extract_behavioral_total_seconds(behavioral_data, user_state)
+                if seconds is not None:
+                    target["total_seconds"] += seconds
+                    target["timed_count"] += 1
+
+        return aggregates
 
 
 # Global instance

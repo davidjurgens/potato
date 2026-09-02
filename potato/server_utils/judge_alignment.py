@@ -53,6 +53,29 @@ def comparisons_path(config: Dict[str, Any]) -> str:
     return os.path.join(_dir(config), "comparisons.json")
 
 
+def position_bias_path(config: Dict[str, Any]) -> str:
+    return os.path.join(_dir(config), "position_bias.json")
+
+
+def load_position_bias(config: Dict[str, Any]) -> Dict[str, dict]:
+    """
+    The last position-bias probe per schema, keyed by schema name.
+
+    Stored rather than recomputed because the probe costs two model calls per
+    item: the alignment page must be able to show the result without paying
+    for it again on every page load.
+    """
+    return _load_json(position_bias_path(config), {})
+
+
+def save_position_bias(config: Dict[str, Any], schema_name: str,
+                       summary: dict) -> None:
+    """Persist one schema's probe summary, replacing any earlier one."""
+    data = load_position_bias(config)
+    data[schema_name] = summary
+    _save_json(position_bias_path(config), data)
+
+
 def load_predictions(config: Dict[str, Any]) -> Dict[str, Dict[str, dict]]:
     return _load_json(predictions_path(config), {})
 
@@ -277,6 +300,14 @@ def run_judge_batch(config: Dict[str, Any], users: List[str],
     few_shot_cfg = (ja.get("few_shot") or {})
     use_few_shot = bool(few_shot_cfg.get("enabled", False))
 
+    # Project the cost and check it against the cap BEFORE the first call.
+    # Halting halfway leaves a part-judged project and a bill for it, so the
+    # only refusal worth having is the one that happens up front. Raises
+    # SpendCapExceeded, which the caller turns into a 402.
+    work = _judge_batch_work(cfg, users, ism, max_per_schema)
+    projected = estimate_batch_cost(cfg, [text for _iid, text in work])
+    check_batch_against_cap(cfg, projected, "judge_batch")
+
     n_judged, n_failed, version_seen = 0, 0, None
     for schema in judge_scoped_schemas(cfg):
         schema_name = schema.get("name")
@@ -299,7 +330,62 @@ def run_judge_batch(config: Dict[str, Any], users: List[str],
             version_seen = pred.prompt_version
             n_judged += 1
 
-    return {"judged": n_judged, "failed": n_failed, "prompt_version": version_seen}
+    return {"judged": n_judged, "failed": n_failed,
+            "prompt_version": version_seen,
+            "estimated_cost": projected.to_dict()}
+
+
+def _judge_batch_work(cfg: Dict[str, Any], users: List[str], ism,
+                      max_per_schema: Optional[int]) -> List[tuple]:
+    """``(instance_id, text)`` for everything this batch would judge."""
+    work = []
+    for schema in judge_scoped_schemas(cfg):
+        ids = annotated_instance_ids(users, schema.get("name"))
+        if max_per_schema:
+            ids = ids[:max_per_schema]
+        for iid in ids:
+            try:
+                item = ism.get_item(iid)
+                work.append((iid, item.get_text() if item else ""))
+            except Exception:
+                work.append((iid, ""))
+    return work
+
+
+def estimate_batch_cost(cfg: Dict[str, Any], texts: List[str],
+                        calls_per_item: int = 1):
+    """
+    What a judge run over ``texts`` is projected to cost.
+
+    Split out so the admin UI can ask "what would this cost" without running
+    anything -- which is the whole point. An estimate you can only get by
+    starting the run is not an estimate.
+    """
+    from potato.ai import cost
+
+    ai_support = ((cfg.get("judge_alignment") or {}).get("ai_support")
+                  or cfg.get("ai_support") or {})
+    ai_config = ai_support.get("ai_config") or {}
+    return cost.estimate(
+        texts,
+        model=ai_config.get("model", ""),
+        endpoint_type=ai_support.get("endpoint_type", ""),
+        # The rubric, the label list and the JSON instruction ride along with
+        # every item, so leaving them out understates a short-text project by
+        # more than the items themselves.
+        prompt_overhead_chars=600,
+        max_output_tokens=int(ai_config.get("max_tokens", 100)),
+        calls_per_item=calls_per_item,
+    )
+
+
+def check_batch_against_cap(cfg: Dict[str, Any], projected, action: str) -> None:
+    """Refuse the run if it would cross the cap, and log it if it would not."""
+    from potato.ai import cost
+
+    spent = cost.total_spend(cfg).get("cost_usd", 0.0)
+    cost.check_before_running(cfg, projected, spent)
+    cost.record_spend(cfg, action, projected, estimated=True)
 
 
 def _few_shot_examples(schema_name: str, enabled: bool, cfg: Dict[str, Any]) -> List[dict]:

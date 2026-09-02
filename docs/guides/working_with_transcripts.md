@@ -1,20 +1,80 @@
 # Working with Transcripts
 
-You have speech, and you have a transcript of it — from Whisper, from a cloud ASR API, or downloaded alongside a video. This guide takes you from those files to a running annotation task.
+You have speech to annotate. This guide takes you from whatever you currently have — raw audio, ASR output, or a folder of subtitle files — to a running annotation task.
 
-Two starting points are covered. They converge once the transcript is in Potato:
+Three starting points are covered. They converge once the transcript is in Potato:
 
-- **[Path A](#path-a-you-ran-whisper)** — you ran an ASR model over audio you have.
-- **[Path B](#path-b-you-have-subtitle-files)** — you have subtitle or caption files.
+- **[Path A](#path-a-you-only-have-audio)** — you have audio or video and no transcript.
+- **[Path B](#path-b-you-ran-whisper)** — you already ran an ASR model.
+- **[Path C](#path-c-you-have-subtitle-files)** — you have subtitle or caption files.
 
 For the format-by-format reference, see [Transcript Format Support](../annotation-types/multimedia/transcript_formats.md).
 
-!!! note "Potato does not transcribe"
-    ASR and diarization run upstream. Potato ingests their output. This guide tells you which upstream options matter, but the transcription itself happens before Potato sees anything.
+---
+
+## Path A: you only have audio
+
+Potato can transcribe locally. Install the extra:
+
+```bash
+pip install "potato-annotation[transcribe]"
+```
+
+Then point the CLI at a folder of recordings:
+
+```bash
+potato transcripts ./interviews --transcribe --asr-model small.en -o data/interviews.json
+```
+
+That runs [faster-whisper](https://github.com/SYSTRAN/faster-whisper) on your own machine. No cloud API, no per-minute charge, and the audio never leaves the box. Each transcript is written beside its media as `<name>.whisper.json` and reused on later runs, so re-running the command after changing an unrelated flag costs nothing.
+
+### Picking a model
+
+| `--asr-model` | Parameters | Use it when |
+|---|---|---|
+| `tiny` / `tiny.en` | 39M | You want a fast rough pass, or you are testing the pipeline |
+| `base` / `base.en` | 74M | Default. Clean audio, one speaker at a time |
+| `small` / `small.en` | 244M | Interviews and meetings; the usual choice for research audio |
+| `medium` | 769M | Accented speech, domain vocabulary, poor recordings |
+| `large-v3` | 1550M | Accuracy matters more than time, and you have a GPU |
+
+Bigger is slower, roughly in proportion to the parameter count. The `.en` variants are English-only and beat the multilingual model of the same size on English audio. Weights download on first use, so the first run needs a network even though later ones do not.
+
+Add `--asr-device cuda` if you have a GPU, and `--asr-language en` to skip auto-detection.
+
+The cache records the settings that produced it, so switching `--asr-model` re-transcribes rather than handing back the old model's text. Changing `--asr-device` does not: that is the same model run on different hardware.
+
+### When the transcript is shorter than the recording
+
+Whisper hallucinates text over silence, so Potato runs [Silero VAD](https://github.com/snakers4/silero-vad) first and decodes only the parts with speech in them. The trade is that VAD also drops quiet and whispered speech. There is no warning when it does; the transcript just comes back short.
+
+`--asr-no-vad` turns it off and decodes every second. Reach for it when audio you know contains speech comes back empty or truncated, and expect some invented text over the silent stretches in exchange.
+
+### Speaker labels
+
+Whisper transcribes but does not diarize: it reports what was said, not who said it. `--diarize` adds speaker labels using a separate segmentation and speaker-embedding model:
+
+```bash
+potato transcripts ./interviews --transcribe --diarize --num-speakers 2 \
+    -o data/interviews.json
+```
+
+Turns come back as `SPEAKER_00`, `SPEAKER_01`, the same labels WhisperX produces. Two ONNX models (~47 MB total) download once and then run offline.
+
+Tell it the speaker count when you know it. A two-person interview diarizes markedly better with `--num-speakers 2` than with an inferred count. When you do not know the count, `--diarize-threshold` governs: raise it when one person is split across several labels, lower it when two people are merged into one.
+
+Expect to correct the result. Clustering does badly on crosstalk and on similar voices in a noisy room. Annotators can fix or supply speakers in the interface (see [Assigning speakers by hand](#assigning-speakers-by-hand)), and on a small corpus that is usually faster and more accurate than tuning the threshold.
+
+### Air-gapped installs
+
+Both stages fetch weights on first use. To run with no network at all, prime the caches on a connected machine and copy them across:
+
+- Whisper: set `--asr-model` to a local CTranslate2 model directory.
+- Diarization: set `POTATO_MODEL_CACHE`, or pass `--diarize-segmentation-model` and `--diarize-embedding-model` explicitly.
 
 ---
 
-## Path A: you ran Whisper
+## Path B: you ran Whisper
 
 ### Keep the right output file
 
@@ -37,7 +97,7 @@ If you only kept the `.txt`, you cannot recover the alignment without re-running
 
 Plain Whisper does not label speakers. Every turn arrives unassigned, which is fine for content annotation and painful for anything speaker-related.
 
-To get speakers, run [WhisperX](https://github.com/m-bain/whisperX), which wraps Whisper with pyannote diarization:
+Potato can add the labels for you with `--diarize` — see [Path A](#speaker-labels). To do it upstream instead, run [WhisperX](https://github.com/m-bain/whisperX), which wraps Whisper with pyannote diarization:
 
 ```bash
 whisperx interview_01.mp3 --model medium --diarize --output_format json
@@ -78,7 +138,7 @@ Skip to [Setting up the task](#setting-up-the-task).
 
 ---
 
-## Path B: you have subtitle files
+## Path C: you have subtitle files
 
 ### Getting captions
 

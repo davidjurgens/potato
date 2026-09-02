@@ -4,10 +4,10 @@ Annotate conversations **between multiple agents** — debates, crew
 coordination, agent-to-agent handoffs — with agent identity, message
 addressees, reply threading, and discussion-structure tagging.
 
-Potato treats multi-agent identity as first-class: converters populate
-standardized `agent_id` / `addressee` / `role` keys on conversation turns,
-the `multi_agent_discussion` display renders them, and turn-level bindings
-and analytics can filter on them.
+Agent identity travels with the turn. Converters populate standardized
+`agent_id` / `addressee` / `role` keys on each conversation turn, the
+`multi_agent_discussion` display renders them, and turn-level bindings and
+analytics can filter on them.
 
 ## Quick Start
 

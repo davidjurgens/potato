@@ -221,6 +221,28 @@ class TestMetrics:
         assert metrics["per_member"]["carol"]["toward_majority"] == 1
         assert metrics["per_member"]["alice"]["changes"] == 0
 
+    def test_a_pair_norming_together_produces_conformity_data(self):
+        """The two-person room is the common case, and it reported nothing.
+
+        Scored against a majority that included the changer's own vote, a 1-1
+        disagreement never had a majority to move toward, so the conformity
+        column stayed at zero however much the pair actually converged.
+        """
+        manager = make_manager()
+        room = manager.create_room("alice", "norming", ["s1", "s2"], LABELS)
+        manager.join(room, "bob")
+
+        self.run_item(manager, room, {"alice": "Sincere", "bob": "Sarcastic"},
+                      changes=[("bob", "Sincere")])
+        self.run_item(manager, room, {"alice": "Sarcastic", "bob": "Sincere"},
+                      changes=[("bob", "Sarcastic")])
+
+        metrics = manager.metrics(room)
+        assert metrics["total_changes"] == 2
+        assert metrics["toward_majority"] == 2
+        assert metrics["per_member"]["bob"]["toward_majority"] == 2
+        assert metrics["per_member"]["alice"]["changes"] == 0
+
     def test_single_revealed_item_reports_no_alpha(self):
         """One item cannot support an alpha, so the meter must stay empty.
 

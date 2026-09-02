@@ -128,6 +128,73 @@ def _scheme_labels(app_config, schema_name):
     return None
 
 
+def _scheme_by_name(app_config, schema_name):
+    for scheme in app_config.get("annotation_schemes", []) or []:
+        if scheme.get("name") == schema_name:
+            return scheme
+    return None
+
+
+def votable_schema_error(app_config, schema_name):
+    """Why this schema cannot be voted on in a room, or None if it can.
+
+    A room stores a member's final vote by *deleting* every annotation for the
+    schema and writing ``Label(schema, "cat") = "true"``. On a schema whose
+    answer is a JSON blob — geometry, spans, timelines, rollouts — that is not
+    a vote, it is the annotator's work being replaced by a class name. Image,
+    video, audio and spatial schemas all carry a ``labels`` list (their class
+    palettes), so "has labels" was never enough of a check.
+    """
+    scheme = _scheme_by_name(app_config, schema_name)
+    if scheme is None:
+        return f"No annotation scheme named '{schema_name}'"
+
+    from potato.server_utils.iaa.dispatcher import SchemaKind, classify_schema
+
+    kind = classify_schema(scheme)
+    votable = {SchemaKind.NOMINAL, SchemaKind.ORDINAL, SchemaKind.MULTILABEL}
+    if kind not in votable:
+        return (
+            f"Schema '{schema_name}' ({scheme.get('annotation_type')}) stores a "
+            f"structured answer, not a label, so a room vote cannot represent "
+            f"it — and recording one would replace each member's existing work "
+            f"for that schema. Point rooms.schema at a radio, likert or "
+            f"multiselect scheme.")
+    return None
+
+
+#: Item fields a room can show, by the media element they need.
+_MEDIA_FIELDS = {
+    "image": ("image_url", "image", "image_path", "img", "photo"),
+    "video": ("video_url", "video", "video_path", "clip"),
+    "audio": ("audio_url", "audio", "audio_path", "sound"),
+}
+_MEDIA_EXTENSIONS = {
+    "image": (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"),
+    "video": (".mp4", ".webm", ".mov", ".mkv", ".m4v"),
+    "audio": (".wav", ".mp3", ".flac", ".ogg", ".m4a", ".opus"),
+}
+
+
+def _item_media(data):
+    """{"kind": "image", "src": ...} for an item, or None.
+
+    Without this a norming room on a vision project rendered the literal string
+    "(no text)" and asked the group to vote on it.
+    """
+    if not isinstance(data, dict):
+        return None
+    for kind, names in _MEDIA_FIELDS.items():
+        for key, value in data.items():
+            if not isinstance(value, str) or not value.strip():
+                continue
+            lowered = key.lower()
+            base = value.split("?", 1)[0].lower()
+            if lowered in names or base.endswith(_MEDIA_EXTENSIONS[kind]):
+                return {"kind": kind, "src": value}
+    return None
+
+
 def _item_text(app_config, instance_id, max_chars=2000):
     """Display text for an instance (text_key with get_text() fallback)."""
     try:
@@ -137,13 +204,29 @@ def _item_text(app_config, instance_id, max_chars=2000):
         data = ism.get_item(instance_id).get_data()
         text_key = (app_config.get("item_properties") or {}).get("text_key", "text")
         value = data.get(text_key)
-        text = value if isinstance(value, str) else ism.get_item(instance_id).get_text()
-        text = text or ""
+        if isinstance(value, str):
+            text = value
+        elif _item_media(data):
+            # The item is media; get_text() would return its id, and a room
+            # that shows an id looks like a room that shows the item.
+            text = ""
+        else:
+            text = ism.get_item(instance_id).get_text() or ""
     except Exception:
         return ""
     if len(text) > max_chars:
         text = text[: max_chars - 1] + "…"
     return text
+
+
+def _item_media_for(instance_id):
+    try:
+        ism = get_item_state_manager()
+        if not ism.has_item(instance_id):
+            return None
+        return _item_media(ism.get_item(instance_id).get_data())
+    except Exception:
+        return None
 
 
 # ----------------------------------------------------------------------
@@ -232,6 +315,15 @@ def create_room():
         return jsonify({"error": f"Unknown room type '{room_type}'"}), 400
 
     schema = manager.rooms_config.schema
+    # Before anything else: a room that closes an item writes a label over that
+    # schema's stored answer, so pointing it at a geometry or timeline schema
+    # destroys work. Refuse, with the reason and the fix.
+    blocked = votable_schema_error(manager.app_config, schema)
+    if blocked:
+        logger.warning("rooms: refusing to create a room on '%s': %s",
+                       schema, blocked)
+        return jsonify({"error": blocked}), 400
+
     labels = _scheme_labels(manager.app_config, schema)
     if not labels:
         return jsonify({"error": f"No labels found for schema '{schema}'"}), 400
@@ -330,6 +422,7 @@ def room_state(room_id):
     if state["current_instance_id"]:
         state["item_text"] = _item_text(manager.app_config,
                                         state["current_instance_id"])
+        state["item_media"] = _item_media_for(state["current_instance_id"])
     state["metrics"] = manager.metrics(room)
     state["poll_interval_ms"] = manager.rooms_config.poll_interval_ms
     return jsonify(state)

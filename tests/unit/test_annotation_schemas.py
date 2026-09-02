@@ -639,3 +639,88 @@ class TestFormAttributeCorrectness:
         for label in ["poor", "fair", "good"]:
             assert label in values, \
                 f"Rating label '{label}' should be a value attribute, got {values}"
+
+class TestLikertSequentialKeyBinding:
+    """`sequential_key_binding` on a likert used to corrupt the stored value and give
+    no working shortcut.
+
+    generate_element_value() returns str(index % 10) when the flag is set, and likert
+    used that as the input's `value`. A 10-point scale therefore stored point 10 as
+    "0" — the exported column `<schema>.10` read 0, which is not an ordinal and defeats
+    the purpose of a likert — and with bad_text_label enabled it collided with
+    bad_text's hardcoded value="0". Meanwhile the keydown handler matches exclusively
+    on `data-key`, which likert never emitted, so the shortcuts did not work at all.
+    """
+
+    @staticmethod
+    def _inputs(scheme):
+        import re
+        from potato.server_utils.schemas.likert import generate_likert_layout
+        html, keybindings = generate_likert_layout(scheme)
+        out = []
+        for tag in re.findall(r"<input[^>]*>", html):
+            def attr(name):
+                m = re.search(rf'{name}="([^"]*)"', tag)
+                return m.group(1) if m else None
+            out.append({"label_name": attr("label_name"), "value": attr(r"\bvalue"),
+                        "data_key": attr("data-key"),
+                        "constraint": attr("selection_constraint")})
+        return out, keybindings
+
+    BIG = {"name": "q", "description": "Rate", "annotation_type": "likert",
+           "size": 10, "min_label": "low", "max_label": "high",
+           "sequential_key_binding": True,
+           "bad_text_label": {"label_content": "Bad text"}}
+
+    def test_value_is_the_scale_point_not_the_keybinding_digit(self):
+        inputs, _ = self._inputs(self.BIG)
+        point_10 = next(i for i in inputs if i["label_name"] == "10")
+        assert point_10["value"] == "10", (
+            "point 10 stored its keybinding digit instead of its rating")
+
+    def test_no_two_options_share_a_value(self):
+        inputs, _ = self._inputs(self.BIG)
+        values = [i["value"] for i in inputs]
+        assert len(values) == len(set(values)), (
+            f"duplicate values {values} — onlyOne() de-duplicates by value, so "
+            f"colliding options cannot uncheck each other")
+
+    def test_bad_text_does_not_collide_with_point_ten(self):
+        inputs, _ = self._inputs(self.BIG)
+        bad = next(i for i in inputs if i["label_name"] == "bad_text")
+        point_10 = next(i for i in inputs if i["label_name"] == "10")
+        assert bad["value"] != point_10["value"]
+
+    def test_bad_text_is_marked_single_select(self):
+        """It is a real member of the radio group, so it must carry the same
+        constraint the scale points do."""
+        inputs, _ = self._inputs(self.BIG)
+        bad = next(i for i in inputs if i["label_name"] == "bad_text")
+        assert bad["constraint"] == "single"
+
+    def test_shortcuts_are_emitted_as_data_key(self):
+        """The keydown handler in static/annotation.js matches on data-key only."""
+        inputs, keybindings = self._inputs(self.BIG)
+        scale = [i for i in inputs if i["label_name"] != "bad_text"]
+        assert all(i["data_key"] for i in scale), (
+            "no data-key emitted — the shortcut cannot fire")
+        # Point 10 is reached with "0", as on a keyboard number row.
+        assert next(i for i in scale if i["label_name"] == "10")["data_key"] == "0"
+        assert len(keybindings) == 10
+
+    def test_eleven_points_do_not_wrap_onto_each_other(self):
+        scheme = dict(self.BIG, size=11)
+        scheme.pop("bad_text_label")
+        inputs, _ = self._inputs(scheme)
+        values = [i["value"] for i in inputs]
+        assert len(values) == len(set(values)), (
+            "an 11-point scale wrapped point 11 onto point 1's value")
+
+    def test_plain_likert_is_unchanged(self):
+        """The overwhelmingly common case must render exactly as before."""
+        inputs, keybindings = self._inputs({
+            "name": "q", "description": "Rate", "annotation_type": "likert",
+            "size": 5, "min_label": "low", "max_label": "high"})
+        assert [i["value"] for i in inputs] == ["1", "2", "3", "4", "5"]
+        assert all(i["data_key"] is None for i in inputs)
+        assert keybindings == []

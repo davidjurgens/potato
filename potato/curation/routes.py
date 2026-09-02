@@ -18,11 +18,14 @@ Admin routes for semantic curation (the "Catalog").
 
 from __future__ import annotations
 
+import logging
 from functools import wraps
 
 from flask import Blueprint, jsonify, render_template, request, session
 
 from potato.curation.manager import get_curation_manager
+
+logger = logging.getLogger(__name__)
 from potato.curation.slices import Slice
 
 curation_bp = Blueprint("curation", __name__, url_prefix="/admin/catalog")
@@ -99,7 +102,15 @@ def api_search():
 @admin_required
 @_enabled_required
 def api_list_slices():
-    return jsonify([s.to_dict() for s in get_curation_manager().slices.list()])
+    """Every slice a picker should offer: saved ones plus the built-ins.
+
+    Each carries ``builtin`` so the UI can tell them apart -- a built-in has
+    no delete, and a user who saved a slice of the same name should be able to
+    see that theirs is the one in effect.
+    """
+    store = get_curation_manager().slices
+    return jsonify([dict(s.to_dict(), builtin=store.is_builtin(s.name))
+                    for s in store.list_all()])
 
 
 @curation_bp.route("/api/slices", methods=["POST"])
@@ -124,6 +135,70 @@ def api_resolve_slice(name):
         return jsonify({"error": "not found"}), 404
     ids = mgr.resolve(slc)
     return jsonify({"name": name, "count": len(ids), "instance_ids": ids})
+
+
+@curation_bp.route("/api/duplicates", methods=["GET"])
+@admin_required
+@_enabled_required
+def api_duplicates():
+    """
+    Near-duplicate groups in this project.
+
+    Query: ``?method=phash|embedding&max_distance=5&min_similarity=0.97``.
+
+    phash is the default and the right choice for near-identical frames.
+    Embeddings put two frames of the same scene close together BY DESIGN,
+    which is what you want for "find me more like this" and exactly wrong for
+    "is this the same picture".
+    """
+    from potato.curation import duplicates as dup
+    from potato.item_state_management import get_item_state_manager
+
+    method = (request.args.get("method") or "phash").lower()
+    mgr = get_curation_manager()
+    try:
+        report = dup.find_duplicates(
+            get_item_state_manager(), mgr.config, method=method,
+            max_distance=int(request.args.get("max_distance",
+                                              dup.DEFAULT_MAX_DISTANCE)),
+            min_similarity=float(request.args.get("min_similarity",
+                                                  dup.DEFAULT_MIN_SIMILARITY)),
+            index=mgr.index if method == "embedding" else None,
+        )
+    except Exception as exc:
+        logger.exception("Duplicate scan failed")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(report)
+
+
+@curation_bp.route("/api/duplicates/exclude", methods=["POST"])
+@admin_required
+@_enabled_required
+def api_exclude_duplicates():
+    """
+    Stop assigning the duplicates in the given groups.
+
+    Body: ``{"instance_ids": [...]}``.
+
+    Excludes rather than deletes. A duplicate is still evidence of what the
+    dataset contained, and any annotation already made on one has to stay
+    readable -- deleting the item would orphan it.
+    """
+    from potato.item_state_management import get_item_state_manager
+
+    body = request.get_json(silent=True) or {}
+    wanted = [str(i) for i in (body.get("instance_ids") or [])]
+    if not wanted:
+        return jsonify({"error": "instance_ids is required"}), 400
+
+    ism = get_item_state_manager()
+    excluded = []
+    for instance_id in wanted:
+        if instance_id in ism.remaining_instance_ids:
+            ism.remaining_instance_ids.remove(instance_id)
+            excluded.append(instance_id)
+    return jsonify({"excluded": excluded, "n_excluded": len(excluded),
+                    "n_requested": len(wanted)})
 
 
 @curation_bp.route("/api/slices/<name>", methods=["DELETE"])

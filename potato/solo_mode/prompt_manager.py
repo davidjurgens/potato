@@ -1,9 +1,9 @@
 """
 Prompt Manager for Solo Mode
 
-This module handles prompt synthesis, versioning, and revision for Solo Mode.
-It generates annotation prompts from task descriptions and refines them
-based on edge cases and human feedback.
+Prompt synthesis, versioning and revision for Solo Mode: generates an annotation
+prompt from the task description, then refines it from edge cases and human
+feedback.
 """
 
 import json

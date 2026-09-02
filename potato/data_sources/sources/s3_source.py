@@ -1,7 +1,7 @@
 """
 Amazon S3 data source.
 
-This module provides data loading from Amazon S3 buckets,
+Data loading from Amazon S3 buckets,
 supporting various authentication methods.
 """
 
