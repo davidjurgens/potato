@@ -2,6 +2,7 @@
 <html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
   <head>
     <meta charset="UTF-8" />
+    <script type="text/javascript">{% include '_url_prefix.js' %}</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{ annotation_task_name }} - {{ ui_lang.admin_page_title|default('Admin Dashboard') }}</title>
     <link
@@ -2169,7 +2170,7 @@
       function logout() {
         // Clear admin session and redirect to login
         fetch("/admin", { method: "GET" }).then(() => {
-          window.location.href = "/admin";
+          window.location.href = window.potatoUrl("/admin");
         });
       }
 

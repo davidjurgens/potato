@@ -71,6 +71,11 @@ def test_env_url_prefix_is_exposed_to_annotation_client(monkeypatch):
     assert "navigator.sendBeacon = function(url, data)" in rendered
     # Live-agent SSE streams must also be prefixed.
     assert "window.EventSource = function(url, config)" in rendered
+    # The sanitizer permits these three URL attributes in annotation content,
+    # so the rewriter must prefix them too.
+    assert """prefixAttribute(root, 'track[src^="/"]', 'src')""" in rendered
+    assert """prefixAttribute(root, 'video[poster^="/"]', 'poster')""" in rendered
+    assert """prefixAttribute(root, 'source[srcset]', 'srcset', true)""" in rendered
 
 
 def test_context_processor_derives_client_prefix_from_forwarded_prefix(monkeypatch):
@@ -123,3 +128,28 @@ def test_forwarded_prefix_wins_over_env_prefix(monkeypatch):
     )
 
     assert response.get_data(as_text=True) == "/round1"
+
+
+def test_pages_with_root_relative_fetch_include_the_prefix_helper():
+    """Any page that builds request URLs in JavaScript needs window.potatoUrl.
+
+    A root-relative fetch("/admin") resolves against the public root, not the
+    mounted app, so it returns 404 behind a path prefix. The helper rewrites
+    it. Pages carrying such a call must therefore include _url_prefix.js.
+    """
+    import pathlib
+    import re
+
+    templates = pathlib.Path("potato/templates")
+    root_relative = re.compile(r"""(?:fetch\(|location\.href\s*=\s*|location\.replace\()['"]/""")
+
+    missing = []
+    for path in sorted(templates.glob("*.html")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if root_relative.search(text) and "_url_prefix.js" not in text:
+            missing.append(path.name)
+
+    assert not missing, (
+        "these pages build root-relative URLs in JavaScript but do not include "
+        "_url_prefix.js, so they break behind a path prefix: " + ", ".join(missing)
+    )
