@@ -71,10 +71,14 @@ FEATURE_PRIORITY_LIST.md
 MERGE_PLAN.md
 social_media_announcement.md
 
-# Node.js
+# Node.js. Only the installed tree is an artifact -- `package.json` carries the
+# Jest config (testEnvironment, setupFilesAfterEach, testMatch), so ignoring it
+# meant a clean checkout had all 55 jest suites and no way to run them: jest
+# failed at resolveConfigPath and reported zero tests. The lockfile is what
+# makes `npm ci` reproduce the versions those 1196 assertions were written
+# against. Neither reaches the sdist -- MANIFEST.in is an allowlist and ships
+# only LICENSE, MANIFEST.in, README.md and setup.py from the root.
 node_modules/
-package.json
-package-lock.json
 
 # Annotation output directories
 annotation_output/
