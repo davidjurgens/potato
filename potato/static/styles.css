@@ -297,6 +297,16 @@ body {
   font-size: var(--text-md);
   letter-spacing: -0.01em;
   line-height: 1.4;
+  /* Undo Bootstrap's `legend { float: left; width: 100% }` reset.
+     A schema whose content wrapper is display:flex or display:grid
+     establishes a block formatting context, and a BFC does not overlap a
+     float -- it shrinks to whatever width is left beside it, which against a
+     100%-wide float is nothing. `triage` rendered its three buttons out of a
+     zero-width container and past the right edge of the card, where two of the
+     three were clipped and unclickable. Every schema with a flex or grid
+     wrapper directly after its legend is exposed to the same thing. */
+  float: none;
+  width: auto;
 }
 
 /* ai help */
@@ -5146,6 +5156,31 @@ body > .container-fluid {
 }
 .range-slider-val-sep {
   color: var(--muted-foreground);
+}
+/* Before the annotator moves a thumb there is no range: no band, no numbers,
+   and a label that says so. The widget used to open with a band drawn between
+   the 25th and 75th percentile while the stored value was empty. */
+.range-slider-unset-hint {
+  display: none;
+  font-weight: 400;
+  /* No `color` here on purpose. `.annotation-form fieldset span` is more
+     specific and would win anyway, and it inherits --text-color at 9.6:1 --
+     over the 7:1 this project asks of annotation-facing text. --muted-foreground
+     would be 4.5:1, which passes AA and fails that bar. */
+}
+.range-slider-values.range-slider-unset .range-slider-unset-hint {
+  display: inline;
+}
+.range-slider-values.range-slider-unset .range-slider-val-low,
+.range-slider-values.range-slider-unset .range-slider-val-sep,
+.range-slider-values.range-slider-unset .range-slider-val-high {
+  display: none;
+}
+.range-slider-track.range-slider-unset .range-slider-fill {
+  display: none;
+}
+.range-slider-track.range-slider-unset .range-slider-thumb {
+  background: var(--muted-foreground);
 }
 
 /* ==========================================

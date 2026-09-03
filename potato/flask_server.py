@@ -2520,6 +2520,26 @@ def get_current_page_html(config, username):
             if input_field is None:
                 continue
 
+            # Ranges and hidden inputs restore exactly as they do on the
+            # annotation page. They were missing here, which is the "two
+            # page-render paths" trap in CLAUDE.md: a `slider` or a `ranking`
+            # answered on a survey page was stored server-side and then rendered
+            # back at its default, so re-showing the page (a reload, or a
+            # validation bounce) put the default in front of the respondent and
+            # a resubmit overwrote the real answer. `data-server-set` is what
+            # tells the client the value is an answer rather than a starting
+            # position.
+            if input_field.get('type') == 'range':
+                input_field['value'] = value
+                input_field['data-server-set'] = 'true'
+                continue
+
+            if input_field.get('type') == 'hidden':
+                if isinstance(value, str):
+                    input_field['value'] = value
+                    input_field['data-server-set'] = 'true'
+                continue
+
             if input_field.get('type') == 'checkbox' or input_field.get('type') == 'radio':
                 if value:
                     if input_field.get('type') == 'radio':
@@ -2546,6 +2566,11 @@ def get_current_page_html(config, username):
                 if isinstance(value, str):
                     options = input_field.find_all("option", {"value": value})
                     if options:
+                        # Same as the annotation-page path: drop the
+                        # placeholder's `selected` explicitly.
+                        for other in input_field.find_all("option"):
+                            if other.has_attr("selected"):
+                                del other["selected"]
                         options[0]["selected"] = "selected"
 
     # Cross-page conditional display_logic: expose answers from OTHER phase
@@ -3390,10 +3415,20 @@ def render_page_with_annotations(username: str):
                         logger.debug(f"No input for {name}")
                         continue
 
-                    # If it's a range input (slider, soft_label, vas, range_slider, etc.),
-                    # set the value attribute so loadAnnotations() reads it back
+                    # If it's a range input (slider, soft_label, vas, constant_sum
+                    # in slider mode), set the value attribute so loadAnnotations()
+                    # reads it back -- and mark it server-set.
+                    #
+                    # The flag is not decoration: a range always reports a value, so
+                    # loadAnnotations() and validateRequiredFields() both treat one
+                    # as an answer only when data-server-set or data-modified says
+                    # where the value came from. Setting the value without the flag
+                    # meant a stored slider answer was rendered but not adopted, so
+                    # a *required* slider the annotator had already answered blocked
+                    # Next for good the moment they navigated back to it.
                     if input_field.get('type') == 'range':
                         input_field['value'] = value
+                        input_field['data-server-set'] = 'true'
                         continue
 
                     if input_field.get('type') == 'checkbox' or input_field.get('type') == 'radio':
@@ -3441,6 +3476,12 @@ def render_page_with_annotations(username: str):
                             # Find the option with the matching value and set it as selected
                             options = input_field.find_all("option", {"value": value})
                             if options:
+                                # Clear the placeholder's `selected` rather than
+                                # relying on "the last selected option wins" to
+                                # override it.
+                                for other in input_field.find_all("option"):
+                                    if other.has_attr("selected"):
+                                        del other["selected"]
                                 options[0]["selected"] = "selected"
                                 logger.debug(f"Set select {name} option to {value}")
                             else:

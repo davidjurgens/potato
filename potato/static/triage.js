@@ -81,6 +81,12 @@
         const hiddenInput = form.querySelector('.triage-input');
         if (hiddenInput) {
             hiddenInput.value = value;
+            // `bws` and `ranking` set this on their hidden inputs and triage did
+            // not. It does not show on an annotation page, where the display-logic
+            // gate reads the live answer map, but on a phase page that gate falls
+            // back to getAnnotationsFromDOM -- which requires the flag -- so a
+            // question gated on a triage answer could never see one.
+            hiddenInput.setAttribute('data-modified', 'true');
 
             // Trigger change event for annotation system
             hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));

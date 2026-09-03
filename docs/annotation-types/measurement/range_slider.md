@@ -32,9 +32,13 @@ The dual-thumb slider captures this interval structure directly. Both thumbs are
 | `left_label` | `""` | Label displayed at the left (min) end of the track |
 | `right_label` | `""` | Label displayed at the right (max) end of the track |
 | `show_values` | `true` | Display the current numeric range values above the thumbs |
-| `default_low` | `min_value` | Initial position of the lower thumb |
-| `default_high` | `max_value` | Initial position of the upper thumb |
 | `label_requirement.required` | `false` | Require range selection before proceeding |
+
+The widget opens with no range: the thumbs sit at the two ends in grey, no band
+is drawn between them, and the readout says "No range set". It stays that way
+until the annotator moves a thumb. There is no starting position to configure.
+A pre-drawn range is not stored, so an annotator who agrees with what is on
+screen leaves the item unanswered and is not told.
 
 ### YAML Example — Formality Range
 
@@ -113,7 +117,7 @@ Both values are string-encoded numbers. `range_low` is always less than or equal
 
 **Both thumbs overlap at the same position:** This is a valid degenerate case (zero-width range = point estimate). If your task requires a non-zero range, add a validation check in the instruction text but note that the schema does not enforce a minimum range width by default.
 
-**Annotators do not move the default thumbs:** Ensure `default_low` and `default_high` are set to values that require deliberate adjustment. Setting them both to the midpoint forces annotators to actively place both thumbs.
+**An item comes back with no range:** The widget records nothing until a thumb moves, and the unset state says so on screen. Set `label_requirement.required` if every item needs one.
 
 ## Related Documentation
 

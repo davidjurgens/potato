@@ -10978,6 +10978,16 @@ user_config:
   allow_all_users: true
 ```
 
+### `bws_config` is required
+
+A `bws` scheme does not read its candidates off the item the way `pairwise`
+reads `items_key`. The tuples come from the top-level `bws_config` block.
+
+Give a `bws` scheme neither that nor `ibws_config` and the page still renders:
+both questions, and a best and a worst button for every position in the tuple,
+over an empty item list, so the annotator is asked to choose between blanks.
+`potato validate` rejects the combination and names the missing block.
+
 ### BWS Config Options
 
 | Option | Default | Description |
@@ -18381,9 +18391,13 @@ The dual-thumb slider captures this interval structure directly. Both thumbs are
 | `left_label` | `""` | Label displayed at the left (min) end of the track |
 | `right_label` | `""` | Label displayed at the right (max) end of the track |
 | `show_values` | `true` | Display the current numeric range values above the thumbs |
-| `default_low` | `min_value` | Initial position of the lower thumb |
-| `default_high` | `max_value` | Initial position of the upper thumb |
 | `label_requirement.required` | `false` | Require range selection before proceeding |
+
+The widget opens with no range: the thumbs sit at the two ends in grey, no band
+is drawn between them, and the readout says "No range set". It stays that way
+until the annotator moves a thumb. There is no starting position to configure.
+A pre-drawn range is not stored, so an annotator who agrees with what is on
+screen leaves the item unanswered and is not told.
 
 ### YAML Example — Formality Range
 
@@ -18462,7 +18476,7 @@ Both values are string-encoded numbers. `range_low` is always less than or equal
 
 **Both thumbs overlap at the same position:** This is a valid degenerate case (zero-width range = point estimate). If your task requires a non-zero range, add a validation check in the instruction text but note that the schema does not enforce a minimum range width by default.
 
-**Annotators do not move the default thumbs:** Ensure `default_low` and `default_high` are set to values that require deliberate adjustment. Setting them both to the midpoint forces annotators to actively place both thumbs.
+**An item comes back with no range:** The widget records nothing until a thumb moves, and the unset state says so on screen. Set `label_requirement.required` if every item needs one.
 
 ## Related Documentation
 
@@ -18487,7 +18501,8 @@ Constant sum (also called budget allocation) is a measurement technique from mar
 
 - Annotators receive a fixed budget (e.g., 100 points)
 - They enter values for each category using number inputs or sliders
-- The UI enforces the constraint that all values sum exactly to the total
+- The UI caps each entry so the budget cannot be exceeded, and shows the running total
+- A scheme marked `required` cannot be left part-allocated: Next is blocked until the values sum to the total, and the message says how far off they are
 - Remaining budget is displayed as a running counter
 
 This approach elicits relative importance judgments and prevents scale-usage bias (the tendency to rate everything high or low when using independent scales).

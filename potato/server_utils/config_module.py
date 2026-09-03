@@ -1809,6 +1809,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Validate layout configuration if present
     validate_layout_config(config_data)
 
+    # A bws scheme is inert without the dataset-level tuple generator.
+    _validate_bws_scheme_has_config(config_data)
+
     # Validate BWS configuration if present
     if 'bws_config' in config_data:
         _validate_bws_config(config_data)
@@ -2306,6 +2309,50 @@ def _validate_keyword_highlight_for_images(config_data: Dict[str, Any]) -> None:
                 f"Keyword highlighting only works with text content, not images. "
                 f"Set keyword_highlight: false or remove it from the ai_support features."
             )
+
+
+def _validate_bws_scheme_has_config(config_data: Dict[str, Any]) -> None:
+    """
+    Require the dataset-level tuple generator whenever a `bws` scheme is present.
+
+    Unlike `pairwise`, which reads its candidates off the item via `items_key`,
+    `bws` gets its tuples from a top-level `bws_config` (or `ibws_config`) block.
+    Without one the scheme still rendered: two questions and a full set of A/B/C/D
+    buttons over an empty `div.bws-items-display`, so the annotator was asked to
+    choose between blanks. Nothing said the config was incomplete -- validation
+    passed, the server booted without a warning, and the scheme's own required
+    fields are just name and description.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If a bws scheme has no tuple source
+    """
+    schemes = config_data.get('annotation_schemes', [])
+    if not isinstance(schemes, list):
+        return
+
+    bws_names = [
+        s.get('name', '<unnamed>') for s in schemes
+        if isinstance(s, dict) and s.get('annotation_type') == 'bws'
+    ]
+    if not bws_names:
+        return
+
+    if 'bws_config' in config_data or 'ibws_config' in config_data:
+        return
+
+    raise ConfigValidationError(
+        f"annotation scheme '{bws_names[0]}' has annotation_type: bws, but the "
+        "config has no top-level 'bws_config' (or 'ibws_config') block. A bws "
+        "scheme does not read its candidates off the item -- the tuples come "
+        "from that block, and without it the scheme renders its buttons over an "
+        "empty item list. Add, for example:\n\n"
+        "  bws_config:\n"
+        "    tuple_size: 4\n"
+        "    num_tuples: 100"
+    )
 
 
 def _validate_bws_config(config_data: Dict[str, Any]) -> None:

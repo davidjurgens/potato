@@ -1075,6 +1075,15 @@ class SpanManager {
     async fetchCurrentInstanceIdFromServer() {
         try {
             const response = await fetch('/api/current_instance');
+            if (response.status === 404) {
+                // Not a failure. Consent, instructions, training and the survey
+                // pages have no instance, and the endpoint's own phase guard
+                // says so with a 404. Reporting that as an error put two red
+                // lines in the console on every phase page and buried the
+                // errors that mean something.
+                this.currentInstanceId = null;
+                return null;
+            }
             if (!response.ok) {
                 throw new Error(`Failed to fetch current instance: ${response.status}`);
             }
@@ -1099,7 +1108,8 @@ class SpanManager {
         try {
             const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
             if (!serverInstanceId) {
-                console.error('[SpanManager] Failed to get server instance ID during initialization');
+                // A page with no instance is a page with nothing to span.
+                spanCoreDebugLog('[SpanManager] No current instance; not initialising');
                 return false;
             }
 

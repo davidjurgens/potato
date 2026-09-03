@@ -67,6 +67,16 @@ user_config:
   allow_all_users: true
 ```
 
+### `bws_config` is required
+
+A `bws` scheme does not read its candidates off the item the way `pairwise`
+reads `items_key`. The tuples come from the top-level `bws_config` block.
+
+Give a `bws` scheme neither that nor `ibws_config` and the page still renders:
+both questions, and a best and a worst button for every position in the tuple,
+over an empty item list, so the annotator is asked to choose between blanks.
+`potato validate` rejects the combination and names the missing block.
+
 ### BWS Config Options
 
 | Option | Default | Description |

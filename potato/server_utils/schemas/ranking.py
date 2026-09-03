@@ -84,8 +84,8 @@ def _generate_ranking_layout_internal(annotation_scheme):
                    schema="{identifiers['schema']}"
                    label_name="{identifiers['label_name']}"
                    validation="{validation}"
-                   value="{escape_html_content(initial_order)}"
-                   data-modified="true">
+                   value=""
+                   data-placeholder-order="{escape_html_content(initial_order)}">
             <div class="ranking-list" id="ranking-list-{safe_schema}" data-schema="{safe_schema}">
     """
 
@@ -203,7 +203,44 @@ def _generate_ranking_layout_internal(annotation_scheme):
             }}
         }});
 
-        updateOrder();
+        /**
+         * Put the rows in the order the server restored, if it restored one.
+         *
+         * Read-only on purpose: it reorders and renumbers, and does not touch
+         * the hidden input, stamp data-modified or dispatch `change`. That is
+         * the whole difference from the updateOrder() call this replaced.
+         *
+         * The widget does this itself so it holds on every render path. The
+         * annotation page also runs restoreRankingAnnotations(), which arrives
+         * at the same order; phase pages (consent, instructions, surveys) run
+         * no such pass, so a ranking answered on a survey page was rendered
+         * back in the config order while the input held the real answer.
+         */
+        (function applyStoredOrder() {{
+            var stored = hiddenInput.value;
+            if (!stored) return;
+            var items = Array.prototype.slice.call(list.querySelectorAll('.ranking-item'));
+            stored.split(',').forEach(function (value) {{
+                var item = items.filter(function (it) {{
+                    return it.getAttribute('data-value') === value;
+                }})[0];
+                if (item) list.appendChild(item);
+            }});
+            list.querySelectorAll('.ranking-item').forEach(function (item, idx) {{
+                item.querySelector('.ranking-rank').textContent = idx + 1;
+            }});
+        }})();
+
+        // Deliberately NOT calling updateOrder() on load. It writes the current
+        // DOM order into the hidden input, stamps data-modified='true' and
+        // dispatches `change`, so the config default arrived already flagged as
+        // the annotator's own answer. Two consequences: an untouched ranking was
+        // stored for every item merely scrolled past, and on a return visit this
+        // ran after the server had injected the saved order, overwrote it with the
+        // config order, and the resulting `change` replaced currentAnnotations
+        // before restoreRankingAnnotations() could read it -- so a ranking the
+        // annotator had given was destroyed on screen and then on disk. The rows
+        // are numbered server-side, so nothing needs to run before the first edit.
     }})();
     </script>
     """

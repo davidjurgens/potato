@@ -1175,10 +1175,30 @@ function clearAllFormInputs() {
         tile => tile.classList.remove('selected')
     );
 
-    // Clear ranking visual state (reset order numbers)
-    document.querySelectorAll('.ranking-list .ranking-item').forEach((item, idx) => {
+    // Clear ranking visual state. Renumbering alone left the PREVIOUS instance's
+    // row order on screen, so an item with no saved ranking opened showing the
+    // last item's answer as though it were the default. `data-placeholder-order`
+    // is the config order the generator rendered with; put the rows back in it
+    // unless the server restored an answer for this instance.
+    document.querySelectorAll('.ranking-order-input').forEach(input => {
+        if (input.getAttribute('data-server-set') === 'true') return;
+        const list = input.closest('fieldset')
+            ? input.closest('fieldset').querySelector('.ranking-list')
+            : null;
+        const placeholder = input.getAttribute('data-placeholder-order');
+        if (!list || !placeholder) return;
+        const items = Array.from(list.querySelectorAll('.ranking-item'));
+        placeholder.split(',').forEach(value => {
+            const item = items.find(it => it.getAttribute('data-value') === value);
+            if (item) list.appendChild(item);
+        });
+    });
+    document.querySelectorAll('.ranking-list .ranking-item').forEach(item => {
         const rank = item.querySelector('.ranking-rank');
-        if (rank) rank.textContent = idx + 1;
+        if (rank) {
+            rank.textContent =
+                Array.prototype.indexOf.call(item.parentElement.children, item) + 1;
+        }
     });
 
     // Clear hierarchical multiselect checkboxes
@@ -1387,18 +1407,22 @@ async function loadAnnotations() {
             }
         });
 
-        // Read select dropdown state from server-rendered HTML
-        // The server sets the 'selected' attribute on the appropriate option
+        // Read select dropdown state from server-rendered HTML, the same way the
+        // checkboxes above are read.
+        //
+        // The `if (selectedOption)` guard used to mean that an instance with NO
+        // stored answer kept whatever the browser had put in the box. Chrome
+        // restores a select's selection across navigations within a tab, so
+        // moving to a fresh item re-applied the previous item's choice and the
+        // line below then recorded it as this item's answer. Fall through to the
+        // placeholder when the server rendered no selection: its value is the
+        // empty string, which is what "unanswered" has to look like.
         const selectInputs = document.querySelectorAll('select.annotation-input');
         selectInputs.forEach(select => {
             const schema = select.getAttribute('schema');
             const labelName = select.getAttribute('label_name');
-            // Find the option with 'selected' attribute (server-rendered)
             const selectedOption = select.querySelector('option[selected]');
-            if (selectedOption) {
-                // Sync browser state to server state
-                select.value = selectedOption.value;
-            }
+            select.value = selectedOption ? selectedOption.value : '';
             if (schema && labelName && select.value) {
                 if (!currentAnnotations[schema]) {
                     currentAnnotations[schema] = {};
@@ -1960,6 +1984,31 @@ function isSchemaHiddenByDisplayLogic(schemaName, form) {
     return false;
 }
 
+/**
+ * How far a budget schema (constant_sum, soft_label) is from its declared total.
+ *
+ * Returns null when the form is not a budget schema or the parts already add up.
+ * The total lives on the form as `data-constant-sum-total` / `data-soft-label-total`,
+ * which the generators have always emitted -- nothing read it.
+ */
+function budgetShortfall(form) {
+    if (!form) return null;
+    const totalAttr = form.getAttribute('data-constant-sum-total')
+                   || form.getAttribute('data-soft-label-total');
+    if (totalAttr === null) return null;
+
+    const total = parseInt(totalAttr, 10);
+    if (isNaN(total)) return null;
+
+    const parts = form.querySelectorAll(
+        '.constant-sum-number, .constant-sum-slider, .soft-label-slider');
+    if (!parts.length) return null;
+
+    let sum = 0;
+    parts.forEach(part => { sum += (parseInt(part.value, 10) || 0); });
+    return sum === total ? null : { sum: sum, total: total };
+}
+
 function validateRequiredFields(options) {
     // If user has already attempted forward validation, always show errors
     // so they get real-time feedback as they fill in fields
@@ -2024,11 +2073,26 @@ function validateRequiredFields(options) {
             }
         }
 
+        // Budget schemas carry one rule the per-input test cannot express: the
+        // parts have to add up. constant_sum clamps upward only, so an annotator
+        // could put 10 in each of four boxes, read "Allocated: 40 / 100", and
+        // advance with 40 points' worth of allocation stored. soft_label holds
+        // its total by redistributing, except when `min_per_label` floors stop
+        // the other sliders absorbing the difference.
+        let reason = null;
+        if (schemaFilled) {
+            const shortfall = budgetShortfall(group.form);
+            if (shortfall) {
+                schemaFilled = false;
+                reason = `${shortfall.sum} of ${shortfall.total} allocated`;
+            }
+        }
+
         if (!schemaFilled) {
             allRequiredFilled = false;
             const legend = group.form.querySelector('legend');
             const label = legend ? legend.textContent.trim() : schemaName;
-            unfilledSchemas.push({ name: schemaName, label: label });
+            unfilledSchemas.push({ name: schemaName, label: label, reason: reason });
         }
 
         // Only show visual feedback if user has attempted forward navigation
@@ -2066,7 +2130,8 @@ function updateRequiredFieldsError(unfilledSchemas) {
         }
     }
 
-    const labels = unfilledSchemas.map(s => `<strong>${s.label}</strong>`).join(', ');
+    const labels = unfilledSchemas.map(
+        s => `<strong>${s.label}</strong>${s.reason ? ` (${s.reason})` : ''}`).join(', ');
     const plural = unfilledSchemas.length > 1;
     errorDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> Please answer the required question${plural ? 's' : ''}: ${labels}`;
     errorDiv.style.display = 'block';
@@ -2885,15 +2950,17 @@ function restoreRangeSliderDisplays() {
             highVal = currentAnnotations[schema]['range_high'];
         }
 
-        // If we have saved values, restore them
-        if (lowVal != null && highVal != null) {
-            const renderFn = window['rangeSliderRender_' + schema];
-            if (renderFn) {
-                renderFn(parseInt(lowVal), parseInt(highVal));
-            }
-        }
+        // Only a restored answer is an answer. Stamping data-modified
+        // unconditionally said "the annotator touched this" about a widget
+        // nobody had touched -- harmless only for as long as the value stayed
+        // empty, and the same flag is what made an untouched ranking overwrite
+        // a real one.
+        if (lowVal == null || highVal == null) return;
 
-        // Always mark hidden inputs as modified so they get synced
+        const renderFn = window['rangeSliderRender_' + schema];
+        if (renderFn) {
+            renderFn(parseInt(lowVal), parseInt(highVal));
+        }
         lowInput.setAttribute('data-modified', 'true');
         highInput.setAttribute('data-modified', 'true');
     });

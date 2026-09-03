@@ -15,6 +15,11 @@ from .identifier_utils import (
 )
 
 
+#: The empty first option. Matches the wording the country/ethnicity/religion
+#: lists in `static/survey_assets/` already use, so both paths read alike.
+SELECT_PLACEHOLDER = "-- select one --"
+
+
 def generate_select_layout(annotation_scheme):
     """
     Generate HTML for a select dropdown interface.
@@ -79,6 +84,19 @@ def _generate_select_layout_internal(annotation_scheme):
                 labels = [it.strip() for it in r.readlines()]
         else:
             labels = annotation_scheme["labels"]
+
+        # An unanswered dropdown has to report an empty value, or every widget
+        # the annotator never touched answers itself with its first option.
+        # `syncAnnotationsFromDOM` records any select whose value is non-empty
+        # and `validateRequiredFields` counts one as answered on the same test,
+        # so without this a select stored a label on every item merely scrolled
+        # past and `required` could never fail. The three predefined lists in
+        # `predefined_labels_dict` have always opened with exactly this option;
+        # the label-list path was the one that did not.
+        schematic += (
+            f'<option class="{escape_html_content(annotation_scheme["name"])}" '
+            f'value="" selected disabled>{escape_html_content(SELECT_PLACEHOLDER)}</option>'
+        )
 
         for i, label_data in enumerate(labels, 1):
             label = label_data if isinstance(label_data, str) else label_data["name"]
