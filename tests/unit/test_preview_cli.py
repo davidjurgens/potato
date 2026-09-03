@@ -88,7 +88,25 @@ class TestValidation:
         issues = validate_config(config)
         assert any('annotation_task_name' in i for i in issues)
         assert any('item_properties' in i for i in issues)
-        assert any('task_dir' in i for i in issues)
+        assert any('output_annotation_dir' in i for i in issues)
+
+    def test_a_missing_task_dir_is_not_an_error(self):
+        """config_module defaults it to '.', so the server runs the config.
+
+        preview was the only rung of the documented validate -> preview -> start
+        ladder that rejected it, and it rejected it as an ERROR: `validate
+        --strict` said OK, `start` booted and served, and `preview` in between
+        said "Missing required field 'task_dir'".
+        """
+        config = {
+            'annotation_task_name': 'Test',
+            'item_properties': {'id_key': 'id', 'text_key': 'text'},
+            'output_annotation_dir': './',
+            'data_files': ['data/x.json'],
+            'annotation_schemes': [],
+        }
+        issues = validate_config(config)
+        assert not [i for i in issues if 'task_dir' in i], issues
 
     def test_missing_data_source(self):
         """Test that missing data_files and data_directory is detected."""

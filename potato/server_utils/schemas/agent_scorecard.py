@@ -185,6 +185,7 @@ def _generate_internal(
             }}
 
             bind();
+            declareCompleteness();
         }}
 
         function bind() {{
@@ -231,6 +232,39 @@ def _generate_internal(
                 h.value = empty ? '' : JSON.stringify(data);
                 h.setAttribute('data-modified', 'true');
                 h.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            }}
+            declareCompleteness();
+        }}
+
+        /**
+         * Say how many of the declared cells are still unscored.
+         *
+         * This card asks one question per agent per dimension, plus one per
+         * team dimension. All of them live behind a single hidden input, so the
+         * required-fields check -- which only asks whether that input is
+         * non-empty -- was satisfied by the first cell the annotator clicked.
+         * Four agents by two dimensions plus two team dimensions is ten
+         * questions answered by one.
+         */
+        function declareCompleteness() {{
+            var form = document.getElementById(SCHEMA);
+            if (!form) return;
+            var agents = uniqueAgents();
+            var total = agents.length * CONFIG.agent_dimensions.length
+                      + CONFIG.team_dimensions.length;
+            var done = 0;
+            agents.forEach(function(a) {{
+                CONFIG.agent_dimensions.forEach(function(d) {{
+                    if ((STATE.agents[a] || {{}})[d]) done++;
+                }});
+            }});
+            CONFIG.team_dimensions.forEach(function(d) {{ if (STATE.team[d]) done++; }});
+            // Milestones are checkboxes: "none reached" is a real answer, so
+            // they are not counted as questions that must be answered.
+            if (total && done < total) {{
+                form.setAttribute('data-incomplete-reason', done + ' of ' + total + ' scored');
+            }} else {{
+                form.removeAttribute('data-incomplete-reason');
             }}
         }}
 

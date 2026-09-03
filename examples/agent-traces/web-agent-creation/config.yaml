@@ -39,12 +39,15 @@ instance_display:
       type: live_agent
       label: "Browse and Complete the Task"
       display_options:
-        start_url: "https://www.google.com"
-        proxy_mode: auto
-        record_mouse_path: true
-        record_viewport: true
-        screenshot_method: server
-        max_steps: 50
+        show_filmstrip: true
+        show_thought: true
+        allow_takeover: true
+
+# How far the agent is allowed to run. This belongs here, not in
+# display_options: the runner reads the top-level block, and the per-item
+# `start_url` in data/tasks.json is what decides where each task begins.
+live_agent:
+  max_steps: 50
 
 # Annotation Schemes
 annotation_schemes:

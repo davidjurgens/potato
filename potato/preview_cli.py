@@ -78,8 +78,14 @@ def validate_config(
     """
     issues = []
 
-    # Required fields
-    required = ['annotation_task_name', 'item_properties', 'task_dir', 'output_annotation_dir']
+    # Required fields.
+    #
+    # `task_dir` is deliberately absent: config_module.py defaults it to '.'
+    # and resolves it against the config file's directory, so a config without
+    # one boots and serves. Listing it here made preview the only rung of the
+    # documented validate -> preview -> start ladder that rejected a working
+    # config, and it rejected it as an ERROR.
+    required = ['annotation_task_name', 'item_properties', 'output_annotation_dir']
     for field in required:
         if field not in config:
             issues.append(f"ERROR: Missing required field '{field}'")

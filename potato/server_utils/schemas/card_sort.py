@@ -80,7 +80,9 @@ def _generate_card_sort_layout_internal(annotation_scheme):
             f'<span class="card-sort-group-name">{esc_group}</span>'
             f'<span class="card-sort-group-count">0</span>'
             f'</div>'
-            f'<div class="card-sort-group-items"'
+            f'<div class="card-sort-group-items" tabindex="0" role="group"'
+            f' aria-label="{esc_group} group. Press Enter to move the picked-up card here."'
+            f' data-drop-group="{esc_group}"'
             f' ondragover="event.preventDefault(); this.classList.add(\'card-sort-drag-over\')"'
             f' ondragleave="this.classList.remove(\'card-sort-drag-over\')"'
             f' ondrop="cardSortDrop(event, \'{esc_schema}\', \'{esc_group}\')"></div>'
@@ -112,7 +114,15 @@ def _generate_card_sort_layout_internal(annotation_scheme):
             <div class="card-sort-layout">
                 <div class="card-sort-source" id="{schema_name}-source">
                     <div class="card-sort-source-header">Drag items into groups</div>
+                    <p class="card-sort-kbd-hint" id="{schema_name}-kbd-hint">
+                        Or use the keyboard: Tab to a card, press Enter to pick it
+                        up, then Tab to a group and press Enter to drop it. Press a
+                        number key to send a picked-up card straight to that group,
+                        or Escape to put it back down.
+                    </p>
                     <div class="card-sort-source-items" id="{schema_name}-source-items"
+                         tabindex="0" role="group" data-drop-group="__source__"
+                         aria-label="Unsorted items. Press Enter to move the picked-up card back here."
                          ondragover="event.preventDefault(); this.classList.add('card-sort-drag-over')"
                          ondragleave="this.classList.remove('card-sort-drag-over')"
                          ondrop="cardSortDrop(event, '{escape_html_content(schema_name)}', '__source__')">
@@ -125,6 +135,9 @@ def _generate_card_sort_layout_internal(annotation_scheme):
             </div>
 
             {new_group_html}
+
+            <p class="card-sort-live" id="{schema_name}-live"
+               role="status" aria-live="polite"></p>
 
             <input type="hidden"
                    class="annotation-input card-sort-data-input"
@@ -207,12 +220,16 @@ def _generate_card_sort_layout_internal(annotation_scheme):
                 '<span class="card-sort-group-count">0</span>' +
                 '<button type="button" class="card-sort-remove-group" onclick="cardSortRemoveGroup(\\\'' + schemaName + '\\\',this)">&times;</button>' +
                 '</div>' +
-                '<div class="card-sort-group-items" ondragover="event.preventDefault();this.classList.add(\\\'card-sort-drag-over\\\')" ' +
+                '<div class="card-sort-group-items" tabindex="0" role="group" ' + 'data-drop-group="' + escapeHtml(name) + '" ' + 'aria-label="' + escapeHtml(name) + ' group. Press Enter to move the picked-up card here." ' + 'ondragover="event.preventDefault();this.classList.add(\\\'card-sort-drag-over\\\')" ' +
                 'ondragleave="this.classList.remove(\\\'card-sort-drag-over\\\')" ' +
                 'ondrop="cardSortDrop(event,\\\'' + schemaName + '\\\',\\\'' + name.replace(/'/g, "\\\\'") + '\\\')">' +
                 '</div>';
             groupsContainer.appendChild(groupDiv);
             input.value = '';
+            // A group added at runtime is a drop target like any other.
+            if (typeof window._cardSortBindZones === 'function') {{
+                window._cardSortBindZones(schemaName);
+            }}
             cardSortSaveData(schemaName);
         }};
 
@@ -235,6 +252,19 @@ def _generate_card_sort_layout_internal(annotation_scheme):
             card.className = 'card-sort-card';
             card.textContent = text;
             card.setAttribute('draggable', 'true');
+
+            // HTML5 drag was the only way to do this task: no tabindex, no
+            // role, no click-to-assign. A keyboard-only or screen-reader
+            // annotator could not sort a single card, and drag-and-drop does
+            // not work on touch either. ranking.py is the precedent -- it ships
+            // a keyboard equivalent alongside the same drag gesture.
+            card.setAttribute('tabindex', '0');
+            card.setAttribute('role', 'button');
+            card.setAttribute('aria-pressed', 'false');
+            card.dataset.cardText = text;
+            card.dataset.cardGroup = groupName;
+            setCardLabel(card);
+
             card.addEventListener('dragstart', function(e) {{
                 e.dataTransfer.setData('text/plain', text);
                 e.dataTransfer.setData('application/x-source-group', groupName);
@@ -243,8 +273,146 @@ def _generate_card_sort_layout_internal(annotation_scheme):
             card.addEventListener('dragend', function() {{
                 card.classList.remove('card-sort-dragging');
             }});
+
+            // Tap or click picks a card up, which is also the touch path.
+            // `detail === 0` marks a click that no pointer produced -- what a
+            // screen reader dispatches when it activates a role="button". The
+            // keydown handler below already covers that, and letting both run
+            // would toggle the card twice.
+            card.addEventListener('click', function(e) {{
+                if (e.detail === 0) return;
+                togglePickUp(schemaName, card);
+            }});
+            card.addEventListener('keydown', function(e) {{
+                if (e.key === 'Enter' || e.key === ' ') {{
+                    e.preventDefault();
+                    togglePickUp(schemaName, card);
+                }} else if (e.key === 'Escape') {{
+                    dropPickUp(schemaName);
+                }} else if (/^[1-9]$/.test(e.key)) {{
+                    var zones = dropZones(schemaName);
+                    var zone = zones[parseInt(e.key, 10)];  // 0 is the source list
+                    if (zone) {{
+                        e.preventDefault();
+                        pickUp(schemaName, card);
+                        moveTo(schemaName, zone);
+                    }}
+                }}
+            }});
             return card;
         }}
+
+        /* ---------- keyboard / tap sorting ---------------------------------- */
+
+        function groupLabel(name) {{
+            return name === '__source__' ? 'the unsorted list' : name;
+        }}
+
+        function setCardLabel(card) {{
+            var where = groupLabel(card.dataset.cardGroup || '__source__');
+            var held = card.getAttribute('aria-pressed') === 'true';
+            card.setAttribute('aria-label', card.dataset.cardText + '. In ' + where +
+                '. ' + (held ? 'Picked up. Choose a group, or press Escape to put it back.'
+                             : 'Press Enter to pick it up.'));
+        }}
+
+        /** The source list first, then each group, in the order they appear. */
+        function dropZones(schemaName) {{
+            var form = document.getElementById(schemaName);
+            if (!form) return [];
+            return Array.prototype.slice.call(
+                form.querySelectorAll('[data-drop-group]'));
+        }}
+
+        function announce(schemaName, message) {{
+            var live = document.getElementById(schemaName + '-live');
+            if (live) live.textContent = message;
+        }}
+
+        function heldCard(schemaName) {{
+            var form = document.getElementById(schemaName);
+            return form ? form.querySelector('.card-sort-card.card-sort-held') : null;
+        }}
+
+        function pickUp(schemaName, card) {{
+            dropPickUp(schemaName, true);
+            card.classList.add('card-sort-held');
+            card.setAttribute('aria-pressed', 'true');
+            setCardLabel(card);
+            var form = document.getElementById(schemaName);
+            if (form) form.classList.add('card-sort-holding');
+            announce(schemaName, 'Picked up ' + card.dataset.cardText +
+                '. Choose a group to move it to.');
+        }}
+
+        function dropPickUp(schemaName, quiet) {{
+            var held = heldCard(schemaName);
+            if (held) {{
+                held.classList.remove('card-sort-held');
+                held.setAttribute('aria-pressed', 'false');
+                setCardLabel(held);
+            }}
+            var form = document.getElementById(schemaName);
+            if (form) form.classList.remove('card-sort-holding');
+            if (held && !quiet) announce(schemaName, 'Put ' + held.dataset.cardText + ' back down.');
+        }}
+
+        function togglePickUp(schemaName, card) {{
+            if (card.classList.contains('card-sort-held')) dropPickUp(schemaName);
+            else pickUp(schemaName, card);
+        }}
+
+        /** Move the picked-up card into `zone`, keeping focus with the card. */
+        function moveTo(schemaName, zone) {{
+            var card = heldCard(schemaName);
+            if (!card || !zone) return false;
+            var target = zone.getAttribute('data-drop-group');
+            if (card.dataset.cardGroup === target) {{
+                dropPickUp(schemaName);
+                return false;
+            }}
+
+            var moved = createCard(card.dataset.cardText, schemaName, target);
+            card.remove();
+            zone.appendChild(moved);
+            // Nothing is in the air any more. Without this the dashed "drop it
+            // here" borders stayed on every zone for the rest of the item, which
+            // makes the one signal that means "choose a target" mean nothing.
+            var form = document.getElementById(schemaName);
+            if (form) form.classList.remove('card-sort-holding');
+            updateGroupCounts(schemaName);
+            cardSortSaveData(schemaName);
+            moved.focus();
+            announce(schemaName, 'Moved ' + moved.dataset.cardText + ' to ' +
+                groupLabel(target) + '.');
+            return true;
+        }}
+
+        /** Enter on a drop zone drops whatever is held into it. */
+        window._cardSortBindZones = function(schemaName) {{
+            dropZones(schemaName).forEach(function(zone) {{
+                if (zone.dataset.cardSortBound) return;
+                zone.dataset.cardSortBound = '1';
+                zone.addEventListener('keydown', function(e) {{
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    // Only when the zone itself is focused. A card sits inside a
+                    // zone, so the Enter that picks the card up bubbles straight
+                    // to its own container -- which then "dropped" it back where
+                    // it already was, and the keyboard path did nothing at all.
+                    if (e.target !== zone) return;
+                    if (!heldCard(schemaName)) return;
+                    e.preventDefault();
+                    moveTo(schemaName, zone);
+                }});
+                zone.addEventListener('click', function(e) {{
+                    // Only the empty area of the zone; a click on a card is
+                    // that card's own pick-up. `detail === 0` is the synthetic
+                    // click that follows Enter, already handled by keydown.
+                    if (e.detail === 0 || e.target !== zone) return;
+                    if (heldCard(schemaName)) moveTo(schemaName, zone);
+                }});
+            }});
+        }};
 
         function updateGroupCounts(schemaName) {{
             var groups = document.querySelectorAll('#' + schemaName + '-groups .card-sort-group');

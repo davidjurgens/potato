@@ -34,7 +34,7 @@ instance_display:
       type: agent_trace
       label: "Agent Interactions"
       display_options:
-        show_turn_numbers: true
+        show_step_numbers: true
         speaker_key: agent
         text_key: content
 

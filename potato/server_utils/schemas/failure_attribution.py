@@ -153,6 +153,11 @@ def _generate_internal(
                     el.addEventListener('input', save);
                 }}
             }});
+
+            declareCompleteness({{
+                responsible_agent: agentSel.value,
+                decisive_step: stepSel.value !== '' ? parseInt(stepSel.value, 10) : null,
+            }});
         }}
 
         function stepText(s) {{
@@ -175,6 +180,29 @@ def _generate_internal(
                     ? JSON.stringify(data) : '';
                 h.setAttribute('data-modified', 'true');
                 h.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            }}
+            declareCompleteness(data);
+        }}
+
+        /**
+         * The scheme asks two things: which agent, and which step it turned on.
+         *
+         * Both live in one hidden input, so naming an agent made the JSON
+         * non-empty and the required-fields check passed with
+         * `decisive_step: null` -- an attribution that does not say where the
+         * run went wrong. The free-text reason stays optional.
+         */
+        function declareCompleteness(data) {{
+            var form = document.getElementById(SCHEMA);
+            if (!form) return;
+            var missing = [];
+            if (!data.responsible_agent) missing.push('responsible agent');
+            if (data.decisive_step === null || data.decisive_step === undefined)
+                missing.push('decisive step');
+            if (missing.length) {{
+                form.setAttribute('data-incomplete-reason', 'no ' + missing.join(' or ') + ' chosen');
+            }} else {{
+                form.removeAttribute('data-incomplete-reason');
             }}
         }}
 

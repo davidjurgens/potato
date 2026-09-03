@@ -99,6 +99,13 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
             for (var a = 0; a < calls.length; a++) {{
                 for (var b = a+1; b < calls.length; b++) {{
                     if (!calls[a].resource || calls[a].resource !== calls[b].resource) continue;
+                    // Contention is between agents. The header the annotator
+                    // reads says "across agents" and the module docstring says
+                    // "two calls touch the same shared resource" -- neither
+                    // describes one agent's own two calls overlapping, which
+                    // produced cards like "coder:read <-> coder:read" that a
+                    // required scheme then forced them to classify.
+                    if (calls[a].agent === calls[b].agent) continue;
                     var s = Math.max(calls[a].start, calls[b].start);
                     var e = Math.min(calls[a].end, calls[b].end);
                     if (e > s) out.push({{start: s, end: e, resource: calls[a].resource,
@@ -147,7 +154,19 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
             var head = document.getElementById(SCHEMA + '-head');
             var none = document.getElementById(SCHEMA + '-none');
             var list = document.getElementById(SCHEMA + '-list');
-            if (!_cont.length) {{ list.innerHTML = ''; head.style.display = 'none'; none.style.display = ''; }}
+            if (!_cont.length) {{
+                list.innerHTML = ''; head.style.display = 'none'; none.style.display = '';
+                // Overlap is computed from `start`/`end` in seconds. With calls
+                // that carry neither, every interval is 0-0, nothing can
+                // overlap, and "No shared-resource contention detected" is
+                // indistinguishable from a trace that genuinely has none.
+                var timed = calls.filter(function(c) {{ return c.end > c.start; }});
+                none.textContent = (calls.length && !timed.length)
+                    ? 'These tool calls have no start/end times, so overlap ' +
+                      'cannot be computed. Add `start` and `end` in seconds to ' +
+                      'each call to see contention regions.'
+                    : 'No shared-resource contention detected.';
+            }}
             else {{
                 head.style.display = ''; none.style.display = 'none';
                 // Contention bands across all lanes.

@@ -8,8 +8,8 @@
     "version": "2"
   },
   "annotation.js": {
-    "sha256": "6791c95e521f6754",
-    "version": "33"
+    "sha256": "fa6dd1886d10be9a",
+    "version": "35"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -43,13 +43,21 @@
     "sha256": "52c78d82786477ea",
     "version": "15"
   },
-  "conversation-tree.js": {
-    "sha256": "9181c59ed2b15736",
+  "coding-trace.css": {
+    "sha256": "474a0e265bfd76ad",
     "version": "1"
+  },
+  "conversation-tree.js": {
+    "sha256": "40a15d32a7ae6bca",
+    "version": "3"
   },
   "coreference-manager.js": {
     "sha256": "6079f8cf8a564aff",
     "version": "6"
+  },
+  "css/agent-chat.css": {
+    "sha256": "13829ca669ee01b7",
+    "version": "1"
   },
   "css/boundary.css": {
     "sha256": "f53c04d1f22adff3",
@@ -58,6 +66,22 @@
   "css/codebook.css": {
     "sha256": "a84f8ac6393636dc",
     "version": "12"
+  },
+  "css/conversation-tree.css": {
+    "sha256": "7aec08ceff12adf5",
+    "version": "2"
+  },
+  "css/coreference.css": {
+    "sha256": "0623296ca5b777ec",
+    "version": "1"
+  },
+  "css/entity-linking.css": {
+    "sha256": "c9daba247b4a01b5",
+    "version": "1"
+  },
+  "css/format-displays.css": {
+    "sha256": "b1b662995e5cdc7a",
+    "version": "1"
   },
   "css/live-agent.css": {
     "sha256": "e5dd8cb6d35c5d49",
@@ -77,6 +101,18 @@
   },
   "css/thinkaloud.css": {
     "sha256": "de53b4e35a2f57e2",
+    "version": "1"
+  },
+  "css/tiered-annotation.css": {
+    "sha256": "73ab61a30bfeeed3",
+    "version": "1"
+  },
+  "css/tracking.css": {
+    "sha256": "0505e17c3d4db747",
+    "version": "1"
+  },
+  "css/triage.css": {
+    "sha256": "3f229062e0a5060f",
     "version": "1"
   },
   "css/truth-serum.css": {
@@ -99,9 +135,17 @@
     "sha256": "f52d7fbb29b8ca21",
     "version": "2"
   },
+  "display-logic.css": {
+    "sha256": "e74030575f27db93",
+    "version": "1"
+  },
   "display-logic.js": {
     "sha256": "d1111821ad185738",
     "version": "4"
+  },
+  "document-bbox.css": {
+    "sha256": "58cd936046af536e",
+    "version": "1"
   },
   "document-bbox.js": {
     "sha256": "b53b7ebb08d21ec5",
@@ -119,9 +163,13 @@
     "sha256": "ef0e60f89afd0413",
     "version": "1"
   },
-  "event-annotation.js": {
-    "sha256": "5bc3f646dba34275",
+  "event-annotation.css": {
+    "sha256": "9397cddac45f41e5",
     "version": "1"
+  },
+  "event-annotation.js": {
+    "sha256": "c177e47b974a3e0d",
+    "version": "3"
   },
   "floating-panel-utils.js": {
     "sha256": "0c81c4cfae319503",
@@ -171,6 +219,10 @@
     "sha256": "b019b3accc059e6d",
     "version": "1"
   },
+  "live-coding-agent-viewer.js": {
+    "sha256": "4e3e4daffd673849",
+    "version": "1"
+  },
   "llm-chat-sidebar.js": {
     "sha256": "5da18161a8320499",
     "version": "1"
@@ -202,6 +254,10 @@
   "option_highlight_manager.js": {
     "sha256": "bb9254e571a8ecf9",
     "version": "2"
+  },
+  "pdf-annotation.css": {
+    "sha256": "8bd6cce93c6751f8",
+    "version": "1"
   },
   "pdf-bbox.js": {
     "sha256": "d3114fbbb9a05d54",
@@ -300,8 +356,8 @@
     "version": "1"
   },
   "span-core.js": {
-    "sha256": "88c23470ac2bf3f1",
-    "version": "18"
+    "sha256": "947835bbcd1140fc",
+    "version": "19"
   },
   "span-link-manager.js": {
     "sha256": "643b3403ec23892e",
@@ -315,9 +371,13 @@
     "sha256": "f917576d7ae6c929",
     "version": "1"
   },
+  "spreadsheet-display.css": {
+    "sha256": "b09c16ed83007f42",
+    "version": "1"
+  },
   "styles.css": {
-    "sha256": "4a1e93d63a2e7780",
-    "version": "14"
+    "sha256": "871336c0a9b9bf1a",
+    "version": "16"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",

@@ -147,8 +147,11 @@ annotation_schemes:
 ```
 
 Stored as a list of `{index, step, from, to, flags, quality}`. Handoffs are derived
-from the trace at render time (no manual setup). Example:
-`examples/agent-traces/handoff-review/`.
+from the trace at render time (no manual setup). `quality` is omitted from a
+handoff nobody rated, rather than written as 0 — the scale starts at 1, so a
+stored 0 would read as a rating in the export.
+
+Example: `examples/agent-traces/handoff-review/`.
 
 ## Per-agent + per-team scorecard (`agent_scorecard`)
 
@@ -174,6 +177,22 @@ annotation_schemes:
 Stored as `{"agents": {name: {dim: score}}, "team": {dim: score}, "milestones": {name: bool}}`.
 Example: `examples/agent-traces/agent-scorecard/`.
 
+### Requiredness on multi-cell widgets
+
+A scorecard asks one question per agent per dimension, plus one per team
+dimension, and keeps every answer in a single field. Four agents across two
+dimensions plus two team dimensions is ten questions in one field, so
+`required: true` has to mean all ten rather than the first cell clicked.
+
+Each of these widgets reports how much of itself is unanswered, and the message
+beside the Next button names it: "3 of 10 scored", "2 of 5 handoffs reviewed",
+"no responsible agent or decisive step chosen". Milestones are checkboxes, so
+"none reached" is an answer and they are not counted.
+
+`consensus_tracking` and `context_attribution` work the same way. An act listed
+in `linked_acts` is unfinished until the turn it refers to has been clicked, and
+Next says which turn is still waiting.
+
 ## Tool / resource-contention timeline (`tool_contention`)
 
 Visualize concurrent tool/resource use across agents on a multi-lane timeline (one
@@ -193,7 +212,14 @@ annotation_schemes:
     contention_labels: [deadlock, circular_wait, race_condition, benign]
 ```
 
-Contentions are computed at render time (same `resource`, overlapping interval).
+Contentions are computed at render time: the same `resource`, an overlapping
+interval, and **two different agents**. One agent whose own two calls overlap on
+a resource is not contention across agents, and is not listed.
+
+`start` and `end` are in seconds and both are needed. Calls that carry neither
+all sit at 0–0, nothing can overlap, and the widget says so rather than
+reporting no contention — which would look exactly like a trace that has none.
+
 Stored as `{"contentions": {idx: label}}`. Example:
 `examples/agent-traces/tool-contention/`.
 

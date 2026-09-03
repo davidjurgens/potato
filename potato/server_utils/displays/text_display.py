@@ -23,6 +23,10 @@ class TextDisplay(BaseDisplay):
     required_fields = ["key"]
     optional_fields = {
         "collapsible": False,
+        # Only meaningful with `collapsible`. Without it a collapsible field
+        # could only ever open expanded, so a long case file sat between the
+        # instructions and the questions on every item.
+        "collapsed_by_default": False,
         "max_height": None,
         "preserve_whitespace": True,
     }
@@ -100,7 +104,10 @@ class TextDisplay(BaseDisplay):
         class_attr = f'class="{" ".join(wrapper_classes)}"'
 
         if collapsible:
-            return self._render_collapsible(content, class_attr, style_attr, field_config)
+            return self._render_collapsible(
+                content, class_attr, style_attr, field_config,
+                collapsed=bool(options.get("collapsed_by_default", False)),
+            )
 
         return f'<div {class_attr}{style_attr}>{content}</div>'
 
@@ -109,7 +116,8 @@ class TextDisplay(BaseDisplay):
         content: str,
         class_attr: str,
         style_attr: str,
-        field_config: Dict[str, Any]
+        field_config: Dict[str, Any],
+        collapsed: bool = False,
     ) -> str:
         """
         Render content in a collapsible container.
@@ -126,6 +134,8 @@ class TextDisplay(BaseDisplay):
         field_key = field_config.get("key", "text")
         collapse_id = f"collapse-{field_key}"
         label = field_config.get("label", "")
+        expanded = "false" if collapsed else "true"
+        show_class = "" if collapsed else " show"
 
         # Build header row with label and button inline
         label_html = f'<span class="collapsible-label">{label}</span>' if label else ''
@@ -138,13 +148,13 @@ class TextDisplay(BaseDisplay):
                         type="button"
                         data-bs-toggle="collapse"
                         data-bs-target="#{collapse_id}"
-                        aria-expanded="true"
+                        aria-expanded="{expanded}"
                         aria-controls="{collapse_id}">
                     <span class="collapse-text-show">Show</span>
                     <span class="collapse-text-hide">Hide</span>
                 </button>
             </div>
-            <div class="collapse show" id="{collapse_id}">
+            <div class="collapse{show_class}" id="{collapse_id}">
                 <div {class_attr}{style_attr}>
                     {content}
                 </div>

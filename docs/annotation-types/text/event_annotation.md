@@ -80,6 +80,13 @@ Each argument defines:
 | `entity_types` | list | No | Span labels allowed for this role (empty = any span) |
 | `required` | boolean | No | Whether this argument must be filled (default: false) |
 
+!!! warning "These names must match the span schema"
+    `trigger_labels` and `entity_types` name labels in the scheme `span_schema`
+    points at. A name that does not exist there is now a configuration error,
+    because the flow cannot start without it: the annotator marks a span, picks
+    a role, and nothing happens, with Create Event staying disabled and nothing
+    saying which label was wrong.
+
 #### Visual Display
 
 ```yaml

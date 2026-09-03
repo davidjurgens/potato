@@ -359,7 +359,14 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     "event_annotation": ("event-annotation-container",),
     "multi_document_event": ('data-annotation-type="multi_document_event"', "mde-container"),
     "coreference": ('data-annotation-type="coreference"', "coref-chain-panel"),
-    "conversation_tree": ("conv-tree",),
+    # The display emits `conv-tree`; the `tree_annotation` *scheme* emits
+    # `tree-ann-container` and needs the same script. Keyed on the display alone,
+    # a tree_annotation scheme in a project whose display was something else
+    # loaded no JS at all -- no node selection, no path building, nothing.
+    "conversation_tree": ("conv-tree", "tree-ann-container"),
+    # Per-segment/per-node question forms. Audio and video emit this template
+    # for `segment_schemes`, tree_annotation for `node_scheme`.
+    "segment_questions": ("segment-questions-template",),
     "tracking": ("tracking-panel", "tracking-overlay", "tracking-controls-group"),
     "triage": ('class="annotation-form triage"', 'data-annotation-type="triage"', "triage-container"),
     "tiered_annotation": ("tiered-annotation-container",),

@@ -1,6 +1,7 @@
 # Card Sorting / Grouping
 
-The Card Sort schema groups items into categories by dragging them. In **closed mode**, groups are predefined by the researcher. In **open mode**, annotators create and name their own groups. This is commonly used in information architecture research, taxonomy development, and content categorization.
+The Card Sort schema groups items into categories by dragging them, tapping
+them, or moving them with the keyboard. In **closed mode**, groups are predefined by the researcher. In **open mode**, annotators create and name their own groups. This is commonly used in information architecture research, taxonomy development, and content categorization.
 
 ## When to Use Card Sort
 
@@ -74,6 +75,21 @@ annotation_schemes:
 4. Group counters update automatically
 5. In open mode: type a group name and click "+ Add Group" to create new groups
 6. In open mode: click × on a group header to remove it (cards return to source)
+
+### Without a mouse
+
+Dragging is not the only way to sort, and on a phone or tablet it is not
+available at all — HTML5 drag-and-drop does not work on touch.
+
+Tap or click a card to pick it up, then tap the group to drop it in. The same
+sequence works from the keyboard: Tab to a card, press Enter or Space to pick it
+up, Tab to a group and press Enter to drop it. With a card picked up, a number
+key sends it straight to that group — 1 is the first group on screen — and
+Escape puts it back down. Focus lands on the card that just moved, so the next
+Tab starts from there.
+
+The drop zones show a dashed outline while a card is held, and each move is
+announced to a screen reader ("Moved serious adverse events to Critical").
 
 ## Example
 

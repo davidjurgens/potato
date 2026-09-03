@@ -40,6 +40,38 @@ annotation_schemes:
 
 *Either `attributes` or `profiles_field` is required.
 
+### Where the profiles come from
+
+With `attributes`, Potato builds the profiles by combining the levels you
+declare, which is the classic design: the levels are the experimental
+conditions.
+
+With `profiles_field`, each item carries its own profiles and Potato shows them
+as they are. The rows are built from the keys the profiles use, so no
+`attributes` block is needed. Every card gets a row for every key seen anywhere
+in the set, which keeps the cards aligned when one profile omits a key: a
+missing value shows as an em dash in the right row rather than shifting the rows
+below it up.
+
+Declaring `attributes` alongside `profiles_field` narrows the display to the
+attributes you named, in the order you named them.
+
+```yaml
+- annotation_type: conjoint
+  name: platform
+  description: "Which platform would you rather use?"
+  profiles_field: profiles     # each item supplies its own
+  profiles_per_set: 3
+```
+
+```json
+{"id": "1", "profiles": [
+  {"Hosting": "Self-hosted", "Cost": "Free"},
+  {"Hosting": "Cloud", "Cost": "$20/mo"},
+  {"Hosting": "Hybrid", "Cost": "$8/mo"}
+]}
+```
+
 ### Attributes Format
 
 ```yaml

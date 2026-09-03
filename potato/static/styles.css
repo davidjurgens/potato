@@ -6147,6 +6147,16 @@ body > .container-fluid {
   gap: 1rem;
   min-height: 200px;
 }
+
+/* A fixed 250px source column leaves about 70px for the groups on a phone.
+   Tapping a card and then tapping a group is now a supported way to do this
+   task -- it is the only one that works on touch, where HTML5 drag does not --
+   so the narrow layout has to be usable rather than merely present. */
+@media (max-width: 640px) {
+  .card-sort-layout {
+    grid-template-columns: 1fr;
+  }
+}
 .card-sort-source {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -6210,6 +6220,12 @@ body > .container-fluid {
   flex: 1;
 }
 .card-sort-card {
+  /* 44px is the tap target the annotation surface asks for, and a card is now
+     tapped rather than only dragged. The card is full-width in its column, so
+     only the height needed raising. */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
   padding: 0.4rem 0.75rem;
   background: var(--background);
   border: 1px solid var(--border);
@@ -6229,6 +6245,50 @@ body > .container-fluid {
 .card-sort-drag-over {
   background: var(--muted) !important;
   border-color: var(--primary) !important;
+}
+
+/* --- Card Sort: the keyboard and touch path ---------------------------------
+   The widget was drag-only: no tabindex, no roles, no click-to-assign, so a
+   keyboard or screen-reader annotator could not do the task at all, and HTML5
+   drag does not work on touch either. A card is now picked up with Enter or a
+   tap, and dropped into a focused group.                                    */
+
+.card-sort-card:focus-visible,
+.card-sort-group-items:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.card-sort-card.card-sort-held {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary);
+  cursor: grabbing;
+}
+
+/* While a card is held, show where it can go. */
+.card-sort-holding .card-sort-group-items {
+  border-style: dashed;
+  border-color: var(--primary);
+}
+
+.card-sort-kbd-hint {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  margin: 0.25rem 0 0.5rem;
+}
+
+/* The move announcements. Visible text would repeat what the cards already
+   show; screen readers get it through role="status". */
+.card-sort-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .card-sort-new-group {
   display: flex;

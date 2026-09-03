@@ -15,6 +15,9 @@ import logging
 from .identifier_utils import (
     safe_generate_layout,
     escape_html_content,
+    generate_element_identifier,
+    generate_layout_attributes,
+    generate_validation_attribute,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,8 +79,16 @@ def _generate_tree_annotation_layout_internal(annotation_scheme, horizontal=Fals
         </div>
         """
 
-    # Node annotation mode description
+    # Node annotation mode description, and the control the panel clones.
+    #
+    # The panel body used to be emitted empty with nothing anywhere that filled
+    # it: the page said "Node annotation type: likert" over a blank box, so
+    # `node_annotations` could never be anything but {}. `node_scheme` is a
+    # single ordinary scheme, so it goes through the same template renderer the
+    # audio and video widgets use for `segment_schemes` -- which means every
+    # annotation type works inside a node, with its own tooltips and layout.
     node_ann_desc = ""
+    node_template = ""
     if node_scheme:
         node_type = node_scheme.get("annotation_type", "")
         node_ann_desc = f"""
@@ -86,12 +97,32 @@ def _generate_tree_annotation_layout_internal(annotation_scheme, horizontal=Fals
             Node annotation type: <strong>{escape_html_content(node_type)}</strong></p>
         </div>
         """
+        from .segment_questions import render_segment_question_template
+
+        scheme_for_node = dict(node_scheme)
+        scheme_for_node.setdefault("name", f"{scheme_name}_node")
+        # The registry rejects an empty description, and the panel header
+        # already names the node being annotated, so fall back to the tree's
+        # own instruction rather than repeating the node text.
+        if not scheme_for_node.get("description"):
+            scheme_for_node["description"] = node_scheme.get(
+                "description") or "Annotate this node"
+        node_template, _ = render_segment_question_template(
+            [scheme_for_node], scheme_name)
+
+    layout_attrs = generate_layout_attributes(annotation_scheme)
+    validation = generate_validation_attribute(annotation_scheme)
+    path_ids = generate_element_identifier(scheme_name, "selected_path", "hidden")
+    node_ids = generate_element_identifier(scheme_name, "node_annotations", "hidden")
 
     schematic = f"""
-    <div id="{escape_html_content(scheme_name)}" class="tree-ann-container annotation-form"
+    <form id="{escape_html_content(scheme_name)}" class="tree-ann-container annotation-form"
+         action="javascript:void(0)"
          data-annotation-type="tree_annotation"
+         data-schema-name="{escape_html_content(scheme_name)}"
          data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', scheme_name)))}"
-         data-tree-ann-config='{escape_html_content(config_data)}'>
+         data-tree-ann-config='{escape_html_content(config_data)}'
+         {layout_attrs}>
 
         <div class="tree-ann-header">
             <h4 class="tree-ann-title">{escape_html_content(description)}</h4>
@@ -113,12 +144,25 @@ def _generate_tree_annotation_layout_internal(annotation_scheme, horizontal=Fals
 
         {path_section}
 
-        <!-- Hidden inputs for form submission -->
-        <input type="hidden" name="{escape_html_content(scheme_name)}:::node_annotations"
-               id="{escape_html_content(scheme_name)}_node_annotations" value="{{}}">
-        <input type="hidden" name="{escape_html_content(scheme_name)}:::selected_path"
-               id="{escape_html_content(scheme_name)}_selected_path_data" value="[]">
-    </div>
+        {node_template}
+
+        <!-- The two values this scheme collects.
+             `class="annotation-input"` is what makes syncAnnotationsFromDOM read
+             them; without it conversation-tree.js wrote to inputs nothing ever
+             looked at, and the scheme stored nothing under any configuration.
+             Both start empty rather than at "{{}}" / "[]", so an untouched tree
+             is unanswered rather than answered with a blank. -->
+        <input type="hidden" class="annotation-input tree-ann-node-input"
+               name="{path_ids['name'].replace('selected_path', 'node_annotations')}"
+               id="{escape_html_content(scheme_name)}_node_annotations"
+               schema="{node_ids['schema']}" label_name="{node_ids['label_name']}"
+               validation="{validation}" value="">
+        <input type="hidden" class="annotation-input tree-ann-path-input"
+               name="{path_ids['name']}"
+               id="{escape_html_content(scheme_name)}_selected_path_data"
+               schema="{path_ids['schema']}" label_name="{path_ids['label_name']}"
+               validation="{validation}" value="">
+    </form>
     """
 
     key_bindings = []

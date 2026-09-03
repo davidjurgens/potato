@@ -178,7 +178,10 @@ server-rendered HTML, with a note about what is missing.
 
 ## Configuration Validation
 
-The preview CLI validates your configuration and reports issues:
+The preview CLI validates your configuration and reports issues. It applies the
+same defaults the server does, so a config that boots is not reported as broken
+here — `task_dir` is optional in both, defaulting to the directory the config
+file is in.
 
 ### Errors (Blocking)
 

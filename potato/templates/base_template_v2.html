@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=14">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=16">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=1">
@@ -106,7 +106,7 @@
 
     <!-- Event Annotation Styles -->
     {% if frontend_assets.event_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='event-annotation.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='event-annotation.css') }}?v=1">
     {% endif %}
 
     <!-- Multi-Document Event Annotation Styles -->
@@ -115,63 +115,63 @@
     {% endif %}
 
     <!-- Spreadsheet Display Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='spreadsheet-display.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='spreadsheet-display.css') }}?v=1">
 
     <!-- Coding Trace Display Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='coding-trace.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='coding-trace.css') }}?v=1">
 
     <!-- Live Coding Agent Viewer -->
     {% if frontend_assets.live_coding_agent | default(false) %}
-    <script src="{{ url_for('static', filename='live-coding-agent-viewer.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='live-coding-agent-viewer.js') }}?v=1" defer></script>
     {% endif %}
 
     <!-- Format Display Styles (document, code, etc.) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/format-displays.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/format-displays.css') }}?v=1">
 
     <!-- Document Bounding Box Styles -->
     {% if frontend_assets.document_bbox | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='document-bbox.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='document-bbox.css') }}?v=1">
     {% endif %}
 
     <!-- PDF Annotation Styles -->
     {% if frontend_assets.pdf_bbox | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='pdf-annotation.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pdf-annotation.css') }}?v=1">
     {% endif %}
 
     <!-- Display Logic Styles (conditional schema branching) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='display-logic.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='display-logic.css') }}?v=1">
 
     <!-- Coreference Chain Styles -->
     {% if frontend_assets.coreference | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/coreference.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/coreference.css') }}?v=1">
     {% endif %}
 
     <!-- Conversation Tree Styles -->
     {% if frontend_assets.conversation_tree | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/conversation-tree.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/conversation-tree.css') }}?v=2">
     {% endif %}
 
     <!-- Video Tracking Styles -->
     {% if frontend_assets.tracking | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tracking.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tracking.css') }}?v=1">
     {% endif %}
 
     <!-- Triage Styles -->
     {% if frontend_assets.triage | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/triage.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/triage.css') }}?v=1">
     {% endif %}
 
     <!-- Entity Linking Styles (knowledge base linking) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/entity-linking.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/entity-linking.css') }}?v=1">
 
     <!-- Tiered Annotation Styles (ELAN-style hierarchical annotation) -->
     {% if frontend_assets.tiered_annotation | default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tiered-annotation.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tiered-annotation.css') }}?v=1">
     {% endif %}
 
     {% if agent_proxy_enabled | default(false) %}
     <!-- Agent Chat Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}?v=1">
     {% endif %}
 
     {% if chat_enabled | default(false) %}
@@ -764,7 +764,7 @@
     </script>
     <script src="{{ url_for('static', filename='annotation_telemetry.js') }}?v=2"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='span-core.js') }}?v=18"></script>
+    <script src="{{ url_for('static', filename='span-core.js') }}?v=19"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=2"></script>
     <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->
     <script src="{{ url_for('static', filename='display-logic.js') }}?v=4"></script>
@@ -772,7 +772,7 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=3"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=33"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=35"></script>
     <!-- Shared geometry for the bottom-anchored floating widgets below; must
          load before them. Unconditional: tiny, and several may be enabled at
          once (see the combined showcase example). -->
@@ -945,10 +945,11 @@
     <!-- Shared right-click-drag range selection + edge auto-scroll for Peaks views -->
     <script src="{{ url_for('static', filename='peaks-range-select.js') }}?v=2"></script>
     {% endif %}
-    <!-- Per-segment question forms, shared by the audio and video widgets.
-         Loaded before both, because each calls window.SegmentQuestions the
-         first time a segment is selected. -->
-    {% if (frontend_assets.audio_annotation | default(false)) or (frontend_assets.video_annotation | default(false)) %}
+    <!-- Per-segment question forms: the audio and video widgets' segment_schemes
+         and tree_annotation's node_scheme. Loaded before all three, because each
+         calls window.SegmentQuestions the first time a segment or node is
+         selected. -->
+    {% if (frontend_assets.audio_annotation | default(false)) or (frontend_assets.video_annotation | default(false)) or (frontend_assets.segment_questions | default(false)) %}
     <script src="{{ url_for('static', filename='segment-questions.js') }}?v=1"></script>
     {% endif %}
     <!-- Audio annotation manager -->
@@ -967,7 +968,7 @@
 
     <!-- Event annotation manager -->
     {% if frontend_assets.event_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='event-annotation.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='event-annotation.js') }}?v=3"></script>
     {% endif %}
 
     <!-- Multi-document event annotation manager -->
@@ -985,7 +986,7 @@
 
     <!-- Conversation tree interaction -->
     {% if frontend_assets.conversation_tree | default(false) %}
-    <script src="{{ url_for('static', filename='conversation-tree.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='conversation-tree.js') }}?v=3"></script>
     {% endif %}
 
     <!-- Video tracking interpolation and UI -->

@@ -9356,6 +9356,29 @@ For speech and dialogue over audio, see [Audio Dialogue](multimedia/audio_dialog
 
 ## Display Type Options
 
+The sections below cover the options authors reach for most often. They are not
+the whole set — `pdf` alone takes twenty-two. The registry is the complete list,
+and it is generated from the renderers, so it cannot fall behind them:
+
+```python
+from potato.server_utils.displays.registry import display_registry
+
+for display in display_registry.list_displays():
+    print(display["name"], sorted(display["optional_fields"]))
+```
+
+An option name Potato does not recognise is now a configuration error rather
+than a silently ignored key, and the message suggests the nearest real one:
+
+```
+instance_display.fields[0].display_options.speeker_key is not an option for
+display type 'multi_agent_discussion', so it would be ignored silently.
+Did you mean 'speaker_key'? Accepted options: ...
+```
+
+That check found four dead keys in Potato's own example configs, so it is worth
+running `potato validate` over an existing project after upgrading.
+
 ### Text Display
 
 ```yaml
@@ -9363,10 +9386,14 @@ For speech and dialogue over audio, see [Audio Dialogue](multimedia/audio_dialog
   type: "text"
   label: "Document"
   display_options:
-    collapsible: false        # Make content collapsible
-    max_height: 400           # Max height in pixels before scrolling
-    preserve_whitespace: true # Preserve line breaks and spacing
+    collapsible: false           # Make content collapsible
+    collapsed_by_default: false  # Start collapsed (needs collapsible)
+    max_height: 400              # Max height in pixels before scrolling
+    preserve_whitespace: true    # Preserve line breaks and spacing
 ```
+
+`collapsed_by_default` keeps a long case file out of the way until the annotator
+asks for it, rather than pushing the questions down the page on every item.
 
 ### Image Display
 
@@ -9453,7 +9480,12 @@ For text-only conversations with no audio:
     alternating_shading: true    # Alternate background colors
     speaker_extraction: true     # Extract "Speaker:" from text
     show_turn_numbers: false     # Show turn numbers
+    max_height: 600              # Cap the height and scroll inside it
 ```
+
+A long agent trace otherwise pushes the annotation form off the bottom of the
+page. `max_height` scrolls the container rather than clipping it, and takes a
+number of pixels or any CSS length.
 
 Data format for dialogue (each line in JSONL file):
 ```json
@@ -11489,6 +11521,38 @@ annotation_schemes:
 
 *Either `attributes` or `profiles_field` is required.
 
+### Where the profiles come from
+
+With `attributes`, Potato builds the profiles by combining the levels you
+declare, which is the classic design: the levels are the experimental
+conditions.
+
+With `profiles_field`, each item carries its own profiles and Potato shows them
+as they are. The rows are built from the keys the profiles use, so no
+`attributes` block is needed. Every card gets a row for every key seen anywhere
+in the set, which keeps the cards aligned when one profile omits a key: a
+missing value shows as an em dash in the right row rather than shifting the rows
+below it up.
+
+Declaring `attributes` alongside `profiles_field` narrows the display to the
+attributes you named, in the order you named them.
+
+```yaml
+- annotation_type: conjoint
+  name: platform
+  description: "Which platform would you rather use?"
+  profiles_field: profiles     # each item supplies its own
+  profiles_per_set: 3
+```
+
+```json
+{"id": "1", "profiles": [
+  {"Hosting": "Self-hosted", "Cost": "Free"},
+  {"Hosting": "Cloud", "Cost": "$20/mo"},
+  {"Hosting": "Hybrid", "Cost": "$8/mo"}
+]}
+```
+
 ### Attributes Format
 
 ```yaml
@@ -13389,6 +13453,13 @@ Each argument defines:
 | `role` | string | Yes | Semantic role name (e.g., "attacker", "target") |
 | `entity_types` | list | No | Span labels allowed for this role (empty = any span) |
 | `required` | boolean | No | Whether this argument must be filled (default: false) |
+
+!!! warning "These names must match the span schema"
+    `trigger_labels` and `entity_types` name labels in the scheme `span_schema`
+    points at. A name that does not exist there is now a configuration error,
+    because the flow cannot start without it: the annotator marks a span, picks
+    a role, and nothing happens, with Create Event staying disabled and nothing
+    saying which label was wrong.
 
 #### Visual Display
 
@@ -19367,9 +19438,16 @@ Click on any node to:
 
 ### Node Annotation Panel
 
-When a node is selected, the annotation panel appears with:
-- The annotation interface defined in `node_scheme`
-- Controls to close the panel or move to adjacent nodes
+Selecting a node opens a panel holding whatever `node_scheme` describes,
+rendered through the same registry as a top-level scheme — so any annotation
+type works there, with its own tooltips, labels and layout. A close button
+dismisses it; the tree above stays where it is.
+
+Answers are kept per node. A node that already has one is marked with a tick in
+the tree, so finding the ones still to do does not mean opening each in turn.
+
+`node_scheme` needs a `name`: it becomes the key each answer is stored under.
+Without one the scheme is named `<scheme>_node`.
 
 ### Path Selection
 
@@ -19380,7 +19458,8 @@ When path selection is enabled:
 
 ## Output Format
 
-Tree annotations are saved with both node-level and path-level data:
+Tree annotations are saved with both node-level and path-level data. Node
+answers are keyed by node id, then by the `name` of the `node_scheme`:
 
 ```json
 {
@@ -19540,17 +19619,31 @@ Nodes can be styled based on:
 2. Check that tree data is valid JSON
 3. Ensure each node has required fields (id, content)
 
-### Node Annotations Not Saving
+### The node panel opens but is empty
 
-1. Check that `node_scheme` is properly configured
-2. Verify hidden input elements are present
-3. Look for JavaScript errors in console
+The panel says which:
+
+- *"This tree has no node_scheme, so there is nothing to annotate on a node."*
+  The scheme has no `node_scheme` block. Path selection still works.
+- *"The node question form could not be loaded."* The page did not load
+  `segment-questions.js`. This should not happen; it is worth reporting.
+
+If `node_scheme` names an annotation type that fails to render, the panel shows
+that type's own error rather than an empty box.
+
+### Nothing is stored for a tree nobody touched
+
+That is deliberate. Both values start empty, so opening an item and moving on
+records nothing — an untouched tree is unanswered rather than answered with an
+empty path. Mark `required: true` under `label_requirement` if an answer is
+compulsory.
 
 ### Path Selection Issues
 
-1. Confirm `path_selection.enabled: true` is set
-2. Check that clicking nodes triggers selection
-3. Verify path data is being stored in hidden input
+1. Confirm `path_selection.enabled: true` is set.
+2. Nodes are clickable across the whole card; clicking the collapse triangle
+   toggles the subtree instead.
+3. Clicking a node already on the path takes it off again.
 
 ## Related Documentation
 
@@ -20063,7 +20156,8 @@ URL: https://potatoannotator.readthedocs.io/en/latest/annotation-types/structure
 
 # Card Sorting / Grouping
 
-The Card Sort schema groups items into categories by dragging them. In **closed mode**, groups are predefined by the researcher. In **open mode**, annotators create and name their own groups. This is commonly used in information architecture research, taxonomy development, and content categorization.
+The Card Sort schema groups items into categories by dragging them, tapping
+them, or moving them with the keyboard. In **closed mode**, groups are predefined by the researcher. In **open mode**, annotators create and name their own groups. This is commonly used in information architecture research, taxonomy development, and content categorization.
 
 ## When to Use Card Sort
 
@@ -20137,6 +20231,21 @@ annotation_schemes:
 4. Group counters update automatically
 5. In open mode: type a group name and click "+ Add Group" to create new groups
 6. In open mode: click × on a group header to remove it (cards return to source)
+
+### Without a mouse
+
+Dragging is not the only way to sort, and on a phone or tablet it is not
+available at all — HTML5 drag-and-drop does not work on touch.
+
+Tap or click a card to pick it up, then tap the group to drop it in. The same
+sequence works from the keyboard: Tab to a card, press Enter or Space to pick it
+up, Tab to a group and press Enter to drop it. With a card picked up, a number
+key sends it straight to that group — 1 is the first group on screen — and
+Escape puts it back down. Focus lands on the card that just moved, so the next
+Tab starts from there.
+
+The drop zones show a dashed outline while a card is held, and each move is
+announced to a screen reader ("Moved serious adverse events to Critical").
 
 ## Example
 
@@ -24609,8 +24718,11 @@ annotation_schemes:
 ```
 
 Stored as a list of `{index, step, from, to, flags, quality}`. Handoffs are derived
-from the trace at render time (no manual setup). Example:
-`examples/agent-traces/handoff-review/`.
+from the trace at render time (no manual setup). `quality` is omitted from a
+handoff nobody rated, rather than written as 0 — the scale starts at 1, so a
+stored 0 would read as a rating in the export.
+
+Example: `examples/agent-traces/handoff-review/`.
 
 ## Per-agent + per-team scorecard (`agent_scorecard`)
 
@@ -24636,6 +24748,22 @@ annotation_schemes:
 Stored as `{"agents": {name: {dim: score}}, "team": {dim: score}, "milestones": {name: bool}}`.
 Example: `examples/agent-traces/agent-scorecard/`.
 
+### Requiredness on multi-cell widgets
+
+A scorecard asks one question per agent per dimension, plus one per team
+dimension, and keeps every answer in a single field. Four agents across two
+dimensions plus two team dimensions is ten questions in one field, so
+`required: true` has to mean all ten rather than the first cell clicked.
+
+Each of these widgets reports how much of itself is unanswered, and the message
+beside the Next button names it: "3 of 10 scored", "2 of 5 handoffs reviewed",
+"no responsible agent or decisive step chosen". Milestones are checkboxes, so
+"none reached" is an answer and they are not counted.
+
+`consensus_tracking` and `context_attribution` work the same way. An act listed
+in `linked_acts` is unfinished until the turn it refers to has been clicked, and
+Next says which turn is still waiting.
+
 ## Tool / resource-contention timeline (`tool_contention`)
 
 Visualize concurrent tool/resource use across agents on a multi-lane timeline (one
@@ -24655,7 +24783,14 @@ annotation_schemes:
     contention_labels: [deadlock, circular_wait, race_condition, benign]
 ```
 
-Contentions are computed at render time (same `resource`, overlapping interval).
+Contentions are computed at render time: the same `resource`, an overlapping
+interval, and **two different agents**. One agent whose own two calls overlap on
+a resource is not contention across agents, and is not listed.
+
+`start` and `end` are in seconds and both are needed. Calls that carry neither
+all sit at 0–0, nothing can overlap, and the widget says so rather than
+reporting no contention — which would look exactly like a trace that has none.
+
 Stored as `{"contentions": {idx: label}}`. Example:
 `examples/agent-traces/tool-contention/`.
 
@@ -46572,7 +46707,10 @@ server-rendered HTML, with a note about what is missing.
 
 ## Configuration Validation
 
-The preview CLI validates your configuration and reports issues:
+The preview CLI validates your configuration and reports issues. It applies the
+same defaults the server does, so a config that boots is not reported as broken
+here — `task_dir` is optional in both, defaulting to the directory the config
+file is in.
 
 ### Errors (Blocking)
 

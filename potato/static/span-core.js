@@ -1487,7 +1487,24 @@ class SpanManager {
         // Don't clear currentSchema - keep it for consistency
     }
 
+    /**
+     * Draw the overlays, then say so.
+     *
+     * The event-annotation widget renders its list of saved events before the
+     * overlays exist, so looking an argument's text up by span id returned null
+     * and every argument printed as "?" on any revisit or reload. Nothing
+     * re-rendered the list once the spans arrived, because nothing announced
+     * that they had. Anyone downstream of a span restore needs this signal;
+     * polling for overlays is the alternative and it is worse.
+     */
     renderSpans() {
+        this.renderSpansNow();
+        document.dispatchEvent(new CustomEvent('potato:spansRendered', {
+            detail: {schema: this.currentSchema},
+        }));
+    }
+
+    renderSpansNow() {
         const hasFieldStrategies = Object.keys(this.fieldStrategies).length > 0;
 
         if (hasFieldStrategies) {
@@ -1633,7 +1650,7 @@ class SpanManager {
     handleTextSelection(event) {
         const selection = window.getSelection();
 
-        console.warn('[SpanManager] handleTextSelection ENTRY: rangeCount=' + selection.rangeCount + ' isCollapsed=' + selection.isCollapsed + ' selectedLabel=' + this.selectedLabel + ' currentSchema=' + this.currentSchema);
+        spanCoreDebugWarn('[SpanManager] handleTextSelection ENTRY: rangeCount=' + selection.rangeCount + ' isCollapsed=' + selection.isCollapsed + ' selectedLabel=' + this.selectedLabel + ' currentSchema=' + this.currentSchema);
 
         if (!selection.rangeCount || selection.isCollapsed) {
             return;
@@ -1641,7 +1658,7 @@ class SpanManager {
 
         const selectedLabel = this.getSelectedLabel();
         if (!selectedLabel) {
-            console.warn('[SpanManager] handleTextSelection: no selectedLabel, returning');
+            spanCoreDebugWarn('[SpanManager] handleTextSelection: no selectedLabel, returning');
             return;
         }
 
@@ -1658,13 +1675,13 @@ class SpanManager {
         let overlaysContainer = document.getElementById('span-overlays');
 
         const hasFieldStrategies = Object.keys(this.fieldStrategies).length > 0;
-        console.warn('[SpanManager] handleTextSelection: fieldStrategies=', Object.keys(this.fieldStrategies), 'selectedLabel=', selectedLabel);
+        spanCoreDebugWarn('[SpanManager] handleTextSelection: fieldStrategies=', Object.keys(this.fieldStrategies), 'selectedLabel=', selectedLabel);
 
         if (selection.rangeCount > 0) {
             const startNode = selection.getRangeAt(0).startContainer;
             const el = startNode.nodeType === Node.TEXT_NODE ? startNode.parentElement : startNode;
             const textContentEl = el ? el.closest('[id^="text-content-"]') : null;
-            console.warn('[SpanManager] handleTextSelection: textContentEl=', textContentEl?.id, 'el=', el?.id || el?.className);
+            spanCoreDebugWarn('[SpanManager] handleTextSelection: textContentEl=', textContentEl?.id, 'el=', el?.id || el?.className);
             if (textContentEl) {
                 const fieldKey = textContentEl.id.replace('text-content-', '');
                 if (fieldKey && this.fieldStrategies[fieldKey]) {
@@ -1676,11 +1693,11 @@ class SpanManager {
         }
 
         if (!strategy || !strategy.isInitialized) {
-            console.warn('[SpanManager] handleTextSelection: strategy not ready, targetField=' + targetField);
+            spanCoreDebugWarn('[SpanManager] handleTextSelection: strategy not ready, targetField=' + targetField);
             return;
         }
 
-        console.warn('[SpanManager] handleTextSelection: using strategy for field=' + targetField + ' container=' + (strategy.container ? strategy.container.id : 'NULL') + ' overlays=' + (overlaysContainer ? overlaysContainer.id : 'NULL'));
+        spanCoreDebugWarn('[SpanManager] handleTextSelection: using strategy for field=' + targetField + ' container=' + (strategy.container ? strategy.container.id : 'NULL') + ' overlays=' + (overlaysContainer ? overlaysContainer.id : 'NULL'));
 
         // Handle discontinuous span extension (Ctrl/Cmd+click with existing active span)
         if (isDiscontinuousMode && allowDiscontinuous && this.activeDiscontinuousSpan) {
@@ -1701,7 +1718,7 @@ class SpanManager {
             color: color
         });
         if (!result) {
-            console.warn('[SpanManager] handleTextSelection: createSpanFromSelection returned null for field=' + targetField);
+            spanCoreDebugWarn('[SpanManager] handleTextSelection: createSpanFromSelection returned null for field=' + targetField);
             return;
         }
 
@@ -1735,9 +1752,9 @@ class SpanManager {
             // Append the overlay to the correct container
             if (overlaysContainer) {
                 overlaysContainer.appendChild(overlay);
-                console.warn('[SpanManager] handleTextSelection: overlay appended to ' + overlaysContainer.id + ' for field=' + targetField);
+                spanCoreDebugWarn('[SpanManager] handleTextSelection: overlay appended to ' + overlaysContainer.id + ' for field=' + targetField);
             } else {
-                console.warn('[SpanManager] handleTextSelection: no overlaysContainer for field=' + targetField);
+                spanCoreDebugWarn('[SpanManager] handleTextSelection: no overlaysContainer for field=' + targetField);
             }
         }
 

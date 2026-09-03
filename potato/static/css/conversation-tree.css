@@ -140,6 +140,32 @@
     border-left: 3px solid #22c55e;
 }
 
+/* Which nodes already carry an answer. Without this the only way to find out
+   was to click every node in turn and read the panel. */
+.conv-tree-node.has-annotation > .conv-tree-node-header::after,
+.conv-tree-node.has-annotation:not(:has(> .conv-tree-node-header))::after {
+    content: "\2713";
+    float: right;
+    margin-left: 8px;
+    color: #6E56CF;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.tree-ann-node-panel-body {
+    padding-top: 4px;
+}
+
+/* The cloned node control is a whole generated form; drop the margins it
+   carries as a top-level scheme so it sits inside the panel. */
+.tree-ann-node-panel-body .annotation-form,
+.tree-ann-node-panel-body form {
+    margin: 0;
+    border: none;
+    padding: 0;
+    background: none;
+}
+
 /* Tree Annotation Schema Styles */
 .tree-ann-container {
     margin: 10px 0;

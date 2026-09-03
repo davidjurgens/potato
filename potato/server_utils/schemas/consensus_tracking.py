@@ -174,6 +174,7 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
             }});
 
             paint();
+            declareCompleteness();
         }}
 
         function paint() {{
@@ -209,6 +210,34 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
                 h.value = _tags.length ? JSON.stringify(_tags) : '';
                 h.setAttribute('data-modified', 'true');
                 h.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            }}
+            declareCompleteness();
+        }}
+
+        /**
+         * A linked act without its reference is half a tag.
+         *
+         * `linked_acts` are the ones that respond to something -- an agreement
+         * agrees *with* a proposal -- and the widget already says so on screen:
+         * the card gets `ct-awaiting-ref` and the badge reads "click the
+         * referenced turn". Nothing consulted that on submit, so Next advanced
+         * and `{{"turn": 2, "act": "agreement"}}` was stored with no `ref`. On
+         * return the badge reads "agreement" where a finished one reads
+         * "agreement -> #1", which is recoverable by eye, one card at a time.
+         */
+        function declareCompleteness() {{
+            var form = document.getElementById(SCHEMA);
+            if (!form) return;
+            var dangling = _tags.filter(function(t) {{
+                return CONFIG.linked_acts.indexOf(t.act) !== -1 && t.ref === undefined;
+            }});
+            if (dangling.length) {{
+                var turns = dangling.map(function(t) {{ return '#' + (t.turn + 1); }}).join(', ');
+                form.setAttribute('data-incomplete-reason',
+                    (dangling.length === 1 ? 'turn ' : 'turns ') + turns +
+                    ' still needs the turn it refers to');
+            }} else {{
+                form.removeAttribute('data-incomplete-reason');
             }}
         }}
 

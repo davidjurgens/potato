@@ -51,6 +51,10 @@ class DialogueDisplay(BaseDisplay):
         "text_key": "text",
         "show_turn_numbers": False,
         "per_turn_ratings": None,
+        # Cap the container and scroll inside it. A long agent trace otherwise
+        # pushes the annotation form off the bottom of the page. Accepts a
+        # number (px) or any CSS length.
+        "max_height": None,
         # --- reply threading and per-turn chrome -------------------------- #
         # All of the following render as CSS pseudo-element content or data
         # attributes, never as text nodes, so they do not change the container's
@@ -344,8 +348,16 @@ class DialogueDisplay(BaseDisplay):
         if turn_meta_fields:
             container_classes.append("show-meta-chips")
 
+        # Scrolling happens on the container, so turn markup -- and therefore
+        # the textContent span offsets depend on -- is untouched.
+        max_height = options.get("max_height")
+        container_style = ""
+        if max_height:
+            css_height = f"{max_height}px" if isinstance(max_height, (int, float)) else str(max_height)
+            container_style = f' style="max-height: {html.escape(css_height, quote=True)}; overflow-y: auto;"'
+
         return f'''
-        <div class="{' '.join(container_classes)}" data-field-key="{field_key}">
+        <div class="{' '.join(container_classes)}" data-field-key="{field_key}"{container_style}>
             {all_turns_html}
             {hidden_input_html}
         </div>

@@ -20,7 +20,7 @@ instance_display:
     - key: steps
       type: agent_trace
       label: "Agent Interactions"
-      display_options: {show_turn_numbers: true, speaker_key: agent, text_key: content}
+      display_options: {show_step_numbers: true, speaker_key: agent, text_key: content}
 annotation_schemes:
   - annotation_type: agent_scorecard
     name: scorecard

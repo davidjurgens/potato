@@ -84,6 +84,29 @@ For speech and dialogue over audio, see [Audio Dialogue](multimedia/audio_dialog
 
 ## Display Type Options
 
+The sections below cover the options authors reach for most often. They are not
+the whole set — `pdf` alone takes twenty-two. The registry is the complete list,
+and it is generated from the renderers, so it cannot fall behind them:
+
+```python
+from potato.server_utils.displays.registry import display_registry
+
+for display in display_registry.list_displays():
+    print(display["name"], sorted(display["optional_fields"]))
+```
+
+An option name Potato does not recognise is now a configuration error rather
+than a silently ignored key, and the message suggests the nearest real one:
+
+```
+instance_display.fields[0].display_options.speeker_key is not an option for
+display type 'multi_agent_discussion', so it would be ignored silently.
+Did you mean 'speaker_key'? Accepted options: ...
+```
+
+That check found four dead keys in Potato's own example configs, so it is worth
+running `potato validate` over an existing project after upgrading.
+
 ### Text Display
 
 ```yaml
@@ -91,10 +114,14 @@ For speech and dialogue over audio, see [Audio Dialogue](multimedia/audio_dialog
   type: "text"
   label: "Document"
   display_options:
-    collapsible: false        # Make content collapsible
-    max_height: 400           # Max height in pixels before scrolling
-    preserve_whitespace: true # Preserve line breaks and spacing
+    collapsible: false           # Make content collapsible
+    collapsed_by_default: false  # Start collapsed (needs collapsible)
+    max_height: 400              # Max height in pixels before scrolling
+    preserve_whitespace: true    # Preserve line breaks and spacing
 ```
+
+`collapsed_by_default` keeps a long case file out of the way until the annotator
+asks for it, rather than pushing the questions down the page on every item.
 
 ### Image Display
 
@@ -181,7 +208,12 @@ For text-only conversations with no audio:
     alternating_shading: true    # Alternate background colors
     speaker_extraction: true     # Extract "Speaker:" from text
     show_turn_numbers: false     # Show turn numbers
+    max_height: 600              # Cap the height and scroll inside it
 ```
+
+A long agent trace otherwise pushes the annotation form off the bottom of the
+page. `max_height` scrolls the container rather than clipping it, and takes a
+number of pixels or any CSS length.
 
 Data format for dialogue (each line in JSONL file):
 ```json

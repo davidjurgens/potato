@@ -1811,6 +1811,7 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # A bws scheme is inert without the dataset-level tuple generator.
     _validate_bws_scheme_has_config(config_data)
+    _validate_event_annotation_labels(config_data)
 
     # Validate BWS configuration if present
     if 'bws_config' in config_data:
@@ -2309,6 +2310,104 @@ def _validate_keyword_highlight_for_images(config_data: Dict[str, Any]) -> None:
                 f"Keyword highlighting only works with text content, not images. "
                 f"Set keyword_highlight: false or remove it from the ai_support features."
             )
+
+
+def _validate_event_annotation_labels(config_data: Dict[str, Any]) -> None:
+    """Check an `event_annotation`'s labels against the span schema it names.
+
+    `trigger_labels` and each argument's `entity_types` have to name labels that
+    exist in the schema named by `span_schema` -- that is how the widget decides
+    which span can be a trigger and which can fill a role. With a mismatch the
+    flow simply cannot start: the annotator marks a span, clicks a role, and
+    nothing happens, with Create Event staying disabled and no message saying
+    why. Validation was quiet about it, including under --strict.
+
+    Only names that are certainly wrong are rejected. A `span_schema` naming a
+    scheme that is not in this config is left alone rather than guessed at.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If a label cannot exist in the named span schema
+    """
+    schemes = config_data.get('annotation_schemes', [])
+    if not isinstance(schemes, list):
+        return
+
+    by_name = {
+        s['name']: s for s in schemes
+        if isinstance(s, dict) and isinstance(s.get('name'), str)
+    }
+
+    def labels_of(scheme):
+        """The label names a span scheme offers, or None if it does not say."""
+        labels = scheme.get('labels')
+        if not isinstance(labels, list):
+            return None
+        names = set()
+        for label in labels:
+            if isinstance(label, str):
+                names.add(label)
+            elif isinstance(label, dict) and isinstance(label.get('name'), str):
+                names.add(label['name'])
+        return names or None
+
+    for scheme in schemes:
+        if not isinstance(scheme, dict) or scheme.get('annotation_type') != 'event_annotation':
+            continue
+
+        span_schema_name = scheme.get('span_schema')
+        if not span_schema_name:
+            continue
+        span_scheme = by_name.get(span_schema_name)
+        if span_scheme is None:
+            raise ConfigValidationError(
+                f"event_annotation scheme '{scheme.get('name', '<unnamed>')}' names "
+                f"span_schema: {span_schema_name}, but no annotation scheme in this "
+                f"config is called that. Its triggers and arguments are matched "
+                f"against that schema's labels, so nothing can be annotated. "
+                f"Schemes available: {', '.join(sorted(by_name)) or '(none)'}."
+            )
+
+        available = labels_of(span_scheme)
+        if available is None:
+            continue  # the span scheme builds its labels some other way
+
+        for event_type in scheme.get('event_types') or []:
+            if not isinstance(event_type, dict):
+                continue
+            type_name = event_type.get('type', '<unnamed>')
+
+            unknown = [
+                label for label in (event_type.get('trigger_labels') or [])
+                if isinstance(label, str) and label not in available
+            ]
+            if unknown:
+                raise ConfigValidationError(
+                    f"event_annotation scheme '{scheme.get('name', '<unnamed>')}', "
+                    f"event type '{type_name}': trigger_labels names "
+                    f"{unknown!r}, which the span schema '{span_schema_name}' does "
+                    f"not offer. No span could ever be a trigger for this event "
+                    f"type. Its labels are: {', '.join(sorted(available))}."
+                )
+
+            for argument in event_type.get('arguments') or []:
+                if not isinstance(argument, dict):
+                    continue
+                unknown = [
+                    label for label in (argument.get('entity_types') or [])
+                    if isinstance(label, str) and label not in available
+                ]
+                if unknown:
+                    raise ConfigValidationError(
+                        f"event_annotation scheme '{scheme.get('name', '<unnamed>')}', "
+                        f"event type '{type_name}', argument "
+                        f"'{argument.get('role', '<unnamed>')}': entity_types names "
+                        f"{unknown!r}, which the span schema '{span_schema_name}' "
+                        f"does not offer, so no span could ever fill this role. "
+                        f"Its labels are: {', '.join(sorted(available))}."
+                    )
 
 
 def _validate_bws_scheme_has_config(config_data: Dict[str, Any]) -> None:
@@ -6529,6 +6628,44 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
     _check_display_only_deprecation(config_data)
 
 
+def _reject_unknown_display_options(field_type: str, options: Dict[str, Any], path: str) -> None:
+    """Reject a display option the renderer will never read.
+
+    ``get_display_options()`` merges the author's options over the renderer's
+    defaults and passes the result through, so an unrecognised key is inert. It
+    does not warn, it does not appear in the log, and the page renders at the
+    default -- which is why a misspelled option was indistinguishable from a
+    correct one, and stayed that way until somebody noticed the page was wrong.
+
+    Not hypothetical. This check found four dead keys already shipped in the
+    repo's own examples, including ``show_turn_numbers`` on nine ``agent_trace``
+    fields, where the option is spelled ``show_step_numbers``.
+
+    A display whose renderer declares no options at all is skipped: for a plugin
+    that never set ``optional_fields`` there is no way to tell "takes no options"
+    from "did not say".
+    """
+    try:
+        from .displays import display_registry
+        definition = display_registry._displays.get(field_type)
+    except Exception:
+        return
+    if definition is None or not definition.optional_fields:
+        return
+
+    accepted = set(definition.optional_fields or {}) | set(definition.required_fields or [])
+    for key in options:
+        if key in accepted:
+            continue
+        suggestion = difflib.get_close_matches(key, sorted(accepted), n=1, cutoff=0.7)
+        hint = f" Did you mean '{suggestion[0]}'?" if suggestion else ""
+        raise ConfigValidationError(
+            f"{path}.display_options.{key} is not an option for display type "
+            f"'{field_type}', so it would be ignored silently.{hint} "
+            f"Accepted options: {', '.join(sorted(accepted))}."
+        )
+
+
 def _validate_display_options(field_type: str, options: Dict[str, Any], path: str) -> None:
     """
     Validate display options for a specific field type.
@@ -6541,6 +6678,8 @@ def _validate_display_options(field_type: str, options: Dict[str, Any], path: st
     Raises:
         ConfigValidationError: If options are invalid
     """
+    _reject_unknown_display_options(field_type, options, path)
+
     # Common option validation
     if "max_width" in options:
         max_width = options["max_width"]

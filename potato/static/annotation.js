@@ -2009,6 +2009,20 @@ function budgetShortfall(form) {
     return sum === total ? null : { sum: sum, total: total };
 }
 
+/**
+ * What a composite widget says is still missing, if anything.
+ *
+ * The widget owns this: it knows how many cells it declared, which of them are
+ * answered, and how to say so in the annotator's terms ("3 of 10 scored", "no
+ * decisive step chosen"). The validator just reads it. An empty or absent
+ * attribute means the widget is satisfied.
+ */
+function compositeShortfall(form) {
+    if (!form) return null;
+    const reason = form.getAttribute('data-incomplete-reason');
+    return reason && reason.trim() ? reason.trim() : null;
+}
+
 function validateRequiredFields(options) {
     // If user has already attempted forward validation, always show errors
     // so they get real-time feedback as they fill in fields
@@ -2088,6 +2102,22 @@ function validateRequiredFields(options) {
             }
         }
 
+        // A composite widget declares its own cells, so only it can say whether
+        // they are all answered. The per-input test above sees one hidden input
+        // holding JSON and asks only whether it is non-empty, which made
+        // `required` mean "touched once": an agent_scorecard declaring four
+        // agents by two dimensions plus two team dimensions asks ten questions
+        // and was satisfied by one, and a failure_attribution with a null
+        // decisive step passed. Each widget sets `data-incomplete-reason` on its
+        // form when it writes its value, and clears it when it is done.
+        if (schemaFilled) {
+            const declared = compositeShortfall(group.form);
+            if (declared) {
+                schemaFilled = false;
+                reason = declared;
+            }
+        }
+
         if (!schemaFilled) {
             allRequiredFilled = false;
             const legend = group.form.querySelector('legend');
@@ -2124,6 +2154,11 @@ function updateRequiredFieldsError(unfilledSchemas) {
         errorDiv = document.createElement('div');
         errorDiv.id = 'required-fields-error';
         errorDiv.className = 'required-fields-error';
+        // Pressing Next and having nothing happen needs an explanation, and a
+        // banner that only appears on screen is not one. This matters more now
+        // that composite widgets put the specific shortfall in here -- "3 of 10
+        // scored" is the useful half, and it was the half nobody heard.
+        errorDiv.setAttribute('role', 'alert');
         const navDiv = document.querySelector('.potato-nav');
         if (navDiv) {
             navDiv.parentNode.insertBefore(errorDiv, navDiv);
@@ -5858,22 +5893,36 @@ function populateCardSort(form, schemaName, data) {
     const sourceItems = document.getElementById(schemaName + '-source-items');
     if (!sourceItems || sourceItems.children.length > 0) return;
 
-    items.forEach(function(item, idx) {
-        const card = document.createElement('div');
-        card.className = 'card-sort-card';
-        card.draggable = true;
-        card.setAttribute('data-card-text', item);
-        card.textContent = item;
-        card.ondragstart = function(e) {
-            e.dataTransfer.setData('text/plain', item);
-            e.dataTransfer.setData('application/x-source-group', '__source__');
-            card.classList.add('card-sort-dragging');
-        };
-        card.ondragend = function() {
-            card.classList.remove('card-sort-dragging');
-        };
+    // Build through the schema's own createCard, which is exported for exactly
+    // this. Hand-rolling a second copy here is how the starting cards -- the
+    // only ones an annotator ever sees before they touch anything -- ended up
+    // without the tabindex, role and keyboard handlers that createCard gives
+    // every card it makes.
+    items.forEach(function(item) {
+        let card;
+        if (typeof window._cardSortCreateCard === 'function') {
+            card = window._cardSortCreateCard(item, schemaName, '__source__');
+        } else {
+            card = document.createElement('div');
+            card.className = 'card-sort-card';
+            card.draggable = true;
+            card.setAttribute('data-card-text', item);
+            card.textContent = item;
+            card.ondragstart = function(e) {
+                e.dataTransfer.setData('text/plain', item);
+                e.dataTransfer.setData('application/x-source-group', '__source__');
+                card.classList.add('card-sort-dragging');
+            };
+            card.ondragend = function() {
+                card.classList.remove('card-sort-dragging');
+            };
+        }
         sourceItems.appendChild(card);
     });
+
+    if (typeof window._cardSortBindZones === 'function') {
+        window._cardSortBindZones(schemaName);
+    }
 }
 
 function populateConjoint(form, schemaName, data) {
@@ -5930,16 +5979,71 @@ function populateConjoint(form, schemaName, data) {
             });
         }
     } else if (Array.isArray(profiles)) {
-        // Profiles from data
+        // Profiles from data.
+        //
+        // The generator only emits attribute rows for entries in the config's
+        // `attributes` block, but it accepts `attributes` OR `profiles_field`.
+        // So a data-driven conjoint had no `.conjoint-attr-value` cells to fill,
+        // and rendered as three blank cards with a radio under each: the
+        // annotator was asked to choose between nothing, and the config
+        // validated. Build the rows from the data's own keys when the config
+        // did not declare any.
         const profileCards = form.querySelectorAll('.conjoint-profile-card');
+        if (!form.querySelector('.conjoint-attr-value')) {
+            buildConjointRowsFromData(profileCards, profiles);
+        }
         profiles.forEach((profile, idx) => {
             if (idx < profileCards.length) {
                 const card = profileCards[idx];
                 Object.keys(profile).forEach(attrName => {
-                    const cell = card.querySelector(`.conjoint-attr-value[data-attr="${attrName}"]`);
+                    const cell = card.querySelector(
+                        `.conjoint-attr-value[data-attr="${CSS.escape(attrName)}"]`);
                     if (cell) cell.textContent = profile[attrName];
                 });
             }
         });
     }
+}
+
+/**
+ * Give every card the same rows, in the same order, from the profiles' own keys.
+ *
+ * Every card gets a row for every attribute seen anywhere in the set, so the
+ * cards stay aligned when one profile omits a key — a missing value reads as an
+ * empty cell in the right row, rather than shifting the rows below it up and
+ * silently changing what the annotator is comparing.
+ */
+function buildConjointRowsFromData(profileCards, profiles) {
+    const attrNames = [];
+    profiles.forEach(profile => {
+        if (!profile || typeof profile !== 'object') return;
+        Object.keys(profile).forEach(name => {
+            if (!attrNames.includes(name)) attrNames.push(name);
+        });
+    });
+    if (attrNames.length === 0) return;
+
+    profileCards.forEach(card => {
+        const tbody = card.querySelector('.conjoint-profile-table tbody');
+        if (!tbody) return;
+        const profileNum = card.getAttribute('data-profile');
+        attrNames.forEach(name => {
+            const row = document.createElement('tr');
+            row.className = 'conjoint-attr-row';
+
+            const nameCell = document.createElement('td');
+            nameCell.className = 'conjoint-attr-name';
+            nameCell.textContent = name;
+
+            const valueCell = document.createElement('td');
+            valueCell.className = 'conjoint-attr-value';
+            valueCell.setAttribute('data-attr', name);
+            if (profileNum) valueCell.setAttribute('data-profile', profileNum);
+            valueCell.textContent = '\u2014';
+
+            row.appendChild(nameCell);
+            row.appendChild(valueCell);
+            tbody.appendChild(row);
+        });
+    });
 }

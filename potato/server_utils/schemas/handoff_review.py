@@ -169,6 +169,7 @@ def _generate_internal(
                 }});
             }});
             _handoffs.forEach(function(h) {{ paint(h.index); }});
+            declareCompleteness();
         }}
 
         function paint(i) {{
@@ -186,13 +187,43 @@ def _generate_internal(
 
         function save() {{
             var data = _handoffs.filter(function(h) {{ return h.flags.length || h.quality; }})
-                .map(function(h) {{ return {{index: h.index, step: h.step, from: h.from, to: h.to,
-                                             flags: h.flags, quality: h.quality}}; }});
+                .map(function(h) {{
+                    var rec = {{index: h.index, step: h.step, from: h.from, to: h.to,
+                                flags: h.flags}};
+                    // 0 is this widget's "unrated", but the scale starts at 1,
+                    // so writing it out puts a rating in the export that the
+                    // annotator never gave. Omit the key instead.
+                    if (h.quality) rec.quality = h.quality;
+                    return rec;
+                }});
             var hid = hidden();
             if (hid) {{
                 hid.value = data.length ? JSON.stringify(data) : '';
                 hid.setAttribute('data-modified', 'true');
                 hid.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            }}
+            declareCompleteness();
+        }}
+
+        /**
+         * Say what is still unreviewed, for the required-fields check.
+         *
+         * The scheme asks about every handoff in the trace; a hidden input
+         * holding one handoff's JSON is non-empty, so the generic check passed
+         * it. Only this widget knows how many handoffs there are.
+         */
+        function declareCompleteness() {{
+            var form = document.getElementById(SCHEMA);
+            if (!form) return;
+            var total = _handoffs.length;
+            var done = _handoffs.filter(function(h) {{
+                return h.flags.length || h.quality;
+            }}).length;
+            if (total && done < total) {{
+                form.setAttribute('data-incomplete-reason',
+                    done + ' of ' + total + ' handoffs reviewed');
+            }} else {{
+                form.removeAttribute('data-incomplete-reason');
             }}
         }}
 

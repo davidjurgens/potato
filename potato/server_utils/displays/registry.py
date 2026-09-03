@@ -54,6 +54,32 @@ class DisplayDefinition:
     description: str = ""
     lazy_populated: bool = False
 
+    def __post_init__(self):
+        """Take ``optional_fields`` from the renderer, which is what runs.
+
+        ``BaseDisplay.get_display_options()`` merges the *renderer's*
+        ``optional_fields``; this dataclass's copy only feeds ``list_displays()``,
+        the generated JSON schema and the docs. So a key the renderer reads and
+        this definition omits is an option that works but that no author, editor
+        or agent can discover -- and a default declared in both that disagrees is
+        documentation that contradicts the product.
+
+        Both had happened. 14 of 24 displays hid 44 working options between them
+        (``pdf`` alone hid 15, including ``ocr`` and ``link_schema``), and
+        ``agent_trace.step_type_colors`` and ``eval_trace.pane_labels`` were
+        published as ``None`` while the renderer supplied real defaults.
+
+        Reading the renderer removes the copy rather than asking anyone to keep
+        it in step. Keys declared only here still survive, for the entries whose
+        renderer is a bare callable with no such attribute.
+        """
+        renderer_fields = getattr(self.renderer, "optional_fields", None)
+        if isinstance(renderer_fields, dict):
+            merged = dict(renderer_fields)
+            for key, value in (self.optional_fields or {}).items():
+                merged.setdefault(key, value)
+            self.optional_fields = merged
+
 
 #: Display types that accept ``span_target: true`` without satisfying the
 #: standard ``.text-content`` contract, because they anchor spans themselves.
@@ -392,11 +418,6 @@ def _register_builtin_displays():
             name="text",
             renderer=TextDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "collapsible": False,
-                "max_height": None,
-                "preserve_whitespace": True,
-            },
             supports_span_target=True,
             description="Plain text content display"
         ),
@@ -404,10 +425,6 @@ def _register_builtin_displays():
             name="html",
             renderer=TextDisplay(allow_html=True),
             required_fields=["key"],
-            optional_fields={
-                "collapsible": False,
-                "max_height": None,
-            },
             supports_span_target=False,
             description="HTML content display (sanitized)"
         ),
@@ -415,12 +432,6 @@ def _register_builtin_displays():
             name="image",
             renderer=ImageDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "max_width": None,
-                "max_height": None,
-                "zoomable": True,
-                "alt_text": "",
-            },
             supports_span_target=False,
             description="Image display with optional zoom"
         ),
@@ -428,15 +439,6 @@ def _register_builtin_displays():
             name="depth_map",
             renderer=DepthDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "depth_scale": None,
-                "colormap": "turbo",
-                "invert": False,
-                "rgb_field": None,
-                "overlay_opacity": 0.75,
-                "max_height": None,
-                "show_controls": True,
-            },
             supports_span_target=False,
             description="Depth map with windowing, colormap and a metre readout"
         ),
@@ -444,14 +446,6 @@ def _register_builtin_displays():
             name="video",
             renderer=VideoDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "max_width": None,
-                "max_height": None,
-                "controls": True,
-                "autoplay": False,
-                "loop": False,
-                "muted": False,
-            },
             supports_span_target=False,
             description="Video player display"
         ),
@@ -459,12 +453,6 @@ def _register_builtin_displays():
             name="audio",
             renderer=AudioDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "controls": True,
-                "autoplay": False,
-                "loop": False,
-                "show_waveform": False,
-            },
             supports_span_target=False,
             description="Audio player display"
         ),
@@ -475,23 +463,6 @@ def _register_builtin_displays():
             # Must stay in step with DialogueDisplay.optional_fields — that class
             # attribute is what get_display_options() actually merges, while this
             # copy feeds the docs and the generated config schema.
-            optional_fields={
-                "alternating_shading": True,
-                "speaker_extraction": True,
-                "speaker_key": "speaker",
-                "text_key": "text",
-                "show_turn_numbers": False,
-                "per_turn_ratings": None,
-                "indent_replies": False,
-                "max_indent_depth": 6,
-                "show_reply_lines": True,
-                "show_timestamps": False,
-                "timestamp_format": "relative",
-                "turn_meta_fields": None,
-                "meta_key": "meta",
-                "depth_key": "depth",
-                "reply_to_key": "reply_to",
-            },
             supports_span_target=True,
             description=(
                 "Dialogue/conversation turns, optionally threaded by reply-to "
@@ -502,17 +473,6 @@ def _register_builtin_displays():
             name="audio_dialogue",
             renderer=AudioDialogueDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "audio_key": "audio",
-                "turns_key": "turns",
-                "speaker_key": "speaker",
-                "text_key": "text",
-                "speakers": [],
-                "allow_speaker_assignment": "auto",
-                "scroll_height": "480px",
-                "show_timestamps": True,
-                "playback_rates": [1, 1.25, 1.5, 2],
-            },
             supports_span_target=True,
             description="Podcast / interview dialogue: speaker bubbles, per-turn audio playback, ratings, spans, cross-turn linking",
         ),
@@ -520,13 +480,6 @@ def _register_builtin_displays():
             name="multi_agent_discussion",
             renderer=MultiAgentDiscussionDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "show_turn_numbers": False,
-                "show_legend": True,
-                "show_addressees": True,
-                "thread_replies": True,
-                "collapse_environment": False,
-            },
             supports_span_target=True,
             description="Multi-agent discussion with agent legend, colors, addressees, and filtering"
         ),
@@ -539,12 +492,6 @@ def _register_builtin_displays():
             # copy feeds the docs and the generated config schema. This one had
             # drifted twice: the default was still "50%" after the renderer
             # moved to "auto", and `labels` was documented but never declared.
-            optional_fields={
-                "cell_width": "auto",
-                "show_labels": True,
-                "labels": None,
-                "vertical_on_mobile": True,
-            },
             supports_span_target=False,
             description="Side-by-side comparison display"
         ),
@@ -552,15 +499,6 @@ def _register_builtin_displays():
             name="pdf",
             renderer=PDFDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "view_mode": "scroll",
-                "max_height": 700,
-                "max_width": None,
-                "text_layer": True,
-                "show_page_controls": True,
-                "initial_page": 1,
-                "zoom": "auto",
-            },
             supports_span_target=False,
             description="PDF document display with PDF.js rendering"
         ),
@@ -568,13 +506,6 @@ def _register_builtin_displays():
             name="document",
             renderer=DocumentDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "collapsible": False,
-                "max_height": None,
-                "show_outline": False,
-                "preserve_structure": True,
-                "style_theme": "default",
-            },
             supports_span_target=True,
             description="Document display for DOCX, Markdown, and other formats"
         ),
@@ -582,17 +513,6 @@ def _register_builtin_displays():
             name="spreadsheet",
             renderer=SpreadsheetDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "annotation_mode": "row",
-                "show_headers": True,
-                "max_height": 400,
-                "max_width": None,
-                "striped": True,
-                "hoverable": True,
-                "sortable": False,
-                "selectable": True,
-                "compact": False,
-            },
             supports_span_target=False,
             description="Spreadsheet/table display with row or cell annotation"
         ),
@@ -600,17 +520,6 @@ def _register_builtin_displays():
             name="code",
             renderer=CodeDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "language": None,
-                "show_line_numbers": True,
-                "max_height": 500,
-                "max_width": None,
-                "wrap_lines": False,
-                "highlight_lines": None,
-                "start_line": 1,
-                "theme": "default",
-                "copy_button": True,
-            },
             supports_span_target=True,
             description="Source code display with syntax highlighting"
         ),
@@ -618,15 +527,6 @@ def _register_builtin_displays():
             name="conversation_tree",
             renderer=ConversationTreeDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "collapsed_depth": 2,
-                "node_style": "card",
-                "show_node_ids": False,
-                "max_depth": None,
-                "show_timestamps": False,
-                "turn_meta_fields": None,
-                "meta_key": "meta",
-            },
             # Not a span target: collapsed subtrees make the container's
             # textContent depend on UI state, so span offsets would shift when a
             # branch is expanded. Pair it with a `dialogue` field for spans.
@@ -637,15 +537,6 @@ def _register_builtin_displays():
             name="agent_trace",
             renderer=AgentTraceDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "show_timestamps": False,
-                "collapse_observations": False,
-                "step_type_colors": None,
-                "show_screenshots": True,
-                "show_step_numbers": True,
-                "show_summary": True,
-                "compact": False,
-            },
             supports_span_target=False,
             description="Agent trace display with step cards and type badges"
         ),
@@ -653,14 +544,6 @@ def _register_builtin_displays():
             name="cot_trace",
             renderer=CotTraceDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "show_step_numbers": True,
-                "show_types": True,
-                "show_rail": True,
-                "collapse_long_steps": True,
-                "clamp_lines": 12,
-                "compact": False,
-            },
             supports_span_target=False,
             description="Long chain-of-thought trace: vertical step cards with a sticky progress rail for process-reward verification",
         ),
@@ -668,14 +551,6 @@ def _register_builtin_displays():
             name="eval_trace",
             renderer=EvalTraceDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "pane_labels": None,
-                "show_step_numbers": True,
-                "collapse_long_outputs": True,
-                "max_output_lines": 20,
-                "link_steps": True,
-                "compact": False,
-            },
             # Matches EvalTraceDisplay.supports_span_target: the three-pane block
             # is span-annotatable (offset-based highlight across panes).
             supports_span_target=True,
@@ -685,14 +560,6 @@ def _register_builtin_displays():
             name="gallery",
             renderer=GalleryDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "layout": "horizontal",
-                "thumbnail_size": 300,
-                "show_captions": True,
-                "zoomable": True,
-                "max_height": 400,
-                "columns": 3,
-            },
             supports_span_target=False,
             description="Scrollable image gallery with captions"
         ),
@@ -700,9 +567,6 @@ def _register_builtin_displays():
             name="interactive_chat",
             renderer=InteractiveChatDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "placeholder_text": "Start chatting with the agent to begin the task.",
-            },
             supports_span_target=True,
             lazy_populated=True,  # conversation is written by /agent_chat/finish
             description="Interactive agent chat with post-interaction trace display"
@@ -711,18 +575,6 @@ def _register_builtin_displays():
             name="web_agent_trace",
             renderer=WebAgentTraceDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "show_overlays": True,
-                "show_filmstrip": True,
-                "show_thought": True,
-                "show_observation": True,
-                "show_element_info": True,
-                "screenshot_max_width": 800,
-                "screenshot_max_height": 600,
-                "filmstrip_size": 80,
-                "auto_playback": False,
-                "playback_step_delay": 2.0,
-            },
             supports_span_target=False,
             description="Web agent trace viewer with screenshots, SVG overlays, and step navigation"
         ),
@@ -730,17 +582,6 @@ def _register_builtin_displays():
             name="coding_trace",
             renderer=CodingTraceDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "show_file_tree": True,
-                "diff_view": "unified",
-                "collapse_long_outputs": True,
-                "max_output_lines": 50,
-                "terminal_theme": "dark",
-                "show_step_numbers": True,
-                "show_tool_badges": True,
-                "show_reasoning": True,
-                "compact": False,
-            },
             supports_span_target=True,
             description="Coding agent trace display with diff rendering, terminal blocks, and file tree"
         ),
@@ -748,17 +589,6 @@ def _register_builtin_displays():
             name="live_agent",
             renderer=LiveAgentDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "show_overlays": True,
-                "show_filmstrip": True,
-                "show_thought": True,
-                "show_controls": True,
-                "allow_takeover": True,
-                "allow_instructions": True,
-                "screenshot_max_width": 900,
-                "screenshot_max_height": 650,
-                "filmstrip_size": 80,
-            },
             supports_span_target=False,
             lazy_populated=True,  # trace populated by live agent session
             description="Live AI agent viewer with real-time screenshots, controls, and interaction"
@@ -767,14 +597,6 @@ def _register_builtin_displays():
             name="live_coding_agent",
             renderer=LiveCodingAgentDisplay(),
             required_fields=["key"],
-            optional_fields={
-                "show_file_tree": True,
-                "show_reasoning": True,
-                "collapse_long_outputs": True,
-                "max_output_lines": 50,
-                "show_controls": True,
-                "allow_instructions": True,
-            },
             supports_span_target=False,
             lazy_populated=True,  # trace populated by live coding-agent session
             description="Live coding agent viewer with real-time streaming and intervention controls"

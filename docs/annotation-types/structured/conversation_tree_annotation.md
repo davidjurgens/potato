@@ -256,9 +256,16 @@ Click on any node to:
 
 ### Node Annotation Panel
 
-When a node is selected, the annotation panel appears with:
-- The annotation interface defined in `node_scheme`
-- Controls to close the panel or move to adjacent nodes
+Selecting a node opens a panel holding whatever `node_scheme` describes,
+rendered through the same registry as a top-level scheme — so any annotation
+type works there, with its own tooltips, labels and layout. A close button
+dismisses it; the tree above stays where it is.
+
+Answers are kept per node. A node that already has one is marked with a tick in
+the tree, so finding the ones still to do does not mean opening each in turn.
+
+`node_scheme` needs a `name`: it becomes the key each answer is stored under.
+Without one the scheme is named `<scheme>_node`.
 
 ### Path Selection
 
@@ -269,7 +276,8 @@ When path selection is enabled:
 
 ## Output Format
 
-Tree annotations are saved with both node-level and path-level data:
+Tree annotations are saved with both node-level and path-level data. Node
+answers are keyed by node id, then by the `name` of the `node_scheme`:
 
 ```json
 {
@@ -429,17 +437,31 @@ Nodes can be styled based on:
 2. Check that tree data is valid JSON
 3. Ensure each node has required fields (id, content)
 
-### Node Annotations Not Saving
+### The node panel opens but is empty
 
-1. Check that `node_scheme` is properly configured
-2. Verify hidden input elements are present
-3. Look for JavaScript errors in console
+The panel says which:
+
+- *"This tree has no node_scheme, so there is nothing to annotate on a node."*
+  The scheme has no `node_scheme` block. Path selection still works.
+- *"The node question form could not be loaded."* The page did not load
+  `segment-questions.js`. This should not happen; it is worth reporting.
+
+If `node_scheme` names an annotation type that fails to render, the panel shows
+that type's own error rather than an empty box.
+
+### Nothing is stored for a tree nobody touched
+
+That is deliberate. Both values start empty, so opening an item and moving on
+records nothing — an untouched tree is unanswered rather than answered with an
+empty path. Mark `required: true` under `label_requirement` if an answer is
+compulsory.
 
 ### Path Selection Issues
 
-1. Confirm `path_selection.enabled: true` is set
-2. Check that clicking nodes triggers selection
-3. Verify path data is being stored in hidden input
+1. Confirm `path_selection.enabled: true` is set.
+2. Nodes are clickable across the whole card; clicking the collapse triangle
+   toggles the subtree instead.
+3. Clicking a node already on the path takes it off again.
 
 ## Related Documentation
 
