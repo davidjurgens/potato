@@ -9511,6 +9511,44 @@ def _is_authorized_adjudicator(username, adj_mgr):
     return get_rbac_manager().check(Permission.ADJUDICATE, request, session)
 
 
+def _adjudication_display_html(item_data):
+    """The item as the annotators saw it, when the project configures a display.
+
+    Without this the panel dumped every string field of the raw item as
+    ``key: value`` -- so an adjudicator saw the abstract twice (once as
+    ``abstract`` and again as the internal ``displayed_text``), saw fields the
+    project never meant to show, and did not see the image at all. Deciding the
+    same question on a different presentation of the item is the problem;
+    ``instance_display`` is the project's own answer to what the item looks
+    like, so use it.
+
+    Returns None when the project has no ``instance_display``, leaving the
+    existing fallback in place.
+    """
+    if not isinstance(item_data, dict) or not item_data:
+        return None
+    if not config.get("instance_display"):
+        return None
+    try:
+        from potato.server_utils.instance_display import (
+            get_instance_display_renderer)
+        renderer = get_instance_display_renderer(config)
+        if not getattr(renderer, "has_instance_display", False):
+            return None
+        return renderer.render(item_data)
+    except Exception as e:
+        logger.warning("Could not render instance_display for adjudication: %s", e)
+        return None
+
+
+#: Item fields the server writes for its own use. Showing them in the
+#: adjudication panel duplicates content the display already carries and leaks
+#: internals into a reviewer-facing view.
+_ADJUDICATION_INTERNAL_FIELDS = frozenset({
+    "displayed_text", "_data", "context_id",
+})
+
+
 @app.route('/adjudicate', methods=['GET'])
 def adjudicate():
     """Main adjudication page."""
@@ -9605,6 +9643,8 @@ def adjudicate_api_item(instance_id):
         "item": item.to_dict(),
         "item_text": item_text,
         "item_data": item_data,
+        "item_display_html": _adjudication_display_html(item_data),
+        "item_internal_fields": sorted(_ADJUDICATION_INTERNAL_FIELDS),
         "decision": decision.to_dict() if decision else None,
         "annotator_signals": annotator_signals,
         "similar_items": similar_items,
@@ -10567,6 +10607,8 @@ def adjudicate_api_next():
         "item": item.to_dict(),
         "item_text": item_text,
         "item_data": item_data,
+        "item_display_html": _adjudication_display_html(item_data),
+        "item_internal_fields": sorted(_ADJUDICATION_INTERNAL_FIELDS),
     })
 
 

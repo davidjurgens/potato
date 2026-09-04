@@ -288,6 +288,9 @@
     <main class="admin-main">
       <p class="iaa-meta">
         {{ ui_lang.iaa_overlap_sample|default('Overlap sample') }} &mdash; {{ report.n_overlap_items }} item{{ '' if report.n_overlap_items == 1 else 's' }} {{ ui_lang.iaa_at_cap|default('at cap.') }}
+        {% if report.n_items_below_cap %}
+        {{ report.n_items_below_cap }} more {{ 'has' if report.n_items_below_cap == 1 else 'have' }} more than one annotator but are still short of the cap, so {{ 'it is' if report.n_items_below_cap == 1 else 'they are' }} not scored yet.
+        {% endif %}
         {{ ui_lang.iaa_meta_scored|default('Each schema is scored with the metrics appropriate to its annotation type.') }}
       </p>
 

@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=19">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=27">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=1">
@@ -772,7 +772,7 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=3"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=38"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=40"></script>
     <!-- Shared geometry for the bottom-anchored floating widgets below; must
          load before them. Unconditional: tiny, and several may be enabled at
          once (see the combined showcase example). -->

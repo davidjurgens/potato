@@ -34,6 +34,14 @@ Flat multi-label checkboxes become unwieldy when label spaces have hundreds of e
 | `expand_depth` | `1` | Number of tree levels expanded by default (0 = all collapsed) |
 | `label_requirement.required` | `false` | Require at least one selection |
 
+Only the boxes an annotator actually ticked are stored. Before v2.8.3 checking
+one leaf silently ticked its whole ancestor chain regardless of
+`auto_select_parent`, so a click on `Adjudication` stored `Annotation`,
+`Process` and `Adjudication`. An analyst counting how often `Annotation` was
+chosen could not tell a deliberate category-level choice from a leaf click three
+levels below it. If you have data from an earlier build, ancestor entries
+in it may not be choices anyone made.
+
 ### Taxonomy Format
 
 The taxonomy is defined as a nested YAML structure where keys are parent labels and values are either a list of child labels (leaf nodes) or another nested dict:

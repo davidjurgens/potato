@@ -200,6 +200,21 @@ Two things about `ai_config` are worth stating because nothing catches them:
 - `include.all` is off by default. Without it every assistant button is absent
   and the page renders an empty AI div, with a clean validation and no warning.
 
+### Assistants in a narrow grid cell
+
+The assistant row is per scheme, so `layout.grid` multiplies it: three
+assistants on three schemes is nine buttons, one row per cell. In a cell around
+120px wide the row wrapped once per assistant and cost more height than the
+question it sat above.
+
+Below 260px of cell width the row shows icons only, on one line. The label stays
+in the DOM as the button's accessible name and is on the `title`, so it comes
+back on hover and focus. Nothing is hidden from a screen reader, and the icon
+keeps a 24x24 target, the WCAG 2.2 AA minimum.
+
+If you are combining `layout.grid` with `include.all`, name the assistants you
+want per scheme rather than turning all of them on everywhere.
+
 ## Caching and Pre-generation
 
 For better performance, especially with large annotation tasks, Potato can pre-generate AI hints and cache them to disk. This avoids delays when annotators request AI assistance.

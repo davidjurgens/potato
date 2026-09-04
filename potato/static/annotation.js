@@ -421,7 +421,14 @@ class FormLayoutManager {
                     .annotation-forms-grid .annotation-form[data-grid-columns="4"],
                     .annotation-forms-grid .annotation-form[data-grid-columns="5"],
                     .annotation-forms-grid .annotation-form[data-grid-columns="6"] {
-                        grid-column: span 2;
+                        /*
+                         * !important because styles.css pins every
+                         * [data-grid-columns] to span 1 !important at its own
+                         * 480px. An author whose mobile threshold is below 480
+                         * -- the only reason to set one -- would otherwise get
+                         * one column through the whole band they widened.
+                         */
+                        grid-column: span 2 !important;
                     }
                 }
                 /*
@@ -460,6 +467,66 @@ class FormLayoutManager {
                     .annotation-forms-layout,
                     .annotation-forms-grid {
                         --layout-columns: ${columns} !important;
+                    }
+                }
+                /*
+                 * The last two rules styles.css applies unconditionally at its
+                 * own 768px, restated here so they end at the author's tablet
+                 * threshold instead.
+                 *
+                 * The container's track count is the one that mattered most:
+                 * styles.css sets grid-template-columns: 1fr directly, and a
+                 * literal declaration beats the var-based one above no matter
+                 * what --layout-columns computes to -- so restoring the
+                 * variable alone left the grid at one track while the variable
+                 * reported the configured number, which is exactly the shape
+                 * that reads as honoured.
+                 *
+                 * The span for data-grid-columns="2" is the second. Halving
+                 * spans of 3-6 to 2 in the tablet band is deliberate; taking 2
+                 * itself down to 1 is not, and it made a two-column span the
+                 * one width that could not be expressed anywhere in that band.
+                 */
+                @media (min-width: ${mobile + 1}px) {
+                    .annotation-forms-layout,
+                    .annotation-forms-grid {
+                        grid-template-columns:
+                            repeat(var(--layout-columns, 2), 1fr) !important;
+                    }
+                    .pairwise-forms-wrapper {
+                        grid-template-columns: repeat(2, 1fr);
+                    }
+                    .annotation-forms-grid .annotation-form[data-grid-columns="2"],
+                    .annotation-forms-layout .annotation-form[data-grid-columns="2"] {
+                        grid-column: span 2 !important;
+                    }
+                }
+                /*
+                 * And the halving band itself. styles.css reduces spans of 3-6
+                 * to 2 between 481px and 768px, both hardcoded. Above the
+                 * author's tablet threshold that rule is still in force -- so
+                 * with a tablet threshold of 420 a three-column form measured
+                 * span 2 at a 500px viewport, inside the band the author had
+                 * declared to be full-width territory. Restore the declared
+                 * span above their threshold; the injected halving rule above
+                 * still applies below it.
+                 */
+                @media (min-width: ${tablet + 1}px) {
+                    .annotation-forms-layout .annotation-form[data-grid-columns="3"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="3"] {
+                        grid-column: span 3 !important;
+                    }
+                    .annotation-forms-layout .annotation-form[data-grid-columns="4"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="4"] {
+                        grid-column: span 4 !important;
+                    }
+                    .annotation-forms-layout .annotation-form[data-grid-columns="5"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="5"] {
+                        grid-column: span 5 !important;
+                    }
+                    .annotation-forms-layout .annotation-form[data-grid-columns="6"],
+                    .annotation-forms-grid .annotation-form[data-grid-columns="6"] {
+                        grid-column: span 6 !important;
                     }
                 }
             `;

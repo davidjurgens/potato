@@ -6030,6 +6030,13 @@ layout:
 **Default behavior:**
 - Below mobile breakpoint (480px): All forms become single-column
 - Between mobile and tablet (481-768px): Large spans (3-6) reduce to span 2
+- Above the tablet breakpoint: the grid you configured applies in full
+
+A span of 2 is never reduced. Only spans of 3 or more are halved in the tablet
+band, so a two-column form stays two columns everywhere above the mobile
+threshold. Before v2.8.3 a `columns: 2` form collapsed to one at a hardcoded
+768px that `breakpoints` did not move, which made a two-column span the one
+width unreachable in that band.
 
 ## Schema-Level Layout
 
@@ -20053,6 +20060,14 @@ Flat multi-label checkboxes become unwieldy when label spaces have hundreds of e
 | `expand_depth` | `1` | Number of tree levels expanded by default (0 = all collapsed) |
 | `label_requirement.required` | `false` | Require at least one selection |
 
+Only the boxes an annotator actually ticked are stored. Before v2.8.3 checking
+one leaf silently ticked its whole ancestor chain regardless of
+`auto_select_parent`, so a click on `Adjudication` stored `Annotation`,
+`Process` and `Adjudication`. An analyst counting how often `Annotation` was
+chosen could not tell a deliberate category-level choice from a leaf click three
+levels below it. If you have data from an earlier build, ancestor entries
+in it may not be choices anyone made.
+
 ### Taxonomy Format
 
 The taxonomy is defined as a nested YAML structure where keys are parent labels and values are either a list of child labels (leaf nodes) or another nested dict:
@@ -30210,6 +30225,21 @@ Two things about `ai_config` are worth stating because nothing catches them:
 - `include.all` is off by default. Without it every assistant button is absent
   and the page renders an empty AI div, with a clean validation and no warning.
 
+### Assistants in a narrow grid cell
+
+The assistant row is per scheme, so `layout.grid` multiplies it: three
+assistants on three schemes is nine buttons, one row per cell. In a cell around
+120px wide the row wrapped once per assistant and cost more height than the
+question it sat above.
+
+Below 260px of cell width the row shows icons only, on one line. The label stays
+in the DOM as the button's accessible name and is on the `title`, so it comes
+back on hover and focus. Nothing is hidden from a screen reader, and the icon
+keeps a 24x24 target, the WCAG 2.2 AA minimum.
+
+If you are combining `layout.grid` with `include.all`, name the assistants you
+want per scheme rather than turning all of them on everywhere.
+
 ## Caching and Pre-generation
 
 For better performance, especially with large annotation tasks, Potato can pre-generate AI hints and cache them to disk. This avoids delays when annotators request AI assistance.
@@ -40247,12 +40277,22 @@ Once overlap-sample items saturate, agreement statistics are available at
 | nominal (radio, single-label multiselect, triage) | percent agreement, Cohen's κ, Fleiss' κ, Krippendorff's α (nominal) |
 | ordinal (likert, confidence, semantic_differential, range_slider, VAS) | weighted κ (linear, quadratic), Spearman's ρ, Krippendorff's α (ordinal) |
 | continuous (slider, number) | Pearson r, MAE, RMSE, Krippendorff's α (interval), ICC(2,k) |
-| matrix (multirate, constant_sum, soft_label) | the ordinal or continuous set above, once per row and once pooled |
+| matrix (multirate, constant_sum, soft_label, bws, multi-dimension pairwise) | the nominal, ordinal or continuous set above, once per sub-answer and once pooled |
 | multi-label (multiselect, hierarchical_multiselect, card_sort) | mean Jaccard, MASI-α |
-| ranking (ranking, bws, pairwise) | Kendall's τ, Spearman footrule |
+| ranking (ranking) | Kendall's τ, Spearman footrule |
 | span (span, error_span, event_annotation, coreference, extractive_qa) | token-level κ (BIO), span F1 (exact + partial), Krippendorff's α<sub>U</sub>, γ (Mathet) |
 | geometry (image_annotation) | mean agreement, mean matched IoU, detection F1, mean object count difference |
 | temporal (audio_annotation, video_annotation) | mean agreement, mean matched IoU (temporal), detection F1, mean segment count difference |
+
+An item is scored only once it reaches its **full** cap, not as soon as it has
+two annotators, because a partly-annotated item's agreement moves as the rest
+arrive. With `num_annotators_per_item: 3` and two annotators finished, every
+schema reports null.
+
+That output used to be identical to a study nobody had touched. The report now
+carries `n_items_below_cap`, counting items with two or more annotators that
+are still short, and `/admin/iaa` says so above the tables — so "not yet" and
+"nothing" are legible apart.
 
 ### Schemas that hold several answers at once
 
@@ -40282,6 +40322,39 @@ tone" is the finding, and a pooled 0.4 hides it.
 `scale` says which set was used. It is read from the stored values rather than
 the declared type, because a multirate over `[Low, Medium, High]` is ordinal
 over label names while `constant_sum` stores points.
+
+`bws` and a `multi_dimension` pairwise are the same shape with a third scale.
+BWS stores a best and a worst pick; multi-dimension pairwise stores one pick per
+dimension. Both hold item names, which have no order, so they are scored as
+`nominal` per sub-answer. Reporting them as a ranking, which is what Potato did
+before v2.8.3, put a weighted κ on categories where a two-step disagreement does
+not exist.
+
+### Schema types that store the answer in the value
+
+Most schema types put the answer in the *key*: a radio stores
+`{"positive": true}` and a likert stores `{"5": "5"}`, so the option's name is
+what was chosen. A handful invert that and store one fixed key whose value
+carries the whole answer:
+
+| Type | Stored as |
+|---|---|
+| `hierarchical_multiselect` | `{"selected_labels": "Annotation,People,Experts"}` |
+| `ranking` | `{"rank_order": "Cost,Agreement,Accuracy"}` |
+| `card_sort` | `{"<schema>": "{\"Group A\": [\"card1\"]}"}` |
+| `conjoint` | `{"<schema>": "2"}` |
+| `pairwise` (binary) | `{"selection": "A"}` |
+| `pairwise` (scale) | `{"scale_value": "-2"}` |
+
+Before v2.8.3 the agreement code read all of these the first way, which returned
+the key name for every annotator on every item. A taxonomy study reported a
+perfect mean Jaccard of 1.0 no matter what anyone selected, because every set
+gathered as `{"selected_labels"}`. Recompute any of these against a current
+build; the earlier numbers do not describe your data.
+
+A `card_sort` is compared as the set of (group, card) placements rather than the
+set of group names. Every annotator sees the same groups, so group names would
+agree perfectly by construction.
 
 ### Ordering a scale of word labels
 
@@ -43433,19 +43506,23 @@ When you select an item from the queue, the main area displays:
 
 1. **Item Header** -- The instance ID, agreement score badge, and annotator count.
 
-2. **Item Text** -- The full text (or data fields) of the item being adjudicated. If the item has multiple data fields, each field is displayed with its key as a label.
+2. **The Item** -- Rendered through the project's `instance_display` when one is configured, so the adjudicator sees exactly what the annotators saw, images included. Projects without `instance_display` fall back to listing the item's data fields with their keys as labels; fields Potato writes for itself, such as `displayed_text`, are not shown.
 
 3. **Annotator Responses** -- For each annotation schema, a grouped panel shows what each annotator selected. Each annotator's response appears in a card with:
    - The annotator's username (or "Annotator" if `show_annotator_names` is false).
    - Their selected label(s) or text response.
    - Time spent on the item (if `show_timing_data` is true), with a warning icon if the time was below `fast_decision_warning_ms`.
    - A per-schema agreement badge (if `show_agreement_scores` is true).
+   - Quality flags, where any apply. Each names its own scope: "many edits on this item" is about this item, "low agreement across all items" is about the annotator's record across the whole task. The second one sits beside a per-schema agreement percentage and is not about it. An annotator can carry it on a scheme everyone agreed on. Hover a flag for the number behind it.
 
 4. **Your Decision** -- For each schema, a compact decision form is rendered based on the annotation type:
    - **Radio/single-choice**: Options listed vertically with radio buttons. Colored annotator chips appear next to each option showing which annotators chose it. Click an option or an annotator chip to select it.
    - **Multiselect/checkbox**: Similar to radio but with checkboxes for multiple selection.
    - **Likert/slider**: A track showing dots for each annotator's rating, plus a slider for the adjudicator's decision. Click an annotator dot to adopt their value.
    - **Text/number**: Each annotator's text response is shown as a clickable card. Click a card to adopt its text into your response textarea, or type your own.
+   - **Everything else**: A list of the answers annotators actually gave, one radio each. Pick one and it becomes the decision, in the same shape and value space as the answers it resolves. This covers the composite widgets, whose answers cannot be re-elicited from a generic input: `constant_sum`, `soft_label`, `hierarchical_multiselect`, `ranking` and `card_sort`.
+
+   A likert that declares a `labels:` list renders as a radio group here, not a slider, because that is how the annotators answered it. A slider would store `3` against their `"Good"`.
 
 5. **Decision Metadata** -- Below the schema forms:
    - **Confidence** (if `require_confidence` is true): A dropdown to select high, medium, or low confidence.
@@ -43476,6 +43553,23 @@ The following keyboard shortcuts are available when focus is not in an input fie
 These shortcuts are disabled when you are typing in a textarea (such as notes or text-based annotation decisions) or interacting with a select dropdown.
 
 ---
+
+## Getting the decisions out
+
+`potato export --format adjudication` writes the decisions themselves:
+`adjudicated.csv`, one row per (item, schema) with the value, its source and the
+adjudicator's confidence, plus `adjudication_log.jsonl` with the notes, error
+taxonomy and timings. It runs from the same place as every other format,
+including the admin export API. See
+[Export formats](../data-export/export_formats.md).
+
+The CLI below merges those decisions with the items annotators already agreed
+on, to make one final dataset. Reach for it if you want that merge. The
+exporter gives you the decisions on their own.
+
+The `csv`, `jsonl` and `parquet` formats carry neither. They read per-annotator
+state, so an export made after adjudication ships the disagreements and not the
+resolution.
 
 ## Export CLI
 
@@ -45143,6 +45237,41 @@ pieces can be recombined.
 Per-annotator data is never discarded, in any mode. Every field is accompanied by
 `<field>_n_annotators`.
 
+### Adjudication (adjudication)
+
+The adjudicated label -- one resolved answer per item -- is what an adjudicated
+workflow is for, and it is not in csv, jsonl or parquet. Those three read
+per-annotator state, so an export made after adjudication carries the
+disagreements and not the resolution. Use this format to get the resolution.
+
+```bash
+python -m potato.export --config config.yaml --format adjudication -o final/
+```
+
+Two files:
+
+| File | One row per | Holds |
+|---|---|---|
+| `adjudicated.csv` | (item, schema) | The final value, where it came from, and the adjudicator's confidence |
+| `adjudication_log.jsonl` | decision | Notes, error taxonomy, span decisions, guideline flags and time spent |
+
+The `source` column names an annotator when the adjudicator adopted that
+person's answer verbatim, and reads `adjudicator` when they answered it
+themselves.
+
+A composite scheme such as `constant_sum`, `soft_label` or
+`hierarchical_multiselect` resolves to a whole allocation or path list, which
+has no scalar reading. Those cells hold JSON, which round-trips. Scalar answers
+stay scalar.
+
+The exporter declines when the project has no adjudication config or has
+recorded no decisions, and warns if an adjudicated item resolved no schema at
+all.
+
+`python -m potato.adjudication_export` is the older, separate CLI for the same
+data. It merges unanimous agreements with adjudicated decisions into one
+dataset, which this exporter does not; use it when you want that merge.
+
 ## Programmatic Export
 
 Use the export registry directly in Python:
@@ -45403,8 +45532,9 @@ dataset, because the dataset being annotated is usually read-only — see
 layer model. Rather than write a plausible guess into a file you would upload to
 a paid platform, masks are traced to polygons and the loss is reported.
 
-Potato also exports `csv`, `tsv`, `jsonl`, `parquet`, `huggingface` and several
-NLP formats; those carry annotations generically rather than as CV geometry.
+Potato also exports `csv`, `tsv`, `jsonl`, `parquet`, `huggingface`, several
+NLP formats and `adjudication`; those carry annotations generically rather than
+as CV geometry.
 
 ## What survives a round trip
 

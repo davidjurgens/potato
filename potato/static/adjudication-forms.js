@@ -27,6 +27,10 @@ window.AdjudicationForms = (function () {
     let annotatorColorMap = {};
     let colorIndex = 0;
 
+    //: schema name -> the annotator answers renderAdoptForm offered, in the
+    //: order its radios index into. Reset per item by resetColors().
+    var adoptValues = {};
+
     function getAnnotatorColor(annotatorId) {
         if (!(annotatorId in annotatorColorMap)) {
             annotatorColorMap[annotatorId] = CHIP_COLORS[colorIndex % CHIP_COLORS.length];
@@ -38,6 +42,9 @@ window.AdjudicationForms = (function () {
     function resetColors() {
         annotatorColorMap = {};
         colorIndex = 0;
+        // Same lifetime: both are per-item state, and a stale adopt list would
+        // resolve a radio index against the previous item's answers.
+        adoptValues = {};
     }
 
     /**
@@ -633,6 +640,15 @@ window.AdjudicationForms = (function () {
             case 'multiselect':
                 return renderMultiselectForm(schema, annotations, behavioralData, config);
             case 'likert':
+                // A likert that declares `labels:` renders for the annotator as
+                // a radio group over those words and stores one of them, so the
+                // slider below would put the adjudicator's decision in a
+                // different value space from the answers it adjudicates -- 3
+                // against "Good", with the mapping written down nowhere. Mirror
+                // generate_likert_layout's own condition instead.
+                if (Array.isArray(schema.labels) && schema.labels.length) {
+                    return renderRadioForm(schema, annotations, behavioralData, config);
+                }
                 return renderLikertForm(schema, annotations, behavioralData, config);
             case 'slider':
                 return renderSliderForm(schema, annotations, behavioralData, config);
@@ -649,8 +665,96 @@ window.AdjudicationForms = (function () {
             case 'video_annotation':
                 return renderMediaForm(schema, annotations, behavioralData, config, 'video');
             default:
-                return '<p class="text-muted">Form not available for type: ' + type + '</p>';
+                return renderAdoptForm(schema, annotations, behavioralData, config);
         }
+    }
+
+    /**
+     * Fallback decision form: adopt one annotator's answer verbatim.
+     *
+     * Every type without a bespoke widget above used to render "Form not
+     * available for type: X" and offer no control at all, so a task with
+     * composite schemes produced a partial final record -- adjudication exists
+     * to yield one final label per item, and on those schemes it yielded none.
+     *
+     * Adopting is the honest general control: the answers a constant_sum or a
+     * taxonomy widget stores cannot be re-elicited from a generic input, but
+     * choosing between the ones annotators gave is a real decision and it keeps
+     * the adjudicated value in the same shape and value space as what it
+     * resolves.
+     */
+    function renderAdoptForm(schema, annotations, behavioralData, config) {
+        var schemaName = schema.name || '';
+        var type = schema.annotation_type || '';
+
+        var options = [];
+        Object.keys(annotations).forEach(function (userId) {
+            var userAnn = annotations[userId];
+            if (!userAnn || !(schemaName in userAnn)) return;
+            var val = userAnn[schemaName];
+            if (val === null || val === undefined || val === '') return;
+            options.push({ userId: userId, value: val });
+        });
+
+        if (options.length === 0) {
+            return '<p class="adj-adopt-empty">No annotator answered ' +
+                escapeHtml(schemaName) + ' on this item.</p>';
+        }
+
+        var html = '<div class="adj-adopt-options" data-schema="' +
+            escapeHtml(schemaName) + '" data-type="' +
+            escapeHtml(type) + '">';
+        html += '<p class="adj-adopt-hint">Adopt one annotator’s answer as the decision:</p>';
+
+        options.forEach(function (opt, idx) {
+            var timing = getTimingMs(behavioralData, opt.userId);
+            var chip = createChip(opt.userId, timing, config.show_annotator_names,
+                config.fast_decision_warning_ms);
+            html += '<label class="adj-adopt-option">' +
+                '<input type="radio" name="adj-adopt-' + schemaName + '" ' +
+                'value="' + idx + '" data-schema="' + schemaName + '" ' +
+                'data-annotator="' + escapeHtml(opt.userId) + '">' +
+                chip +
+                '<span class="adj-adopt-value">' +
+                escapeHtml(formatAnswer(opt.value)) +
+                '</span></label>';
+        });
+
+        html += '</div>';
+        // The raw values, so collectDecisions can store the answer itself
+        // rather than an index into a list the server never saw.
+        adoptValues[schemaName] = options.map(function (o) { return o.value; });
+        return html;
+    }
+
+    //: Single fixed keys that name the widget's storage slot rather than a
+    //: sub-question -- the value beside them IS the whole answer. Printing the
+    //: key would show the adjudicator "selected_labels: Annotation,People"
+    //: where the annotator only ever chose "Annotation, People".
+    var PACKED_KEYS = ['selected_labels', 'rank_order', 'selection',
+                       'scale_value', '_data'];
+
+    /**
+     * One-line rendering of any stored answer, for the adopt list.
+     */
+    function formatAnswer(val) {
+        if (typeof val === 'string') return val;
+        if (val === null || val === undefined) return '';
+        if (Array.isArray(val)) return val.join(', ');
+        if (typeof val === 'object') {
+            var keys = Object.keys(val);
+            if (keys.length === 1 && PACKED_KEYS.indexOf(keys[0]) !== -1) {
+                return formatAnswer(val[keys[0]]);
+            }
+            return keys.map(function (k) {
+                var v = val[k];
+                // {label: label} and {label: true} both mean "the key is the
+                // answer", so printing "Include: Include" would be noise.
+                if (v === true || String(v) === String(k)) return k;
+                return k + ': ' + v;
+            }).join(', ');
+        }
+        return String(val);
     }
 
     /**
@@ -700,6 +804,20 @@ window.AdjudicationForms = (function () {
             if (textarea.value.trim()) {
                 decisions[schema] = textarea.value.trim();
                 sources[schema] = 'adjudicator';
+            }
+        });
+
+        // Adopt-an-answer forms (every type without a bespoke widget)
+        document.querySelectorAll('.adj-adopt-options').forEach(function(container) {
+            var schema = container.dataset.schema;
+            var checked = container.querySelector('input[type="radio"]:checked');
+            if (!checked) return;
+            var values = adoptValues[schema] || [];
+            var idx = parseInt(checked.value, 10);
+            if (idx >= 0 && idx < values.length) {
+                decisions[schema] = values[idx];
+                // Not 'adjudicator': the value is an annotator's, unchanged.
+                sources[schema] = checked.dataset.annotator || 'adjudicator';
             }
         });
 

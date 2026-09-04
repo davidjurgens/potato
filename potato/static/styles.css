@@ -433,10 +433,80 @@ body {
   display: flex;
 }
 
-.ai-assistant-img {
-  display: flex;
-  justify-content: center;
+/*
+ * Keep the assistant row to one line, and drop the labels when the cell is too
+ * narrow to show them.
+ *
+ * With `layout.grid` and `ai_config.include.all` the row wrapped once per
+ * assistant in a ~120px track, costing more height than the question it sat
+ * above. Ellipsing the labels instead fixed the height but painted a stray
+ * letter beside each icon -- "[icon] [icon]K [icon]R" -- so below the threshold
+ * the label is hidden outright.
+ *
+ * The container is `.ai-help-shell`, not the form: `container-type:
+ * inline-size` on `.annotation-form` collapses span-1 and span-2 grid items to
+ * their contain-intrinsic width, measured at 18px against a 123px track, and
+ * the fieldset behaves the same way. The shell is a plain block div whose width
+ * comes from its parent, so containing it costs nothing.
+ *
+ * The label is hidden, never removed. It stays the button's accessible name,
+ * and the `title` the wrapper writes gives sighted users the word back on hover
+ * and focus.
+ */
+.ai-help-shell {
+  container-type: inline-size;
+  container-name: ai-help-shell;
+  /* A definite width, because `.annotation-form` is a column flex container and
+     a size-contained item with no definite inline size resolves to 0 -- which
+     made the query match on every cell by accident rather than by measurement. */
+  width: 100%;
+}
+
+.ai-help {
+  flex-wrap: nowrap;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.ai-help .ai-assistant-containter {
+  min-width: 0;
   align-items: center;
+}
+
+/* The icon must never be what shrinks -- it is the only thing left to aim at
+   once the labels are gone. */
+.ai-help .ai-assistant-img {
+  flex: none;
+}
+
+@container ai-help-shell (max-width: 260px) {
+  .ai-help {
+    gap: 0.35rem;
+    padding: 0.35rem 0.4rem;
+  }
+
+  .ai-help .ai-assistant-containter > span:not(.ai-assistant-img) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Without a label the icon alone is the whole target. 24px is WCAG 2.2 AA
+     (2.5.8 Target Size Minimum); the 44px AAA figure does not fit -- three of
+     them need 132px and the row these appear in is around 105px, so demanding
+     it forced a wrap and put the row back to three lines, which is the height
+     problem this rule exists to fix. */
+  .ai-help .ai-assistant-containter {
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+    justify-content: center;
+  }
 }
 
 .ai-assistant-img img {
@@ -5272,6 +5342,14 @@ body > .container-fluid {
 }
 .hier-toggle {
   cursor: pointer;
+  /* It is a <button> so it is focusable and announced; strip the UA chrome that
+     comes with that, and keep the focus ring the UA reset would take away. */
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
   width: 1.125rem;
   height: 1.125rem;
   display: inline-flex;
@@ -5285,6 +5363,11 @@ body > .container-fluid {
 }
 .hier-toggle:hover {
   color: var(--foreground);
+}
+.hier-toggle:focus-visible {
+  outline: 2px solid var(--ring, var(--primary, #6366f1));
+  outline-offset: 1px;
+  border-radius: 2px;
 }
 .hier-toggle-placeholder {
   width: 1.125rem;

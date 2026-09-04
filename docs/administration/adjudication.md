@@ -281,19 +281,23 @@ When you select an item from the queue, the main area displays:
 
 1. **Item Header** -- The instance ID, agreement score badge, and annotator count.
 
-2. **Item Text** -- The full text (or data fields) of the item being adjudicated. If the item has multiple data fields, each field is displayed with its key as a label.
+2. **The Item** -- Rendered through the project's `instance_display` when one is configured, so the adjudicator sees exactly what the annotators saw, images included. Projects without `instance_display` fall back to listing the item's data fields with their keys as labels; fields Potato writes for itself, such as `displayed_text`, are not shown.
 
 3. **Annotator Responses** -- For each annotation schema, a grouped panel shows what each annotator selected. Each annotator's response appears in a card with:
    - The annotator's username (or "Annotator" if `show_annotator_names` is false).
    - Their selected label(s) or text response.
    - Time spent on the item (if `show_timing_data` is true), with a warning icon if the time was below `fast_decision_warning_ms`.
    - A per-schema agreement badge (if `show_agreement_scores` is true).
+   - Quality flags, where any apply. Each names its own scope: "many edits on this item" is about this item, "low agreement across all items" is about the annotator's record across the whole task. The second one sits beside a per-schema agreement percentage and is not about it. An annotator can carry it on a scheme everyone agreed on. Hover a flag for the number behind it.
 
 4. **Your Decision** -- For each schema, a compact decision form is rendered based on the annotation type:
    - **Radio/single-choice**: Options listed vertically with radio buttons. Colored annotator chips appear next to each option showing which annotators chose it. Click an option or an annotator chip to select it.
    - **Multiselect/checkbox**: Similar to radio but with checkboxes for multiple selection.
    - **Likert/slider**: A track showing dots for each annotator's rating, plus a slider for the adjudicator's decision. Click an annotator dot to adopt their value.
    - **Text/number**: Each annotator's text response is shown as a clickable card. Click a card to adopt its text into your response textarea, or type your own.
+   - **Everything else**: A list of the answers annotators actually gave, one radio each. Pick one and it becomes the decision, in the same shape and value space as the answers it resolves. This covers the composite widgets, whose answers cannot be re-elicited from a generic input: `constant_sum`, `soft_label`, `hierarchical_multiselect`, `ranking` and `card_sort`.
+
+   A likert that declares a `labels:` list renders as a radio group here, not a slider, because that is how the annotators answered it. A slider would store `3` against their `"Good"`.
 
 5. **Decision Metadata** -- Below the schema forms:
    - **Confidence** (if `require_confidence` is true): A dropdown to select high, medium, or low confidence.
@@ -324,6 +328,23 @@ The following keyboard shortcuts are available when focus is not in an input fie
 These shortcuts are disabled when you are typing in a textarea (such as notes or text-based annotation decisions) or interacting with a select dropdown.
 
 ---
+
+## Getting the decisions out
+
+`potato export --format adjudication` writes the decisions themselves:
+`adjudicated.csv`, one row per (item, schema) with the value, its source and the
+adjudicator's confidence, plus `adjudication_log.jsonl` with the notes, error
+taxonomy and timings. It runs from the same place as every other format,
+including the admin export API. See
+[Export formats](../data-export/export_formats.md).
+
+The CLI below merges those decisions with the items annotators already agreed
+on, to make one final dataset. Reach for it if you want that merge. The
+exporter gives you the decisions on their own.
+
+The `csv`, `jsonl` and `parquet` formats carry neither. They read per-annotator
+state, so an export made after adjudication ships the disagreements and not the
+resolution.
 
 ## Export CLI
 

@@ -255,10 +255,23 @@
                     '<div class="adj-span-overlays" id="adj-span-overlays"></div>' +
                     '<div class="adj-span-text-content" id="adj-span-text-content">' +
                     AdjudicationForms.escapeHtml(itemText) + '</div></div>';
+            } else if (data.item_display_html) {
+                // The project's own instance_display, rendered server-side --
+                // the same markup the annotators were looking at. Injected as
+                // HTML for the same reason the annotation page does: it is
+                // generated from the project's config, not from user input, and
+                // escaping it here would show the adjudicator a different item
+                // than the one being adjudicated, which is the whole defect.
+                textEl.innerHTML = data.item_display_html;
             } else if (typeof itemData === 'object' && Object.keys(itemData).length > 0) {
-                // Show all fields
+                // No instance_display configured: fall back to the raw fields,
+                // minus the ones the server writes for itself. `displayed_text`
+                // is a rendered copy of the text field, so printing it showed
+                // the adjudicator the same passage twice under an internal name.
+                var internal = data.item_internal_fields || [];
                 var html = '';
                 Object.keys(itemData).forEach(function (key) {
+                    if (internal.indexOf(key) !== -1) return;
                     var val = itemData[key];
                     if (typeof val === 'string') {
                         html += '<div style="margin-bottom: 8px;">' +
@@ -951,6 +964,24 @@
     /**
      * Render annotator signal badges (Phase 3)
      */
+    //: What each flag actually measures, in words, because the badge sits
+    //: beside a per-scheme agreement percentage and the bare type name reads as
+    //: a claim about that number. "low agreement" on a scheme both annotators
+    //: agreed on 100% is a direct contradiction of the figure next to it -- the
+    //: flag is about the annotator's record across every item, not this scheme.
+    //: Every one of these is per annotator, and none is per scheme.
+    var FLAG_LABELS = {
+        unusually_fast: 'unusually fast on this item',
+        fast_decision: 'fast decision on this item',
+        excessive_changes: 'many edits on this item',
+        low_agreement: 'low agreement across all items',
+        similar_item_inconsistency: 'differs on similar items'
+    };
+
+    function flagLabel(type) {
+        return FLAG_LABELS[type] || String(type || '').replace(/_/g, ' ');
+    }
+
     function renderAnnotatorSignals(signalsData) {
         if (!signalsData) return;
 
@@ -977,9 +1008,7 @@
                         (flag.severity || 'medium');
                     badge.title = flag.message || '';
                     badge.innerHTML = '<i class="fas fa-exclamation-triangle"></i> ' +
-                        AdjudicationForms.escapeHtml(
-                            (flag.type || '').replace(/_/g, ' ')
-                        );
+                        AdjudicationForms.escapeHtml(flagLabel(flag.type));
                     flagsDiv.appendChild(badge);
                 });
 

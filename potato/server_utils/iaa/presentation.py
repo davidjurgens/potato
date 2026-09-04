@@ -403,7 +403,8 @@ def present(report: Dict[str, Any]) -> Dict[str, Any]:
     for name, schema in (report.get("schemas") or {}).items():
         metrics = schema.get("metrics") or {}
         declared = metrics_for_schema(
-            {"annotation_type": schema.get("annotation_type"), "name": name})
+            {"annotation_type": schema.get("annotation_type"), "name": name},
+            kind=schema.get("kind"))
         rows = flatten(metrics)
         table = sweep_table(metrics, declared)
         present_scales = [row["scale"] for row in rows]

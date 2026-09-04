@@ -107,6 +107,13 @@ layout:
 **Default behavior:**
 - Below mobile breakpoint (480px): All forms become single-column
 - Between mobile and tablet (481-768px): Large spans (3-6) reduce to span 2
+- Above the tablet breakpoint: the grid you configured applies in full
+
+A span of 2 is never reduced. Only spans of 3 or more are halved in the tablet
+band, so a two-column form stays two columns everywhere above the mobile
+threshold. Before v2.8.3 a `columns: 2` form collapsed to one at a hardcoded
+768px that `breakpoints` did not move, which made a two-column span the one
+width unreachable in that band.
 
 ## Schema-Level Layout
 

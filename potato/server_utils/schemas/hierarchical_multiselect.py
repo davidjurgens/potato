@@ -81,7 +81,16 @@ def _build_tree_html(taxonomy, schema_name, prefix="", depth=0, tooltips=None):
             node_id = f"{prefix}{key}".replace(" ", "_")
             safe_node_id = escape_html_content(node_id)
             has_children = bool(children)
-            toggle = '<span class="hier-toggle">&#9654;</span>' if has_children else '<span class="hier-toggle-placeholder"></span>'
+            # A button, not a bare span. The toggle is the only way to reach a
+            # nested label, and as an unfocusable <span> with no role it was
+            # absent from the accessibility tree entirely -- so a keyboard-only
+            # annotator could not open the tree, and every label below the first
+            # level was unreachable for them.
+            toggle = (
+                f'<button type="button" class="hier-toggle" aria-expanded="false"'
+                f' aria-label="Expand {safe_key}">&#9654;</button>'
+                if has_children
+                else '<span class="hier-toggle-placeholder"></span>')
             title_attr, info = _label_tooltip(key, tooltips)
 
             html += f"""
@@ -229,6 +238,7 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
                     const isOpen = children.style.display !== 'none';
                     children.style.display = isOpen ? 'none' : 'block';
                     toggle.innerHTML = isOpen ? '&#9654;' : '&#9660;';
+                    toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
                 }}
                 return;
             }}
@@ -282,14 +292,29 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
                 childCbs.forEach(child => {{ child.checked = false; }});
             }}
 
-            // Always select ancestor chain when a node is checked
-            if (cb.checked) {{
+            // Select a parent once ALL of its children are selected, and only
+            // when the author asked for it.
+            //
+            // This used to run unconditionally and select the whole ancestor
+            // chain from any checked descendant, so ticking one leaf three
+            // levels down stored all four nodes. `autoParent` was read but
+            // consulted only on the *un*checking branch, which meant
+            // `auto_select_parent: false` -- the documented default, and the
+            // config written specifically to prevent this -- had no effect on
+            // the behaviour it names. The data cost outlives the UI one: an
+            // analyst counting how often "Annotation" was chosen could not tell
+            // a deliberate category-level choice from a leaf click below it.
+            if (autoParent && cb.checked) {{
                 let parentChildren = cb.closest('.hier-children');
                 while (parentChildren) {{
                     const parentNode = parentChildren.closest('.hier-node');
                     if (!parentNode) break;
                     const parentCb = parentNode.querySelector(':scope > .hier-node-row .hier-checkbox');
-                    if (parentCb) parentCb.checked = true;
+                    const siblings = parentChildren.querySelectorAll(':scope > .hier-node > .hier-node-row .hier-checkbox');
+                    const allChecked = siblings.length > 0 &&
+                        Array.from(siblings).every(s => s.checked);
+                    if (!parentCb || !allChecked) break;
+                    parentCb.checked = true;
                     parentChildren = parentNode.parentElement.closest('.hier-children');
                 }}
             }}
@@ -329,7 +354,10 @@ def _generate_hierarchical_multiselect_layout_internal(annotation_scheme):
                                     const parentToggle = parent.previousElementSibling;
                                     if (parentToggle) {{
                                         const toggle = parentToggle.querySelector('.hier-toggle');
-                                        if (toggle) toggle.innerHTML = '&#9660;';
+                                        if (toggle) {{
+                                            toggle.innerHTML = '&#9660;';
+                                            toggle.setAttribute('aria-expanded', 'true');
+                                        }}
                                     }}
                                 }}
                                 parent = parent.parentElement;

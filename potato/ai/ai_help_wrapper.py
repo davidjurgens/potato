@@ -41,17 +41,33 @@ class DynamicAIHelp:
         {% endif %}
         """
 
-    def get_empty_wrapper(self): 
-        return f'<div class="ai-help none"><div class="tooltip"></div></div>'
+    def get_empty_wrapper(self):
+        # The shell exists to be a size container for the row inside it (see
+        # styles.css). It has to be a separate element: putting
+        # `container-type: inline-size` on `.annotation-form` collapses span-1
+        # and span-2 grid items to their contain-intrinsic width -- 18px against
+        # a 123px track -- and the fieldset does the same. A plain block div
+        # takes its width from its parent rather than its contents, so
+        # containment on it changes nothing but what the query can measure.
+        return ('<div class="ai-help-shell">'
+                '<div class="ai-help none"><div class="tooltip"></div></div>'
+                '</div>')
 
     def generate_ai_assistant(self, ai_prompts, annotation_type, ai_assistant):
-        str_html = f'<div class="{ai_assistant} ai-assistant-containter">'
+        import html as _html
+        name = ai_prompts[annotation_type].get(ai_assistant).get("name", ai_assistant.capitalize())
+        safe_name = _html.escape(str(name), quote=True)
+        # `title` because a narrow grid cell hides the text label and shows the
+        # icon alone (see the @container rule in styles.css). The label stays in
+        # the DOM as the accessible name; this is how a sighted mouse or
+        # keyboard user gets the same word back.
+        str_html = (f'<div class="{ai_assistant} ai-assistant-containter" '
+                    f'title="{safe_name}">')
         img_url = ai_prompts[annotation_type].get(ai_assistant).get("img")
         if img_url:
             # Use empty alt since the button already has a text label
             str_html += f'<span class="ai-assistant-img"><img src="{img_url}" alt=""></span>'
-        name = ai_prompts[annotation_type].get(ai_assistant).get("name", ai_assistant.capitalize())
-        str_html += f'<span>{name}</span>'
+        str_html += f'<span>{safe_name}</span>'
         str_html += "</div>"
         return str_html
 

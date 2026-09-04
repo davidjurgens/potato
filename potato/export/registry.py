@@ -141,6 +141,7 @@ def _register_builtin_exporters():
     from .keystroke_exporter import KeystrokeExporter
     from .annotation_telemetry_exporter import AnnotationTelemetryExporter
     from .episode_exporter import EpisodeJsonlExporter
+    from .adjudication_exporter import AdjudicationExporter
 
     exporters = [
         COCOExporter(),
@@ -188,6 +189,11 @@ def _register_builtin_exporters():
         # back to JSONL when pyarrow is absent, so it has no hard dependency.
         KeystrokeExporter(),
         AnnotationTelemetryExporter(),
+        # The adjudicated label is the deliverable of an adjudicated
+        # workflow, and no other format here carried it: csv, jsonl and
+        # parquet all read per-annotator state, so an export shipped the
+        # disagreements and not the resolution.
+        AdjudicationExporter(),
     ]
 
     # Optional exporters with external dependencies

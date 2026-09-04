@@ -63,23 +63,19 @@ class UserPhase(Enum):
             >>> UserPhase.fromstr("annotation")
             <UserPhase.ANNOTATION: 'annotation'>
         """
-        phase = phase.lower()
-        if phase == "login":
-            return UserPhase.LOGIN
-        elif phase == "consent":
-            return UserPhase.CONSENT
-        elif phase == "prestudy":
-            return UserPhase.PRESTUDY
-        elif phase == "instructions":
-            return UserPhase.INSTRUCTIONS
-        elif phase == "training":
-            return UserPhase.TRAINING
-        elif phase == "annotation":
-            return UserPhase.ANNOTATION
-        elif phase == "poststudy":
-            return UserPhase.POSTSTUDY
-        else:
-            raise ValueError(f"Unknown phase: {phase}")
+        # Derived from the enum rather than an if-chain, because the chain had
+        # no branch for DONE -- so the phase every finished annotator's state
+        # holds could be written but not read back. `load_user_data` catches the
+        # ValueError per directory and skips it, which silently dropped every
+        # completed annotator at the next boot: agreement, the adjudication
+        # queue and the per-item annotator cap all went empty while the state
+        # files on disk were intact. A member that cannot round-trip is the bug,
+        # so this cannot go stale when a phase is added.
+        wanted = str(phase).lower()
+        for member in UserPhase:
+            if member.value == wanted:
+                return member
+        raise ValueError(f"Unknown phase: {phase}")
 
     def __str__(self) -> str:
         """

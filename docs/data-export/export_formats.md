@@ -670,6 +670,41 @@ pieces can be recombined.
 Per-annotator data is never discarded, in any mode. Every field is accompanied by
 `<field>_n_annotators`.
 
+### Adjudication (adjudication)
+
+The adjudicated label -- one resolved answer per item -- is what an adjudicated
+workflow is for, and it is not in csv, jsonl or parquet. Those three read
+per-annotator state, so an export made after adjudication carries the
+disagreements and not the resolution. Use this format to get the resolution.
+
+```bash
+python -m potato.export --config config.yaml --format adjudication -o final/
+```
+
+Two files:
+
+| File | One row per | Holds |
+|---|---|---|
+| `adjudicated.csv` | (item, schema) | The final value, where it came from, and the adjudicator's confidence |
+| `adjudication_log.jsonl` | decision | Notes, error taxonomy, span decisions, guideline flags and time spent |
+
+The `source` column names an annotator when the adjudicator adopted that
+person's answer verbatim, and reads `adjudicator` when they answered it
+themselves.
+
+A composite scheme such as `constant_sum`, `soft_label` or
+`hierarchical_multiselect` resolves to a whole allocation or path list, which
+has no scalar reading. Those cells hold JSON, which round-trips. Scalar answers
+stay scalar.
+
+The exporter declines when the project has no adjudication config or has
+recorded no decisions, and warns if an adjudicated item resolved no schema at
+all.
+
+`python -m potato.adjudication_export` is the older, separate CLI for the same
+data. It merges unanimous agreements with adjudicated decisions into one
+dataset, which this exporter does not; use it when you want that merge.
+
 ## Programmatic Export
 
 Use the export registry directly in Python:

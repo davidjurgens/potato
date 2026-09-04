@@ -127,12 +127,22 @@ Once overlap-sample items saturate, agreement statistics are available at
 | nominal (radio, single-label multiselect, triage) | percent agreement, Cohen's κ, Fleiss' κ, Krippendorff's α (nominal) |
 | ordinal (likert, confidence, semantic_differential, range_slider, VAS) | weighted κ (linear, quadratic), Spearman's ρ, Krippendorff's α (ordinal) |
 | continuous (slider, number) | Pearson r, MAE, RMSE, Krippendorff's α (interval), ICC(2,k) |
-| matrix (multirate, constant_sum, soft_label) | the ordinal or continuous set above, once per row and once pooled |
+| matrix (multirate, constant_sum, soft_label, bws, multi-dimension pairwise) | the nominal, ordinal or continuous set above, once per sub-answer and once pooled |
 | multi-label (multiselect, hierarchical_multiselect, card_sort) | mean Jaccard, MASI-α |
-| ranking (ranking, bws, pairwise) | Kendall's τ, Spearman footrule |
+| ranking (ranking) | Kendall's τ, Spearman footrule |
 | span (span, error_span, event_annotation, coreference, extractive_qa) | token-level κ (BIO), span F1 (exact + partial), Krippendorff's α<sub>U</sub>, γ (Mathet) |
 | geometry (image_annotation) | mean agreement, mean matched IoU, detection F1, mean object count difference |
 | temporal (audio_annotation, video_annotation) | mean agreement, mean matched IoU (temporal), detection F1, mean segment count difference |
+
+An item is scored only once it reaches its **full** cap, not as soon as it has
+two annotators, because a partly-annotated item's agreement moves as the rest
+arrive. With `num_annotators_per_item: 3` and two annotators finished, every
+schema reports null.
+
+That output used to be identical to a study nobody had touched. The report now
+carries `n_items_below_cap`, counting items with two or more annotators that
+are still short, and `/admin/iaa` says so above the tables — so "not yet" and
+"nothing" are legible apart.
 
 ### Schemas that hold several answers at once
 
@@ -162,6 +172,39 @@ tone" is the finding, and a pooled 0.4 hides it.
 `scale` says which set was used. It is read from the stored values rather than
 the declared type, because a multirate over `[Low, Medium, High]` is ordinal
 over label names while `constant_sum` stores points.
+
+`bws` and a `multi_dimension` pairwise are the same shape with a third scale.
+BWS stores a best and a worst pick; multi-dimension pairwise stores one pick per
+dimension. Both hold item names, which have no order, so they are scored as
+`nominal` per sub-answer. Reporting them as a ranking, which is what Potato did
+before v2.8.3, put a weighted κ on categories where a two-step disagreement does
+not exist.
+
+### Schema types that store the answer in the value
+
+Most schema types put the answer in the *key*: a radio stores
+`{"positive": true}` and a likert stores `{"5": "5"}`, so the option's name is
+what was chosen. A handful invert that and store one fixed key whose value
+carries the whole answer:
+
+| Type | Stored as |
+|---|---|
+| `hierarchical_multiselect` | `{"selected_labels": "Annotation,People,Experts"}` |
+| `ranking` | `{"rank_order": "Cost,Agreement,Accuracy"}` |
+| `card_sort` | `{"<schema>": "{\"Group A\": [\"card1\"]}"}` |
+| `conjoint` | `{"<schema>": "2"}` |
+| `pairwise` (binary) | `{"selection": "A"}` |
+| `pairwise` (scale) | `{"scale_value": "-2"}` |
+
+Before v2.8.3 the agreement code read all of these the first way, which returned
+the key name for every annotator on every item. A taxonomy study reported a
+perfect mean Jaccard of 1.0 no matter what anyone selected, because every set
+gathered as `{"selected_labels"}`. Recompute any of these against a current
+build; the earlier numbers do not describe your data.
+
+A `card_sort` is compared as the set of (group, card) placements rather than the
+set of group names. Every annotator sees the same groups, so group names would
+agree perfectly by construction.
 
 ### Ordering a scale of word labels
 

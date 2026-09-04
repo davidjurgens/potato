@@ -8,6 +8,7 @@ those metrics across the overlap-sample items that have reached their cap.
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional
@@ -62,12 +63,20 @@ _KIND_BY_TYPE = {
     "multiselect": SchemaKind.MULTILABEL,  # may be downgraded to NOMINAL if max=1
     "hierarchical_multiselect": SchemaKind.MULTILABEL,
     "card_sort": SchemaKind.MULTILABEL,
-    # Ranking
+    # Ranking. Only `ranking` stores an order; the other four were classified
+    # here by family resemblance rather than by what they store, and none of
+    # them holds a ranked sequence:
+    #   bws       {"best": "A", "worst": "C"}   two nominal sub-answers
+    #   pairwise  {"selection": "A"}            one nominal choice (binary mode)
+    #             {"scale_value": -2}           one number (scale mode)
+    #             {"<dim>": "A", ...}           nominal per dimension
+    #   conjoint  {"<schema>": "2"}             one nominal choice
+    # `classify_schema` sends each to the kind matching its stored shape.
     "ranking": SchemaKind.RANKING,
-    "bws": SchemaKind.RANKING,
-    "pairwise": SchemaKind.RANKING,
-    "conjoint": SchemaKind.RANKING,
-    "best_worst_scaling": SchemaKind.RANKING,
+    "bws": SchemaKind.MATRIX,
+    "best_worst_scaling": SchemaKind.MATRIX,
+    "pairwise": SchemaKind.NOMINAL,   # mode-dependent; see classify_schema
+    "conjoint": SchemaKind.NOMINAL,
     # Span
     "span": SchemaKind.SPAN,
     "error_span": SchemaKind.SPAN,
@@ -106,12 +115,35 @@ def classify_schema(scheme: Dict[str, Any]) -> SchemaKind:
         max_choices = scheme.get("max_choices") or scheme.get("max_selections")
         if max_choices == 1:
             return SchemaKind.NOMINAL
+    # pairwise renders three different widgets under one type name and stores a
+    # different shape for each, so the type alone cannot decide the measure.
+    if atype == "pairwise":
+        mode = _pairwise_mode(scheme)
+        if mode == "scale":
+            return SchemaKind.CONTINUOUS
+        if mode == "multi_dimension":
+            return SchemaKind.MATRIX
+        return SchemaKind.NOMINAL
     return kind
 
 
-def metrics_for_schema(scheme: Dict[str, Any]) -> List[str]:
-    """Return human-readable names of metrics that apply to ``scheme``."""
-    kind = classify_schema(scheme)
+def metrics_for_schema(scheme: Dict[str, Any],
+                       kind: Optional[Any] = None) -> List[str]:
+    """Return human-readable names of metrics that apply to ``scheme``.
+
+    Pass ``kind`` when the caller already has the classification the report was
+    computed with. A report row carries only ``annotation_type`` and ``name``,
+    and for ``pairwise`` that is not enough -- the widget's ``mode`` decides
+    the measure, so reclassifying from the type alone would list the wrong
+    columns for two of its three modes.
+    """
+    if kind is not None:
+        try:
+            kind = SchemaKind(kind)
+        except ValueError:
+            kind = None
+    if kind is None:
+        kind = classify_schema(scheme)
     table = {
         SchemaKind.NOMINAL: ["percent_agreement", "cohen_kappa", "fleiss_kappa", "alpha_nominal"],
         SchemaKind.ORDINAL: ["weighted_kappa_linear", "weighted_kappa_quadratic", "spearman_rho", "alpha_ordinal"],
@@ -121,10 +153,14 @@ def metrics_for_schema(scheme: Dict[str, Any]) -> List[str]:
         # The pooled one is the headline; the per-row ones are what tells an
         # author which of ten rows their annotators actually disagreed about,
         # and that is the reason to prefer this widget over ten likerts.
+        # Which of the three scales a given scheme lands on is decided from the
+        # stored values (see `_aggregate_matrix`), so all three appear here.
         SchemaKind.MATRIX: [
             "pooled.alpha_ordinal", "pooled.weighted_kappa_linear",
             "pooled.alpha_interval", "pooled.icc_2_k",
+            "pooled.alpha_nominal", "pooled.fleiss_kappa",
             "<row>.alpha_ordinal", "<row>.alpha_interval",
+            "<row>.alpha_nominal",
         ],
         SchemaKind.RANKING: ["kendall_tau", "spearman_footrule"],
         SchemaKind.SPAN: [
@@ -220,6 +256,7 @@ def _gather_labels(
     user_states: Dict[str, Any],
     schema_name: str,
     numeric: bool = False,
+    scheme: Optional[Dict[str, Any]] = None,
 ):
     """
     Per item, return {user_id: [values]} for one schema.
@@ -233,6 +270,16 @@ def _gather_labels(
     and every metric in this module reported NaN over zero items for every
     schema of every kind. Fixed here; pinned by
     ``tests/unit/test_iaa_dispatcher_gathering.py``.
+
+    ``scheme`` is what lets a *packed* type opt out of that convention entirely
+    -- see `packed_answer`. Without it a hierarchical taxonomy gathered as the
+    literal string "selected_labels" for every annotator.
+
+    Items only one annotator answered are dropped. Every other gatherer here
+    already filters at two, and keeping them made `n_items` count rows no
+    measure could score: a scheme one person answered on three items reported
+    three items and zero annotators, which reads as data loss rather than as
+    "not enough people yet".
     """
     from potato.server_utils import annotation_values
 
@@ -243,20 +290,119 @@ def _gather_labels(
             values = _schema_values(ustate, iid, schema_name)
             if not values:
                 continue
-            names = annotation_values.selected_labels(values)
+            packed = packed_answer(scheme, values) if scheme else None
+            if packed is not None:
+                names = packed
+            else:
+                names = annotation_values.selected_labels(values)
             if not names:
                 continue
             if numeric:
-                vals = [v for v in (_as_number(n, values) for n in names)
-                        if v is not None]
+                if packed is not None:
+                    vals = []
+                    for atom in names:
+                        try:
+                            vals.append(float(atom))
+                        except (TypeError, ValueError):
+                            continue
+                else:
+                    vals = [v for v in (_as_number(n, values) for n in names)
+                            if v is not None]
                 if not vals:
                     continue
             else:
                 vals = names
             per_user[uid] = vals
-        if per_user:
+        if len(per_user) >= 2:
             rows[iid] = per_user
     return rows
+
+
+#: Types whose stored dict is ``{one_fixed_key: the_whole_answer}`` -- the exact
+#: inversion of the radio/likert convention `selected_labels` encodes, where the
+#: *key* is the answer. Six of the seven set- and order-valued types are built
+#: this way, and reading them through `selected_labels` returned the key name for
+#: every annotator on every item: three annotators who picked three different
+#: taxonomies all gathered as ``{"selected_labels"}``, so mean_jaccard was 1.0
+#: and a taxonomy study reported perfect agreement whatever anyone selected.
+#:
+#: The unpacker returns the comparable atoms. Order matters for RANKING and is
+#: ignored by MULTILABEL, so one list serves both.
+def _unpack_joined(values: Dict[str, Any], key: str) -> List[str]:
+    """``{"rank_order": "Cost,Agreement"}`` -> ``["Cost", "Agreement"]``."""
+    raw = values.get(key)
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple)):
+        return [str(v).strip() for v in raw if str(v).strip()]
+    return [part.strip() for part in str(raw).split(",") if part.strip()]
+
+
+def _unpack_card_sort(values: Dict[str, Any], key: str) -> List[str]:
+    """A card sort compares as the set of (group, card) placements.
+
+    The blob is ``{"Group A": ["card1", "card2"], ...}``, and "did two people
+    sort the cards the same way" is Jaccard over the placements, not over the
+    group names -- every annotator sees the same groups, so a set of group names
+    would agree perfectly by construction.
+    """
+    raw = values.get(key)
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (ValueError, TypeError):
+            return []
+    if not isinstance(raw, dict):
+        return []
+    placements = []
+    for group, cards in raw.items():
+        if not isinstance(cards, (list, tuple)):
+            continue
+        for card in cards:
+            placements.append(f"{group}\u241f{card}")
+    return placements
+
+
+def _unpack_single(values: Dict[str, Any], key: str) -> List[str]:
+    """``{"selection": "A"}`` -> ``["A"]``. The answer is the value."""
+    raw = values.get(key)
+    if raw is None or str(raw) == "":
+        return []
+    return [str(raw)]
+
+
+#: annotation_type -> (stored key, unpacker). The key is the widget's
+#: ``label_name``, which is what becomes the dict key in the stored state.
+_PACKED_ANSWER: Dict[str, Any] = {
+    "hierarchical_multiselect": ("selected_labels", _unpack_joined),
+    "ranking": ("rank_order", _unpack_joined),
+    "card_sort": (None, _unpack_card_sort),   # key is the schema's own name
+    "conjoint": (None, _unpack_single),       # key is the schema's own name
+    "pairwise": ("selection", _unpack_single),
+}
+
+
+def packed_answer(scheme: Dict[str, Any], values: Any) -> Optional[List[str]]:
+    """The comparable atoms for a packed type, or None if it is not one.
+
+    ``None`` and ``[]`` mean different things: not-packed versus packed-and-empty.
+    """
+    atype = (scheme.get("annotation_type") or "").strip().lower()
+    spec = _PACKED_ANSWER.get(atype)
+    if spec is None:
+        return None
+    if atype == "pairwise" and _pairwise_mode(scheme) == "scale":
+        spec = ("scale_value", _unpack_single)
+    if not isinstance(values, dict):
+        return []
+    key, unpack = spec
+    if key is None:
+        key = str(scheme.get("name") or "")
+    return unpack(values, key)
+
+
+def _pairwise_mode(scheme: Dict[str, Any]) -> str:
+    return str(scheme.get("mode") or "binary").strip().lower()
 
 
 def _as_number(name: str, values: Any) -> Optional[float]:
@@ -352,9 +498,18 @@ def _aggregate_matrix(rows, scheme: Dict[str, Any]):
                     sub_keys.append(key)
 
     numeric = _matrix_is_numeric(rows)
-    ordering = None if numeric else _scale_ordering(scheme)
-    aggregate = (_aggregate_continuous if numeric
-                 else (lambda g: _aggregate_ordinal(g, ordering)))
+    # bws and multi-dimension pairwise are matrix-shaped but their sub-answers
+    # are item names and side picks -- categories with no order at all. Scoring
+    # them as ordinal would rank "A" below "B" because of where they sort, and
+    # report a weighted kappa that pretends a two-step disagreement exists.
+    nominal_scale = (not numeric) and _matrix_is_nominal(scheme)
+    ordering = None if (numeric or nominal_scale) else _scale_ordering(scheme)
+    if numeric:
+        aggregate = _aggregate_continuous
+    elif nominal_scale:
+        aggregate = _aggregate_nominal
+    else:
+        aggregate = (lambda g: _aggregate_ordinal(g, ordering))
 
     def _value(raw):
         if numeric:
@@ -400,12 +555,22 @@ def _aggregate_matrix(rows, scheme: Dict[str, Any]):
     metrics["n_rows"] = len(per_key_rows)
     metrics["n_items"] = len(rows)
     metrics["n_annotators"] = len(annotators)
-    metrics["scale"] = "interval" if numeric else "ordinal"
+    metrics["scale"] = ("interval" if numeric
+                        else ("nominal" if nominal_scale else "ordinal"))
     if not per_key_rows:
         metrics["note"] = (
             "No sub-answer was given by two or more annotators on the same "
             "item, so there is nothing to compare.")
     return metrics
+
+
+#: Matrix-shaped types whose sub-answers are unordered categories.
+_NOMINAL_MATRIX_TYPES = frozenset({"bws", "best_worst_scaling", "pairwise"})
+
+
+def _matrix_is_nominal(scheme: Dict[str, Any]) -> bool:
+    atype = (scheme.get("annotation_type") or "").strip().lower()
+    return atype in _NOMINAL_MATRIX_TYPES
 
 
 def _matrix_is_numeric(rows) -> bool:
@@ -1006,11 +1171,19 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
     """
     schemes = _extract_schemes(config)
     if not schemes:
-        return {"schemas": {}, "items": {}, "n_overlap_items": 0}
+        return {"schemas": {}, "items": {}, "n_overlap_items": 0,
+                "n_items_below_cap": 0}
 
     # Overlap items: per-item cap >= 2 AND saturated.
     wanted = set(instance_ids) if instance_ids is not None else None
     overlap_items = []
+    # Items with two or more annotators that have not yet reached their cap.
+    # Counted rather than scored, because a partly-annotated item's agreement
+    # moves as the remaining annotators arrive. Reported so that "not yet" is
+    # distinguishable from "nothing": without it a study whose items are each
+    # one annotator short reports zero overlap items and null coefficients,
+    # which is byte-for-byte what a study nobody has touched reports.
+    n_items_below_cap = 0
     for iid, item in item_state_manager.iter_items():
         if wanted is not None and iid not in wanted:
             continue
@@ -1018,6 +1191,8 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
         if cap is None or cap < 2:
             continue
         if len(item_state_manager.instance_annotators[iid]) < cap:
+            if len(item_state_manager.instance_annotators[iid]) >= 2:
+                n_items_below_cap += 1
             continue
         overlap_items.append(iid)
 
@@ -1084,7 +1259,8 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
             metrics = _aggregate_blobs(rows, scheme)
         else:
             rows = _gather_labels(overlap_items, user_states, name,
-                                  numeric=(kind == SchemaKind.CONTINUOUS))
+                                  numeric=(kind == SchemaKind.CONTINUOUS),
+                                  scheme=scheme)
             if kind == SchemaKind.NOMINAL:
                 metrics = _aggregate_nominal(rows)
             elif kind == SchemaKind.ORDINAL:
@@ -1112,6 +1288,7 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
         "schemas": schema_report,
         "items": item_report,
         "n_overlap_items": len(overlap_items),
+        "n_items_below_cap": n_items_below_cap,
     }
 
 

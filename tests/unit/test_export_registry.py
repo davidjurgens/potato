@@ -160,6 +160,9 @@ class TestBuiltinExportersRegistered:
             # Embodied episodes: a per-frame sidecar. Plain JSON Lines, so no
             # hard dependency either.
             "episode_jsonl",
+            # The adjudicated final label -- the deliverable of an adjudicated
+            # workflow, which no per-annotator format above carries.
+            "adjudication",
         }
         # HuggingFace exporter is optional (depends on datasets/huggingface_hub)
         optional = {"huggingface"}
@@ -241,6 +244,8 @@ class TestTheFormatListIsPinned:
         # agent evaluation and behaviour
         "agent_eval", "coding_eval", "episode_jsonl",
         "trajectory_correction", "annotation_telemetry", "keystrokes",
+        # adjudication outcome
+        "adjudication",
     }
 
     def test_every_registered_format_is_accounted_for(self):

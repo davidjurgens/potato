@@ -8,8 +8,8 @@
     "version": "2"
   },
   "annotation.js": {
-    "sha256": "520792fa0236e455",
-    "version": "38"
+    "sha256": "280f0477a11e106c",
+    "version": "40"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -376,8 +376,8 @@
     "version": "1"
   },
   "styles.css": {
-    "sha256": "bf03c899b6a8c171",
-    "version": "19"
+    "sha256": "065901cf0001aea4",
+    "version": "27"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",

@@ -32,6 +32,10 @@ NON_CV_EXPORTERS = {
     # REFI-QDA project exchange: text codings for qualitative software. Its
     # only geometry is a character offset, so it belongs to the text formats.
     "qdpx",
+    # The adjudicated decision, whatever the schema type it resolves. Its
+    # geometry, when there is any, is whatever the underlying schema stored, so
+    # it has no row of its own in a matrix about shapes.
+    "adjudication",
 }
 
 

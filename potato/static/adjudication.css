@@ -1160,3 +1160,66 @@
     font-size: 0.85em;
     font-variant-numeric: tabular-nums;
 }
+
+/* Adopt-an-answer form -- the fallback decision control for schema types with
+   no bespoke widget. Deliberately shaped like .adj-radio-option, because it is
+   the same gesture: pick one, and it becomes the decision. */
+.adj-adopt-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.adj-adopt-hint {
+    margin: 0 0 2px;
+    font-size: 0.8rem;
+    color: #6b7280;
+}
+
+.adj-adopt-empty {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+
+.adj-adopt-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.adj-adopt-option:hover {
+    background: #f9fafb;
+}
+
+.adj-adopt-option:focus-within {
+    border-color: var(--primary-color, #4f46e5);
+    outline: 2px solid var(--primary-color, #4f46e5);
+    outline-offset: 1px;
+}
+
+.adj-adopt-option:has(input:checked) {
+    background: #eff6ff;
+    border-color: var(--primary-color, #4f46e5);
+}
+
+.adj-adopt-option input[type="radio"] {
+    margin: 3px 0 0;
+    flex: none;
+}
+
+/* Composite answers can be long (a whole constant_sum allocation), so this
+   wraps rather than truncating -- an adjudicator choosing between answers has
+   to be able to read them. */
+.adj-adopt-value {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
