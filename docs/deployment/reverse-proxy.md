@@ -32,8 +32,19 @@ and uses it for:
 - server-rendered `url_for(...)` output (CSS/JS/static tags), and
 - the client-side prefix exposed to the browser as `window.config.url_prefix`,
   which wraps `fetch()`, `navigator.sendBeacon()`, `EventSource`, and
-  root-relative `href`/`action`/`src` attributes (including dynamically inserted
-  media and data elements).
+  root-relative `href`/`action`/`src`/`poster`/`srcset` attributes (including
+  dynamically inserted media and data elements).
+
+The helper lives in `potato/templates/_url_prefix.js`. The annotation page, the
+admin pages and the dashboards all include it. If you add a page that builds a
+request URL in JavaScript, include it there too:
+
+```jinja
+<script type="text/javascript">{% include '_url_prefix.js' %}</script>
+```
+
+`tests/unit/test_proxy_prefix_static_urls.py` fails if a page uses a
+root-relative URL in JavaScript without the include.
 
 When no prefix is configured, `SCRIPT_NAME` is empty and nothing changes — this
 is a no-op for ordinary `potato start` runs.
