@@ -42,7 +42,7 @@ import json
 import logging
 from typing import Dict, Any, Tuple, List
 
-from .identifier_utils import safe_generate_layout, escape_html_content
+from .identifier_utils import safe_generate_layout, escape_html_content, generate_layout_attributes
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +99,9 @@ def _generate_tiered_annotation_layout_internal(
     annotation_scheme: Dict[str, Any]
 ) -> Tuple[str, List[Tuple[str, str]]]:
     """Internal implementation of tiered annotation layout generation."""
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
 
     schema_name = annotation_scheme.get("name", "tiered_annotation")
     description = annotation_scheme.get("description", "")
@@ -179,7 +182,7 @@ def _generate_tiered_annotation_layout_internal(
 
     # Generate the complete HTML
     html = f'''
-<form id="{escape_html_content(schema_name)}" class="annotation-form tiered-annotation-container"
+<form id="{escape_html_content(schema_name)}" class="annotation-form tiered-annotation-container" data-annotation-type="tiered_annotation" data-schema-name="{escape_html_content(schema_name)}" {layout_attrs}
       action="javascript:void(0)"
       data-annotation-type="tiered_annotation"
       data-schema-name="{escape_html_content(schema_name)}"

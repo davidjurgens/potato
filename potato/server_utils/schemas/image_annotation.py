@@ -16,7 +16,8 @@ import json
 from potato import model_zoo
 from .identifier_utils import (
     safe_generate_layout,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes,
 )
 
 logger = logging.getLogger(__name__)
@@ -430,6 +431,9 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
     """
     Generate the HTML for the image annotation interface.
     """
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
     escaped_name = escape_html_content(schema_name)
 
     # Read from js_config rather than the scheme: the validation and the
@@ -486,7 +490,7 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
         ai_init_script = _generate_ai_init_script(escaped_name)
 
     html = f'''
-    <form id="{escaped_name}" class="annotation-form image-annotation" action="javascript:void(0)"{source_field_attr}>
+    <form id="{escaped_name}" class="annotation-form image-annotation" action="javascript:void(0)" data-annotation-type="image_annotation" data-schema-name="{escaped_name}" {layout_attrs}{source_field_attr}>
         <fieldset schema="{escaped_name}">
             <legend>{description}</legend>
 

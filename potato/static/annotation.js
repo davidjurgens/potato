@@ -389,6 +389,7 @@ class FormLayoutManager {
     setupResponsiveBreakpoints() {
         const mobile = this.config.breakpoints.mobile;
         const tablet = this.config.breakpoints.tablet;
+        const columns = this.config.grid.columns;
 
         // Only inject custom breakpoints if they differ from defaults
         if (mobile !== 480 || tablet !== 768) {
@@ -421,6 +422,44 @@ class FormLayoutManager {
                     .annotation-forms-grid .annotation-form[data-grid-columns="5"],
                     .annotation-forms-grid .annotation-form[data-grid-columns="6"] {
                         grid-column: span 2;
+                    }
+                }
+                /*
+                 * Grouped forms. styles.css collapses
+                 * .annotation-form-group-content to a single column at its own
+                 * hardcoded 480px and 768px, and the rules above only ever
+                 * touch per-form grid-column -- so a grouped form was one
+                 * column below 768px whatever the breakpoints key said,
+                 * while --layout-columns still computed to the configured
+                 * value, so the key read as honoured. These two re-state the
+                 * same behaviour at the author's thresholds. !important and
+                 * later source order are both needed: the 480px rule in
+                 * styles.css is itself !important.
+                 */
+                @media (max-width: ${tablet}px) {
+                    .annotation-form-group-content {
+                        grid-template-columns: 1fr !important;
+                    }
+                }
+                @media (min-width: ${tablet + 1}px) {
+                    .annotation-form-group-content {
+                        grid-template-columns:
+                            repeat(var(--layout-columns, 2), 1fr) !important;
+                    }
+                }
+                /*
+                 * And the variable those tracks are counted from. styles.css
+                 * pins --layout-columns to 1 !important at its own 480px, and
+                 * that beats the inline value the layout manager sets on the
+                 * container -- so restoring grid-template-columns alone still
+                 * produced one track between the author's tablet breakpoint
+                 * and 480px. The configured number is written literally
+                 * because CSS cannot read it back out of the inline style.
+                 */
+                @media (min-width: ${mobile + 1}px) {
+                    .annotation-forms-layout,
+                    .annotation-forms-grid {
+                        --layout-columns: ${columns} !important;
                     }
                 }
             `;

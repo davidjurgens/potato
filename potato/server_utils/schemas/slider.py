@@ -467,7 +467,8 @@ from .radio import generate_radio_layout
 from .identifier_utils import (
     safe_generate_layout,
     generate_element_identifier,
-    escape_html_content
+    escape_html_content,
+    generate_layout_attributes,
 )
 
 logger = logging.getLogger(__name__)
@@ -503,6 +504,9 @@ def generate_slider_layout(annotation_scheme):
     return safe_generate_layout(annotation_scheme, generate_slider_layout_internal)
 
 def generate_slider_layout_internal(annotation_scheme):
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
     from .identifier_utils import escape_html_content, generate_element_identifier, generate_validation_attribute
     
     if "labels" in annotation_scheme:
@@ -535,7 +539,7 @@ def generate_slider_layout_internal(annotation_scheme):
     max_tick = annotation_scheme.get("maxTick", 8)
 
     schematic = f"""
-    <form id="{identifiers['schema']}" class="annotation-form slider" action="javascript:void(0)" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" >
+    <form id="{identifiers['schema']}" class="annotation-form slider" action="javascript:void(0)" data-annotation-id="{escape_html_content(str(annotation_scheme.get("annotation_id", "")))}" data-annotation-type="slider" data-schema-name="{identifiers['schema']}" {layout_attrs}>
             {get_ai_wrapper()}
         <fieldset schema="{identifiers['schema']}">
             <legend class="custom-slider-title">{annotation_scheme['description']}</legend>

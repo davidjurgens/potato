@@ -215,3 +215,45 @@ class TestPhaseResponseExport:
         result = export_registry.export("csv", self._ctx(False, out), out)
         assert result.stats.get("num_phase_responses_excluded") == 2
         assert any("phase/survey responses" in w for w in result.warnings)
+
+
+class TestTheFormatListIsPinned:
+    """Adding or removing an export format is a documented, deliberate change.
+
+    `qdpx` arrived and the count went 29 -> 30 with nothing on either side
+    noticing: the skill pack's guard table did not cover this registry, so the
+    number it published was simply wrong until somebody counted by hand.
+
+    Pinning the names rather than the count means a failure says *which* format
+    moved, which is the thing you need in order to update the docs and the
+    agent-facing tables.
+    """
+
+    EXPECTED = {
+        # tabular
+        "csv", "tsv", "jsonl", "parquet", "huggingface",
+        # text / linguistic
+        "conll_2003", "conll_u", "convokit", "eaf", "textgrid",
+        "codebook", "quotation_report", "qdpx",
+        # vision and tracking
+        "coco", "yolo", "pascal_voc", "mask_png", "cvat", "labelme",
+        "darwin", "cityscapes", "kitti", "mot", "davis",
+        # agent evaluation and behaviour
+        "agent_eval", "coding_eval", "episode_jsonl",
+        "trajectory_correction", "annotation_telemetry", "keystrokes",
+    }
+
+    def test_every_registered_format_is_accounted_for(self):
+        from potato.export.registry import export_registry
+
+        registered = set(export_registry.get_supported_formats())
+        added = registered - self.EXPECTED
+        removed = self.EXPECTED - registered
+
+        assert not added, (
+            f"new export format(s) {sorted(added)}: add them to EXPECTED here, "
+            f"to the format matrix in the docs, and to the agent-facing tables"
+        )
+        assert not removed, (
+            f"export format(s) {sorted(removed)} disappeared from the registry"
+        )

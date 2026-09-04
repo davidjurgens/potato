@@ -37,7 +37,7 @@ and that lives in `potato/grounding/metrics.py`.
 import json
 import logging
 
-from .identifier_utils import escape_html_content, safe_generate_layout
+from .identifier_utils import escape_html_content, safe_generate_layout, generate_layout_attributes
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,9 @@ def generate_grounding_eval_layout(annotation_scheme):
 
 
 def _generate_internal(annotation_scheme):
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
     schema_name = annotation_scheme.get("name", "grounding")
     escaped_name = escape_html_content(schema_name)
     description = escape_html_content(
@@ -161,7 +164,7 @@ def _generate_internal(annotation_scheme):
                 </div>"""
 
     html = f"""
-<div class="grounding-eval-container" data-schema="{escaped_name}"
+<div class="grounding-eval-container annotation-form" data-schema="{escaped_name}" data-annotation-type="grounding_eval" data-schema-name="{escaped_name}" {layout_attrs}
      data-region-type="{region_type}">
     <fieldset class="grounding-eval-fieldset">
         <legend class="grounding-eval-legend">{description}</legend>

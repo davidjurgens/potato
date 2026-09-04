@@ -20,7 +20,8 @@ from typing import List, Dict, Tuple, Any
 from .identifier_utils import (
     safe_generate_layout,
     escape_html_content,
-    generate_validation_attribute
+    generate_validation_attribute,
+    generate_layout_attributes,
 )
 
 logger = logging.getLogger(__name__)
@@ -273,6 +274,9 @@ def _generate_html(
     """
     Generate the HTML for the audio annotation interface.
     """
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
     escaped_name = escape_html_content(schema_name)
     validation = generate_validation_attribute(annotation_scheme)
     description = escape_html_content(annotation_scheme.get('description', ''))
@@ -333,7 +337,7 @@ def _generate_html(
         '''
 
     html = f'''
-    <form id="{escaped_name}" class="annotation-form audio-annotation" action="javascript:void(0)"
+    <form id="{escaped_name}" class="annotation-form audio-annotation" action="javascript:void(0)" data-annotation-type="audio_annotation" data-schema-name="{escaped_name}" {layout_attrs}
           data-schema-name="{escaped_name}"{source_field_attr}>
         <fieldset schema="{escaped_name}">
             <legend>{description}</legend>

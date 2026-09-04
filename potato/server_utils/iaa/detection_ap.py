@@ -58,9 +58,23 @@ def _label_of(obj: Dict[str, Any]) -> str:
 
 
 def _iou(a: Dict[str, Any], b: Dict[str, Any]) -> float:
+    """Overlap between two objects in either the stored or the canonical shape.
+
+    `similarity()` reads the canonical form -- `bbox`, `points`, `rle` -- while
+    annotators and the client store `coordinates`. Handing it the stored shape
+    does not raise; it scores every pair 0.0, so a detector that reproduces the
+    ground truth exactly scores AP 0.0 and reads as completely broken. Both
+    shapes reach this function in practice: ground truth comes from
+    annotations, predictions come from a model.
+    """
     from potato.server_utils.iaa.geometry import similarity
+    from potato.server_utils.iaa.geometry_agreement import canonical_object
+
     try:
-        return float(similarity(a, b))
+        obj_a, obj_b = canonical_object(a), canonical_object(b)
+        if obj_a is None or obj_b is None:
+            return 0.0
+        return float(similarity(obj_a, obj_b))
     except Exception:
         return 0.0
 

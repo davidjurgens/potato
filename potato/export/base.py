@@ -34,6 +34,55 @@ class ExportContext:
     output_dir: str
     phase_responses: List[dict] = field(default_factory=list)
 
+    def covered_text(self, instance_id: str, span: dict) -> str:
+        """The words a span covers, sliced out of the item it was drawn on.
+
+        Spans are stored as offsets and a label, with no content: the span
+        manager records `{"schema", "name", "start", "end", "target_field"}`
+        and nothing else. (`extractSpanAnnotationsFromDOM` in annotation.js
+        does build a `value` from the overlay text, but it reads
+        `.span-overlay` elements, and a page using `instance_display` has
+        none.) So every tabular export carried offsets that the reader had to
+        join back to the data file to interpret, while `conll` -- which
+        re-tokenises the source itself -- was the one format that showed the
+        marked words.
+
+        Deriving it here rather than storing it at write time keeps it honest:
+        the text can never disagree with the offsets it came from, and spans
+        recorded before this existed export the same as new ones.
+
+        Returns "" when the offsets or the field cannot be resolved, which is
+        the same thing the column held before.
+        """
+        item = self.items.get(instance_id)
+        if not isinstance(item, dict):
+            return ""
+
+        start, end = span.get("start"), span.get("end")
+        try:
+            start, end = int(start), int(end)
+        except (TypeError, ValueError):
+            return ""
+        if start < 0 or end <= start:
+            return ""
+
+        # A multi-span page marks up several fields, and the span says which.
+        field_name = span.get("target_field")
+        if not field_name:
+            field_name = (self.config.get("item_properties", {})
+                          or {}).get("text_key", "text")
+
+        source = item.get(field_name)
+        if not isinstance(source, str):
+            # Fall back to the configured text field: an older span may carry a
+            # target_field the item no longer has.
+            source = item.get((self.config.get("item_properties", {})
+                               or {}).get("text_key", "text"))
+        if not isinstance(source, str):
+            return ""
+
+        return source[start:end]
+
 
 @dataclass
 class ExportResult:

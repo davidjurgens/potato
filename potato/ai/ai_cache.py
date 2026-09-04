@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 import requests
 from tqdm import tqdm
 import time
@@ -72,6 +72,50 @@ def _get_instance_text(instance_id: int) -> str:
             return value
 
     return str(item_data)
+
+def _get_instance_image(instance_id: int) -> Optional[str]:
+    """The item's image, when the config names a field that holds one.
+
+    `_get_instance_text` returns exactly one field -- `item_properties.text_key`
+    -- and `_is_image_url` then sniffs that one string to decide whether the
+    item is a picture. So a multimodal item could send its review or its
+    photograph, never both: pointing `text_key` at the body meant the
+    photograph never left the server, and pointing it at the photo meant the
+    review did not. An `openai_vision` endpoint on an item whose text_key is
+    text is a vision endpoint that never sees an image, and nothing said so.
+
+    Reading a second key closes that. Resolution order:
+      1. `ai_support.image_key`, when the author names one
+      2. `item_properties.image_key`
+      3. the first `instance_display` field whose value looks like an image
+    Returns None when the item has no image, which restores the old
+    single-field behaviour exactly.
+    """
+    try:
+        item = get_item_state_manager().items()[instance_id]
+        item_data = item.get_data()
+    except Exception:
+        return None
+    if not isinstance(item_data, dict):
+        return None
+
+    for key in (
+        (config.get("ai_support", {}) or {}).get("image_key"),
+        (config.get("item_properties", {}) or {}).get("image_key"),
+    ):
+        if key and isinstance(item_data.get(key), str):
+            return item_data[key]
+
+    # No key named: fall back to any displayed field that looks like an image,
+    # so a config that already declares the photo through instance_display does
+    # not have to name it twice.
+    for field in (config.get("instance_display", {}) or {}).get("fields", []) or []:
+        name = field.get("field") if isinstance(field, dict) else field
+        value = item_data.get(name) if isinstance(name, str) else None
+        if isinstance(value, str) and _is_image_url(value):
+            return value
+    return None
+
 
 def _is_image_url(text: str) -> bool:
     """Check if text appears to be an image URL."""
@@ -373,14 +417,23 @@ class AiCacheManager:
             )
         return capabilities
 
-    def _get_ai_with_vision_support(self, text: str, prompt: str, output_format) -> str:
+    def _get_ai_with_vision_support(self, text: str, prompt: str, output_format,
+                                    instance_id: Optional[int] = None) -> str:
         """
-        Get AI response, using vision if text is an image URL and endpoint supports it.
+        Get AI response, using vision if the item has an image and the endpoint
+        supports it.
+
+        `instance_id` is optional so the old single-field behaviour still works
+        for a caller that only has the text: without it the image can only be
+        the text itself, which is what this did before.
         """
         # Check if we should use vision
-        if self.endpoint_supports_vision and _is_image_url(text):
+        vision_image = (
+            _get_instance_image(instance_id) if instance_id is not None else None
+        ) or (text if _is_image_url(text) else None)
+        if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision query for image URL: {text[:50]}...")
-            image_data = _get_image_data_from_url(text)
+            image_data = _get_image_data_from_url(vision_image)
             if image_data:
                 try:
                     return self.ai_endpoint.query_with_image(prompt, image_data, output_format)
@@ -502,9 +555,11 @@ class AiCacheManager:
         output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
 
         # Check if we should use vision endpoint for image-based content
-        if self.endpoint_supports_vision and _is_image_url(text):
+        vision_image = _get_instance_image(instance_id) or (
+            text if _is_image_url(text) else None)
+        if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision for likert {ai_assistant} on image: {text[:50]}...")
-            image_data = _get_image_data_from_url(text)
+            image_data = _get_image_data_from_url(vision_image)
             if image_data:
                 # Build vision-specific prompts based on ai_assistant type
                 if ai_assistant == "hint":
@@ -562,9 +617,11 @@ Respond in JSON format: {{"keywords": ["<visual_feature_1>", "<visual_feature_2>
         output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
 
         # Check if we should use vision endpoint for image-based content
-        if self.endpoint_supports_vision and _is_image_url(text):
+        vision_image = _get_instance_image(instance_id) or (
+            text if _is_image_url(text) else None)
+        if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision for multiselect {ai_assistant} on image: {text[:50]}...")
-            image_data = _get_image_data_from_url(text)
+            image_data = _get_image_data_from_url(vision_image)
             if image_data:
                 # Format labels for the prompt
                 label_names = [l.get('name', l) if isinstance(l, dict) else l for l in labels]
@@ -624,9 +681,11 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         output_format = self.model_manager.get_model_class_by_name(ai_prompt[annotation_type].get(ai_assistant).get("output_format"))
 
         # Check if we should use vision endpoint for image-based content
-        if self.endpoint_supports_vision and _is_image_url(text):
+        vision_image = _get_instance_image(instance_id) or (
+            text if _is_image_url(text) else None)
+        if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision for radio {ai_assistant} on image: {text[:50]}...")
-            image_data = _get_image_data_from_url(text)
+            image_data = _get_image_data_from_url(vision_image)
             if image_data:
                 # Format labels for the prompt
                 label_names = [l.get('name', l) if isinstance(l, dict) else l for l in labels]

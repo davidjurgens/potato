@@ -486,6 +486,16 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "`min_annotators` and `agreement_threshold`",
         type="boolean|object", category=QC,
     ),
+    "ai_support.image_key": _D(
+        "Item field holding the image, when the item also carries text. Without "
+        "it a vision endpoint only ever sees `item_properties.text_key`",
+        type="string", category=AI,
+    ),
+    "item_properties.image_key": _D(
+        "Item field holding the image, the counterpart of `text_key`. "
+        "`ai_support.image_key` overrides it",
+        type="string", category=CORE,
+    ),
     "gold_standards.feedback": _D(
         "What an annotator is told after a gold item. A mapping with "
         "`show_correct_answer` and `show_explanation`; both off means silent "

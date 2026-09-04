@@ -37,7 +37,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 |-----|----------|------|---------|-------------|----------|
 | `annotation_task_description` |  | string |  | Longer task description; falls back to task_description when absent |  |
 | `annotation_task_name` | Yes | string |  | Display name for the task, shown in the browser title and the header |  |
-| `item_properties` | Yes | object |  | Maps the fields of your data file onto the roles Potato needs: which field is the identifier and which holds the text to annotate | `category_key`, `id_key`, `kwargs`, `text_key` |
+| `item_properties` | Yes | object |  | Maps the fields of your data file onto the roles Potato needs: which field is the identifier and which holds the text to annotate | `category_key`, `id_key`, `image_key`, `kwargs`, `text_key` |
 | `output_annotation_dir` | Yes | string |  | Directory annotations, user state and exports are written to |  |
 | `output_annotation_format` |  | string | `""` | Deprecated, and read as `export_annotation_format` at load time with a warning (`json` becomes `jsonl`, since no exporter is called `json`). It will stop being read in a later release, so rename it. Annotations are stored as `<output_annotation_dir>/<user>/user_state.json` whatever it says; this key never changed that |  |
 | `task_description` |  | string |  | Short description of the task, shown to annotators |  |
@@ -117,7 +117,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 |-----|----------|------|---------|-------------|----------|
 | `active_learning` |  | object |  | Order items by model uncertainty | `annotation_routing`, `bald_params`, `calibrate_probabilities`, `classifier`, `classifier_params`, `cold_start_strategy`, `confidence_method`, `database`, `enabled`, `hybrid_weights`, `icl_ensemble_params`, `llm`, `max_instances_to_reorder`, `min_annotations_per_instance`, `min_instances_for_training`, `model_persistence`, `query_strategy`, `random_sample_percent`, `resolution_strategy`, `routing_thresholds`, `schema_names`, `update_frequency`, `use_icl_ensemble`, `vectorizer`, `vectorizer_params` |
 | `ai_budget` |  | object |  | Cost estimate and spend cap for AI actions. The complaint about commercial platforms is not the price but the surprise -- credits consumed by auto-labelling and discovered at export time | `cap_usd` |
-| `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `option_highlighting` |
+| `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `image_key`, `option_highlighting` |
 | `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `ui` |
 | `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected |  |
 | `llm_labeling` |  | object |  | Bulk labeling by a model |  |

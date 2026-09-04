@@ -27,12 +27,16 @@ from .identifier_utils import (
     escape_html_content,
     generate_element_identifier,
     generate_validation_attribute,
+    generate_layout_attributes,
 )
 
 logger = logging.getLogger(__name__)
 
 
 def _generate_multi_document_event_layout_internal(annotation_scheme, horizontal=False):
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
     scheme_name = annotation_scheme["name"]
     description = annotation_scheme.get(
         "description", "Annotate events that span multiple documents"
@@ -56,7 +60,7 @@ def _generate_multi_document_event_layout_internal(annotation_scheme, horizontal
     validation = generate_validation_attribute(annotation_scheme)
 
     schematic = f"""
-    <div id="{escape_html_content(scheme_name)}" class="mde-container annotation-form"
+    <div id="{escape_html_content(scheme_name)}" class="mde-container annotation-form" data-annotation-type="multi_document_event" data-schema-name="{escape_html_content(scheme_name)}" {layout_attrs}
          data-annotation-type="multi_document_event"
          data-scheme-name="{escape_html_content(scheme_name)}"
          data-schema-name="{escape_html_content(scheme_name)}"

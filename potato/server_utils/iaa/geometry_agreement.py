@@ -442,33 +442,38 @@ def geometry_agreement(
     return result
 
 
-def _canonicalize(objects_by_annotator: Dict[str, List[dict]]
-                  ) -> Dict[str, List[dict]]:
+def canonical_object(obj: dict) -> Optional[dict]:
     """
-    Client-shaped objects -> the canonical form the distance functions read.
+    One client-shaped object -> the canonical form the distance functions read.
 
     `similarity()` and everything built on it expect what
     `cv_utils.normalize_annotation_object` returns -- `bbox`, `points`, `rle` --
     NOT the stored client shape with `coordinates`. Passing the client shape
     does not raise; it silently scores every pair 0 similarity, so nothing
-    matches and every measure comes back NaN. Converting once here means no
-    call site can get it wrong.
+    matches and every measure comes back NaN. `detection_ap` was written
+    against the client shape and scored a perfect detector 0.0 for exactly
+    this reason, so the conversion lives here rather than in each caller.
+
+    Returns None for anything that is not a dict.
     """
     from potato.server_utils.annotation_values import _as_canonical
 
+    if not isinstance(obj, dict):
+        return None
+    # Already canonical (has bbox/points/rle and no coordinates)?
+    if "coordinates" not in obj and (
+            "bbox" in obj or "points" in obj or "rle" in obj):
+        return obj
+    return _as_canonical(obj)
+
+
+def _canonicalize(objects_by_annotator: Dict[str, List[dict]]
+                  ) -> Dict[str, List[dict]]:
+    """Client-shaped objects -> canonical, for a whole {annotator: [obj]} map."""
     out: Dict[str, List[dict]] = {}
     for annotator, objects in objects_by_annotator.items():
-        converted = []
-        for obj in objects or []:
-            if not isinstance(obj, dict):
-                continue
-            # Already canonical (has bbox/points/rle and no coordinates)?
-            if "coordinates" not in obj and (
-                    "bbox" in obj or "points" in obj or "rle" in obj):
-                converted.append(obj)
-            else:
-                converted.append(_as_canonical(obj))
-        out[annotator] = converted
+        converted = [canonical_object(obj) for obj in objects or []]
+        out[annotator] = [obj for obj in converted if obj is not None]
     return out
 
 

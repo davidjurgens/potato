@@ -53,6 +53,9 @@ KNOWN_CONFIG_KEYS = {
     # === Core / required ===
     "item_properties": {
         "id_key", "text_key", "category_key", "kwargs",
+        # The image counterpart of text_key, for AI support on a multimodal
+        # item. `ai_support.image_key` overrides it.
+        "image_key",
     },
     "data_files": None,
     "task_dir": None,
@@ -134,6 +137,11 @@ KNOWN_CONFIG_KEYS = {
     "ai_support": {
         "enabled": None, "endpoint_type": None, "ai_config_file": None,
         "option_highlighting": None, "features": None, "cache_config": None,
+        # Which item field holds the picture. The AI path reads exactly one
+        # field -- `item_properties.text_key` -- and sniffs it to decide
+        # whether the item is an image, so a multimodal item could send its
+        # text or its photograph but never both.
+        "image_key": None,
         # Spelled out rather than left opaque so `ai_support.ai_config.modle`
         # is caught. The union of every key any endpoint reads: the shared
         # ones first, then the per-endpoint ones (openai_vision's detail /

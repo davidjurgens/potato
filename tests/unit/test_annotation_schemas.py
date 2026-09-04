@@ -227,8 +227,10 @@ class TestAnnotationSchemas:
 
         html_layout, keybindings = generate_schematic(schema)
 
-        # Extract all name attributes from radio inputs
-        name_pattern = r'name="([^"]+)"'
+        # Extract all name attributes from radio inputs. The lookbehind keeps
+        # `data-schema-name="..."` -- which every scheme now carries so a
+        # page-wide scan can find it -- out of the radio-group count.
+        name_pattern = r'(?<![-\w])name="([^"]+)"'
         names = re.findall(name_pattern, html_layout)
 
         # Filter to only radio input names (should contain the schema name)

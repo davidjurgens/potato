@@ -47,7 +47,7 @@ boundaries with no conversion. The frame index is recoverable exactly from
 import json
 import logging
 
-from .identifier_utils import escape_html_content, safe_generate_layout
+from .identifier_utils import escape_html_content, safe_generate_layout, generate_layout_attributes
 from .image_annotation import DEFAULT_COLORS, _process_labels
 
 logger = logging.getLogger(__name__)
@@ -124,6 +124,9 @@ def generate_episode_annotation_layout(annotation_scheme):
 
 
 def _generate_internal(annotation_scheme):
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
     schema_name = annotation_scheme.get("name", "episode_annotation")
     logger.debug("Generating episode annotation layout for schema: %s",
                  schema_name)
@@ -172,7 +175,7 @@ def _generate_internal(annotation_scheme):
     }
 
     html = f"""
-    <div class="episode-annotation-container" data-schema="{escaped_name}">
+    <div class="episode-annotation-container annotation-form" data-schema="{escaped_name}" data-annotation-type="episode_annotation" data-schema-name="{escaped_name}" {layout_attrs}>
         <fieldset>
             <legend>{description}</legend>
 

@@ -25,7 +25,7 @@ different object.
 import json
 import logging
 
-from .identifier_utils import escape_html_content, safe_generate_layout
+from .identifier_utils import escape_html_content, safe_generate_layout, generate_layout_attributes
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,9 @@ def generate_region_caption_layout(annotation_scheme):
 
 
 def _generate_internal(annotation_scheme):
+    # The grid reads data-grid-columns; without this the scheme's
+    # `layout:` block is silently discarded and it renders at one column.
+    layout_attrs = generate_layout_attributes(annotation_scheme)
     schema_name = annotation_scheme.get("name", "region_caption")
     escaped_name = escape_html_content(schema_name)
     description = escape_html_content(
@@ -53,7 +56,7 @@ def _generate_internal(annotation_scheme):
     }
 
     html = f"""
-<div class="region-caption-container" data-schema="{escaped_name}">
+<div class="region-caption-container annotation-form" data-schema="{escaped_name}" data-annotation-type="region_caption" data-schema-name="{escaped_name}" {layout_attrs}>
     <fieldset class="region-caption-fieldset">
         <legend class="region-caption-legend">{description}</legend>
 

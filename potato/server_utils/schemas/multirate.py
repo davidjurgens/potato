@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # HTML template using Jinja2 with comprehensive styling that preserves horizontal layout
 MULTIRATE_TEMPLATE = """
-<form id="{{ schema_name }}" class="annotation-form multirate shadcn-multirate-container" action="javascript:void(0)" data-annotation-id="{{ annotation_id }}" {{ layout_attrs }}>
+<form id="{{ schema_name }}" class="annotation-form multirate shadcn-multirate-container" action="javascript:void(0)" data-annotation-id="{{ annotation_id }}" data-annotation-type="multirate" data-schema-name="{{ schema_name }}" {{ layout_attrs }}>
     <fieldset schema="{{ schema_name }}">
         <legend class="shadcn-multirate-title">{{ description }}</legend>
         <table class="shadcn-multirate-table">

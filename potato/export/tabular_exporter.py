@@ -9,7 +9,7 @@ import csv
 import json
 import os
 import logging
-from typing import Optional, Tuple, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from .base import BaseExporter, ExportContext, ExportResult
 from .single_select import (
@@ -29,8 +29,38 @@ def _single_select_names(context: ExportContext) -> set:
     return names
 
 
+def _spans_with_text(ann: dict,
+                     context: Optional[ExportContext]) -> Dict[str, Any]:
+    """This record's spans, each carrying the words it covers.
+
+    A stored span is offsets and a label with no content, so every tabular
+    export left the reader joining back to the data file and slicing on
+    start/end to find out what was marked -- `conll` was the only format that
+    showed the words, because it re-tokenises the source itself.
+    `context.covered_text` does that slice once, against the item the span was
+    drawn on, so the text can never disagree with the offsets.
+    """
+    spans_by_schema = ann.get("spans", {}) or {}
+    if context is None:
+        return spans_by_schema
+
+    instance_id = ann.get("instance_id", "")
+    out = {}
+    for schema_name, spans in spans_by_schema.items():
+        if not isinstance(spans, list):
+            out[schema_name] = spans
+            continue
+        out[schema_name] = [
+            ({**span, "text": context.covered_text(instance_id, span)}
+             if isinstance(span, dict) and not span.get("text") else span)
+            for span in spans
+        ]
+    return out
+
+
 def _flatten_annotation(ann: dict, single_select: Optional[set] = None,
-                        ambiguities: Optional[List[str]] = None) -> dict:
+                        ambiguities: Optional[List[str]] = None,
+                        context: Optional[ExportContext] = None) -> dict:
     """Flatten a single annotation record into a flat dict for tabular output.
 
     ``single_select`` names the schemas that may hold at most one label. When such a
@@ -68,8 +98,13 @@ def _flatten_annotation(ann: dict, single_select: Optional[set] = None,
         else:
             row[schema_name] = labels if not isinstance(labels, (dict, list)) else json.dumps(labels)
 
-    # Flatten spans as JSON strings
-    for schema_name, spans in ann.get("spans", {}).items():
+    # Flatten spans as JSON strings.
+    #
+    # A stored span is offsets and a label with no content, so this column used
+    # to leave the reader joining back to the data file and slicing on
+    # start/end to find out what was actually marked. `context.covered_text`
+    # does that slice here, once, against the item the span was drawn on.
+    for schema_name, spans in _spans_with_text(ann, context).items():
         row[f"{schema_name}._spans"] = json.dumps(spans)
 
     return row
@@ -150,7 +185,9 @@ class JSONLExporter(BaseExporter):
                     "instance_id": ann.get("instance_id", ""),
                     "user_id": ann.get("user_id", ""),
                     "labels": ann.get("labels", {}),
-                    "spans": ann.get("spans", {}),
+                    # Same slice the csv column gets: a stored span is offsets
+                    # and a label, and the words it covers are the point.
+                    "spans": _spans_with_text(ann, context),
                     "links": ann.get("links", {}),
                 }
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -403,7 +440,7 @@ def _write_delimited(context: ExportContext, output_path: str,
     # Flatten all annotations to collect the full set of columns
     single_select = _single_select_names(context)
     ambiguities = []
-    rows = [_flatten_annotation(ann, single_select, ambiguities)
+    rows = [_flatten_annotation(ann, single_select, ambiguities, context)
             for ann in context.annotations]
 
     if not rows:

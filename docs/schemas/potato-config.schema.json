@@ -146,6 +146,10 @@
           "type": "string"
         },
         "features": {},
+        "image_key": {
+          "description": "Item field holding the image, when the item also carries text. Without it a vision endpoint only ever sees `item_properties.text_key`",
+          "type": "string"
+        },
         "option_highlighting": {}
       },
       "type": "object"
