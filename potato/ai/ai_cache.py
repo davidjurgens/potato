@@ -109,12 +109,57 @@ def _get_instance_image(instance_id: int) -> Optional[str]:
     # No key named: fall back to any displayed field that looks like an image,
     # so a config that already declares the photo through instance_display does
     # not have to name it twice.
-    for field in (config.get("instance_display", {}) or {}).get("fields", []) or []:
-        name = field.get("field") if isinstance(field, dict) else field
+    # `instance_display.fields[]` entries are keyed `key` -- the validator
+    # rejects an entry without one. This read `field`, which no entry has and
+    # nothing writes, so `name` was always None and the branch could never
+    # fire: a config that declared its photo through instance_display and
+    # trusted the documented fallback sent the model text, every time.
+    #
+    # A field the author typed as an image is taken at its word; otherwise the
+    # value is sniffed, as before.
+    fields = (config.get("instance_display", {}) or {}).get("fields", []) or []
+    sniffed = None
+    for field in fields:
+        if isinstance(field, dict):
+            name = field.get("key") or field.get("field")
+            declared_image = str(field.get("type") or "").lower() == "image"
+        else:
+            name = field
+            declared_image = False
         value = item_data.get(name) if isinstance(name, str) else None
-        if isinstance(value, str) and _is_image_url(value):
+        if not isinstance(value, str) or not value:
+            continue
+        if declared_image:
             return value
-    return None
+        if sniffed is None and _is_image_url(value):
+            sniffed = value
+    return sniffed
+
+
+def _item_text_block(text: Any, vision_image: Optional[str]) -> str:
+    """The item's text, as a block to drop into a vision prompt, or "".
+
+    Every vision prompt was built from the scheme description, the labels and
+    the picture, and never from the item -- `text` was in scope at all nine of
+    them and unused. With `image_key` naming the photograph and `text_key` the
+    body, the model was handed the photograph *instead of* the ticket rather
+    than as well as it, and said so: asked to triage "The export button spins
+    forever and the CSV never downloads" it replied that there was "no text,
+    error message, or specific context provided" and suggested Other. The
+    annotator sees that written with confidence, and the label it names
+    highlighted in their form.
+
+    Returns "" when the text is absent or is itself the image being sent, so a
+    single-field image task keeps the prompt it had.
+    """
+    if not isinstance(text, str):
+        return ""
+    stripped = text.strip()
+    if not stripped or stripped == (vision_image or "").strip():
+        return ""
+    if _is_image_url(stripped):
+        return ""
+    return f"\nThe item's text:\n{stripped}\n"
 
 
 def _is_image_url(text: str) -> bool:
@@ -557,6 +602,7 @@ class AiCacheManager:
         # Check if we should use vision endpoint for image-based content
         vision_image = _get_instance_image(instance_id) or (
             text if _is_image_url(text) else None)
+        text_block = _item_text_block(text, vision_image)
         if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision for likert {ai_assistant} on image: {text[:50]}...")
             image_data = _get_image_data_from_url(vision_image)
@@ -566,7 +612,7 @@ class AiCacheManager:
                     prompt = f"""Look at this image and help with the following annotation task:
 
 Task: {description}
-Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
+{text_block}Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
 
 Please analyze the image and suggest an appropriate rating with a brief explanation.
 Respond in JSON format: {{"hint": "<explanation>", "suggestive_choice": "<rating label>"}}"""
@@ -574,7 +620,7 @@ Respond in JSON format: {{"hint": "<explanation>", "suggestive_choice": "<rating
                     prompt = f"""Look at this image and explain the reasoning for different rating choices:
 
 Task: {description}
-Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
+{text_block}Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
 
 For each possible rating, explain what visual evidence in the image would support that rating.
 Respond in JSON format: {{"rationales": [{{"label": "<rating>", "reasoning": "<explanation>"}}]}}"""
@@ -582,7 +628,7 @@ Respond in JSON format: {{"rationales": [{{"label": "<rating>", "reasoning": "<e
                     prompt = f"""Look at this image and identify visual features relevant to the rating task:
 
 Task: {description}
-Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
+{text_block}Rating scale: {size} points, from "{min_label}" (1) to "{max_label}" ({size})
 
 Identify key visual elements that would influence the rating.
 Respond in JSON format: {{"keywords": ["<visual_feature_1>", "<visual_feature_2>"]}}"""
@@ -619,6 +665,7 @@ Respond in JSON format: {{"keywords": ["<visual_feature_1>", "<visual_feature_2>
         # Check if we should use vision endpoint for image-based content
         vision_image = _get_instance_image(instance_id) or (
             text if _is_image_url(text) else None)
+        text_block = _item_text_block(text, vision_image)
         if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision for multiselect {ai_assistant} on image: {text[:50]}...")
             image_data = _get_image_data_from_url(vision_image)
@@ -632,7 +679,7 @@ Respond in JSON format: {{"keywords": ["<visual_feature_1>", "<visual_feature_2>
                     prompt = f"""Look at this image and help with the following annotation task:
 
 Task: {description}
-Available options (select all that apply): {labels_str}
+{text_block}Available options (select all that apply): {labels_str}
 
 Please analyze the image and suggest which options apply.
 Respond in JSON format: {{"hint": "<explanation>", "suggestive_choices": ["<option1>", "<option2>"]}}"""
@@ -640,7 +687,7 @@ Respond in JSON format: {{"hint": "<explanation>", "suggestive_choices": ["<opti
                     prompt = f"""Look at this image and explain the reasoning for each option:
 
 Task: {description}
-Available options: {labels_str}
+{text_block}Available options: {labels_str}
 
 For each option, explain what visual evidence supports or contradicts it.
 Respond in JSON format: {{"rationales": [{{"label": "<option>", "reasoning": "<explanation>"}}]}}"""
@@ -648,7 +695,7 @@ Respond in JSON format: {{"rationales": [{{"label": "<option>", "reasoning": "<e
                     prompt = f"""Look at this image and identify visual features for each option:
 
 Task: {description}
-Available options: {labels_str}
+{text_block}Available options: {labels_str}
 
 For each option, identify visual cues that indicate its presence.
 Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": ["<feature1>", "<feature2>"]}}]}}"""
@@ -683,6 +730,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         # Check if we should use vision endpoint for image-based content
         vision_image = _get_instance_image(instance_id) or (
             text if _is_image_url(text) else None)
+        text_block = _item_text_block(text, vision_image)
         if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision for radio {ai_assistant} on image: {text[:50]}...")
             image_data = _get_image_data_from_url(vision_image)
@@ -696,7 +744,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
                     prompt = f"""Look at this image and help with the following annotation task:
 
 Task: {description}
-Available options: {labels_str}
+{text_block}Available options: {labels_str}
 
 Please analyze the image and suggest the most appropriate option.
 Respond in JSON format: {{"hint": "<explanation>", "suggestive_choice": "<selected option>"}}"""
@@ -704,7 +752,7 @@ Respond in JSON format: {{"hint": "<explanation>", "suggestive_choice": "<select
                     prompt = f"""Look at this image and explain the reasoning for each option:
 
 Task: {description}
-Available options: {labels_str}
+{text_block}Available options: {labels_str}
 
 For each option, explain what visual evidence in the image supports or contradicts it.
 Respond in JSON format: {{"rationales": [{{"label": "<option>", "reasoning": "<explanation>"}}]}}"""
@@ -712,7 +760,7 @@ Respond in JSON format: {{"rationales": [{{"label": "<option>", "reasoning": "<e
                     prompt = f"""Look at this image and identify visual features for each option:
 
 Task: {description}
-Available options: {labels_str}
+{text_block}Available options: {labels_str}
 
 For each option, identify visual cues that would indicate its presence.
 Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": ["<feature1>", "<feature2>"]}}]}}"""

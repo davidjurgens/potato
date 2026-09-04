@@ -73,6 +73,9 @@
   .ja-verdict.v-trustworthy { background: hsl(140 45% 90%); color: hsl(140 45% 26%); }
   .ja-verdict.v-use-with-caution { background: hsl(40 70% 88%); color: hsl(35 55% 28%); }
   .ja-verdict.v-needs-review { background: hsl(8 60% 91%); color: hsl(8 55% 32%); }
+  /* Deliberately not on the green/amber/red scale: this card has no evidence
+     yet, which is a different statement from "the evidence is mixed". */
+  .ja-verdict.v-not-yet-measured { background: var(--muted); color: var(--muted-foreground); }
   .ja-concerns { margin: 0.4rem 0 0; padding-left: 1.1rem; font-size: 0.8rem; color: hsl(8 45% 38%); }
   .ja-mono { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); }
 </style>

@@ -408,9 +408,25 @@ export/
 
 Schema columns are flattened by annotation type:
 - **radio/select** → `string` (the selected label)
-- **likert/slider/number** → `float64`
+- **likert/slider/number** → `float64`, or `string` for a scale with named labels
 - **multiselect** → `list<string>` (selected labels)
 - **text** → `string`
+
+A schema that stores **several answers at once** gets one column per
+sub-answer, named `<schema>.<key>`. These are the same columns the CSV writes:
+
+| Schema | Stored | Columns |
+|---|---|---|
+| `multirate` | `{"Urgency": "Low", "Customer tone": "High"}` | `handling.Urgency`, `handling.Customer tone` |
+| `constant_sum`, `soft_label` | `{"A": 40, "B": 60}` | `budget.A`, `budget.B` |
+| `image_annotation` and other blob schemas | `{"_data": "[...]"}` | `uibox._data` (the JSON) |
+
+A single-select stays a single column, because that is the shape that is usable
+in a dataframe: `severity` holds `"Serious"` rather than spreading across a
+sparse `severity.Serious`, `severity.Minor`, … as the CSV does.
+
+Every column is present on every row, filled with null where an annotator did
+not answer, so a schema only some annotators reached is still in the file.
 
 **spans.parquet schema:**
 

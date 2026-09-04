@@ -95,20 +95,32 @@ class DynamicAIHelp:
             logger.debug(f"[get_ai_help_data] ai_prompts keys: {list(ai_prompts.keys()) if ai_prompts else 'None'}")
 
             if not ai_prompts:
-                context["error_message"] = f'No AI prompt configured'
-                logger.debug("[get_ai_help_data] No AI prompts configured")
+                # Also a config-time fact, and also not the annotator's to fix.
+                logger.warning(
+                    "AI support is enabled but no AI prompts are configured; "
+                    "no assistant row will be rendered.")
                 return context
             elif annotation_type not in ai_prompts:
-                context["error_message"] = f'annotation type {annotation_type} does not exist in ai_prompts'
-                logger.debug(f"[get_ai_help_data] annotation type {annotation_type} not in prompts")
+                # No prompt file for this type -- a config-time fact, addressed
+                # to whoever wrote the config, and it was being printed into
+                # the annotation form for the annotator to read. The types with
+                # no AI support at all (multirate, image_annotation) already
+                # render no assistant row and say nothing, so the same
+                # situation had two presentations and the louder one reached
+                # the audience that cannot act on it. Log it, render nothing.
+                logger.warning(
+                    f"No AI prompt file for annotation type '{annotation_type}' "
+                    f"(potato/ai/prompt/). The AI assistant row is omitted for "
+                    f"schemes of this type.")
                 return context
 
             ai_cache_manager = get_ai_cache_manager()
             logger.debug(f"[get_ai_help_data] ai_cache_manager: {ai_cache_manager is not None}")
 
             if ai_cache_manager is None:
-                context["error_message"] = "AI cache manager not initialized"
-                logger.debug("[get_ai_help_data] AI cache manager is None")
+                logger.warning(
+                    "AI cache manager is not initialized; no assistant row "
+                    "will be rendered.")
                 return context
 
             ai_assistant_html_parts = []
@@ -163,9 +175,12 @@ class DynamicAIHelp:
             return context
         except Exception as e:
             logger.error(f"[get_ai_help_data] Exception: {e}", exc_info=True)
+            # The exception text names internals and is already in the log at
+            # ERROR with a traceback. What reaches the page is what the
+            # annotator can act on, which is "carry on without it".
             return {
                 'ai_assistant': None,
-                'error_message': f'Error loading AI help: {str(e)}',
+                'error_message': 'AI help is unavailable for this item.',
             }
 
     def render(self, instance: int, annotation_id: int, annotation_type) -> str:

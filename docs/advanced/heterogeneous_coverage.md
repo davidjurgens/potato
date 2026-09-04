@@ -126,12 +126,59 @@ Once overlap-sample items saturate, agreement statistics are available at
 |---|---|
 | nominal (radio, single-label multiselect, triage) | percent agreement, Cohen's κ, Fleiss' κ, Krippendorff's α (nominal) |
 | ordinal (likert, confidence, semantic_differential, range_slider, VAS) | weighted κ (linear, quadratic), Spearman's ρ, Krippendorff's α (ordinal) |
-| continuous (slider, number, multirate, constant_sum, soft_label) | Pearson r, MAE, RMSE, Krippendorff's α (interval), ICC(2,k) |
+| continuous (slider, number) | Pearson r, MAE, RMSE, Krippendorff's α (interval), ICC(2,k) |
+| matrix (multirate, constant_sum, soft_label) | the ordinal or continuous set above, once per row and once pooled |
 | multi-label (multiselect, hierarchical_multiselect, card_sort) | mean Jaccard, MASI-α |
 | ranking (ranking, bws, pairwise) | Kendall's τ, Spearman footrule |
 | span (span, error_span, event_annotation, coreference, extractive_qa) | token-level κ (BIO), span F1 (exact + partial), Krippendorff's α<sub>U</sub>, γ (Mathet) |
 | geometry (image_annotation) | mean agreement, mean matched IoU, detection F1, mean object count difference |
 | temporal (audio_annotation, video_annotation) | mean agreement, mean matched IoU (temporal), detection F1, mean segment count difference |
+
+### Schemas that hold several answers at once
+
+A `multirate` asks N questions on one scale; `constant_sum` and `soft_label`
+spread a quantity over N options. The unit a reader cares about is the
+sub-answer, so each row is scored on its own and then pooled:
+
+```json
+"handling": {
+  "kind": "matrix",
+  "metrics": {
+    "Reproducibility": {"alpha_ordinal": 1.0,   "n_items": 4},
+    "Customer tone":   {"alpha_ordinal": 0.774, "n_items": 4},
+    "Urgency":         {"alpha_ordinal": 0.741, "n_items": 4},
+    "pooled":          {"alpha_ordinal": 0.820, "n_items": 12},
+    "n_rows": 3, "scale": "ordinal"
+  }
+}
+```
+
+`pooled` is the headline, and its unit is the (item, row) pair — four items
+rated on three rows is twelve judgements, not four. It is the number ten
+separate likert schemes would have given you. The per-row numbers are the
+reason to prefer the compact widget: "they agree about urgency and not about
+tone" is the finding, and a pooled 0.4 hides it.
+
+`scale` says which set was used. It is read from the stored values rather than
+the declared type, because a multirate over `[Low, Medium, High]` is ordinal
+over label names while `constant_sum` stores points.
+
+### Ordering a scale of word labels
+
+Every ordinal measure needs to know that `Serious` sits between `Minor` and
+`Critical`. Potato takes that from the schema's own `labels` list, so write the
+scale in order:
+
+```yaml
+- annotation_type: likert
+  name: severity
+  labels: [Trivial, Minor, Serious, Critical, Blocker]
+```
+
+Without a `labels` block the label names are sorted instead, which is only
+right when they sort into their own order — `[Low, Medium, High]` sorts to
+High &lt; Low &lt; Medium, and a one-step disagreement is then scored as a
+two-step one.
 
 ### Agreement over drawn and timed annotations
 
@@ -152,6 +199,14 @@ Reading them together is the point. High `mean_matched_iou` with low
 `detection_f1` means your annotators draw well but miss things — a coverage
 problem, fixed with better instructions. The reverse means they find everything
 but trace it carelessly — a precision problem, fixed with training.
+
+An item where **both** annotators marked nothing is counted, not scored. It
+appears as `n_empty_pairs` beside `n_scored_pairs`, and the four measures are
+computed over the scored pairs alone — the same convention COCO-style AP uses
+for an image with no ground truth and no predictions. Two blank answers are not
+evidence of agreement, and treating them as a perfect pair gave a task where
+nobody drew anything a `detection_f1` of 1.0. When nothing was scored at all,
+the measures read `n/a` with a note saying why.
 
 !!! note "Why not Krippendorff's α over IoU?"
 

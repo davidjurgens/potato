@@ -233,10 +233,34 @@ class TestGeometryGathering:
         assert metrics["mean_agreement"] < 1.0
         assert metrics["mean_object_count_diff"] == pytest.approx(1.0)
 
-    def test_both_empty_is_agreement(self):
+    def test_both_empty_is_counted_not_scored(self):
+        """Two blank answers are not evidence of agreement.
+
+        Scored as a perfect pair, a study where nobody drew anything reported
+        detection_f1 1.0 and mean_agreement 1.0 over every item -- exactly what
+        a well-executed geometry task looks like, from a task that collected
+        nothing. The pair is counted so the reader can see how much of the task
+        was blank, and the measures say n/a with a note.
+        """
         empty = {"i1": {("objects", "_data"): "[]"}}
         metrics = run_report({"alice": empty, "bob": empty}, IMAGE)
-        assert metrics["mean_agreement"] == pytest.approx(1.0)
+        assert math.isnan(metrics["mean_agreement"])
+        assert math.isnan(metrics["detection_f1"])
+        assert metrics["n_empty_pairs"] == 1
+        assert metrics["n_scored_pairs"] == 0
+        assert "nothing to compare" in metrics["note"]
+
+    def test_empty_pair_does_not_inflate_a_real_score(self):
+        """One blank item alongside one disagreement must not average to 0.5."""
+        drawn = blob(box(0.1, 0.1, 0.2, 0.2))
+        alice = {"i1": {("objects", "_data"): "[]"},
+                 "i2": {("objects", "_data"): drawn}}
+        bob = {"i1": {("objects", "_data"): "[]"},
+               "i2": {("objects", "_data"): "[]"}}
+        metrics = run_report({"alice": alice, "bob": bob}, IMAGE)
+        assert metrics["detection_f1"] == pytest.approx(0.0)
+        assert metrics["n_scored_pairs"] == 1
+        assert metrics["n_empty_pairs"] == 1
 
     def test_one_empty_is_disagreement(self):
         alice = {"i1": {("objects", "_data"): blob(box(0.1, 0.1, 0.2, 0.2))}}

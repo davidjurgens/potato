@@ -687,13 +687,20 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                             console.log('Calling loadImage with:', imageUrl);
                             manager.loadImage(imageUrl);
                         }} else {{
-                            console.warn('No image URL found for annotation');
-                            // Say what actually happened. Falling through silently
-                            // left an empty canvas that reads as a broken tool.
+                            // The config advice goes to the console, where the
+                            // person who wrote the config will look. It used to
+                            // be printed on the canvas, naming `text_key` and
+                            // `source_field` to the annotator -- correct, and
+                            // addressed to somebody who is not reading it and
+                            // could not act on it if they were.
+                            console.warn(
+                                'potato: no image URL for this item. Check that the item data '
+                                + 'has an image URL under text_key or source_field.');
+                            // The annotator still needs to know the empty canvas
+                            // is the item and not a broken tool.
                             if (typeof manager._showCanvasMessage === 'function') {{
                                 manager._showCanvasMessage(
-                                    'No image URL for this item. Check that the item data has an image URL '
-                                    + 'under text_key or source_field.');
+                                    'This item has no image to annotate. You can move on to the next one.');
                             }}
                         }}
 

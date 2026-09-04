@@ -55,6 +55,13 @@
      reads all day. */
   --destructive-text: #9f1e17;
   --warning-text: #7d4407;
+  /* The readable partner of --success-color, on the same terms as
+     --destructive-text above. #10b981 is an indicator colour: it reads at
+     2.5:1 on white and 2.35:1 on its own 8% scrim, so used as TEXT it fails
+     AA outright. /admin/iaa colours the agreement coefficients with it, which
+     put the page's actual content below the floor. 5.5:1 on white, 5.1:1 on
+     the scrim. */
+  --success-text: #047857;
   --border: #e4e4e7;
   --input: #e4e4e7;
   --ring: #6e56cf;

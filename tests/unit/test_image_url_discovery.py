@@ -44,9 +44,23 @@ class TestGuardIsPresent:
         assert "Ignoring non-URL data-image-url" in bootstrap_js
 
     def test_no_url_says_so_on_the_canvas(self, bootstrap_js):
-        """A blank canvas reads as a broken tool. Say what happened."""
+        """A blank canvas reads as a broken tool. Say what happened.
+
+        In the annotator's terms: the canvas message used to name `text_key`
+        and `source_field`, which is correct advice addressed to the person who
+        wrote the config rather than the person reading it. That half moved to
+        console.warn; what stays on the canvas is what the annotator can act on.
+        """
         assert "_showCanvasMessage" in bootstrap_js
-        assert "No image URL for this item" in bootstrap_js
+        assert "This item has no image to annotate" in bootstrap_js
+
+        canvas_message = bootstrap_js.split("_showCanvasMessage(", 1)[1][:200]
+        assert "text_key" not in canvas_message
+        assert "source_field" not in canvas_message
+
+    def test_the_config_advice_survives_in_the_console(self, bootstrap_js):
+        assert "console.warn(" in bootstrap_js
+        assert "under text_key or source_field" in bootstrap_js
 
     def test_regex_escapes_survive_the_f_string(self, bootstrap_js):
         """The generator is an f-string, so `\\s` has to be written `\\\\s`."""

@@ -668,6 +668,13 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "chat_support": _D(
         "In-task chat with a model", type="object", category=AI,
     ),
+    "chat_support.system_prompt": _D(
+        "Overrides what the chat assistant is told. Takes a `template` string, "
+        "which may interpolate `task_name`, `task_description`, "
+        "`annotation_labels`, `instance_text` and `instance_id`. The default "
+        "carries all of those and instructs the model not to name a label",
+        type="object", category=AI,
+    ),
     "active_learning": _D(
         "Order items by model uncertainty", type="object", category=AI,
         see_also=("assignment_strategy",),
@@ -677,7 +684,6 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "high-confidence annotations already collected",
         type="object", category=AI,
     ),
-    "llm_labeling": _D("Bulk labeling by a model", type="object", category=AI),
 
     # ------------------------------------------------------------------ ui --
     "instance_display": _D(

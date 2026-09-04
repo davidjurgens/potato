@@ -118,9 +118,8 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `active_learning` |  | object |  | Order items by model uncertainty | `annotation_routing`, `bald_params`, `calibrate_probabilities`, `classifier`, `classifier_params`, `cold_start_strategy`, `confidence_method`, `database`, `enabled`, `hybrid_weights`, `icl_ensemble_params`, `llm`, `max_instances_to_reorder`, `min_annotations_per_instance`, `min_instances_for_training`, `model_persistence`, `query_strategy`, `random_sample_percent`, `resolution_strategy`, `routing_thresholds`, `schema_names`, `update_frequency`, `use_icl_ensemble`, `vectorizer`, `vectorizer_params` |
 | `ai_budget` |  | object |  | Cost estimate and spend cap for AI actions. The complaint about commercial platforms is not the price but the surprise -- credits consumed by auto-labelling and discovered at export time | `cap_usd` |
 | `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `image_key`, `option_highlighting` |
-| `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `ui` |
+| `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `system_prompt`, `ui` |
 | `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected |  |
-| `llm_labeling` |  | object |  | Bulk labeling by a model |  |
 
 ## Qualitative Coding (QDA)
 

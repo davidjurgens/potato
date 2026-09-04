@@ -185,6 +185,11 @@ the second axis per schema and packages both into a portable certificate:
 Each card shows a verdict — **trustworthy / use with caution / needs review** — with
 the specific concerns listed. See `potato/server_utils/judge_bias.py`.
 
+A card with no human/judge pairs behind it reads **not yet measured**, and
+carries `agreement.n: 0`. Every concern above comes from a measurement, so
+before anyone has annotated anything there are none to raise — which is not the
+same as a judge that has been checked and found sound.
+
 ## Soft-label / perspectivist export
 
 Disagreement is signal, not just noise. `GET /admin/api/perspectivist` exports, per

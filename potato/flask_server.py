@@ -3389,7 +3389,27 @@ def render_page_with_annotations(username: str):
                 if "labels" not in scheme:
                     annotations[schema_name]['text_box'] = str(predicted_value)
             elif scheme['annotation_type'] in ['likert', 'slider', 'number']:
-                annotations[schema_name]['slider'] = str(predicted_value)
+                # A likert with an explicit `labels:` list renders as a RADIO
+                # group -- `generate_likert_layout` switches on exactly this
+                # condition -- so its inputs carry the label names and nothing
+                # reads a value stored under "slider". Seeding one checked no
+                # button and logged nothing: the item came up blank while the
+                # radio scheme beside it came up pre-filled.
+                if scheme['annotation_type'] == 'likert' and 'labels' in scheme:
+                    known = {(l if isinstance(l, str) else l.get('name')): True
+                             for l in scheme['labels']}
+                    matched = [name for name in _prelabel_names(predicted_value)
+                               if name in known]
+                    for name in matched:
+                        annotations[schema_name][name] = name
+                    if not matched:
+                        logger.warning(
+                            f"Pre-annotation '{predicted_value}' for likert "
+                            f"schema '{schema_name}' matches none of its "
+                            f"labels {sorted(str(k) for k in known)}; nothing "
+                            f"will be pre-selected")
+                else:
+                    annotations[schema_name]['slider'] = str(predicted_value)
             elif scheme['annotation_type'] == 'image_annotation':
                 # Image annotations live in a single hidden input under the
                 # "_data" label. The DOM walk below has a dedicated fallback for

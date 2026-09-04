@@ -89,6 +89,32 @@ item the Keyword button is filtered out. The endpoints used to declare no
 keyword support at all, which removed the button from text items too and left
 only two of the three assistants reachable on a text task.
 
+### Items with both a picture and text
+
+A support ticket with a screenshot, a product photo with a review: the model
+should see both. It gets the text from `item_properties.text_key` and the
+picture from whichever of these resolves first:
+
+1. `ai_support.image_key`
+2. `item_properties.image_key`
+3. an `instance_display` field of `type: image`, or failing that the first
+   displayed field whose value looks like an image
+
+So a config that already declares its photo through `instance_display` does not
+have to name it twice:
+
+```yaml
+instance_display:
+  fields:
+    - {key: body, type: text, label: Ticket}
+    - {key: screenshot, type: image, label: Screenshot}
+```
+
+Both halves go into the prompt. Sending only the picture is how a hint ends up
+written with confidence about the wrong half of the item. A model handed a
+stock photo and asked to triage "the export button spins forever" will say it
+was given no context and suggest **Other**.
+
 ### Best Practices for Visual AI
 
 1. **For image classification with explanations**: Use a vision-capable LLM like `ollama_vision` with Qwen-VL or LLaVA

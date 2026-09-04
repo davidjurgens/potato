@@ -24,6 +24,7 @@ class SchemaKind(str, Enum):
     ORDINAL = "ordinal"
     CONTINUOUS = "continuous"
     MULTILABEL = "multilabel"
+    MATRIX = "matrix"        # several sub-answers under one scheme, keyed by row
     RANKING = "ranking"
     SPAN = "span"
     GEOMETRY = "geometry"    # 2D shapes: boxes, polygons, masks, points
@@ -50,9 +51,13 @@ _KIND_BY_TYPE = {
     # Continuous
     "slider": SchemaKind.CONTINUOUS,
     "number": SchemaKind.CONTINUOUS,
-    "multirate": SchemaKind.CONTINUOUS,
-    "constant_sum": SchemaKind.CONTINUOUS,
-    "soft_label": SchemaKind.CONTINUOUS,
+    # Matrix: one scheme, several sub-answers keyed by row or option. Scored
+    # as CONTINUOUS these reported zero annotators over zero items (multirate,
+    # whose values are label names) or scored only the first sub-answer and
+    # called it the scheme (constant_sum, soft_label). See `_aggregate_matrix`.
+    "multirate": SchemaKind.MATRIX,
+    "constant_sum": SchemaKind.MATRIX,
+    "soft_label": SchemaKind.MATRIX,
     # Multi-label
     "multiselect": SchemaKind.MULTILABEL,  # may be downgraded to NOMINAL if max=1
     "hierarchical_multiselect": SchemaKind.MULTILABEL,
@@ -112,6 +117,15 @@ def metrics_for_schema(scheme: Dict[str, Any]) -> List[str]:
         SchemaKind.ORDINAL: ["weighted_kappa_linear", "weighted_kappa_quadratic", "spearman_rho", "alpha_ordinal"],
         SchemaKind.CONTINUOUS: ["pearson_r", "mae", "rmse", "alpha_interval", "icc_2_k"],
         SchemaKind.MULTILABEL: ["mean_jaccard", "alpha_masi"],
+        # Per sub-answer, plus a pooled number over every (item, row) pair.
+        # The pooled one is the headline; the per-row ones are what tells an
+        # author which of ten rows their annotators actually disagreed about,
+        # and that is the reason to prefer this widget over ten likerts.
+        SchemaKind.MATRIX: [
+            "pooled.alpha_ordinal", "pooled.weighted_kappa_linear",
+            "pooled.alpha_interval", "pooled.icc_2_k",
+            "<row>.alpha_ordinal", "<row>.alpha_interval",
+        ],
         SchemaKind.RANKING: ["kendall_tau", "spearman_footrule"],
         SchemaKind.SPAN: [
             "token_level_kappa", "span_f1_exact", "span_f1_partial",
@@ -265,6 +279,169 @@ def _as_number(name: str, values: Any) -> Optional[float]:
     return None
 
 
+def _gather_matrix(
+    instance_ids: Iterable[str],
+    user_states: Dict[str, Any],
+    schema_name: str,
+):
+    """
+    Per item, ``{user_id: {sub_key: raw_value}}`` for a matrix-shaped schema.
+
+    Deliberately not routed through ``selected_labels``: for these schemas the
+    *key* names the sub-question and the *value* carries the answer, which is
+    the exact inversion of the radio/likert convention that function encodes.
+    Reading them the same way is what made multirate report zero annotators --
+    ``_as_number`` was handed the row name "Urgency" and the label "Low" and
+    could make a number of neither.
+    """
+    rows: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    for iid in instance_ids:
+        per_user: Dict[str, Dict[str, Any]] = {}
+        for uid, ustate in user_states.items():
+            values = _schema_values(ustate, iid, schema_name)
+            if not isinstance(values, dict) or not values:
+                continue
+            answers = {str(k): v for k, v in values.items()
+                       if v is not None and str(v) != ""}
+            if answers:
+                per_user[uid] = answers
+        if len(per_user) >= 2:
+            rows[iid] = per_user
+    return rows
+
+
+#: Group keys `_aggregate_matrix` reserves for itself, so a sub-answer that
+#: happens to be named `pooled` cannot overwrite the pooled block.
+_MATRIX_RESERVED = frozenset({"pooled", "note"})
+
+
+def _aggregate_matrix(rows, scheme: Dict[str, Any]):
+    """
+    Agreement for a scheme that holds several sub-answers at once.
+
+    multirate asks N questions on one scale; constant_sum and soft_label
+    distribute a quantity over N options. In all three the unit a reader cares
+    about is the *sub-answer*, so this scores each one separately and then
+    pools them, rather than collapsing the scheme to a single value.
+
+    Both halves matter and neither substitutes for the other. The pooled number
+    is the scheme's headline and is what a ten-row multirate would have got
+    from ten separate likert schemes. The per-row numbers are why the compact
+    widget is worth choosing: "they agree about urgency and not about tone" is
+    the finding, and a pooled 0.4 hides it.
+
+    The scale is decided from the stored values, not from the declared type: a
+    multirate over ``[Low, Medium, High]`` is ordinal over label names, while
+    constant_sum stores points. Ordering for the ordinal case comes from the
+    scheme's own ``labels`` block, so "High" ranks above "Low" because the
+    author said so rather than because of where it sorts alphabetically.
+    """
+    sub_keys: List[str] = []
+    seen = set()
+    # Declared order first, so the report reads down the widget.
+    for declared in (scheme.get("options") or []):
+        name = declared.get("name") if isinstance(declared, dict) else declared
+        if isinstance(name, str) and name not in seen:
+            seen.add(name)
+            sub_keys.append(name)
+    for _iid, per_user in rows.items():
+        for _uid, answers in per_user.items():
+            for key in answers:
+                if key not in seen:
+                    seen.add(key)
+                    sub_keys.append(key)
+
+    numeric = _matrix_is_numeric(rows)
+    ordering = None if numeric else _scale_ordering(scheme)
+    aggregate = (_aggregate_continuous if numeric
+                 else (lambda g: _aggregate_ordinal(g, ordering)))
+
+    def _value(raw):
+        if numeric:
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return None
+        return str(raw)
+
+    per_key_rows: Dict[str, Dict[str, Dict[str, list]]] = {}
+    pooled_rows: Dict[str, Dict[str, list]] = {}
+    for key in sub_keys:
+        gathered: Dict[str, Dict[str, list]] = {}
+        for iid, per_user in rows.items():
+            answered = {}
+            for uid, answers in per_user.items():
+                if key not in answers:
+                    continue
+                value = _value(answers[key])
+                if value is None:
+                    continue
+                answered[uid] = [value]
+            if len(answered) >= 2:
+                gathered[iid] = answered
+                # The pooled unit is (item, sub-answer): two annotators rating
+                # eight items on three rows agree or disagree 24 times, and
+                # collapsing that to 8 would throw away two thirds of the
+                # evidence the widget collected.
+                pooled_rows[f"{iid}␟{key}"] = answered
+        if gathered:
+            per_key_rows[key] = gathered
+
+    metrics: Dict[str, Any] = {}
+    for key, gathered in per_key_rows.items():
+        group = key if key not in _MATRIX_RESERVED else f"{key} (row)"
+        metrics[group] = aggregate(gathered)
+
+    metrics["pooled"] = aggregate(pooled_rows)
+
+    annotators = set()
+    for per_user in rows.values():
+        annotators.update(per_user)
+    metrics["n_rows"] = len(per_key_rows)
+    metrics["n_items"] = len(rows)
+    metrics["n_annotators"] = len(annotators)
+    metrics["scale"] = "interval" if numeric else "ordinal"
+    if not per_key_rows:
+        metrics["note"] = (
+            "No sub-answer was given by two or more annotators on the same "
+            "item, so there is nothing to compare.")
+    return metrics
+
+
+def _matrix_is_numeric(rows) -> bool:
+    """True when every stored sub-answer parses as a number."""
+    saw_one = False
+    for per_user in rows.values():
+        for answers in per_user.values():
+            for raw in answers.values():
+                saw_one = True
+                try:
+                    float(raw)
+                except (TypeError, ValueError):
+                    return False
+    return saw_one
+
+
+def _scale_ordering(scheme: Dict[str, Any]) -> Optional[Dict[str, int]]:
+    """``{label: rank}`` from the scheme's declared scale, or None.
+
+    Without it the ordinal measures fall back to sorting the label names, and
+    a scale of ``[Low, Medium, High]`` sorts to High < Low < Medium -- so a
+    one-step disagreement is penalised as a two-step one and the coefficient
+    is wrong rather than merely imprecise.
+    """
+    labels = scheme.get("labels")
+    if not isinstance(labels, list) or len(labels) < 2:
+        return None
+    ordering = {}
+    for rank, label in enumerate(labels):
+        name = label.get("name") if isinstance(label, dict) else label
+        if name is None:
+            return None
+        ordering[str(name)] = rank
+    return ordering
+
+
 def _gather_blobs(
     instance_ids: Iterable[str],
     user_states: Dict[str, Any],
@@ -395,12 +572,28 @@ def _aggregate_nominal(rows):
     }
 
 
-def _aggregate_ordinal(rows):
+def _aggregate_ordinal(rows, ordering: Optional[Dict[str, int]] = None):
+    """
+    Ordinal agreement, with the scale's own order when the scheme declares one.
+
+    ``ordering`` maps label name -> position, from the scheme's ``labels``
+    block. Without it every measure here falls back to sorting the label
+    names, and ``alpha_ordinal`` degrades further still: Krippendorff's
+    ordinal distance is ``abs(float(a) - float(b))``, which cannot parse
+    "Serious" and drops to the *nominal* 0-or-1 distance -- so a labelled
+    scale's "ordinal" alpha was its nominal alpha under another name, giving
+    a one-step disagreement and a four-step one the same penalty.
+
+    Mapping the labels to their declared ranks here fixes all four measures at
+    once, because everything downstream then sees numbers.
+    """
     long_rows = []
     seqs_by_user: Dict[str, list] = defaultdict(list)
     aligned_users = None
     for iid, per_user in rows.items():
         flat = {u: v[0] for u, v in per_user.items() if v}
+        if ordering:
+            flat = {u: ordering.get(str(val), val) for u, val in flat.items()}
         if len(flat) < 2:
             continue
         for u, val in flat.items():
@@ -542,6 +735,8 @@ def _aggregate_blobs(rows, scheme: Dict[str, Any], match_threshold: float = 0.5)
     count_diffs: List[float] = []
     annotators = set()
     n_items = 0
+    n_empty_pairs = 0
+    n_scored_pairs = 0
 
     for iid, per_user in rows.items():
         users = sorted(per_user)
@@ -554,6 +749,20 @@ def _aggregate_blobs(rows, scheme: Dict[str, Any], match_threshold: float = 0.5)
                 a = per_user[users[i]]
                 b = per_user[users[j]]
 
+                if not a and not b:
+                    # Both marked nothing. This is not evidence of agreement:
+                    # scored as a perfect pair it gave a study where nobody drew
+                    # anything detection_f1 1.0 and mean_agreement 1.0 over
+                    # every item, which is exactly what a well-executed task
+                    # looks like. It is also the conventional treatment --
+                    # COCO-style AP contributes nothing for an image with no
+                    # ground truth and no predictions. Counted, not scored, so
+                    # the reader can still see how much of the task was blank.
+                    n_empty_pairs += 1
+                    continue
+
+                n_scored_pairs += 1
+
                 d = annotation_values.distance(scheme, a, b, match_threshold)
                 if d is not None:
                     agreements.append(1.0 - d)
@@ -561,9 +770,8 @@ def _aggregate_blobs(rows, scheme: Dict[str, Any], match_threshold: float = 0.5)
                 count_diffs.append(abs(len(a) - len(b)))
 
                 if not a or not b:
-                    # One annotator marked nothing. Detection F1 is 1.0 only when
-                    # BOTH found nothing; otherwise it is a total detection miss.
-                    detection_f1s.append(1.0 if not a and not b else 0.0)
+                    # One annotator marked nothing: a total detection miss.
+                    detection_f1s.append(0.0)
                     continue
 
                 matches, _un_a, _un_b = geometry.match_instances(
@@ -581,7 +789,14 @@ def _aggregate_blobs(rows, scheme: Dict[str, Any], match_threshold: float = 0.5)
         "mean_object_count_diff": _mean(count_diffs),
         "n_items": n_items,
         "n_annotators": len(annotators),
+        "n_scored_pairs": n_scored_pairs,
+        "n_empty_pairs": n_empty_pairs,
     }
+    if not n_scored_pairs:
+        result["note"] = (
+            f"Neither annotator marked anything on any of the {n_items} "
+            f"overlap item(s), so there is nothing to compare. An empty answer "
+            f"matching another empty answer is not agreement.")
 
     # The chance-corrected measures this docstring promised. Spatial only:
     # the sigma baseline is built from between-ITEM distances, and for temporal
@@ -861,6 +1076,9 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
             # cannot drift from what the client wrote.
             rows = _gather_raw(overlap_items, user_states, name)
             metrics = rollout_iaa.rollout_report(rows, scheme)
+        elif kind == SchemaKind.MATRIX:
+            rows = _gather_matrix(overlap_items, user_states, name)
+            metrics = _aggregate_matrix(rows, scheme)
         elif kind in (SchemaKind.GEOMETRY, SchemaKind.TEMPORAL):
             rows = _gather_blobs(overlap_items, user_states, name, scheme)
             metrics = _aggregate_blobs(rows, scheme)
@@ -870,7 +1088,9 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
             if kind == SchemaKind.NOMINAL:
                 metrics = _aggregate_nominal(rows)
             elif kind == SchemaKind.ORDINAL:
-                metrics = _aggregate_ordinal(rows)
+                # The scheme's own label order, so a `labels: [Minor, Serious,
+                # Critical]` scale is not ranked alphabetically.
+                metrics = _aggregate_ordinal(rows, _scale_ordering(scheme))
             elif kind == SchemaKind.CONTINUOUS:
                 metrics = _aggregate_continuous(rows)
             elif kind == SchemaKind.MULTILABEL:

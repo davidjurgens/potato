@@ -118,9 +118,26 @@ def position_swap_consistency(judge_two_orderings: Callable[[str], Tuple[str, st
 
 def build_eval_card(schema: str, kappa: Optional[float], agreement_rate: Optional[float],
                     verbosity: Optional[Dict] = None, calibration: Optional[Dict] = None,
-                    position: Optional[Dict] = None, prompt_version: str = "") -> Dict[str, Any]:
+                    position: Optional[Dict] = None, prompt_version: str = "",
+                    n: Optional[int] = None) -> Dict[str, Any]:
     """Assemble a portable **judge eval card**: agreement (κ) PLUS the robustness/bias
-    axis, with an overall verdict. This is the certificate to ship with an eval."""
+    axis, with an overall verdict. This is the certificate to ship with an eval.
+
+    ``n`` is the number of human/judge pairs the card rests on. Pass it: every
+    concern below is raised by a *measurement*, so before anyone has annotated
+    anything there are no measurements, no concerns, and the verdict came out
+    "trustworthy" -- a certificate of trust issued on zero evidence, and the
+    part of the report shaped like a headline. The per-schema block beside it
+    said "no overlap" from the same numbers.
+    """
+    if n is not None and n <= 0:
+        return {"schema": schema, "prompt_version": prompt_version,
+                "agreement": {"kappa": _r(kappa),
+                              "agreement_rate": _r(agreement_rate), "n": 0},
+                "verbosity_bias": verbosity, "calibration": calibration,
+                "position": position, "concerns": [],
+                "verdict": "not yet measured"}
+
     concerns: List[str] = []
     if kappa is not None and kappa < 0.6:
         concerns.append(f"moderate/low agreement (κ={round(kappa,3)})")
@@ -132,7 +149,8 @@ def build_eval_card(schema: str, kappa: Optional[float], agreement_rate: Optiona
         concerns.append(position["interpretation"])
     verdict = "trustworthy" if not concerns else ("use with caution" if len(concerns) == 1 else "needs review")
     return {"schema": schema, "prompt_version": prompt_version,
-            "agreement": {"kappa": _r(kappa), "agreement_rate": _r(agreement_rate)},
+            "agreement": {"kappa": _r(kappa), "agreement_rate": _r(agreement_rate),
+                          "n": n},
             "verbosity_bias": verbosity, "calibration": calibration, "position": position,
             "concerns": concerns, "verdict": verdict}
 
@@ -172,7 +190,10 @@ def eval_cards_from_pairs(pairs_by_schema: Dict[str, List[tuple]],
             # supply the pair of verdicts it needs. potato/ai/position_bias.py
             # is that driver, and its stored `swap` block is this shape.
             position=(position_by_schema or {}).get(schema),
-            prompt_version=prompt_version)
+            prompt_version=prompt_version,
+            # Pairs where both sides actually have a label -- the same set
+            # every concern below is computed from.
+            n=len(recs))
     return cards
 
 

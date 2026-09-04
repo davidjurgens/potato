@@ -3222,6 +3222,10 @@
         "ai_config": {},
         "enabled": {},
         "endpoint_type": {},
+        "system_prompt": {
+          "description": "Overrides what the chat assistant is told. Takes a `template` string, which may interpolate `task_name`, `task_description`, `annotation_labels`, `instance_text` and `instance_id`. The default carries all of those and instructs the model not to name a label",
+          "type": "object"
+        },
         "ui": {}
       },
       "type": "object"
@@ -4314,10 +4318,6 @@
           "type": "string"
         }
       },
-      "type": "object"
-    },
-    "llm_labeling": {
-      "description": "Bulk labeling by a model",
       "type": "object"
     },
     "login": {

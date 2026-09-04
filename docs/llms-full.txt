@@ -4276,9 +4276,8 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `active_learning` |  | object |  | Order items by model uncertainty | `annotation_routing`, `bald_params`, `calibrate_probabilities`, `classifier`, `classifier_params`, `cold_start_strategy`, `confidence_method`, `database`, `enabled`, `hybrid_weights`, `icl_ensemble_params`, `llm`, `max_instances_to_reorder`, `min_annotations_per_instance`, `min_instances_for_training`, `model_persistence`, `query_strategy`, `random_sample_percent`, `resolution_strategy`, `routing_thresholds`, `schema_names`, `update_frequency`, `use_icl_ensemble`, `vectorizer`, `vectorizer_params` |
 | `ai_budget` |  | object |  | Cost estimate and spend cap for AI actions. The complaint about commercial platforms is not the price but the surprise -- credits consumed by auto-labelling and discovered at export time | `cap_usd` |
 | `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `image_key`, `option_highlighting` |
-| `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `ui` |
+| `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `system_prompt`, `ui` |
 | `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected |  |
-| `llm_labeling` |  | object |  | Bulk labeling by a model |  |
 
 ## Qualitative Coding (QDA)
 
@@ -25893,6 +25892,11 @@ the second axis per schema and packages both into a portable certificate:
 Each card shows a verdict — **trustworthy / use with caution / needs review** — with
 the specific concerns listed. See `potato/server_utils/judge_bias.py`.
 
+A card with no human/judge pairs behind it reads **not yet measured**, and
+carries `agreement.n: 0`. Every concern above comes from a measurement, so
+before anyone has annotated anything there are none to raise — which is not the
+same as a judge that has been checked and found sound.
+
 ## Soft-label / perspectivist export
 
 Disagreement is signal, not just noise. `GET /admin/api/perspectivist` exports, per
@@ -30094,6 +30098,32 @@ language model, so on a text item it offers all three assistants; on an image
 item the Keyword button is filtered out. The endpoints used to declare no
 keyword support at all, which removed the button from text items too and left
 only two of the three assistants reachable on a text task.
+
+### Items with both a picture and text
+
+A support ticket with a screenshot, a product photo with a review: the model
+should see both. It gets the text from `item_properties.text_key` and the
+picture from whichever of these resolves first:
+
+1. `ai_support.image_key`
+2. `item_properties.image_key`
+3. an `instance_display` field of `type: image`, or failing that the first
+   displayed field whose value looks like an image
+
+So a config that already declares its photo through `instance_display` does not
+have to name it twice:
+
+```yaml
+instance_display:
+  fields:
+    - {key: body, type: text, label: Ticket}
+    - {key: screenshot, type: image, label: Screenshot}
+```
+
+Both halves go into the prompt. Sending only the picture is how a hint ends up
+written with confidence about the wrong half of the item. A model handed a
+stock photo and asked to triage "the export button spins forever" will say it
+was given no context and suggest **Other**.
 
 ### Best Practices for Visual AI
 
@@ -40216,12 +40246,59 @@ Once overlap-sample items saturate, agreement statistics are available at
 |---|---|
 | nominal (radio, single-label multiselect, triage) | percent agreement, Cohen's κ, Fleiss' κ, Krippendorff's α (nominal) |
 | ordinal (likert, confidence, semantic_differential, range_slider, VAS) | weighted κ (linear, quadratic), Spearman's ρ, Krippendorff's α (ordinal) |
-| continuous (slider, number, multirate, constant_sum, soft_label) | Pearson r, MAE, RMSE, Krippendorff's α (interval), ICC(2,k) |
+| continuous (slider, number) | Pearson r, MAE, RMSE, Krippendorff's α (interval), ICC(2,k) |
+| matrix (multirate, constant_sum, soft_label) | the ordinal or continuous set above, once per row and once pooled |
 | multi-label (multiselect, hierarchical_multiselect, card_sort) | mean Jaccard, MASI-α |
 | ranking (ranking, bws, pairwise) | Kendall's τ, Spearman footrule |
 | span (span, error_span, event_annotation, coreference, extractive_qa) | token-level κ (BIO), span F1 (exact + partial), Krippendorff's α<sub>U</sub>, γ (Mathet) |
 | geometry (image_annotation) | mean agreement, mean matched IoU, detection F1, mean object count difference |
 | temporal (audio_annotation, video_annotation) | mean agreement, mean matched IoU (temporal), detection F1, mean segment count difference |
+
+### Schemas that hold several answers at once
+
+A `multirate` asks N questions on one scale; `constant_sum` and `soft_label`
+spread a quantity over N options. The unit a reader cares about is the
+sub-answer, so each row is scored on its own and then pooled:
+
+```json
+"handling": {
+  "kind": "matrix",
+  "metrics": {
+    "Reproducibility": {"alpha_ordinal": 1.0,   "n_items": 4},
+    "Customer tone":   {"alpha_ordinal": 0.774, "n_items": 4},
+    "Urgency":         {"alpha_ordinal": 0.741, "n_items": 4},
+    "pooled":          {"alpha_ordinal": 0.820, "n_items": 12},
+    "n_rows": 3, "scale": "ordinal"
+  }
+}
+```
+
+`pooled` is the headline, and its unit is the (item, row) pair — four items
+rated on three rows is twelve judgements, not four. It is the number ten
+separate likert schemes would have given you. The per-row numbers are the
+reason to prefer the compact widget: "they agree about urgency and not about
+tone" is the finding, and a pooled 0.4 hides it.
+
+`scale` says which set was used. It is read from the stored values rather than
+the declared type, because a multirate over `[Low, Medium, High]` is ordinal
+over label names while `constant_sum` stores points.
+
+### Ordering a scale of word labels
+
+Every ordinal measure needs to know that `Serious` sits between `Minor` and
+`Critical`. Potato takes that from the schema's own `labels` list, so write the
+scale in order:
+
+```yaml
+- annotation_type: likert
+  name: severity
+  labels: [Trivial, Minor, Serious, Critical, Blocker]
+```
+
+Without a `labels` block the label names are sorted instead, which is only
+right when they sort into their own order — `[Low, Medium, High]` sorts to
+High &lt; Low &lt; Medium, and a one-step disagreement is then scored as a
+two-step one.
 
 ### Agreement over drawn and timed annotations
 
@@ -40242,6 +40319,14 @@ Reading them together is the point. High `mean_matched_iou` with low
 `detection_f1` means your annotators draw well but miss things — a coverage
 problem, fixed with better instructions. The reverse means they find everything
 but trace it carelessly — a precision problem, fixed with training.
+
+An item where **both** annotators marked nothing is counted, not scored. It
+appears as `n_empty_pairs` beside `n_scored_pairs`, and the four measures are
+computed over the scored pairs alone — the same convention COCO-style AP uses
+for an image with no ground truth and no predictions. Two blank answers are not
+evidence of agreement, and treating them as a perfect pair gave a task where
+nobody drew anything a `detection_f1` of 1.0. When nothing was scored at all,
+the measures read `n/a` with a note saying why.
 
 !!! note "Why not Krippendorff's α over IoU?"
 
@@ -44796,9 +44881,25 @@ export/
 
 Schema columns are flattened by annotation type:
 - **radio/select** → `string` (the selected label)
-- **likert/slider/number** → `float64`
+- **likert/slider/number** → `float64`, or `string` for a scale with named labels
 - **multiselect** → `list<string>` (selected labels)
 - **text** → `string`
+
+A schema that stores **several answers at once** gets one column per
+sub-answer, named `<schema>.<key>`. These are the same columns the CSV writes:
+
+| Schema | Stored | Columns |
+|---|---|---|
+| `multirate` | `{"Urgency": "Low", "Customer tone": "High"}` | `handling.Urgency`, `handling.Customer tone` |
+| `constant_sum`, `soft_label` | `{"A": 40, "B": 60}` | `budget.A`, `budget.B` |
+| `image_annotation` and other blob schemas | `{"_data": "[...]"}` | `uibox._data` (the JSON) |
+
+A single-select stays a single column, because that is the shape that is usable
+in a dataframe: `severity` holds `"Serious"` rather than spreading across a
+sparse `severity.Serious`, `severity.Minor`, … as the CSV does.
+
+Every column is present on every row, filled with null where an annotator did
+not answer, so a schema only some annotators reached is still in the file.
 
 **spans.parquet schema:**
 
@@ -54399,7 +54500,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **160 top-level config keys**, **61 annotation types**, and
+It currently covers **159 top-level config keys**, **61 annotation types**, and
 **24 display types**.
 
 ### Editor validation

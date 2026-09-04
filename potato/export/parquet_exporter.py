@@ -10,6 +10,7 @@ Output files:
     items.parquet       - One row per item with original data fields
 """
 
+import json
 import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
@@ -17,6 +18,10 @@ from typing import Any, Dict, List, Optional, Tuple
 from .base import BaseExporter, ExportContext, ExportResult
 
 logger = logging.getLogger(__name__)
+
+
+def _json_dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False)
 
 
 def _check_pyarrow():
@@ -175,12 +180,46 @@ class ParquetExporter(BaseExporter):
             for schema_name, value in labels.items():
                 schema_config = schema_map.get(schema_name, {})
                 schema_type = schema_config.get("annotation_type", "")
-                row[schema_name] = self._flatten_value(value, schema_type)
+                composite = self._composite_columns(value, schema_type)
+                if composite is None:
+                    row[schema_name] = self._flatten_value(value, schema_type)
+                else:
+                    for sub_name, sub_value in composite.items():
+                        column = (f"{schema_name}.{sub_name}" if sub_name
+                                  else schema_name)
+                        row[column] = sub_value
 
             rows.append(row)
 
         self._unify_mixed_columns(rows)
+        self._align_columns(rows)
         return rows
+
+    @staticmethod
+    def _align_columns(rows: List[dict]) -> None:
+        """Give every row every column, in first-appearance order.
+
+        ``pa.Table.from_pylist`` infers the schema from the **first row alone**
+        and silently drops any key that row does not have. So a schema nobody
+        answered on the first (instance, user) pair was missing from the entire
+        file -- not null, absent -- however many later rows held it. An
+        optional textbox, a conditional scheme behind ``display_logic``, or an
+        item field only some items carry all hit it.
+
+        Filling the union with None also makes the per-row sub-columns that
+        ``_flatten_composite`` emits safe: a multirate row a given annotator
+        skipped is a null in its column rather than a missing column.
+        """
+        columns: List[str] = []
+        seen = set()
+        for row in rows:
+            for key in row:
+                if key not in seen:
+                    seen.add(key)
+                    columns.append(key)
+        for row in rows:
+            for key in columns:
+                row.setdefault(key, None)
 
     @staticmethod
     def _unify_mixed_columns(rows: List[dict]) -> None:
@@ -249,6 +288,55 @@ class ParquetExporter(BaseExporter):
             if isinstance(value, dict):
                 return self._flatten_categorical(value)
             return value
+
+    # The types whose stored shape this exporter knows how to reduce to one
+    # scalar. Everything else reaches `_composite_columns` first.
+    _SCALAR_TYPES = frozenset({
+        "radio", "select", "likert", "slider", "number", "multiselect", "text",
+    })
+
+    @classmethod
+    def _composite_columns(cls, value: Any,
+                           schema_type: str) -> Optional[Dict[str, Any]]:
+        """Sub-columns for an answer that is several answers, or None.
+
+        `_flatten_categorical` reads a stored dict as "the selected label is
+        one of the keys" and returns one of them. That is true for a radio
+        (`{"positive": True}`) and for a labelled scale (`{"5": "5"}`), where
+        the key *is* the answer. It is false for every scheme that stores
+        several sub-answers keyed by row, option or step -- multirate keys by
+        row name, constant_sum and soft_label by option, image_annotation by
+        the `_data` blob, and the agent-trace schemes by step index. For those,
+        the value carries the answer and the key merely names the question, so
+        returning a key returned the *question* and dropped every answer:
+        a three-row multirate exported as the string "Reproducibility".
+
+        Fifty-four of the sixty-one registered types take that branch, and the
+        ones that survived it did so by coincidence -- `confidence` stores
+        `{"5": "5"}`, so the key happens to be the value.
+
+        The test is therefore "do the keys carry the answer": a single key that
+        equals its own value, or that holds a selection flag, is categorical.
+        Anything else is expanded to `schema.key` columns, which is the shape
+        the csv and jsonl exporters have always written for the same data.
+        """
+        if schema_type in cls._SCALAR_TYPES:
+            return None
+        if not isinstance(value, dict) or not value:
+            return None
+        if len(value) == 1:
+            (key, only), = value.items()
+            if isinstance(only, bool) or only is None:
+                return None
+            if isinstance(only, str):
+                if only == str(key) or only.strip().lower() in (
+                        "", "true", "false", "on", "off"):
+                    return None
+            elif str(only) == str(key):
+                return None
+        return {str(k): (v if not isinstance(v, (dict, list))
+                         else _json_dumps(v))
+                for k, v in value.items()}
 
     def _flatten_text(self, value: Any) -> Optional[str]:
         """The typed text, not the container it arrived in.
@@ -384,9 +472,12 @@ class ParquetExporter(BaseExporter):
                 for key, val in item_data.items():
                     # Convert non-primitive types to strings for Parquet compatibility
                     if isinstance(val, (dict, list)):
-                        import json
-                        row[key] = json.dumps(val, ensure_ascii=False)
+                        row[key] = _json_dumps(val)
                     else:
                         row[key] = val
             rows.append(row)
+        # Items are not required to carry identical fields, and the first one
+        # decided the whole schema. See `_align_columns`.
+        self._unify_mixed_columns(rows)
+        self._align_columns(rows)
         return rows

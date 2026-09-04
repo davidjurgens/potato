@@ -65,14 +65,20 @@
     font-weight: 500;
   }
 
+  /* The text tokens, not the indicator ones. `--success-color` and
+     `--destructive` are picked to be seen, not read: as the colour of a
+     coefficient they measured 2.35:1 and 3.39:1 against their own tints,
+     under the 4.5:1 floor, and these cells hold the numbers the page exists
+     to show. `.iaa-band` inherits from here, so its 11px label is covered
+     too. */
   td.iaa-metric-good {
     background-color: rgba(16, 185, 129, 0.08);
-    color: var(--success-color);
+    color: var(--success-text);
   }
 
   td.iaa-metric-poor {
     background-color: rgba(239, 68, 68, 0.08);
-    color: var(--destructive);
+    color: var(--destructive-text);
   }
 
   .iaa-band {

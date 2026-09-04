@@ -164,6 +164,11 @@ KNOWN_CONFIG_KEYS = {
     },
     "chat_support": {
         "enabled", "endpoint_type", "ai_config", "ui",
+        # Read at chat_manager.py:52. It was not ignored -- a template set here
+        # took effect -- but it was rejected here, so the only way to change
+        # what the chat assistant is told, including the default's instruction
+        # not to name a label, could not pass `validate --strict`.
+        "system_prompt",
     },
 
     # === Advanced features ===
@@ -233,7 +238,13 @@ KNOWN_CONFIG_KEYS = {
         "min_items", "num_iters",
     },
     "icl_labeling": None,
-    "llm_labeling": None,
+    # `llm_labeling` is deliberately NOT here. It was a recognized top-level
+    # key that nothing read: the only reader is icl_labeler.py:188, which
+    # reads it as a sub-block of `icl_labeling`, and that is where the bundled
+    # example puts it. Recognized-but-inert is the worst of both -- a config
+    # naming a made-up model with a nonsense batch size validated clean,
+    # booted clean, logged nothing and registered no route. Unlisted, the
+    # unknown-key check points the author at `icl_labeling` instead.
 
     # === UI & layout ===
     "ui": None,

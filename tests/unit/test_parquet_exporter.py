@@ -658,3 +658,130 @@ class TestPhaseResponsesReachTheFile:
             "silently dropping them is the bug; the count and the warning are "
             "what make it visible"
         )
+
+
+class TestCompositeAnswersSurvive:
+    """A dict whose keys are not its values is not a categorical answer.
+
+    ``_flatten_categorical`` reads a stored dict as "the chosen label is one of
+    the keys" and returns one. That holds for a radio and for a labelled scale,
+    where the key *is* the answer, and it is false for every scheme storing
+    several sub-answers keyed by row, option or step -- so a three-row multirate
+    exported as the string "Reproducibility" (the first row's *name*) and an
+    image annotation as "_data". Fifty-four of the sixty-one registered types
+    took that branch. csv had all of it right in the same export.
+    """
+
+    SCHEMAS = [
+        {"name": "handling", "annotation_type": "multirate"},
+        {"name": "uibox", "annotation_type": "image_annotation"},
+        {"name": "severity", "annotation_type": "likert"},
+        {"name": "confidence", "annotation_type": "confidence"},
+    ]
+
+    ANNOTATIONS = [
+        {"instance_id": "i1", "user_id": "alice", "labels": {
+            "handling": {"Reproducibility": "Medium", "Customer tone": "High",
+                         "Urgency": "Low"},
+            "uibox": {"_data": "[]"},
+            "severity": {"Serious": "Serious"},
+            "confidence": {"5": "5"}}},
+        {"instance_id": "i1", "user_id": "bob", "labels": {
+            "handling": {"Reproducibility": "Low", "Customer tone": "Low",
+                         "Urgency": "High"},
+            "uibox": {"_data": '[{"x": 1}]'},
+            "severity": {"Minor": "Minor"},
+            "confidence": {"3": "3"}}},
+    ]
+
+    def _rows(self, tmp_path, annotations=None, schemas=None, items=None):
+        context = ExportContext(
+            config={}, annotations=annotations or self.ANNOTATIONS,
+            items=items if items is not None else {},
+            schemas=schemas or self.SCHEMAS, output_dir=str(tmp_path))
+        result = ParquetExporter().export(context, str(tmp_path))
+        assert result.success, result.errors
+        return pq.read_table(str(tmp_path / "annotations.parquet")).to_pylist()
+
+    def test_multirate_keeps_every_row(self, tmp_path):
+        rows = self._rows(tmp_path)
+        assert rows[0]["handling.Reproducibility"] == "Medium"
+        assert rows[0]["handling.Customer tone"] == "High"
+        assert rows[0]["handling.Urgency"] == "Low"
+        assert rows[1]["handling.Urgency"] == "High"
+        # Not the row name, which is what the column used to hold.
+        assert "handling" not in rows[0]
+
+    def test_geometry_keeps_its_blob(self, tmp_path):
+        rows = self._rows(tmp_path)
+        assert rows[0]["uibox._data"] == "[]"
+        assert json.loads(rows[1]["uibox._data"]) == [{"x": 1}]
+
+    def test_composite_columns_match_what_csv_writes(self, tmp_path):
+        """The two formats must agree about the answers csv already got right.
+
+        Only for the composite schemas. The formats differ on purpose for a
+        single-select: csv writes one column per label (`severity.Serious`),
+        parquet one typed column per schema (`severity` = "Serious"), which is
+        the shape that is usable in a dataframe.
+        """
+        from potato.export.tabular_exporter import _flatten_annotation
+
+        parquet_row = self._rows(tmp_path)[0]
+        csv_row = _flatten_annotation(self.ANNOTATIONS[0])
+        composite = {c: v for c, v in csv_row.items()
+                     if c.startswith(("handling.", "uibox."))}
+        assert composite, "the fixture must exercise composite answers"
+        for column, value in composite.items():
+            assert column in parquet_row, f"{column} missing from parquet"
+            assert str(parquet_row[column]) == str(value)
+
+    def test_a_genuine_categorical_is_left_alone(self, tmp_path):
+        """`{"5": "5"}` and a labelled scale keep their single column."""
+        rows = self._rows(tmp_path)
+        assert rows[0]["confidence"] == "5"
+        assert rows[0]["severity"] == "Serious"
+
+
+class TestNoColumnIsDroppedByRowOne:
+    """`pa.Table.from_pylist` infers the schema from the first row alone.
+
+    Any key that row lacks was absent from the whole file -- not null, gone --
+    however many later rows carried it. An optional textbox, a scheme behind
+    `display_logic`, or an item field only some items have all hit it.
+    """
+
+    def test_a_schema_only_a_later_row_answered_survives(self, tmp_path):
+        annotations = [
+            {"instance_id": "i1", "user_id": "alice",
+             "labels": {"category": {"Bug": "Bug"}}},
+            {"instance_id": "i2", "user_id": "bob",
+             "labels": {"category": {"Bug": "Bug"},
+                        "notes": {"text_box": "only bob wrote this"}}},
+        ]
+        schemas = [{"name": "category", "annotation_type": "radio"},
+                   {"name": "notes", "annotation_type": "text"}]
+        context = ExportContext(config={}, annotations=annotations, items={},
+                                schemas=schemas, output_dir=str(tmp_path))
+        assert ParquetExporter().export(context, str(tmp_path)).success
+
+        table = pq.read_table(str(tmp_path / "annotations.parquet"))
+        assert "notes" in table.column_names
+        rows = table.to_pylist()
+        assert rows[0]["notes"] is None
+        assert rows[1]["notes"] == "only bob wrote this"
+
+    def test_an_item_field_only_some_items_carry_survives(self, tmp_path):
+        annotations = [{"instance_id": "i1", "user_id": "alice",
+                        "labels": {"category": {"Bug": "Bug"}}}]
+        items = {"i1": {"text": "a"},
+                 "i2": {"text": "b", "screenshot": "http://host/s.png"}}
+        context = ExportContext(
+            config={}, annotations=annotations, items=items,
+            schemas=[{"name": "category", "annotation_type": "radio"}],
+            output_dir=str(tmp_path))
+        assert ParquetExporter().export(context, str(tmp_path)).success
+
+        rows = pq.read_table(str(tmp_path / "items.parquet")).to_pylist()
+        assert rows[0]["screenshot"] is None
+        assert rows[1]["screenshot"] == "http://host/s.png"
