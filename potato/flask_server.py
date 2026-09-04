@@ -77,7 +77,8 @@ from potato.authentication import UserAuthenticator
 from potato.phase import UserPhase
 from potato.expertise_manager import init_expertise_manager, get_expertise_manager, clear_expertise_manager
 from potato.quality_control import (
-    init_quality_control_manager, get_quality_control_manager, clear_quality_control_manager
+    init_quality_control_manager, get_quality_control_manager,
+    clear_quality_control_manager, count_dataset_items
 )
 from potato.adjudication import (
     init_adjudication_manager, get_adjudication_manager, clear_adjudication_manager
@@ -1075,12 +1076,21 @@ def load_user_data(config: dict):
             for instance_id in user_state.instance_id_to_span_to_value:
                 if ism.has_item(instance_id):
                     ism.register_annotator(instance_id, user_id)
+            # Rebuild the per-item assignee index too. It backs the per-item
+            # annotator cap alongside instance_annotators, and it is in-memory
+            # only -- without this a restart forgets every outstanding hold and
+            # the cap goes back to counting submitters, which is the bug it
+            # exists to fix.
+            assigned = set(user_state.get_assigned_instance_ids())
+            for instance_id in assigned:
+                if ism.has_item(instance_id):
+                    ism.register_assignee(instance_id, user_id)
+
             # Collect assigned + annotated items so auto-batch cohort pins can be
             # reconstructed below (they are otherwise in-memory only and reset on
             # every restart).
             user_id_to_instance_ids[user_id] = (
-                set(user_state.get_assigned_instance_ids())
-                | set(user_state.get_annotated_instance_ids())
+                assigned | set(user_state.get_annotated_instance_ids())
             )
 
     # Restore auto-assigned batch cohort pins from persisted assignments so that
@@ -1622,6 +1632,22 @@ def load_annotation_schematic_data(config: dict) -> None:
     usm.add_phase(UserPhase.ANNOTATION, config['annotation_task_name'],
                   html_template_fname)
 
+    # Replay model predictions from previous training runs back into item data.
+    # They are not durable on their own: item_data["predictions"] is populated
+    # from the input file at load time and nothing re-persists it, so without
+    # this every prelabel written at runtime vanishes on restart and the review
+    # queue empties itself each time the server bounces.
+    if config.get("model_training", {}).get("enabled", False):
+        try:
+            from potato.training.writeback import rehydrate_predictions
+            restored = rehydrate_predictions(config, get_item_state_manager())
+            if restored:
+                logger.info("Restored %d model prediction(s) from earlier "
+                            "training runs", restored)
+        except Exception as e:
+            logger.warning("Could not restore model predictions: %s", e)
+
+
 def load_highlights_data(config: dict) -> None:
     """
     Load keyword highlights from a TSV file specified in the config.
@@ -1773,6 +1799,14 @@ def load_phase_data(config: dict) -> None:
     # on a prestudy answer). Validated once after all phases load.
     _all_phase_schemes_for_dl = []
 
+    # Phase names in `order` with no matching definition. The loader skips
+    # them, but until the order itself is pruned every other consumer still
+    # believes they exist -- `/register` reads `phases.order[0]` directly and
+    # parked the annotator on a phase with no registered page, so
+    # `get_phase_html_fname` raised KeyError and every request, including `/`,
+    # returned 500. The warning said it had recovered; it had not.
+    undefined_phase_names = []
+
     for phase_name in phase_order:
         try:
             # Skip 'annotation' — it's handled by the main annotation flow,
@@ -1782,7 +1816,11 @@ def load_phase_data(config: dict) -> None:
                 if phase_name == "annotation":
                     logger.debug(f"Skipping phase '{phase_name}' in loader (handled by main annotation flow)")
                 else:
-                    logger.warning(f"Phase '{phase_name}' in order but not defined in phases config, skipping")
+                    logger.warning(
+                        f"Phase '{phase_name}' in order but not defined in phases config; "
+                        f"dropping it from the phase order"
+                    )
+                    undefined_phase_names.append(phase_name)
                 continue
 
             phase = phases_dict[phase_name]
@@ -1988,6 +2026,14 @@ def load_phase_data(config: dict) -> None:
             raise ConfigValidationError(
                 f"Failed to load phase '{phase_name}': {e}"
             ) from e
+
+    # Drop the undefined phases from the order the rest of the server reads, so
+    # the sequence in the config matches the sequence that actually loaded.
+    if undefined_phase_names and isinstance(phases, dict) and "order" in phases:
+        phases["order"] = [
+            name for name in phases["order"] if name not in undefined_phase_names
+        ]
+        get_user_state_manager().invalidate_phase_caches()
 
     # Validate display_logic on SurveyFlow questions now that every phase's
     # questions are known. This covers what the config-load validator misses
@@ -3022,8 +3068,16 @@ def render_page_with_annotations(username: str):
     # replacing {{variable_name}} with the associated text for keyword arguments
 
         # Calculate progress counter values
-    # Get the number of completed annotations and remaining assignable items
-    finished_count = get_user_state(username).get_annotation_count()
+    # Get the number of completed annotations and remaining assignable items.
+    #
+    # Both halves count dataset items only. Attention checks and gold items are
+    # injected by the platform, not drawn from the pool, so they are absent from
+    # the denominator -- counting them in the numerator walked the counter past
+    # its own total ("13/12", "15/12") on a 12-item study with four injected
+    # items.
+    finished_count = count_dataset_items(
+        get_user_state(username).get_annotated_instance_ids()
+    )
     remaining_count = get_item_state_manager().get_total_assignable_items_for_user(get_user_state(username))
     # Total = finished + remaining (so counter shows "X / Total" not "X / Remaining")
     total_count = finished_count + remaining_count
@@ -3213,7 +3267,11 @@ def render_page_with_annotations(username: str):
         ),
         instance_id=instance_id,
         instance_index=user_state.get_current_instance_index(),
-        finished=get_user_state(username).get_annotation_count(),
+        # The counter the annotator reads. It must be the same count the
+        # denominator is built from -- `get_annotation_count()` includes the
+        # injected quality-control items, which are absent from `total_count`,
+        # so the bar walked past its own total.
+        finished=finished_count,
         total_count=total_count,
         alert_time_each_instance=config.get("alert_time_each_instance", 10000000),
         statistics_nav=all_statistics,
@@ -4573,6 +4631,19 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
             flask_app.register_blueprint(curation_bp)
         logger.info("Registered semantic-curation (catalog) blueprint")
 
+    # Model training and the retrain loop. Off unless asked for: it spawns
+    # subprocesses and writes model artifacts, neither of which a project that
+    # has not opted in should get.
+    if config.get("model_training", {}).get("enabled", False):
+        from potato.training.manager import (get_training_manager,
+                                             init_training_manager)
+        from potato.training.routes import training_bp
+        if get_training_manager() is None:
+            init_training_manager(config)
+        if "training" not in flask_app.blueprints:
+            flask_app.register_blueprint(training_bp)
+        logger.info("Registered model-training blueprint")
+
     # Dataset publishing (HuggingFace / Zenodo / local archive). Always on for
     # admins — packaging a dataset needs no per-project config, and the manager
     # only does work when the wizard is used.
@@ -5167,7 +5238,18 @@ def run_server(args):
     if config.get("ai_support", {}).get("enabled", False):
         logger.info("Initializing AI cache manager...")
         init_ai_cache_manager()
-        logger.info("AI support initialized successfully")
+        # Report the endpoint, not the try block. This said "AI support
+        # initialized successfully" two lines under "AI endpoint unavailable at
+        # startup", so an author grepping the boot log for the AI subsystem
+        # found the success line and stopped reading.
+        _ai_manager = get_ai_cache_manager()
+        if _ai_manager is not None and getattr(_ai_manager, "ai_endpoint", None) is not None:
+            logger.info("AI support initialized successfully")
+        else:
+            logger.error(
+                "AI support is enabled in the config but no endpoint could be "
+                "created, so no assistant will appear on any item. See the "
+                "endpoint warning above for the reason.")
     
     # Initialize chat manager if enabled
     if config.get("chat_support", {}).get("enabled", False):

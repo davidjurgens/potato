@@ -8,8 +8,8 @@
     "version": "2"
   },
   "annotation.js": {
-    "sha256": "fa6dd1886d10be9a",
-    "version": "35"
+    "sha256": "7eef9c3eb1c2b4e1",
+    "version": "36"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -24,8 +24,8 @@
     "version": "4"
   },
   "audio-annotation.js": {
-    "sha256": "8b3d9a764de2fe3d",
-    "version": "6"
+    "sha256": "e05a7706a6d6ba5b",
+    "version": "7"
   },
   "audio-dialogue.css": {
     "sha256": "14b56e9a134afacb",
@@ -188,8 +188,8 @@
     "version": "15"
   },
   "image-annotation.js": {
-    "sha256": "89747ee84ee735c9",
-    "version": "31"
+    "sha256": "29eff69cbf92ee2e",
+    "version": "32"
   },
   "instance-display.js": {
     "sha256": "44f86cac34ef4ab1",
@@ -248,8 +248,8 @@
     "version": "2"
   },
   "multi-document-event.js": {
-    "sha256": "00599286574cd8e0",
-    "version": "4"
+    "sha256": "e41b3239c9740446",
+    "version": "6"
   },
   "option_highlight_manager.js": {
     "sha256": "bb9254e571a8ecf9",
@@ -292,8 +292,8 @@
     "version": "5"
   },
   "pointcloud/pc-viewer.js": {
-    "sha256": "a6650e0634eecfaa",
-    "version": "5"
+    "sha256": "2d3bbcbe0e711dd4",
+    "version": "6"
   },
   "pointcloud/pc-wire.js": {
     "sha256": "482b899ec60b7947",
@@ -304,16 +304,16 @@
     "version": "1"
   },
   "region-caption.js": {
-    "sha256": "9fb776bd08350f28",
-    "version": "2"
+    "sha256": "faf81b57803c5c91",
+    "version": "3"
   },
   "rollout-eval.css": {
     "sha256": "ba9d2abeb5a3da52",
     "version": "3"
   },
   "rollout-eval.js": {
-    "sha256": "bd9f596d492ea01b",
-    "version": "5"
+    "sha256": "e2b0e06f19043e2e",
+    "version": "6"
   },
   "run-tree.js": {
     "sha256": "074d3ccc44b64809",
@@ -376,16 +376,16 @@
     "version": "1"
   },
   "styles.css": {
-    "sha256": "871336c0a9b9bf1a",
-    "version": "16"
+    "sha256": "2d5c2fb2bc701615",
+    "version": "18"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",
     "version": "2"
   },
   "tiered-annotation.js": {
-    "sha256": "e91d262ff291f6c7",
-    "version": "4"
+    "sha256": "aa50275b61cdbab8",
+    "version": "5"
   },
   "tracking-interpolation.js": {
     "sha256": "da8bd01cf9b79b92",
@@ -416,8 +416,8 @@
     "version": "3"
   },
   "video-annotation.js": {
-    "sha256": "1b563c223401ae18",
-    "version": "20"
+    "sha256": "706100be15bfcdc5",
+    "version": "22"
   },
   "visual_ai_assistant.js": {
     "sha256": "66eb1e15fcc9d23a",

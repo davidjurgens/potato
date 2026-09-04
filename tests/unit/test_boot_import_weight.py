@@ -142,7 +142,16 @@ for _m in list(sys.modules):
 
 
 @pytest.mark.parametrize("target", ["potato.flask_server", "potato.routes",
-                                    "potato.simulator", "potato.preview_cli"])
+                                    "potato.simulator", "potato.preview_cli",
+                                    # The training package is reachable from
+                                    # the admin UI and from the run ledger, so
+                                    # it has to import with every training
+                                    # extra absent. Each new trainer is a
+                                    # fresh chance to break that, and the
+                                    # lazy registry is what prevents it.
+                                    "potato.training",
+                                    "potato.training.registry",
+                                    "potato.training.base"])
 def test_boot_imports_survive_missing_optional_packages(target):
     """Core entry points must import cleanly with ALL optional extras absent."""
     blocked = OPTIONAL_PACKAGES

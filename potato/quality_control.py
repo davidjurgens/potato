@@ -43,6 +43,9 @@ class AttentionCheckResult:
     actual: Dict[str, Any]
     timestamp: datetime = field(default_factory=datetime.now)
     response_time_seconds: Optional[float] = None
+    # Failed on speed rather than on content, so the admin page can tell the
+    # two apart when explaining a block.
+    too_fast: bool = False
 
 
 @dataclass
@@ -147,10 +150,206 @@ class QualityControlManager:
         self._load_attention_checks()
         self._load_gold_standards()
 
+        # Restore results recorded by earlier runs of this study.
+        self._load_results()
+
         self.logger.info(f"QualityControlManager initialized: "
                         f"attention_checks={self.qc_config.attention_checks_enabled}, "
                         f"gold_standards={self.qc_config.gold_standards_enabled}, "
                         f"pre_annotation={self.qc_config.pre_annotation_enabled}")
+
+    # ------------------------------------------------------------------
+    # Persistence
+    #
+    # Attention-check and gold results used to live only in this object. A
+    # restart for a deploy, a crash or a config change wiped every quality
+    # signal the study had collected, and the admin API answered with a clean
+    # zero and `enabled: true` -- which reads as "nobody has failed a check"
+    # rather than "the record is gone". `is_user_blocked` reads the same list,
+    # so a restart also unblocked everyone who had been blocked.
+    # ------------------------------------------------------------------
+
+    def _results_file(self) -> Optional[Path]:
+        """Where this study's recorded QC results are kept, or None."""
+        output_dir = self.config.get("output_annotation_dir")
+        if not output_dir:
+            return None
+        path = Path(output_dir)
+        if not path.is_absolute():
+            path = Path(self.base_dir) / path
+        return path / "quality_control_results.json"
+
+    def _save_results(self) -> None:
+        """Write the recorded attention and gold results to disk.
+
+        Best-effort: a study must not stop taking annotations because the
+        quality-control side file could not be written.
+        """
+        path = self._results_file()
+        if path is None:
+            return
+
+        with self._lock:
+            payload = {
+                "version": 1,
+                "attention_results": {
+                    user_id: [self._attention_result_to_dict(r) for r in results]
+                    for user_id, results in self.attention_results.items()
+                },
+                "gold_results": {
+                    user_id: [self._gold_result_to_dict(r) for r in results]
+                    for user_id, results in self.gold_results.items()
+                },
+                "items_since_attention": dict(self.user_items_since_attention),
+                "items_since_gold": dict(self.user_items_since_gold),
+                # Auto-promotion state. Empty unless gold_standards.auto_promote
+                # is on, but without it a restart un-golds every item the study
+                # had promoted and throws away the partial agreement behind the
+                # ones still pending.
+                "item_annotations": {
+                    item_id: dict(by_user)
+                    for item_id, by_user in self.item_annotations.items()
+                },
+                "promoted_gold_items": list(self.promoted_gold_items),
+                "promoted_gold_labels": dict(self.promoted_gold_labels),
+            }
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2)
+            tmp.replace(path)
+        except OSError as e:
+            self.logger.warning("Could not save quality control results to %s: %s", path, e)
+
+    def _load_results(self) -> None:
+        """Restore attention and gold results recorded by an earlier run."""
+        path = self._results_file()
+        if path is None or not path.exists():
+            return
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            self.logger.warning("Could not read quality control results from %s: %s", path, e)
+            return
+
+        if not isinstance(payload, dict):
+            self.logger.warning("Ignoring malformed quality control results in %s", path)
+            return
+
+        attention_loaded = gold_loaded = 0
+        with self._lock:
+            for user_id, records in (payload.get("attention_results") or {}).items():
+                for record in records or []:
+                    result = self._attention_result_from_dict(user_id, record)
+                    if result is not None:
+                        self.attention_results[user_id].append(result)
+                        attention_loaded += 1
+
+            for user_id, records in (payload.get("gold_results") or {}).items():
+                for record in records or []:
+                    result = self._gold_result_from_dict(user_id, record)
+                    if result is not None:
+                        self.gold_results[user_id].append(result)
+                        gold_loaded += 1
+
+            for user_id, count in (payload.get("items_since_attention") or {}).items():
+                try:
+                    self.user_items_since_attention[user_id] = int(count)
+                except (TypeError, ValueError):
+                    continue
+            for user_id, count in (payload.get("items_since_gold") or {}).items():
+                try:
+                    self.user_items_since_gold[user_id] = int(count)
+                except (TypeError, ValueError):
+                    continue
+
+            for item_id, by_user in (payload.get("item_annotations") or {}).items():
+                if isinstance(by_user, dict):
+                    self.item_annotations[item_id].update(by_user)
+
+            for gold_item in (payload.get("promoted_gold_items") or []):
+                if isinstance(gold_item, dict) and gold_item.get("id"):
+                    self.promoted_gold_items.append(gold_item)
+
+            for item_id, label in (payload.get("promoted_gold_labels") or {}).items():
+                if isinstance(label, dict):
+                    self.promoted_gold_labels[item_id] = label
+                    # is_gold_standard() reads gold_labels, so a promoted item
+                    # only stays gold if it is restored there too.
+                    self.gold_labels.setdefault(item_id, label)
+
+        if attention_loaded or gold_loaded:
+            self.logger.info(
+                "Restored quality control results: %d attention check(s), "
+                "%d gold evaluation(s)", attention_loaded, gold_loaded,
+            )
+
+    @staticmethod
+    def _attention_result_to_dict(result: "AttentionCheckResult") -> Dict[str, Any]:
+        return {
+            "item_id": result.item_id,
+            "passed": result.passed,
+            "expected": result.expected,
+            "actual": result.actual,
+            "timestamp": result.timestamp.isoformat() if result.timestamp else None,
+            "response_time_seconds": result.response_time_seconds,
+            "too_fast": result.too_fast,
+        }
+
+    @staticmethod
+    def _gold_result_to_dict(result: "GoldStandardResult") -> Dict[str, Any]:
+        return {
+            "item_id": result.item_id,
+            "correct": result.correct,
+            "gold_label": result.gold_label,
+            "user_response": result.user_response,
+            "explanation": result.explanation,
+            "timestamp": result.timestamp.isoformat() if result.timestamp else None,
+        }
+
+    @staticmethod
+    def _parse_timestamp(value: Any) -> datetime:
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value)
+            except ValueError:
+                pass
+        return datetime.now()
+
+    def _attention_result_from_dict(
+        self, user_id: str, record: Any
+    ) -> Optional["AttentionCheckResult"]:
+        if not isinstance(record, dict) or not record.get("item_id"):
+            return None
+        return AttentionCheckResult(
+            item_id=record["item_id"],
+            user_id=user_id,
+            passed=bool(record.get("passed")),
+            expected=record.get("expected") or {},
+            actual=record.get("actual") or {},
+            timestamp=self._parse_timestamp(record.get("timestamp")),
+            response_time_seconds=record.get("response_time_seconds"),
+            too_fast=bool(record.get("too_fast")),
+        )
+
+    def _gold_result_from_dict(
+        self, user_id: str, record: Any
+    ) -> Optional["GoldStandardResult"]:
+        if not isinstance(record, dict) or not record.get("item_id"):
+            return None
+        return GoldStandardResult(
+            item_id=record["item_id"],
+            user_id=user_id,
+            correct=bool(record.get("correct")),
+            gold_label=record.get("gold_label") or {},
+            user_response=record.get("user_response") or {},
+            explanation=record.get("explanation"),
+            timestamp=self._parse_timestamp(record.get("timestamp")),
+        )
 
     def _parse_config(self, config: Dict[str, Any]) -> QualityControlConfig:
         """Parse quality control configuration from the main config."""
@@ -404,6 +603,7 @@ class QualityControlManager:
         with self._lock:
             self.user_items_since_attention[user_id] = self.user_items_since_attention.get(user_id, 0) + 1
             self.user_items_since_gold[user_id] = self.user_items_since_gold.get(user_id, 0) + 1
+        self._save_results()
 
     def validate_attention_response(
         self,
@@ -431,13 +631,17 @@ class QualityControlManager:
         expected = self.attention_expected[item_id]
         passed = self._compare_responses(expected, response)
 
-        # Check for suspiciously fast response
+        # A response faster than min_response_time fails the check, which is what
+        # the key is documented to do. It used to only log, and the log line
+        # could not fire either, because the response time never reached here.
+        too_fast = False
         if (response_time_seconds is not None and
             self.qc_config.attention_min_response_time > 0 and
             response_time_seconds < self.qc_config.attention_min_response_time):
+            too_fast = True
             self.logger.warning(f"User {user_id} responded to attention check {item_id} "
                               f"in {response_time_seconds:.1f}s (min: {self.qc_config.attention_min_response_time}s)")
-            # Still record the result but log the fast response
+            passed = False
 
         # Record result — at most one result per (user, item) pair.
         # Re-saves on the same item replace the prior result rather than
@@ -448,7 +652,8 @@ class QualityControlManager:
             passed=passed,
             expected=expected,
             actual=response,
-            response_time_seconds=response_time_seconds
+            response_time_seconds=response_time_seconds,
+            too_fast=too_fast
         )
 
         with self._lock:
@@ -462,6 +667,8 @@ class QualityControlManager:
             self.attention_results[user_id].append(result)
 
             failures = len([r for r in self.attention_results[user_id] if not r.passed])
+
+        self._save_results()
 
         # Check thresholds — only log when crossing for the first time
         response_data = {"passed": passed}
@@ -604,8 +811,18 @@ class QualityControlManager:
             explanation=explanation
         )
 
+        # Record result — at most one result per (user, item) pair, the same
+        # rule attention checks use. Appending unconditionally made the
+        # denominator count *saves* rather than gold items: an annotator who
+        # changed their mind three times on one gold item was scored 1/3, and
+        # one who nudged a slider seven times was scored as having answered
+        # seven gold items.
         with self._lock:
+            self.gold_results[user_id] = [
+                r for r in self.gold_results[user_id] if r.item_id != item_id
+            ]
             self.gold_results[user_id].append(result)
+        self._save_results()
 
         # By default, gold standards are silent (recorded but no feedback to user)
         # Only include feedback if explicitly enabled in config
@@ -694,11 +911,13 @@ class QualityControlManager:
             # Check if we have enough annotators
             annotations = self.item_annotations[item_id]
             if len(annotations) < self.qc_config.gold_auto_promote_min_annotators:
-                return None
+                promotion_result = None
+            else:
+                # Check agreement
+                promotion_result = self._check_and_promote(item_id, annotations)
 
-            # Check agreement
-            promotion_result = self._check_and_promote(item_id, annotations)
-            return promotion_result
+        self._save_results()
+        return promotion_result
 
     def _check_and_promote(
         self,
@@ -978,7 +1197,8 @@ class QualityControlManager:
                         "item_id": r.item_id,
                         "passed": r.passed,
                         "timestamp": r.timestamp.isoformat(),
-                        "response_time": r.response_time_seconds
+                        "response_time": r.response_time_seconds,
+                        "too_fast": r.too_fast
                     }
                     for r in results
                 ]

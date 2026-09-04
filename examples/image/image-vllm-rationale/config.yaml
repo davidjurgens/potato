@@ -1,24 +1,26 @@
 # yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
-# Image Classification with VLLM Rationales
+# Image Classification with Vision-Language-Model Rationales
 #
-# This example demonstrates using Vision Language Models (VLLMs) like Qwen-VL
-# to provide hints and rationales for image classification tasks.
+# "VLLM" here means Vision Language Model, not the vLLM inference server. Any
+# of the three can serve one: Ollama, a self-hosted vLLM or SGLang server, or a
+# commercial API. Which one is chosen in ai-config.yaml, not here.
 #
-# Unlike YOLO which does object detection with bounding boxes, VLLMs can:
+# Unlike YOLO which does object detection with bounding boxes, a VLM can:
 # - Generate natural language hints about image content
 # - Provide rationales explaining why each label might apply
 # - Suggest classification labels with explanations
 #
-# Note: VLLMs do NOT support keyword highlighting (it doesn't apply to images)
+# The Keyword assistant does not appear on image items: highlighting keywords
+# in a picture means nothing. It does appear on text items served by the same
+# endpoint.
 #
 # To run this example:
-#   python potato/flask_server.py start examples/image/image-vllm-rationale/config.yaml -p 8000
+#   1. cp ai-config.yaml.example ai-config.yaml   (it is gitignored)
+#   2. edit it to point at whichever server you have
+#   3. python potato/flask_server.py start examples/image/image-vllm-rationale/config.yaml -p 8000
 #
-# Requirements:
-#   - Install ollama and pull a vision model:
-#     ollama pull qwen2.5-vl:7b     (recommended for best quality)
-#     ollama pull llava:latest      (good quality, widely supported)
-#     ollama pull moondream:latest  (smallest, fastest, good for testing)
+# Without step 1 the server still boots, but AI support is disabled and no
+# assistant appears. `potato validate --strict` fails on that.
 
 port: 8000
 annotation_task_name: "Image Classification with AI Rationales"

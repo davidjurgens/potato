@@ -464,6 +464,10 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "mapping with warn/block thresholds and messages",
         type="string|object", category=QC,
     ),
+    "attention_checks.geometry_iou_tolerance": _D(
+        "Overlap a drawn answer must reach to count as correct, as a fraction",
+        type="number", category=QC,
+    ),
     "gold_standards": _D(
         "Items with known labels, used to score annotators",
         type="object", category=QC,
@@ -481,6 +485,16 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Promote annotators who pass to the full task. A flag, or a mapping with "
         "`min_annotators` and `agreement_threshold`",
         type="boolean|object", category=QC,
+    ),
+    "gold_standards.feedback": _D(
+        "What an annotator is told after a gold item. A mapping with "
+        "`show_correct_answer` and `show_explanation`; both off means silent "
+        "scoring",
+        type="object", category=QC,
+    ),
+    "gold_standards.geometry_iou_tolerance": _D(
+        "Overlap a drawn answer must reach to count as correct, as a fraction",
+        type="number", category=QC,
     ),
     "gold_standards_file": _D(
         "Gold items file, the flat alternative to the gold_standards block",
@@ -505,6 +519,140 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     # ------------------------------------------------------------------ ai --
     "ai_support": _D(
         "Model-backed label suggestions shown alongside each item",
+        type="object", category=AI,
+    ),
+    "ai_support.enabled": _D(
+        "Turn AI assistance on. Without an endpoint that starts, the boot log "
+        "says so and no assistant appears",
+        type="boolean", default=False, category=AI,
+    ),
+    "ai_support.endpoint_type": _D(
+        "Which backend to talk to: openai, openai_vision, anthropic, "
+        "anthropic_vision, gemini, huggingface, ollama, ollama_vision, "
+        "openrouter, vllm, yolo, sam, sam3",
+        type="string", default="openai", category=AI, example="vllm",
+    ),
+    "ai_support.ai_config": _D(
+        "Everything about the model itself: model, base_url, api_key, "
+        "max_tokens, temperature, timeout, include. One level deeper than the "
+        "obvious guess — ai_support.model is not read",
+        type="object", category=AI,
+    ),
+    "ai_support.ai_config.model": _D(
+        "Model name as the backend spells it",
+        type="string", category=AI, example="gpt-4o",
+    ),
+    "ai_support.ai_config.base_url": _D(
+        "An OpenAI-compatible server to use instead of the vendor's: vLLM, "
+        "SGLang, LM Studio, llama.cpp, LiteLLM. Setting it also makes api_key "
+        "optional, because self-hosted servers do not have one",
+        type="string", category=AI, example="http://localhost:8000/v1",
+    ),
+    "ai_support.ai_config.api_key": _D(
+        "Key for a commercial endpoint. Not needed when base_url points at a "
+        "self-hosted server; openai and openai_vision also read OPENAI_API_KEY "
+        "from the environment",
+        type="string", category=AI,
+    ),
+    "ai_support.ai_config.max_tokens": _D(
+        "Cap on the reply. The multi-label formats (a rationale or a keyword "
+        "set for every label) need several hundred; below that the reply is "
+        "cut off and the assistant renders empty",
+        type="integer", default=800, category=AI, example=800,
+    ),
+    "ai_support.ai_config.temperature": _D(
+        "Sampling temperature, 0 to 2", type="number", default=0.1, category=AI,
+    ),
+    "ai_support.ai_config.timeout": _D(
+        "Seconds to wait for the model", type="integer", default=30, category=AI,
+    ),
+    "ai_support.ai_config.include": _D(
+        "Which schemes get assistants. Off by default: without it every "
+        "assistant button is absent and the page renders an empty ai-help div",
+        type="object", category=AI,
+    ),
+    "ai_support.ai_config.include.all": _D(
+        "Show assistants on every scheme. This is the switch most authors "
+        "want, and nothing warns when it is missing",
+        type="boolean", default=False, category=AI, example=True,
+    ),
+    "ai_support.ai_config.include.special_include": _D(
+        "Per-page, per-scheme assistant list, keyed page number -> annotation "
+        "id -> list of assistant names. Use instead of include.all to show "
+        "assistants on some schemes only",
+        type="object", category=AI,
+    ),
+    "ai_support.ai_config_file": _D(
+        "Path to a separate YAML file holding the endpoint settings, so keys "
+        "stay out of the repo. Its keys are merged FLAT into ai_config, so the "
+        "file holds model/base_url/api_key directly — a nested ai_config: "
+        "block inside it becomes ai_config.ai_config and is ignored. "
+        "endpoint_type is the one key lifted to the ai_support level. A "
+        "missing file disables AI support with a warning, which "
+        "`validate --strict` treats as an error",
+        type="string", category=AI, example="ai-config.yaml",
+    ),
+    "ai_support.ai_config.api_base": _D(
+        "Older spelling of base_url, accepted by the openai_vision endpoint",
+        type="string", category=AI, see_also=("ai_support.ai_config.base_url",),
+    ),
+    "ai_support.ai_config.enabled": _D(
+        "Read by the visual endpoints as a per-endpoint off switch, leaving the "
+        "rest of ai_support in place",
+        type="boolean", default=True, category=AI,
+    ),
+    "ai_support.ai_config.detail": _D(
+        "How much of the image the model is charged for: low, high or auto "
+        "(openai_vision)",
+        type="string", default="auto", category=AI,
+    ),
+    "ai_support.ai_config.json_mode": _D(
+        "Ask the server to constrain output to JSON. Servers without "
+        "constrained decoding reject it; the endpoint notices and retries "
+        "without, so this rarely needs setting (openai_vision)",
+        type="boolean", default=True, category=AI,
+    ),
+    "ai_support.ai_config.max_image_size": _D(
+        "Longest edge, in pixels, an image is downscaled to before it is sent",
+        type="integer", category=AI,
+    ),
+    "ai_support.ai_config.think": _D(
+        "Let a reasoning model emit its thinking block. Off keeps the reply to "
+        "the answer (vllm)",
+        type="boolean", default=False, category=AI,
+    ),
+    "ai_support.ai_config.classes": _D(
+        "Detection classes to keep, by name. Anything else the detector finds "
+        "is dropped (yolo)",
+        type="array", category=AI,
+    ),
+    "ai_support.ai_config.custom_classes": _D(
+        "Open-vocabulary class names for a detector that accepts them, instead "
+        "of its trained label set",
+        type="array", category=AI,
+    ),
+    "ai_support.ai_config.confidence_threshold": _D(
+        "Lowest detection score kept", type="number", category=AI,
+    ),
+    "ai_support.ai_config.iou_threshold": _D(
+        "Overlap above which two detections are treated as the same object",
+        type="number", category=AI,
+    ),
+    "ai_support.ai_config.device": _D(
+        "Where a local model runs: cpu, cuda, mps",
+        type="string", category=AI,
+    ),
+    "ai_support.ai_config.max_frames": _D(
+        "Most frames sampled from a video for one request",
+        type="integer", category=AI,
+    ),
+    "ai_support.ai_config.default_video_fps": _D(
+        "Frame rate assumed when a video does not declare one",
+        type="number", category=AI,
+    ),
+    "ai_support.cache_config": _D(
+        "Disk cache and prefetch for model replies, so an annotator does not "
+        "wait for a generation the study has already paid for",
         type="object", category=AI,
     ),
     "chat_support": _D(

@@ -1104,6 +1104,14 @@ Per-step error marking for agent/LLM traces. Marks each step with correctness st
 - `error_types` (list): Error type definitions with optional subtypes
 - `severities` (list): Severity levels with penalty weights
 - `show_score` (boolean): Display cumulative score (default: true)
+- `max_score` (integer): Score before any deductions (default: 100)
+
+The score deducts a step's `severity` weight, and only for steps marked
+something other than `correct`. While any step is unjudged, or any step marked
+wrong has no severity chosen, Next is blocked and the readout says the number is
+not final. The stored `score` is then `null`, with `score_complete: false`
+beside it. Marking a step `correct` clears the severity it carried while it was
+wrong.
 
 **Example:**
 ```yaml

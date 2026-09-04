@@ -101,20 +101,34 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
             return [];
         }}
 
+        /* A trace keyed uniformly on `content` -- which is what an OpenAI- or
+           Anthropic-shaped message list looks like -- rendered its prose
+           correctly and then showed "IMAGE  missing image" and "TOOL  tool {{}}"
+           for every other step, because only the text branch fell back to
+           `content`. Each branch reads the keys its own kind is written with,
+           and `content` in all of them. */
         function blockHtml(c) {{
             var s = c.raw, t = c.type;
             if (t === 'image') {{
-                var src = s.image || s.image_url || '';
+                var src = s.image || s.image_url || s.url || s.src || s.content || '';
+                if (typeof src !== 'string') src = '';
                 return '<div class="mmr-block mmr-image">' + (src ?
                     '<img class="mmr-img" src="' + esc(src) + '" alt="Reasoning image at step ' + (c.step+1) + '">' :
-                    '<span class="mmr-missing">missing image</span>') +
+                    '<span class="mmr-missing">no image on this step: expected one of ' +
+                    'image, image_url, url, src or content</span>') +
                     (s.caption ? '<div class="mmr-caption">' + esc(s.caption) + '</div>' : '') + '</div>';
             }}
             if (t === 'tool') {{
                 var name = s.tool || s.name || (s.tool_call && s.tool_call.name) || 'tool';
-                var args = s.args || s.arguments || (s.tool_call && s.tool_call.args) || s.input || {{}};
+                var args = s.args || s.arguments || (s.tool_call && s.tool_call.args) ||
+                           s.input || s.content || null;
+                var body = (args === null || args === undefined ||
+                            (typeof args === 'object' && !Object.keys(args).length))
+                    ? '<span class="mmr-missing">no arguments on this step: expected one of ' +
+                      'args, arguments, input or content</span>'
+                    : '<pre class="mmr-args">' + esc(pretty(args)) + '</pre>';
                 return '<div class="mmr-block mmr-tool"><span class="mmr-tool-name">' + esc(name) +
-                    '</span><pre class="mmr-args">' + esc(pretty(args)) + '</pre></div>';
+                    '</span>' + body + '</div>';
             }}
             if (t === 'action') {{
                 return '<div class="mmr-block mmr-action">' + esc(s.action || s.text || s.content || '') + '</div>';

@@ -476,15 +476,15 @@ class TestGoldStandards:
 
     def test_accuracy_warning(self, manager_with_gold):
         """Test that accuracy warning is triggered below threshold."""
-        # Answer 3 gold standards (2 wrong, 1 right = 33% accuracy)
+        # The fixture holds two gold items, and each counts once however many
+        # times it is answered, so evaluate after two rather than three.
+        manager_with_gold.qc_config.gold_evaluation_count = 2
+
         manager_with_gold.validate_gold_response(
             "user1", "gold_001", {"sentiment": "wrong"}
         )
-        manager_with_gold.validate_gold_response(
-            "user1", "gold_002", {"sentiment": "wrong"}
-        )
         result = manager_with_gold.validate_gold_response(
-            "user1", "gold_001", {"sentiment": "positive"}
+            "user1", "gold_002", {"sentiment": "wrong"}
         )
 
         assert result.get("accuracy_warning") is True
@@ -493,21 +493,36 @@ class TestGoldStandards:
 
     def test_get_accuracy(self, manager_with_gold):
         """Test getting gold standard accuracy."""
-        # 2 correct, 1 incorrect
+        # 1 correct, 1 incorrect
         manager_with_gold.validate_gold_response(
             "user1", "gold_001", {"sentiment": "positive"}
         )
         manager_with_gold.validate_gold_response(
-            "user1", "gold_002", {"sentiment": "negative"}
-        )
-        manager_with_gold.validate_gold_response(
-            "user1", "gold_001", {"sentiment": "wrong"}
+            "user1", "gold_002", {"sentiment": "wrong"}
         )
 
         accuracy = manager_with_gold.get_gold_accuracy("user1")
-        assert accuracy["total"] == 3
-        assert accuracy["correct"] == 2
-        assert abs(accuracy["accuracy"] - 2/3) < 0.01
+        assert accuracy["total"] == 2
+        assert accuracy["correct"] == 1
+        assert abs(accuracy["accuracy"] - 0.5) < 0.01
+
+    def test_resaving_a_gold_item_replaces_its_result(self, manager_with_gold):
+        """The denominator counts gold items, not saves.
+
+        Every save against a gold item used to append another result, so an
+        annotator who changed their mind twice on a correct answer scored 1/3,
+        and one who nudged a slider seven times was scored as having answered
+        seven gold items.
+        """
+        for answer in ("wrong", "also wrong", "positive"):
+            manager_with_gold.validate_gold_response(
+                "user1", "gold_001", {"sentiment": answer}
+            )
+
+        accuracy = manager_with_gold.get_gold_accuracy("user1")
+        assert accuracy["total"] == 1
+        assert accuracy["correct"] == 1
+        assert accuracy["accuracy"] == 1.0
 
     def test_load_gold_items_from_jsonl(self, tmp_path):
         """Gold standard files should also load from JSONL."""
@@ -985,6 +1000,8 @@ def test_render_page_with_injected_qc_item_without_displayed_text(monkeypatch):
             return 0
         def get_annotation_count(self):
             return 0
+        def get_annotated_instance_ids(self):
+            return set()
         def get_max_assignments(self):
             return 1
         def has_annotated(self, instance_id):
@@ -1253,3 +1270,141 @@ def test_gold_standard_uses_separate_counter_from_attention(tmp_path):
     assert gold_item["id"] == "gold_001"
     assert manager.user_items_since_gold["user1"] == 0
 
+
+
+def _qc_study(tmp_path, **overrides):
+    """A one-item-each QC config rooted at tmp_path, results written alongside."""
+    config = {
+        "output_annotation_dir": str(tmp_path / "annotation_output"),
+        "attention_checks": {
+            "enabled": True,
+            "items_file": "attention.json",
+            "frequency": 3,
+            "failure_handling": {"warn_threshold": 1, "block_threshold": 1},
+        },
+        "gold_standards": {
+            "enabled": True,
+            "items_file": "gold.json",
+            "frequency": 5,
+        },
+    }
+    for key, value in overrides.items():
+        config[key] = value
+
+    (tmp_path / "attention.json").write_text(json.dumps([
+        {"id": "attn_001", "text": "Select positive",
+         "expected_answer": {"sentiment": "positive"}},
+    ]), encoding="utf-8")
+    (tmp_path / "gold.json").write_text(json.dumps([
+        {"id": "gold_001", "text": "Gold item",
+         "gold_label": {"sentiment": "neutral"}},
+    ]), encoding="utf-8")
+    return config
+
+
+class TestResultPersistence:
+    """Results must outlive the process that recorded them.
+
+    They used to live only in ``QualityControlManager`` memory, so a restart
+    for a deploy, a crash or a config change returned the admin API to a clean
+    zero with ``enabled: true`` — indistinguishable from "nobody has failed a
+    check" — and unblocked everyone who had been blocked.
+    """
+
+    def test_results_survive_a_restart(self, tmp_path):
+        config = _qc_study(tmp_path)
+
+        first = QualityControlManager(config, str(tmp_path))
+        first.validate_attention_response("alice", "attn_001", {"sentiment": "negative"})
+        first.validate_gold_response("alice", "gold_001", {"sentiment": "neutral"})
+
+        # A second manager over the same output dir is what a restart produces.
+        second = QualityControlManager(config, str(tmp_path))
+
+        metrics = second.get_quality_metrics()
+        assert metrics["attention_checks"]["total_checks"] == 1
+        assert metrics["attention_checks"]["total_failed"] == 1
+        assert metrics["gold_standards"]["total_evaluations"] == 1
+        assert metrics["gold_standards"]["total_correct"] == 1
+        assert metrics["gold_standards"]["by_user"]["alice"]["accuracy"] == 1.0
+
+    def test_a_block_survives_a_restart(self, tmp_path):
+        config = _qc_study(tmp_path)
+
+        first = QualityControlManager(config, str(tmp_path))
+        first.validate_attention_response("alice", "attn_001", {"sentiment": "negative"})
+        assert first.is_user_blocked("alice") is True
+
+        assert QualityControlManager(config, str(tmp_path)).is_user_blocked("alice") is True
+
+    def test_injection_cadence_survives_a_restart(self, tmp_path):
+        config = _qc_study(tmp_path)
+
+        first = QualityControlManager(config, str(tmp_path))
+        for _ in range(3):
+            first.record_regular_item("alice")
+        assert first.should_inject_attention_check("alice") is True
+
+        assert QualityControlManager(config, str(tmp_path)).should_inject_attention_check("alice") is True
+
+    def test_no_output_dir_is_not_an_error(self, tmp_path):
+        """A config with nowhere to write still records in memory."""
+        config = _qc_study(tmp_path)
+        del config["output_annotation_dir"]
+
+        manager = QualityControlManager(config, str(tmp_path))
+        manager.validate_gold_response("alice", "gold_001", {"sentiment": "neutral"})
+        assert manager.get_gold_accuracy("alice")["total"] == 1
+
+    def test_malformed_results_file_does_not_block_startup(self, tmp_path):
+        config = _qc_study(tmp_path)
+        results_dir = tmp_path / "annotation_output"
+        results_dir.mkdir(parents=True, exist_ok=True)
+        (results_dir / "quality_control_results.json").write_text("{not json", encoding="utf-8")
+
+        manager = QualityControlManager(config, str(tmp_path))
+        assert manager.get_quality_metrics()["attention_checks"]["total_checks"] == 0
+
+
+class TestMinResponseTime:
+    """``min_response_time`` was unreachable and, if reached, decided nothing.
+
+    The server derived the response time from ``client_timestamp``, which
+    ``annotation.js`` never sent on this path, so the branch never ran; and the
+    branch only logged, while the key is documented as failing the check.
+    """
+
+    def test_a_fast_response_fails_the_check(self, tmp_path):
+        config = _qc_study(tmp_path)
+        config["attention_checks"]["min_response_time"] = 8.0
+        manager = QualityControlManager(config, str(tmp_path))
+
+        result = manager.validate_attention_response(
+            "alice", "attn_001", {"sentiment": "positive"}, response_time_seconds=1.5
+        )
+
+        assert result["passed"] is False
+        assert manager.attention_results["alice"][0].too_fast is True
+
+    def test_a_considered_response_still_passes(self, tmp_path):
+        config = _qc_study(tmp_path)
+        config["attention_checks"]["min_response_time"] = 8.0
+        manager = QualityControlManager(config, str(tmp_path))
+
+        result = manager.validate_attention_response(
+            "alice", "attn_001", {"sentiment": "positive"}, response_time_seconds=12.0
+        )
+
+        assert result["passed"] is True
+        assert manager.attention_results["alice"][0].too_fast is False
+
+    def test_no_timing_leaves_the_verdict_to_the_content(self, tmp_path):
+        config = _qc_study(tmp_path)
+        config["attention_checks"]["min_response_time"] = 8.0
+        manager = QualityControlManager(config, str(tmp_path))
+
+        result = manager.validate_attention_response(
+            "alice", "attn_001", {"sentiment": "positive"}, response_time_seconds=None
+        )
+
+        assert result["passed"] is True

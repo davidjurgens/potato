@@ -4262,9 +4262,9 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 |-----|----------|------|---------|-------------|----------|
 | `adjudication` |  | object |  | Resolve disagreements through an adjudication queue | `adjudicator_users`, `agreement_threshold`, `enabled`, `error_taxonomy`, `fast_decision_warning_ms`, `min_annotations`, `output_subdir`, `require_confidence`, `require_notes_on_override`, `show_agreement_scores`, `show_all_items`, `show_annotator_names`, `show_timing_data`, `similarity` |
 | `agreement_metrics` |  | object |  | Which inter-annotator agreement measures the admin pages compute | `enabled`, `min_overlap`, `refresh_interval` |
-| `attention_checks` |  | object |  | Insert items with a known answer to detect inattentive annotators | `enabled`, `failure_handling`, `frequency`, `items_file`, `min_response_time`, `probability` |
+| `attention_checks` |  | object |  | Insert items with a known answer to detect inattentive annotators | `enabled`, `failure_handling`, `frequency`, `geometry_iou_tolerance`, `items_file`, `min_response_time`, `probability` |
 | `calibration` |  | object |  | Agreement drift tracking and the re-calibration prompt on /admin/iaa. Agreement is scored per time window so a fall in recent work is visible, instead of averaging into one whole-project number | `drop_threshold`, `enabled`, `window_by`, `windows` |
-| `gold_standards` |  | object |  | Items with known labels, used to score annotators | `accuracy`, `auto_promote`, `enabled`, `frequency`, `items_file`, `mode` |
+| `gold_standards` |  | object |  | Items with known labels, used to score annotators | `accuracy`, `auto_promote`, `enabled`, `feedback`, `frequency`, `geometry_iou_tolerance`, `items_file`, `mode` |
 | `gold_standards_file` |  | string |  | Gold items file, the flat alternative to the gold_standards block |  |
 | `quality_control` |  | object |  | Aggregate quality thresholds and actions |  |
 | `require_fully_annotated` |  | boolean |  | Refuse to advance until every scheme on the page has an answer |  |
@@ -8758,6 +8758,14 @@ Per-step error marking for agent/LLM traces. Marks each step with correctness st
 - `error_types` (list): Error type definitions with optional subtypes
 - `severities` (list): Severity levels with penalty weights
 - `show_score` (boolean): Display cumulative score (default: true)
+- `max_score` (integer): Score before any deductions (default: 100)
+
+The score deducts a step's `severity` weight, and only for steps marked
+something other than `correct`. While any step is unjudged, or any step marked
+wrong has no severity chosen, Next is blocked and the readout says the number is
+not final. The stored `score` is then `null`, with `score_complete: false`
+beside it. Marking a step `correct` clears the severity it carried while it was
+wrong.
 
 **Example:**
 ```yaml
@@ -14806,7 +14814,7 @@ annotation_schemes:
 | `mode` | string | `"label"` | Annotation mode: `"label"`, `"questions"`, or `"both"` |
 | `labels` | list | required* | Category labels for segments (*required for label/both modes) |
 | `segment_schemes` | list | required* | Per-segment annotation schemes (*required for questions/both modes) |
-| `min_segments` | integer | `0` | Minimum required segments |
+| `min_segments` | integer | `0` | Fewest segments the annotator must mark. Blocks Next until they have, and says how many are still missing. Needs `label_requirement.required: true` to take effect. |
 | `max_segments` | integer | `null` | Maximum allowed segments |
 | `zoom_enabled` | boolean | `true` | Enable zoom controls |
 | `playback_rate_control` | boolean | `false` | Show playback speed selector |
@@ -14895,6 +14903,23 @@ Two limits are worth knowing:
   `min_segments` to require segments, and check completeness in analysis.
 
 A runnable example is in `examples/audio/segment-questions/`.
+
+### Requiring segments
+
+With `label_requirement.required: true` on the scheme, Next is blocked until
+the annotator has marked at least `min_segments` segments and given every one of
+them a label. The message names what is missing: "1 of 2 segments marked", "1
+segment with no label". Without `required`, neither check blocks anything.
+
+```yaml
+- annotation_type: audio_annotation
+  name: speaker_turns
+  description: "Mark each speaker turn"
+  labels: [caller, agent]
+  min_segments: 2
+  label_requirement:
+    required: true
+```
 
 ### Label Configuration
 
@@ -15037,7 +15062,7 @@ See `examples/audio/audio-annotation/config.yaml` for a complete working example
 
 5. **Label Colors**: Choose distinct colors that are visible on the waveform (avoid grays that blend with the waveform).
 
-6. **Min Segments**: Set `min_segments: 1` to ensure annotators create at least one segment per audio file.
+6. **Min Segments**: Set `min_segments: 1` to ensure annotators create at least one segment per audio file. Pair it with `label_requirement.required: true` — `min_segments` is checked as part of the requiredness pass, so on its own it records the number and blocks nothing.
 
 ## Troubleshooting
 
@@ -15427,7 +15452,7 @@ Then open http://localhost:8000 in your browser.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `mode` | string | `"segment"` | Annotation mode (see Annotation Modes) |
-| `min_segments` | integer | `0` | Minimum required segments |
+| `min_segments` | integer | `0` | Fewest segments the annotator must mark. Blocks Next until they have, and says how many are still missing. Needs `label_requirement.required: true` to take effect. |
 | `max_segments` | integer | `null` | Maximum allowed segments (null = unlimited) |
 | `timeline_height` | integer | `70` | Height of timeline in pixels |
 | `overview_height` | integer | `40` | Height of overview bar in pixels |
@@ -15835,7 +15860,10 @@ No additional server-side dependencies are required. The waveform for the timeli
 
 ### Segments Not Saving
 
-1. Ensure you have at least `min_segments` segments created
+1. Ensure you have at least `min_segments` segments created. With
+   `label_requirement.required: true` the widget says how many are still
+   missing ("1 of 2 segments marked") and blocks Next; without it, neither
+   `min_segments` nor an unlabelled segment stops anyone.
 2. Check browser console for any JavaScript errors
 3. Verify the annotation scheme name matches expectations
 
@@ -21303,8 +21331,8 @@ attention_checks:
   # OR
   probability: 0.1           # 10% chance per item
 
-  # Optional: flag suspiciously fast responses
-  min_response_time: 3.0     # Flag if answered in < 3 seconds
+  # Optional: fail responses that arrive too fast to have been read
+  min_response_time: 3.0     # Fail the check if answered in under 3 seconds
 
   # Failure handling
   failure_handling:
@@ -21347,8 +21375,16 @@ Create a JSON file with your attention check items:
 1. Attention check items are loaded at server startup
 2. Based on `frequency` or `probability`, checks are injected into the annotation flow
 3. When an annotator submits a response, it's compared to the expected answer
-4. Failures are tracked per-user
-5. Warnings and blocks are triggered at configured thresholds
+4. A response faster than `min_response_time` fails whatever it says; the clock
+   runs from when the item appeared on screen to when the annotator saved
+5. Failures are tracked per-user, at most one result per annotator per check
+   item, so changing an answer does not add a second result
+6. Warnings and blocks are triggered at configured thresholds
+
+Attention-check and gold results are written to
+`<output_annotation_dir>/quality_control_results.json` as they are recorded, and
+read back at startup, so a restart for a deploy or a crash does not clear an
+annotator's failure history or unblock someone who had been blocked.
 
 ### Admin Dashboard
 
@@ -24296,7 +24332,7 @@ annotation_schemes:
     show_diff: true
     show_edit_distance: true
     allow_reset: true
-    require_reason_on_edit: false   # add a per-field "reason" input
+    require_reason_on_edit: false   # per-field "reason" input, and require it
     edit_final_answer: true
     final_answer_key: final_answer
 ```
@@ -24309,7 +24345,7 @@ annotation_schemes:
 | `show_diff` | `true` | Show the live word-level diff. |
 | `show_edit_distance` | `true` | Show words/chars changed. |
 | `allow_reset` | `true` | Per-field "Reset to original" button. |
-| `require_reason_on_edit` | `false` | Per-field "reason for edit" input. |
+| `require_reason_on_edit` | `false` | Adds a per-field "reason for edit" input and requires it: an edited field with a blank reason blocks Next, naming the steps that need one. |
 | `edit_final_answer` | `false` | Add an editor for the final answer. |
 | `final_answer_key` | `final_answer` | Instance field holding the final answer. |
 
@@ -26345,7 +26381,10 @@ Runnable example:
 ## The schema
 
 `grounding_eval` binds each referring expression to a region drawn on an
-`image_annotation` canvas beside it.
+`image_annotation` canvas beside it. The canvas is required, and a config
+without one is refused at validation: alone, `grounding_eval` renders its
+expression list and offers "Not present in the image" as the only reachable
+answer, so every verdict in the study would be absent.
 
 ```yaml
 annotation_schemes:
@@ -26385,7 +26424,7 @@ source with stable ids should use them.
 | `expressions_field` | `expressions` | Where the phrases live |
 | `caption_field` | `caption` | The text to ground, in `spans` mode |
 | `predictions_field` | — | Model predictions to review; enables the verdict control |
-| `require_all` | `false` | Warn once before advancing with phrases unanswered |
+| `require_all` | `false` | Warn once before advancing with phrases unanswered. The second Next goes through — this is a nudge, not a gate. |
 
 ---
 
@@ -26591,8 +26630,27 @@ The inverse task: the annotator draws the regions and supplies the language.
     name: descriptions
     description: "Describe each region"
     placeholder: "Describe this region…"
+    min_length: 10                # shorter than this is not a description
     agreement_distance: token     # or `embedding`
 ```
+
+A `region_caption` scheme needs an `image_annotation` scheme in the same
+config. It owns the caption, not the canvas: alone it renders its list and no
+region can ever be drawn into it, so a config without one is refused at
+validation.
+
+### `min_length` and `require_all`
+
+`min_length` is the floor, in characters, below which a caption does not count
+as written. With `min_length: 10`, "box" leaves the region undescribed, the
+progress line says so and names the floor, and the textarea carries the
+`minlength` attribute. Without it, any non-blank caption counts.
+
+`require_all` warns once when Next is pressed with regions undescribed; the
+second press goes through. It is a nudge rather than a gate because an
+annotator legitimately draws every region first and captions them afterwards,
+and stopping them mid-pass is an obstacle. For a gate, use
+`label_requirement.required`.
 
 The caption list follows the canvas and is rebuilt from it on every change,
 with captions carried across by **matching the region they were written about**
@@ -30024,12 +30082,18 @@ Each AI endpoint declares its capabilities:
 | Endpoint Type | Text Gen | Vision | Bbox Output | Keyword | Rationale |
 |---------------|----------|--------|-------------|---------|-----------|
 | `ollama` | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `ollama_vision` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `ollama_vision` | ✅ | ✅ | ❌ | ✅ text only | ✅ |
 | `openai` | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `openai_vision` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `openai_vision` | ✅ | ✅ | ❌ | ✅ text only | ✅ |
 | `anthropic` | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `anthropic_vision` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `anthropic_vision` | ✅ | ✅ | ❌ | ✅ text only | ✅ |
 | `yolo` | ❌ | ✅ | ✅ | ❌ | ❌ |
+
+"Text only" is decided per item, not per endpoint. A vision model is still a
+language model, so on a text item it offers all three assistants; on an image
+item the Keyword button is filtered out. The endpoints used to declare no
+keyword support at all, which removed the button from text items too and left
+only two of the three assistants reachable on a text task.
 
 ### Best Practices for Visual AI
 
@@ -30092,8 +30156,9 @@ ai_support:
 | `endpoint_type` | string | Yes | The LLM provider to use |
 | `ai_config.model` | string | No | Model name (uses provider default if not specified) |
 | `ai_config.api_key` | string | Yes* | API key for cloud providers |
+| `ai_config.base_url` | string | No | An OpenAI-compatible server to use instead of the vendor's — vLLM, SGLang, LM Studio, llama.cpp, LiteLLM. Setting it also makes `api_key` optional |
 | `ai_config.temperature` | float | No | Response randomness (0.0-2.0, default: 0.7) |
-| `ai_config.max_tokens` | integer | No | Maximum response length (default: 100) |
+| `ai_config.max_tokens` | integer | No | Maximum response length (default: 800). The Rationale and Keyword assistants answer for every label at once and need several hundred tokens; below that the reply is cut off and the assistant renders empty |
 | `ai_config.include.all` | boolean | No | Enable AI for all annotation schemes (default: false) |
 | `ai_config.include.special_include` | object | No | Per-page, per-annotation customization |
 | `cache_config.disk_cache.enabled` | boolean | No | Enable disk caching (default: false) |
@@ -30102,7 +30167,18 @@ ai_support:
 | `cache_config.prefetch.on_next` | integer | No | Prefetch N instances ahead when navigating forward |
 | `cache_config.prefetch.on_prev` | integer | No | Prefetch N instances when navigating backward |
 
-*Required for cloud-based providers (OpenAI, Anthropic, Hugging Face, Gemini)
+*Required for cloud-based providers. `openai` and `openai_vision` have two other
+ways to get one, and validation accepts all three: `OPENAI_API_KEY` in the
+environment, or a `base_url` pointing at a self-hosted server, which has no key.
+`anthropic`, `huggingface` and `gemini` read neither, so for those it really is
+required.
+
+Two things about `ai_config` are worth stating because nothing catches them:
+
+- The keys go **inside `ai_config`**, one level deeper than the obvious guess.
+  `ai_support.base_url` is ignored, and `validate --strict` says so.
+- `include.all` is off by default. Without it every assistant button is absent
+  and the page renders an empty AI div, with a clean validation and no warning.
 
 ## Caching and Pre-generation
 
@@ -30415,9 +30491,15 @@ When `ai_config_file` is specified:
 
 This means your inline `ai_config` provides defaults (temperature, max_tokens, include settings) while the external file provides secrets and environment-specific values.
 
+The merge is **flat**. The external file holds `model`, `base_url` and
+`api_key` at its top level, as the example above does. Wrapping them in an
+`ai_config:` block inside that file produces `ai_config.ai_config`, which
+nothing reads: validation passes and the boot fails with "OpenAI API key is
+required", which points at the wrong key.
+
 ### Fallback Behavior
 
-- **File missing**: If `ai_config_file` is set but the file doesn't exist, AI support is automatically disabled with a warning (the server still starts normally)
+- **File missing**: If `ai_config_file` is set but the file doesn't exist, AI support is automatically disabled with a warning (the server still starts normally). `potato validate --strict` treats that warning as an error, so a study whose subject is AI assistance cannot pass its own check with the AI off. Ship an `ai-config.yaml.example` beside the config for people to copy.
 - **No `ai_config_file`**: Current behavior is unchanged -- everything is read from the inline config
 - **Environment variables**: `${VAR_NAME}` syntax works in both files
 
@@ -30525,6 +30607,30 @@ When AI support is enabled, annotators will see AI assistance buttons on each an
    - Ensure the span-core.js file is loaded (check browser console)
    - Verify the SpanManager is initialized
    - Check that the text content element exists
+
+6. **"No hint available" / "No rationales available" over a server that answered**
+
+   The model replied, the server returned 200, and the tooltip is empty. Four
+   things produce that one symptom, so check them in this order:
+
+   - **`include.all` is missing.** No assistant button is on the page at all.
+     Nothing warns about this.
+   - **`max_tokens` is too low.** The Rationale and Keyword assistants answer
+     for every label at once. Below a few hundred tokens the reply is cut
+     mid-object and the salvage step returns a fragment the renderer cannot
+     read. The log says "The model hit max_tokens ... so the reply is cut off".
+   - **The server ignored the schema.** Check the reply is JSON at all rather
+     than prose; a server without constrained decoding answers in whatever
+     shape the prompt suggested.
+   - **The keys are in the wrong place.** `ai_support.model` is ignored;
+     everything about the model goes in `ai_support.ai_config`.
+     `validate --strict` names any key it does not recognise.
+
+7. **No assistant buttons appear, and the boot log looked fine**
+
+   The line to look for is "AI endpoint ready (...)". If it says "No AI
+   endpoint: assistants will not appear", the endpoint failed to start and the
+   reason is in the warning above it.
 
 ### Debug Mode
 
@@ -32238,21 +32344,17 @@ active_learning:
 | `model_save_directory` | Directory to save models | Required | `/models/` |
 | `model_retention_count` | Number of models to keep | `2` | `3-5` |
 
-### Database Integration
+### Training history
 
-For large-scale deployments, enable database persistence:
+Potato records every training run: what was trained, on how many annotations,
+how long it took, and where the model was saved. There is nothing to configure.
+The records go into the project's SQLite database alongside the rest of Potato's
+state, and you can read them at `GET /admin/active-learning/stats`.
 
-```yaml
-active_learning:
-  enabled: true
-  database_enabled: true
-  database_config:
-    host: "localhost"
-    port: 3306
-    database: "potato_al"
-    username: "potato_user"
-    password: "secure_password"
-```
+Earlier versions documented `database_enabled` and a `database_config` block
+with MySQL connection details. Neither key did anything: the code behind them
+created no tables and saved no metrics. Both are ignored if you still have them
+in a config file, and you can delete them.
 
 ## Multi-Schema Support
 
@@ -32517,15 +32619,6 @@ active_learning:
   model_persistence_enabled: true
   model_save_directory: "/data/potato/models"
   model_retention_count: 5
-
-  # Database integration
-  database_enabled: true
-  database_config:
-    host: "localhost"
-    port: 3306
-    database: "potato_al"
-    username: "potato_user"
-    password: "secure_password"
 
   resolution_strategy: "majority_vote"
   random_sample_percent: 10
@@ -35395,6 +35488,7 @@ Assignment strategies decide which instances each annotator sees and in what ord
 4. [Legacy Configuration](#legacy-configuration)
 5. [Test Questions](#test-questions)
 6. [Examples](#examples)
+7. [Surplus annotators](#surplus-annotators)
 
 ---
 
@@ -35829,6 +35923,43 @@ active_learning:
 ```
 
 See [Active Learning Guide](../ai-intelligence/active_learning_guide.md) for complete configuration options.
+
+---
+
+## Surplus annotators
+
+Every item is capped at `num_annotators_per_item`. The cap counts an
+outstanding assignment as well as a submitted annotation, which is what spreads
+annotators across the dataset: the default strategy walks the item list from the
+top, so before this counted holds, five annotators arriving at a three-item
+study were all handed item_0 while item_1 and item_2 sat untouched.
+
+A hold is not a submission, though, and `instance_reclaim` is off by default, so
+an annotator who takes an item and closes the tab would otherwise remove it from
+the study for good. The cap is therefore relaxed for a second pass when
+enforcing it would have sent somebody away with nothing: a held item can be
+handed to a second annotator rather than stranded. Turn on
+[`instance_reclaim`](#reclaiming-abandoned-assignments) to have stale holds returned properly
+instead.
+
+Once every item has its full complement of **annotations**, a user who arrives
+after that gets nothing. This is easy to reach on a pilot: three items at one
+annotator each, and the fourth person to open the link is one too many.
+
+They land on a page that says so:
+
+> **There is no work left for you.** Every item in this study already has as
+> many annotators as it needs, so nothing could be assigned to you. You have
+> not annotated anything, and nothing has been recorded against your account.
+
+The server logs a warning naming the cap. The user stays in the annotation
+phase, so if you add data or raise `num_annotators_per_item`, a reload gives
+them work.
+
+Watch for this if you are paying per completion. Nobody in this state has done
+any work, and until this page existed they were shown the completion screen
+("Thank You! You have completed the annotation task and your responses are
+saved"), which reads as a finished assignment on both sides.
 
 ---
 
@@ -39612,6 +39743,27 @@ annotation_schemes:
     slots: [...]                  # same slots as the template
     allow_annotator_create: true
 ```
+
+The scheme's own `slots:` list does not replace the `event_template` block.
+The block registers the `/corpus/api/*` registry the widget talks to, so a
+config with the scheme and no enabled block is refused at validation. Before
+that check existed, the page rendered "No events yet. Create one to begin.",
+"+ New event" did nothing, and the only sign of trouble was three 404s in the
+browser console.
+
+### The registry and the per-annotator answer
+
+The registry is shared by every annotator. An event, its member documents and
+its evidence are one record, so a second annotator opening a document sees the
+first annotator's events already attached to it. That is what a cross-document
+registry is for, but it means the registry cannot answer "which event does
+*this* annotator think this document belongs to".
+
+That answer is stored per annotator, alongside every other annotation, as the
+scheme's own value: a JSON list of the event ids this annotator has this
+document in. It is what the export and `/admin/iaa` read. Because the registry
+seeds memberships, opening a document that a seeded event already claims does
+**not** count as an answer; only a membership the annotator changes does.
 
 Give the document field `span_target: true` so evidence can be cited by selecting
 text:
@@ -54297,7 +54449,7 @@ display types, invalid `assignment_strategy` values, a missing
 
 ## OpenAPI 3.1 spec
 
-An index of Potato's HTTP surface: **444 paths / 481 operations**, generated by
+An index of Potato's HTTP surface: **445 paths / 482 operations**, generated by
 walking the live Flask `url_map`.
 
 Two extensions carry information a plain OpenAPI document cannot:

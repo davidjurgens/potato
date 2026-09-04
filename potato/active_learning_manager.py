@@ -494,9 +494,12 @@ class ActiveLearningConfig:
     })
     verification_sample_rate: float = 0.2
 
-    # Database persistence
-    database_enabled: bool = False
-    database_config: Dict[str, Any] = None
+    # `database_enabled` / `database_config` were removed. They gated a
+    # persistence layer whose every method was a stub, so setting them changed
+    # nothing except a log line claiming success. Run history is now always
+    # recorded, through the same SQLite layer as the rest of the project, and
+    # needs no configuration. Both keys are ignored if still present in a
+    # config file.
 
     # Model persistence
     model_persistence_enabled: bool = False
@@ -507,6 +510,17 @@ class ActiveLearningConfig:
     llm_enabled: bool = False
     llm_config: Dict[str, Any] = None
 
+    #: The project config dict, carried so the run ledger can find `task_dir`
+    #: and `annotation_task_name`. Empty means "record nothing", which is what
+    #: unit tests that construct this dataclass directly want.
+    project_config: Dict[str, Any] = field(default_factory=dict)
+
+    #: ``{schema_name: annotation_type}`` and ``{schema_name: source_field}``,
+    #: so ``feature_for_item`` can hand a visual schema its image reference
+    #: instead of the item's text.
+    schema_types: Dict[str, str] = field(default_factory=dict)
+    schema_source_fields: Dict[str, str] = field(default_factory=dict)
+
     def __post_init__(self):
         if self.classifier_kwargs is None:
             self.classifier_kwargs = {}
@@ -514,8 +528,6 @@ class ActiveLearningConfig:
             self.vectorizer_kwargs = {}
         if self.schema_names is None:
             self.schema_names = []
-        if self.database_config is None:
-            self.database_config = {}
         if self.llm_config is None:
             self.llm_config = {}
         # Merge classifier_params into classifier_kwargs
@@ -612,78 +624,27 @@ class ModelPersistence:
             self.logger.error(f"Error during model cleanup: {e}")
 
 
-class DatabaseStateManager:
-    """Manages database persistence for active learning state."""
-
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config
-        self.logger = logging.getLogger(__name__)
-        self.connection = None
-        self._initialize_database()
-
-    def _initialize_database(self):
-        """Initialize database connection and create tables."""
-        try:
-            # Use the same database system as main Potato application
-            if self.config.get('type') == 'mysql':
-                self._init_mysql_connection()
-            else:
-                self._init_file_based_connection()
-
-            self._create_tables()
-            self.logger.info("Active learning database initialized successfully")
-        except Exception as e:
-            self.logger.error(f"Failed to initialize database: {e}")
-            raise
-
-    def _init_mysql_connection(self):
-        """Initialize MySQL connection."""
-        # TODO: Implement MySQL connection
-        pass
-
-    def _init_file_based_connection(self):
-        """Initialize file-based database connection."""
-        # TODO: Implement file-based database
-        pass
-
-    def _create_tables(self):
-        """Create database tables for active learning."""
-        # TODO: Implement table creation
-        pass
-
-    def save_training_metrics(self, metrics: TrainingMetrics):
-        """Save training metrics to database."""
-        # TODO: Implement metrics saving
-        pass
-
-    def get_training_history(self, schema_name: Optional[str] = None) -> List[TrainingMetrics]:
-        """Get training history from database."""
-        # TODO: Implement history retrieval
-        return []
-
-    def save_schema_cycling_state(self, current_schema: str, schema_order: List[str]):
-        """Save current schema cycling state."""
-        # TODO: Implement state saving
-        pass
-
-    def get_schema_cycling_state(self) -> Tuple[str, List[str]]:
-        """Get current schema cycling state."""
-        # TODO: Implement state retrieval
-        return "", []
+# `DatabaseStateManager` used to live here: a stub that logged "Active
+# learning database initialized successfully" while creating no tables, saving
+# no metrics, and returning an empty training history forever. Its replacement
+# is `potato.training.store`, which is backed by the same SQLite layer as the
+# rest of the project.
 
 
 class SchemaCycler:
     """Manages cycling through multiple annotation schemes."""
 
-    def __init__(self, schema_names: List[str], database_manager: Optional[DatabaseStateManager] = None):
+    def __init__(self, schema_names: List[str], state_path: Optional[str] = None):
         self.schema_names = self._validate_schemas(schema_names)
-        self.database_manager = database_manager
+        #: Where the cursor is remembered across restarts. A JSON file rather
+        #: than a table because nothing ever queries this -- it is read once at
+        #: startup and written once per advance.
+        self.state_path = state_path
         self.current_index = 0
         self.logger = logging.getLogger(__name__)
         self._lock = threading.Lock()
 
-        # Load state from database if available
-        if self.database_manager:
+        if self.state_path:
             self._load_state()
 
     def _validate_schemas(self, schema_names: List[str]) -> List[str]:
@@ -699,14 +660,28 @@ class SchemaCycler:
         return valid_schemas
 
     def _load_state(self):
-        """Load cycling state from database."""
+        """Restore the cursor from disk, if there is one."""
         try:
-            current_schema, schema_order = self.database_manager.get_schema_cycling_state()
+            if not os.path.isfile(self.state_path):
+                return
+            with open(self.state_path) as fh:
+                state = json.load(fh)
+            current_schema = state.get("current_schema")
             with self._lock:
                 if current_schema in self.schema_names:
                     self.current_index = self.schema_names.index(current_schema)
         except Exception as e:
             self.logger.warning(f"Failed to load schema cycling state: {e}")
+
+    def _save_state(self, current_schema: str):
+        """Persist the cursor. Best effort -- losing it only restarts the cycle."""
+        try:
+            os.makedirs(os.path.dirname(self.state_path), exist_ok=True)
+            with open(self.state_path, "w") as fh:
+                json.dump({"current_schema": current_schema,
+                           "schema_order": self.schema_names}, fh)
+        except Exception as e:
+            self.logger.warning(f"Failed to save schema cycling state: {e}")
 
     def get_current_schema(self) -> Optional[str]:
         """Get the current schema for training."""
@@ -724,15 +699,8 @@ class SchemaCycler:
             self.current_index = (self.current_index + 1) % len(self.schema_names)
             current_schema = self.schema_names[self.current_index]
 
-        # Save state to database if available
-        if self.database_manager:
-            try:
-                self.database_manager.save_schema_cycling_state(
-                    current_schema,
-                    self.schema_names
-                )
-            except Exception as e:
-                self.logger.warning(f"Failed to save schema cycling state: {e}")
+        if self.state_path:
+            self._save_state(current_schema)
 
     def get_schema_order(self) -> List[str]:
         """Get the current schema cycling order."""
@@ -758,8 +726,12 @@ class ActiveLearningManager:
         self.config = config
         self.logger = logging.getLogger(__name__)
 
-        # Thread safety
+        # Thread safety. Two locks on purpose: `_lock` guards the fitted
+        # models and is held by the training worker, while `_counter_lock`
+        # guards only the annotation counter and is taken on the request
+        # thread. Sharing one lock made every annotator wait out every fit.
         self._lock = threading.RLock()
+        self._counter_lock = threading.Lock()
         self._training_queue = queue.Queue()
         self._training_thread = None
         self._stop_training = threading.Event()
@@ -790,15 +762,7 @@ class ActiveLearningManager:
             self._start_training_thread()
 
     def _initialize_components(self):
-        """Initialize database, model persistence, and schema cycler."""
-        # Initialize database manager if enabled
-        if self.config.database_enabled:
-            try:
-                self.database_manager = DatabaseStateManager(self.config.database_config)
-            except Exception as e:
-                self.logger.error(f"Failed to initialize database manager: {e}")
-                # Continue without database persistence
-
+        """Initialize model persistence and the schema cycler."""
         # Initialize model persistence if enabled
         if self.config.model_persistence_enabled and self.config.model_save_directory:
             try:
@@ -812,10 +776,20 @@ class ActiveLearningManager:
 
         # Initialize schema cycler
         try:
-            self.schema_cycler = SchemaCycler(self.config.schema_names, self.database_manager)
+            self.schema_cycler = SchemaCycler(
+                self.config.schema_names, self._cycler_state_path())
         except Exception as e:
             self.logger.error(f"Failed to initialize schema cycler: {e}")
             raise  # Schema cycler is critical
+
+    def _cycler_state_path(self) -> Optional[str]:
+        """Where the schema cursor lives, or ``None`` with no output dir."""
+        cfg = self.config.project_config or {}
+        output_dir = cfg.get("output_annotation_dir")
+        if not output_dir:
+            return None
+        return os.path.join(cfg.get("task_dir", "."), output_dir,
+                            "training", "cycler.json")
 
     def _start_training_thread(self):
         """Start the background training thread."""
@@ -842,79 +816,139 @@ class ActiveLearningManager:
                 self.logger.error(f"Error in training worker: {e}")
 
     def _perform_training(self):
-        """Perform the actual classifier training."""
-        with self._lock:
-            try:
-                self.logger.info("Starting active learning classifier training")
-                start_time = time.time()
+        """Perform the actual classifier training.
 
-                # Get current schema for training
-                current_schema = self.schema_cycler.get_current_schema()
-                if not current_schema:
-                    self.logger.warning("No schema available for training")
-                    return
+        Deliberately does **not** hold ``self._lock`` across the fit. The lock
+        is also taken by ``check_and_trigger_training`` from the Flask request
+        thread on every annotation save, so holding it through data collection,
+        vectorization, calibration and pickling stalls every annotator for the
+        duration of the fit. Only the state mutations at the end are guarded.
+        """
+        try:
+            self.logger.info("Starting active learning classifier training")
+            start_time = time.time()
 
-                # Get current annotation state
-                item_manager = get_item_state_manager()
-                user_manager = get_user_state_manager()
+            # Reading the cycler is cheap and the worker is the only writer.
+            current_schema = self.schema_cycler.get_current_schema()
+            if not current_schema:
+                self.logger.warning("No schema available for training")
+                return
 
-                # Collect training data
-                training_data = self._collect_training_data(item_manager, user_manager, current_schema)
+            item_manager = get_item_state_manager()
+            user_manager = get_user_state_manager()
 
-                if not training_data:
-                    self.logger.warning(f"No training data available for schema {current_schema}")
-                    # If in cold-start phase, try LLM-based reordering
-                    if self.config.cold_start_strategy == "llm" and self.config.llm_enabled:
-                        self._cold_start_reorder(item_manager)
-                    return
+            run = self._begin_run(current_schema)
 
-                # Train classifier
-                model, metrics = self._train_classifier(training_data, current_schema)
+            # --- everything below is unlocked -----------------------------
+            training_data = self._collect_training_data(
+                item_manager, user_manager, current_schema)
 
-                if model:
-                    self._models[current_schema] = model
-                    self._annotated_texts[current_schema] = training_data["texts"]
+            if not training_data:
+                self.logger.warning(
+                    f"No training data available for schema {current_schema}")
+                self._finish_run(run, status="error",
+                                 error="no training data",
+                                 error_code="no_data")
+                if self.config.cold_start_strategy == "llm" and self.config.llm_enabled:
+                    self._cold_start_reorder(item_manager)
+                return
 
-                    # Save model if persistence is enabled
-                    if self.model_persistence:
-                        try:
-                            model_path = self.model_persistence.save_model(
-                                model, current_schema, len(training_data["texts"])
-                            )
-                            metrics.model_file_path = model_path
-                        except Exception as e:
-                            self.logger.error(f"Failed to save model: {e}")
+            model, metrics = self._train_classifier(training_data, current_schema)
 
-                    # Save metrics to database if available
-                    if self.database_manager:
-                        try:
-                            self.database_manager.save_training_metrics(metrics)
-                        except Exception as e:
-                            self.logger.error(f"Failed to save metrics: {e}")
+            if not model:
+                self.logger.warning(
+                    f"Failed to train model for schema {current_schema}")
+                self._finish_run(
+                    run, status="error",
+                    error=metrics.error_message if metrics else "fit failed",
+                    error_code="fit_failed",
+                    n_train=len(training_data.get("texts", [])))
+                if (self.config.cold_start_strategy == "llm"
+                        and self.config.llm_enabled
+                        and len(training_data.get("texts", [])) < self.config.min_instances_for_training):
+                    self._cold_start_reorder(item_manager)
+                return
 
-                    # Reorder instances
-                    self._reorder_instances(item_manager, current_schema)
+            model_path = ""
+            if self.model_persistence:
+                try:
+                    model_path = self.model_persistence.save_model(
+                        model, current_schema, len(training_data["texts"]))
+                    metrics.model_file_path = model_path
+                except Exception as e:
+                    self.logger.error(f"Failed to save model: {e}")
 
-                    # Advance to next schema
-                    self.schema_cycler.advance_schema()
+            # --- state mutation only ---------------------------------------
+            with self._lock:
+                self._models[current_schema] = model
+                self._annotated_texts[current_schema] = training_data["texts"]
+                self._training_metrics.append(metrics)
+                # Bounded: this list is a debugging aid, the durable record is
+                # the training_runs table.
+                if len(self._training_metrics) > 100:
+                    del self._training_metrics[:-100]
+                self._training_count += 1
+                self._last_training_time = time.time()
 
-                    self._training_count += 1
-                    self._last_training_time = time.time()
+            self._finish_run(
+                run, status="success", model_version=model_path,
+                n_train=len(training_data["texts"]),
+                metrics={"accuracy": metrics.accuracy,
+                         "training_time": metrics.training_time,
+                         "instance_count": metrics.instance_count})
 
-                    training_duration = time.time() - start_time
-                    self.logger.info(f"Active learning training completed for schema {current_schema} "
-                                   f"(run #{self._training_count}, duration: {training_duration:.2f}s)")
-                else:
-                    self.logger.warning(f"Failed to train model for schema {current_schema}")
-                    # Try cold-start if not enough data
-                    if (self.config.cold_start_strategy == "llm"
-                            and self.config.llm_enabled
-                            and len(training_data.get("texts", [])) < self.config.min_instances_for_training):
-                        self._cold_start_reorder(item_manager)
+            # Reordering reads the model we just installed and writes the
+            # item manager's own queue; it does not need our lock.
+            self._reorder_instances(item_manager, current_schema)
+            self.schema_cycler.advance_schema()
 
-            except Exception as e:
-                self.logger.error(f"Error during training: {e}")
-                # Continue without failing the entire system
+            self.logger.info(
+                f"Active learning training completed for schema {current_schema} "
+                f"(run #{self._training_count}, "
+                f"duration: {time.time() - start_time:.2f}s)")
+
+        except Exception as e:
+            self.logger.error(f"Error during training: {e}", exc_info=True)
+            # Continue without failing the entire system
+
+    def _begin_run(self, schema_name: str):
+        """Open a ``training_runs`` row, or ``None`` if the store is unusable.
+
+        Returning ``None`` rather than raising keeps a broken ledger from
+        stopping the training it is only supposed to be recording.
+        """
+        if not self.config.project_config:
+            return None
+        try:
+            from potato.training.store import TrainingRun, new_run_id, record_run
+            run = TrainingRun(
+                run_id=new_run_id(), trainer="active-learning-sklearn",
+                schema_names=[schema_name], status="running", trigger="auto",
+                started_at=time.time(),
+                params={"classifier": self.config.classifier_name,
+                        "vectorizer": self.config.vectorizer_name,
+                        "query_strategy": self.config.query_strategy})
+            record_run(self.config.project_config, run)
+            return run
+        except Exception:
+            self.logger.debug("Could not open a training run record",
+                              exc_info=True)
+            return None
+
+    def _finish_run(self, run, status: str, **fields) -> None:
+        """Close a run record. A no-op when the ledger is unavailable."""
+        if run is None:
+            return
+        try:
+            from potato.training.store import record_run
+            run.status = status
+            run.finished_at = time.time()
+            for key, value in fields.items():
+                setattr(run, key, value)
+            record_run(self.config.project_config, run)
+        except Exception:
+            self.logger.debug("Could not close training run record",
+                              exc_info=True)
 
     def _collect_training_data(self, item_manager: ItemStateManager, user_manager, schema_name: str) -> Dict:
         """Collect training data for a specific schema."""
@@ -953,7 +987,10 @@ class ActiveLearningManager:
                 if resolved_label:
                     item = item_manager.get_item(instance_id)
                     if item:
-                        text = item.get_text()
+                        text = feature_for_item(
+                            item,
+                            self.config.schema_types.get(schema_name, ""),
+                            self.config.schema_source_fields.get(schema_name))
                         training_data["texts"].append(text)
                         training_data["labels"].append(resolved_label)
                         training_data["instance_ids"].append(instance_id)
@@ -1037,22 +1074,27 @@ class ActiveLearningManager:
 
             pipeline.fit(training_data["texts"], training_data["labels"])
 
-            # Apply probability calibration if enabled
-            if self.config.calibrate_probabilities and hasattr(classifier, 'predict_proba'):
-                num_samples = len(training_data["texts"])
-                if num_samples >= 5:
-                    try:
-                        from sklearn.calibration import CalibratedClassifierCV
-                        cv_folds = min(3, num_samples // 2)
-                        if cv_folds >= 2:
-                            calibrated = CalibratedClassifierCV(
-                                pipeline, cv=cv_folds, method='isotonic'
-                            )
-                            calibrated.fit(training_data["texts"], training_data["labels"])
-                            pipeline = calibrated
-                            self.logger.debug(f"Applied probability calibration with {cv_folds}-fold CV")
-                    except Exception as e:
-                        self.logger.warning(f"Calibration failed, using uncalibrated model: {e}")
+            # Apply probability calibration, and keep it only if it helped.
+            #
+            # This used to fit `CalibratedClassifierCV(cv=min(3, n // 2),
+            # method='isotonic')` on anything with five or more samples. On a
+            # small training set that does not calibrate the model, it
+            # destroys it: isotonic regression fitted over three folds of a
+            # dozen examples collapses every prediction to an identical
+            # probability. Because active learning trains from
+            # `min_instances_for_training` (10 by default), the shipped
+            # default path went straight into that regime -- and a model whose
+            # confidence is constant makes uncertainty sampling rank every
+            # instance equally, so the queue ordering became arbitrary while
+            # the logs reported a successful fit.
+            from potato.training.calibration import calibrate_if_it_helps
+
+            calibration = calibrate_if_it_helps(
+                pipeline, training_data["texts"], training_data["labels"],
+                enabled=self.config.calibrate_probabilities,
+                log=lambda level, msg: getattr(self.logger, level,
+                                               self.logger.info)(msg))
+            pipeline = calibration.model
 
             # Store vectorizer separately for strategy use
             self._vectorizers[schema_name] = pipeline.named_steps.get("vectorizer", vectorizer) if hasattr(pipeline, 'named_steps') else vectorizer
@@ -1199,25 +1241,38 @@ class ActiveLearningManager:
             self.logger.warning(f"No trained model available for schema {schema_name}")
             return
 
-        # Get unlabeled instances
+        # Rank over exactly the pool the ACTIVE_LEARNING assignment strategy
+        # serves. Ranking "items with no annotator at all" instead silently
+        # excludes every partially-annotated item whenever
+        # max_annotations_per_item > 1, so the ordering never covers the queue
+        # it is meant to be ordering.
+        schema_type = self.config.schema_types.get(schema_name, "")
+        source_field = self.config.schema_source_fields.get(schema_name)
+
+        candidates = list(item_manager.get_remaining_instance_ids())
+        if not candidates:
+            self.logger.info("No unlabeled instances to reorder")
+            return
+
+        # Cap by sampling, not by slicing. Slicing takes the head of the file
+        # in store order, so with a cap set the model only ever ranks the first
+        # N items and the tail can never surface however uncertain it is.
+        limit = self.config.max_instances_to_reorder
+        if limit and len(candidates) > limit:
+            candidates = random.sample(candidates, limit)
+
         unlabeled_instances = []
         unlabeled_texts = []
-        for instance_id in item_manager.get_instance_ids():
-            if not item_manager.get_annotators_for_item(instance_id):
-                item = item_manager.get_item(instance_id)
-                if item:
-                    unlabeled_instances.append(instance_id)
-                    unlabeled_texts.append(item.get_text())
+        for instance_id in candidates:
+            item = item_manager.get_item(instance_id)
+            if item:
+                unlabeled_instances.append(instance_id)
+                unlabeled_texts.append(
+                    feature_for_item(item, schema_type, source_field))
 
         if not unlabeled_texts:
             self.logger.info("No unlabeled instances to reorder")
             return
-
-        # Limit number of instances to process
-        if self.config.max_instances_to_reorder:
-            limit = self.config.max_instances_to_reorder
-            unlabeled_instances = unlabeled_instances[:limit]
-            unlabeled_texts = unlabeled_texts[:limit]
 
         model = self._models[schema_name]
         annotated = self._annotated_texts.get(schema_name, [])
@@ -1398,69 +1453,43 @@ class ActiveLearningManager:
         except Exception as e:
             self.logger.warning(f"Cold-start LLM reordering failed: {e}")
 
-    def _route_annotation(self, instance_id: str, instance_text: str,
-                          schema_name: str) -> Dict[str, Any]:
-        """Noise-aware annotation routing (Phase 5D).
+    def _calculate_confidence_scores(
+            self, instance_ids: List[str], item_manager: ItemStateManager,
+            schema_name: str) -> List[Tuple[str, float]]:
+        """Confidence per instance, for the no-vectorizer fallback path."""
+        instance_scores = []
+        model = self._models[schema_name]
 
-        Based on Yuan et al. (2024) NoiseAL approach. Routes instances
-        between LLM auto-labeling and human annotation based on LLM
-        confidence levels.
+        for instance_id in instance_ids:
+            item = item_manager.get_item(instance_id)
+            if not item:
+                continue
 
-        Returns:
-            Dict with 'route' ('human'|'auto'), optional 'suggestion',
-            and optional 'auto_label'.
-        """
-        if not self.config.annotation_routing:
-            return {"route": "human"}
+            text = feature_for_item(
+                item, self.config.schema_types.get(schema_name, ""),
+                self.config.schema_source_fields.get(schema_name))
 
-        thresholds = self.config.routing_thresholds
-        auto_min = thresholds.get("auto_label_min_confidence", 0.9)
-        suggest_below = thresholds.get("show_suggestion_below", 0.5)
+            try:
+                probas = model.predict_proba([text])[0]
+                confidence = np.max(probas)
+                instance_scores.append((instance_id, confidence))
+            except Exception as e:
+                self.logger.warning(
+                    f"Error predicting for instance {instance_id}: {e}")
+                # Default to low confidence for failed predictions
+                instance_scores.append((instance_id, 0.1))
 
-        try:
-            from potato.ai.icl_labeler import get_icl_labeler
-            icl_labeler = get_icl_labeler()
-            if icl_labeler is None or not icl_labeler.has_enough_examples(schema_name):
-                return {"route": "human"}
+        return instance_scores
 
-            prediction = icl_labeler.label_instance(
-                instance_id=instance_id,
-                schema_name=schema_name,
-                instance_text=instance_text,
-            )
+    # `_route_annotation` used to sit here. It read LLM confidence from
+    # `icl_labeler`, never the trained classifier's `predict_proba`, and had no
+    # caller anywhere in the tree -- so "auto-label" was a contract nothing
+    # implemented and nothing invoked. `routing_thresholds` and
+    # `verification_sample_rate` survive as config keys and are re-earned by
+    # the training subsystem, where an auto-label means "write a prediction and
+    # let model review adjudicate it" rather than "silently invent an
+    # annotation".
 
-            if prediction is None:
-                return {"route": "human"}
-
-            confidence = prediction.confidence_score
-
-            if confidence >= auto_min:
-                # High confidence: auto-label with periodic verification
-                should_verify = random.random() < self.config.verification_sample_rate
-                return {
-                    "route": "auto",
-                    "auto_label": prediction.predicted_label,
-                    "confidence": confidence,
-                    "needs_verification": should_verify,
-                }
-            elif confidence < suggest_below:
-                # Low confidence: route to human with LLM suggestion
-                return {
-                    "route": "human",
-                    "suggestion": prediction.predicted_label,
-                    "confidence": confidence,
-                }
-            else:
-                # Medium confidence: route to human (most informative)
-                return {"route": "human"}
-
-        except ImportError:
-            return {"route": "human"}
-        except Exception as e:
-            self.logger.warning(f"Annotation routing failed for {instance_id}: {e}")
-            return {"route": "human"}
-
-    def _calculate_confidence_scores(self, instance_ids: List[str], item_manager: ItemStateManager, schema_name: str) -> List[Tuple[str, float]]:
         """Calculate confidence scores for instances."""
         instance_scores = []
         model = self._models[schema_name]
@@ -1470,7 +1499,9 @@ class ActiveLearningManager:
             if not item:
                 continue
 
-            text = item.get_text()
+            text = feature_for_item(
+                item, self.config.schema_types.get(schema_name, ""),
+                self.config.schema_source_fields.get(schema_name))
 
             try:
                 # Get prediction probabilities
@@ -1492,53 +1523,79 @@ class ActiveLearningManager:
         if not new_order:
             return
 
-        # Apply random sampling
+        # Split the ranking into an exploitation head and an exploration tail,
+        # then interleave. Sampling from `new_order` as a whole and
+        # interleaving that back in put every sampled id into the result
+        # twice -- roughly random_sample_percent of the queue duplicated on
+        # each reorder. Partitioning instead means each id appears exactly
+        # once, and exploration still surfaces items the model ranked low.
         random_count = int(len(new_order) * self.config.random_sample_percent)
-        if random_count > 0 and random_count <= len(new_order):
-            random_instances = random.sample(new_order, random_count)
+        random_count = max(0, min(random_count, len(new_order)))
+
+        if random_count:
+            head = new_order[:-random_count] if random_count < len(new_order) else []
+            tail = new_order[len(head):]
+            random.shuffle(tail)
         else:
-            random_instances = []
+            head, tail = new_order, []
 
         # Interleave active learning and random instances
         final_order = []
         al_idx = 0
         rand_idx = 0
 
-        while al_idx < len(new_order) or rand_idx < len(random_instances):
-            if al_idx < len(new_order):
-                final_order.append(new_order[al_idx])
+        while al_idx < len(head) or rand_idx < len(tail):
+            if al_idx < len(head):
+                final_order.append(head[al_idx])
                 al_idx += 1
-            if rand_idx < len(random_instances):
-                final_order.append(random_instances[rand_idx])
+            if rand_idx < len(tail):
+                final_order.append(tail[rand_idx])
                 rand_idx += 1
 
         # Update item manager ordering
         item_manager.reorder_instances(final_order)
-        self.logger.info(f"Reordered {len(final_order)} instances")
+        self.logger.info(
+            f"Reordered {len(final_order)} instances "
+            f"({len(head)} ranked, {len(tail)} exploration)")
 
     def check_and_trigger_training(self):
-        """Check if training should be triggered and queue it if needed."""
+        """Check if training should be triggered and queue it if needed.
+
+        Runs on the Flask request thread after every annotation save, so it
+        must return promptly. It takes ``_counter_lock`` -- which is only ever
+        held for the length of a comparison -- and never ``_lock``, which the
+        training worker holds while installing a fitted model.
+        """
         if not self.config.enabled:
             self.logger.debug("Active learning is disabled")
             return
 
-        with self._lock:
-            # Count current annotations
-            user_manager = get_user_state_manager()
-            current_annotation_count = sum(
-                len(user_state.get_all_annotations())
-                for user_state in user_manager.get_all_users()
-            )
+        # Count current annotations
+        user_manager = get_user_state_manager()
+        current_annotation_count = sum(
+            len(user_state.get_all_annotations())
+            for user_state in user_manager.get_all_users()
+        )
 
-            self.logger.debug(f"Current annotation count: {current_annotation_count}, last count: {self._last_annotation_count}, update_frequency: {self.config.update_frequency}")
+        with self._counter_lock:
+            delta = current_annotation_count - self._last_annotation_count
+            self.logger.debug(
+                f"Current annotation count: {current_annotation_count}, "
+                f"last count: {self._last_annotation_count}, "
+                f"update_frequency: {self.config.update_frequency}")
 
-            # Check if we should trigger training
-            if (current_annotation_count - self._last_annotation_count) >= self.config.update_frequency:
-                self._training_queue.put("train")
-                self._last_annotation_count = current_annotation_count
-                self.logger.info(f"Queued active learning training (annotations: {current_annotation_count})")
-            else:
+            if delta < self.config.update_frequency:
                 self.logger.debug("Not enough new annotations to trigger training")
+                return
+
+            # Claim the delta inside the lock so two concurrent saves cannot
+            # both queue a run for the same annotations.
+            self._last_annotation_count = current_annotation_count
+
+        self._training_queue.put("train")
+        self.logger.info(
+            f"Queued active learning training "
+            f"(annotations: {current_annotation_count})")
 
     def force_training(self):
         """Force immediate training (for testing purposes)."""
@@ -1559,7 +1616,6 @@ class ActiveLearningManager:
                 "models_trained": list(self._models.keys()),
                 "current_schema": self.schema_cycler.get_current_schema() if self.schema_cycler else None,
                 "schema_order": self.schema_cycler.get_schema_order() if self.schema_cycler else [],
-                "database_enabled": self.config.database_enabled,
                 "model_persistence_enabled": self.config.model_persistence_enabled,
                 "llm_enabled": self.config.llm_enabled,
                 "query_strategy": self.config.query_strategy,
@@ -1569,17 +1625,23 @@ class ActiveLearningManager:
                 "annotation_routing": self.config.annotation_routing,
             }
 
-            # Add training metrics if available
-            if self.database_manager:
-                try:
-                    stats["training_history"] = [
-                        asdict(metrics) for metrics in self.database_manager.get_training_history()
-                    ]
-                except Exception as e:
-                    self.logger.warning(f"Failed to get training history: {e}")
-                    stats["training_history"] = []
+            # In-process metrics, newest last. The durable history lives in
+            # `training_runs` and is read below.
+            stats["recent_metrics"] = [asdict(m) for m in self._training_metrics[-20:]]
 
-            return stats
+        # Outside the lock: this touches SQLite, and no caller of get_stats()
+        # should be able to block a fit.
+        stats["training_history"] = []
+        if self.config.project_config:
+            try:
+                from potato.training.store import list_runs
+                stats["training_history"] = [
+                    run.to_dict() for run in
+                    list_runs(self.config.project_config, limit=20)]
+            except Exception as e:
+                self.logger.warning(f"Failed to get training history: {e}")
+
+        return stats
 
     def shutdown(self):
         """Shutdown the active learning manager."""
@@ -1609,6 +1671,26 @@ def parse_active_learning_config(config_data: Dict[str, Any]) -> Optional[Active
     valid_fields = {f.name for f in dataclasses.fields(ActiveLearningConfig)}
     kwargs = {k: v for k, v in al_dict.items() if k in valid_fields}
 
+    # Accept the nested blocks the guide documents alongside the flat keys.
+    # There used to be a second parser that understood only the nested form,
+    # and it was the one the docs described and the tests exercised while
+    # production ran this one -- so a config written from the documentation
+    # silently fell back to defaults.
+    for block, mapping in (
+        ("classifier", {"name": "classifier_name",
+                        "hyperparameters": "classifier_kwargs"}),
+        ("vectorizer", {"name": "vectorizer_name",
+                        "hyperparameters": "vectorizer_kwargs"}),
+        ("model_persistence", {"enabled": "model_persistence_enabled",
+                               "save_directory": "model_save_directory",
+                               "retention_count": "model_retention_count"}),
+    ):
+        nested = al_dict.get(block)
+        if isinstance(nested, dict):
+            for src, dest in mapping.items():
+                if src in nested:
+                    kwargs.setdefault(dest, nested[src])
+
     # Honor the nested `active_learning.llm:` block (LLM cold-start / ICL).
     # The dataclass uses flat fields (llm_enabled / llm_config), so translate.
     llm_block = al_dict.get("llm")
@@ -1632,15 +1714,38 @@ def parse_active_learning_config(config_data: Dict[str, Any]) -> Optional[Active
         except ValueError:
             kwargs.pop("resolution_strategy", None)
 
-    # Default schema_names to the labelable schemes in the project.
+    schemes = config_data.get("annotation_schemes", []) or []
+
+    # Default schema_names to every scheme that has something learnable to
+    # predict. Hard-coding four nominal types excluded ordinal, continuous,
+    # multilabel and geometry schemes that the strategies handle perfectly
+    # well; SchemaKind already classifies all 60-odd types and is tested.
     if not kwargs.get("schema_names"):
-        schemes = config_data.get("annotation_schemes", []) or []
-        kwargs["schema_names"] = [
-            s.get("name") for s in schemes
-            if s.get("name") and s.get("annotation_type") in (
-                "radio", "multiselect", "likert", "select"
-            )
-        ]
+        try:
+            from potato.server_utils.iaa.dispatcher import (SchemaKind,
+                                                            classify_schema)
+            kwargs["schema_names"] = [
+                s["name"] for s in schemes
+                if s.get("name")
+                and classify_schema(s) not in (SchemaKind.TEXT,
+                                               SchemaKind.UNSUPPORTED)]
+        except Exception:
+            logger.debug("Could not classify schemes; falling back to the "
+                         "nominal types", exc_info=True)
+            kwargs["schema_names"] = [
+                s.get("name") for s in schemes
+                if s.get("name") and s.get("annotation_type") in (
+                    "radio", "multiselect", "likert", "select")]
+
+    # Carry enough of the project config for the run ledger and for
+    # feature_for_item to tell an image schema from a text one.
+    kwargs["project_config"] = config_data or {}
+    kwargs["schema_types"] = {
+        s["name"]: s.get("annotation_type", "")
+        for s in schemes if s.get("name")}
+    kwargs["schema_source_fields"] = {
+        s["name"]: s["source_field"]
+        for s in schemes if s.get("name") and s.get("source_field")}
 
     return ActiveLearningConfig(**kwargs)
 

@@ -54,7 +54,7 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
     - model: Vision model to use (default: llava:latest)
     - base_url: Ollama server URL (default: http://localhost:11434)
     - timeout: Request timeout in seconds (default: 120)
-    - max_tokens: Maximum response tokens (default: 500)
+    - max_tokens: Maximum response tokens (default: 800)
     - temperature: Sampling temperature (default: 0.1)
     """
 
@@ -68,7 +68,15 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
         text_classification=True,
         image_classification=True,
         rationale_generation=True,
-        keyword_extraction=False,  # Keywords don't apply to images
+        # True, and gated per item rather than per endpoint. These are
+        # language models; they extract keywords from text as well as their
+        # text-only siblings do. `supports_assistant` already returns
+        # `keyword_extraction and not has_image_input`, so declaring False here
+        # said "no keywords, ever" -- and the capability filter runs per item,
+        # so on a text-only task through a vision endpoint the Keyword button
+        # was simply absent and only two of the three assistants were
+        # reachable.
+        keyword_extraction=True,
     )
 
     def _initialize_client(self) -> None:

@@ -49,7 +49,6 @@ class TestActiveLearningConfig:
         assert config.random_sample_percent == 0.2
         assert config.update_frequency == 5
         assert config.schema_names == []
-        assert config.database_enabled is False
         assert config.model_persistence_enabled is False
         assert config.llm_enabled is False
 
@@ -62,7 +61,6 @@ class TestActiveLearningConfig:
             min_annotations_per_instance=3,
             min_instances_for_training=20,
             schema_names=["sentiment", "topic"],
-            database_enabled=True,
             model_persistence_enabled=True,
             llm_enabled=True
         )
@@ -73,7 +71,6 @@ class TestActiveLearningConfig:
         assert config.min_annotations_per_instance == 3
         assert config.min_instances_for_training == 20
         assert config.schema_names == ["sentiment", "topic"]
-        assert config.database_enabled is True
         assert config.model_persistence_enabled is True
         assert config.llm_enabled is True
 
@@ -399,7 +396,6 @@ class TestConfigurationValidation:
         assert al_config.resolution_strategy == ResolutionStrategy.MAJORITY_VOTE
         assert al_config.random_sample_percent == 0.3
         assert al_config.schema_names == ["sentiment", "topic"]
-        assert al_config.database_enabled is True
         assert al_config.model_persistence_enabled is True
         assert al_config.llm_enabled is True
 
@@ -443,7 +439,6 @@ class TestActiveLearningManager:
         config = ActiveLearningConfig(
             enabled=True,
             schema_names=["sentiment", "topic"],
-            database_enabled=False,
             model_persistence_enabled=False,
             llm_enabled=False
         )
@@ -456,7 +451,6 @@ class TestActiveLearningManager:
         assert stats["models_trained"] == []
         assert stats["current_schema"] == "sentiment"
         assert stats["schema_order"] == ["sentiment", "topic"]
-        assert stats["database_enabled"] is False
         assert stats["model_persistence_enabled"] is False
         assert stats["llm_enabled"] is False
 

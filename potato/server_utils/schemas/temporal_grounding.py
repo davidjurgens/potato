@@ -126,9 +126,17 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
 
             var list = document.getElementById(SCHEMA + '-list');
             var empty = document.getElementById(SCHEMA + '-empty');
-            if (!events.length) {{ list.innerHTML = ''; if (empty) empty.style.display = ''; return; }}
-            if (empty) empty.style.display = 'none';
+            /* Assigned before the early return: an item with no events used to
+               leave _events holding the PREVIOUS item's list, so the next
+               instance was measured against the last one's. */
             _events = events;
+            if (!events.length) {{
+                list.innerHTML = '';
+                if (empty) empty.style.display = '';
+                declareCompleteness();
+                return;
+            }}
+            if (empty) empty.style.display = 'none';
 
             list.innerHTML = events.map(function(e) {{
                 var g = STATE.events[e.i] || {{}};
@@ -148,6 +156,10 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
 
             bind();
             events.forEach(function(e) {{ paint(e.i); }});
+            /* On arrival too, not only after the first edit: a restored item
+               with one of two intervals filled has to gate Next as soon as the
+               page settles. */
+            declareCompleteness();
         }}
 
         function bind() {{
@@ -212,6 +224,39 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
                 '<div class="tg-bartrack"><div class="tg-barfill ' + cls + '" style="left:' + left + '%;width:' + width + '%;"></div></div></div>';
         }}
 
+        /* What is still missing, in the annotator's terms.
+           `required` on this scheme was satisfied by the first number typed:
+           the per-input test sees one hidden input holding JSON and asks only
+           whether it is non-empty, so an item declaring two events advanced
+           with {{"events":{{"0":{{"start":1.5}}}}}} stored -- one of two events
+           answered, and that one an interval with no end. */
+        function declareCompleteness() {{
+            var form = document.getElementById(SCHEMA);
+            if (!form) return;
+            var total = _events.length;
+            if (!total) {{ form.removeAttribute('data-incomplete-reason'); return; }}
+            var done = 0, partial = 0, reversed = 0;
+            _events.forEach(function(e) {{
+                var g = STATE.events[e.i];
+                if (!g || (g.start === undefined && g.end === undefined)) return;
+                if (g.start === undefined || g.end === undefined) {{ partial++; return; }}
+                if (g.end < g.start) {{ reversed++; return; }}
+                done++;
+            }});
+            var bits = [];
+            if (done < total) bits.push(done + ' of ' + total + ' intervals marked');
+            if (partial) {{
+                bits.push(partial + (partial === 1 ? ' interval is' : ' intervals are')
+                          + ' missing a start or an end');
+            }}
+            if (reversed) {{
+                bits.push(reversed + (reversed === 1 ? ' interval ends' : ' intervals end')
+                          + ' before it starts');
+            }}
+            if (bits.length) form.setAttribute('data-incomplete-reason', bits.join('; '));
+            else form.removeAttribute('data-incomplete-reason');
+        }}
+
         function save() {{
             var clean = {{}};
             Object.keys(STATE.events).forEach(function(k) {{
@@ -219,6 +264,7 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
                 if (g && (g.start !== undefined || g.end !== undefined)) clean[k] = g;
             }});
             var data = Object.keys(clean).length ? {{events: clean}} : {{}};
+            declareCompleteness();
             var h = hidden();
             if (h) {{
                 h.value = Object.keys(data).length ? JSON.stringify(data) : '';

@@ -389,8 +389,11 @@ class TestStrategyRegistration:
 
         from potato.item_state_management import ItemStateManager
 
+        # `_assign_pass`, not `_assign_instances_to_user_inner`: the latter is
+        # now the wrapper that runs the pass a second time with holds relaxed,
+        # and the strategy branches live in the pass.
         for method in (ItemStateManager.has_unlabeled_items_for_user,
-                       ItemStateManager._assign_instances_to_user_inner):
+                       ItemStateManager._assign_pass):
             assert "_model_review_candidates" in inspect.getsource(method)
 
     def test_fromstr_covers_every_enum_member(self):

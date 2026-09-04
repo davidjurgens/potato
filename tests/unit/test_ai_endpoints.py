@@ -49,7 +49,12 @@ class TestBaseAIEndpoint:
         assert endpoint.annotation_type == "radio"
         assert endpoint.model == "test-model"
         assert endpoint.temperature == 0.1  # New default is 0.1
-        assert endpoint.max_tokens == 100
+        # 800, not 100. 100 cannot finish any of the multi-label formats this
+        # package ships -- GeneralRationaleFormat over three labels is 300-500
+        # tokens -- so the reply was cut mid-object, the salvage step returned
+        # a fragment of the wrong type, and the tooltip read "No rationales
+        # available" with nothing anywhere saying it had been truncated.
+        assert endpoint.max_tokens == 800
 
     def test_init_with_custom_config(self):
         """Test initialization with custom configuration."""

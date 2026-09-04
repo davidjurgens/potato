@@ -452,6 +452,14 @@
                 }
             });
 
+            // Re-say the summary now that the durations are real. `_describe`
+            // ran once with the server payload, whose `duration` is 0 because
+            // nothing server-side probes the files -- so the sentence the
+            // annotator reads said "3 rollouts, 0.00 s." for three six-second
+            // clips and never changed, while the clock and the frame counter
+            // beside it were right.
+            this._describe(this.set);
+
             if (durations.length === this._videos.length) {
                 const spread = Math.max.apply(null, durations)
                     - Math.min.apply(null, durations);

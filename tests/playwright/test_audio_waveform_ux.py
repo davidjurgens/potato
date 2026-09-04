@@ -95,6 +95,11 @@ def _audio_state(page):
     )
 
 
+def _window(state):
+    """Seconds of audio the zoomview currently shows."""
+    return state["viewEnd"] - state["viewStart"]
+
+
 def _set_zoom_seconds(page, secs):
     """Deterministically set the zoomview window width, then report it."""
     return page.evaluate(
@@ -222,20 +227,53 @@ class TestAudioWaveformUX(BasePlaywrightTest):
         assert after["count"] == base + 3, "expected three segments including an overlap"
 
     def test_zoom_controls_change_window(self, page, audio_server):
-        self._login(page, audio_server)
-        fit_before = _audio_state(page)
+        """
+        Zoom out must WIDEN the window and zoom in must NARROW it again.
 
-        page.click(".zoom-btn[data-action='zoom-in'], button[data-action='zoom-in']")
-        page.wait_for_timeout(300)
-        zoomed = _audio_state(page)
-        zoomed_window = zoomed["viewEnd"] - zoomed["viewStart"]
-        fit_window = fit_before["viewEnd"] - fit_before["viewStart"]
-        assert zoomed_window < fit_window + 0.01, "zoom-in did not shrink the visible window"
+        Strictly, with no slack. The old assertions were
+        ``zoomed < fit + 0.01`` and ``out > zoomed - 0.01``, which a window
+        that never moved satisfies -- and it never moved: both buttons threw
+        ``view.getZoom is not a function`` on every click, because the bundled
+        Peaks build puts ``getZoom`` on the zoom controller and not on the
+        view. The test passed over a dead control.
+
+        Zoom OUT is pressed first because the widget opens at the finest zoom
+        level it has waveform data for (scale 256, ~4.4s of this 10s clip), so
+        a first press of zoom-in has nowhere to go and proves nothing.
+        """
+        self._login(page, audio_server)
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+
+        start_window = _window(_audio_state(page))
 
         page.click(".zoom-btn[data-action='zoom-out'], button[data-action='zoom-out']")
         page.wait_for_timeout(300)
-        out = _audio_state(page)
-        assert (out["viewEnd"] - out["viewStart"]) > zoomed_window - 0.01, "zoom-out did not widen window"
+        out_window = _window(_audio_state(page))
+        assert out_window > start_window, (
+            f"zoom-out did not widen the visible window: "
+            f"{start_window:.3f}s before, {out_window:.3f}s after")
+
+        page.click(".zoom-btn[data-action='zoom-in'], button[data-action='zoom-in']")
+        page.wait_for_timeout(300)
+        back_window = _window(_audio_state(page))
+        assert back_window < out_window, (
+            f"zoom-in did not shrink the visible window: "
+            f"{out_window:.3f}s before, {back_window:.3f}s after")
+
+        assert not errors, f"clicking the zoom controls raised: {errors}"
+
+    def test_zoom_out_stops_at_the_whole_clip(self, page, audio_server):
+        """Zooming out past the end of the audio shows the audio, not padding."""
+        self._login(page, audio_server)
+        duration = _audio_state(page)["duration"]
+        for _ in range(6):
+            page.click(".zoom-btn[data-action='zoom-out'], button[data-action='zoom-out']")
+            page.wait_for_timeout(120)
+        widest = _window(_audio_state(page))
+        assert widest <= duration + 0.01, (
+            f"zoom-out ran past the clip: {widest:.3f}s window over a "
+            f"{duration:.3f}s recording")
 
     def test_segments_persist_across_navigation(self, page, audio_server):
         self._login(page, audio_server)

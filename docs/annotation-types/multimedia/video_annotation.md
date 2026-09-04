@@ -82,7 +82,7 @@ Then open http://localhost:8000 in your browser.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `mode` | string | `"segment"` | Annotation mode (see Annotation Modes) |
-| `min_segments` | integer | `0` | Minimum required segments |
+| `min_segments` | integer | `0` | Fewest segments the annotator must mark. Blocks Next until they have, and says how many are still missing. Needs `label_requirement.required: true` to take effect. |
 | `max_segments` | integer | `null` | Maximum allowed segments (null = unlimited) |
 | `timeline_height` | integer | `70` | Height of timeline in pixels |
 | `overview_height` | integer | `40` | Height of overview bar in pixels |
@@ -490,7 +490,10 @@ No additional server-side dependencies are required. The waveform for the timeli
 
 ### Segments Not Saving
 
-1. Ensure you have at least `min_segments` segments created
+1. Ensure you have at least `min_segments` segments created. With
+   `label_requirement.required: true` the widget says how many are still
+   missing ("1 of 2 segments marked") and blocks Next; without it, neither
+   `min_segments` nor an unlabelled segment stops anyone.
 2. Check browser console for any JavaScript errors
 3. Verify the annotation scheme name matches expectations
 

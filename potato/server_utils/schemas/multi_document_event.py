@@ -25,6 +25,8 @@ import logging
 from .identifier_utils import (
     safe_generate_layout,
     escape_html_content,
+    generate_element_identifier,
+    generate_validation_attribute,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,10 +52,14 @@ def _generate_multi_document_event_layout_internal(annotation_scheme, horizontal
         ]
     )
 
+    identifiers = generate_element_identifier(scheme_name, scheme_name, "hidden")
+    validation = generate_validation_attribute(annotation_scheme)
+
     schematic = f"""
     <div id="{escape_html_content(scheme_name)}" class="mde-container annotation-form"
          data-annotation-type="multi_document_event"
          data-scheme-name="{escape_html_content(scheme_name)}"
+         data-schema-name="{escape_html_content(scheme_name)}"
          data-allow-create="{str(bool(allow_create)).lower()}"
          data-slots='{escape_html_content(slots_json)}'>
 
@@ -95,10 +101,19 @@ def _generate_multi_document_event_layout_internal(annotation_scheme, horizontal
             <button type="button" data-role="cite-cancel">Cancel</button>
         </div>
 
-        <!-- Lightweight per-instance mirror of memberships. Initialized from the
-             server-restored value; JS reads this before refreshing from API. -->
-        <input type="hidden" name="multi_document_event:::{escape_html_content(scheme_name)}"
-               id="{escape_html_content(scheme_name)}_mde_data" value="">
+        <!-- The per-annotator answer: which events THIS annotator put this
+             document in. The Event Registry is shared by everyone, and its
+             `member_doc_ids` carries no annotator, so without this input the
+             per-annotator answer existed nowhere -- not in user_state.json, not
+             in the export, not in /admin/iaa.
+
+             `class="annotation-input"` plus schema/label_name is what makes
+             syncAnnotationsFromDOM read it; the JS also stamps `data-modified`
+             when it writes, which is the second half of that contract. -->
+        <input type="hidden" class="annotation-input mde-data-input"
+               id="{identifiers['id']}" name="{identifiers['name']}"
+               schema="{identifiers['schema']}" label_name="{identifiers['label_name']}"
+               validation="{validation}" value="">
     </div>
     """
 

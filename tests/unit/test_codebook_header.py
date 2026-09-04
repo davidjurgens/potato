@@ -77,6 +77,9 @@ class _StubUserState:
     def get_annotation_count(self):
         return 0
 
+    def get_annotated_instance_ids(self):
+        return set()
+
     def get_max_assignments(self):
         return -1
 

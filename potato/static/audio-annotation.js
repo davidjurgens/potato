@@ -1066,32 +1066,69 @@ class AudioAnnotationManager {
     /**
      * Zoom in on waveform
      */
-    zoomIn() {
+    /**
+     * Halve or double the visible window, keeping its centre.
+     *
+     * Expressed in SECONDS, read back off the view, because that is the only
+     * account of the current zoom this Peaks build will give us:
+     *
+     *   - `view.getZoom()` does not exist. `getZoom` lives on the zoom
+     *     CONTROLLER (`peaks.zoom`), and calling it on the view threw
+     *     "view.getZoom is not a function" on every click of both buttons --
+     *     which is what made them dead.
+     *   - `peaks.zoom.zoomIn()` does exist, but it walks the `zoomLevels`
+     *     array from an index the view never updates. The widget opens fitted
+     *     to the whole clip while the controller still believes it is at
+     *     index 0 (the most magnified level), so the first "zoom in" is a
+     *     no-op and the second jumps.
+     *
+     * `getStartTime`/`getEndTime`/`setZoom({seconds})`/`setStartTime` are all
+     * public on the view and all reflect what is actually on screen.
+     *
+     * @param {number} factor <1 magnifies, >1 widens.
+     */
+    _zoomByFactor(factor) {
         if (!this.peaks) return;
         const view = this.peaks.views.getView('zoomview');
-        if (view) {
-            // Halve the current samples-per-pixel to show more detail. (Do NOT
-            // reset to 'auto' first — that jumps to the whole clip and makes
-            // "zoom in" widen the view from the initial state.)
-            const currentZoom = view.getZoom();
-            view.setZoom({ scale: Math.max(256, currentZoom / 2) });
-            // Update spectrogram to match
-            this._updateSpectrogramView();
+        if (!view || typeof view.getStartTime !== 'function') return;
+
+        const start = view.getStartTime();
+        const current = view.getEndTime() - start;
+        if (!isFinite(current) || current <= 0) return;
+
+        const duration = this.peaks.player ? this.peaks.player.getDuration() : 0;
+        // A window below a tenth of a second is past any useful precision and
+        // renders as a blank stripe.
+        let next = current * factor;
+        if (isFinite(duration) && duration > 0) next = Math.min(next, duration);
+        next = Math.max(next, 0.1);
+        if (Math.abs(next - current) < 1e-6) return;
+
+        const centre = start + current / 2;
+        view.setZoom({ seconds: next });
+        if (typeof view.setStartTime === 'function') {
+            const span = (isFinite(duration) && duration > 0) ? duration : next;
+            const maxStart = Math.max(0, span - next);
+            view.setStartTime(Math.min(Math.max(0, centre - next / 2), maxStart));
         }
     }
 
     /**
-     * Zoom out on waveform
+     * Zoom in on waveform.
+     */
+    zoomIn() {
+        this._zoomByFactor(0.5);
+        // Update spectrogram to match
+        this._updateSpectrogramView();
+    }
+
+    /**
+     * Zoom out on waveform.
      */
     zoomOut() {
-        if (!this.peaks) return;
-        const view = this.peaks.views.getView('zoomview');
-        if (view) {
-            const currentZoom = view.getZoom();
-            view.setZoom({ scale: Math.min(4096, currentZoom * 2) });
-            // Update spectrogram to match
-            this._updateSpectrogramView();
-        }
+        this._zoomByFactor(2);
+        // Update spectrogram to match
+        this._updateSpectrogramView();
     }
 
     /**
@@ -1568,6 +1605,7 @@ class AudioAnnotationManager {
      */
     _saveData() {
         if (!this.inputEl) return;
+        this._declareCompleteness();
 
         const data = {
             segments: this.segments.map(s => ({
@@ -1585,6 +1623,35 @@ class AudioAnnotationManager {
         // reaches the server only when the annotator navigates.
         this.inputEl.dispatchEvent(new Event('change', { bubbles: true }));
         audioDebugLog('Saved audio annotation data:', data);
+    }
+
+
+    /**
+     * Say what is still missing, in the annotator's terms.
+     *
+     * `min_segments` reached the browser as `minSegments` and was read by
+     * nobody: a scheme declaring `min_segments: 2` was satisfied by one
+     * segment, and by the hidden input merely being non-empty. The form-level
+     * `data-incomplete-reason` is the contract validateRequiredFields reads
+     * for composite widgets (see agent_scorecard), so this is where the count
+     * belongs. Unlabelled segments count too -- a segment with no label is a
+     * region of time nobody classified.
+     */
+    _declareCompleteness() {
+        const form = this.inputEl && this.inputEl.closest('.annotation-form');
+        if (!form) return;
+        const need = parseInt(this.config.minSegments, 10) || 0;
+        const have = this.segments.length;
+        const bits = [];
+        if (need && have < need) {
+            bits.push(`${have} of ${need} segments marked`);
+        }
+        const unlabelled = this.segments.filter(s => !s.label).length;
+        if (unlabelled) {
+            bits.push(`${unlabelled} segment${unlabelled === 1 ? '' : 's'} with no label`);
+        }
+        if (bits.length) form.setAttribute('data-incomplete-reason', bits.join('; '));
+        else form.removeAttribute('data-incomplete-reason');
     }
 
     /**

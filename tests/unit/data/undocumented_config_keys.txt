@@ -50,11 +50,6 @@ adjudication.similarity
 agreement_metrics.enabled
 agreement_metrics.min_overlap
 agreement_metrics.refresh_interval
-ai_support.ai_config
-ai_support.ai_config_file
-ai_support.cache_config
-ai_support.enabled
-ai_support.endpoint_type
 ai_support.features
 ai_support.option_highlighting
 batch_assignment.annotator_key

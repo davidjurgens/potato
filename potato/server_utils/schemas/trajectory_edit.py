@@ -211,7 +211,8 @@ def _generate_internal(
                 : '';
             var reasonHtml = CONFIG.require_reason_on_edit
                 ? '<div class="trajedit-reason-block"><label class="trajedit-reason-label">' +
-                  'Reason for edit:</label><input type="text" class="trajedit-reason" ' + keyAttr +
+                  'Reason for edit <span class="trajedit-reason-req">(required)</span>:' +
+                  '</label><input type="text" class="trajedit-reason" ' + keyAttr +
                   ' placeholder="why this change?"></div>'
                 : '';
             return '<div class="trajedit-field-block">' +
@@ -368,6 +369,37 @@ def _generate_internal(
             }});
         }}
 
+        /* Steps edited without the reason the config says is required.
+           `require_reason_on_edit` only decided whether the input was
+           RENDERED: an edited step with a blank reason stored
+           reason: "" and Next advanced with no warning, so the key promised
+           an enforcement that did not exist. */
+        function declareCompleteness() {{
+            var form = document.getElementById(SCHEMA);
+            if (!form) return;
+            if (!CONFIG.require_reason_on_edit) {{
+                form.removeAttribute('data-incomplete-reason');
+                return;
+            }}
+            var state = getState();
+            var missing = [];
+            Object.keys(state.entries).forEach(function(k) {{
+                var e = state.entries[k];
+                if (e && e.edited && !String(e.reason || '').trim()) {{
+                    if (missing.indexOf(e.step_index + 1) === -1) {{
+                        missing.push(e.step_index + 1);
+                    }}
+                }}
+            }});
+            missing.sort(function(a, b) {{ return a - b; }});
+            if (missing.length) {{
+                form.setAttribute('data-incomplete-reason',
+                    'no reason given for the edit on step ' + missing.join(', '));
+            }} else {{
+                form.removeAttribute('data-incomplete-reason');
+            }}
+        }}
+
         /* ---- persistence ---- */
         function saveState() {{
             var state = getState();
@@ -389,6 +421,8 @@ def _generate_internal(
             var tEl = document.getElementById(SCHEMA + '-total-dist');
             if (nEl) nEl.textContent = nEdited;
             if (tEl) tEl.textContent = totalDist;
+
+            declareCompleteness();
 
             var data = JSON.stringify({{
                 steps: steps,

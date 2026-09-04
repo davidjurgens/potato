@@ -142,6 +142,96 @@ class TestTheViewerActuallyRuns(BasePlaywrightTest):
         assert -2.2 < ground < -1.2, f"ground estimated at {ground}"
 
 
+class TestFindingTheCloud(BasePlaywrightTest):
+    """
+    Where the cloud path is read from.
+
+    `_cloudPath` scraped the textContent of the `[data-field-key]` element, and
+    `looksLikeCloud` rejects anything containing whitespace. A display field
+    with a `label:` renders that label INSIDE the same element, so its text is
+    "Cloud\n\nclouds/scene_0001.bin" -- whitespace -- and the whole viewer went
+    dark with "the point_cloud field is empty. Check item_properties", which is
+    not where the problem was. `data-source-url` is null on a text field, so
+    the first branch never rescued it either.
+
+    The bundled example dodges all of this by making the cloud path the item's
+    `text_key`, which is why nobody had hit it.
+    """
+
+    def item_with_prose_text(self):
+        """A realistic item: the cloud is a FIELD, and the text is prose."""
+        return [{
+            "id": "scene_0001",
+            "point_cloud": "clouds/scene_0001.bin",
+            "calibration": {"file": "calib/scene_0001.txt",
+                            "images": {"P2": "images/scene_0001.png"}},
+            "notes": "Dashcam scan, dusk, light rain.",
+        }]
+
+    def server_with_display(self, make_server, field):
+        return make_server(
+            SCHEMES,
+            items=self.item_with_prose_text(),
+            extra_config={
+                "media_directory": str(MEDIA),
+                "item_properties": {"id_key": "id", "text_key": "notes"},
+                "instance_display": {
+                    "layout": {"direction": "vertical", "gap": "12px"},
+                    "fields": [field],
+                },
+            },
+        )
+
+    @pytest.mark.parametrize("label", [None, "Cloud"])
+    def test_the_cloud_loads_whether_or_not_the_field_has_a_label(
+            self, make_server, page, label):
+        field = {"key": "point_cloud", "type": "text"}
+        if label:
+            field["label"] = label
+        server = self.server_with_display(make_server, field)
+        open_viewer(self, page, server)
+        assert manager_eval(page, "m.loadedPointCount()") > 5000
+
+    def test_the_cloud_loads_when_the_field_is_not_displayed_at_all(
+            self, make_server, page):
+        # Nothing ever said the field had to be on screen. The record is
+        # published as [data-instance-json] and every other widget reads its
+        # media from there.
+        server = make_server(
+            SCHEMES,
+            items=self.item_with_prose_text(),
+            extra_config={
+                "media_directory": str(MEDIA),
+                "item_properties": {"id_key": "id", "text_key": "notes"},
+            },
+        )
+        open_viewer(self, page, server)
+        assert manager_eval(page, "m.loadedPointCount()") > 5000
+
+    def test_a_genuinely_missing_field_says_so_without_blaming_item_properties(
+            self, make_server, page):
+        server = make_server(
+            SCHEMES,
+            items=[{"id": "scene_0001", "notes": "No scan was captured."}],
+            extra_config={
+                "media_directory": str(MEDIA),
+                "item_properties": {"id_key": "id", "text_key": "notes"},
+            },
+        )
+        self.register_and_login(page, server)
+        page.goto(f"{server.base_url}/annotate")
+        wait_for_manager(page)
+        page.wait_for_function(
+            """() => {
+                const el = document.querySelector('.pc-status');
+                return el && el.textContent.includes('No point cloud');
+            }""", timeout=20000)
+        status = page.text_content(".pc-status")
+        assert "source_field" in status, (
+            f"the message still sends the author to the wrong place: {status}")
+        assert "item_properties" not in status
+
+
 class TestDrawingABox(BasePlaywrightTest):
     def arm_and_drag(self, page, x0, y0, x1, y1):
         """Pick the box tool and a class, then drag across the viewport."""

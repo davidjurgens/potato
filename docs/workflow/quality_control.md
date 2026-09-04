@@ -28,8 +28,8 @@ attention_checks:
   # OR
   probability: 0.1           # 10% chance per item
 
-  # Optional: flag suspiciously fast responses
-  min_response_time: 3.0     # Flag if answered in < 3 seconds
+  # Optional: fail responses that arrive too fast to have been read
+  min_response_time: 3.0     # Fail the check if answered in under 3 seconds
 
   # Failure handling
   failure_handling:
@@ -72,8 +72,16 @@ Create a JSON file with your attention check items:
 1. Attention check items are loaded at server startup
 2. Based on `frequency` or `probability`, checks are injected into the annotation flow
 3. When an annotator submits a response, it's compared to the expected answer
-4. Failures are tracked per-user
-5. Warnings and blocks are triggered at configured thresholds
+4. A response faster than `min_response_time` fails whatever it says; the clock
+   runs from when the item appeared on screen to when the annotator saved
+5. Failures are tracked per-user, at most one result per annotator per check
+   item, so changing an answer does not add a second result
+6. Warnings and blocks are triggered at configured thresholds
+
+Attention-check and gold results are written to
+`<output_annotation_dir>/quality_control_results.json` as they are recorded, and
+read back at startup, so a restart for a deploy or a crash does not clear an
+annotator's failure history or unblock someone who had been blocked.
 
 ### Admin Dashboard
 

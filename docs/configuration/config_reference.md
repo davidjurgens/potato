@@ -104,9 +104,9 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 |-----|----------|------|---------|-------------|----------|
 | `adjudication` |  | object |  | Resolve disagreements through an adjudication queue | `adjudicator_users`, `agreement_threshold`, `enabled`, `error_taxonomy`, `fast_decision_warning_ms`, `min_annotations`, `output_subdir`, `require_confidence`, `require_notes_on_override`, `show_agreement_scores`, `show_all_items`, `show_annotator_names`, `show_timing_data`, `similarity` |
 | `agreement_metrics` |  | object |  | Which inter-annotator agreement measures the admin pages compute | `enabled`, `min_overlap`, `refresh_interval` |
-| `attention_checks` |  | object |  | Insert items with a known answer to detect inattentive annotators | `enabled`, `failure_handling`, `frequency`, `items_file`, `min_response_time`, `probability` |
+| `attention_checks` |  | object |  | Insert items with a known answer to detect inattentive annotators | `enabled`, `failure_handling`, `frequency`, `geometry_iou_tolerance`, `items_file`, `min_response_time`, `probability` |
 | `calibration` |  | object |  | Agreement drift tracking and the re-calibration prompt on /admin/iaa. Agreement is scored per time window so a fall in recent work is visible, instead of averaging into one whole-project number | `drop_threshold`, `enabled`, `window_by`, `windows` |
-| `gold_standards` |  | object |  | Items with known labels, used to score annotators | `accuracy`, `auto_promote`, `enabled`, `frequency`, `items_file`, `mode` |
+| `gold_standards` |  | object |  | Items with known labels, used to score annotators | `accuracy`, `auto_promote`, `enabled`, `feedback`, `frequency`, `geometry_iou_tolerance`, `items_file`, `mode` |
 | `gold_standards_file` |  | string |  | Gold items file, the flat alternative to the gold_standards block |  |
 | `quality_control` |  | object |  | Aggregate quality thresholds and actions |  |
 | `require_fully_annotated` |  | boolean |  | Refuse to advance until every scheme on the page has an answer |  |

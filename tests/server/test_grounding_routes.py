@@ -37,6 +37,17 @@ def _build(test_dir, scheme_overrides=None, items=None):
     }
     scheme.update(scheme_overrides or {})
 
+    # grounding_eval binds expressions to regions drawn by a companion
+    # image_annotation scheme; it has no canvas of its own, and the config
+    # validator now refuses a config that declares it alone.
+    canvas = {
+        "annotation_type": "image_annotation",
+        "name": "regions",
+        "description": "Draw the regions",
+        "tools": ["bbox"],
+        "labels": ["referent"],
+    }
+
     config = {
         "port": 0,
         "annotation_task_name": "grounding routes",
@@ -45,7 +56,7 @@ def _build(test_dir, scheme_overrides=None, items=None):
         "data_files": [data_file],
         "item_properties": {"id_key": "id", "text_key": "text"},
         "user_config": {"allow_all_users": True},
-        "annotation_schemes": [scheme],
+        "annotation_schemes": [canvas, scheme],
     }
     config_path = os.path.join(test_dir, "config.yaml")
     with open(config_path, "w", encoding="utf-8") as handle:

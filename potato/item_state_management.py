@@ -919,6 +919,19 @@ class ItemStateManager:
 
         # Track which annotators have worked on each item
         self.instance_annotators = defaultdict(set)
+        # Who currently HOLDS each item, whether or not they have submitted.
+        #
+        # The per-item cap was counted against `instance_annotators`, which is
+        # populated on annotation, so an item could be handed to any number of
+        # people at once and the cap only bit after somebody submitted. With
+        # `num_annotators_per_item: 1` over three items, five successive users
+        # were each assigned all three -- and the fourth onward were annotating
+        # items that already had their full complement.
+        self.instance_assignees = defaultdict(set)
+        # Whether an outstanding hold counts against an item's cap. True in
+        # normal operation; cleared for the fallback pass in
+        # `_assign_instances_to_user_inner` so holds can never deadlock a study.
+        self._holds_are_binding = True
 
         # Track assignment timestamps for stale reclamation: {instance_id: {username: timestamp}}
         self.assignment_timestamps = defaultdict(dict)
@@ -1612,8 +1625,50 @@ class ItemStateManager:
                     pass
         return self.max_annotations_per_item
 
+    def _committed_annotator_count(self, instance_id: str) -> int:
+        """How many annotators this item is spoken for by.
+
+        Everyone who has annotated it, and -- when holds can be taken back --
+        everyone currently holding an assignment for it.
+
+        Counting only submitters let an item be handed out without limit until
+        somebody actually submitted: with `num_annotators_per_item: 1` over
+        three items, five successive users were each assigned all three, and
+        every one of them past the first was annotating an item that already
+        had its full complement. The study pays for those.
+
+        Counting holds is also what spreads annotators across the dataset. The
+        default strategy walks the item list from the top, so five annotators
+        arriving at a three-item study with `num_annotators_per_item: 1` were
+        all handed item_0 while item_1 and item_2 sat untouched.
+
+        `_holds_are_binding` is cleared for a second pass when the first finds
+        nothing, so a hold can slow an item down but never lock the study: an
+        annotator who takes items and walks away does not strand them, whether
+        or not `instance_reclaim` is on to take them back properly.
+        """
+        if not self._holds_are_binding:
+            return len(self.instance_annotators[instance_id])
+        return len(self.instance_annotators[instance_id]
+                   | self.instance_assignees[instance_id])
+
     def _item_is_saturated(self, instance_id: str) -> bool:
-        """True if the item has reached its annotator cap (per-item or global)."""
+        """True if the item cannot be handed out right now.
+
+        Counts holds as well as submissions, so it answers "is this spoken
+        for?". Use `_item_is_complete` to decide whether an item is *finished*
+        -- a held item is not, and evicting it from `remaining_instance_ids`
+        on this predicate would strand it the moment its holder walked away.
+        """
+        cap = self._get_annotator_cap_for_item(instance_id)
+        return cap >= 0 and self._committed_annotator_count(instance_id) >= cap
+
+    def _item_is_complete(self, instance_id: str) -> bool:
+        """True if the item has all the ANNOTATIONS its cap asks for.
+
+        The retirement test. Only a submitted annotation retires an item from
+        the queue; a hold merely makes it unavailable for now.
+        """
         cap = self._get_annotator_cap_for_item(instance_id)
         return cap >= 0 and len(self.instance_annotators[instance_id]) >= cap
 
@@ -1637,9 +1692,11 @@ class ItemStateManager:
 
         summaries = []
         for iid in list(self.remaining_instance_ids):
-            if self._item_is_saturated(iid):
+            if self._item_is_complete(iid):
                 if iid in self.remaining_instance_ids:
                     self.remaining_instance_ids.remove(iid)
+                continue
+            if self._item_is_saturated(iid):
                 continue
             if self._already_with_user(user_state, iid):
                 continue
@@ -1799,25 +1856,70 @@ class ItemStateManager:
             self.logger.info("Assignment is paused; skipping new assignments")
             return 0
 
-        # Snapshot existing assignments so we can record timestamps for new ones
-        existing_assignments = set(user_state.get_assigned_instance_ids()) if self.reclaim_enabled else None
+        # Snapshot existing assignments. Taken unconditionally, not only under
+        # `reclaim_enabled`: `instance_assignees` is what makes the per-item cap
+        # count holders as well as submitters, and every strategy has its own
+        # `user_state.assign_instance(...)` call, so diffing here is the one
+        # place that catches all of them.
+        username = getattr(user_state, 'user_id', None)
+        existing_assignments = set(user_state.get_assigned_instance_ids())
 
         result = self._assign_instances_to_user_inner(user_state)
 
-        # Record timestamps for newly assigned instances
-        if self.reclaim_enabled and existing_assignments is not None:
-            import time
-            username = getattr(user_state, 'user_id', None)
-            if username:
+        new_assignments = (set(user_state.get_assigned_instance_ids())
+                           - existing_assignments)
+        if username and new_assignments:
+            # Recorded, but NOT retired from `remaining_instance_ids`. A hold is
+            # not a completed annotation: the strategies already skip a
+            # saturated item via `_item_is_saturated`, and taking it out of the
+            # queue here would also hide it from the fallback pass, which is the
+            # thing that keeps a hold from stranding an item.
+            for iid in new_assignments:
+                self.instance_assignees[iid].add(username)
+
+            # Record timestamps for newly assigned instances
+            if self.reclaim_enabled:
+                import time
                 now = time.time()
-                new_assignments = set(user_state.get_assigned_instance_ids()) - existing_assignments
                 for iid in new_assignments:
                     self.assignment_timestamps[iid][username] = now
 
         return result
 
     def _assign_instances_to_user_inner(self, user_state: 'UserState') -> int:
-        """Inner assignment logic called by assign_instances_to_user."""
+        """Assign, and if holds were the only thing in the way, assign anyway.
+
+        A hold counts against an item's cap so that annotators spread across
+        the dataset instead of piling onto its first item. But a hold is not a
+        submission: an annotator who takes items and closes the tab would
+        otherwise strand them, and `instance_reclaim` -- the machinery that
+        takes stale holds back -- is off by default.
+
+        So the cap is enforced, and then relaxed if enforcing it would have sent
+        somebody away empty-handed. The second pass still respects annotations,
+        which are the count the study actually cares about.
+        """
+        assigned = self._assign_pass(user_state)
+        if assigned:
+            return assigned
+
+        # Nothing available under the strict rule. If some item is held but
+        # unannotated, hand it out rather than declaring the study finished.
+        self._holds_are_binding = False
+        try:
+            assigned = self._assign_pass(user_state)
+        finally:
+            self._holds_are_binding = True
+        if assigned:
+            self.logger.info(
+                "Assigned %d item(s) to %s that another annotator holds but "
+                "has not submitted. Enable instance_reclaim to hand those back "
+                "automatically instead.",
+                assigned, getattr(user_state, 'user_id', None))
+        return assigned
+
+    def _assign_pass(self, user_state: 'UserState') -> int:
+        """One assignment attempt under the current cap rule."""
 
         # Check if we should assign a verification task from ICL labeling
         verification_assigned = self._maybe_assign_icl_verification(user_state)
@@ -1878,7 +1980,7 @@ class ItemStateManager:
             # Random assignment strategy
             unlabeled_items = []
             for iid in self.remaining_instance_ids:
-                annotation_count = len(self.instance_annotators[iid])
+                annotation_count = self._committed_annotator_count(iid)
                 cap = self._get_annotator_cap_for_item(iid)
                 self.logger.debug(f"[ASSIGNMENT] Considering {iid}: annotation_count={annotation_count}, cap={cap}")
                 # Always skip items that have reached max annotations, but do not remove here
@@ -1902,10 +2004,13 @@ class ItemStateManager:
             # Least annotated strategy: prioritize items with fewest annotations
             candidates = []
             for iid in list(self.remaining_instance_ids):
-                annotation_count = len(self.instance_annotators[iid])
+                annotation_count = self._committed_annotator_count(iid)
                 cap = self._get_annotator_cap_for_item(iid)
                 if cap >= 0 and annotation_count >= cap:
-                    if iid in self.remaining_instance_ids:
+                    # Retire only when the ANNOTATIONS are in; a hold makes the
+                    # item unavailable now, not finished.
+                    if (self._item_is_complete(iid)
+                            and iid in self.remaining_instance_ids):
                         self.remaining_instance_ids.remove(iid)
                     continue
                 if iid not in user_state.get_assigned_instance_ids():
@@ -1923,9 +2028,11 @@ class ItemStateManager:
             # Fixed order assignment strategy
             assigned = 0
             for iid in list(self.remaining_instance_ids):
-                if self._item_is_saturated(iid):
+                if self._item_is_complete(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
+                    continue
+                if self._item_is_saturated(iid):
                     continue
                 if iid not in user_state.get_assigned_instance_ids():
                     user_state.assign_instance(self._store.get(iid))
@@ -1937,9 +2044,11 @@ class ItemStateManager:
             # Maximum diversity assignment strategy
             unlabeled_items = []
             for iid in list(self.remaining_instance_ids):
-                if self._item_is_saturated(iid):
+                if self._item_is_complete(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
+                    continue
+                if self._item_is_saturated(iid):
                     continue
                 if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
@@ -1966,9 +2075,11 @@ class ItemStateManager:
             # simply the configured order.
             unlabeled_items = []
             for iid in list(self.remaining_instance_ids):
-                if self._item_is_saturated(iid):
+                if self._item_is_complete(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
+                    continue
+                if self._item_is_saturated(iid):
                     continue
                 if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
@@ -1983,9 +2094,11 @@ class ItemStateManager:
             # LLM confidence assignment strategy (currently falls back to random)
             unlabeled_items = []
             for iid in list(self.remaining_instance_ids):
-                if self._item_is_saturated(iid):
+                if self._item_is_complete(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
+                    continue
+                if self._item_is_saturated(iid):
                     continue
                 if not self._already_with_user(user_state, iid):
                     unlabeled_items.append(iid)
@@ -2148,9 +2261,11 @@ class ItemStateManager:
             # determinism. `triage.order: asc` flips to lowest-priority-first.
             candidates = []
             for iid in list(self.remaining_instance_ids):
-                if self._item_is_saturated(iid):
+                if self._item_is_complete(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
+                    continue
+                if self._item_is_saturated(iid):
                     continue
                 if iid in user_state.get_assigned_instance_ids():
                     continue
@@ -2181,9 +2296,11 @@ class ItemStateManager:
             self.logger.warning(f"Unknown assignment strategy: {self.assignment_strategy}, falling back to fixed order")
             assigned = 0
             for iid in list(self.remaining_instance_ids):
-                if self._item_is_saturated(iid):
+                if self._item_is_complete(iid):
                     if iid in self.remaining_instance_ids:
                         self.remaining_instance_ids.remove(iid)
+                    continue
+                if self._item_is_saturated(iid):
                     continue
                 if iid not in user_state.get_assigned_instance_ids():
                     user_state.assign_instance(self._store.get(iid))
@@ -2456,6 +2573,7 @@ class ItemStateManager:
                         reason="stale_assignment",
                     )
                 else:
+                    self.instance_assignees[iid].discard(username)
                     if iid not in self.completed_instance_ids and iid not in self.remaining_instance_ids:
                         self.remaining_instance_ids.append(iid)
                     self.instance_annotators[iid].discard(username)
@@ -2488,6 +2606,15 @@ class ItemStateManager:
         unassigned = user_state.unassign_instance(instance_id)
         if not unassigned:
             return False
+
+        # The hold is the thing being released. Leaving it in
+        # `instance_assignees` would keep the item counted against its own cap
+        # forever, so a reclaimed item could never be given to anyone else.
+        self.instance_assignees[instance_id].discard(user_id)
+
+        if instance_id in self.completed_instance_ids:
+            if not self._item_is_saturated(instance_id):
+                self.completed_instance_ids.discard(instance_id)
 
         if instance_id not in self.completed_instance_ids and instance_id not in self.remaining_instance_ids:
             self.remaining_instance_ids.append(instance_id)
@@ -2526,6 +2653,7 @@ class ItemStateManager:
 
         had_annotator_credit = user_id in self.instance_annotators[instance_id]
         self.instance_annotators[instance_id].discard(user_id)
+        self.instance_assignees[instance_id].discard(user_id)
         if had_annotator_credit and self.item_annotation_counts[instance_id] > 0:
             self.item_annotation_counts[instance_id] -= 1
 
@@ -2833,6 +2961,22 @@ class ItemStateManager:
         """Get all items in the manager"""
         return [item for _, item in self._store.iter_items()]
 
+    def register_assignee(self, instance_id: str, user_id: str) -> None:
+        """
+        Record that a user currently holds an assignment for an instance.
+
+        Used to rebuild `instance_assignees` from persisted user state at
+        startup. Assignment itself records this centrally in
+        `assign_instances_to_user`; this is the restart path, without which a
+        bounce forgets every outstanding hold and the per-item cap goes back to
+        counting only people who have already submitted.
+
+        Args:
+            instance_id: The instance being held
+            user_id: Who is holding it
+        """
+        self.instance_assignees[instance_id].add(user_id)
+
     def register_annotator(self, instance_id: str, user_id: str):
         """
         Register that a user has annotated an instance.
@@ -2906,6 +3050,46 @@ class ItemStateManager:
         """
         self.item_annotation_counts[instance_id] += delta
 
+    def set_prediction(self, instance_id: str, schema_name: str,
+                       payload, field: str = "predictions") -> bool:
+        """
+        Attach one model prediction to an item, as a prelabel.
+
+        The only way the training subsystem writes into item state, and
+        deliberately the narrowest one available. It merges a single key into
+        the ``predictions`` map and leaves every other field of ``item_data``
+        untouched.
+
+        It cannot corrupt human annotations, because it cannot address them:
+        annotations live in ``UserState`` and on this ``Item``'s separate
+        ``labels`` / ``span_annotations`` / ``metadata`` attributes, which the
+        ``item_data`` property above explains are written through the live
+        object. Nor does it use ``update_item()``, which replaces an item's
+        whole payload and would clobber a concurrent field write.
+
+        Returns False when there is no such item, so the caller can count it.
+        """
+        with self._lock:
+            item = self.get_item(instance_id)
+            if item is None:
+                return False
+
+            data = dict(item.item_data or {})
+            predictions = dict(data.get(field) or {})
+            predictions[schema_name] = payload
+            data[field] = predictions
+            item.item_data = data
+            return True
+
+    def get_remaining_instance_ids(self) -> List[str]:
+        """
+        Instance IDs still available for assignment, in serving order.
+
+        A snapshot rather than the live deque, so a caller can iterate it while
+        annotators are being served without tripping over a mutation.
+        """
+        return list(self.remaining_instance_ids)
+
     def reorder_instances(self, new_order: List[str]):
         """
         Reorder instances based on active learning predictions.
@@ -2917,6 +3101,14 @@ class ItemStateManager:
             This method preserves instances that are not in the new_order list
             by appending them to the end of the ordering.
         """
+        # Deduplicate, preserving first occurrence. A caller that interleaves
+        # a ranked list with an exploration sample drawn from that same list
+        # hands us every sampled id twice, and without this the duplicates
+        # propagate straight into instance_id_ordering and
+        # remaining_instance_ids -- so the same item is served repeatedly and
+        # the queue length stops meaning anything.
+        new_order = list(dict.fromkeys(new_order))
+
         # Create a set of instances in the new order for efficient lookup
         new_order_set = set(new_order)
 
@@ -2944,4 +3136,5 @@ class ItemStateManager:
         self.remaining_instance_ids.clear()
         self.completed_instance_ids.clear()
         self.instance_annotators.clear()
+        self.instance_assignees.clear()
         self.item_annotation_counts.clear()

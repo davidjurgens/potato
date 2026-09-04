@@ -543,6 +543,19 @@ class UserStateManager:
         self._phase_page_order_cache.pop(phase_type, None)
         self._phase_page_index_cache.pop(phase_type, None)
 
+    def invalidate_phase_caches(self) -> None:
+        """Drop the derived phase caches after `config["phases"]` is edited.
+
+        The phase loader prunes undefined names out of `phases.order`, and the
+        sequence/page caches are derived from that list, so anything cached
+        before the prune describes a config that no longer exists.
+        """
+        self._ensure_phase_caches()
+        self._configured_phase_sequence_cache = None
+        self._configured_phase_index_cache = {}
+        self._phase_page_order_cache = {}
+        self._phase_page_index_cache = {}
+
     def _ensure_phase_caches(self) -> None:
         """Initialize derived phase caches when older tests bypass __init__."""
         if not hasattr(self, "_configured_phase_sequence_cache"):

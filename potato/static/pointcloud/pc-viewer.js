@@ -231,20 +231,40 @@
         /**
          * Where this item's cloud lives, or null.
          *
-         * Two sources, in order, mirroring how image annotation finds its
-         * image: a display field explicitly wired to this schema, then the
-         * instance text (which is where a `text_key` lands). The extension is
-         * checked before anything is fetched, so a text-only item does not
-         * produce a request for the sentence it happens to contain.
+         * The record first, the DOM second. `[data-instance-json]` carries the
+         * whole item, so the cloud path is read from the field the schema
+         * names whether or not that field is *displayed* -- which is how every
+         * other widget on the page finds its media, and nothing ever said this
+         * one needed the field on screen.
+         *
+         * Scraping the display field was also wrong in a way that looked like
+         * missing data: `render_display_container` puts the field's `label:`
+         * inside the same element, so the text of a labelled field is
+         * "Cloud\n\nclouds/scene_0001.bin" -- whitespace, which
+         * `looksLikeCloud` rejects. Adding a label to the display silently
+         * emptied the viewer.
+         *
+         * The DOM fallbacks stay for items whose path arrives only as the
+         * instance text (a `text_key` cloud, which is what the bundled example
+         * uses), and read `.display-field-content` rather than the container so
+         * a label cannot poison the value.
          */
         _cloudPath() {
             const field = this.config.sourceField || 'point_cloud';
 
+            const record = this._instanceRecord();
+            const fromRecord = record && record[field];
+            if (typeof fromRecord === 'string' && looksLikeCloud(fromRecord)) {
+                return fromRecord.trim();
+            }
+
             const display = document.querySelector(`[data-field-key="${field}"]`);
             if (display) {
+                const body = display.querySelector('.display-field-content')
+                    || display;
                 const value = display.getAttribute('data-source-url')
-                    || (display.textContent || '').trim();
-                if (looksLikeCloud(value)) return value;
+                    || (body.textContent || '').trim();
+                if (looksLikeCloud(value)) return value.trim();
             }
 
             const text = document.getElementById('text-content')
@@ -252,6 +272,19 @@
             if (text) {
                 const value = (text.textContent || '').trim();
                 if (looksLikeCloud(value)) return value;
+            }
+            return null;
+        }
+
+        /** The whole item record, as the page publishes it. */
+        _instanceRecord() {
+            try {
+                const el = document.querySelector('[data-instance-json]');
+                if (el) {
+                    return JSON.parse(el.getAttribute('data-instance-json')) || {};
+                }
+            } catch (err) {
+                /* fall through to the DOM sources */
             }
             return null;
         }
@@ -310,9 +343,18 @@
         async _loadCloud() {
             const url = this._cloudUrl();
             if (!url) {
+                const field = this.config.sourceField || 'point_cloud';
+                const record = this._instanceRecord();
+                const present = record && record[field];
                 this._status(
-                    `No point cloud for this item: the "${this.config.sourceField}" `
-                    + `field is empty. Check item_properties in the config.`,
+                    present
+                        ? `No point cloud for this item: "${field}" holds `
+                          + `"${String(present).slice(0, 80)}", which is not a `
+                          + `cloud path. Expected a .pcd, .ply, .bin, .las, `
+                          + `.laz, .xyz or .pts file, with no spaces in it.`
+                        : `No point cloud for this item: it has no "${field}" `
+                          + `field. Set source_field on this schema to the item `
+                          + `key that holds the cloud path.`,
                     'error');
                 return;
             }

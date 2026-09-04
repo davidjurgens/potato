@@ -47,7 +47,7 @@ annotation_schemes:
     show_diff: true
     show_edit_distance: true
     allow_reset: true
-    require_reason_on_edit: false   # add a per-field "reason" input
+    require_reason_on_edit: false   # per-field "reason" input, and require it
     edit_final_answer: true
     final_answer_key: final_answer
 ```
@@ -60,7 +60,7 @@ annotation_schemes:
 | `show_diff` | `true` | Show the live word-level diff. |
 | `show_edit_distance` | `true` | Show words/chars changed. |
 | `allow_reset` | `true` | Per-field "Reset to original" button. |
-| `require_reason_on_edit` | `false` | Per-field "reason for edit" input. |
+| `require_reason_on_edit` | `false` | Adds a per-field "reason for edit" input and requires it: an edited field with a blank reason blocks Next, naming the steps that need one. |
 | `edit_final_answer` | `false` | Add an editor for the final answer. |
 | `final_answer_key` | `final_answer` | Instance field holding the final answer. |
 

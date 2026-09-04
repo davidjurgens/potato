@@ -135,6 +135,93 @@ class TestCanvasDrawing(BasePlaywrightTest):
 
 
 @pytest.mark.playwright
+class TestBoxesStayOnTheImage(BasePlaywrightTest):
+    """
+    The canvas is bigger than the bitmap and the image is centred in it, so
+    there is a dead margin on every side. A drag that STARTED in that margin
+    was stored unclamped -- {"x": -0.046, "y": -0.0007} for a 640x420 image on
+    an 831x600 canvas -- and the region_caption panel read it back as
+    "Region 1 (referent) - at -5%, 0%". A drag that stayed entirely in the
+    margin was already discarded, so the rule existed and applied to only half
+    the cases.
+    """
+
+    def _open(self, page, server):
+        self.register_and_login(page, server)
+        self.image_manager_ready(page, SCHEMA)
+
+    def _drag_from_canvas_origin(self, page, tool="bbox"):
+        """Start the drag at the canvas corner, which is outside the image."""
+        rect = self.image_rect(page, SCHEMA)
+        assert rect["left"] > 4 or rect["top"] > 4, (
+            "this image fills its canvas, so there is no margin to test with")
+        self.arm(page, SCHEMA, tool, "car")
+        return self.draw_bbox(
+            page, SCHEMA,
+            2, 2,
+            rect["left"] + rect["width"] * 0.5,
+            rect["top"] + rect["height"] * 0.5,
+            armed=True) if tool == "bbox" else None
+
+    def test_a_drag_starting_in_the_margin_is_clamped_into_the_image(
+            self, page, image_server):
+        self._open(page, image_server)
+        self._drag_from_canvas_origin(page)
+
+        data = self.read_annotation_data(page, SCHEMA)
+        assert len(data) == 1, "the box was discarded rather than clamped"
+        coords = data[0]["coordinates"]
+        assert coords["x"] >= 0, coords
+        assert coords["y"] >= 0, coords
+        assert coords["x"] + coords["width"] <= 1.0001, coords
+        assert coords["y"] + coords["height"] <= 1.0001, coords
+
+    def test_the_clamped_box_is_still_worth_keeping(self, page, image_server):
+        # Clamping must not collapse the box: the annotator dragged across half
+        # the picture and should get half the picture.
+        self._open(page, image_server)
+        self._drag_from_canvas_origin(page)
+
+        coords = self.read_annotation_data(page, SCHEMA)[0]["coordinates"]
+        assert coords["width"] > 0.2, coords
+        assert coords["height"] > 0.2, coords
+
+    def test_a_drag_running_off_the_far_edge_stops_at_the_edge(
+            self, page, image_server):
+        self._open(page, image_server)
+        rect = self.image_rect(page, SCHEMA)
+        canvas = page.locator(f"#canvas-{SCHEMA}").bounding_box()
+        self.arm(page, SCHEMA, "bbox", "car")
+        self.draw_bbox(
+            page, SCHEMA,
+            rect["left"] + rect["width"] * 0.5,
+            rect["top"] + rect["height"] * 0.5,
+            canvas["width"] - 2, canvas["height"] - 2,
+            armed=True)
+
+        coords = self.read_annotation_data(page, SCHEMA)[0]["coordinates"]
+        assert coords["x"] + coords["width"] <= 1.0001, coords
+        assert coords["y"] + coords["height"] <= 1.0001, coords
+
+    def test_a_drag_wholly_inside_the_image_is_not_moved(self, page, image_server):
+        """
+        The clamp must be a no-op away from the edges.
+
+        Asserted as "still strictly inside", not "landed at exactly 0.2": where
+        a drag lands depends on the canvas layout at the moment of the drag,
+        and pinning the exact fraction made this test order-dependent -- it
+        passed after its siblings and failed alone.
+        """
+        self._open(page, image_server)
+        self.draw_bbox_on_image(page, SCHEMA, 0.25, 0.25, 0.6, 0.6, label="car")
+
+        coords = self.read_annotation_data(page, SCHEMA)[0]["coordinates"]
+        assert 0 < coords["x"] < 1, coords
+        assert 0 < coords["y"] < 1, coords
+        assert coords["x"] + coords["width"] < 1, coords
+        assert coords["y"] + coords["height"] < 1, coords
+
+
 class TestCanvasPersistence(BasePlaywrightTest):
     def _open(self, page, server):
         self.register_and_login(page, server)

@@ -367,3 +367,51 @@ class TestLogCaptureIsolation:
 
         after = list(logger.handlers)
         assert len(after) == len(before)
+
+
+class TestStrictFailsOnEveryWarning:
+    """
+    `--strict` used to consider unknown keys and nothing else, so a warning
+    that silently DISABLES a feature slid past the one check an author is told
+    to run. A missing `ai_config_file` turns ai_support off and says so at
+    WARNING level; `validate --strict` exited 0 on a study whose entire subject
+    was AI assistance, with the AI off.
+    """
+
+    def _ai_config(self, tmp_path):
+        return (_minimal_valid_config(str(tmp_path))
+                + "\nai_support:\n  enabled: true\n"
+                  "  ai_config_file: nowhere.yaml\n")
+
+    def test_a_disabling_warning_fails_strict(self, tmp_path, capsys):
+        config_file = _write_config(tmp_path, self._ai_config(tmp_path))
+        assert main([config_file, "--strict"]) == 1
+        out = capsys.readouterr().out
+        assert "FAILED" in out
+        assert "AI support will be disabled" in out
+
+    def test_the_same_config_still_passes_without_strict(self, tmp_path, capsys):
+        config_file = _write_config(tmp_path, self._ai_config(tmp_path))
+        assert main([config_file]) == 0
+        out = capsys.readouterr().out
+        assert "OK with" in out
+
+    def test_the_summary_does_not_say_ok_when_the_exit_code_says_failed(
+            self, tmp_path, capsys):
+        # It used to say "OK with 1 warning(s)" and exit 0; saying OK while
+        # exiting 1 would be worse.
+        config_file = _write_config(tmp_path, self._ai_config(tmp_path))
+        main([config_file, "--strict"])
+        out = capsys.readouterr().out
+        assert "OK with" not in out
+
+    def test_the_advice_is_not_offered_to_someone_already_using_the_flag(
+            self, tmp_path, capsys):
+        config_file = _write_config(tmp_path, self._ai_config(tmp_path))
+        main([config_file, "--strict"])
+        assert "Re-run with --strict" not in capsys.readouterr().out
+
+    def test_a_clean_config_still_passes_strict(self, tmp_path, capsys):
+        config_file = _write_config(tmp_path, _minimal_valid_config(str(tmp_path)))
+        assert main([config_file, "--strict"]) == 0
+        assert "no issues found" in capsys.readouterr().out

@@ -49,6 +49,15 @@ def server():
     config_file = create_test_config(
         test_dir,
         annotation_schemes=[{
+            # grounding_eval binds expressions to regions drawn by a companion
+            # image_annotation scheme; declared alone it renders and collects
+            # nothing, and the config validator refuses it.
+            "annotation_type": "image_annotation",
+            "name": "regions",
+            "description": "Draw the regions",
+            "tools": ["bbox"],
+            "labels": ["referent"],
+        }, {
             "annotation_type": "grounding_eval",
             "name": SCHEMA,
             "description": "Draw the region each expression refers to",

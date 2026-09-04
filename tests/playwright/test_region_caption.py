@@ -21,8 +21,17 @@ CAPTIONS = "descriptions"
 IMAGE = "region"
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="class")
 def caption_server():
+    """Class-scoped: FlaskTestServer runs in-process, so two live servers share
+    the item/user/config singletons and the newest answers for both ports."""
+    srv = _caption_server()
+    yield srv
+    srv.stop()
+
+
+def _caption_server(min_length=None):
+    """Build a region-caption project, optionally with a caption floor."""
     pytest.importorskip("PIL", reason="the fixture image needs Pillow")
 
     from PIL import Image, ImageDraw
@@ -31,7 +40,8 @@ def caption_server():
     from tests.helpers.port_manager import find_free_port
     from tests.helpers.test_utils import create_test_directory
 
-    test_dir = create_test_directory("playwright_region_caption")
+    suffix = "min" if min_length else "plain"
+    test_dir = create_test_directory(f"playwright_region_caption_{suffix}")
     media = os.path.join(test_dir, "media")
     os.makedirs(media, exist_ok=True)
     image = Image.new("RGB", (800, 600), "white")
@@ -45,6 +55,14 @@ def caption_server():
     data_file = os.path.join(test_dir, "items.json")
     with open(data_file, "w", encoding="utf-8") as handle:
         json.dump(items, handle)
+
+    captions = {
+        "annotation_type": "region_caption",
+        "name": CAPTIONS,
+        "description": "Describe each region",
+    }
+    if min_length:
+        captions["min_length"] = min_length
 
     config = {
         "port": 0,
@@ -64,11 +82,7 @@ def caption_server():
                 "tools": ["bbox"],
                 "labels": [{"name": "object", "color": "#6e56cf"}],
             },
-            {
-                "annotation_type": "region_caption",
-                "name": CAPTIONS,
-                "description": "Describe each region",
-            },
+            captions,
         ],
     }
     config_path = os.path.join(test_dir, "config.yaml")
@@ -79,6 +93,13 @@ def caption_server():
                           config_file=config_path)
     if not srv.start():
         raise RuntimeError("Failed to start the region-caption server")
+    return srv
+
+
+@pytest.fixture(scope="class")
+def min_length_server():
+    """Class-scoped: FlaskTestServer is in-process and the two share singletons."""
+    srv = _caption_server(min_length=10)
     yield srv
     srv.stop()
 
@@ -277,3 +298,70 @@ class TestRegionCaption(BasePlaywrightTest):
         captions = [c["caption"]
                     for c in self._state(page)["stored"]["captions"]]
         assert captions == ["the red square"], captions
+
+
+@pytest.mark.playwright
+class TestCaptionFloor(BasePlaywrightTest):
+    """
+    `min_length` was computed by the schema, shipped to the client as
+    `minLength` and read by nobody -- `region-caption.js` reads `maxLength` and
+    never mentions it. With `min_length: 10`, a caption of "box" counted and
+    the panel said "All 2 regions described."
+    """
+
+    def _open(self, page, server):
+        self.register_and_login(page, server)
+        page.goto(f"{server.base_url}/annotate")
+        page.wait_for_function(
+            """(schema) => {
+                const c = document.querySelector(
+                    `.region-caption-container[data-schema="${schema}"]`);
+                const m = c && c.regionCaptionManager;
+                return !!(m && m.imageManager);
+            }""", arg=CAPTIONS, timeout=20_000)
+        self.image_manager_ready(page, IMAGE)
+
+    def _type(self, page, index, text):
+        page.wait_for_function(
+            """({schema, index}) => {
+                const c = document.querySelector(
+                    `.region-caption-container[data-schema="${schema}"]`);
+                const m = c && c.regionCaptionManager;
+                return !!(m && m.entries.length > index
+                    && document.querySelector(`[data-caption-index="${index}"]`));
+            }""", arg={"schema": CAPTIONS, "index": index}, timeout=10_000)
+        page.wait_for_timeout(250)
+        selector = f'[data-caption-index="{index}"]'
+        page.click(selector)
+        page.type(selector, text, delay=10)
+        page.wait_for_timeout(300)
+
+    def _progress(self, page):
+        return page.inner_text(f"#region-caption-progress-{CAPTIONS}")
+
+    def test_a_caption_below_the_floor_does_not_count_as_described(
+            self, page, min_length_server):
+        self._open(page, min_length_server)
+        self.draw_bbox_on_image(page, IMAGE, 0.05, 0.05, 0.4, 0.5, label="object")
+        self._type(page, 0, "box")
+        assert "0 of 1" in self._progress(page), self._progress(page)
+
+    def test_a_caption_at_the_floor_counts(self, page, min_length_server):
+        self._open(page, min_length_server)
+        self.draw_bbox_on_image(page, IMAGE, 0.05, 0.05, 0.4, 0.5, label="object")
+        self._type(page, 0, "a red square")
+        assert "All 1 regions described" in self._progress(page), self._progress(page)
+
+    def test_the_floor_is_stated_where_the_count_is(self, page, min_length_server):
+        # An annotator who types "box" and is told "0 of 1" and nothing else
+        # has no way to know what is wrong with it.
+        self._open(page, min_length_server)
+        self.draw_bbox_on_image(page, IMAGE, 0.05, 0.05, 0.4, 0.5, label="object")
+        self._type(page, 0, "box")
+        assert "at least 10 characters" in self._progress(page)
+
+    def test_the_textarea_advertises_the_floor(self, page, min_length_server):
+        self._open(page, min_length_server)
+        self.draw_bbox_on_image(page, IMAGE, 0.05, 0.05, 0.4, 0.5, label="object")
+        page.wait_for_selector('[data-caption-index="0"]', timeout=10_000)
+        assert page.get_attribute('[data-caption-index="0"]', "minlength") == "10"

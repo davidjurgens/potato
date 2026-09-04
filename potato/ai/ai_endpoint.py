@@ -217,7 +217,19 @@ class BaseAIEndpoint(ABC):
 
         # Model configuration
         self.model = self.ai_config.get("model", self._get_default_model())
-        self.max_tokens = self.ai_config.get("max_tokens", 100)
+        # 800, not 100. 100 cannot complete any of the multi-label formats
+        # this package ships: GeneralRationaleFormat over a three-label scheme
+        # runs 300-500 tokens and GeneralKeywordFormat is similar, so the
+        # generation was cut mid-object and parseStringToJson's salvage
+        # ("extract complete key-value pairs") returned the inner fragment --
+        # a plausible-looking dict of the wrong type. The tooltip read "No
+        # rationales available" and nothing anywhere said the reply had been
+        # truncated. Every bundled example that uses this sets max_tokens;
+        # nothing warned the author who did not.
+        #
+        # A cap costs nothing unless the model reaches it, so raising it does
+        # not make short answers longer.
+        self.max_tokens = self.ai_config.get("max_tokens", 800)
         self.temperature = self.ai_config.get("temperature", 0.1)
 
         # prompt
@@ -318,6 +330,28 @@ class BaseAIEndpoint(ABC):
             return str(result)
         except Exception as e:
             raise AIEndpointRequestError(f"Chat query failed: {e}")
+
+    def _warn_if_truncated(self, finish_reason, where="response"):
+        """
+        Say so when the model ran out of budget mid-answer.
+
+        Truncation and unconstrained output produce the same symptom -- a dict
+        the renderer cannot read and a tooltip saying the assistant has nothing
+        -- because `parseStringToJson`'s salvage step happily returns the
+        complete key-value pairs it found inside a cut-off object. Separating
+        the two took a live server and a run at each max_tokens value; the
+        finish reason was in the response all along.
+
+        Args:
+            finish_reason: The API's finish_reason for the choice
+            where: What was being generated, for the message
+        """
+        if finish_reason != "length":
+            return
+        logger.warning(
+            "The model hit max_tokens (%s) before finishing this %s, so the "
+            "reply is cut off and may parse into the wrong shape. Raise "
+            "ai_config.max_tokens.", self.max_tokens, where)
 
     def parseStringToJson(self, response_content: str) -> str:
         """
@@ -521,6 +555,53 @@ class BaseAIEndpoint(ABC):
 
         return result if result else None
 
+    def _as_structured(self, result, output_format):
+        """
+        One return type for the AI-help path, whatever the endpoint returned.
+
+        `query()` is not consistent across endpoints and never has been: ollama,
+        vllm and openrouter return `parseStringToJson(...)` -- a dict -- while
+        openai, huggingface, anthropic and gemini return
+        `response.choices[0].message.content`, a string. `/get_ai_suggestion`
+        reads that difference as success versus failure:
+
+            if isinstance(res, dict):  return jsonify(res)
+            elif isinstance(res, str): return jsonify({"error": res})
+
+        So the endpoint that gets structured output *right* -- openai sends
+        `response_format: json_schema`, which local vLLM servers honour -- had
+        its correct answer delivered to the browser labelled as an error, and
+        the annotator read "No hint available" over a complete hint.
+
+        Only converted when a schema was actually requested. Without one the
+        caller asked for free text (the model arena, chat) and a string is the
+        answer. A string that will not parse is left alone: `get_ai` also
+        returns "Unable to generate suggestion - ..." messages, and those really
+        are errors.
+        """
+        if not isinstance(result, str):
+            return result
+        if output_format is None or not hasattr(output_format, "model_json_schema"):
+            return result
+        try:
+            parsed = self.parseStringToJson(result)
+        except Exception:
+            return result
+        if not isinstance(parsed, dict):
+            return result
+        # `parseStringToJson` never fails: text it cannot read comes back as
+        # {"response": "<the text>"}. Accept the parse only when it produced at
+        # least one key the schema asked for, so an error message -- "Unable to
+        # generate suggestion - prompt not configured" -- stays a string the
+        # route can report instead of being handed to the tooltip as data.
+        try:
+            wanted = set(output_format.model_json_schema().get("properties", {}))
+        except Exception:
+            wanted = set()
+        if wanted and not (wanted & set(parsed)):
+            return result
+        return parsed
+
     def get_ai(self, data: AnnotationInput, output_format) -> str:
         """
         Get a hint for annotating the given text.
@@ -558,7 +639,8 @@ class BaseAIEndpoint(ABC):
                 max_value=data.max_value,  
                 step=data.step             
             )
-            return self.query(prompt, output_format)
+            result = self.query(prompt, output_format)
+            return self._as_structured(result, output_format)
         except Exception as e:
             logger.error(f"[get_ai] AnnotationInput: {data}")
             logger.error(f"[get_ai] Error for {data.annotation_type}/{data.ai_assistant}: {type(e).__name__}: {e}")

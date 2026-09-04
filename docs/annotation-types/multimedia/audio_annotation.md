@@ -72,7 +72,7 @@ annotation_schemes:
 | `mode` | string | `"label"` | Annotation mode: `"label"`, `"questions"`, or `"both"` |
 | `labels` | list | required* | Category labels for segments (*required for label/both modes) |
 | `segment_schemes` | list | required* | Per-segment annotation schemes (*required for questions/both modes) |
-| `min_segments` | integer | `0` | Minimum required segments |
+| `min_segments` | integer | `0` | Fewest segments the annotator must mark. Blocks Next until they have, and says how many are still missing. Needs `label_requirement.required: true` to take effect. |
 | `max_segments` | integer | `null` | Maximum allowed segments |
 | `zoom_enabled` | boolean | `true` | Enable zoom controls |
 | `playback_rate_control` | boolean | `false` | Show playback speed selector |
@@ -161,6 +161,23 @@ Two limits are worth knowing:
   `min_segments` to require segments, and check completeness in analysis.
 
 A runnable example is in `examples/audio/segment-questions/`.
+
+### Requiring segments
+
+With `label_requirement.required: true` on the scheme, Next is blocked until
+the annotator has marked at least `min_segments` segments and given every one of
+them a label. The message names what is missing: "1 of 2 segments marked", "1
+segment with no label". Without `required`, neither check blocks anything.
+
+```yaml
+- annotation_type: audio_annotation
+  name: speaker_turns
+  description: "Mark each speaker turn"
+  labels: [caller, agent]
+  min_segments: 2
+  label_requirement:
+    required: true
+```
 
 ### Label Configuration
 
@@ -303,7 +320,7 @@ See `examples/audio/audio-annotation/config.yaml` for a complete working example
 
 5. **Label Colors**: Choose distinct colors that are visible on the waveform (avoid grays that blend with the waveform).
 
-6. **Min Segments**: Set `min_segments: 1` to ensure annotators create at least one segment per audio file.
+6. **Min Segments**: Set `min_segments: 1` to ensure annotators create at least one segment per audio file. Pair it with `label_requirement.required: true` — `min_segments` is checked as part of the requiredness pass, so on its own it records the number and blocks nothing.
 
 ## Troubleshooting
 

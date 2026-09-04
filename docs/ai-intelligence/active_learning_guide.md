@@ -189,21 +189,17 @@ active_learning:
 | `model_save_directory` | Directory to save models | Required | `/models/` |
 | `model_retention_count` | Number of models to keep | `2` | `3-5` |
 
-### Database Integration
+### Training history
 
-For large-scale deployments, enable database persistence:
+Potato records every training run: what was trained, on how many annotations,
+how long it took, and where the model was saved. There is nothing to configure.
+The records go into the project's SQLite database alongside the rest of Potato's
+state, and you can read them at `GET /admin/active-learning/stats`.
 
-```yaml
-active_learning:
-  enabled: true
-  database_enabled: true
-  database_config:
-    host: "localhost"
-    port: 3306
-    database: "potato_al"
-    username: "potato_user"
-    password: "secure_password"
-```
+Earlier versions documented `database_enabled` and a `database_config` block
+with MySQL connection details. Neither key did anything: the code behind them
+created no tables and saved no metrics. Both are ignored if you still have them
+in a config file, and you can delete them.
 
 ## Multi-Schema Support
 
@@ -468,15 +464,6 @@ active_learning:
   model_persistence_enabled: true
   model_save_directory: "/data/potato/models"
   model_retention_count: 5
-
-  # Database integration
-  database_enabled: true
-  database_config:
-    host: "localhost"
-    port: 3306
-    database: "potato_al"
-    username: "potato_user"
-    password: "secure_password"
 
   resolution_strategy: "majority_vote"
   random_sample_percent: 10

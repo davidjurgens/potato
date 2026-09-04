@@ -271,9 +271,21 @@ class AiCacheManager:
         for scheme in annotation_scheme:
             self.annotations.append(scheme)
 
-        # Check if main endpoint supports vision
+        # Check if main endpoint supports vision.
+        #
+        # Reported as three states, not two. "supports vision: False" was
+        # printed both for a text-only endpoint that started fine and for an
+        # endpoint that never started at all, so the boot log could not tell
+        # an author which had happened.
         self.endpoint_supports_vision = hasattr(self.ai_endpoint, 'query_with_image')
-        logger.info(f"AI endpoint supports vision: {self.endpoint_supports_vision}")
+        if self.ai_endpoint is None:
+            logger.warning(
+                "No AI endpoint: assistants will not appear and AI support is "
+                "off for this run.")
+        else:
+            logger.info("AI endpoint ready (%s), vision: %s",
+                        type(self.ai_endpoint).__name__,
+                        self.endpoint_supports_vision)
 
         # Initialize cache
         if self.disk_cache_enabled:

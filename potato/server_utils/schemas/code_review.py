@@ -362,7 +362,20 @@ def _generate_internal(
         }}
 
         function saveState() {{
-            var data = JSON.stringify(_state);
+            /* "+ Add Comment" appends a row immediately, and an untouched row
+               used to be stored exactly like a written one: two clicks and one
+               Next stored two comments with empty text on an empty file, and
+               any export counting `comments` counted two reviews of a file
+               nobody reviewed. The rows stay on screen -- the annotator is
+               mid-thought -- but only comments with text are saved. */
+            var written = (_state.comments || []).filter(function(c) {{
+                return c && String(c.text || '').trim() !== '';
+            }});
+            var data = JSON.stringify({{
+                verdict: _state.verdict,
+                comments: written,
+                file_ratings: _state.file_ratings
+            }});
             var input = document.getElementById(SCHEMA).querySelector('.code-review-data-input');
             if (input) {{
                 input.value = data;

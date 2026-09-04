@@ -23,7 +23,8 @@ import json
 from typing import List, Dict, Tuple, Any
 from .identifier_utils import (
     safe_generate_layout,
-    escape_html_content
+    escape_html_content,
+    generate_validation_attribute
 )
 
 logger = logging.getLogger(__name__)
@@ -202,6 +203,7 @@ def _generate_html(
     Generate the HTML for the video annotation interface.
     """
     escaped_name = escape_html_content(schema_name)
+    validation = generate_validation_attribute(annotation_scheme)
     description = escape_html_content(annotation_scheme.get('description', ''))
     config_json = json.dumps(js_config)
 
@@ -304,7 +306,8 @@ def _generate_html(
     source_field_attr = f' data-source-field="{escape_html_content(source_field)}"' if source_field else ""
 
     html = f'''
-    <form id="{escaped_name}" class="annotation-form video-annotation" action="javascript:void(0)"{source_field_attr}>
+    <form id="{escaped_name}" class="annotation-form video-annotation" action="javascript:void(0)"
+          data-schema-name="{escaped_name}"{source_field_attr}>
         <fieldset schema="{escaped_name}">
             <legend>{description}</legend>
 
@@ -414,10 +417,18 @@ def _generate_html(
 
                 <!-- Hidden input for storing annotation data -->
                 <!-- autocomplete="off" prevents Firefox from restoring old values on reload -->
+                <!-- `validation` is what puts this schema in front of
+                     validateRequiredFields at all. Without it
+                     `label_requirement.required: true` was inert on this
+                     scheme, and `min_segments` -- which does reach the browser
+                     -- had nothing to report a shortfall to. The manager sets
+                     `data-incomplete-reason` on the form above; that is where
+                     "1 of 2 segments marked" comes from. -->
                 <input type="hidden"
                        name="{escaped_name}"
                        id="input-{escaped_name}"
                        class="annotation-data-input"
+                       validation="{validation}"
                        autocomplete="off"
                        value="">
 

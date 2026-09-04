@@ -117,11 +117,34 @@
       "additionalProperties": true,
       "description": "Model-backed label suggestions shown alongside each item",
       "properties": {
-        "ai_config": {},
-        "ai_config_file": {},
-        "cache_config": {},
-        "enabled": {},
-        "endpoint_type": {},
+        "ai_config": {
+          "description": "Everything about the model itself: model, base_url, api_key, max_tokens, temperature, timeout, include. One level deeper than the obvious guess \u2014 ai_support.model is not read",
+          "type": "object"
+        },
+        "ai_config_file": {
+          "description": "Path to a separate YAML file holding the endpoint settings, so keys stay out of the repo. Its keys are merged FLAT into ai_config, so the file holds model/base_url/api_key directly \u2014 a nested ai_config: block inside it becomes ai_config.ai_config and is ignored. endpoint_type is the one key lifted to the ai_support level. A missing file disables AI support with a warning, which `validate --strict` treats as an error",
+          "examples": [
+            "ai-config.yaml"
+          ],
+          "type": "string"
+        },
+        "cache_config": {
+          "description": "Disk cache and prefetch for model replies, so an annotator does not wait for a generation the study has already paid for",
+          "type": "object"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Turn AI assistance on. Without an endpoint that starts, the boot log says so and no assistant appears",
+          "type": "boolean"
+        },
+        "endpoint_type": {
+          "default": "openai",
+          "description": "Which backend to talk to: openai, openai_vision, anthropic, anthropic_vision, gemini, huggingface, ollama, ollama_vision, openrouter, vllm, yolo, sam, sam3",
+          "examples": [
+            "vllm"
+          ],
+          "type": "string"
+        },
         "features": {},
         "option_highlighting": {}
       },
@@ -2856,6 +2879,10 @@
           "description": "Insert a check every N items",
           "type": "integer"
         },
+        "geometry_iou_tolerance": {
+          "description": "Overlap a drawn answer must reach to count as correct, as a fraction",
+          "type": "number"
+        },
         "items_file": {
           "description": "File holding the attention-check items",
           "type": "string"
@@ -3717,9 +3744,17 @@
           "description": "Turn gold standards on",
           "type": "boolean"
         },
+        "feedback": {
+          "description": "What an annotator is told after a gold item. A mapping with `show_correct_answer` and `show_explanation`; both off means silent scoring",
+          "type": "object"
+        },
         "frequency": {
           "description": "Insert a gold item every N items",
           "type": "integer"
+        },
+        "geometry_iou_tolerance": {
+          "description": "Overlap a drawn answer must reach to count as correct, as a fraction",
+          "type": "number"
         },
         "items_file": {
           "description": "File holding the gold items",

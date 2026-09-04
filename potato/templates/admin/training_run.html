@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="{{ ui_lang.html_lang|default('en') }}" dir="{{ ui_lang.html_dir|default('ltr') }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ ui_lang.training_run_page_title|default('Training run') }} · {{ run.run_id }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+<style>
+  .tr-back { font-size: 0.85rem; display: inline-block; margin-bottom: 0.75rem; }
+  .tr-card { margin-bottom: 1.25rem; }
+  .tr-card h2 { margin-top: 0; font-size: 1.125rem; }
+  .tr-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.tr-table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+  table.tr-table th, table.tr-table td {
+    border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }
+  table.tr-table th { background: var(--muted); font-weight: 600; white-space: nowrap; }
+  td.tr-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tr-mono { font-family: var(--font-mono, ui-monospace, Menlo, monospace); }
+  .tr-empty { color: var(--muted-foreground); font-style: italic; }
+  .tr-pill { font-size: 0.7rem; border-radius: var(--radius); padding: 0.05rem 0.45rem;
+             font-weight: 600; background: var(--muted); }
+  .tr-pill.ok     { background: hsl(140 45% 92%); color: hsl(140 45% 24%); }
+  .tr-pill.err    { background: hsl(0 65% 95%);   color: hsl(0 55% 34%); }
+  .tr-pill.run    { background: hsl(210 70% 93%); color: hsl(212 60% 30%); }
+  .tr-pill.cancel { background: hsl(35 60% 93%);  color: hsl(28 55% 28%); }
+  .tr-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+              gap: 0.75rem 1.5rem; }
+  .tr-fact dt { font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+                letter-spacing: 0.03em; color: var(--muted-foreground); }
+  .tr-fact dd { margin: 0.1rem 0 0; font-size: 0.95rem; }
+  .tr-err { background: hsl(0 65% 96%); border: 1px solid hsl(0 55% 88%);
+            color: hsl(0 50% 30%); border-radius: var(--radius);
+            padding: 0.6rem 0.8rem; font-size: 0.875rem; white-space: pre-wrap; }
+  .tr-log { background: var(--muted); border-radius: var(--radius);
+            padding: 0.6rem 0.8rem; font-size: 0.8rem; max-height: 24rem;
+            overflow: auto; }
+  .tr-log div { font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+                white-space: pre-wrap; margin-bottom: 0.15rem; }
+  .tr-log .lvl-warning { color: hsl(28 60% 32%); }
+  .tr-log .lvl-error   { color: hsl(0 55% 38%); }
+  .tr-note { font-size: 0.8rem; color: var(--muted-foreground); margin-top: 0.4rem;
+             max-width: 70ch; line-height: 1.5; }
+</style>
+</head>
+<body>
+<main class="dashboard" role="main">
+  <a class="tr-back" href="{{ url_for('training.training_page') }}">&larr; {{ ui_lang.training_all_runs|default('All runs') }}</a>
+  <h1>{{ ui_lang.training_run_heading|default('Run') }} <span class="tr-mono">{{ run.run_id }}</span></h1>
+
+  <section class="dashboard-card tr-card" aria-labelledby="facts-h">
+    <h2 id="facts-h">{{ ui_lang.training_summary|default('Summary') }}</h2>
+    <dl class="tr-facts">
+      <div class="tr-fact"><dt>{{ ui_lang.training_col_status|default('Status') }}</dt>
+        <dd><span class="tr-pill {{ 'ok' if run.status == 'success' else 'err' if run.status == 'error' else 'cancel' if run.status == 'cancelled' else 'run' }}">{{ run.status }}</span></dd></div>
+      <div class="tr-fact"><dt>{{ ui_lang.training_col_trainer|default('Trainer') }}</dt><dd>{{ run.trainer }}</dd></div>
+      <div class="tr-fact"><dt>{{ ui_lang.training_col_schemas|default('Schemas') }}</dt><dd>{{ run.schema_names|join(', ') }}</dd></div>
+      <div class="tr-fact"><dt>{{ ui_lang.training_trigger|default('Triggered by') }}</dt><dd>{{ run.trigger }}</dd></div>
+      <div class="tr-fact"><dt>{{ ui_lang.training_col_train|default('Train') }}</dt><dd>{{ run.n_train }}</dd></div>
+      <div class="tr-fact"><dt>{{ ui_lang.training_col_val|default('Val') }}</dt><dd>{{ run.n_val }}</dd></div>
+      <div class="tr-fact"><dt>{{ ui_lang.training_col_test|default('Test') }}</dt><dd>{{ run.n_test }}</dd></div>
+      <div class="tr-fact"><dt>{{ ui_lang.training_col_duration|default('Duration') }}</dt>
+        <dd>{% if run.duration %}{{ '%.1fs'|format(run.duration) }}{% else %}<span class="tr-empty">still running</span>{% endif %}</dd></div>
+      <div class="tr-fact"><dt>{{ ui_lang.training_split_seed|default('Split seed') }}</dt><dd class="tr-mono">{{ run.split_seed }}</dd></div>
+      <div class="tr-fact"><dt>{{ ui_lang.training_model_version|default('Model version') }}</dt>
+        <dd class="tr-mono">{{ run.model_version or '—' }}</dd></div>
+    </dl>
+    <p class="tr-note">
+      {{ ui_lang.training_seed_note|default('The split seed decides which items are held out. Keep it fixed:
+      changing it moves validation items into training, and every score recorded before the change stops
+      being comparable to the ones after it.') }}
+    </p>
+  </section>
+
+  {% if run.error %}
+  <section class="dashboard-card tr-card" aria-labelledby="err-h">
+    <h2 id="err-h">{{ ui_lang.training_error_heading|default('What went wrong') }}</h2>
+    <div class="tr-err">{{ run.error }}</div>
+    {% if run.error_code %}<p class="tr-note">{{ ui_lang.training_error_code|default('Code') }}: <span class="tr-mono">{{ run.error_code }}</span></p>{% endif %}
+  </section>
+  {% endif %}
+
+  <section class="dashboard-card tr-card" aria-labelledby="metrics-h">
+    <h2 id="metrics-h">{{ ui_lang.training_metrics_heading|default('Metrics') }}</h2>
+    {% if not run.metrics %}
+      <p class="tr-empty">{{ ui_lang.training_no_metrics|default('This run recorded no metrics.') }}</p>
+    {% else %}
+    <div class="tr-scroll">
+      <table class="tr-table">
+        <thead><tr>
+          <th scope="col">{{ ui_lang.training_col_metric|default('Metric') }}</th>
+          <th scope="col">{{ ui_lang.training_col_value|default('Value') }}</th>
+        </tr></thead>
+        <tbody>
+        {% for name, value in run.metrics.items() %}
+          <tr>
+            <td class="tr-mono">{{ name }}</td>
+            {#- A count is not a rate: rendering n_train as "37.0000" reads as a
+                measurement with four significant figures rather than a tally. -#}
+            <td class="tr-num">
+              {%- if value is number and value == value|round|int -%}
+                {{ value|int }}
+              {%- elif value is number -%}
+                {{ '%.4f'|format(value) }}
+              {%- else -%}
+                {{ value }}
+              {%- endif -%}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="dashboard-card tr-card" aria-labelledby="log-h">
+    <h2 id="log-h">{{ ui_lang.training_log_heading|default('Log') }}</h2>
+    {% set log_events = events|selectattr('event', 'equalto', 'log')|list %}
+    {% if not log_events %}
+      <p class="tr-empty">{{ ui_lang.training_no_log|default('This run produced no log lines.') }}</p>
+    {% else %}
+    <div class="tr-log">
+      {% for e in log_events %}
+        <div class="lvl-{{ e.level }}">[{{ e.level }}] {{ e.msg }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+</main>
+</body>
+</html>

@@ -85,6 +85,7 @@ class OpenAIEndpoint(BaseAIEndpoint):
                     },
                 }
             response = self.client.chat.completions.create(**kwargs)
+            self._warn_if_truncated(response.choices[0].finish_reason)
             return response.choices[0].message.content
         except Exception as e:
             raise AIEndpointRequestError(f"OpenAI request failed: {e}")

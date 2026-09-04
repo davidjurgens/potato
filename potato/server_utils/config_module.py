@@ -115,11 +115,11 @@ KNOWN_CONFIG_KEYS = {
     # === Quality control ===
     "attention_checks": {
         "enabled", "items_file", "frequency", "probability",
-        "min_response_time", "failure_handling",
+        "min_response_time", "failure_handling", "geometry_iou_tolerance",
     },
     "gold_standards": {
         "enabled", "items_file", "mode", "frequency",
-        "accuracy", "auto_promote",
+        "accuracy", "auto_promote", "feedback", "geometry_iou_tolerance",
     },
     "gold_standards_file": None,
     "pre_annotation": {
@@ -132,8 +132,27 @@ KNOWN_CONFIG_KEYS = {
 
     # === AI ===
     "ai_support": {
-        "enabled", "endpoint_type", "ai_config_file", "ai_config",
-        "option_highlighting", "features", "cache_config",
+        "enabled": None, "endpoint_type": None, "ai_config_file": None,
+        "option_highlighting": None, "features": None, "cache_config": None,
+        # Spelled out rather than left opaque so `ai_support.ai_config.modle`
+        # is caught. The union of every key any endpoint reads: the shared
+        # ones first, then the per-endpoint ones (openai_vision's detail /
+        # json_mode / max_image_size, vllm's think, yolo and sam's detection
+        # settings). An `ai_config_file` merges its keys in here flat, so the
+        # same list covers that file's contents.
+        "ai_config": {
+            "model": None, "base_url": None, "api_base": None,
+            "api_key": None, "max_tokens": None, "temperature": None,
+            "timeout": None, "enabled": None,
+            "detail": None, "json_mode": None, "max_image_size": None,
+            "think": None,
+            "classes": None, "custom_classes": None,
+            "confidence_threshold": None, "iou_threshold": None,
+            "device": None, "max_frames": None, "default_video_fps": None,
+            # `include.all` is the switch most authors want and the one whose
+            # absence is silent, so a typo in it must not pass either.
+            "include": {"all", "special_include"},
+        },
     },
     "chat_support": {
         "enabled", "endpoint_type", "ai_config", "ui",
@@ -1793,6 +1812,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     if 'adjudication' in config_data:
         validate_adjudication_config(config_data)
 
+    # Warn about phases named in the order that no block defines
+    validate_phase_order(config_data)
+
     # Validate quality control configuration if present
     validate_quality_control_config(config_data)
 
@@ -1812,6 +1834,11 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # A bws scheme is inert without the dataset-level tuple generator.
     _validate_bws_scheme_has_config(config_data)
     _validate_event_annotation_labels(config_data)
+
+    # Schemes whose whole surface is served by a block or a companion scheme
+    # they do not declare themselves.
+    _validate_multi_document_event_has_template(config_data)
+    _validate_canvas_companion_schemes(config_data)
 
     # Validate BWS configuration if present
     if 'bws_config' in config_data:
@@ -2451,6 +2478,112 @@ def _validate_bws_scheme_has_config(config_data: Dict[str, Any]) -> None:
         "  bws_config:\n"
         "    tuple_size: 4\n"
         "    num_tuples: 100"
+    )
+
+
+def _validate_multi_document_event_has_template(config_data: Dict[str, Any]) -> None:
+    """
+    Require the top-level ``event_template`` block for multi_document_event.
+
+    The scheme's own ``slots:`` list is not enough. The whole widget is driven
+    by the Event Registry at ``/corpus/api/*``, and that blueprint is only
+    registered when ``event_template.enabled`` (or ``corpus_map.enabled``) is
+    true. Without it the page rendered "No events yet. Create one to begin.",
+    "+ New event" did nothing forever, and the only symptom was three 404s in
+    the browser console -- validation passed, the boot log said nothing, and
+    the annotator was told nothing.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If a multi_document_event scheme has no registry
+    """
+    schemes = config_data.get('annotation_schemes', [])
+    if not isinstance(schemes, list):
+        return
+
+    names = [
+        s.get('name', '<unnamed>') for s in schemes
+        if isinstance(s, dict) and s.get('annotation_type') == 'multi_document_event'
+    ]
+    if not names:
+        return
+
+    def _enabled(block_name):
+        block = config_data.get(block_name)
+        return isinstance(block, dict) and bool(block.get('enabled', False))
+
+    if _enabled('event_template') or _enabled('corpus_map'):
+        return
+
+    raise ConfigValidationError(
+        f"annotation scheme '{names[0]}' has annotation_type: "
+        "multi_document_event, but the config has no top-level "
+        "'event_template' block with 'enabled: true'. That block is what "
+        "registers the cross-document event registry the widget talks to; "
+        "without it every /corpus/api/* call 404s and '+ New event' does "
+        "nothing. A scheme-level 'slots:' list does not replace it. Add:\n\n"
+        "  event_template:\n"
+        "    enabled: true\n"
+        "    name: service_outage\n"
+        "    allow_annotator_create: true\n"
+        "    slots:\n"
+        "      - name: location\n"
+        "        description: Where it happened"
+    )
+
+
+def _validate_canvas_companion_schemes(config_data: Dict[str, Any]) -> None:
+    """
+    Require an ``image_annotation`` scheme beside the two that draw on it.
+
+    ``region_caption`` and ``grounding_eval`` own the language half of their
+    task -- the caption, the phrase-to-region binding -- and borrow the canvas
+    from an ``image_annotation`` scheme in the same config. Alone they render
+    fully and are unusable: region_caption shows "Draw a region on the image"
+    over a list that can never fill, and grounding_eval offers "Not present in
+    the image" as the only reachable answer for every expression, so the study
+    stores a grounding set whose every verdict is absent.
+
+    Args:
+        config_data: The configuration data
+
+    Raises:
+        ConfigValidationError: If such a scheme has no canvas to draw on
+    """
+    schemes = config_data.get('annotation_schemes', [])
+    if not isinstance(schemes, list):
+        return
+
+    needy = [
+        s for s in schemes
+        if isinstance(s, dict)
+        and s.get('annotation_type') in ('region_caption', 'grounding_eval')
+    ]
+    if not needy:
+        return
+
+    if any(isinstance(s, dict) and s.get('annotation_type') == 'image_annotation'
+           for s in schemes):
+        return
+
+    scheme = needy[0]
+    kind = scheme.get('annotation_type')
+    what = ('regions to caption' if kind == 'region_caption'
+            else 'regions to bind expressions to')
+    raise ConfigValidationError(
+        f"annotation scheme '{scheme.get('name', '<unnamed>')}' has "
+        f"annotation_type: {kind}, but the config declares no "
+        "'image_annotation' scheme. This scheme does not draw its own canvas "
+        f"-- it reads the {what} off an image_annotation scheme beside it, and "
+        "an 'image' display field is not a canvas. Alone it renders and then "
+        "collects nothing that could ever be drawn. Add, for example:\n\n"
+        "  - annotation_type: image_annotation\n"
+        "    name: regions\n"
+        "    description: Draw the regions\n"
+        "    tools: [bbox]\n"
+        "    labels: [referent]"
     )
 
 
@@ -3738,6 +3871,41 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
             raise ConfigValidationError(
                 "authentication.user_config_path cannot be used with method 'database'. "
                 "The database backend handles its own user persistence."
+            )
+
+
+def validate_phase_order(config_data: Dict[str, Any]) -> None:
+    """Warn about names in `phases.order` that no phase defines.
+
+    The server drops these from the order at load time, but a name that
+    survives validation silently is almost always a typo or a phase block the
+    author forgot to write, and the study runs without the step they asked
+    for. `--strict` turns the warning into a refusal.
+    """
+    phases = config_data.get("phases")
+    if not isinstance(phases, dict):
+        return
+
+    order = phases.get("order")
+    if not isinstance(order, list):
+        return
+
+    for phase_name in order:
+        if not isinstance(phase_name, str):
+            logger.warning(
+                "phases.order entry %r is not a phase name; it will be ignored.",
+                phase_name,
+            )
+            continue
+        # 'annotation' is sequenced through the order but has no phase block:
+        # the main annotation flow owns it, not the phase loader.
+        if phase_name == "annotation":
+            continue
+        if not isinstance(phases.get(phase_name), dict):
+            logger.warning(
+                "Phase '%s' is listed in phases.order but no 'phases.%s' block "
+                "defines it. It will be dropped from the phase order.",
+                phase_name, phase_name,
             )
 
 
@@ -6068,6 +6236,62 @@ def validate_active_learning_config(config_data: Dict[str, Any]) -> None:
             )
 
 
+def _api_key_is_reachable(endpoint_type: str, endpoint_config: Dict[str, Any],
+                          block: str) -> None:
+    """
+    Refuse a cloud endpoint that has no way to authenticate.
+
+    Three ways an endpoint gets a key, and the check has to know all of them or
+    it rejects working configurations:
+
+    * the config's own ``api_key``;
+    * the environment, which the openai and openai_vision endpoints read
+      (``OPENAI_API_KEY``) -- so a correctly-configured shell used to fail
+      ``validate --strict``;
+    * not at all, when ``base_url`` points at a self-hosted OpenAI-compatible
+      server. Those have no keys, and the endpoint substitutes ``"EMPTY"``
+      itself. The check demanded a key anyway, so the code path written for
+      local servers could not be reached through the validator, and the
+      workaround was to write the placeholder the endpoint would have supplied.
+
+    anthropic, huggingface and gemini read neither a base_url nor the
+    environment, so for those the key really is required.
+
+    Args:
+        endpoint_type: The configured endpoint type
+        endpoint_config: The ``ai_config`` block
+        block: Which top-level block this is, for the message
+
+    Raises:
+        ConfigValidationError: If nothing can supply a key
+    """
+    import os
+
+    openai_shaped = endpoint_type in ("openai", "openai_vision")
+
+    api_key = endpoint_config.get("api_key", "")
+    if api_key and isinstance(api_key, str):
+        return
+    if api_key and not isinstance(api_key, str):
+        raise ConfigValidationError(
+            f"{block}.ai_config.api_key must be a string")
+
+    if openai_shaped:
+        if endpoint_config.get("base_url") or endpoint_config.get("api_base"):
+            return
+        if os.environ.get("OPENAI_API_KEY"):
+            return
+        raise ConfigValidationError(
+            f"{block}.ai_config.api_key is required for the {endpoint_type} "
+            "endpoint. Set it here, set OPENAI_API_KEY in the environment, or "
+            f"set {block}.ai_config.base_url to a self-hosted "
+            "OpenAI-compatible server (vLLM, SGLang, LM Studio, llama.cpp), "
+            "which needs no key.")
+
+    raise ConfigValidationError(
+        f"{block}.ai_config.api_key is required for {endpoint_type} endpoint")
+
+
 def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
     """
     Validate AI support configuration.
@@ -6127,10 +6351,9 @@ def validate_ai_support_config(config_data: Dict[str, Any]) -> None:
                 raise ConfigValidationError("ai_support.ai_config.model must be a non-empty string")
 
         # Validate API key for cloud-based endpoints
-        if endpoint_type in ["openai", "anthropic", "huggingface", "gemini"]:
-            api_key = ai_endpoint_config.get("api_key", "")
-            if not api_key or not isinstance(api_key, str):
-                raise ConfigValidationError(f"ai_support.ai_config.api_key is required for {endpoint_type} endpoint")
+        if endpoint_type in ["openai", "openai_vision", "anthropic",
+                             "huggingface", "gemini"]:
+            _api_key_is_reachable(endpoint_type, ai_endpoint_config, "ai_support")
 
         # Validate base_url for VLLM
         if endpoint_type == "vllm":
@@ -6227,12 +6450,9 @@ def validate_chat_support_config(config_data: Dict[str, Any]) -> None:
                 )
 
         # Validate API key for cloud endpoints
-        if endpoint_type in ["openai", "anthropic", "huggingface", "gemini", "openrouter"]:
-            api_key = ai_cfg.get("api_key", "")
-            if not api_key or not isinstance(api_key, str):
-                raise ConfigValidationError(
-                    f"chat_support.ai_config.api_key is required for {endpoint_type} endpoint"
-                )
+        if endpoint_type in ["openai", "openai_vision", "anthropic",
+                             "huggingface", "gemini", "openrouter"]:
+            _api_key_is_reachable(endpoint_type, ai_cfg, "chat_support")
 
     # Validate UI section
     if "ui" in chat_config:
@@ -6311,105 +6531,25 @@ def parse_active_learning_config(config_data: Dict[str, Any]) -> 'ActiveLearning
     """
     Parse active learning configuration from YAML data.
 
+    Delegates to the single implementation in
+    :func:`potato.active_learning_manager.parse_active_learning_config`. This
+    module used to carry a second, independent parser that understood only the
+    nested ``classifier:``/``vectorizer:`` blocks and applied different
+    defaults. It was the one the documentation described and the tests
+    exercised, while the live server ran the other -- so a config copied out
+    of the guide quietly got defaults instead of the settings it named.
+
     Args:
-        config_data: The configuration data containing active_learning section
+        config_data: The configuration data containing an active_learning section
 
     Returns:
-        ActiveLearningConfig: Parsed active learning configuration
-
-    Raises:
-        ConfigValidationError: If the configuration is invalid
+        ActiveLearningConfig: Parsed configuration, or a default instance when
+        active learning is absent or disabled.
     """
-    from potato.active_learning_manager import ActiveLearningConfig, ResolutionStrategy
+    from potato.active_learning_manager import (
+        ActiveLearningConfig, parse_active_learning_config as _parse)
 
-    if "active_learning" not in config_data:
-        return ActiveLearningConfig()  # Return default config
-
-    al_config = config_data["active_learning"]
-
-    # Parse classifier configuration
-    classifier_name = "sklearn.linear_model.LogisticRegression"
-    classifier_kwargs = {}
-    if "classifier" in al_config:
-        classifier_config = al_config["classifier"]
-        classifier_name = classifier_config.get("name", classifier_name)
-        classifier_kwargs = classifier_config.get("hyperparameters", {})
-
-    # Parse vectorizer configuration
-    vectorizer_name = "sklearn.feature_extraction.text.CountVectorizer"
-    vectorizer_kwargs = {}
-    if "vectorizer" in al_config:
-        vectorizer_config = al_config["vectorizer"]
-        vectorizer_name = vectorizer_config.get("name", vectorizer_name)
-        vectorizer_kwargs = vectorizer_config.get("hyperparameters", {})
-
-    # Parse resolution strategy
-    resolution_strategy = ResolutionStrategy.MAJORITY_VOTE
-    if "resolution_strategy" in al_config:
-        strategy_str = al_config["resolution_strategy"]
-        if strategy_str == "majority_vote":
-            resolution_strategy = ResolutionStrategy.MAJORITY_VOTE
-        elif strategy_str == "random":
-            resolution_strategy = ResolutionStrategy.RANDOM
-        elif strategy_str == "consensus":
-            resolution_strategy = ResolutionStrategy.CONSENSUS
-        elif strategy_str == "weighted_average":
-            resolution_strategy = ResolutionStrategy.WEIGHTED_AVERAGE
-
-    # Parse other parameters
-    min_annotations_per_instance = al_config.get("min_annotations_per_instance", 1)
-    min_instances_for_training = al_config.get("min_instances_for_training", 10)
-    max_instances_to_reorder = al_config.get("max_instances_to_reorder")
-    random_sample_percent = al_config.get("random_sample_percent", 0.2)
-    update_frequency = al_config.get("update_frequency", 5)
-    schema_names = al_config.get("schema_names", [])
-
-    # Parse database configuration
-    database_enabled = False
-    database_config = {}
-    if "database" in al_config:
-        db_config = al_config["database"]
-        database_enabled = db_config.get("enabled", False)
-        database_config = {k: v for k, v in db_config.items() if k != "enabled"}
-
-    # Parse model persistence configuration
-    model_persistence_enabled = False
-    model_save_directory = None
-    model_retention_count = 2
-    if "model_persistence" in al_config:
-        model_config = al_config["model_persistence"]
-        model_persistence_enabled = model_config.get("enabled", False)
-        model_save_directory = model_config.get("save_directory")
-        model_retention_count = model_config.get("retention_count", 2)
-
-    # Parse LLM configuration
-    llm_enabled = False
-    llm_config = {}
-    if "llm" in al_config:
-        llm_config = al_config["llm"]
-        llm_enabled = llm_config.get("enabled", False)
-
-    return ActiveLearningConfig(
-        enabled=al_config.get("enabled", False),
-        classifier_name=classifier_name,
-        classifier_kwargs=classifier_kwargs,
-        vectorizer_name=vectorizer_name,
-        vectorizer_kwargs=vectorizer_kwargs,
-        min_annotations_per_instance=min_annotations_per_instance,
-        min_instances_for_training=min_instances_for_training,
-        max_instances_to_reorder=max_instances_to_reorder,
-        resolution_strategy=resolution_strategy,
-        random_sample_percent=random_sample_percent,
-        update_frequency=update_frequency,
-        schema_names=schema_names,
-        database_enabled=database_enabled,
-        database_config=database_config,
-        model_persistence_enabled=model_persistence_enabled,
-        model_save_directory=model_save_directory,
-        model_retention_count=model_retention_count,
-        llm_enabled=llm_enabled,
-        llm_config=llm_config
-    )
+    return _parse(config_data) or ActiveLearningConfig()
 
 
 def validate_mcp_config(config_data: Dict[str, Any]) -> None:

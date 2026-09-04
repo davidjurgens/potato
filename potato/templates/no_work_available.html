@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ annotation_task_name }} - Nothing to annotate</title>
+    <link href="{{ url_for('static', filename='vendor/bootstrap-5.3.3.min.css') }}" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="potato-page-center">
+    <div class="potato-page-card potato-page-card-wide" style="text-align: center;">
+        <div class="potato-page-icon potato-page-icon-info">
+            <i class="fas fa-hourglass-end"></i>
+        </div>
+
+        <h1 class="potato-page-title">There is no work left for you</h1>
+        <p class="potato-page-subtitle">
+            Every item in this study already has as many annotators as it needs,
+            so nothing could be assigned to you. You have not annotated anything,
+            and nothing has been recorded against your account.
+        </p>
+
+        <div class="potato-alert potato-alert-info" style="text-align: left;">
+            <i class="fas fa-info-circle me-2"></i>
+            If you were asked to take part, tell whoever sent you the link —
+            they can raise the number of annotators per item or add more data.
+        </div>
+
+        <p style="margin-top: 1.25rem; font-size: 0.875rem; color: var(--muted-foreground);">
+            If more data arrives, reload this page and you will be given work.
+        </p>
+
+        <div style="margin-top: 1.5rem;">
+            <a href="{{ url_for('home') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-rotate-right me-1"></i> Check again
+            </a>
+        </div>
+    </div>
+</body>
+</html>

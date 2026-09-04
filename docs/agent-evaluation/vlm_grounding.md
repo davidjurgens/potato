@@ -17,7 +17,10 @@ Runnable example:
 ## The schema
 
 `grounding_eval` binds each referring expression to a region drawn on an
-`image_annotation` canvas beside it.
+`image_annotation` canvas beside it. The canvas is required, and a config
+without one is refused at validation: alone, `grounding_eval` renders its
+expression list and offers "Not present in the image" as the only reachable
+answer, so every verdict in the study would be absent.
 
 ```yaml
 annotation_schemes:
@@ -57,7 +60,7 @@ source with stable ids should use them.
 | `expressions_field` | `expressions` | Where the phrases live |
 | `caption_field` | `caption` | The text to ground, in `spans` mode |
 | `predictions_field` | — | Model predictions to review; enables the verdict control |
-| `require_all` | `false` | Warn once before advancing with phrases unanswered |
+| `require_all` | `false` | Warn once before advancing with phrases unanswered. The second Next goes through — this is a nudge, not a gate. |
 
 ---
 
@@ -263,8 +266,27 @@ The inverse task: the annotator draws the regions and supplies the language.
     name: descriptions
     description: "Describe each region"
     placeholder: "Describe this region…"
+    min_length: 10                # shorter than this is not a description
     agreement_distance: token     # or `embedding`
 ```
+
+A `region_caption` scheme needs an `image_annotation` scheme in the same
+config. It owns the caption, not the canvas: alone it renders its list and no
+region can ever be drawn into it, so a config without one is refused at
+validation.
+
+### `min_length` and `require_all`
+
+`min_length` is the floor, in characters, below which a caption does not count
+as written. With `min_length: 10`, "box" leaves the region undescribed, the
+progress line says so and names the floor, and the textarea carries the
+`minlength` attribute. Without it, any non-blank caption counts.
+
+`require_all` warns once when Next is pressed with regions undescribed; the
+second press goes through. It is a nudge rather than a gate because an
+annotator legitimately draws every region first and captions them afterwards,
+and stopping them mid-pass is an obstacle. For a gate, use
+`label_requirement.required`.
 
 The caption list follows the canvas and is rebuilt from it on every change,
 with captions carried across by **matching the region they were written about**

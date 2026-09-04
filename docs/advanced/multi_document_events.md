@@ -100,6 +100,27 @@ annotation_schemes:
     allow_annotator_create: true
 ```
 
+The scheme's own `slots:` list does not replace the `event_template` block.
+The block registers the `/corpus/api/*` registry the widget talks to, so a
+config with the scheme and no enabled block is refused at validation. Before
+that check existed, the page rendered "No events yet. Create one to begin.",
+"+ New event" did nothing, and the only sign of trouble was three 404s in the
+browser console.
+
+### The registry and the per-annotator answer
+
+The registry is shared by every annotator. An event, its member documents and
+its evidence are one record, so a second annotator opening a document sees the
+first annotator's events already attached to it. That is what a cross-document
+registry is for, but it means the registry cannot answer "which event does
+*this* annotator think this document belongs to".
+
+That answer is stored per annotator, alongside every other annotation, as the
+scheme's own value: a JSON list of the event ids this annotator has this
+document in. It is what the export and `/admin/iaa` read. Because the registry
+seeds memberships, opening a document that a seeded event already claims does
+**not** count as an answer; only a membership the annotator changes does.
+
 Give the document field `span_target: true` so evidence can be cited by selecting
 text:
 

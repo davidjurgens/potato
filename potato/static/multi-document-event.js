@@ -87,7 +87,8 @@
         this.slots = [];
         console.error("MDE: bad slots JSON", e);
       }
-      this.hidden = container.querySelector('input[type="hidden"]');
+      this.hidden = container.querySelector('input.mde-data-input')
+                 || container.querySelector('input[type="hidden"]');
       this.listEl = container.querySelector('[data-role="event-list"]');
       this.editorEl = container.querySelector('[data-role="editor"]');
       this.editorTitleEl = container.querySelector('[data-role="editor-title"]');
@@ -99,6 +100,12 @@
       this.events = [];
       this.activeEventId = null;
       this.pendingCiteSlot = null;
+      // The registry is shared by every annotator, and a seeded event already
+      // claims documents. Mirroring that into the input AND marking it
+      // modified would record an answer this annotator never gave, and mark
+      // the instance done before they touched it. The first sync writes the
+      // value; only later ones (which follow a real action) stamp it.
+      this._firstSync = true;
       // Serialize mutating writes so each picks up the freshest version stamp.
       // This prevents same-user field edits from racing into spurious optimistic-
       // lock conflicts, while a genuinely concurrent OTHER annotator still 409s.
@@ -292,9 +299,28 @@
       const mine = this.events
         .filter((e) => e.member_doc_ids.indexOf(docId) !== -1)
         .map((e) => e.id);
-      this.hidden.value = mine.length ? JSON.stringify(mine) : "";
-      // Let the standard pipeline persist the per-instance mirror.
-      this.hidden.dispatchEvent(new Event("change", { bubbles: true }));
+      // "[]" rather than "" when the annotator empties a document that had
+      // memberships: an empty string is invisible to syncAnnotationsFromDOM,
+      // so removing the last event would have left the previous answer
+      // standing in currentAnnotations. An untouched document stays "".
+      const next = mine.length ? JSON.stringify(mine)
+                               : (this.hidden.value ? "[]" : "");
+      const changed = next !== this.hidden.value;
+      this.hidden.value = next;
+      // `data-modified` is the other half of the annotation-input contract:
+      // syncAnnotationsFromDOM ignores a hidden input that carries neither
+      // data-modified nor data-server-set, because browsers restore hidden
+      // values across reloads and an unmarked one leaks between instances.
+      // Only stamp it on a real change -- the first refresh() of an untouched
+      // document writes "" back and must not mark the item answered.
+      if (this._firstSync) {
+        this._firstSync = false;
+        return;
+      }
+      if (changed) {
+        this.hidden.setAttribute("data-modified", "true");
+        this.hidden.dispatchEvent(new Event("change", { bubbles: true }));
+      }
     }
 
     // ---- actions ---------------------------------------------------------

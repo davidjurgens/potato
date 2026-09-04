@@ -273,6 +273,29 @@
         ]
       }
     },
+    "/admin/active-learning/stats": {
+      "get": {
+        "operationId": "get_admin_active_learning_stats",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Active learning state and training history.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_api_key"
+        ]
+      }
+    },
     "/admin/all_instances": {
       "get": {
         "operationId": "get_admin_all_instances",

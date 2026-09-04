@@ -561,6 +561,21 @@ class TieredAnnotationManager {
 
             button.addEventListener('click', () => {
                 this.setActiveLabel(label.name);
+                // Relabel the selection, not just the next annotation drawn.
+                // Without this the label buttons only ever seeded NEW
+                // annotations, so a seeded transcript turn -- or any
+                // annotation given the wrong label -- could not be corrected
+                // at all: the keyboard offers play/step/Delete/Escape, and
+                // `updateAnnotation` existed with nothing calling it. Delete
+                // and redraw was the only repair.
+                const selected = this.selectedAnnotation;
+                if (selected && selected.tier === tier.name
+                        && selected.label !== label.name) {
+                    this.updateAnnotation(selected.id, {
+                        label: label.name,
+                        color: label.color || '#cccccc'
+                    });
+                }
             });
 
             if (label.tooltip || label.description) {
@@ -1001,8 +1016,17 @@ class TieredAnnotationManager {
                 });
             });
 
-            // Set up Peaks.js event listeners for segment interactions
-            this._setupPeaksEventListeners();
+            // Set up Peaks.js event listeners for segment interactions.
+            // Isolated: a listener that cannot be registered is worth one
+            // warning, not the loss of auto-scroll, sizing and the initial
+            // zoom, which is what a throw in here cost before.
+            try {
+                this._setupPeaksEventListeners();
+            } catch (listenerError) {
+                console.warn('[TieredAnnotation] Could not wire all Peaks.js '
+                             + 'listeners; playback and sizing still apply:',
+                             listenerError);
+            }
 
             // Enable auto-scroll during playback and set initial zoom
             const zoomviewInstance = this.peaks.views.getView('zoomview');
@@ -1067,33 +1091,35 @@ class TieredAnnotationManager {
             this._onSegmentDragEnd(event.segment);
         });
 
-        // Double-click on zoomview to seek
-        const zoomview = this.peaks.views.getView('zoomview');
-        if (zoomview) {
-            zoomview.on('dblclick', (event) => {
-                tieredDebugLog('Zoomview double-click at time:', event.time);
-                this.mediaElement.currentTime = event.time;
-            });
-        }
+        // Waveform clicks arrive on the PEAKS INSTANCE, namespaced by view
+        // name -- the view objects in the bundled build are not event
+        // emitters and have no `.on` at all. `zoomview.on('dblclick', ...)`
+        // therefore threw TypeError here on every load, and because the throw
+        // escaped into _initPeaks's outer try/catch, everything after this
+        // function was skipped: auto-scroll, the initial zoom and start time,
+        // the post-layout refit, the resize refit, the zoom-range sync, and
+        // both seek handlers. The widget looked alive only because
+        // `segments.click` and `segments.dragend` are registered above.
+        this.peaks.on('zoomview.dblclick', (event) => {
+            tieredDebugLog('Zoomview double-click at time:', event.time);
+            this.mediaElement.currentTime = event.time;
+        });
 
         // Click on overview to navigate zoomed view and seek
-        const overview = this.peaks.views.getView('overview');
-        if (overview) {
-            overview.on('click', (event) => {
-                tieredDebugLog('Overview click at time:', event.time);
-                // Center zoomed view on clicked time
-                this.zoomedViewStart = Math.max(0, event.time - this.zoomedViewDuration / 2);
-                const maxStart = Math.max(0, this.mediaMetadata.duration - this.zoomedViewDuration);
-                this.zoomedViewStart = Math.min(maxStart, this.zoomedViewStart);
-                this.mediaElement.currentTime = event.time;
-                this._updateZoomedView();
-                this._updateZoomedSlider();
-            });
-            overview.on('dblclick', (event) => {
-                tieredDebugLog('Overview double-click at time:', event.time);
-                this.mediaElement.currentTime = event.time;
-            });
-        }
+        this.peaks.on('overview.click', (event) => {
+            tieredDebugLog('Overview click at time:', event.time);
+            // Center zoomed view on clicked time
+            this.zoomedViewStart = Math.max(0, event.time - this.zoomedViewDuration / 2);
+            const maxStart = Math.max(0, this.mediaMetadata.duration - this.zoomedViewDuration);
+            this.zoomedViewStart = Math.min(maxStart, this.zoomedViewStart);
+            this.mediaElement.currentTime = event.time;
+            this._updateZoomedView();
+            this._updateZoomedSlider();
+        });
+        this.peaks.on('overview.dblclick', (event) => {
+            tieredDebugLog('Overview double-click at time:', event.time);
+            this.mediaElement.currentTime = event.time;
+        });
 
         // Sync when Peaks.js auto-scrolls the zoomview during playback
         this._lastZoomSyncTime = 0;
@@ -1293,22 +1319,48 @@ class TieredAnnotationManager {
             return;
         }
 
-        const defaultLabel = (tier && tier.labels && tier.labels.length)
-            ? tier.labels[0] : null;
+        // The turn's own speaker, when the tier offers a label by that name.
+        // Seeding every turn with `labels[0]` produced records that contradict
+        // themselves -- four utterances all labelled "Caller", two of them
+        // carrying speaker: "agent" in a field nothing displays -- and there
+        // is no way to relabel a seeded annotation from the UI, so the only
+        // repair was delete and redraw. An unmatched speaker leaves the label
+        // empty: an unanswered turn is honest, a guessed one is not.
+        const labels = (tier && tier.labels) || [];
+        const byName = new Map(
+            labels.map(l => [String(l.name || '').trim().toLowerCase(), l]));
+        const labelForSpeaker = (speaker) => {
+            if (!speaker) return null;
+            return byName.get(String(speaker).trim().toLowerCase()) || null;
+        };
 
-        this.annotations[tierName] = turns.map((turn, i) => ({
-            // Derived from the turn id so the same transcript reproduces the
-            // same annotation ids across reloads.
-            id: 'turn-' + (turn.turn_id || ('t' + i)),
-            tier: tierName,
-            start_time: (turn.start || 0) * 1000,
-            end_time: (turn.end || turn.start || 0) * 1000,
-            label: defaultLabel ? defaultLabel.name : '',
-            color: defaultLabel ? (defaultLabel.color || '#cccccc') : '#cccccc',
-            parent_id: null,
-            value: turn.text || '',
-            speaker: turn.speaker || null
-        }));
+        this.annotations[tierName] = turns.map((turn, i) => {
+            const label = labelForSpeaker(turn.speaker);
+            return {
+                // Derived from the turn id so the same transcript reproduces
+                // the same annotation ids across reloads.
+                id: 'turn-' + (turn.turn_id || ('t' + i)),
+                tier: tierName,
+                start_time: (turn.start || 0) * 1000,
+                end_time: (turn.end || turn.start || 0) * 1000,
+                label: label ? label.name : '',
+                color: label ? (label.color || '#cccccc') : '#cccccc',
+                parent_id: null,
+                value: turn.text || '',
+                speaker: turn.speaker || null
+            };
+        });
+
+        const unmatched = this.annotations[tierName]
+            .filter(a => !a.label).length;
+        if (unmatched && labels.length) {
+            console.warn(
+                '[TieredAnnotation] ' + unmatched + ' of '
+                + this.annotations[tierName].length + ' seeded turn(s) on tier "'
+                + tierName + '" have no speaker matching a tier label, so they '
+                + 'are seeded unlabelled. Tier labels are: '
+                + labels.map(l => l.name).join(', ') + '.');
+        }
 
         tieredDebugLog(
             'Seeded ' + this.annotations[tierName].length +

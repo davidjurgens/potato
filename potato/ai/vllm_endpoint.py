@@ -85,8 +85,9 @@ class VLLMEndpoint(BaseAIEndpoint):
         Args:
             prompt: The prompt to send to the model
             output_format: Optional Pydantic model class for structured output.
-                          When provided, the schema is sent as guided_json for
-                          constrained generation (vLLM native feature).
+                          When provided, the schema is sent as
+                          ``response_format: {type: json_schema, ...}``, which
+                          is what vLLM's OpenAI-compatible endpoint reads.
 
         Returns:
             The model's response as a string (or parsed dict for structured output)
@@ -115,9 +116,25 @@ class VLLMEndpoint(BaseAIEndpoint):
                 "chat_template_kwargs": {"enable_thinking": think},
             }
 
-            # Add structured output via guided_json if schema provided
+            # Structured output via `response_format`, the parameter vLLM's
+            # OpenAI-compatible /v1/chat/completions actually reads.
+            #
+            # This used to send a top-level `guided_json`. vLLM ignores that
+            # here -- no error, no warning, 200 with unconstrained output -- so
+            # every schema-shaped request came back as markdown prose, and
+            # `parseStringToJson` wrapped the prose as {"response": "..."},
+            # which has none of the keys the caller asked for. The annotator
+            # saw "No hint available" over a server that had answered
+            # correctly, and judge.py read an empty label for every item it
+            # scored against a vLLM endpoint.
             if output_format is not None and hasattr(output_format, 'model_json_schema'):
-                payload["guided_json"] = output_format.model_json_schema()
+                payload["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": getattr(output_format, "__name__", "output"),
+                        "schema": output_format.model_json_schema(),
+                    },
+                }
 
             response = requests.post(
                 f"{self.base_url}/v1/chat/completions",
@@ -133,6 +150,7 @@ class VLLMEndpoint(BaseAIEndpoint):
                 )
 
             result = response.json()
+            self._warn_if_truncated(result["choices"][0].get("finish_reason"))
             message = result["choices"][0]["message"]
             content = message.get("content") or ""
 

@@ -82,7 +82,9 @@ function flushPendingSave() {
     const payload = JSON.stringify({
         instance_id: currentInstance.id,
         annotations: labelAnnotations,
-        span_annotations: extractSpanAnnotationsFromDOM()
+        span_annotations: extractSpanAnnotationsFromDOM(),
+        client_timestamp: new Date().toISOString(),
+        response_time_seconds: currentInstanceResponseSeconds()
     });
 
     navigator.sendBeacon('/updateinstance',
@@ -98,6 +100,15 @@ function flushPendingSave() {
  * on the server reads as "the annotator cleared them" rather than "this
  * message does not mention them".
  */
+/**
+ * Seconds the current instance has been on screen, or null when it was never
+ * stamped (a phase page, or an instance built outside `loadCurrentInstance`).
+ */
+function currentInstanceResponseSeconds() {
+    if (!currentInstance || !currentInstance.displayedAt) return null;
+    return Math.max(0, (Date.now() - currentInstance.displayedAt) / 1000);
+}
+
 function collectAnnotationDataInputs(labelAnnotations) {
     document.querySelectorAll('.annotation-data-input').forEach(input => {
         if (input.name && input.value) {
@@ -970,11 +981,19 @@ async function loadCurrentInstance() {
             return;
         }
 
-        // Create current instance object from server-rendered data
+        // Create current instance object from server-rendered data.
+        //
+        // `displayedAt` is what `attention_checks.min_response_time` is measured
+        // against. The server used to derive the response time from
+        // `client_timestamp`, which nothing on this path ever sent, so the guard
+        // could not fire; deriving it from the send time would have measured
+        // network latency instead. Navigation is a full server re-render, so
+        // this is stamped once per instance shown.
         currentInstance = {
             id: instanceId,
             text: instanceTextElement.textContent || instanceTextElement.innerText,
-            displayed_text: instanceText
+            displayed_text: instanceText,
+            displayedAt: Date.now()
         };
 
         // Set global variable for span manager
@@ -1542,7 +1561,9 @@ async function saveAnnotations({ background = false } = {}) {
             body: JSON.stringify({
                 instance_id: currentInstance.id,
                 annotations: labelAnnotations,
-                span_annotations: spanAnnotations
+                span_annotations: spanAnnotations,
+                client_timestamp: new Date().toISOString(),
+                response_time_seconds: currentInstanceResponseSeconds()
             })
         });
 

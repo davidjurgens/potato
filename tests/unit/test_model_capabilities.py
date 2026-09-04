@@ -243,8 +243,17 @@ class TestEndpointCapabilities:
         assert caps.text_generation is True
         assert caps.vision_input is True
         assert caps.bounding_box_output is False  # VLLMs don't do precise bbox
-        assert caps.keyword_extraction is False  # Not for images
         assert caps.rationale_generation is True
+
+        # True at the endpoint, gated per item. A vision model is still a
+        # language model, and `supports_assistant` already returns
+        # `keyword_extraction and not has_image_input`. Declaring False here
+        # meant "no keywords, ever", so on a TEXT item served by a vision
+        # endpoint the Keyword button was simply absent and only two of the
+        # three assistants were reachable.
+        assert caps.keyword_extraction is True
+        assert caps.supports_assistant("keyword", has_image_input=False) is True
+        assert caps.supports_assistant("keyword", has_image_input=True) is False
 
     def test_yolo_endpoint_capabilities(self):
         """YOLOEndpoint should have bbox output but no text generation."""

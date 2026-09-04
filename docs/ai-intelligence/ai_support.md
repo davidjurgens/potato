@@ -76,12 +76,18 @@ Each AI endpoint declares its capabilities:
 | Endpoint Type | Text Gen | Vision | Bbox Output | Keyword | Rationale |
 |---------------|----------|--------|-------------|---------|-----------|
 | `ollama` | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `ollama_vision` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `ollama_vision` | ✅ | ✅ | ❌ | ✅ text only | ✅ |
 | `openai` | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `openai_vision` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `openai_vision` | ✅ | ✅ | ❌ | ✅ text only | ✅ |
 | `anthropic` | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `anthropic_vision` | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `anthropic_vision` | ✅ | ✅ | ❌ | ✅ text only | ✅ |
 | `yolo` | ❌ | ✅ | ✅ | ❌ | ❌ |
+
+"Text only" is decided per item, not per endpoint. A vision model is still a
+language model, so on a text item it offers all three assistants; on an image
+item the Keyword button is filtered out. The endpoints used to declare no
+keyword support at all, which removed the button from text items too and left
+only two of the three assistants reachable on a text task.
 
 ### Best Practices for Visual AI
 
@@ -144,8 +150,9 @@ ai_support:
 | `endpoint_type` | string | Yes | The LLM provider to use |
 | `ai_config.model` | string | No | Model name (uses provider default if not specified) |
 | `ai_config.api_key` | string | Yes* | API key for cloud providers |
+| `ai_config.base_url` | string | No | An OpenAI-compatible server to use instead of the vendor's — vLLM, SGLang, LM Studio, llama.cpp, LiteLLM. Setting it also makes `api_key` optional |
 | `ai_config.temperature` | float | No | Response randomness (0.0-2.0, default: 0.7) |
-| `ai_config.max_tokens` | integer | No | Maximum response length (default: 100) |
+| `ai_config.max_tokens` | integer | No | Maximum response length (default: 800). The Rationale and Keyword assistants answer for every label at once and need several hundred tokens; below that the reply is cut off and the assistant renders empty |
 | `ai_config.include.all` | boolean | No | Enable AI for all annotation schemes (default: false) |
 | `ai_config.include.special_include` | object | No | Per-page, per-annotation customization |
 | `cache_config.disk_cache.enabled` | boolean | No | Enable disk caching (default: false) |
@@ -154,7 +161,18 @@ ai_support:
 | `cache_config.prefetch.on_next` | integer | No | Prefetch N instances ahead when navigating forward |
 | `cache_config.prefetch.on_prev` | integer | No | Prefetch N instances when navigating backward |
 
-*Required for cloud-based providers (OpenAI, Anthropic, Hugging Face, Gemini)
+*Required for cloud-based providers. `openai` and `openai_vision` have two other
+ways to get one, and validation accepts all three: `OPENAI_API_KEY` in the
+environment, or a `base_url` pointing at a self-hosted server, which has no key.
+`anthropic`, `huggingface` and `gemini` read neither, so for those it really is
+required.
+
+Two things about `ai_config` are worth stating because nothing catches them:
+
+- The keys go **inside `ai_config`**, one level deeper than the obvious guess.
+  `ai_support.base_url` is ignored, and `validate --strict` says so.
+- `include.all` is off by default. Without it every assistant button is absent
+  and the page renders an empty AI div, with a clean validation and no warning.
 
 ## Caching and Pre-generation
 
@@ -467,9 +485,15 @@ When `ai_config_file` is specified:
 
 This means your inline `ai_config` provides defaults (temperature, max_tokens, include settings) while the external file provides secrets and environment-specific values.
 
+The merge is **flat**. The external file holds `model`, `base_url` and
+`api_key` at its top level, as the example above does. Wrapping them in an
+`ai_config:` block inside that file produces `ai_config.ai_config`, which
+nothing reads: validation passes and the boot fails with "OpenAI API key is
+required", which points at the wrong key.
+
 ### Fallback Behavior
 
-- **File missing**: If `ai_config_file` is set but the file doesn't exist, AI support is automatically disabled with a warning (the server still starts normally)
+- **File missing**: If `ai_config_file` is set but the file doesn't exist, AI support is automatically disabled with a warning (the server still starts normally). `potato validate --strict` treats that warning as an error, so a study whose subject is AI assistance cannot pass its own check with the AI off. Ship an `ai-config.yaml.example` beside the config for people to copy.
 - **No `ai_config_file`**: Current behavior is unchanged -- everything is read from the inline config
 - **Environment variables**: `${VAR_NAME}` syntax works in both files
 
@@ -577,6 +601,30 @@ When AI support is enabled, annotators will see AI assistance buttons on each an
    - Ensure the span-core.js file is loaded (check browser console)
    - Verify the SpanManager is initialized
    - Check that the text content element exists
+
+6. **"No hint available" / "No rationales available" over a server that answered**
+
+   The model replied, the server returned 200, and the tooltip is empty. Four
+   things produce that one symptom, so check them in this order:
+
+   - **`include.all` is missing.** No assistant button is on the page at all.
+     Nothing warns about this.
+   - **`max_tokens` is too low.** The Rationale and Keyword assistants answer
+     for every label at once. Below a few hundred tokens the reply is cut
+     mid-object and the salvage step returns a fragment the renderer cannot
+     read. The log says "The model hit max_tokens ... so the reply is cut off".
+   - **The server ignored the schema.** Check the reply is JSON at all rather
+     than prose; a server without constrained decoding answers in whatever
+     shape the prompt suggested.
+   - **The keys are in the wrong place.** `ai_support.model` is ignored;
+     everything about the model goes in `ai_support.ai_config`.
+     `validate --strict` names any key it does not recognise.
+
+7. **No assistant buttons appear, and the boot log looked fine**
+
+   The line to look for is "AI endpoint ready (...)". If it says "No AI
+   endpoint: assistants will not appear", the endpoint failed to start and the
+   reason is in the warning above it.
 
 ### Debug Mode
 

@@ -36,7 +36,7 @@ class AnthropicVisionEndpoint(BaseVisualAIEndpoint):
     Configuration options:
     - model: Model to use (default: claude-sonnet-4-20250514)
     - api_key: Anthropic API key (can also use ANTHROPIC_API_KEY env var)
-    - max_tokens: Maximum response tokens (default: 1024)
+    - max_tokens: Maximum response tokens (default: 800)
     - temperature: Sampling temperature (default: 0.1)
     """
 
@@ -49,7 +49,15 @@ class AnthropicVisionEndpoint(BaseVisualAIEndpoint):
         text_classification=True,
         image_classification=True,
         rationale_generation=True,
-        keyword_extraction=False,  # Keywords don't apply to images
+        # True, and gated per item rather than per endpoint. These are
+        # language models; they extract keywords from text as well as their
+        # text-only siblings do. `supports_assistant` already returns
+        # `keyword_extraction and not has_image_input`, so declaring False here
+        # said "no keywords, ever" -- and the capability filter runs per item,
+        # so on a text-only task through a vision endpoint the Keyword button
+        # was simply absent and only two of the three assistants were
+        # reachable.
+        keyword_extraction=True,
     )
 
     def _initialize_client(self) -> None:

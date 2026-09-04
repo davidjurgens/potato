@@ -17,11 +17,10 @@ Checks performed:
 Exit codes:
     0 — all checks passed
     1 — fatal errors found (invalid YAML, missing required fields,
-        structural errors)
-    2 — warnings only (unrecognized keys) and --strict was passed
+        structural errors), or any warning when --strict was passed
 
-In default mode unknown keys are reported but do not fail the exit
-code. Use --strict to treat them as fatal (useful for CI).
+In default mode warnings are reported but do not fail the exit code.
+Use --strict to treat them as fatal (useful for CI).
 """
 
 from __future__ import annotations
@@ -178,13 +177,17 @@ def _format_human(report: ValidationReport, strict: bool = False) -> str:
     lines.append("")
     if report.ok and not report.unknown_keys and not report.other_warnings:
         lines.append("OK — no issues found.")
-    elif report.ok and strict and report.unknown_keys:
-        # --strict makes unknown keys fatal, and the exit code says so, so the
+    elif report.ok and strict:
+        # --strict makes warnings fatal, and the exit code says so, so the
         # summary must not say "OK". It used to, alongside advice to re-run
         # with the flag that was already set.
+        counts = []
+        if report.unknown_keys:
+            counts.append(f"{len(report.unknown_keys)} unrecognized key(s)")
+        if report.other_warnings:
+            counts.append(f"{len(report.other_warnings)} warning(s)")
         lines.append(
-            f"FAILED — {len(report.unknown_keys)} unrecognized key(s); "
-            f"--strict treats these as errors."
+            f"FAILED — {' and '.join(counts)}; --strict treats these as errors."
         )
     elif report.ok:
         # A valid config with warnings still exits 0, so it must not say FAILED.
@@ -194,11 +197,11 @@ def _format_human(report: ValidationReport, strict: bool = False) -> str:
         if report.other_warnings:
             counts.append(f"{len(report.other_warnings)} warning(s)")
         summary = f"OK with {' and '.join(counts)}."
-        if report.unknown_keys and not strict:
+        if not strict:
             # Under --strict this advice contradicts the command that produced
-            # it, and unknown keys are already an error, so there is nothing to
+            # it, and the warnings are already errors, so there is nothing to
             # re-run.
-            summary += " Re-run with --strict to fail on unknown keys."
+            summary += " Re-run with --strict to fail on warnings."
         lines.append(summary)
     else:
         lines.append(f"FAILED — {len(report.errors)} error(s).")
@@ -241,7 +244,13 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     report = validate_config_file(args.config_file)
 
-    fatal = not report.ok or (args.strict and bool(report.unknown_keys))
+    # Under --strict, EVERY warning is fatal, not only unknown keys. The
+    # warnings config_module emits are the ones that silently disable a
+    # feature: a missing `ai_config_file` turns ai_support off and says so at
+    # WARNING, so `validate --strict` used to exit 0 on a study whose entire
+    # subject was AI assistance, with the AI off.
+    fatal = not report.ok or (
+        args.strict and bool(report.unknown_keys or report.other_warnings))
 
     if args.emit_json:
         print(json.dumps(report.to_dict(), indent=2))

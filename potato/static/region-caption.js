@@ -167,9 +167,25 @@
             this._renderProgress();
         }
 
+        /** The shortest a caption may be and still count as written. */
+        _minLength() {
+            const n = parseInt(this.config.minLength, 10);
+            return Number.isFinite(n) && n > 0 ? n : 1;
+        }
+
+        /**
+         * Regions still without a usable caption.
+         *
+         * `min_length` was computed by the schema, shipped to the client and
+         * read by nobody: with `min_length: 10`, a caption of "box" counted and
+         * the panel said "All 2 regions described." A caption below the
+         * configured floor is not a caption.
+         */
         undescribed() {
+            const floor = this._minLength();
             return this.entries
-                .map((entry, index) => (entry.caption.trim() ? -1 : index))
+                .map((entry, index) =>
+                    (entry.caption.trim().length >= floor ? -1 : index))
                 .filter((index) => index >= 0);
         }
 
@@ -295,6 +311,12 @@
             field.placeholder = this.config.placeholder || '';
             field.value = entry.caption;
             if (this.config.maxLength) field.maxLength = this.config.maxLength;
+            if (this.config.minLength > 0) {
+                field.minLength = this.config.minLength;
+                field.setAttribute(
+                    'aria-describedby',
+                    'region-caption-progress-' + this.schemaName);
+            }
             field.addEventListener('input', (event) => this.setCaption(
                 Number(event.target.dataset.captionIndex), event.target.value));
             item.appendChild(field);
@@ -325,8 +347,11 @@
                 return;
             }
             const remaining = this.undescribed().length;
+            const floor = this._minLength();
+            const rule = floor > 1
+                ? ` A description needs at least ${floor} characters.` : '';
             this.progress.textContent = remaining
-                ? `${total - remaining} of ${total} regions described.`
+                ? `${total - remaining} of ${total} regions described.${rule}`
                 : `All ${total} regions described.`;
         }
 
@@ -338,6 +363,12 @@
 
         /**
          * Warn once before advancing with regions undescribed.
+         *
+         * Once, not every time: an annotator legitimately draws every region
+         * first and captions them afterwards, and a hard gate mid-pass is an
+         * obstacle. `require_all` is therefore a nudge, not a rule -- the
+         * second Next goes through. This is documented on the schema; if you
+         * need a gate, use `label_requirement.required`.
          *
          * document + capture + stopImmediatePropagation: `#next-btn` navigates
          * from an inline onclick registered at parse time, so a listener on the

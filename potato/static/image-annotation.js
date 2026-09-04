@@ -2013,9 +2013,38 @@ class ImageAnnotationManager {
     }
 
     /**
+     * A pointer confined to the image, in canvas coordinates.
+     *
+     * The canvas is larger than the bitmap and the image is centred in it, so
+     * there is a dead margin on every side -- 96px each side for a 640x420
+     * image on an 831x600 canvas. A drag that STARTED in that margin was
+     * stored unclamped, giving normalized coordinates outside [0, 1]
+     * ({x: -0.046, y: -0.0007}) that the region_caption panel then read back
+     * as "Region 1 — at -5%, 0%". A drag that stayed entirely in the margin
+     * was already discarded, so the rule existed and applied to only half the
+     * cases.
+     *
+     * Clamping the pointer rather than the finished shape means the box
+     * visibly stops at the edge of the picture while the annotator is still
+     * dragging, which is the feedback that stops them trying.
+     */
+    _pointerInImage(pointer) {
+        if (!this.image) return pointer;
+        const left = this.image.left;
+        const top = this.image.top;
+        const right = left + this.image.width * this.image.scaleX;
+        const bottom = top + this.image.height * this.image.scaleY;
+        return {
+            x: Math.min(Math.max(pointer.x, left), right),
+            y: Math.min(Math.max(pointer.y, top), bottom),
+        };
+    }
+
+    /**
      * Start drawing a bounding box.
      */
     _startBbox(pointer) {
+        pointer = this._pointerInImage(pointer);
         this.isDrawing = true;
         this.startX = pointer.x;
         this.startY = pointer.y;
@@ -2041,6 +2070,7 @@ class ImageAnnotationManager {
      */
     _updateBbox(pointer) {
         if (!this.drawingObject) return;
+        pointer = this._pointerInImage(pointer);
 
         const left = Math.min(this.startX, pointer.x);
         const top = Math.min(this.startY, pointer.y);
@@ -2428,6 +2458,7 @@ class ImageAnnotationManager {
      * Start drawing an ellipse (drag from one corner of its bounding box).
      */
     _startEllipse(pointer) {
+        pointer = this._pointerInImage(pointer);
         this.isDrawing = true;
         this.startX = pointer.x;
         this.startY = pointer.y;
@@ -2455,6 +2486,7 @@ class ImageAnnotationManager {
      */
     _updateEllipse(pointer) {
         if (!this.drawingObject) return;
+        pointer = this._pointerInImage(pointer);
 
         this.drawingObject.set({
             left: Math.min(this.startX, pointer.x),

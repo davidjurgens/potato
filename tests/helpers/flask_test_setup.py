@@ -1007,6 +1007,22 @@ class FlaskTestServer:
                     except ImportError:
                         pass
 
+                # Register the model-training blueprint if configured.
+                # This harness hand-builds its app and never calls
+                # configure_app(), so a blueprint wired only in flask_server
+                # silently does not exist in server tests.
+                if config.get("model_training", {}).get("enabled", False):
+                    try:
+                        from potato.training.manager import (
+                            clear_training_manager, init_training_manager)
+                        from potato.training.routes import training_bp
+                        clear_training_manager()
+                        init_training_manager(config)
+                        if 'training' not in app.blueprints:
+                            app.register_blueprint(training_bp)
+                    except ImportError:
+                        pass
+
                 # Register multi-model arena blueprint if configured
                 if config.get("arena", {}).get("enabled", False):
                     try:

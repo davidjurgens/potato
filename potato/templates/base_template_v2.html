@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=16">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=18">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=1">
@@ -772,7 +772,7 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=3"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=35"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=36"></script>
     <!-- Shared geometry for the bottom-anchored floating widgets below; must
          load before them. Unconditional: tiny, and several may be enabled at
          once (see the combined showcase example). -->
@@ -824,7 +824,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=31"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=32"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.
@@ -842,7 +842,7 @@
     <!-- Region captioning: a description per region drawn on the image
          annotation canvas beside it. -->
     {% if frontend_assets.region_caption | default(false) %}
-    <script src="{{ url_for('static', filename='region-caption.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='region-caption.js') }}?v=3"></script>
     {% endif %}
 
     {% if frontend_assets.deepzoom | default(false) %}
@@ -884,7 +884,7 @@
     <script src="{{ url_for('static', filename='pointcloud/pc-calibration.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='pointcloud/pc-octree.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='pointcloud/pc-mpr.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='pointcloud/pc-viewer.js') }}?v=6"></script>
     {% endif %}
 
     <!-- Depth maps. A display type, so it is gated on the display's wrapper
@@ -900,7 +900,7 @@
 
     <!-- World-model rollout evaluation -->
     {% if frontend_assets.rollout_evaluation | default(false) %}
-    <script src="{{ url_for('static', filename='rollout-eval.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='rollout-eval.js') }}?v=6"></script>
     {% endif %}
 
     <!-- Per-class show/hide, shared by image and video annotation -->
@@ -954,11 +954,11 @@
     {% endif %}
     <!-- Audio annotation manager -->
     {% if frontend_assets.audio_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='audio-annotation.js') }}?v=7"></script>
     {% endif %}
     <!-- Video annotation manager -->
     {% if frontend_assets.video_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=20"></script>
+    <script src="{{ url_for('static', filename='video-annotation.js') }}?v=22"></script>
     {% endif %}
 
     <!-- Span link manager -->
@@ -973,7 +973,7 @@
 
     <!-- Multi-document event annotation manager -->
     {% if frontend_assets.multi_document_event | default(false) %}
-    <script src="{{ url_for('static', filename='multi-document-event.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='multi-document-event.js') }}?v=6"></script>
     {% endif %}
 
     <!-- Entity linking for knowledge bases (Wikidata, UMLS) -->
@@ -1002,7 +1002,7 @@
 
     <!-- Tiered annotation manager (ELAN-style hierarchical annotation) -->
     {% if frontend_assets.tiered_annotation | default(false) %}
-    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=4"></script>
+    <script src="{{ url_for('static', filename='tiered-annotation.js') }}?v=5"></script>
     {% endif %}
 
     <!-- Document bounding box annotation -->

@@ -223,11 +223,25 @@ class VideoAnnotationManager {
             }
 
         } catch (error) {
-            console.error('Failed to initialize Peaks.js:', error);
-            // Hide timeline containers since they won't work
+            // A video with no audio track is the common case here, and it is
+            // not an error: there is no waveform to draw, and everything else
+            // on the widget works. Logged at `warn`, in one line that says so.
+            // At `console.error` it was indistinguishable from the
+            // tiered_annotation initialiser genuinely giving up, and an audit
+            // spent time telling them apart.
+            const silent = /EncodingError|Unable to decode audio/i.test(
+                String(error && error.message || error));
             if (this.zoomviewEl) this.zoomviewEl.style.display = 'none';
             if (this.overviewEl) this.overviewEl.style.display = 'none';
-            console.warn('[VideoAnnotation] Waveform visualization unavailable. Video playback still works.');
+            if (silent) {
+                console.warn('[VideoAnnotation] No decodable audio track, so '
+                    + 'there is no waveform to draw. The timeline, segments '
+                    + 'and playback all still work.');
+            } else {
+                console.error('[VideoAnnotation] Peaks.js failed to '
+                    + 'initialize, so the waveform is unavailable. Video '
+                    + 'playback and segments still work:', error);
+            }
             // Still restore existing annotations even without a working timeline —
             // otherwise navigating away and back loses saved segments.
             this._loadExistingAnnotations();
@@ -1123,24 +1137,48 @@ class VideoAnnotationManager {
 
     // ==================== Zoom Controls ====================
 
-    zoomIn() {
+    /**
+     * Halve or double the visible window, keeping its centre.
+     *
+     * See the same method in audio-annotation.js for why this is expressed in
+     * seconds read back off the view: `view.getZoom()` does not exist in the
+     * bundled Peaks build (it is on `peaks.zoom`), so the old
+     * `setZoom({scale:'auto'}); view.getZoom()` pair threw on every click and
+     * both buttons were dead; and `peaks.zoom.zoomIn()` steps an index the
+     * view never updates, so the first press does nothing.
+     *
+     * @param {number} factor <1 magnifies, >1 widens.
+     */
+    _zoomByFactor(factor) {
         if (!this.peaks) return;
         const view = this.peaks.views.getView('zoomview');
-        if (view) {
-            view.setZoom({ scale: 'auto' });
-            const zoomLevel = view.getZoom();
-            view.setZoom({ seconds: zoomLevel * 0.75 });
+        if (!view || typeof view.getStartTime !== 'function') return;
+
+        const start = view.getStartTime();
+        const current = view.getEndTime() - start;
+        if (!isFinite(current) || current <= 0) return;
+
+        const duration = this.peaks.player ? this.peaks.player.getDuration() : 0;
+        let next = current * factor;
+        if (isFinite(duration) && duration > 0) next = Math.min(next, duration);
+        next = Math.max(next, 0.1);
+        if (Math.abs(next - current) < 1e-6) return;
+
+        const centre = start + current / 2;
+        view.setZoom({ seconds: next });
+        if (typeof view.setStartTime === 'function') {
+            const span = (isFinite(duration) && duration > 0) ? duration : next;
+            const maxStart = Math.max(0, span - next);
+            view.setStartTime(Math.min(Math.max(0, centre - next / 2), maxStart));
         }
     }
 
+    zoomIn() {
+        this._zoomByFactor(0.5);
+    }
+
     zoomOut() {
-        if (!this.peaks) return;
-        const view = this.peaks.views.getView('zoomview');
-        if (view) {
-            view.setZoom({ scale: 'auto' });
-            const zoomLevel = view.getZoom();
-            view.setZoom({ seconds: zoomLevel * 1.25 });
-        }
+        this._zoomByFactor(2);
     }
 
     zoomToFit() {
@@ -1333,6 +1371,7 @@ class VideoAnnotationManager {
     // ==================== Data Persistence ====================
 
     _saveData() {
+        this._declareCompleteness();
         const data = {
             video_metadata: this.videoMetadata,
             segments: this.segments.map(s => ({
@@ -1371,6 +1410,35 @@ class VideoAnnotationManager {
         }
 
         videoDebugLog('Saved annotation data:', data);
+    }
+
+
+    /**
+     * Say what is still missing, in the annotator's terms.
+     *
+     * `min_segments` reached the browser as `minSegments` and was read by
+     * nobody: a scheme declaring `min_segments: 2` was satisfied by one
+     * segment, and by the hidden input merely being non-empty. The form-level
+     * `data-incomplete-reason` is the contract validateRequiredFields reads
+     * for composite widgets (see agent_scorecard), so this is where the count
+     * belongs. Unlabelled segments count too -- a segment with no label is a
+     * region of time nobody classified.
+     */
+    _declareCompleteness() {
+        const form = this.inputEl && this.inputEl.closest('.annotation-form');
+        if (!form) return;
+        const need = parseInt(this.config.minSegments, 10) || 0;
+        const have = this.segments.length;
+        const bits = [];
+        if (need && have < need) {
+            bits.push(`${have} of ${need} segments marked`);
+        }
+        const unlabelled = this.segments.filter(s => !s.label).length;
+        if (unlabelled) {
+            bits.push(`${unlabelled} segment${unlabelled === 1 ? '' : 's'} with no label`);
+        }
+        if (bits.length) form.setAttribute('data-incomplete-reason', bits.join('; '));
+        else form.removeAttribute('data-incomplete-reason');
     }
 
     _loadExistingAnnotations() {

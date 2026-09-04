@@ -33,7 +33,7 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
       makes the API key optional, because self-hosted servers usually have none
       and requiring a placeholder just to reach a local GPU is a papercut that
       sends people to write their own endpoint class.
-    - max_tokens: Maximum response tokens (default: 1000)
+    - max_tokens: Maximum response tokens (default: 800)
     - temperature: Sampling temperature (default: 0.1)
     - detail: Image detail level - 'low', 'high', or 'auto' (default: auto)
     - json_mode: Request ``response_format={"type": "json_object"}`` (default
@@ -50,7 +50,15 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
         text_classification=True,
         image_classification=True,
         rationale_generation=True,
-        keyword_extraction=False,  # Keywords don't apply to images
+        # True, and gated per item rather than per endpoint. These are
+        # language models; they extract keywords from text as well as their
+        # text-only siblings do. `supports_assistant` already returns
+        # `keyword_extraction and not has_image_input`, so declaring False here
+        # said "no keywords, ever" -- and the capability filter runs per item,
+        # so on a text-only task through a vision endpoint the Keyword button
+        # was simply absent and only two of the three assistants were
+        # reachable.
+        keyword_extraction=True,
     )
 
     def _initialize_client(self) -> None:
@@ -85,6 +93,10 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
         timeout = self.ai_config.get("timeout", 60)
         self.detail = self.ai_config.get("detail", "auto")
         self.json_mode = bool(self.ai_config.get("json_mode", True))
+        # Set once, by _create, when the server 400s on a json_schema
+        # response_format. Sticky so the failed round trip is paid once
+        # rather than on every assistant click.
+        self._schema_mode_refused = False
 
         kwargs = {"api_key": api_key, "timeout": timeout}
         if base_url:
@@ -94,14 +106,25 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
         logger.info("OpenAI Vision client initialized with model: %s%s",
                     self.model, f" at {base_url}" if base_url else "")
 
-    def _create(self, messages):
-        """One chat completion, retrying without JSON mode if it is rejected.
+    def _create(self, messages, output_format=None):
+        """One chat completion, retrying with weaker JSON guarantees if refused.
 
-        An OpenAI-compatible server built without constrained decoding answers
-        ``response_format`` with a 400. Failing the whole request there would
-        make every such server look like it has no vision support, when in
-        fact only the JSON guarantee is missing -- and the responses are then
-        parsed leniently anyway (``parseStringToJson``).
+        Three levels, strongest first:
+
+        1. ``json_schema`` when the caller named a schema. This is the only one
+           that constrains the SHAPE, and without it the same task returned a
+           different shape one click apart -- ``{"rationales": [...]}`` for the
+           rationale button and ``{"annotation_guidance": {...}}`` for the hint
+           button, which rendered as "No hint available". The hint that did
+           work worked because the model followed the prompt, not because
+           anything held it to the format.
+        2. ``json_object``, which guarantees only that the reply parses.
+        3. Nothing, parsed leniently.
+
+        Each step down is taken only when the server rejects the one above. A
+        server built without constrained decoding answers ``response_format``
+        with a 400, and failing there would make it look like it has no vision
+        support when only the guarantee is missing.
         """
         kwargs = dict(
             model=self.model,
@@ -109,6 +132,36 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
             max_tokens=self.max_tokens,
             temperature=self.temperature,
         )
+
+        schema = None
+        if output_format is not None and hasattr(output_format, "model_json_schema"):
+            try:
+                schema = output_format.model_json_schema()
+            except Exception:  # noqa: BLE001
+                schema = None
+
+        if schema is not None and self.json_mode and not self._schema_mode_refused:
+            try:
+                return self.client.chat.completions.create(
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": getattr(output_format, "__name__", "output"),
+                            "schema": schema,
+                        },
+                    },
+                    **kwargs)
+            except Exception as exc:  # noqa: BLE001
+                if "response_format" not in str(exc) and "json_schema" not in str(exc):
+                    raise
+                logger.info(
+                    "Server rejected schema-constrained output (%s); falling "
+                    "back to plain JSON mode. Responses are no longer "
+                    "guaranteed to match the requested shape.", exc)
+                # Sticky: retrying the schema on every call would pay the
+                # round trip and the log line once per assistant click.
+                self._schema_mode_refused = True
+
         if self.json_mode:
             try:
                 return self.client.chat.completions.create(
@@ -138,7 +191,9 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
             Parsed response
         """
         try:
-            response = self._create([{"role": "user", "content": prompt}])
+            response = self._create([{"role": "user", "content": prompt}],
+                                    output_format)
+            self._warn_if_truncated(response.choices[0].finish_reason)
             content = response.choices[0].message.content
             return self.parseStringToJson(content)
 
@@ -177,7 +232,10 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
                 content.append(image_content)
 
             # Make request
-            response = self._create([{"role": "user", "content": content}])
+            response = self._create([{"role": "user", "content": content}],
+                                    output_format)
+            self._warn_if_truncated(response.choices[0].finish_reason,
+                                    "image response")
 
             response_content = response.choices[0].message.content
             logger.debug(f"OpenAI vision response: {response_content[:500] if response_content else 'empty'}")

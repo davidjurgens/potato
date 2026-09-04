@@ -1264,21 +1264,17 @@ def register():
     logger.debug(f"Retrieved user state for '{username}': {user_state}")
     logger.debug(f"User state phase: {user_state.get_phase() if user_state else 'No user state'}")
 
-    # Determine the first phase from config
-    phases_config = config.get('phases', {})
-    phases_order = phases_config.get('order', ['annotation'])
-    first_phase_name = phases_order[0] if phases_order else 'annotation'
-    # Get the phase type from the config (phase name may differ from type, e.g., 'prescreen' has type 'prestudy')
-    first_phase_config = phases_config.get(first_phase_name, {})
-    first_phase_type = first_phase_config.get('type', first_phase_name)
-    first_phase = UserPhase.fromstr(first_phase_type)
-    logger.debug(f"First phase from config: {first_phase_name} (type={first_phase_type}) -> {first_phase}")
-
-    # Set user to the first phase if they're in LOGIN
+    # Set user to the first phase if they're in LOGIN.
+    #
+    # This used to read `phases.order[0]` straight out of the config and trust
+    # it. A phase named in the order but never defined -- or defined but
+    # unloadable -- has no entry in `phase_type_to_name_to_page`, so the
+    # annotator was parked on a page that does not exist and every subsequent
+    # request, `/` included, 500ed on a KeyError. `advance_phase` walks the
+    # sequence the loader actually registered, which is the only sequence that
+    # can be rendered.
     if user_state and user_state.get_phase() == UserPhase.LOGIN:
-        logger.debug(f"Advancing user {username} to first phase: {first_phase}")
-        # Use first_phase_name as the page since that's the key in the phase config
-        user_state.advance_to_phase(first_phase, first_phase_name)
+        usm.advance_phase(username)
         logger.debug(f"User state phase after advancement: {user_state.get_phase()}")
 
     # Assign instances if user doesn't have any
@@ -1874,6 +1870,30 @@ def annotate():
             if adj_mgr and adj_mgr.is_adjudicator(username):
                 logger.info(f"Adjudicator {username} has no annotation items, redirecting to /adjudicate")
                 return redirect(url_for("adjudicate"))
+
+            # A surplus annotator: every item already has its full complement,
+            # so nothing could be assigned. Falling through from here advanced
+            # the phase and showed the completion page -- "You have completed
+            # the annotation task and your responses are saved" to somebody who
+            # never saw an item, with no annotation_output directory and not a
+            # line in the log. On a pilot that reads as a broken study; in the
+            # field it pays people for a page they could not work on.
+            #
+            # The phase is deliberately left at ANNOTATION: if more data
+            # arrives, or num_annotators_per_item is raised, a reload gives
+            # them work.
+            logger.warning(
+                f"No items could be assigned to {username}: every item already "
+                f"has its full complement of annotators "
+                f"(num_annotators_per_item={_configured_annotator_cap()}). "
+                f"Showing the no-work page rather than the completion page. "
+                f"Raise num_annotators_per_item or add data to give them work."
+            )
+            return render_template(
+                "no_work_available.html",
+                annotation_task_name=config.get(
+                    "annotation_task_name", "Annotation Platform"),
+            )
 
     # IBWS: Check if round is complete and advance if needed
     if config.get("ibws_config"):
@@ -3420,6 +3440,37 @@ def admin_model_review():
         logger.exception("Model-review summary failed")
         return jsonify({"error": str(exc)}), 500
     return jsonify(report)
+
+
+@app.route("/admin/active-learning/stats", methods=["GET"])
+def admin_active_learning_stats():
+    """
+    Active learning state and training history.
+
+    Which schemas have a fitted model, where the schema cycler is, and the
+    recorded training runs. Previously reachable only by importing the manager
+    in a Python REPL, which is what the guide told administrators to do.
+    """
+    api_key = request.headers.get('X-API-Key')
+    if not validate_admin_api_key(api_key):
+        return jsonify({"error": "Admin API key required"}), 403
+
+    try:
+        from potato.active_learning_manager import get_active_learning_manager
+        manager = get_active_learning_manager()
+    except Exception as exc:
+        logger.exception("Could not reach the active learning manager")
+        return jsonify({"error": str(exc)}), 500
+
+    if manager is None:
+        return jsonify({"enabled": False,
+                        "reason": "Active learning is not configured"})
+
+    try:
+        return jsonify(manager.get_stats())
+    except Exception as exc:
+        logger.exception("Active learning stats failed")
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/api/model-review/verdict", methods=["POST"])
@@ -6000,10 +6051,18 @@ def update_instance():
         qc_result = None
 
         if qc_manager:
-            # Calculate response time
+            # How long the annotator had the item on screen, as measured by the
+            # client. This used to be derived from `client_timestamp`, which is
+            # the moment the request was *sent* -- so the subtraction measured
+            # network latency, not reading time, and nothing on this path sent
+            # the field at all, which left `min_response_time` unreachable.
             response_time = None
-            if client_timestamp:
-                response_time = (datetime.datetime.now() - client_timestamp).total_seconds()
+            raw_response_time = request.json.get("response_time_seconds")
+            if raw_response_time is not None:
+                try:
+                    response_time = float(raw_response_time)
+                except (TypeError, ValueError):
+                    logger.warning(f"Invalid response_time_seconds: {raw_response_time!r}")
 
             # Check if this is an attention check
             attention_result = qc_manager.validate_attention_response(
@@ -6166,6 +6225,20 @@ def update_instance():
         except Exception as e:
             logger.debug("Active learning trigger skipped: %s", e)
 
+        # Same trigger point for the model-training subsystem's auto-retrain.
+        # Kept separate from active learning on purpose: one answers "what
+        # should this annotator see next", the other "what model do we have".
+        # Never allowed to break the save, and cheap enough for the request
+        # thread — the debounce check is a counter comparison, and the run
+        # itself happens in a subprocess.
+        try:
+            from potato.training.manager import get_training_manager
+            training_mgr = get_training_manager()
+            if training_mgr is not None:
+                training_mgr.maybe_auto_retrain()
+        except Exception as e:
+            logger.debug("Auto-retrain check skipped: %s", e)
+
         # Stamp this annotation with the codebook revision in effect so
         # an instance labeled before later code additions can be softly
         # flagged for review. No-op unless the project uses a codebook;
@@ -6239,6 +6312,21 @@ def poststudy():
     else:
         logger.debug("GET <-- POSTSTUDY")
         return get_current_page_html(config, username)
+
+def _configured_annotator_cap():
+    """The per-item annotator cap this study is running with, for the log.
+
+    Resolution lives in config_module (int form, dict `default`, the legacy
+    `max_annotations_per_item`, then unlimited); reading one spelling here
+    would have printed a number the server is not using.
+    """
+    try:
+        from potato.server_utils.config_module import resolve_num_annotators_per_item
+        cap = resolve_num_annotators_per_item(config)
+    except Exception:
+        return "unknown"
+    return "unlimited" if cap < 0 else cap
+
 
 @app.route("/done", methods=["GET", "POST"])
 def done():
@@ -9071,6 +9159,9 @@ def configure_routes(flask_app, app_config):
                      admin_model_review, methods=["GET"])
     app.add_url_rule("/api/model-review/verdict", "model_review_verdict",
                      model_review_verdict, methods=["POST"])
+    app.add_url_rule("/admin/active-learning/stats",
+                     "admin_active_learning_stats",
+                     admin_active_learning_stats, methods=["GET"])
     app.add_url_rule("/admin/api/rollout/judge-batch", "admin_rollout_judge_batch", admin_rollout_judge_batch, methods=["POST"])
     app.add_url_rule("/admin/api/rollout/alignment", "admin_rollout_alignment", admin_rollout_alignment, methods=["GET"])
     app.add_url_rule("/admin/triage-queue", "admin_triage_queue", admin_triage_queue, methods=["GET"])

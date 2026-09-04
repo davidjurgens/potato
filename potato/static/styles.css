@@ -48,6 +48,13 @@
   --accent-foreground: #18181b;
   --destructive: #ef4444;
   --destructive-foreground: #fafafa;
+  /* `--destructive` is a FILL. At 3.76:1 on white it cannot carry text, which
+     is why components that needed red words kept reaching for a literal.
+     These two are the text colours: both clear 7:1 on the card and on the
+     muted chip, which is the bar this product sets for anything an annotator
+     reads all day. */
+  --destructive-text: #9f1e17;
+  --warning-text: #7d4407;
   --border: #e4e4e7;
   --input: #e4e4e7;
   --ring: #6e56cf;
@@ -164,27 +171,25 @@ body {
   flex-shrink: 0;
 }
 
-.status-badge.labeled {
-  background-color: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.9);
+/* The three annotation-status pills sit on the purple navbar. They used to be
+   a white scrim with translucent white text, which put "Not labeled" -- the
+   state an annotator sees on every fresh item -- at 2.98:1, and the other two
+   at 3.6 and 3.3. A darkened scrim under solid white reaches ~7.3:1, which is
+   the bar this product sets for text annotators read all day. State is carried
+   by the dot colour and the word, not by the text opacity. */
+.status-badge.labeled,
+.status-badge.unlabeled,
+.status-badge.in_progress {
+  background-color: rgba(0, 0, 0, 0.18);
+  color: #ffffff;
 }
 
 .status-badge.labeled::before {
   background-color: #34d399;
 }
 
-.status-badge.unlabeled {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.7);
-}
-
 .status-badge.unlabeled::before {
   background-color: #fbbf24;
-}
-
-.status-badge.in_progress {
-  background-color: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.8);
 }
 
 .status-badge.in_progress::before {
@@ -4354,6 +4359,17 @@ body > .container-fluid {
   color: var(--success-color);
 }
 
+/* Neither a success nor a failure: the study has no work for this person.
+   Used by no_work_available.html, where a green tick would have read as
+   "you finished" -- which is what the completion page wrongly said. */
+.potato-page-icon-info {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.potato-page-icon-info i {
+  color: var(--primary, #6e56cf);
+}
+
 .potato-page-icon-error {
   background: rgba(239, 68, 68, 0.08);
 }
@@ -5854,6 +5870,13 @@ body > .container-fluid {
   font-weight: 600;
   color: var(--muted-foreground);
 }
+/* The block only renders under require_reason_on_edit, and that key now
+   actually blocks Next, so the label has to say so before the annotator
+   reaches the button. */
+.trajedit-reason-req {
+  font-weight: 500;
+  color: var(--destructive-text);
+}
 .trajedit-reason {
   flex: 1 1 auto;
   border: 1px solid var(--border);
@@ -6644,6 +6667,19 @@ body > .container-fluid {
   background: hsl(var(--muted, 210 40% 96%));
   border-radius: 0.375rem;
   display: inline-block;
+}
+
+/* Why the number on the left is not yet the verdict. Sits beside the score
+   rather than replacing it, so the running total stays readable while the
+   annotator fills in the severities it is waiting on. */
+.traj-score-note {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--warning-text);
+}
+
+.traj-score-note:empty {
+  display: none;
 }
 
 .traj-steps-container {

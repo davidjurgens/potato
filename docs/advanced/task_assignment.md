@@ -10,6 +10,7 @@ Assignment strategies decide which instances each annotator sees and in what ord
 4. [Legacy Configuration](#legacy-configuration)
 5. [Test Questions](#test-questions)
 6. [Examples](#examples)
+7. [Surplus annotators](#surplus-annotators)
 
 ---
 
@@ -444,6 +445,43 @@ active_learning:
 ```
 
 See [Active Learning Guide](../ai-intelligence/active_learning_guide.md) for complete configuration options.
+
+---
+
+## Surplus annotators
+
+Every item is capped at `num_annotators_per_item`. The cap counts an
+outstanding assignment as well as a submitted annotation, which is what spreads
+annotators across the dataset: the default strategy walks the item list from the
+top, so before this counted holds, five annotators arriving at a three-item
+study were all handed item_0 while item_1 and item_2 sat untouched.
+
+A hold is not a submission, though, and `instance_reclaim` is off by default, so
+an annotator who takes an item and closes the tab would otherwise remove it from
+the study for good. The cap is therefore relaxed for a second pass when
+enforcing it would have sent somebody away with nothing: a held item can be
+handed to a second annotator rather than stranded. Turn on
+[`instance_reclaim`](#reclaiming-abandoned-assignments) to have stale holds returned properly
+instead.
+
+Once every item has its full complement of **annotations**, a user who arrives
+after that gets nothing. This is easy to reach on a pilot: three items at one
+annotator each, and the fourth person to open the link is one too many.
+
+They land on a page that says so:
+
+> **There is no work left for you.** Every item in this study already has as
+> many annotators as it needs, so nothing could be assigned to you. You have
+> not annotated anything, and nothing has been recorded against your account.
+
+The server logs a warning naming the cap. The user stays in the annotation
+phase, so if you add data or raise `num_annotators_per_item`, a reload gives
+them work.
+
+Watch for this if you are paying per completion. Nobody in this state has done
+any work, and until this page existed they were shown the completion screen
+("Thank You! You have completed the annotation task and your responses are
+saved"), which reads as a finished assignment on both sides.
 
 ---
 
