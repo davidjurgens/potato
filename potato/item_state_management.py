@@ -1707,8 +1707,35 @@ class ItemStateManager:
 
         return model_review.review_order(summaries)
 
+    def _holds_unannotated_item(self, user_state: 'UserState') -> bool:
+        """True if the user is already holding something they have not answered.
+
+        Saturation asks "may this item go to somebody NEW"; it is not the
+        question here. Once holds began counting against an item's cap, an
+        annotator's own hold made their own queue look unavailable: with
+        `num_annotators_per_item: 2`, the second annotator was assigned all
+        three items, every one of them then read as saturated (one submitter
+        plus their own hold), `has_unlabeled_items_for_user` said there was no
+        work, and they were moved to DONE while holding three blank items.
+
+        The loss was silent and total. `_label_container` routes writes by the
+        user's current phase, so every annotation they submitted afterwards
+        went into `phase_to_page_to_label_to_value[DONE]` instead of the
+        instance store, and each one overwrote the last. Every save returned
+        200. Their work simply did not exist, and the agreement report over the
+        study showed one annotator.
+        """
+        for iid in user_state.get_assigned_instance_ids():
+            if not user_state.has_annotated(iid):
+                return True
+        return False
+
     def has_unlabeled_items_for_user(self, user_state: 'UserState') -> bool:
         """Check whether any items remain for this user to annotate (read-only)."""
+        # Anything already in their queue counts, whatever the pool looks like.
+        if self._holds_unannotated_item(user_state):
+            return True
+
         if self.assignment_strategy == AssignmentStrategy.BATCH:
             user_id = getattr(user_state, 'user_id', None)
             if not user_id:
