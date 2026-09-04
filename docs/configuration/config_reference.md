@@ -110,6 +110,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `gold_standards_file` |  | string |  | Gold items file, the flat alternative to the gold_standards block |  |
 | `quality_control` |  | object |  | Aggregate quality thresholds and actions |  |
 | `require_fully_annotated` |  | boolean |  | Refuse to advance until every scheme on the page has an answer |  |
+| `text_as_image` |  | boolean or object | `False` | Render each item's text to a PNG so annotators cannot copy or paste it | `enabled`, `font_size`, `max_width` |
 
 ## AI Support
 

@@ -4860,6 +4860,38 @@
       "description": "Custom HTML for the annotation form area",
       "type": "string"
     },
+    "text_as_image": {
+      "additionalProperties": true,
+      "default": false,
+      "description": "Render each item's text to a PNG so annotators cannot copy or paste it",
+      "examples": [
+        true
+      ],
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Turn the picture on, when text_as_image is written as a mapping",
+          "type": "boolean"
+        },
+        "font_size": {
+          "default": 18,
+          "description": "Point size of the text in the picture",
+          "examples": [
+            20
+          ],
+          "type": "integer"
+        },
+        "max_width": {
+          "default": 900,
+          "description": "Width of the picture in CSS pixels",
+          "examples": [
+            800
+          ],
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "thinkaloud": {
       "additionalProperties": true,
       "description": "Think-aloud mode: local speech-to-text over spoken rationales, plus rule-based detection of spoken label phrases",

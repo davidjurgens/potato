@@ -2389,6 +2389,16 @@ def _training_page_context(user_state):
                 or data.get("text", ""))
         instance_id = instance.get_id()
 
+    # text_as_image covers the practice question too. A researcher who turns the
+    # feature on does not expect the training text to stay copyable.
+    from potato.server_utils import text_to_image
+    training_image = ""
+    _text_as_image = text_to_image.applies(config, config.get("annotation_schemes") or [])
+    if _text_as_image:
+        training_image = text_to_image.image_html(text, _text_as_image)
+    if training_image:
+        text = ""
+
     total = len(training_state.training_instances)
     return {
         "is_training_page": True,
@@ -2398,6 +2408,7 @@ def _training_page_context(user_state):
         "instance_text_heading": "Training Question",
         "instance": text,
         "instance_plain_text": text,
+        "instance_image": training_image,
         "instance_id": instance_id,
         "training_current_question": min(training_state.get_current_question_index() + 1,
                                          total) if total else 0,
@@ -2892,6 +2903,26 @@ def render_page_with_annotations(username: str):
     # Also normalize whitespace
     original_plain_text = re_module.sub(r'\s+', ' ', original_plain_text).strip()
 
+    # text_as_image: the annotator sees a picture of the instance instead of the
+    # words, so the page must not carry the text anywhere. Blanking `text` and
+    # `original_plain_text` here also empties var_elems and the template's
+    # data-original-text. See server_utils/text_to_image.py for what the feature
+    # stops and what it does not.
+    from potato.server_utils import text_to_image
+    instance_image = ""
+    # The cohort-resolved `annotation_schemes` local is not bound until later
+    # in this function, so read the config list. It is the superset, and
+    # applies() switches the feature off for any media scheme in it, which
+    # is the safe direction.
+    _text_as_image = text_to_image.applies(
+        config, config.get("annotation_schemes") or [])
+    if _text_as_image:
+        instance_image = text_to_image.image_html(text, _text_as_image)
+    if instance_image:
+        text = ""
+        original_plain_text = ""
+        item_data = text_to_image.without_text(item_data, text_key)
+
     var_elems = {
         "instance": { "text": text },
         "emphasis": list(emphasis_corpus_to_schemas)
@@ -3202,6 +3233,8 @@ def render_page_with_annotations(username: str):
         instance=text,
         # Original plain text without span HTML (for data-original-text attribute)
         instance_plain_text=original_plain_text,
+        # Empty unless text_as_image is on, so the template branch is inert.
+        instance_image=instance_image,
         instance_obj=item,
         # Full record dict so schemas like process_reward / trajectory_eval
         # can bind to structured fields (e.g. structured_turns) via the
@@ -3209,7 +3242,8 @@ def render_page_with_annotations(username: str):
         # normalized "_transcripts" index attached here, so they accept every
         # format the audio_dialogue display does (see transcripts/binding.py).
         instance_record=enrich_transcript_record(
-            item.get_data(), config, base_dir=config.get("task_dir")
+            item_data if instance_image else item.get_data(),
+            config, base_dir=config.get("task_dir")
         ),
         instance_id=instance_id,
         instance_index=user_state.get_current_instance_index(),
