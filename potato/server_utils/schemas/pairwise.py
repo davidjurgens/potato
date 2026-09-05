@@ -125,15 +125,21 @@ def _generate_binary_mode(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[
     <form id="{escaped_schema}" class="annotation-form pairwise pairwise-binary" action="javascript:void(0)" data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}" {data_attrs} {layout_attrs}>
         {get_ai_wrapper()}
         <fieldset schema="{escaped_schema}">
-            <legend class="pairwise-question">{escaped_description}</legend>
+            <legend class="pairwise-question" id="{escaped_schema}-question">{escaped_description}</legend>
 
-            <!-- Compact selection tiles -->
-            <div class="pairwise-selection-container">
-                <div class="pairwise-tile" data-value="A" data-schema="{escaped_schema}" tabindex="0" {data_key_a}>
+            <!-- Compact selection tiles. A tile is a div that takes focus and
+                 carries the answer, so without a role and a checked state a
+                 screen reader announced two unlabelled focusable things and
+                 never said which one was chosen. -->
+            <div class="pairwise-selection-container" role="radiogroup"
+                 aria-labelledby="{escaped_schema}-question">
+                <div class="pairwise-tile" data-value="A" data-schema="{escaped_schema}" tabindex="0"
+                     role="radio" aria-checked="false" {data_key_a}>
                     <span class="pairwise-tile-label">{label_a}</span>
                     <span class="pairwise-tile-shortcut">{shortcut_a}</span>
                 </div>
-                <div class="pairwise-tile" data-value="B" data-schema="{escaped_schema}" tabindex="0" {data_key_b}>
+                <div class="pairwise-tile" data-value="B" data-schema="{escaped_schema}" tabindex="0"
+                     role="radio" aria-checked="false" {data_key_b}>
                     <span class="pairwise-tile-label">{label_b}</span>
                     <span class="pairwise-tile-shortcut">{shortcut_b}</span>
                 </div>
@@ -148,7 +154,7 @@ def _generate_binary_mode(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[
 
         schematic += f"""
             <div class="pairwise-extra-options">
-                <button type="button" class="pairwise-tie-btn" data-value="tie" data-schema="{escaped_schema}" {data_key_tie}>
+                <button type="button" class="pairwise-tie-btn" data-value="tie" data-schema="{escaped_schema}" aria-pressed="false" {data_key_tie}>
                     {escaped_tie_label} {shortcut_tie}
                 </button>
             </div>
@@ -402,7 +408,7 @@ def _generate_multi_dimension_mode(annotation_scheme: Dict[str, Any]) -> Tuple[s
             tie_btn_html = f"""
                 <button type="button" class="pairwise-tie-btn"
                         data-value="tie" data-schema="{escaped_schema}"
-                        data-dimension="{escaped_dim}">
+                        data-dimension="{escaped_dim}" aria-pressed="false">
                     {escape_html_content(tie_label)}
                 </button>"""
 
@@ -410,13 +416,16 @@ def _generate_multi_dimension_mode(annotation_scheme: Dict[str, Any]) -> Tuple[s
             <div class="pairwise-dimension-row" data-dimension="{escaped_dim}">
                 <div class="pairwise-dimension-label">{escape_html_content(dim_name.replace('_', ' ').title())}</div>
                 <div class="pairwise-dimension-description">{escape_html_content(dim_desc)}</div>
-                <div class="pairwise-dimension-tiles">
+                <div class="pairwise-dimension-tiles" role="radiogroup"
+                     aria-label="{escape_html_content(dim_name.replace('_', ' ').title())}">
                     <div class="pairwise-tile" data-value="A" data-schema="{escaped_schema}"
-                         data-dimension="{escaped_dim}" tabindex="0">
+                         data-dimension="{escaped_dim}" tabindex="0"
+                         role="radio" aria-checked="false">
                         <span class="pairwise-tile-label">{label_a}</span>
                     </div>
                     <div class="pairwise-tile" data-value="B" data-schema="{escaped_schema}"
-                         data-dimension="{escaped_dim}" tabindex="0">
+                         data-dimension="{escaped_dim}" tabindex="0"
+                         role="radio" aria-checked="false">
                         <span class="pairwise-tile-label">{label_b}</span>
                     </div>
                     {tie_btn_html}

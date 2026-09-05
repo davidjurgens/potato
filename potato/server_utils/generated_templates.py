@@ -104,3 +104,30 @@ def resolve_generated_templates_dir(package_templates_dir: str,
         logger.info("Generated templates directory: %s (%s)", chosen, reason)
         _logged = True
     return chosen
+
+
+def site_name_prefix(task_name: str, space: str = "-") -> str:
+    """``annotation_task_name`` as the leading part of a generated filename.
+
+    Three places build a template filename out of the task name and all three
+    only ever replaced spaces, so any separator in the name became a directory
+    boundary. ``annotation_task_name: "Pairwise left/right"`` crashed the
+    server at boot with a ``FileNotFoundError`` naming a directory nobody had
+    asked for, and a name containing ``..`` would have written the template
+    outside the generated directory entirely.
+
+    Spaces still become ``space`` -- ``-`` for the annotation template and
+    ``_`` for phase pages -- because that is what the existing names look like
+    and the two conventions are not worth unifying here. Everything else that
+    a path can interpret is replaced.
+    """
+    name = (task_name or "task").replace(" ", space)
+    for unsafe in (os.sep, os.altsep, "\0"):
+        if unsafe:
+            name = name.replace(unsafe, "-")
+    # A name that is only dots would resolve to the directory itself, and one
+    # that is only punctuation names a file nobody can recognise.
+    name = name.strip(".")
+    if not any(character.isalnum() for character in name):
+        return "task"
+    return name

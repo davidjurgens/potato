@@ -93,6 +93,20 @@ The schema expects instance data with a list of items to compare:
 
 The `items_key` configuration specifies which field contains the items to compare. The field should contain a list with at least 2 items.
 
+Three shapes work, and the page tries them in this order:
+
+1. **The field named by `items_key`**, holding a list of two or more strings. Use this one.
+2. **A `left` and `right` pair on the item**, for data that names the two sides instead of listing them:
+
+   ```json
+   {"id": "3", "prompt": "Which reply is better?", "left": "First reply", "right": "Second reply"}
+   ```
+
+   This is read only when `items_key` names no field on the item, so items that are not all shaped alike still render.
+3. **Markers in the displayed text.** With `list_as_text` set, text reading `A. ... B. ...` is split on the markers. What this finds depends on how the text was written, so prefer one of the shapes above.
+
+If none of the three yields two candidates, the labels render with nothing to compare. When `items_key` names a field holding something that is not a list, the browser console says so.
+
 ## Output Format
 
 ### Binary Mode Output

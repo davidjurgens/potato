@@ -3633,10 +3633,20 @@ body.has-pairwise-display #instance-text {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.pairwise-tile:focus {
-  outline: none;
+/* The tile is a div with tabindex, so this ring is the only thing telling a
+   keyboard user where they are. The 20%-alpha halo it used to rely on is
+   1.32:1 against the card -- WCAG 1.4.11 asks for 3:1 -- so the indicator is
+   a solid outline at full strength (5.39:1) and the halo stays as decoration
+   behind it. */
+.pairwise-tile:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.2);
+}
+
+.pairwise-tile:focus {
+  border-color: var(--primary);
 }
 
 .pairwise-tile.selected {
@@ -3725,11 +3735,15 @@ body.has-pairwise-display #instance-text {
   max-width: 600px;
 }
 
+/* These three labels are the only thing saying which end of the slider means
+   what, so they are UI labels rather than help text. At --text-sm they render
+   at 13px, which is the size this file reserves for captions and fine print. */
 .pairwise-scale-labels {
   display: flex;
   justify-content: space-between;
+  gap: 0.75rem;
   width: 100%;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--muted-foreground);
   margin-bottom: 12px;
@@ -6557,6 +6571,20 @@ body > .container-fluid {
   display: flex;
   gap: 1rem;
   flex-wrap: wrap;
+}
+
+/* An item carrying more profiles than the scheme renders. Says so above the
+   cards, because the alternative is an annotator comparing three of five
+   options with nothing on screen to tell them the set is incomplete.
+
+   Scoped through the container because `.annotation-form fieldset p` and
+   `.annotation-form fieldset *` both set a colour and both outrank a bare
+   class, so the unscoped rule lost and the notice rendered in body grey. */
+.shadcn-conjoint-container .conjoint-truncation-notice {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--warning-text);
+  margin-bottom: 0.75rem;
 }
 .conjoint-profile-card {
   flex: 1;

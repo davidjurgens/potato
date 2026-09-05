@@ -5287,11 +5287,13 @@ function populatePairwiseTileContent() {
         return;
     }
 
-    // Get items from instance text
-    let items = null;
+    // The item's own fields first. `items_key` names the field holding the two
+    // candidates, so a scheme that configures it has said where its data is,
+    // and parsing the rendered text instead is guessing over an answer.
+    let items = pairwiseItemsFromInstanceData(pairwiseForms[0]);
     const instanceText = document.getElementById('instance-text');
 
-    if (instanceText) {
+    if (!items && instanceText) {
         const textContent = instanceText.querySelector('#text-content');
         const contentElement = textContent || instanceText;
 
@@ -5331,16 +5333,6 @@ function populatePairwiseTileContent() {
         }
     }
 
-    // Method 4: Try window.currentInstanceData
-    if (!items) {
-        const firstForm = pairwiseForms[0];
-        const itemsKey = firstForm.getAttribute('data-items-key') || 'text';
-        if (window.currentInstanceData && window.currentInstanceData[itemsKey]) {
-            const data = window.currentInstanceData[itemsKey];
-            if (Array.isArray(data) && data.length >= 2) items = data;
-        }
-    }
-
     if (items && items.length >= 2) {
         // Create pairwise items display ONCE at top (if not exists)
         createPairwiseItemsDisplay(items, pairwiseForms[0]);
@@ -5348,17 +5340,111 @@ function populatePairwiseTileContent() {
         // Wrap pairwise forms in a flex container for side-by-side layout
         wrapPairwiseFormsInFlexContainer(pairwiseForms);
 
-        // Hide the "Text to Annotate" section
-        const instanceTextContainer = document.querySelector('.instance-text-container');
-        if (instanceTextContainer) {
-            instanceTextContainer.style.display = 'none';
-        }
-        // Also hide the "Text to Annotate" heading
-        const textHeading = document.querySelector('h5.mb-3');
-        if (textHeading && textHeading.textContent.includes('Text to Annotate')) {
-            textHeading.style.display = 'none';
+        // Hide the main text only when it is the SAME text as the candidates.
+        // With `items_key` naming a field of its own, the text field usually
+        // holds the question -- hiding it takes away what the annotator is
+        // being asked, which is not a duplicate of anything. Same rule as
+        // error_span's `sourceText === instanceText` guard.
+        if (pairwiseCandidatesAreTheMainText(items)) {
+            const instanceTextContainer =
+                document.querySelector('.instance-text-container');
+            if (instanceTextContainer) {
+                instanceTextContainer.style.display = 'none';
+            }
+            hideInstanceTextHeading();
         }
     }
+}
+
+/** Whether every candidate already appears in the rendered instance text. */
+function pairwiseCandidatesAreTheMainText(items) {
+    const element = document.getElementById('text-content')
+        || document.getElementById('instance-text');
+    if (!element) return false;
+    const flatten = text => String(text).replace(/\s+/g, ' ').trim();
+    const rendered = flatten(element.textContent || '');
+    if (!rendered) return false;
+    return items.every(item => {
+        const candidate = flatten(item);
+        return candidate.length > 0 && rendered.indexOf(candidate) !== -1;
+    });
+}
+
+/**
+ * The two candidates, read from the item's own fields.
+ *
+ * This used to read `window.currentInstanceData`, which is assigned in exactly
+ * one place: inside `populateDynamicSchemaContent`, for the dynamic-schema
+ * family. A page with only a pairwise scheme never ran that function, so the
+ * global did not exist and neither `items_key` nor a {left, right} pair ever
+ * rendered -- the only shape that worked was the one Method 3 parses out of
+ * the rendered text with a regex. A page that DID carry a dynamic scheme set
+ * the global, but only after the pairwise setup had already run and given up,
+ * so the same feature broke a second way.
+ *
+ * The item is on the page the whole time, in <script id="instance_data">, so
+ * read that instead of depending on another feature having run first.
+ */
+function pairwiseItemsFromInstanceData(form) {
+    const data = getEmbeddedInstanceData();
+    if (!data) return null;
+
+    const itemsKey = form.getAttribute('data-items-key') || 'text';
+    const configured = data[itemsKey];
+    if (Array.isArray(configured) && configured.length >= 2) {
+        return configured.map(item => String(item));
+    }
+
+    if (configured !== undefined && !Array.isArray(configured)) {
+        console.warn('[PAIRWISE] items_key "' + itemsKey + '" holds a ' +
+            (typeof configured) + ', not a list of candidates.');
+    }
+
+    // A two-sided comparison is often stored as a named pair rather than a
+    // list. Second, so a scheme that names a field of its own always wins on
+    // the items that have it -- but an item that carries the pair instead
+    // still renders, because a study whose items are not all shaped alike is
+    // the normal case and the alternative is a blank comparison.
+    if (typeof data.left === 'string' && typeof data.right === 'string') {
+        return [data.left, data.right];
+    }
+    return null;
+}
+
+/**
+ * The full current item, parsed from the page.
+ *
+ * `window.currentInstanceData` is the same object when something has already
+ * set it; this fills it in when nothing has, so neither caller depends on the
+ * order the two ran in.
+ */
+function getEmbeddedInstanceData() {
+    if (window.currentInstanceData) return window.currentInstanceData;
+    const script = document.getElementById('instance_data');
+    if (!script) return null;
+    try {
+        window.currentInstanceData = JSON.parse(script.textContent);
+        return window.currentInstanceData;
+    } catch (e) {
+        console.warn('[PAIRWISE] Could not parse the embedded instance data.');
+        return null;
+    }
+}
+
+/**
+ * Hide the "Text to Annotate:" heading above the main text container.
+ *
+ * Three callers hide the text container itself and left the heading behind:
+ * two of them tried, with `h5.mb-3`, which has matched nothing since the
+ * heading became `h5.instance-text-heading`. Matching on the heading's text
+ * was the second half of the same bug -- the heading is configurable through
+ * `instance_text_heading` and `ui_lang`, so a renamed or translated one would
+ * have been left behind even once the selector was right.
+ */
+function hideInstanceTextHeading() {
+    document.querySelectorAll('.instance-text-heading').forEach(heading => {
+        heading.style.display = 'none';
+    });
 }
 
 /**
@@ -5466,6 +5552,30 @@ function escapeHtml(text) {
  * Select a pairwise tile (binary mode).
  * @param {HTMLElement} tile - The tile element clicked
  */
+/**
+ * Mirror the `selected` class onto `aria-checked`.
+ *
+ * The tiles carry role="radio", and a radio whose checked state lives only in
+ * a CSS class tells a screen reader nothing about which one is chosen. Derived
+ * from the class in one place rather than set at each of the sites that add or
+ * remove it, so the two cannot drift apart.
+ */
+function syncPairwiseTileAria(scope) {
+    const root = scope || document;
+    root.querySelectorAll('.pairwise-tile').forEach(tile => {
+        tile.setAttribute('aria-checked',
+            tile.classList.contains('selected') ? 'true' : 'false');
+    });
+    // Tie and Neither are real buttons rather than tiles, so they get the
+    // toggle attribute a button uses. Same reason: the state lived only in a
+    // class, and a class is not announced.
+    root.querySelectorAll('.pairwise-tie-btn, .pairwise-neither-btn')
+        .forEach(button => {
+            button.setAttribute('aria-pressed',
+                button.classList.contains('selected') ? 'true' : 'false');
+        });
+}
+
 function selectPairwiseTile(tile) {
     const schema = tile.getAttribute('data-schema');
     const value = tile.getAttribute('data-value');
@@ -5485,6 +5595,7 @@ function selectPairwiseTile(tile) {
 
     // Select this tile
     tile.classList.add('selected');
+    syncPairwiseTileAria(scope);
 
     // Update hidden input — in multi-dim mode find the dimension-specific input
     let hiddenInput;
@@ -5534,6 +5645,7 @@ function selectPairwiseOption(btn) {
 
     // Select this button
     btn.classList.add('selected');
+    syncPairwiseTileAria(scope);
 
     // Update hidden input
     let hiddenInput;
@@ -5689,6 +5801,11 @@ function restorePairwiseAnnotations() {
             debugLog('[PAIRWISE] Error restoring justification:', e);
         }
     });
+
+    // A restored selection is a selection: the checked state has to follow the
+    // class here too, or a returning annotator hears "not checked" on the tile
+    // they already picked.
+    syncPairwiseTileAria(document);
 }
 
 /**
@@ -5820,10 +5937,7 @@ function populateBwsItemsDisplay() {
     if (instanceTextContainer) {
         instanceTextContainer.style.display = 'none';
     }
-    const textHeading = document.querySelector('h5.mb-3');
-    if (textHeading && textHeading.textContent.includes('Text to Annotate')) {
-        textHeading.style.display = 'none';
-    }
+    hideInstanceTextHeading();
 }
 
 /**
@@ -6106,6 +6220,10 @@ function populateErrorSpan(form, schemaName, data, instanceText) {
         if (instanceTextSection) {
             instanceTextSection.style.display = 'none';
         }
+        // The heading is a sibling of that container, not a child, so hiding
+        // the container on its own left "Text to Annotate:" standing over
+        // empty space.
+        hideInstanceTextHeading();
     }
 }
 
@@ -6226,7 +6344,52 @@ function populateConjoint(form, schemaName, data) {
                 });
             }
         });
+        reconcileConjointCardCount(form, profileCards, profiles.length);
     }
+}
+
+/**
+ * Make the number of cards on screen the number of profiles in the data.
+ *
+ * The generator emits `profiles_per_set` cards, which it has to decide once
+ * for the whole scheme, while the data decides per item. Two profiles under
+ * the default of three left an "Option 3" whose every attribute read as an em
+ * dash -- with a live "Choose this" radio under it, so an annotator could pick
+ * the empty one and the study would record a preference for nothing.
+ *
+ * The other direction is a silent cap rather than a stray control: profiles
+ * past the last card were dropped with nothing on screen saying so, so an
+ * annotator compared three of five options believing they had seen the set.
+ * That one says so where they can read it.
+ */
+function reconcileConjointCardCount(form, profileCards, profileCount) {
+    profileCards.forEach((card, idx) => {
+        if (idx < profileCount) return;
+        card.remove();
+    });
+
+    const container = form.querySelector('.conjoint-profiles');
+    if (!container) return;
+    let notice = container.parentNode.querySelector('.conjoint-truncation-notice');
+    if (profileCount <= profileCards.length) {
+        if (notice) notice.remove();
+        return;
+    }
+    if (!notice) {
+        notice = document.createElement('p');
+        notice.className = 'conjoint-truncation-notice';
+        notice.setAttribute('role', 'status');
+        container.parentNode.insertBefore(notice, container);
+    }
+    // The annotator is told the set is incomplete. The config key that fixes
+    // it goes to the console, because they are not the person who can change
+    // it and naming a YAML setting in the interface tells them nothing they
+    // can act on.
+    notice.textContent = 'Showing ' + profileCards.length + ' of ' +
+        profileCount + ' options for this item.';
+    console.warn('[CONJOINT] ' + (form.getAttribute('data-schema-name') || '') +
+        ': this item has ' + profileCount + ' profiles but the scheme renders ' +
+        profileCards.length + '. Raise profiles_per_set to ' + profileCount + '.');
 }
 
 /**

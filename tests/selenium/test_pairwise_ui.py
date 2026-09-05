@@ -454,9 +454,19 @@ site_dir: default
         assert "Equal" in page_text
 
     def test_scale_items_displayed(self):
-        """Test that both items are displayed in scale mode."""
-        scale_items = self.driver.find_elements(By.CLASS_NAME, "pairwise-scale-item")
-        assert len(scale_items) == 2
+        """Test that both items are displayed in scale mode.
+
+        The class asserted here used to be `pairwise-scale-item`, which nothing
+        in the tree has ever emitted, so this test could only fail. Scale mode
+        shares `createPairwiseItemsDisplay` with binary mode and renders
+        `pairwise-item-box`. Asserting the candidate text as well, because two
+        empty boxes are also two boxes.
+        """
+        boxes = self.driver.find_elements(By.CLASS_NAME, "pairwise-item-box")
+        assert len(boxes) == 2, [b.text for b in boxes]
+        text = " ".join(b.text for b in boxes)
+        assert "Response A content." in text, text
+        assert "Response B content." in text, text
 
     def test_slider_value_change(self):
         """Test that slider value can be changed."""

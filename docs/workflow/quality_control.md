@@ -373,6 +373,14 @@ The system automatically selects the appropriate metric:
 - **Nominal metric**: For categorical annotations (radio, multiselect)
 - **Interval metric**: For numeric annotations (likert, slider, number)
 
+An interval metric subtracts the two ratings, so a likert, slider or number
+scheme whose answers are not numbers is measured nominally instead. The report
+says so, in `metric_note` on the schema and in the top-level `warnings` list.
+
+Nothing is reported for a schema until `min_overlap` annotators have answered
+the same item, so a study with one annotator shows "No items with 2+
+annotators" rather than a number.
+
 ---
 
 ## API Endpoints

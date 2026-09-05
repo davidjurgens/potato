@@ -2222,12 +2222,12 @@ def load_phase_data(config: dict) -> None:
                             project_css = ""
                         html_template = html_template.replace("{{ PROJECT_BASE_CSS }}", project_css)
 
+                        from potato.server_utils.generated_templates import (
+                            resolve_generated_templates_dir, site_name_prefix)
                         site_name = (
-                            "_".join(config["annotation_task_name"].split(" "))
+                            site_name_prefix(config["annotation_task_name"], "_")
                             + "-" + "%s.html" % phase_name
                         )
-                        from potato.server_utils.generated_templates import (
-                            resolve_generated_templates_dir)
                         generated_dir = resolve_generated_templates_dir(
                             config["site_dir"])
                         output_html_fname = os.path.join(generated_dir, site_name)
@@ -2812,6 +2812,40 @@ def _training_page_context(user_state):
     }
 
 
+def progress_counts(username):
+    """``(finished, total)`` for the navbar counter.
+
+    Shared because phase pages render through a different function and used to
+    hardcode ``0`` here: after finishing every item, the post-study page read
+    "Progress 0/8", which is the one place an annotator looks to confirm they
+    are done.
+
+    Both halves count dataset items only. Attention checks and gold items are
+    injected by the platform, not drawn from the pool, so they are absent from
+    the denominator -- counting them in the numerator walked the counter past
+    its own total ("13/12", "15/12") on a 12-item study with four injected
+    items.
+    """
+    user_state = get_user_state(username)
+    finished_count = count_dataset_items(user_state.get_annotated_instance_ids())
+    # Their own outstanding assignments AND what is still free in the pool.
+    # Counting only the pool told every annotator after the first that they
+    # were 100% done from their first save: a hold counts against an item's
+    # cap, so with two annotators on six items the pool is empty for the
+    # second one while their ordering holds all six.
+    remaining_count = count_dataset_items(
+        get_item_state_manager().get_progress_pending_ids_for_user(user_state)
+    )
+    # Total = finished + remaining (so counter shows "X / Total" not "X / Remaining")
+    total_count = finished_count + remaining_count
+
+    # Cap total by max_assignments if set (so progress shows "3/6" not "3/100")
+    max_assignments = user_state.get_max_assignments()
+    if max_assignments >= 0:
+        total_count = min(total_count, max_assignments)
+    return finished_count, total_count
+
+
 def get_current_page_html(config, username):
     """
     Returns the HTML for the current page that the user is on.
@@ -2827,6 +2861,15 @@ def get_current_page_html(config, username):
     usm = get_user_state_manager()
     html_fname = usm.get_phase_html_fname(phase, page)
 
+    try:
+        _phase_finished, _phase_total = progress_counts(username)
+    except Exception as e:
+        # A phase page must still render if the counter cannot be computed.
+        logger.debug("Progress counts unavailable for %s: %s", username, e)
+        _phase_finished, _phase_total = 0, (
+            user_state.get_assigned_instance_count()
+            if hasattr(user_state, 'get_assigned_instance_count') else 0)
+
     # Provide context variables needed by the template
     # For phase pages, many annotation-specific fields can be empty/default
     context = {
@@ -2840,9 +2883,11 @@ def get_current_page_html(config, username):
         'instance': '',
         'instance_plain_text': '',
         'instance_id': '',
-        'instance_index': 0,
-        'finished': 0,
-        'total_count': user_state.get_assigned_instance_count() if hasattr(user_state, 'get_assigned_instance_count') else 0,
+        # No `instance_index`: the template renders the "Instance #N" chip only
+        # when it is defined, and a consent or post-study page is not an
+        # instance. Setting it to 0 made every phase page claim "Instance #1".
+        'finished': _phase_finished,
+        'total_count': _phase_total,
         'ui_config': config.get('ui_config', {}),
         'is_annotation_page': is_annotation_page,
         'annotation_instructions': config.get('annotation_instructions', ''),
@@ -3418,32 +3463,7 @@ def render_page_with_annotations(username: str):
     # replacing {{variable_name}} with the associated text for keyword arguments
 
         # Calculate progress counter values
-    # Get the number of completed annotations and remaining assignable items.
-    #
-    # Both halves count dataset items only. Attention checks and gold items are
-    # injected by the platform, not drawn from the pool, so they are absent from
-    # the denominator -- counting them in the numerator walked the counter past
-    # its own total ("13/12", "15/12") on a 12-item study with four injected
-    # items.
-    finished_count = count_dataset_items(
-        get_user_state(username).get_annotated_instance_ids()
-    )
-    # Their own outstanding assignments AND what is still free in the pool.
-    # Counting only the pool told every annotator after the first that they
-    # were 100% done from their first save: a hold counts against an item's
-    # cap, so with two annotators on six items the pool is empty for the
-    # second one while their ordering holds all six.
-    remaining_count = count_dataset_items(
-        get_item_state_manager().get_progress_pending_ids_for_user(
-            get_user_state(username))
-    )
-    # Total = finished + remaining (so counter shows "X / Total" not "X / Remaining")
-    total_count = finished_count + remaining_count
-
-    # Cap total by max_assignments if set (so progress shows "3/6" not "3/100")
-    max_assignments = get_user_state(username).get_max_assignments()
-    if max_assignments >= 0:
-        total_count = min(total_count, max_assignments)
+    finished_count, total_count = progress_counts(username)
 
     # Determine annotation status for the status badge (three-state)
     annotation_status = "unlabeled"

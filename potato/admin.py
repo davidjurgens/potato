@@ -1541,6 +1541,9 @@ class AdminDashboard:
             from simpledorff.metrics import nominal_metric, interval_metric
             import pandas as pd
 
+            from potato.server_utils import annotation_values
+            from potato.server_utils.iaa import dispatcher
+
             agreement_config = config.get("agreement_metrics", {})
             min_overlap = agreement_config.get("min_overlap", 2)
 
@@ -1580,19 +1583,32 @@ class AdminDashboard:
                         instance_annotations = all_annotations[item_id]
                         labels = instance_annotations.get("labels", {})
 
-                        # Find annotation for this schema
-                        for label, value in labels.items():
-                            label_schema = None
-                            if hasattr(label, 'schema'):
-                                label_schema = label.schema
-                            elif hasattr(label, 'get_schema'):
-                                label_schema = label.get_schema()
+                        # The answer is the NAME of the label whose stored value
+                        # is truthy, not the value: radio stores
+                        # {"eligible": True} and likert {"4": "4"}, so reading
+                        # the value gave True for every annotator on every
+                        # categorical schema -- unanimous agreement whatever
+                        # anyone picked. Shared with /admin/iaa and with
+                        # adjudication so the two reports cannot disagree about
+                        # what a person answered.
+                        values = annotation_values.group_by_schema(
+                            labels).get(schema_name)
+                        if not values:
+                            continue
+                        names = (dispatcher.packed_answer(scheme, values)
+                                 or annotation_values.selected_labels(values))
+                        if not names:
+                            continue
 
-                            if label_schema == schema_name:
-                                item_annotations.append({
-                                    "user": username,
-                                    "value": value
-                                })
+                        # One row per annotator. A multiselect chooses several
+                        # names at once; appending them separately gave
+                        # simpledorff two rows for the same (item, annotator)
+                        # and counted one person as meeting a two-annotator
+                        # overlap on their own.
+                        item_annotations.append({
+                            "user": username,
+                            "value": names[0] if len(names) == 1 else list(names),
+                        })
 
                     if item_annotations:
                         annotations_by_item[item_id] = item_annotations
@@ -1613,18 +1629,11 @@ class AdminDashboard:
 
                 # Format for simpledorff
                 try:
-                    reliability_data = []
-                    for item_id, annots in valid_items.items():
-                        for annot in annots:
-                            reliability_data.append({
-                                "unit": item_id,
-                                "annotator": annot["user"],
-                                "annotation": self._normalize_annotation_value(annot["value"])
-                            })
-
-                    df = pd.DataFrame(reliability_data)
-
-                    # Choose metric based on annotation type
+                    # An interval metric subtracts the two values, so a rating
+                    # has to reach simpledorff as a number. The shared
+                    # normalizer stringifies everything, which is right for
+                    # nominal comparison and fatal here, so a rating scale
+                    # takes its own path.
                     if annotation_type in ["likert", "slider", "number"]:
                         metric_fn = interval_metric
                         metric_name = "interval"
@@ -1632,8 +1641,44 @@ class AdminDashboard:
                         metric_fn = nominal_metric
                         metric_name = "nominal"
 
-                    # Calculate alpha
-                    alpha = simpledorff.calculate_krippendorffs_alpha(
+                    fell_back = False
+                    if metric_name == "interval":
+                        numeric = self._numeric_annotation_values(valid_items)
+                        if numeric is None:
+                            # A rating scale whose answers are not numbers is a
+                            # nominal variable, and reporting nothing at all
+                            # helps nobody. Say which measure was used.
+                            metric_fn = nominal_metric
+                            metric_name = "nominal"
+                            fell_back = True
+
+                    reliability_data = []
+                    for item_id, annots in valid_items.items():
+                        for annot in annots:
+                            value = annot["value"]
+                            reliability_data.append({
+                                "unit": item_id,
+                                "annotator": annot["user"],
+                                "annotation": (
+                                    numeric[(item_id, annot["user"])]
+                                    if metric_name == "interval"
+                                    else self._normalize_annotation_value(value)
+                                ),
+                            })
+
+                    df = pd.DataFrame(reliability_data)
+
+                    # `calculate_krippendorffs_alpha` takes an
+                    # experiment-by-annotator TABLE and one metric. The
+                    # function that takes a long dataframe and the three column
+                    # names is `..._for_df`, which is what every other call
+                    # site in the tree uses. Calling the wrong one raised
+                    # TypeError on the first statement of this try, so the
+                    # kappas below were never reached and every schema came
+                    # back as an error string with a 200 -- the whole feature
+                    # produced no numbers for anyone who had two annotators,
+                    # which is the only condition under which it runs at all.
+                    alpha = simpledorff.calculate_krippendorffs_alpha_for_df(
                         df,
                         experiment_col="unit",
                         annotator_col="annotator",
@@ -1648,6 +1693,15 @@ class AdminDashboard:
                         "total_annotations": len(reliability_data),
                         "interpretation": self._interpret_alpha(alpha)
                     }
+                    if fell_back:
+                        note = (
+                            f"'{schema_name}' is a {annotation_type} scheme but "
+                            "its answers are not numbers, so agreement was "
+                            "measured nominally rather than on an interval "
+                            "scale."
+                        )
+                        schema_metrics["metric_note"] = note
+                        metrics["warnings"].append(note)
 
                     # Cohen's kappa (pairwise) and Fleiss' kappa apply to
                     # categorical schemas; skip for interval-metric data where
@@ -1730,6 +1784,28 @@ class AdminDashboard:
             return "Low agreement"
         else:
             return "Poor agreement"
+
+    def _numeric_annotation_values(self, valid_items) -> Optional[Dict]:
+        """Every answer as a float, or ``None`` if any one of them is not.
+
+        Krippendorff's alpha on an interval metric differences the two values.
+        A rating stored as ``"4"`` -- which is what the shared normalizer
+        produces, and what a checkbox-flavoured answer looks like too --
+        raises ``TypeError`` inside the metric, and the caller reports the
+        schema as broken rather than measuring it the other way.
+        """
+        numeric = {}
+        for item_id, annots in valid_items.items():
+            for annot in annots:
+                value = annot["value"]
+                if isinstance(value, bool) or not isinstance(
+                        value, (str, int, float)):
+                    return None
+                try:
+                    numeric[(item_id, annot["user"])] = float(value)
+                except (TypeError, ValueError):
+                    return None
+        return numeric
 
     def _normalize_annotation_value(self, value: Any) -> Any:
         """Normalize annotation value for comparison."""

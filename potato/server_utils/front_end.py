@@ -23,7 +23,7 @@ from potato.server_utils.schemas.keybinding_allocator import allocate_keybinding
 logger = logging.getLogger(__name__)
 
 from potato.server_utils.generated_templates import (  # noqa: E402
-    resolve_generated_templates_dir)
+    resolve_generated_templates_dir, site_name_prefix)
 
 
 # TODO: Move this to config.yaml files
@@ -506,7 +506,7 @@ def generate_annotation_html_template(config: dict) -> str:
 
         # Site file name: project + template basename, plus cohort suffix.
         site_name = (
-            "-".join(config["annotation_task_name"].split(" "))
+            site_name_prefix(config["annotation_task_name"], "-")
             + "-"
             + os.path.basename(html_template_file)
         )
@@ -738,7 +738,7 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
 
     # Cache the html as a template for use in flask server
     site_name = (
-            "_".join(config["annotation_task_name"].split(" "))
+            site_name_prefix(config["annotation_task_name"], "_")
             + "-"
             + "%s.html" % phase_name
         )

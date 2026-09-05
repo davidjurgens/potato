@@ -56,6 +56,12 @@ below it up.
 Declaring `attributes` alongside `profiles_field` narrows the display to the
 attributes you named, in the order you named them.
 
+`profiles_per_set` is fixed for the scheme, but with `profiles_field` the data
+decides how many profiles each item has. An item with fewer shows only the cards
+it has, instead of padding the set with an empty option an annotator can select.
+An item with more shows the first `profiles_per_set` of them and says on the page
+how many it is showing. Set `profiles_per_set` to the largest set in your data.
+
 ```yaml
 - annotation_type: conjoint
   name: platform
