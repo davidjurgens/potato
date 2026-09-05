@@ -829,14 +829,17 @@ def _aggregate_continuous(rows):
 
 def _aggregate_multilabel(rows):
     long_rows = []
-    label_sets_by_user: Dict[str, list] = defaultdict(list)
+    # Keyed by item, not appended to a list: a user who skipped an item gets a
+    # shorter list, and positional pairing then compares two different items
+    # from that point on.
+    label_sets_by_user: Dict[str, dict] = defaultdict(dict)
     for iid, per_user in rows.items():
         flat = {u: frozenset(v) for u, v in per_user.items() if v}
         if len(flat) < 2:
             continue
         for u, val in flat.items():
             long_rows.append((u, iid, val))
-            label_sets_by_user[u].append(val)
+            label_sets_by_user[u][iid] = val
     return {
         "mean_jaccard": multilabel.mean_jaccard(label_sets_by_user),
         "alpha_masi": multilabel.alpha_masi(long_rows),

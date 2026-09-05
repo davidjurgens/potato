@@ -316,12 +316,14 @@ class _AnnotationCollector:
                     self.span_count += 1
 
     def _show_turn_numbers(self, field_key: Optional[str]) -> bool:
+        from potato.server_utils.displays.base import resolve_display_options
+
         for field in (self.context.config.get("instance_display", {}) or {}).get(
             "fields", []
         ) or []:
             if field.get("key") == field_key:
                 return bool(
-                    (field.get("display_options") or {}).get("show_turn_numbers", False)
+                    resolve_display_options(field).get("show_turn_numbers", False)
                 )
         return False
 

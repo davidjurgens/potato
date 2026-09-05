@@ -114,10 +114,14 @@ class ExportContext:
         from potato.server_utils.displays.base import (
             concatenate_dialogue_text,
             reconstruct_dialogue_dom_text,
+            resolve_display_options,
         )
 
         field_config = self._display_field_config(field_name)
-        options = field_config.get("display_options", {}) or {}
+        # Resolve the options the way the DISPLAY resolves them -- flat on the
+        # field or nested -- or the two anchor to different strings and every
+        # dialogue span exports shifted by the width of the turn numbering.
+        options = resolve_display_options(field_config)
         if field_config.get("type") == "dialogue":
             return reconstruct_dialogue_dom_text(
                 value,

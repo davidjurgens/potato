@@ -398,7 +398,9 @@ class DocumentDisplay(BaseDisplay):
     def validate_config(self, field_config: Dict[str, Any]) -> List[str]:
         """Validate the field configuration."""
         errors = super().validate_config(field_config)
-        options = field_config.get("display_options", {})
+        # Through the resolver, so an option written flat on the field is
+        # validated too rather than silently skipping these checks.
+        options = self.get_display_options(field_config)
 
         # Validate annotation_mode
         valid_modes = ["span", "bounding_box"]

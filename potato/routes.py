@@ -5560,7 +5560,9 @@ def get_span_data(instance_id):
             is_dialogue = field_cfg and field_cfg.get("type") == "dialogue"
 
             if is_dialogue and isinstance(field_data, list):
-                opts = field_cfg.get("display_options", {})
+                from potato.server_utils.displays.base import (
+                    resolve_display_options)
+                opts = resolve_display_options(field_cfg)
                 field_text = reconstruct_dialogue_dom_text(
                     field_data,
                     speaker_key=opts.get("speaker_key", "speaker"),
@@ -7158,6 +7160,7 @@ def _keyword_scan_fields(instance):
     from potato.server_utils.displays.base import (
         concatenate_dialogue_text,
         reconstruct_dialogue_dom_text,
+        resolve_display_options,
     )
 
     item_data = instance.get_data()
@@ -7187,7 +7190,7 @@ def _keyword_scan_fields(instance):
         if isinstance(value, str) and value:
             scanned.append((key, value))
         elif isinstance(value, list) and value:
-            options = entry.get("display_options", {}) or {}
+            options = resolve_display_options(entry)
             if entry.get("type") == "dialogue":
                 scanned.append((key, reconstruct_dialogue_dom_text(
                     value,

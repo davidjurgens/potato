@@ -46,7 +46,7 @@ Config YAML
 | `get_js_init()` | `None` | Return JS to run on page load |
 | `validate_config(field_config)` | Checks `required_fields` | Add enum/range validation |
 | `has_inline_label(field_config)` | `False` | Return `True` if display renders its own label (avoids duplicate) |
-| `get_display_options(field_config)` | Merges `optional_fields` with `display_options` | Rarely needed |
+| `get_display_options(field_config)` | Resolves a field's options: declared defaults, then options written flat on the field, then the nested `display_options` block | Use it in `render()` and `validate_config()`; never read `field_config["display_options"]` by hand |
 
 ### Class attributes
 
@@ -54,6 +54,20 @@ Config YAML
 |-----------|------|-------------|
 | `required_fields` | `List[str]` | Config keys that must be present |
 | `optional_fields` | `Dict[str, Any]` | Default values for optional display_options |
+
+### Reading a display's options from outside the display
+
+Code outside a display that needs an option's value — the exporters,
+`/api/spans`, the keyword scan — must call
+`resolve_display_options(field_config)` from `displays/base.py`. It answers
+through the registered display, so it agrees with what the page renders.
+
+Parsing `field_config["display_options"]` by hand is how the two sides drift.
+When `get_display_options()` learned to accept an option written flat on the
+field, every hand-parsing reader kept seeing only the nested block: the
+dialogue display honoured `show_turn_numbers: true` while the export resolved
+spans against an un-numbered string, and every dialogue span exported shifted
+by the width of the numbering.
 | `description` | `str` | Human-readable description |
 | `supports_span_target` | `bool` | Whether this type implements the span annotation contract |
 

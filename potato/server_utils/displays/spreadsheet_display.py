@@ -65,7 +65,9 @@ class SpreadsheetDisplay(BaseDisplay):
             List of validation error messages (empty if valid)
         """
         errors = super().validate_config(field_config)
-        options = field_config.get("display_options", {})
+        # Through the resolver, so an option written flat on the field is
+        # validated too rather than silently skipping these checks.
+        options = self.get_display_options(field_config)
 
         # Validate border_style
         border_style = options.get("border_style", "default")

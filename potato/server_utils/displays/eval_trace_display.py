@@ -391,7 +391,9 @@ class EvalTraceDisplay(BaseDisplay):
 
     def validate_config(self, field_config: Dict[str, Any]) -> List[str]:
         errors = super().validate_config(field_config)
-        opts = field_config.get("display_options", {}) or {}
+        # Through the resolver, so an option written flat on the field is
+        # validated too rather than silently skipping these checks.
+        opts = self.get_display_options(field_config)
         labels = opts.get("pane_labels")
         if labels is not None and not isinstance(labels, (list, tuple)):
             errors.append(

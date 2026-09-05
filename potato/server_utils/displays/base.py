@@ -248,6 +248,45 @@ class BaseDisplay(ABC):
         return result
 
 
+def resolve_display_options(field_config: Dict[str, Any]) -> Dict[str, Any]:
+    """A field's display options, resolved the way the display itself resolves them.
+
+    `BaseDisplay.get_display_options()` accepts an option written flat on the
+    field or nested under `display_options`, and applies the display's declared
+    defaults. Anything OUTSIDE a display that needs to know an option's value
+    has to agree with it, or the two disagree about what the page shows.
+
+    They did. When the flat form started working, the dialogue display began
+    honouring `show_turn_numbers: true` written at the field level while the
+    export, `/api/spans` and the keyword scan still read only the nested block
+    -- so the browser measured spans against a numbered DOM and the server
+    sliced them out of an un-numbered string. Every dialogue span exported
+    shifted left by the width of the numbering, and enabling the option on an
+    already-annotated study moved every highlight on screen instead.
+
+    Falls back to a plain merge for a type the registry does not know, so a
+    plugin display or a stale config still resolves rather than raising.
+    """
+    if not isinstance(field_config, dict):
+        return {}
+
+    try:
+        from potato.server_utils.displays.registry import display_registry
+
+        entry = display_registry.get(field_config.get("type", ""))
+        renderer = getattr(entry, "renderer", entry)
+        if isinstance(renderer, BaseDisplay):
+            return renderer.get_display_options(field_config)
+    except ImportError:
+        pass   # displays package unavailable (a bare unit-test import path)
+
+    merged = dict(field_config.get("display_options") or {})
+    for name, value in field_config.items():
+        if name not in BaseDisplay.STRUCTURAL_FIELD_KEYS and name not in merged:
+            merged[name] = value
+    return merged
+
+
 def concatenate_dialogue_text(data: Any, speaker_key: str = "speaker", text_key: str = "text") -> str:
     """
     Concatenate dialogue data into a single plain text string.
