@@ -1837,8 +1837,17 @@ class AdminDashboard:
         return numeric
 
     def _normalize_annotation_value(self, value: Any) -> Any:
-        """Normalize annotation value for comparison."""
-        if isinstance(value, list):
+        """Normalize annotation value for comparison.
+
+        Sets are unpacked whether they arrive as a list or a tuple. Matching
+        only ``list`` meant a caller who built the tuple itself fell through to
+        ``str(value)`` and got ``"(\'age\', \'meds\')"`` -- one string per
+        distinct set, so it compared correctly, sorted correctly and passed its
+        tests while doing something nobody wrote down. The first draft of the
+        multiselect fix in 00fb6f21 did exactly that, and only an A/B against
+        the line it replaced showed the guard was not testing what it claimed.
+        """
+        if isinstance(value, (list, tuple, set, frozenset)):
             return tuple(sorted(str(v) for v in value))
         elif isinstance(value, bool):
             return str(value).lower()
