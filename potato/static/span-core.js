@@ -1465,26 +1465,88 @@ class SpanManager {
         }
     }
 
-    getSelectedLabel() {
+    /**
+     * Whether `schemaName` is pinned to a different field than `targetField`.
+     *
+     * A scheme with no `target_field` is unpinned and owns whatever it is
+     * pointed at, so it never counts as belonging elsewhere.
+     */
+    schemaTargetsOtherField(schemaName, targetField) {
+        if (!schemaName || !targetField) return false;
+        const form = document.querySelector(
+            `.annotation-form.span[data-schema-name="${CSS.escape(schemaName)}"]`);
+        if (!form) return false;
+        const owns = form.getAttribute('data-target-field') || '';
+        return owns !== '' && owns !== targetField;
+    }
+
+    /**
+     * A checked span-label checkbox belonging to the field being annotated.
+     *
+     * Prefers a scheme pinned to this field, then an unpinned scheme, and only
+     * then anything checked at all -- which is what the single-scheme studies
+     * this code was written against always resolved to.
+     */
+    findCheckedLabelFor(targetField) {
+        const checked = Array.from(document.querySelectorAll(
+            '.annotation-form.span input[type="checkbox"]:checked'));
+        if (!checked.length) return null;
+        if (!targetField) return checked[0];
+
+        const owns = box => (box.getAttribute('data-target-field')
+            || (box.closest('.annotation-form.span')
+                && box.closest('.annotation-form.span')
+                    .getAttribute('data-target-field'))
+            || '');
+        return checked.find(box => owns(box) === targetField)
+            || checked.find(box => owns(box) === '')
+            || checked[0];
+    }
+
+    getSelectedLabel(targetField) {
         // FIRST: Use the label set by selectLabel() if available
         // This is set by changeSpanLabel() when a checkbox is clicked,
         // and is more reliable than querying the DOM
         if (this.selectedLabel && this.currentSchema) {
-            return this.selectedLabel;
+            // ...unless the drag was in a field that scheme does not target.
+            // With several span schemes the armed one is often not the one
+            // that owns the field under the cursor, and the stored offsets
+            // would then be right while the schema name was wrong.
+            if (!targetField || !this.schemaTargetsOtherField(this.currentSchema,
+                                                              targetField)) {
+                return this.selectedLabel;
+            }
         }
 
-        // FALLBACK: Try to find checked span checkbox (for legacy code paths)
-        const checkedCheckbox = document.querySelector('.annotation-form.span input[type="checkbox"]:checked');
+        // FALLBACK: a checked span checkbox.
+        //
+        // This used to take the first checked box in the DOCUMENT, across
+        // every span scheme on the page. Span label checkboxes render checked
+        // by default, so with more than one scheme every scheme is armed
+        // before the annotator touches anything and "first" is just DOM order:
+        // three spans drawn in three different fields all stored under the
+        // first scheme, each with the correct target_field. The offsets were
+        // right and the schema name was wrong, which is the combination that
+        // makes the file look clean.
+        //
+        // Restricting to the scheme that owns the field being annotated is the
+        // disambiguation the page already has -- `target_field` was correct
+        // throughout.
+        const checkedCheckbox = this.findCheckedLabelFor(targetField);
 
         if (checkedCheckbox) {
+            // The owning form states its schema. Splitting the checkbox id on
+            // "_" and calling everything before the last one the schema name
+            // works only while no label contains an underscore, and the answer
+            // is on the form either way.
+            const form = checkedCheckbox.closest('.annotation-form.span');
+            const declared = form && form.getAttribute('data-schema-name');
+
             const checkboxId = checkedCheckbox.id;
             const parts = checkboxId.split('_');
             if (parts.length >= 2) {
-                // ID format is "schemaName_labelName" - extract both
                 const label = parts[parts.length - 1];
-                // Schema name is everything before the last underscore
-                // (handles multi-word schema names like "emotion_spans")
-                const schemaName = parts.slice(0, -1).join('_');
+                const schemaName = declared || parts.slice(0, -1).join('_');
 
                 // Update currentSchema to match the selected checkbox's schema
                 if (schemaName) {
@@ -1492,6 +1554,9 @@ class SpanManager {
                 }
 
                 return label;
+            }
+            if (declared) {
+                this.setCurrentSchema(declared, 'getSelectedLabel');
             }
             return checkedCheckbox.value;
         }
@@ -1807,6 +1872,19 @@ class SpanManager {
         }
     }
 
+    /**
+     * The display field a selection was made in, or '' when there is no
+     * per-field container (a single-field page).
+     */
+    fieldOfSelection(selection) {
+        if (!selection || !selection.rangeCount) return '';
+        const startNode = selection.getRangeAt(0).startContainer;
+        const el = startNode.nodeType === Node.TEXT_NODE
+            ? startNode.parentElement : startNode;
+        const container = el ? el.closest('[id^="text-content-"]') : null;
+        return container ? container.id.replace('text-content-', '') : '';
+    }
+
     handleTextSelection(event) {
         const selection = window.getSelection();
 
@@ -1816,7 +1894,13 @@ class SpanManager {
             return;
         }
 
-        const selectedLabel = this.getSelectedLabel();
+        // Which field the drag landed in, BEFORE asking which label is armed.
+        // The label lookup needs it to pick the scheme that owns this field,
+        // and the detection below used to run afterwards -- so the lookup had
+        // to guess, and guessed the first checked box in the document.
+        const selectionField = this.fieldOfSelection(selection);
+
+        const selectedLabel = this.getSelectedLabel(selectionField);
         if (!selectedLabel) {
             spanCoreDebugWarn('[SpanManager] handleTextSelection: no selectedLabel, returning');
             return;
