@@ -236,3 +236,137 @@ class TestBrushPaints(unittest.TestCase):
         assert self._mask_count() > 0, (
             f"the stroke painted but no mask was recorded "
             f"(painted pixels: {self._painted_pixels()})")
+
+
+class TestBrushOnlyStudyIsUsableOnArrival(unittest.TestCase):
+    """A scheme whose only tool is `brush`.
+
+    The auditor found this after four rounds of the brush looking dead. The
+    toolbar's init click arms the first tool, and `annotation.js` then calls
+    `clearAnnotations` on instance setup -- which ended by hiding the mask
+    canvas unconditionally. So the page came up with `currentTool` "brush", the
+    button rendered active, and the canvas `display: none`: the stroke had
+    nowhere to land.
+
+    With two or more tools an annotator recovers by clicking another tool and
+    back, which is why the class above -- declaring brush AND eraser -- passed
+    throughout. A brush-only study has nothing to switch to and is inert for
+    its whole life.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        schemes = [{
+            "annotation_type": "image_annotation",
+            "name": "lesion",
+            "description": "Paint the affected region",
+            "source_field": "image",
+            "tools": ["brush"],
+            "labels": [{"name": "affected", "color": "#FF6B6B", "key_value": "1"}],
+            "brush_size": 20,
+        }]
+        port = find_free_port(preferred_port=9887)
+        cls.test_dir = create_test_directory("audit26_brush_only")
+        image_ref = _write_solid_png(cls.test_dir)
+        cls.data_file = create_test_data_file(
+            cls.test_dir,
+            [{"id": f"img_{n}", "image": image_ref} for n in range(1, 5)])
+        cls.config_file = create_test_config(
+            cls.test_dir, schemes, data_files=[cls.data_file], port=port,
+            item_properties={"id_key": "id", "text_key": "image"},
+            user_config={"allow_all_users": True, "users": []},
+            additional_config={"media_directory": "media"},
+        )
+        cls.server = FlaskTestServer(port=port, debug=False,
+                                     config_file=cls.config_file)
+        assert cls.server.start_server(), "Failed to start Flask server"
+        cls.server._wait_for_server_ready(timeout=15)
+
+        options = ChromeOptions()
+        options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1400,1100")
+        cls.driver = webdriver.Chrome(options=options)
+        cls.driver.implicitly_wait(5)
+        cls.driver.get(f"{cls.server.base_url}/")
+        WebDriverWait(cls.driver, 10).until(
+            EC.presence_of_element_located((By.NAME, "email")))
+        cls.driver.find_element(By.NAME, "email").send_keys("brushonly")
+        try:
+            cls.driver.find_element(By.NAME, "pass").send_keys("pw")
+        except Exception:
+            pass
+        cls.driver.find_element(
+            By.CSS_SELECTOR, "button[type='submit']").click()
+        time.sleep(2)
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "driver"):
+            cls.driver.quit()
+        if hasattr(cls, "server"):
+            cls.server.stop_server()
+        if hasattr(cls, "test_dir"):
+            cleanup_test_directory(cls.test_dir)
+
+    def _arrive(self):
+        """Load the page and touch nothing. That is the whole point."""
+        self.driver.get(f"{self.server.base_url}/annotate")
+        WebDriverWait(self.driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".mask-canvas")))
+        WebDriverWait(self.driver, 15).until(lambda d: d.execute_script(
+            "const c = document.querySelector('.image-annotation-container');"
+            "return !!(c && c.annotationManager && c.annotationManager.image);"))
+        time.sleep(0.5)
+
+    def test_the_only_tool_is_armed_on_arrival(self):
+        """The toolbar said "brush" and the canvas said otherwise.
+
+        Asserting the canvas state, not the button state: the button was
+        already correct while the widget was inert, which is exactly why this
+        took four rounds to see.
+        """
+        self._arrive()
+        state = self.driver.execute_script("""
+            const c = document.querySelector('.image-annotation-container');
+            const mask = document.querySelector('.mask-canvas');
+            return {
+                tool: c.annotationManager.currentTool,
+                display: getComputedStyle(mask).display,
+                pointerEvents: getComputedStyle(mask).pointerEvents,
+            };
+        """)
+        assert state["tool"] == "brush", state
+        assert state["display"] != "none", (
+            f"the only tool is armed but its canvas is hidden: {state}")
+        assert state["pointerEvents"] == "auto", state
+
+    def test_painting_works_without_touching_the_toolbar(self):
+        """An annotator who never clicks a tool -- because only one exists and
+        it looks selected -- must still be able to paint."""
+        self._arrive()
+        self.driver.find_element(By.CSS_SELECTOR, ".label-btn").click()
+        time.sleep(0.2)
+
+        mask = self.driver.find_element(By.CSS_SELECTOR, ".mask-canvas")
+        actions = ActionChains(self.driver)
+        actions.move_to_element_with_offset(mask, 60, 60)
+        actions.click_and_hold()
+        for _ in range(6):
+            actions.move_by_offset(20, 10)
+        actions.release()
+        actions.perform()
+        time.sleep(0.5)
+
+        painted = self.driver.execute_script("""
+            const c = document.querySelector('.mask-canvas');
+            const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+            let n = 0;
+            for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+            return n;
+        """)
+        assert painted > 0, (
+            "a brush-only study painted nothing on arrival; the annotator has "
+            "no other tool to click and back")

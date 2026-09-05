@@ -983,22 +983,7 @@ class ImageAnnotationManager {
             this.canvas.isDrawingMode = false;
         }
 
-        // Show/hide mask canvas for mask tools
-        if (tool === 'brush' || tool === 'eraser' || tool === 'fill') {
-            this._showMaskCanvas(true);
-            this.maskCanvas.style.pointerEvents = 'auto';
-        } else if (tool === 'sam') {
-            // Visible so the preview paints, but NOT interactive: the wand's
-            // clicks go to the fabric canvas, which is what knows the viewport
-            // transform. A pointer-events mask canvas would swallow them.
-            this._showMaskCanvas(true);
-            if (this.maskCanvas) this.maskCanvas.style.pointerEvents = 'none';
-        } else {
-            this._showMaskCanvas(this._hasMasks());
-            if (this.maskCanvas) {
-                this.maskCanvas.style.pointerEvents = 'none';
-            }
-        }
+        this._syncMaskCanvasForTool();
 
         // Update cursor
         switch (tool) {
@@ -1070,6 +1055,43 @@ class ImageAnnotationManager {
     _showMaskCanvas(show) {
         if (this.maskCanvas) {
             this.maskCanvas.style.display = show ? 'block' : 'none';
+        }
+    }
+
+    /**
+     * Show and arm the mask canvas according to the tool currently selected.
+     *
+     * This is where a brush stroke can land at all: the mask tools paint on
+     * the mask canvas rather than through fabric, so a hidden or
+     * pointer-events:none mask canvas means the stroke never reaches the code
+     * that draws.
+     *
+     * Called from `setTool` and from `clearAnnotations`. The second is the
+     * point: `clearAnnotations` ended by hiding the mask canvas, and
+     * annotation.js calls it on every instance switch -- including once
+     * during setup, AFTER the toolbar's init click has armed the first tool.
+     * So a scheme declaring `tools: [brush]` came up with currentTool
+     * "brush", the button rendered active, and the canvas display:none. With
+     * two or more tools an annotator recovers by clicking another tool and
+     * back; with one tool there is nothing to switch to and the widget is
+     * inert for the whole study.
+     */
+    _syncMaskCanvasForTool() {
+        const tool = this.currentTool;
+        if (tool === 'brush' || tool === 'eraser' || tool === 'fill') {
+            this._showMaskCanvas(true);
+            if (this.maskCanvas) this.maskCanvas.style.pointerEvents = 'auto';
+        } else if (tool === 'sam') {
+            // Visible so the preview paints, but NOT interactive: the wand's
+            // clicks go to the fabric canvas, which is what knows the viewport
+            // transform. A pointer-events mask canvas would swallow them.
+            this._showMaskCanvas(true);
+            if (this.maskCanvas) this.maskCanvas.style.pointerEvents = 'none';
+        } else {
+            this._showMaskCanvas(this._hasMasks());
+            if (this.maskCanvas) {
+                this.maskCanvas.style.pointerEvents = 'none';
+            }
         }
     }
 
@@ -4109,7 +4131,10 @@ class ImageAnnotationManager {
         this._segmentationPreview = null;
         if (this.samTool) this.samTool.clear();
         this._renderAllMasks();
-        this._showMaskCanvas(false);
+        // Not an unconditional hide: the armed tool decides. Hiding here left
+        // a brush-only study unable to paint at all -- see
+        // _syncMaskCanvasForTool.
+        this._syncMaskCanvasForTool();
 
         // Reset history
         this.history = [];
