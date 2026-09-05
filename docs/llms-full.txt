@@ -20953,9 +20953,25 @@ annotation_instructions: |
 Keep this shorter than the phase page: it is the reminder, not the teaching
 material. Good content here is the two or three rules that decide most items.
 
-The HTML passes through the project sanitizer — formatting survives, `<script>`
-and event handlers do not, and character entities such as `&mdash;` render
-correctly.
+Markdown works too, and is usually less typing:
+
+```yaml
+annotation_instructions: |
+  Rate how the message lands **on the person receiving it**, not whether you
+  would have written it that way.
+
+  - **Polite** — the writer visibly softens the ask.
+  - **Neutral** — plain business, nothing that stings.
+  - **Impolite** — sarcasm, blame, a pointed reminder.
+```
+
+Instructions that already contain block-level HTML are used as written; markdown
+is rendered otherwise. So an existing config keeps rendering exactly as it did,
+and you can mix inline HTML into markdown but not the other way around.
+
+Either way the result passes through the project sanitizer — formatting
+survives, `<script>` and event handlers do not, and character entities such as
+`&mdash;` render correctly.
 
 ## 3. The Codebook button
 

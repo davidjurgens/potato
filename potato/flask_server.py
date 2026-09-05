@@ -2851,6 +2851,40 @@ def _training_page_context(user_state):
     }
 
 
+_BLOCK_HTML_IN_INSTRUCTIONS = re.compile(
+    r"<\s*(p|div|ul|ol|li|h[1-6]|table|section|details|blockquote|pre)\b",
+    re.IGNORECASE)
+
+
+def render_annotation_instructions(text):
+    """`annotation_instructions` as HTML, whether it was written as markdown
+    or as HTML.
+
+    The template emits this with `| safe`, so HTML has always worked and the
+    bundled examples use it. Markdown did not: an author who wrote
+    `## Heading` and `**bold**` -- which is the most natural thing to write,
+    and which the key's own documentation does nothing to discourage -- saw
+    the source text on every page of their study.
+
+    Text that already contains block-level HTML is passed through untouched.
+    Running it through the markdown renderer wraps it in a paragraph and
+    inserts a `<br>` between its blocks, so an existing config would render
+    worse than before -- and "your instructions still work" is worth more than
+    markdown inside a `<p>`.
+
+    Everything goes through the sanitizer either way, which is what the
+    `long-guidelines` example already tells authors happens.
+    """
+    raw = text or ""
+    if not raw.strip():
+        return ""
+    from potato.server_utils.html_sanitizer import sanitize_html
+    if _BLOCK_HTML_IN_INSTRUCTIONS.search(raw):
+        return str(sanitize_html(raw))
+    from potato.codebook.markdown import render_markdown
+    return render_markdown(raw)
+
+
 def progress_counts(username):
     """``(finished, total)`` for the navbar counter.
 
@@ -2929,7 +2963,8 @@ def get_current_page_html(config, username):
         'total_count': _phase_total,
         'ui_config': config.get('ui_config', {}),
         'is_annotation_page': is_annotation_page,
-        'annotation_instructions': config.get('annotation_instructions', ''),
+        'annotation_instructions': render_annotation_instructions(
+            config.get('annotation_instructions', '')),
         'annotation_status': 'unlabeled',
         'instance_has_annotations': False,
         'can_go_back': usm.can_user_go_back(username),
@@ -3743,7 +3778,8 @@ def render_page_with_annotations(username: str):
         # Live agent (for conditional loading of live-agent assets)
         live_agent_enabled=live_agent_enabled,
         # Annotation instructions (collapsible banner)
-        annotation_instructions=config.get("annotation_instructions", ""),
+        annotation_instructions=render_annotation_instructions(
+            config.get("annotation_instructions", "")),
         # Adjudication: show link for adjudicators
         is_adjudicator=_is_user_adjudicator(username),
         # Annotator progress dashboard nav link (opt-in, off by default)

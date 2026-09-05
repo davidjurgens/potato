@@ -147,8 +147,19 @@ def markdown_to_blocks(md: str, *, level: int = 3) -> List[Dict[str, Any]]:
 _INLINE_CODE = re.compile(r"`([^`]+)`")
 _BOLD = re.compile(r"\*\*([^*]+)\*\*|__([^_]+)__")
 _ITALIC = re.compile(r"(?<!\*)\*(?!\*)([^*]+)\*(?!\*)|(?<!_)_(?!_)([^_]+)_(?!_)")
+_IMAGE = re.compile(r"!\[([^\]]*)\]\(([^)\s]+)\)")
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _PLAIN_URL = re.compile(r"^https?://[^\s<>\"']+$")
+
+
+def _SAFE_URL(url: str) -> bool:
+    """Whether a markdown target is one we are willing to emit.
+
+    Shared by links and images so the two cannot drift: an image pointing at
+    `javascript:` must be refused on the same terms as a link, and the check
+    was previously written out only once.
+    """
+    return bool(_PLAIN_URL.match(url)) or url.startswith(("/", "#", "mailto:"))
 
 
 def _render_inline(text: str) -> str:
@@ -164,9 +175,22 @@ def _render_inline(text: str) -> str:
 
     out = _INLINE_CODE.sub(code_sub, out)
 
+    def image_sub(m: "re.Match[str]") -> str:
+        alt, url = m.group(1), m.group(2)
+        if not _SAFE_URL(url):
+            return f"{alt} ({url})"
+        return f'<img src="{url}" alt="{alt}">'
+
+    # BEFORE links: `![alt](url)` contains `[alt](url)`, so the link rule
+    # matched the tail of it and left the `!` behind as text -- a codebook
+    # definition illustrated with a screenshot rendered as a bang followed by
+    # a link. `img` and its `src`/`alt` are already in the sanitizer's
+    # allowlist, so nothing else had to change.
+    out = _IMAGE.sub(image_sub, out)
+
     def link_sub(m: "re.Match[str]") -> str:
         label, url = m.group(1), m.group(2)
-        if not _PLAIN_URL.match(url) and not url.startswith(("/", "#", "mailto:")):
+        if not _SAFE_URL(url):
             # Unknown/unsafe scheme: render as plain text (sanitizer would
             # also strip it, but be explicit).
             return f"{label} ({url})"

@@ -6,6 +6,35 @@
  * and Peaks.js timeline (video), with accept/reject UI.
  */
 
+/**
+ * Model output as safe HTML, with its inline markdown rendered.
+ *
+ * Two problems, one place. Model text was interpolated straight into
+ * `innerHTML`: a hint is generated from the item under annotation, so a
+ * document containing markup could put it on the page unescaped. And the
+ * model writes markdown -- `**Identify the pain points:**` is a normal thing
+ * for it to return -- which showed up as literal asterisks, with no lever
+ * available to the author except asking the model in the prompt not to
+ * format its answer.
+ *
+ * Escape first, then apply inline markdown to the escaped text, so every tag
+ * in the output is one this function put there.
+ */
+function aiTextToSafeHtml(text) {
+    const escaped = String(text == null ? '' : text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    return escaped
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
+        .replace(/\n/g, '<br>');
+}
+
+
 class VisualAIAssistantManager {
     /**
      * Create a VisualAIAssistantManager.
@@ -712,8 +741,8 @@ class VisualAIAssistantManager {
         this.tooltipContainer.innerHTML = `
             <button class="close-btn">&times;</button>
             <div class="hint-text">
-                <strong>Hint:</strong> ${hintData.hint}
-                ${hintData.suggestive_choice ? `<br><em>Focus: ${hintData.suggestive_choice}</em>` : ''}
+                <strong>Hint:</strong> ${aiTextToSafeHtml(hintData.hint)}
+                ${hintData.suggestive_choice ? `<br><em>Focus: ${aiTextToSafeHtml(hintData.suggestive_choice)}</em>` : ''}
             </div>
         `;
         this.tooltipContainer.style.display = 'block';
@@ -729,9 +758,9 @@ class VisualAIAssistantManager {
         this.tooltipContainer.innerHTML = `
             <button class="close-btn">&times;</button>
             <div class="hint-text">
-                <strong>Suggested Label:</strong> ${result.suggested_label}
+                <strong>Suggested Label:</strong> ${aiTextToSafeHtml(result.suggested_label)}
                 (${Math.round(result.confidence * 100)}% confidence)
-                ${result.reasoning ? `<br><em>Reasoning: ${result.reasoning}</em>` : ''}
+                ${result.reasoning ? `<br><em>Reasoning: ${aiTextToSafeHtml(result.reasoning)}</em>` : ''}
             </div>
         `;
         this.tooltipContainer.style.display = 'block';
@@ -990,7 +1019,7 @@ class VisualAIAssistantManager {
         this.tooltipContainer.innerHTML = `
             <button class="close-btn">&times;</button>
             <div class="hint-text" style="color: #dc2626;">
-                <strong>Error:</strong> ${message}
+                <strong>Error:</strong> ${aiTextToSafeHtml(message)}
             </div>
         `;
         this.tooltipContainer.style.display = 'block';

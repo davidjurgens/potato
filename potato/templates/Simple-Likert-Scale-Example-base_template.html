@@ -1640,7 +1640,12 @@
       <div class="col-md-12">
         <div name="context_text" class="instance">
           <div id="instance-text" name="instance_text">
-            {{instance | safe}}
+            {# `sanitize_html`, never `safe`: this is the item's own text, which
+               on a real project is scraped corpus. The filter permits the span
+               markup that highlighting injects and strips anything that can
+               execute. This file is an unreferenced example, which is exactly
+               where a stale pattern survives to be copied. #}
+            {{instance | sanitize_html}}
           </div>
         </div>
       </div>
