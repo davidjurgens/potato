@@ -1885,6 +1885,29 @@ def _keyword_entries_from_object(row):
                           resolved.get("schema"), resolved.get("color"))
 
 
+#: A leading ``#`` starts a comment, EXCEPT when what follows is a hex colour.
+#: ``#ffcc00,latch,Defect`` is a data row whose first cell is a colour, and
+#: dropping it as a comment deleted the keyword and reported "Loaded 0" --
+#: which reads as an empty file rather than an unreadable one. Hex is the
+#: natural way to write a colour and `color` first is an ordinary spreadsheet
+#: layout, so this is not an exotic file.
+_HEX_COLOUR_CELL = re.compile(r"^#(?:[0-9a-fA-F]{3,8})(?:\s*[,;\t|]|\s*$)")
+
+
+def _is_keyword_comment_line(line):
+    """Whether ``line`` is a comment rather than a data row.
+
+    A comment is a ``#`` followed by something that is not a colour. Ambiguity
+    only arises for a bare ``#abc``-style line with no delimiter after it,
+    which is read as a colour -- a comment whose entire text is three to eight
+    hex letters and nothing else.
+    """
+    stripped = line.lstrip()
+    if not stripped.startswith("#"):
+        return False
+    return not _HEX_COLOUR_CELL.match(stripped)
+
+
 def _parse_keyword_highlight_entries(raw, path):
     """Parse a keyword-highlights file into entry dicts.
 
@@ -1921,7 +1944,7 @@ def _parse_keyword_highlight_entries(raw, path):
 
     extension = os.path.splitext(path or "")[1].lower()
     content_lines = [line for line in text.splitlines()
-                     if line.strip() and not line.lstrip().startswith("#")]
+                     if line.strip() and not _is_keyword_comment_line(line)]
     # JSONL first when it looks like JSONL, so the whole-file JSON parse does
     # not fail on it and log a misleading "does not parse".
     looks_like_jsonl = (
@@ -1978,7 +2001,23 @@ def _parse_keyword_highlight_entries(raw, path):
     columns = _keyword_column_map(header_cells)
     if "word" in columns:
         entries = []
-        for row in csv.reader(lines[1:], delimiter=delimiter):
+        for number, row in enumerate(csv.reader(lines[1:], delimiter=delimiter),
+                                     start=2):
+            if len(row) != len(header_cells):
+                # Almost always an unquoted value containing the delimiter --
+                # `rgb(255,0,0)` is three cells to a CSV reader. The values
+                # then slide along the header and the keyword column picks up
+                # a fragment of the colour, so the row is dropped rather than
+                # stored as nonsense. Naming the line is the whole point: the
+                # author cannot see this from "Loaded 3 patterns".
+                logger.warning(
+                    "%s line %d has %d fields but the header declares %d, so "
+                    "the row was skipped. A value containing a %s must be "
+                    "quoted: \"rgb(255,0,0)\".",
+                    path, number, len(row), len(header_cells),
+                    "tab" if delimiter == "\t" else "comma")
+                continue
+
             def cell(field):
                 index = columns.get(field)
                 return row[index] if index is not None and index < len(row) else ""

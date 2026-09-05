@@ -191,19 +191,30 @@ disappoint*,negative,sentiment
 | `keyword` | yes | The word or phrase to highlight (supports `*` wildcards) |
 | `label` | no | The annotation label this keyword suggests |
 | `schema` | no | The annotation scheme the label belongs to |
-| `color` | no | A colour for this label, as `(r, g, b)` or `#rrggbb` |
+| `color` | no | A color for this label, as `(r, g, b)` or `#rrggbb` |
 
 Columns are matched by name, so they can be in any order, and each accepts a
 few spellings: `keyword`/`word`/`pattern`/`term`, `label`/`category`/`tag`,
 `schema`/`scheme`, `color`/`colour`. A file whose header Potato does not
-recognise is read positionally as keyword, label, schema, and the log says so.
+recognize is read positionally as keyword, label, schema, and the log says so.
+The header line becomes a keyword in that case, because nothing marks it as a
+header.
+
+Quote any value that contains the delimiter. Unquoted, `rgb(255,0,0)` is three
+cells to a CSV reader and every later value lands in the wrong column. Potato
+skips a row whose field count does not match the header, and names the line
+number.
 
 Several other shapes load too. One keyword per line, with `#` comments:
 
 ```
+# hazards from the 2019 review
 latch
 swelled
 ```
+
+A `#` starts a comment unless what follows it is a hex color, so
+`#ffcc00,latch,Defect` is read as data rather than dropped.
 
 A JSON array of keywords:
 
