@@ -192,15 +192,32 @@ def _instance_index_map() -> dict:
         return {}
 
 
+def _with_glosses(tree: list, glosses: dict) -> list:
+    """Attach each code's short definition to its tray node. The panel
+    on the annotation page renders it under the name, so an annotator
+    reads what a code means where they apply it instead of leaving the
+    page for the full codebook."""
+    for node in tree:
+        gloss = glosses.get(node.get("id"))
+        if gloss:
+            node["definition"] = gloss
+        _with_glosses(node.get("children") or [], glosses)
+    return tree
+
+
 @codebook_bp.route("", methods=["GET"])
 @codebook_view
 def get_codebook(ctx):
     cb = Codebook.load(ctx["task_dir"], ctx["project"])
+    from potato.codebook import blocks as _blocks
+    glosses = _blocks.gloss_by_code(ctx["task_dir"], ctx["project"])
     return jsonify({
         "mode": ctx["mode"],
         "labels": cb.labels(),
-        "tree": cb.as_tree(),
+        "tree": _with_glosses(cb.as_tree(), glosses),
         "revision": current_revision(ctx["task_dir"], ctx["project"]),
+        "content_revision": _blocks.current_content_revision(
+            ctx["task_dir"], ctx["project"]),
         "schemes": _codebook_scheme_names(),
         "invivo_key": str(
             _config().get("codebook_invivo_key") or "i")[:1].lower(),
@@ -215,9 +232,19 @@ def version(ctx):
     """Lightweight revision poll. The client checks this on each
     navigation and only re-fetches the full codebook (GET /api/codebook)
     when the revision has moved — instead of downloading the whole tree
-    on every page load."""
+    on every page load.
+
+    `content_revision` moves too, because the tray now carries each
+    code's definition: editing a definition bumps only the content
+    revision, so a poll that watched the structural revision alone would
+    serve a cached tray with the old wording until someone happened to
+    add or rename a code."""
+    from potato.codebook import blocks as _blocks
     return jsonify({
-        "revision": current_revision(ctx["task_dir"], ctx["project"])})
+        "revision": current_revision(ctx["task_dir"], ctx["project"]),
+        "content_revision": _blocks.current_content_revision(
+            ctx["task_dir"], ctx["project"]),
+    })
 
 
 @codebook_bp.route("/provenance", methods=["GET"])

@@ -33,6 +33,49 @@ def _label_name(entry: Any) -> str:
     return str(entry).strip()
 
 
+def _label_color(entry: Any) -> str:
+    """A label's configured colour, so the codebook's dot matches the
+    chip the annotator sees on the form."""
+    if isinstance(entry, dict):
+        return str(entry.get("color") or "").strip() or None
+    return None
+
+
+def _label_gloss(entry: Any) -> str:
+    """A label's prose, in the order an author is likely to have written
+    it. `tooltip` is the documented per-label help text; `description` is
+    what authors reach for anyway, and neither used to reach the
+    codebook, so a code seeded from a fully-described config still read
+    "No content yet"."""
+    if not isinstance(entry, dict):
+        return ""
+    for key in ("description", "tooltip"):
+        text = entry.get(key)
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+    return ""
+
+
+def _seed_gloss(task_dir: str, project: str, code_id: str,
+                gloss: str) -> None:
+    """Write a config label's prose in as the code's short definition.
+    Only ever called for a code this bootstrap just created, and only
+    when its content scope is untouched (base_version 0), so it can
+    never overwrite a researcher's own wording."""
+    from potato.codebook import content_service
+    try:
+        content_service.save_scope(
+            task_dir, project=project, scope_kind="code", scope_id=code_id,
+            blocks_in=[{"block_type": "short_def", "body_md": gloss}],
+            base_version=0, actor="config", actor_kind="config", minor=True)
+    except Exception:
+        # A codebook whose codes carry no definitions is still a working
+        # codebook; never let seeding prose break server start.
+        logger.exception(
+            "codebook seed: could not write a definition for code %s",
+            code_id)
+
+
 def _project_of(config: Dict[str, Any]) -> str:
     return config.get("annotation_task_name") or "default"
 
@@ -45,11 +88,14 @@ def _seed_from_yaml(
         if not name:
             continue
         try:
-            create_code(
+            code = create_code(
                 task_dir, project=project, name=name,
-                created_by="config")
+                created_by="config", color=_label_color(entry))
         except DuplicateCodeError:
-            pass  # idempotent: re-seeding an existing code is fine
+            continue  # idempotent: re-seeding an existing code is fine
+        gloss = _label_gloss(entry)
+        if gloss:
+            _seed_gloss(task_dir, project, code["id"], gloss)
 
 
 def apply_codebook_to_schemes(config: Dict[str, Any],

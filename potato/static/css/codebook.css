@@ -120,7 +120,13 @@
 }
 
 .cb-tree {
-    flex: 1;
+    /* The code list is what the panel is for, so it gets a floor rather
+       than only a share of what the other sections leave. `flex: 1` has
+       a 0 basis, and the curate block below is 500px tall for an
+       adjudicator: the list was squeezed to about one row and read as a
+       one-code codebook until you noticed it scrolled. */
+    flex: 1 1 auto;
+    min-height: 40vh;
     overflow-y: auto;
     padding: var(--cb-space-4);
 }
@@ -165,6 +171,25 @@
 }
 
 .cb-name { word-break: break-word; }
+
+/* One-line gloss under a code name. Indented to the same depth as its
+   row so a child's definition never reads as belonging to the parent,
+   and clamped to two lines: the tray is a reminder, /codebook is the
+   place to read the whole entry. */
+.cb-def {
+    margin: 0 0 var(--cb-space-1);
+    padding: 0 var(--cb-space-2) 0
+        calc(var(--cb-space-2)
+             + min(var(--cb-depth, 0), 6) * var(--cb-space-4));
+    color: var(--cb-ink-soft);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
 
 .cb-composer {
     border-top: 1px solid var(--cb-line);
@@ -492,6 +517,11 @@
     display: flex;
     flex-direction: column;
     gap: var(--cb-space-4);
+    /* Curation is secondary to reading the codes: it scrolls within its
+       own share instead of pushing the list off the panel. */
+    flex: 0 1 auto;
+    max-height: 38vh;
+    overflow-y: auto;
 }
 
 .cb-admin-head {

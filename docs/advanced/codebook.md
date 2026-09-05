@@ -40,6 +40,33 @@ annotation_schemes:
 A **crowdsourcing backend force-locks `fixed`** regardless of the
 requested mode — paid annotators must not reshape the shared codebook.
 
+### Seeding colors and definitions from the config
+
+The seed takes more than the name. A label written in the object form
+starts its code off with a color and a definition:
+
+```yaml
+  labels:
+  - name: access barriers
+    color: "#4682b4"
+    description: >
+      Anything the speaker names as standing between them and care they
+      wanted: distance, waiting lists, a referral that never arrived.
+  - name: cost concerns
+    color: "#b44682"
+    tooltip: Money, insurance, or the fear of a bill.
+```
+
+`color` becomes the code's dot in the tray and on the full codebook
+page. `description` becomes the code's **Short definition** block, which
+is what the tray shows under the name and what the distiller sends to a
+model.
+`tooltip` is used when there is no `description`; it is the documented
+per-label spelling, so a config that uses it seeds a codebook too.
+
+The seed runs once, on an empty codebook. It never overwrites wording a
+researcher has since edited.
+
 ### Modes
 
 | Mode | Annotators may… | Typical use |
@@ -53,8 +80,12 @@ Adjudicators are privileged and may edit in any non-`fixed` mode.
 ## The Codebook tray
 
 When a codebook is enabled, a **Codebook** toggle appears on the right
-edge of the annotation page (below Notes). It lists the codes and, when
-`codebook_mode` is `extensible`/`open`, shows an "Add a code…" composer.
+edge of the annotation page (below Notes). It lists the codes with each
+code's short definition underneath, so an annotator can check what a
+code means without leaving the item they are coding. Definitions are clamped
+to two lines; "Open full codebook" has the whole entry. When
+`codebook_mode` is `extensible`/`open`, the tray also shows an "Add a
+code…" composer.
 
 ### Add a code while coding
 

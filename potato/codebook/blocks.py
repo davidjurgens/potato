@@ -230,6 +230,41 @@ def list_blocks(
     return [dict(r) for r in rows]
 
 
+# Block types that answer "what does this code mean?", best first. The
+# annotation-page tray shows one line per code, so it takes the shortest
+# real answer available rather than the first block in ordinal order --
+# a code whose only content is a long `definition` still gets a gloss.
+GLOSS_TYPES = ("short_def", "definition")
+
+
+def gloss_by_code(task_dir: str, project: str) -> Dict[str, str]:
+    """`{code_id: body_md}` for every code that has a short definition,
+    in ONE query. The annotation tray renders a definition per code, and
+    a per-code `list_blocks()` call there would issue one round trip per
+    code on every codebook load."""
+    placeholders = ",".join("?" for _ in GLOSS_TYPES)
+    rows = _db(task_dir).execute(
+        f"""SELECT code_id, block_type, body_md FROM code_block
+            WHERE project = ? AND section = ? AND code_id != ?
+              AND archived_at IS NULL
+              AND block_type IN ({placeholders})
+            ORDER BY ordinal ASC""",
+        (project, NO_SECTION, NO_CODE, *GLOSS_TYPES),
+    ).fetchall()
+    out: Dict[str, str] = {}
+    ranks: Dict[str, int] = {}
+    for r in rows:
+        body = (r["body_md"] or "").strip()
+        if not body:
+            continue
+        rank = GLOSS_TYPES.index(r["block_type"])
+        if r["code_id"] in out and ranks[r["code_id"]] <= rank:
+            continue
+        out[r["code_id"]] = body
+        ranks[r["code_id"]] = rank
+    return out
+
+
 def get_block(task_dir: str, block_id: str) -> Optional[Dict[str, Any]]:
     row = _db(task_dir).execute(
         "SELECT * FROM code_block WHERE id = ?", (block_id,)

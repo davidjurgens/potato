@@ -40,8 +40,8 @@
     "version": "6"
   },
   "codebook.js": {
-    "sha256": "538de3cc6668aa18",
-    "version": "16"
+    "sha256": "097bf544478be842",
+    "version": "17"
   },
   "coding-trace.css": {
     "sha256": "474a0e265bfd76ad",
@@ -64,8 +64,8 @@
     "version": "5"
   },
   "css/codebook.css": {
-    "sha256": "a84f8ac6393636dc",
-    "version": "12"
+    "sha256": "d4ac13717b505eab",
+    "version": "14"
   },
   "css/conversation-tree.css": {
     "sha256": "7aec08ceff12adf5",

@@ -45,7 +45,9 @@
     function writeCache(data) {
         try {
             sessionStorage.setItem(cacheKey(), JSON.stringify({
-                revision: data.revision, labels: data.labels,
+                revision: data.revision,
+                content_revision: data.content_revision,
+                labels: data.labels,
                 tree: data.tree, schemes: data.schemes,
                 mode: data.mode, can_add: data.can_add,
             }));
@@ -54,14 +56,24 @@
 
     // ---- tray rendering --------------------------------------------------
 
-    function renderTree(nodes) {
+    // `depth` drives the --cb-depth indent the stylesheet reads. Nothing
+    // used to set it, so every code in a nested codebook rendered flush
+    // left and a child was indistinguishable from a root code.
+    function renderTree(nodes, depth) {
         if (!nodes || !nodes.length) return "";
+        var d = depth || 0;
         return nodes.map(function (n) {
             var dot = n.color
                 ? '<span class="cb-dot" style="background:'
                   + esc(n.color) + '"></span>'
                 : "";
-            return '<li class="cb-node">'
+            // The definition is markdown in the full codebook; the tray
+            // shows it as one plain line, so escape it and leave the
+            // markup to /codebook rather than half-rendering it here.
+            var def = n.definition
+                ? '<p class="cb-def">' + esc(n.definition) + "</p>"
+                : "";
+            return '<li class="cb-node" style="--cb-depth:' + d + '">'
                 + '<div class="cb-node-row" data-code-id="' + esc(n.id) + '">'
                 + dot
                 + '<span class="cb-name">' + esc(n.name) + "</span>"
@@ -72,9 +84,10 @@
                 + ' aria-label="Edit content for ' + esc(n.name) + '">'
                 + '&#9998;</button>'
                 + "</div>"
+                + def
                 + (n.children && n.children.length
                     ? '<ul class="cb-children">'
-                      + renderTree(n.children) + "</ul>"
+                      + renderTree(n.children, d + 1) + "</ul>"
                     : "")
                 + "</li>";
         }).join("");
@@ -623,7 +636,10 @@
         return fetch(API + "/version")
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (v) {
-                if (v && cache && cache.revision === v.revision) {
+                // Both revisions must match: the tray shows definitions,
+                // and editing one moves only content_revision.
+                if (v && cache && cache.revision === v.revision
+                        && cache.content_revision === v.content_revision) {
                     return cache;            // cache fresh — done
                 }
                 return fetchFull().then(function (data) {
