@@ -71,7 +71,8 @@ class LabelMeExporter(BaseExporter):
         num_objects = 0
         for instance_id, objects in sorted(by_image.items()):
             item = context.items.get(instance_id, {})
-            width, height = get_image_dimensions(item)
+            width, height = get_image_dimensions(
+                item, config=context.config, annotation=ann)
             file_name = os.path.basename(get_image_filename(item) or instance_id)
 
             shapes = []

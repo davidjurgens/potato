@@ -44,7 +44,8 @@ class YOLOExporter(BaseExporter):
             item = context.items.get(instance_id, {})
             img_anns = extract_image_annotations(ann)
             if img_anns:
-                w, h = get_image_dimensions(item)
+                w, h = get_image_dimensions(
+                    item, config=context.config, annotation=ann)
                 if w <= 0 or h <= 0:
                     missing_dims.append(instance_id)
 
@@ -77,7 +78,8 @@ class YOLOExporter(BaseExporter):
             if not img_anns:
                 continue
 
-            img_w, img_h = get_image_dimensions(item)
+            img_w, img_h = get_image_dimensions(
+                item, config=context.config, annotation=ann)
             if img_w <= 0 or img_h <= 0:
                 warnings.append(f"Skipping {instance_id}: no image dimensions")
                 continue

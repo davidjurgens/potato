@@ -89,7 +89,8 @@ class CVATExporter(BaseExporter):
         num_objects = 0
         for index, (instance_id, objects) in enumerate(sorted(by_image.items())):
             item = context.items.get(instance_id, {})
-            width, height = get_image_dimensions(item)
+            width, height = get_image_dimensions(
+                item, config=context.config, annotation=ann)
             file_name = get_image_filename(item) or instance_id
 
             image_elem = SubElement(root, "image", {

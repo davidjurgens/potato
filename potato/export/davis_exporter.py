@@ -105,7 +105,8 @@ class DAVISExporter(BaseExporter):
         overflow = 0
         for instance_id, objects in sorted(by_image.items()):
             item = context.items.get(instance_id, {})
-            width, height = get_image_dimensions(item)
+            width, height = get_image_dimensions(
+                item, config=context.config, annotation=ann)
             if width <= 0 or height <= 0:
                 warnings.append(
                     f"{instance_id} has no image dimensions; skipped.")

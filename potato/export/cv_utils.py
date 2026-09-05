@@ -7,6 +7,7 @@ Shared helper functions for computer vision export formats (COCO, YOLO, VOC).
 from typing import Dict, List, Tuple, Any, Optional
 import logging
 import math
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -212,17 +213,36 @@ def extract_image_annotations(annotation: dict) -> List[Tuple[str, List[dict]]]:
     return results
 
 
-def get_image_dimensions(item: dict, default_width: int = 0,
-                         default_height: int = 0) -> Tuple[int, int]:
-    """
-    Extract image dimensions from item metadata.
+#: Dimensions read off disk, keyed by absolute path. An export walks every
+#: annotation record, and two annotators on one image means two lookups for the
+#: same file.
+_DIMENSION_CACHE: Dict[str, Tuple[int, int]] = {}
 
-    Checks common field names for image width/height.
+
+def get_image_dimensions(item: dict, default_width: int = 0,
+                         default_height: int = 0, *,
+                         config: Any = None,
+                         annotation: Any = None) -> Tuple[int, int]:
+    """
+    The image's pixel dimensions, from whichever source can supply them.
+
+    In order: the item's own metadata, a mask's RLE size, the image file.
+
+    A data file that names an image does not describe one, so for a study built
+    in Potato the metadata keys are simply absent and this used to return
+    ``(0, 0)``. Eleven exporters call it. YOLO refuses the export on a zero,
+    which is right; COCO wrote the zero into its ``images`` record while the
+    annotation beside it carried the true size, so the mask decoded correctly
+    and only a consumer reading ``img['width']`` -- normalization, training,
+    COCOeval -- saw the damage.
 
     Args:
         item: Item data dict
         default_width: Fallback width
         default_height: Fallback height
+        config: Project config, used to locate the image on disk
+        annotation: The annotation record for this item, whose mask RLE carries
+            ``size`` as ``[height, width]``
 
     Returns:
         Tuple of (width, height)
@@ -246,7 +266,89 @@ def get_image_dimensions(item: dict, default_width: int = 0,
                 pass
             break
 
+    if width > 0 and height > 0:
+        return (width, height)
+
+    # A mask states its own size and costs nothing to read. It is also the only
+    # source that works when the image is remote or unreadable.
+    derived = _dimensions_from_masks(annotation)
+    if derived is None and config is not None:
+        derived = _dimensions_from_file(config, item)
+    if derived is not None:
+        return derived
+
     return (width, height)
+
+
+def _dimensions_from_masks(annotation: Any) -> Optional[Tuple[int, int]]:
+    """``(width, height)`` from a stored mask's RLE, which holds [h, w]."""
+    if not isinstance(annotation, dict):
+        return None
+    image_annotations = annotation.get("image_annotations")
+    if not isinstance(image_annotations, dict):
+        return None
+    for objects in image_annotations.values():
+        if not isinstance(objects, list):
+            continue
+        for obj in objects:
+            if not isinstance(obj, dict):
+                continue
+            size = (obj.get("rle") or {}).get("size") if isinstance(
+                obj.get("rle"), dict) else None
+            if isinstance(size, (list, tuple)) and len(size) >= 2:
+                try:
+                    height, width = int(size[0]), int(size[1])
+                except (ValueError, TypeError):
+                    continue
+                if width > 0 and height > 0:
+                    return (width, height)
+    return None
+
+
+def _dimensions_from_file(config: Any, item: dict) -> Optional[Tuple[int, int]]:
+    """``(width, height)`` by opening the image the item names.
+
+    Returns ``None`` rather than raising for every reason this can fail --
+    no filename, a remote URL, a path outside the media directory, a missing
+    file, Pillow absent. An export must not die because one image cannot be
+    measured; the caller keeps its zeros and YOLO keeps refusing.
+    """
+    filename = get_image_filename(item)
+    if not filename or "://" in str(filename):
+        return None
+    try:
+        from potato.media.paths import resolve_media_path
+    except ImportError:  # pragma: no cover
+        return None
+
+    reference = str(filename)
+    for prefix in ("/media/", "media/"):
+        if reference.startswith(prefix):
+            reference = reference[len(prefix):]
+            break
+    reference = reference.lstrip("/")
+
+    try:
+        _, path = resolve_media_path(config, reference, context="export")
+    except Exception:  # pragma: no cover - config shapes vary
+        return None
+    if not path:
+        return None
+    if path in _DIMENSION_CACHE:
+        return _DIMENSION_CACHE[path]
+    if not os.path.isfile(path):
+        return None
+    try:
+        from PIL import Image
+        with Image.open(path) as image:
+            dimensions = (int(image.width), int(image.height))
+    except Exception:
+        logger.debug("export could not read the dimensions of %s", path)
+        return None
+    if dimensions[0] <= 0 or dimensions[1] <= 0:
+        return None
+    _DIMENSION_CACHE[path] = dimensions
+    return dimensions
 
 
 def get_image_filename(item: dict) -> Optional[str]:

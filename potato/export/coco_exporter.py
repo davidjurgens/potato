@@ -73,7 +73,8 @@ class COCOExporter(BaseExporter):
             # records with the same instance_id, and the second one used to
             # fall through with `width`/`height` still holding the PREVIOUS
             # image's values -- silently rescaling that annotator's geometry.
-            width, height = get_image_dimensions(item)
+            width, height = get_image_dimensions(
+                item, config=context.config, annotation=ann)
 
             # Assign image ID (deduplicate by instance_id)
             if instance_id not in image_id_map:

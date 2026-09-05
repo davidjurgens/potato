@@ -76,7 +76,8 @@ class MaskExporter(BaseExporter):
             if not img_anns:
                 continue
 
-            width, height = get_image_dimensions(item)
+            width, height = get_image_dimensions(
+                item, config=context.config, annotation=ann)
             if width <= 0 or height <= 0:
                 # Try to get from mask RLE size
                 for _, objects in img_anns:

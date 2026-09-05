@@ -105,7 +105,8 @@ class MOTExporter(BaseExporter):
             next_id = 10_000  # well clear of real track ids
             width = height = 0
             for frame, _instance_id, objects, item in sorted(frames):
-                w, h = get_image_dimensions(item)
+                w, h = get_image_dimensions(
+                    item, config=context.config, annotation=ann)
                 width, height = width or w, height or h
                 for obj in objects:
                     obj_type = obj.get("type", "")
