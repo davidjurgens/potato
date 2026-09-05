@@ -203,9 +203,33 @@ class BaseDisplay(ABC):
 
         return errors
 
+    #: Keys that belong to the field entry itself, never to a display's
+    #: options. Excluded from the top-level pull-up below so a structural key
+    #: can never be mistaken for a setting.
+    STRUCTURAL_FIELD_KEYS = frozenset({
+        "key", "type", "label", "span_target", "display_options",
+        "_turn_schemes", "_run_tree",
+    })
+
     def get_display_options(self, field_config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Get display options with defaults applied.
+
+        Options may be written nested or at the field's top level:
+
+            {key: turns, type: dialogue, display_options: {show_turn_numbers: true}}
+            {key: turns, type: dialogue, show_turn_numbers: true}
+
+        Only the nested form used to be read, and the flat one is what an
+        author writes after seeing the option listed as an "optional field" of
+        the display type -- `describe_display_type("dialogue")` lists sixteen
+        of them with no mention of the nesting. The flat form did nothing, and
+        did it silently: `show_turn_numbers: true` rendered turns with no
+        numbers and nothing said why.
+
+        Only keys the display actually declares are pulled up, so an unrelated
+        top-level key is still ignored rather than being handed to the display
+        as a setting. `display_options` wins when both are given.
 
         Args:
             field_config: The field configuration
@@ -213,9 +237,14 @@ class BaseDisplay(ABC):
         Returns:
             Dictionary of display options with defaults filled in
         """
-        options = field_config.get("display_options", {})
         result = dict(self.optional_fields)  # Start with defaults
-        result.update(options)  # Override with user-specified options
+
+        declared = set(self.optional_fields) - self.STRUCTURAL_FIELD_KEYS
+        for name in declared:
+            if name in field_config:
+                result[name] = field_config[name]
+
+        result.update(field_config.get("display_options", {}) or {})
         return result
 
 

@@ -9337,6 +9337,19 @@ instance_display:
     gap: "20px"
 ```
 
+A display's own options may also be written at the field's top level, which is
+how `describe_display_type` lists them:
+
+```yaml
+    - key: "image_url"
+      type: "image"
+      max_width: 600
+      zoomable: true
+```
+
+Only options the display declares are read this way, so an unrelated key is
+still ignored. When an option appears in both places, `display_options` wins.
+
 ## Supported Display Types
 
 | Type | Description | Span Target |

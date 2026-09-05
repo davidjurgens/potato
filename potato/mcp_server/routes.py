@@ -481,7 +481,8 @@ def tool_submit_annotation(record, payload):
     # Two shapes are accepted, matching what /updateinstance takes:
     #   {"schema": {"label": value}}   nested
     #   {"schema": value}              a scalar answer for a single-field scheme
-    from potato.item_state_management import Label, SpanAnnotation
+    from potato.item_state_management import (
+        Label, SpanAnnotation, get_item_state_manager)
 
     written = 0
     for schema_name, label_data in annotations.items():
@@ -527,6 +528,28 @@ def tool_submit_annotation(record, payload):
     behavioral = payload.get("behavioral_data") or {}
     if behavioral:
         state.instance_id_to_behavioral_data[instance_id] = behavioral
+
+    # Tell the ITEM side that this annotator worked on this item.
+    #
+    # /updateinstance does this and the MCP path did not, so an agent's work
+    # was invisible to everything that reads item state: /admin/iaa reported
+    # n_annotators 0 on a scheme with three annotators on every item, every
+    # coefficient null on a complete dataset, and live_get_progress reported
+    # only the items answered in a browser. The user side saw them perfectly
+    # well -- the phase machinery advanced annotators out of the annotation
+    # phase on the strength of the same writes -- which is what made it look
+    # like the annotations had landed.
+    #
+    # This is exactly where MCP is meant to earn its keep: the reason to have
+    # an agent label beside people is to compare them, and the comparison was
+    # the one thing blind to it.
+    try:
+        get_item_state_manager().register_annotator(instance_id, username)
+    except Exception as e:  # noqa: BLE001 - bookkeeping must not lose the write
+        logger.warning(
+            "Stored %s's annotation of %s but could not register them as an "
+            "annotator of it, so agreement and progress will undercount: %s",
+            username, instance_id, e)
 
     # The STATE, not the username: every other caller passes the object, and
     # handing over the string raised AttributeError inside save_user_state.
