@@ -87,6 +87,8 @@ class CodingAgentRunner:
         self._structured_turns: List[Dict] = []
         self._task_description = ""
         self._started_at = 0.0
+        #: When the session reached COMPLETED or ERROR, for the reaper.
+        self._finished_at = 0.0
         self._event_thread: Optional[threading.Thread] = None
 
     @property
@@ -98,6 +100,15 @@ class CodingAgentRunner:
         with self._state_lock:
             old = self._state
             self._state = new_state
+            # When it FINISHED, not when it started. The reaper measured a
+            # session's age from `_started_at`, so a session that ran for
+            # 59 minutes was reaped a minute after completing while one that
+            # finished immediately held its container for the full hour.
+            if new_state in (CodingAgentState.COMPLETED, CodingAgentState.ERROR):
+                if not self._finished_at:
+                    self._finished_at = time.time()
+            else:
+                self._finished_at = 0.0
         self._emit_event("state_change", {"old_state": old.value, "new_state": new_state.value})
 
     # --- Listener/SSE pattern (mirrors AgentRunner) ---
@@ -184,10 +195,33 @@ class CodingAgentRunner:
         self._emit_event("instruction_received", {"instruction": instruction})
 
     def stop(self) -> None:
+        """End the session and release its sandbox.
+
+        Stopping the backend is not enough: a container sandbox is a running
+        container, and `stop()` left it up. Two sessions on one study left two
+        containers running, at 512m each, and clicking Stop on either changed
+        nothing -- so a ten-item study left ten.
+
+        A session that finishes on its own keeps its sandbox, because the Send
+        box stays live and the annotator may still have something to ask. Stop
+        is the control that says otherwise, so it is the one that tears down.
+        """
         if self._backend:
             self._backend.stop()
         self._set_state(CodingAgentState.COMPLETED)
         self._save_trace()
+        self.release_sandbox()
+
+    def release_sandbox(self) -> None:
+        """Tear down the sandbox, leaving the trace and state readable."""
+        if not self._sandbox:
+            return
+        sandbox, self._sandbox = self._sandbox, None
+        try:
+            sandbox.cleanup()
+        except Exception as e:  # noqa: BLE001 - never fail a stop over cleanup
+            logger.warning("Could not release the sandbox for session %s: %s",
+                           self.session_id, e)
 
     # --- Event consumption ---
 

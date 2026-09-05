@@ -5,6 +5,7 @@ Singleton manager for CodingAgentRunner sessions.
 Mirrors AgentRunnerManager pattern.
 """
 
+import atexit
 import logging
 import threading
 import time
@@ -29,6 +30,11 @@ class CodingAgentRunnerManager:
         self._session_ttl = session_ttl
         self._cleanup_thread = threading.Thread(target=self._cleanup_loop, daemon=True)
         self._cleanup_thread.start()
+        # The cleanup thread is a daemon, so it is killed without running when
+        # the process exits -- and a container sandbox outlives the process
+        # that started it. Without this, stopping Potato left every live
+        # container up, and only the next boot's sweep would find them.
+        atexit.register(self._release_all)
 
     @classmethod
     def get_instance(cls, **kwargs) -> "CodingAgentRunnerManager":
@@ -37,6 +43,14 @@ class CodingAgentRunnerManager:
                 if cls._instance is None:
                     cls._instance = cls(**kwargs)
         return cls._instance
+
+    def _release_all(self) -> None:
+        """Tear down every live sandbox. Registered with atexit."""
+        for runner in list(self._sessions.values()):
+            try:
+                runner.cleanup()
+            except Exception as e:  # noqa: BLE001 - shutdown must not raise
+                logger.warning("Could not clean up session at exit: %s", e)
 
     @classmethod
     def clear_instance(cls):
@@ -105,7 +119,12 @@ class CodingAgentRunnerManager:
             expired = []
             for sid, runner in list(self._sessions.items()):
                 if runner.state in (CodingAgentState.COMPLETED, CodingAgentState.ERROR):
-                    if time.time() - runner._started_at > self._session_ttl:
+                    # Age from when it FINISHED. Measured from `_started_at`, a
+                    # session that ran for most of the TTL was reaped moments
+                    # after completing, and one that finished immediately held
+                    # its container for the whole hour.
+                    since = getattr(runner, "_finished_at", 0.0) or runner._started_at
+                    if time.time() - since > self._session_ttl:
                         expired.append(sid)
             for sid in expired:
                 self.remove_session(sid)

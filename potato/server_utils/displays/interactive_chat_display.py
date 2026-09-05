@@ -24,6 +24,13 @@ class InteractiveChatDisplay(BaseDisplay):
     """
     Display type for interactive agent chat sessions.
 
+    This is the only thing that puts an `agent_proxy` chat on a page. The
+    `agent_proxy` block configures the backend and logs that it initialised;
+    the panel itself (`#agent-chat-panel`, which agent-chat.js looks for)
+    exists only where a field of this type is rendered. A config with
+    `agent_proxy` and no such field boots cleanly, loads the chat assets, and
+    shows the annotator nothing.
+
     When data is null/empty: renders a chat panel placeholder
     (the actual chat UI is handled by agent-chat.js).
     When data is populated: delegates to DialogueDisplay for the conversation,

@@ -55,6 +55,18 @@ class LiveCodingAgentDisplay(BaseDisplay):
         field_key = html.escape(field_config.get("key", ""), quote=True)
         options = self.get_display_options(field_config)
 
+        # Seed the task box from the item, the way live_agent seeds its
+        # Starting URL. `key` is this display's only required field, so
+        # pointing it at the field holding the task is the obvious reading --
+        # and it was ignored, so the annotator retyped the task on every item.
+        task_text = ""
+        if isinstance(data, str):
+            task_text = data.strip()
+        elif isinstance(data, dict):
+            task_text = str(data.get("task_description")
+                            or data.get("task") or "").strip()
+        task_value = html.escape(task_text, quote=True)
+
         show_controls = options.get("show_controls", True)
         allow_instructions = options.get("allow_instructions", True)
 
@@ -95,7 +107,7 @@ class LiveCodingAgentDisplay(BaseDisplay):
             <div class="lca-start-form" id="lca-start-{field_key}">
                 <div class="lca-start-header">Start Coding Agent</div>
                 <textarea class="lca-task-input" id="lca-task-{field_key}"
-                          rows="3" placeholder="Describe the coding task..."></textarea>
+                          rows="3" placeholder="Describe the coding task...">{task_value}</textarea>
                 <button type="button" class="lca-btn lca-btn-start" data-action="start">
                     Start Agent
                 </button>

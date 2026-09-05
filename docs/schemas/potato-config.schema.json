@@ -180,7 +180,13 @@
       "type": "string"
     },
     "agent_proxy": {
-      "description": "Run an agent as the subject of annotation",
+      "description": "Run an agent as the subject of annotation. This block only configures the backend -- to put the chat on the page, add an `instance_display` field of `type: interactive_chat`, which renders the panel the annotator talks to. Set `enabled: false` to turn it off without deleting the block",
+      "examples": [
+        {
+          "model": "gpt-4o-mini",
+          "type": "openai"
+        }
+      ],
       "type": "object"
     },
     "agreement_metrics": {

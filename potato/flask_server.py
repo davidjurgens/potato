@@ -3516,8 +3516,11 @@ def render_page_with_annotations(username: str):
     # Check if AI support is enabled (for conditional loading of visual_ai_assistant.js)
     ai_enabled = config.get("ai_support", {}).get("enabled", False)
 
-    # Check if agent proxy is configured (for conditional loading of agent-chat.js/css)
-    agent_proxy_enabled = "agent_proxy" in config
+    # Check if agent proxy is configured (for conditional loading of agent-chat.js/css).
+    # Presence alone used to be enough, so `enabled: false` still loaded the
+    # assets and initialised the backend -- harmless while nothing renders,
+    # and not once something does.
+    agent_proxy_enabled = _agent_proxy_enabled(config)
 
     # Check if chat support is enabled (for conditional loading of llm-chat-sidebar assets)
     chat_enabled = config.get("chat_support", {}).get("enabled", False)
@@ -4839,6 +4842,18 @@ def configure_app(flask_app):
     return app
 
 
+def _agent_proxy_enabled(config) -> bool:
+    """Whether the agent proxy should be wired up.
+
+    Present unless explicitly switched off, so `enabled: false` turns it off
+    without deleting the block -- which is what that key means everywhere else.
+    """
+    block = config.get("agent_proxy")
+    if not isinstance(block, dict):
+        return bool(block)
+    return block.get("enabled", True) is not False
+
+
 def _preflight_coding_agent_sandbox(config):
     """Check the configured agent sandbox is usable, and say what it is.
 
@@ -5882,7 +5897,7 @@ def run_server(args):
                     budget_cfg.get("cap_usd"))
 
     # Initialize agent session manager if agent_proxy is configured
-    if "agent_proxy" in config:
+    if _agent_proxy_enabled(config):
         from potato.agent_proxy import init_agent_session_manager
         init_agent_session_manager(config)
         logger.info(f"Agent session manager initialized (proxy type: {config['agent_proxy'].get('type', 'unknown')})")

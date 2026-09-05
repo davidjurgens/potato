@@ -1218,7 +1218,14 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="boolean", category=INTEG,
     ),
     "agent_proxy": _D(
-        "Run an agent as the subject of annotation", type="object", category=INTEG,
+        "Run an agent as the subject of annotation. This block only configures "
+        "the backend -- to put the chat on the page, add an `instance_display` "
+        "field of `type: interactive_chat`, which renders the panel the "
+        "annotator talks to. Set `enabled: false` to turn it off without "
+        "deleting the block",
+        type="object", category=INTEG,
+        see_also=("instance_display",),
+        example={"type": "openai", "model": "gpt-4o-mini"},
     ),
     "database": _D("Database connection for item or user storage", type="object", category=INTEG),
 

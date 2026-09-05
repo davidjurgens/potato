@@ -351,6 +351,38 @@ one your machine supports.
 
 Set `container_cli: podman` for rootless containers, which need no root daemon.
 
+#### Give the agent an image that can do the task
+
+The default image is `python:3.12-slim` and the default network is `none`.
+Both are right on their own. Together they mean an agent asked to run the tests
+cannot: there is no test runner in the image and no way to install one, so its
+first tool call is `pytest` and the answer is exit 127.
+
+Name an image that already carries what the task needs:
+
+```yaml
+live_coding_agent:
+  sandbox_mode: container
+  sandbox_image: my-org/eval-python:3.12   # pytest, ruff, whatever the task uses
+```
+
+Loosening `sandbox_network` is the other way out, and a worse one — an agent
+that can reach the network can send out whatever it reads. Potato logs a
+warning when you do. The boot banner points this out when the defaults are
+left as they are.
+
+#### Session lifecycle
+
+A session holds a container for as long as it is alive. It is released when
+the annotator clicks **Stop**, when the session has been finished for longer
+than the manager's TTL (one hour), and when the Potato process exits. A
+session that finishes on its own keeps its container until one of those
+happens, because the instruction box stays live and the annotator may still
+have something to ask.
+
+A crash escapes all three, so Potato sweeps leftover sandbox containers at
+startup and logs how many it removed.
+
 To go further, install a drop-in container runtime and name it:
 
 ```yaml

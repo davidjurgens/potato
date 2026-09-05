@@ -29,7 +29,8 @@ import logging
 from typing import Optional
 
 from .base import ExecResult, SandboxBackend, SandboxError, resolve_within
-from .settings import ACK_KEY, DEPRECATED_MODES, VALID_MODES, SandboxSettings
+from .settings import (
+    ACK_KEY, DEFAULT_IMAGE, DEPRECATED_MODES, VALID_MODES, SandboxSettings)
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,20 @@ def startup_report(settings: SandboxSettings) -> str:
             "  *** NO ISOLATION. Tool calls, including arbitrary shell",
             "  *** commands, run directly on this host as the Potato user.",
             "  *** Acknowledged via %s." % ACK_KEY,
+        ]
+    # Both defaults are right on their own and awkward together: a bare image
+    # with no network cannot install anything, so an agent asked to run tests
+    # spends its turns discovering that `pytest` is not there. Say so once, at
+    # boot, rather than leaving it to be found a tool call at a time.
+    if (settings.mode == "container"
+            and settings.sandbox_network == "none"
+            and settings.sandbox_image == DEFAULT_IMAGE):
+        lines += [
+            "",
+            "  Note: %s with sandbox_network 'none' has no test runner and" % DEFAULT_IMAGE,
+            "  no way to install one. Give the agent an image that already",
+            "  carries what the task needs (sandbox_image), or loosen",
+            "  sandbox_network -- which lets it reach the network.",
         ]
     lines.append("=" * 70)
     return "\n".join(lines)
