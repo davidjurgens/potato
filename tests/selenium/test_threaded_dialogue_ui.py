@@ -64,7 +64,7 @@ class TestThreadedDialogueUI(unittest.TestCase):
              "description": "Evidence", "labels": ["claim", "counter"]},
         ]
         cls.config_file = create_test_config(
-            cls.test_dir, schemes, data_file=data_file,
+            cls.test_dir, schemes, data_files=[data_file],
             item_properties={"id_key": "id", "text_key": "title"},
         )
         # The display config is not expressible through create_test_config, so

@@ -35,7 +35,7 @@ class TestFailureTaxonomyUI(unittest.TestCase):
             "taxonomy_preset": "mast",
             "show_search": True,
         }]
-        cls.config_file = create_test_config(cls.test_dir, schemes, data_file=data_file)
+        cls.config_file = create_test_config(cls.test_dir, schemes, data_files=[data_file])
 
         port = find_free_port(preferred_port=9021)
         cls.server = FlaskTestServer(port=port, debug=False, config_file=cls.config_file)

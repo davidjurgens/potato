@@ -32,7 +32,7 @@ class TestToolContentionUI(unittest.TestCase):
                     "description": "Flag contention", "calls_key": "calls",
                     "agent_key": "agent", "resource_key": "resource"}]
         cls.config_file = create_test_config(
-            cls.test_dir, schemes, data_file=data_file,
+            cls.test_dir, schemes, data_files=[data_file],
             item_properties={"id_key": "id", "text_key": "task"})
         port = find_free_port(preferred_port=9031)
         cls.server = FlaskTestServer(port=port, debug=False, config_file=cls.config_file)

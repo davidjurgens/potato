@@ -32,7 +32,7 @@ class TestVoiceInteractionUI(unittest.TestCase):
                     "description": "Classify overlaps", "turns_key": "turns",
                     "speaker_key": "speaker", "rating_scale": 5}]
         cls.config_file = create_test_config(
-            cls.test_dir, schemes, data_file=data_file,
+            cls.test_dir, schemes, data_files=[data_file],
             item_properties={"id_key": "id", "text_key": "task"})
         port = find_free_port(preferred_port=9028)
         cls.server = FlaskTestServer(port=port, debug=False, config_file=cls.config_file)

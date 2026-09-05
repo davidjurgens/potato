@@ -101,6 +101,68 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
             return [];
         }}
 
+        function markerHtml(coord) {{
+            if (!coord) return '';
+            if (CONFIG.coord_space === 'pixels') {{
+                // Pixel coordinates cannot become a percentage until the
+                // screenshot reports its intrinsic size, so carry them on the
+                // marker and place it in placePixelMarkers() after load. This
+                // branch used to set left/top to null and emit nothing at all,
+                // which removed the marker the display exists to show -- while
+                // the normalized default puts the same data at 42000%, off the
+                // picture, so a pixel trace had no working setting either way.
+                return '<span class="gt-marker gt-marker-pending" data-gt-x="' +
+                    Number(coord.x) + '" data-gt-y="' + Number(coord.y) +
+                    '" aria-hidden="true"></span>';
+            }}
+            return '<span class="gt-marker" style="left:' + (coord.x * 100) +
+                '%;top:' + (coord.y * 100) + '%;" aria-hidden="true"></span>';
+        }}
+
+        function placePixelMarkers(root) {{
+            // Percentage of the *intrinsic* size, not the rendered size: the
+            // screenshot scales uniformly inside .gt-shot-wrap, which shrink-
+            // wraps it, so the same percentage is correct at any display width
+            // and survives a resize without recomputation.
+            // A screenshot that does not load renders as a broken-image icon and
+            // says nothing, so the author cannot tell a wrong path from a wrong
+            // key. Name the path that failed.
+            var shots = (root || document).querySelectorAll('img.gt-shot');
+            Array.prototype.forEach.call(shots, function(im) {{
+                im.addEventListener('error', function() {{
+                    var note = document.createElement('div');
+                    note.className = 'gt-shot-missing';
+                    note.textContent = 'screenshot did not load: ' +
+                        (im.getAttribute('data-gt-src') || '') +
+                        ' — a path under media_directory is served at /media/<name>';
+                    if (im.parentNode && im.parentNode.parentNode) {{
+                        im.parentNode.parentNode.replaceChild(note, im.parentNode);
+                    }}
+                }});
+            }});
+
+            var pending = (root || document).querySelectorAll('.gt-marker-pending');
+            Array.prototype.forEach.call(pending, function(m) {{
+                var wrap = m.parentNode;
+                var img = wrap ? wrap.querySelector('img.gt-shot') : null;
+                if (!img) return;
+                var place = function() {{
+                    var w = img.naturalWidth, h = img.naturalHeight;
+                    var x = parseFloat(m.getAttribute('data-gt-x'));
+                    var y = parseFloat(m.getAttribute('data-gt-y'));
+                    // A screenshot that failed to load reports 0x0. Leave the
+                    // marker hidden rather than dividing by zero and pinning it
+                    // to a corner, which would read as a real answer.
+                    if (!w || !h || isNaN(x) || isNaN(y)) return;
+                    m.style.left = ((x / w) * 100) + '%';
+                    m.style.top = ((y / h) * 100) + '%';
+                    m.classList.remove('gt-marker-pending');
+                }};
+                if (img.complete) place();
+                else img.addEventListener('load', place);
+            }});
+        }}
+
         function build() {{
             var steps = extractSteps();
             var list = document.getElementById(SCHEMA + '-list');
@@ -118,15 +180,11 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
             }});
 
             list.innerHTML = _steps.map(function(c) {{
-                var marker = '';
-                if (c.coord) {{
-                    var left = CONFIG.coord_space === 'pixels' ? null : (c.coord.x * 100) + '%';
-                    var top = CONFIG.coord_space === 'pixels' ? null : (c.coord.y * 100) + '%';
-                    if (left !== null) marker = '<span class="gt-marker" style="left:' + left + ';top:' + top + ';" aria-hidden="true"></span>';
-                }}
+                var marker = markerHtml(c.coord);
                 var img = c.shot ? '<div class="gt-shot-wrap"><img class="gt-shot" src="' + esc(c.shot) +
-                    '" alt="Screenshot at step ' + (c.step+1) + '">' + marker + '</div>'
-                    : '<div class="gt-shot-missing">no screenshot</div>';
+                    '" data-gt-src="' + esc(c.shot) + '" alt="Screenshot at step ' + (c.step+1) + '">' + marker + '</div>'
+                    : '<div class="gt-shot-missing">no screenshot: this step has no ' +
+                      esc(CONFIG.screenshot_key) + ' key, and no image key</div>';
                 var opts = CONFIG.verdict_options.map(function(o) {{
                     return '<button type="button" class="gt-vbtn" data-idx="' + c.index +
                         '" data-v="' + esc(o) + '">' + esc(o.replace(/_/g,' ')) + '</button>'; }}).join('');
@@ -139,6 +197,8 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
                     '<input type="text" class="gt-notes" data-idx="' + c.index +
                     '" placeholder="notes (optional)" value="' + esc(c.notes) + '">' +
                     '</div>'; }}).join('');
+
+            placePixelMarkers(list);
 
             list.querySelectorAll('.gt-vbtn').forEach(function(b) {{
                 b.addEventListener('click', function() {{
@@ -206,6 +266,7 @@ def _generate_internal(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[Tup
                      border-radius: 6px; overflow: hidden; }}
     .gt-shot {{ display: block; max-width: 100%; height: auto; }}
     .gt-shot-missing {{ font-size: 0.85em; color: var(--muted-foreground, #71717a); font-style: italic; padding: 8px 0; }}
+    .gt-marker-pending {{ display: none; }}
     .gt-marker {{ position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px;
                   border: 2px solid #e03131; border-radius: 50%; background: rgba(224,49,49,0.25);
                   box-shadow: 0 0 0 2px rgba(255,255,255,0.7); }}

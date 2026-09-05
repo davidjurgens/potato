@@ -30,7 +30,7 @@ class TestFailureAttributionUI(unittest.TestCase):
         schemes = [{"annotation_type": "failure_attribution", "name": "attribution",
                     "description": "Which agent failed?", "steps_key": "steps", "agent_key": "agent"}]
         cls.config_file = create_test_config(
-            cls.test_dir, schemes, data_file=data_file,
+            cls.test_dir, schemes, data_files=[data_file],
             item_properties={"id_key": "id", "text_key": "task"})
         port = find_free_port(preferred_port=9022)
         cls.server = FlaskTestServer(port=port, debug=False, config_file=cls.config_file)
