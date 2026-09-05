@@ -115,9 +115,23 @@ class SpreadsheetDisplay(BaseDisplay):
             if "rendered_html" in data:
                 return self._wrap_content(data["rendered_html"], options, field_key)
 
-            # Extract from metadata
+            # Extract from metadata. `columns` is accepted alongside
+            # `headers`: {columns, rows} is the obvious spelling and the one a
+            # data file tends to use, and it used to render the rows with no
+            # header row at all -- with `show_headers: true` set and nothing
+            # for it to act on.
             rows = data.get("rows", [])
-            headers = data.get("headers", data.get("metadata", {}).get("headers", []))
+            headers = (data.get("headers")
+                       or data.get("columns")
+                       or data.get("metadata", {}).get("headers")
+                       or data.get("metadata", {}).get("columns")
+                       or [])
+            # {columns, rows: [{col: value}]} -- rows keyed by column name
+            # rather than positional.
+            if rows and isinstance(rows[0], dict):
+                if not headers:
+                    headers = list(rows[0].keys())
+                rows = [[row.get(h, "") for h in headers] for row in rows]
         elif isinstance(data, list):
             if data and isinstance(data[0], dict):
                 # List of dictionaries

@@ -115,9 +115,11 @@ Optional: set a custom expiry with `"ttl_hours": 48`.
 
 When `require_password: true` is set, a "Forgot Password?" link appears on the login page, directing annotators to the self-service reset form.
 
-## Shared User Credentials
+## Where accounts are stored
 
-By default, user credentials are stored in memory and not persisted between server restarts when using the `in_memory` authentication method. To share credentials across server restarts or between multiple server instances, configure an explicit `user_config_path`:
+Accounts created through the sign-up form are written to a JSONL file, and they
+are read back at the next boot. With the `in_memory` method that file is
+`user_config.json`, next to the output directory, unless you name another one:
 
 ```yaml
 authentication:
@@ -125,11 +127,27 @@ authentication:
   user_config_path: /shared/path/to/user_config.jsonl
 ```
 
-When `user_config_path` is explicitly set:
-- New user registrations are saved to the file automatically
+Name one when several server instances share a roster, or when you want the
+roster somewhere other than beside the annotations.
+
+Either way:
+- New registrations are written to the file as they happen
 - Password changes are persisted immediately
-- The file is in JSONL format (one JSON object per line)
-- Passwords are stored as `salt$hash` (never plaintext)
+- The format is JSONL (one JSON object per line)
+- Passwords are stored as `salt$hash`, never as plaintext
+
+**Keep the file with the annotation output.** An annotator's directory is named
+after their username, so a roster that has gone missing and an output directory
+that has not is a study where the next person to type that username would
+inherit somebody else's work. Potato refuses that registration rather than
+allowing it, which means the annotator cannot get back in until you restore the
+roster.
+
+Before v2.8.3, `in_memory` wrote nothing unless `user_config_path` was set
+explicitly. Accounts did not survive a restart: the annotator was told their
+account did not exist, and the sign-up form then accepted their username with
+any password at all. If you ran a study on an earlier build, the accounts from
+it are gone; the annotations are not.
 
 **Example `user_config.jsonl`:**
 ```json

@@ -31,8 +31,12 @@ class TestBlockedUserErrorState:
         assert 'id="error-done-link"' in self.template_html
 
     def test_done_link_points_to_done_page(self):
-        """The done link should navigate to the /done endpoint."""
-        assert 'href="/done"' in self.template_html
+        """The done link should navigate to the /done endpoint.
+
+        Carrying the deployment prefix, so it still resolves when the task is
+        mounted below a path (a bare /done 404s on the proxy).
+        """
+        assert 'href="{{ url_prefix }}/done"' in self.template_html
 
     def test_done_link_initially_hidden(self):
         """The done link should be hidden by default (only shown for permanent blocks)."""

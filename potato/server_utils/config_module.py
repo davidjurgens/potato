@@ -237,7 +237,27 @@ KNOWN_CONFIG_KEYS = {
         "enabled", "min_annotations_per_item", "trigger_every_n", "num_restarts",
         "min_items", "num_iters",
     },
-    "icl_labeling": None,
+    # Recorded three levels deep because that is where icl_labeling is
+    # actually configured. It was `None` -- sub-keys unchecked -- and its real
+    # shape is nested, so the flat block a reader would naturally write
+    # (`min_confidence`, `num_examples`, `schema_names`) validated clean,
+    # booted clean and did nothing at all.
+    "icl_labeling": {
+        "enabled": None,
+        "example_selection": {
+            "min_agreement_threshold", "min_annotators_per_instance",
+            "max_examples_per_schema", "refresh_interval_seconds",
+        },
+        "llm_labeling": {
+            "batch_size", "trigger_threshold", "confidence_threshold",
+            "batch_interval_seconds", "max_total_labels",
+            "max_unlabeled_ratio", "pause_on_low_accuracy",
+            "min_accuracy_threshold",
+        },
+        "verification": {"enabled", "sample_rate", "selection_strategy",
+                         "mix_with_regular_assignments", "assignment_mix_rate"},
+        "persistence": {"predictions_file"},
+    },
     # `llm_labeling` is deliberately NOT here. It was a recognized top-level
     # key that nothing read: the only reader is icl_labeler.py:188, which
     # reads it as a sub-block of `icl_labeling`, and that is where the bundled
@@ -1799,6 +1819,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate active learning configuration if present
     validate_active_learning_config(config_data)
+
+    # Validate automation rules if present
+    validate_automation_config(config_data)
 
     # Validate AI support configuration if present
     validate_ai_support_config(config_data)
@@ -6015,6 +6038,104 @@ def init_config(args):
         raise
 
 
+def validate_automation_config(config_data: Dict[str, Any]) -> None:
+    """Check the shape of `automation.rules` before anything runs them.
+
+    Nothing checked these, so two mistakes were possible in one rule and
+    neither was caught: `actions: [skip]` -- a list of strings rather than of
+    `{type: ...}` dicts -- validated clean, booted with "AutomationManager
+    initialized with 1 rule(s)", and then threw AttributeError on
+    /admin/automation; and `sample` instead of `sample_rate` was read as
+    nothing and silently defaulted to 1.0, so a rule the author meant to fire
+    on half the corpus fired on all of it.
+    """
+    block = (config_data or {}).get("automation")
+    if not isinstance(block, dict) or not block.get("enabled"):
+        return
+
+    from potato.automation.actions import FAST_ACTIONS, HEAVY_ACTIONS
+    known_actions = sorted(FAST_ACTIONS | HEAVY_ACTIONS)
+
+    rules = block.get("rules")
+    if rules is None:
+        return
+    if not isinstance(rules, list):
+        raise ConfigValidationError("automation.rules must be a list of rules")
+
+    known_rule_keys = {"name", "when", "sample_rate", "actions", "enabled"}
+    for index, rule in enumerate(rules):
+        where = f"automation.rules[{index}]"
+        if not isinstance(rule, dict):
+            raise ConfigValidationError(
+                f"{where} must be a mapping with `when` and `actions`")
+
+        for key in sorted(set(rule) - known_rule_keys):
+            suggestion = ""
+            if key == "sample":
+                suggestion = " Did you mean 'sample_rate'?"
+            raise ConfigValidationError(
+                f"{where}.{key} is not a rule key. Accepted: "
+                f"{', '.join(sorted(known_rule_keys))}.{suggestion}")
+
+        if "sample_rate" in rule:
+            try:
+                rate = float(rule["sample_rate"])
+            except (TypeError, ValueError):
+                raise ConfigValidationError(
+                    f"{where}.sample_rate must be a number between 0 and 1")
+            if not 0.0 <= rate <= 1.0:
+                raise ConfigValidationError(
+                    f"{where}.sample_rate must be between 0 and 1 "
+                    f"(got {rule['sample_rate']})")
+
+        actions = rule.get("actions")
+        if actions is None:
+            continue
+        if not isinstance(actions, list):
+            raise ConfigValidationError(
+                f"{where}.actions must be a list of "
+                f"{{type: ...}} mappings, one per action")
+        for action_index, action in enumerate(actions):
+            action_where = f"{where}.actions[{action_index}]"
+            if not isinstance(action, dict):
+                raise ConfigValidationError(
+                    f"{action_where} must be a mapping with a `type`, e.g. "
+                    f"{{type: add_to_queue, priority: 100}}, not "
+                    f"{action!r}. Accepted types: {', '.join(known_actions)}.")
+            atype = action.get("type")
+            if not atype:
+                raise ConfigValidationError(
+                    f"{action_where}.type is required. Accepted types: "
+                    f"{', '.join(known_actions)}.")
+            if atype not in known_actions:
+                raise ConfigValidationError(
+                    f"{action_where}.type '{atype}' is not an action Potato "
+                    f"can run. Accepted types: {', '.join(known_actions)}.")
+
+
+def _validate_estimator_name(key: str, name: str, *, kind: str) -> None:
+    """Reject a classifier/vectorizer name nothing can build.
+
+    The name is either a short alias or a fully qualified import path. A bare
+    word that is neither -- `logistic`, `tfidf` -- used to validate clean and
+    then fail at the first training run with "not enough values to unpack",
+    after which active learning silently trained the fallback estimator. The
+    study ran, the log said the model was trained, and it was not the model
+    the config asked for.
+    """
+    from potato.active_learning_manager import (
+        CLASSIFIER_ALIASES, VECTORIZER_ALIASES)
+
+    aliases = CLASSIFIER_ALIASES if kind == "classifier" else VECTORIZER_ALIASES
+    value = name.strip()
+    if value.lower() in aliases or "." in value:
+        return
+    raise ConfigValidationError(
+        f"{key}: '{name}' is not a {kind} Potato can build. Use a short name "
+        f"({', '.join(sorted(set(aliases)))}) or a fully qualified import "
+        f"path such as '{sorted(set(aliases.values()))[0]}'.")
+
+
 def validate_active_learning_config(config_data: Dict[str, Any]) -> None:
     """
     Validate active learning configuration.
@@ -6049,6 +6170,10 @@ def validate_active_learning_config(config_data: Dict[str, Any]) -> None:
         if not isinstance(classifier_config["name"], str):
             raise ConfigValidationError("active_learning.classifier.name must be a string")
 
+        _validate_estimator_name(
+            "active_learning.classifier.name", classifier_config["name"],
+            kind="classifier")
+
         # Validate hyperparameters if present
         if "hyperparameters" in classifier_config:
             if not isinstance(classifier_config["hyperparameters"], dict):
@@ -6065,6 +6190,10 @@ def validate_active_learning_config(config_data: Dict[str, Any]) -> None:
 
         if not isinstance(vectorizer_config["name"], str):
             raise ConfigValidationError("active_learning.vectorizer.name must be a string")
+
+        _validate_estimator_name(
+            "active_learning.vectorizer.name", vectorizer_config["name"],
+            kind="vectorizer")
 
         # Validate hyperparameters if present
         if "hyperparameters" in vectorizer_config:
@@ -6823,6 +6952,37 @@ def _reject_unknown_display_options(field_type: str, options: Dict[str, Any], pa
             f"'{field_type}', so it would be ignored silently.{hint} "
             f"Accepted options: {', '.join(sorted(accepted))}."
         )
+
+    _reject_wrongly_shaped_display_options(field_type, options, path,
+                                           definition.optional_fields or {})
+
+
+def _reject_wrongly_shaped_display_options(
+    field_type: str, options: Dict[str, Any], path: str,
+    declared: Dict[str, Any]) -> None:
+    """Reject an option whose value cannot be what the renderer expects.
+
+    display_options were checked for unknown NAMES and for the enums, but not
+    for shape: `pane_labels: true`, where a list of three strings is expected,
+    validated clean and was then read as a list and ignored.
+
+    Only list- and dict-valued options are checked, from the shape of the
+    renderer's own declared default. Scalars are deliberately left alone --
+    several accept more than one type on purpose (`max_width` takes 320 or
+    "20rem", `zoom` takes a mode name or a number) and a blanket check would
+    reject working configs.
+    """
+    for key, value in options.items():
+        default = declared.get(key)
+        if isinstance(default, list) and not isinstance(value, list):
+            raise ConfigValidationError(
+                f"{path}.display_options.{key} must be a list "
+                f"(e.g. {default!r}), not {type(value).__name__}. "
+                f"A value of another shape is read as a list and ignored.")
+        if isinstance(default, dict) and not isinstance(value, dict):
+            raise ConfigValidationError(
+                f"{path}.display_options.{key} must be a mapping, not "
+                f"{type(value).__name__}.")
 
 
 def _validate_display_options(field_type: str, options: Dict[str, Any], path: str) -> None:

@@ -171,6 +171,27 @@ output_annotation_dir: output   # .media_cache/ goes here
 Both `/media/` and `/media/proxy/` resolve against `media_directory` with the
 same path-traversal guard, so the proxy cannot reach outside it.
 
+### What to write in the data file
+
+Name the file as it sits inside `media_directory`:
+
+```json
+{"id": "i1", "photo": "shelf_a.png"}
+```
+
+Potato resolves that to `/media/shelf_a.png` for the `image`, `gallery`,
+`video`, `audio`, `pdf`, `audio_dialogue` and `web_agent_trace` displays.
+
+Four kinds of value are left exactly as written: absolute URLs, `data:` URIs,
+anything already starting with `/` (including `/media/...`), and a name that
+matches no file in the media directory, since the project may be serving that
+one another way.
+
+Before v2.8.3 only the depth viewer built the `/media/` URL. Every other
+display emitted the raw field value, so `shelf_a.png` reached the browser as a
+page-relative path and 404ed. The workaround was to write `media/shelf_a.png`,
+which spells the media directory's name twice. Both spellings work.
+
 ## Not yet supported
 
 DICOM, NIfTI and whole-slide (SVS) formats are **not** handled. The 16-bit

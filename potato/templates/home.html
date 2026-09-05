@@ -84,7 +84,7 @@
 
             <!-- Login Tab Content -->
             <div class="tab-content active" id="login-content">
-                <form method="POST" action="/auth">
+                <form method="POST" action="{{ url_prefix }}/auth">
                     <input type="hidden" name="action" value="login">
                     <div class="potato-form-group">
                         <label for="login-email" class="potato-form-label">{{ ui_lang.username_label|default('Username') }}</label>
@@ -105,7 +105,7 @@
 
                     {% if require_password %}
                     <div style="text-align: center; margin-top: 0.75rem;">
-                        <a href="/forgot-password" style="color: #6c757d; font-size: 0.875rem; text-decoration: none;">{{ ui_lang.forgot_password|default('Forgot Password?') }}</a>
+                        <a href="{{ url_prefix }}/forgot-password" style="color: #6c757d; font-size: 0.875rem; text-decoration: none;">{{ ui_lang.forgot_password|default('Forgot Password?') }}</a>
                     </div>
                     {% endif %}
                 </form>
@@ -114,7 +114,7 @@
             {% if require_password %}
             <!-- Register Tab Content -->
             <div class="tab-content" id="register-content">
-                <form method="POST" action="/register">
+                <form method="POST" action="{{ url_prefix }}/register">
                     <input type="hidden" name="action" value="signup">
                     <div class="potato-form-group">
                         <label for="register-email" class="potato-form-label">{{ ui_lang.username_label|default('Username') }}</label>

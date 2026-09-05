@@ -7549,6 +7549,54 @@
         "x-potato-requires-config": "corpus_map.enabled: true"
       }
     },
+    "/datasets": {
+      "get": {
+        "operationId": "get_datasets_index",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "The bare prefix, which is the URL the boot log's \"Registered",
+        "tags": [
+          "datasets"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "datasets.enabled: true"
+      }
+    },
+    "/datasets/": {
+      "get": {
+        "operationId": "get_datasets_index__datasets",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "The bare prefix, which is the URL the boot log's \"Registered",
+        "tags": [
+          "datasets"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ],
+        "x-potato-requires-config": "datasets.enabled: true"
+      }
+    },
     "/datasets/admin": {
       "get": {
         "operationId": "get_datasets_admin",

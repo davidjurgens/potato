@@ -1282,7 +1282,7 @@
           <!-- 3. Jump to item form -->
           <div style="margin-left: 40px">
             <form
-              action="/go_to"
+              action="{{ url_prefix }}/go_to"
               method="post"
               class="d-flex align-items-center"
             >
@@ -1364,7 +1364,7 @@
             "
           >
             <a
-              href="/logout"
+              href="{{ url_prefix }}/logout"
               class="shadcn-button"
               style="
                 background-color: var(--light-color);

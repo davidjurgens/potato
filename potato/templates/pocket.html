@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#5b21b6">
 <title>{{ task_name }} — Potato Pocket</title>
-<link rel="manifest" href="/pocket/manifest.webmanifest">
-<link rel="icon" href="/static/pocket-icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/static/pocket-icon.svg">
-<link rel="stylesheet" href="/static/css/pocket.css?v=2">
+<link rel="manifest" href="{{ url_prefix }}/pocket/manifest.webmanifest">
+<link rel="icon" href="{{ url_prefix }}/static/pocket-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="{{ url_prefix }}/static/pocket-icon.svg">
+<link rel="stylesheet" href="{{ url_prefix }}/static/css/pocket.css?v=2">
 </head>
 <body>
 <header class="pk-header">
@@ -16,7 +16,7 @@
         <span class="pk-logo" aria-hidden="true">&#129364;</span>
         <span class="pk-task">{{ task_name }}</span>
         <span class="pk-count" id="pk-count" aria-live="polite"></span>
-        <a class="pk-desktop-link" href="/annotate?desktop=1">Desktop site</a>
+        <a class="pk-desktop-link" href="{{ url_prefix }}/annotate?desktop=1">Desktop site</a>
     </div>
     <div class="pk-progress" role="progressbar" aria-label="Annotation progress"
          aria-valuemin="0" aria-valuemax="100">
@@ -33,6 +33,6 @@
 <div class="pk-sync" id="pk-sync" hidden></div>
 
 <script>window.pocketTaskName = {{ task_name | tojson }};</script>
-<script src="/static/pocket.js?v=1"></script>
+<script src="{{ url_prefix }}/static/pocket.js?v=1"></script>
 </body>
 </html>

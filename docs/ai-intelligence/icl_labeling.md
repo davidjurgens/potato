@@ -101,6 +101,18 @@ icl_labeling:
 | `max_examples_per_schema` | 10 | Maximum examples per schema in prompts |
 | `refresh_interval_seconds` | 300 | How often to refresh example pool |
 
+The default of 2 makes the labeler inert on a study with
+`num_annotators_per_item: 1`: no item can ever have two annotators, so no item
+can ever become an example, and the worker runs forever reporting
+`Refreshed high-confidence examples: 0 examples across 0 schemas`. Set it to 1
+for a single-annotator study, or raise `num_annotators_per_item`. When the pool
+comes back empty the log now names the gate that emptied it.
+
+All four of these live under `example_selection:`. The block is nested three
+deep, and a flat spelling — `min_confidence`, `num_examples`, `schema_names`
+directly under `icl_labeling:` — is now reported as an unrecognized key rather
+than accepted and ignored.
+
 #### LLM Labeling
 
 | Option | Default | Description |

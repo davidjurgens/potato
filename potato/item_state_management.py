@@ -2984,6 +2984,34 @@ class ItemStateManager:
             count += 1
         return count
 
+    def get_progress_pending_ids_for_user(self, user_state: UserState) -> list[str]:
+        """Ids this annotator still has to do: their own holds, plus the pool.
+
+        `get_total_assignable_items_for_user` counts what is left in the
+        *shared pool*, and a hold counts against an item's cap -- so once a
+        second annotator is holding every item, every item is saturated and
+        the pool reads zero for them. Their progress counter was
+        finished + 0: "0/0" before their first save and "N/N" after it, from
+        their very first item, while their ordering held the whole study.
+
+        What they have already been assigned is the part that was missing.
+        Returned as ids rather than a count so the caller can discount
+        platform-injected items (attention checks, gold) the same way it
+        discounts them from the numerator.
+        """
+        assigned = set(user_state.get_assigned_instance_ids())
+        pending = [iid for iid in assigned if not user_state.has_annotated(iid)]
+
+        for iid in self.remaining_instance_ids:
+            if iid in assigned:
+                continue
+            if self._item_is_saturated(iid):
+                continue
+            if user_state.has_annotated(iid):
+                continue
+            pending.append(iid)
+        return pending
+
     def items(self) -> list[Item]:
         """Get all items in the manager"""
         return [item for _, item in self._store.iter_items()]

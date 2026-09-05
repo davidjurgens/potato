@@ -40,8 +40,8 @@
     "version": "6"
   },
   "codebook.js": {
-    "sha256": "52c78d82786477ea",
-    "version": "15"
+    "sha256": "538de3cc6668aa18",
+    "version": "16"
   },
   "coding-trace.css": {
     "sha256": "474a0e265bfd76ad",
@@ -80,8 +80,8 @@
     "version": "1"
   },
   "css/format-displays.css": {
-    "sha256": "b1b662995e5cdc7a",
-    "version": "1"
+    "sha256": "e922eb09ead3638a",
+    "version": "3"
   },
   "css/live-agent.css": {
     "sha256": "e5dd8cb6d35c5d49",
@@ -172,8 +172,8 @@
     "version": "3"
   },
   "floating-panel-utils.js": {
-    "sha256": "0c81c4cfae319503",
-    "version": "5"
+    "sha256": "16e0b90c890792b8",
+    "version": "6"
   },
   "grounding-eval.css": {
     "sha256": "0913d758fc309574",
@@ -232,8 +232,8 @@
     "version": "1"
   },
   "memos.js": {
-    "sha256": "031f31d592ecdeb9",
-    "version": "3"
+    "sha256": "36884b943980ef05",
+    "version": "4"
   },
   "multi-agent-discussion.css": {
     "sha256": "276ac528ca3f2b51",
@@ -376,8 +376,8 @@
     "version": "1"
   },
   "styles.css": {
-    "sha256": "065901cf0001aea4",
-    "version": "27"
+    "sha256": "fd9875808388e3a5",
+    "version": "29"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",

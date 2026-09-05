@@ -99,6 +99,18 @@ class InstanceDisplayRenderer:
             # (legacy behavior will be handled by the template)
             return ""
 
+        # When nothing at all can be rendered, say so ON THE PAGE, before
+        # validation raises. The diagnostic in `_validate_fields` goes only to
+        # the log and the exception is swallowed upstream, so an item whose
+        # data keys did not match the config arrived as a blank display with
+        # the annotation form still under it -- the annotator was asked to
+        # judge a trace that was not on the screen, with no sign that anything
+        # was wrong. An ingested trace whose fields do not match the task's
+        # `instance_display` does exactly that.
+        if self._all_fields_missing(instance_data):
+            self._validate_fields_log_only(instance_data)
+            return self._render_nothing_to_show(instance_data)
+
         # Validate all required fields exist
         self._validate_fields(instance_data)
 
@@ -133,6 +145,58 @@ class InstanceDisplayRenderer:
             {fields_html}
         </div>
         '''
+
+    def _validate_fields_log_only(self, instance_data: Dict[str, Any]) -> None:
+        """The `_validate_fields` diagnostic, without the raise."""
+        non_lazy = [
+            f for f in self.fields
+            if not display_registry.is_lazy_populated(f.get("type", ""))
+        ]
+        logger.error(
+            "instance_display: ALL %d non-lazy field(s) %s are absent from "
+            "the instance data (available keys: %s). This is almost certainly "
+            "a config/data key mismatch. The item renders a placeholder "
+            "telling the annotator not to annotate it.",
+            len(non_lazy), [f["key"] for f in non_lazy],
+            list(instance_data.keys()),
+        )
+
+    def _all_fields_missing(self, instance_data: Dict[str, Any]) -> bool:
+        """True when no configured non-lazy field exists in this item."""
+        non_lazy = [
+            f for f in self.fields
+            if not display_registry.is_lazy_populated(f.get("type", ""))
+        ]
+        if not non_lazy:
+            return False
+        return all(f["key"] not in instance_data for f in non_lazy)
+
+    def _render_nothing_to_show(self, instance_data: Dict[str, Any]) -> str:
+        """A visible placeholder naming the mismatch, in place of a blank item.
+
+        Addressed to whoever can act on it. The annotator gets "there is
+        nothing to show here"; the keys are there because on a self-hosted
+        study the annotator and the administrator are often the same person,
+        and because a screenshot of this is a usable bug report.
+        """
+        wanted = ", ".join(
+            html_module.escape(str(f["key"])) for f in self.fields
+        ) or "(none)"
+        available = ", ".join(
+            html_module.escape(str(k)) for k in list(instance_data.keys())[:12]
+        ) or "(none)"
+        return (
+            '<div class="instance-display-container instance-display-empty" '
+            'role="status">'
+            '<p class="instance-display-empty-title">'
+            'This item has nothing to show.</p>'
+            '<p class="instance-display-empty-body">'
+            'The display is configured to show '
+            f'<code>{wanted}</code>, and this item carries '
+            f'<code>{available}</code>. Do not annotate it &mdash; tell '
+            'whoever set up the task, so the field names can be matched up.'
+            '</p></div>'
+        )
 
     def _validate_fields(self, instance_data: Dict[str, Any]) -> None:
         """
@@ -187,6 +251,37 @@ class InstanceDisplayRenderer:
                 f"Available fields: {available}"
             )
 
+    #: Display types whose field value is a media reference (or a list of
+    #: them). `media_directory` is resolved for these before the display sees
+    #: the value, so a data file can name `shelf_a.png` rather than
+    #: `media/shelf_a.png` -- the media directory's name spelled twice.
+    MEDIA_REFERENCE_TYPES = {"image", "gallery", "video", "audio", "pdf",
+                             "audio_dialogue", "web_agent_trace"}
+
+    def _resolve_media_references(self, field_type: str, data: Any) -> Any:
+        """Turn bare media filenames into the ``/media/...`` URLs Potato serves.
+
+        Applied at this one chokepoint rather than in each display, because
+        every one of them was emitting the raw field value and five of the six
+        failed silently in the browser -- only `pdf` said anything, and only
+        `depth_map` built the URL at all.
+
+        Anything that is not a plain string (or a list of them) is passed
+        through untouched: a `gallery` of ``{src, caption}`` dicts and a
+        `web_agent_trace` step list are the display's business, and each
+        resolves its own nested references.
+        """
+        if field_type not in self.MEDIA_REFERENCE_TYPES:
+            return data
+        from potato.media.paths import media_href
+
+        if isinstance(data, str):
+            return media_href(self.config, data, context=field_type)
+        if isinstance(data, list):
+            return [media_href(self.config, v, context=field_type)
+                    if isinstance(v, str) else v for v in data]
+        return data
+
     def _render_field(self, field: Dict[str, Any], instance_data: Dict[str, Any]) -> str:
         """
         Render a single display field.
@@ -201,6 +296,7 @@ class InstanceDisplayRenderer:
         key = field["key"]
         field_type = field["type"]
         data = instance_data.get(key)
+        data = self._resolve_media_references(field_type, data)
 
         # For format-based display types, process the file if data is a file path
         format_display_types = ["pdf", "document", "spreadsheet", "code"]

@@ -51,11 +51,20 @@ def create_yaml_config(test_dir, config_dict):
 
 
 def register_and_get_annotate(server, username="test_user"):
-    """Register a user and return the annotation page HTML."""
+    """Register (or sign in) and return the annotation page HTML.
+
+    The sign-in is the fallback for a re-run: accounts now survive a restart,
+    so a username registered by an earlier run of this file is already taken.
+    """
     session = requests.Session()
     session.post(
         f"{server.base_url}/register",
         data={"action": "signup", "email": username, "pass": "pass"},
+        timeout=5,
+    )
+    session.post(
+        f"{server.base_url}/auth",
+        data={"action": "login", "email": username, "pass": "pass"},
         timeout=5,
     )
     resp = session.get(f"{server.base_url}/annotate", timeout=5)

@@ -10,9 +10,15 @@ Output columns:
     annotation_type  schema type (radio, multiselect, span, hierarchical_multiselect)
     code             label name
     parent           parent code (for hierarchical schemas)
-    description      description / tooltip from the schema config
+    description      the code's definition. From the project codebook's
+                     "Short definition" / "Definition" block when the code has
+                     one, otherwise the description / tooltip in the config.
     color            color hex if defined
     n_uses           number of times this code was applied across all annotators
+
+Codes a coder added at /codebook during the study are included, with their
+definitions -- the codebook, not the YAML, is the source of truth for a scheme
+that declares ``codebook: true``.
 """
 
 import csv
@@ -53,6 +59,7 @@ class CodebookExporter(BaseExporter):
         out_file = os.path.join(output_path, "codebook.csv")
 
         use_counts = self._count_label_uses(context)
+        definitions = self._codebook_definitions(context)
 
         rows = []
         for scheme in context.schemas:
@@ -66,6 +73,8 @@ class CodebookExporter(BaseExporter):
                 code_row["n_uses"] = use_counts.get(
                     (schema_name, code_row["code"]), 0
                 )
+                if not code_row.get("description"):
+                    code_row["description"] = definitions.get(code_row["code"], "")
                 rows.append(code_row)
 
         fieldnames = [
@@ -85,6 +94,45 @@ class CodebookExporter(BaseExporter):
             files_written=[out_file],
             stats={"codes_exported": len(rows)},
         )
+
+    @staticmethod
+    def _codebook_definitions(context):
+        """``{code name: definition}`` from the project codebook, if there is one.
+
+        The definition a coder writes at /codebook lives in a `code_block`
+        row, not in the config, so `description` was empty for every code even
+        when every code had been defined -- on an export whose whole purpose is
+        to hand someone the codebook. Prefers the short definition, falls back
+        to the full one.
+
+        Returns {} when the project has no codebook database, which is every
+        non-QDA project.
+        """
+        task_dir = context.config.get("task_dir", ".")
+        if not os.path.exists(os.path.join(task_dir, "project.sqlite")):
+            return {}
+        project = context.config.get("annotation_task_name") or "default"
+        try:
+            from potato.codebook import blocks
+            from potato.codebook.codebook import Codebook
+        except Exception:
+            return {}
+
+        out = {}
+        try:
+            for code in Codebook.load(task_dir, project)._codes:
+                bodies = {}
+                for block in blocks.list_blocks(task_dir, project,
+                                                code_id=code["id"]):
+                    body = (block.get("body_md") or "").strip()
+                    if body:
+                        bodies.setdefault(block.get("block_type"), body)
+                definition = bodies.get("short_def") or bodies.get("definition")
+                if definition:
+                    out[code["name"]] = definition
+        except Exception as e:
+            logger.warning(f"Could not read codebook definitions: {e}")
+        return out
 
     @staticmethod
     def _iter_codes(scheme):
@@ -149,7 +197,12 @@ class CodebookExporter(BaseExporter):
             spans = ann.get("spans", {}) or {}
             for schema_name, span_list in spans.items():
                 for span in span_list or []:
-                    label = span.get("label") or span.get("annotation")
+                    # `name` is where a stored span keeps its code. Without it
+                    # every span code exported n_uses 0 -- the one column a
+                    # qualitative researcher sorts by, zero for the scheme the
+                    # codebook belongs to.
+                    label = (span.get("name") or span.get("label")
+                             or span.get("annotation"))
                     if label:
                         key = (schema_name, label)
                         counts[key] = counts.get(key, 0) + 1

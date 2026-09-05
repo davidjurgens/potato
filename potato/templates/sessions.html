@@ -48,14 +48,25 @@
   .sess-status { font-size: 0.85rem; min-height: 1.2em; }
   .sess-status.err { color: hsl(0 65% 45%); }
   .sess-status.ok { color: hsl(140 45% 32%); }
+  .sess-back { display: inline-block; margin-bottom: 0.75rem; font-size: 0.875rem;
+               color: var(--muted-foreground); text-decoration: none;
+               border: 1px solid var(--border); border-radius: var(--radius);
+               padding: 0.3rem 0.7rem; }
+  .sess-back:hover { background: var(--muted); color: var(--foreground); }
+  .sess-attrs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.75rem; }
+  .sess-attr { border: 1px solid var(--border); border-radius: 999px;
+               padding: 0.15rem 0.65rem; font-size: 0.78rem;
+               color: var(--muted-foreground); }
+  .sess-attr strong { color: var(--foreground); font-weight: 600; }
 </style>
 </head>
 <body>
 <main class="dashboard" role="main">
+  <a class="sess-back" href="{{ url_for('home') }}">&larr; Annotation</a>
   <h1>Sessions</h1>
   <p class="sess-lede">
     Score whole <strong>sessions</strong> — every trace that shares a
-    <code>session_id</code>/<code>thread_id</code> — instead of individual traces.
+    <code>{{ session_key }}</code> — instead of individual traces.
     Pick a session, review its member traces, and answer the session-level questions.
   </p>
 
@@ -72,6 +83,7 @@
         <span id="detail-name">Select a session</span>
       </h2>
       <div id="detail-body" hidden>
+        <div class="sess-attrs" id="sess-attrs"></div>
         <div id="schemes-root"></div>
         <span class="sess-status" id="save-status" role="status" aria-live="polite"></span>
         <h3 style="font-size:0.95rem;margin:1rem 0 0.2rem;">
@@ -139,6 +151,17 @@
         myAnnotations = data.my_annotations || {};
         document.getElementById('detail-name').textContent = data.name;
         document.getElementById('detail-body').hidden = false;
+        // `sessions.attributes` lifts item fields onto the session and the
+        // API has always returned them; the page just never showed them, so
+        // naming a field there looked like it did nothing.
+        var attrs = document.getElementById('sess-attrs');
+        attrs.innerHTML = '';
+        Object.keys(data.attributes || {}).sort().forEach(function (k) {
+          var chip = el('span', {'class': 'sess-attr'});
+          chip.appendChild(el('strong', {}, k + ': '));
+          chip.appendChild(document.createTextNode(String(data.attributes[k])));
+          attrs.appendChild(chip);
+        });
         renderSchemes(data.aggregates || {});
         renderMembers(data.members || []);
       });

@@ -360,15 +360,78 @@ def _as_canonical(obj: dict) -> dict:
     return canonical
 
 
+#: Kinds whose stored dict is ``{sub-answer: the answer}`` rather than
+#: ``{label: label}``. A ``constant_sum`` stores
+#: ``{"Intervention": "30", "Outcome": "20", "Population": "50"}``: every
+#: annotator produces the same three keys whatever they answered, so reading
+#: the keys alone made three different distributions compare equal. The
+#: comparable value is the (sub-answer, value) set.
+_MATRIX_KIND = "matrix"
+
+#: The one kind where order carries the answer, so its atoms compare as a
+#: sequence rather than as a set.
+_ORDERED_KIND = "ranking"
+
+
+def _packed_atoms(scheme: Any, stored: Any):
+    """Atoms for a type that stores the whole answer under one fixed key.
+
+    ``hierarchical_multiselect`` stores
+    ``{"selected_labels": "Annotation,People,Crowdworkers"}`` and ``ranking``
+    stores ``{"rank_order": "..."}``. Reading the *keys* returns the literal
+    string "selected_labels" for every annotator on every item. The IAA
+    dispatcher already unpacks these; this is the same table, so the two
+    readers cannot drift.
+
+    Returns None when the scheme is not one of them.
+    """
+    try:
+        from potato.server_utils.iaa.dispatcher import packed_answer
+    except Exception:  # pragma: no cover - iaa is always importable in-tree
+        return None
+    try:
+        return packed_answer(scheme if isinstance(scheme, dict) else {}, stored)
+    except Exception:
+        return None
+
+
+def _schema_kind(scheme: Any):
+    try:
+        from potato.server_utils.iaa.dispatcher import classify_schema
+        kind = classify_schema(scheme if isinstance(scheme, dict) else {})
+        # SchemaKind is a str-Enum, but str() on it renders "SchemaKind.MATRIX"
+        # from 3.11 on, so read `.value`.
+        return str(getattr(kind, "value", kind))
+    except Exception:  # pragma: no cover
+        return ""
+
+
 def comparable_value(scheme: Any, stored: Any) -> Any:
     """
     A value two annotators can be compared on.
 
-    Categorical schemas collapse to the frozenset of selected labels, which is
-    what adjudication already did. Geometry returns its object list, which is
-    NOT hashable on purpose — callers must go through :func:`distance` rather
-    than testing equality, because two annotators never draw identical pixels
-    and exact comparison would report total disagreement.
+    Geometry returns its object list, which is NOT hashable on purpose —
+    callers must go through :func:`distance` rather than testing equality,
+    because two annotators never draw identical pixels and exact comparison
+    would report total disagreement.
+
+    Everything else collapses to a hashable value that reflects **what was
+    answered**, which depends on how the type stores it:
+
+    ``{label: label}`` (radio, likert, multiselect, ...)
+        the set of selected label names — the key is the answer.
+    ``{one_fixed_key: whole answer}`` (hierarchical_multiselect, ranking,
+    card_sort, conjoint, pairwise)
+        the unpacked atoms; a set, except for ``ranking`` where the order is
+        the answer.
+    ``{sub-answer: value}`` (constant_sum, soft_label, multirate, bws)
+        the set of (sub-answer, value) pairs.
+
+    The last two used to return the key set, which is identical for every
+    annotator on every item. Adjudication scored those schemes 1.0 whatever
+    anyone answered, and because per-item agreement is the mean across
+    schemes, real disagreements scored above the routing threshold and never
+    reached the adjudicator.
     """
     if supports_geometry(scheme):
         return geometry_objects(scheme, stored)
@@ -377,6 +440,17 @@ def comparable_value(scheme: Any, stored: Any) -> Any:
         return temporal_segments(scheme, stored)
 
     if isinstance(stored, dict):
+        packed = _packed_atoms(scheme, stored)
+        if packed is not None:
+            atoms = [str(a) for a in packed]
+            kind = _schema_kind(scheme)
+            return tuple(atoms) if kind == _ORDERED_KIND else frozenset(atoms)
+
+        if _schema_kind(scheme) == _MATRIX_KIND:
+            return frozenset(
+                (str(k), str(v)) for k, v in stored.items() if v not in FALSEY
+            )
+
         return frozenset(selected_labels(stored))
     return stored
 

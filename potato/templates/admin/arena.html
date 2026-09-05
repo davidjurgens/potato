@@ -99,6 +99,7 @@
 (function () {
   var L = window.UI_LANG || {};
   let lastPrompt = "";
+  let lastResponses = {};
   // Escape untrusted model output before inserting into innerHTML.
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g,
@@ -140,6 +141,14 @@
       const r = await post("{{ url_for('arena.api_run') }}", {prompt});
       if (!r.ok) { st.textContent = r.data.error || (L.arena_failed || "Failed."); return; }
       lastPrompt = prompt; st.textContent = "";
+      // Keep what each model actually said, and send it with the pick. The
+      // server used to look it up in its own run history by prompt string,
+      // which is empty after a restart -- so a recorded preference could
+      // never become a DPO pair and Export DPO returned nothing.
+      lastResponses = {};
+      (r.data.results || []).forEach(res => {
+        if (res && res.label && !res.error) lastResponses[res.label] = res.response || "";
+      });
       document.getElementById("ar-resp-card").style.display = "";
       document.getElementById("ar-grid").innerHTML = r.data.results.map(res => `
         <div class="ar-model">
@@ -149,7 +158,9 @@
           <button class="shadcn-button shadcn-button-outline ar-pick" data-label="${esc(res.label)}"${res.error ? ' disabled' : ''}>${L.arena_pick_as_best || 'Pick as best'}</button>
         </div>`).join("");
       document.querySelectorAll(".ar-pick").forEach(b => b.addEventListener("click", async () => {
-        const pr = await post("{{ url_for('arena.api_preference') }}", {prompt: lastPrompt, winner: b.dataset.label});
+        const pr = await post("{{ url_for('arena.api_preference') }}",
+                              {prompt: lastPrompt, winner: b.dataset.label,
+                               responses: lastResponses});
         if (pr.ok) {
           renderLeaderboard(pr.data.leaderboard);
           document.querySelectorAll(".ar-pick").forEach(x => x.classList.remove("won"));

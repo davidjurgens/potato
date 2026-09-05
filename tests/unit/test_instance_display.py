@@ -90,21 +90,46 @@ class TestInstanceDisplayRenderer:
         assert renderer.span_targets == ["text1", "text2"]
 
     def test_missing_field_raises_error(self):
-        """Test that missing fields raise InstanceDisplayError."""
+        """Test that a missing field raises InstanceDisplayError.
+
+        Only when SOME field resolves. An item that matches no configured
+        field at all renders a placeholder instead (see
+        test_no_field_matches_renders_a_placeholder): the raise is swallowed
+        upstream, so it produced a blank item with the annotation form still
+        under it and nothing to annotate.
+        """
         config = {
             "instance_display": {
                 "fields": [
-                    {"key": "required_field", "type": "text"}
+                    {"key": "present_field", "type": "text"},
+                    {"key": "required_field", "type": "text"},
                 ]
             }
         }
         renderer = InstanceDisplayRenderer(config)
-        instance_data = {"other_field": "value"}
+        instance_data = {"present_field": "here", "other_field": "value"}
 
         with pytest.raises(InstanceDisplayError) as excinfo:
             renderer.render(instance_data)
         assert "required_field" in str(excinfo.value)
         assert "not found" in str(excinfo.value)
+
+    def test_no_field_matches_renders_a_placeholder(self):
+        """An item carrying none of the configured keys says so on the page."""
+        config = {
+            "instance_display": {
+                "fields": [{"key": "required_field", "type": "text"}]
+            }
+        }
+        renderer = InstanceDisplayRenderer(config)
+
+        html = renderer.render({"other_field": "value"})
+
+        assert "instance-display-empty" in html
+        assert "nothing to show" in html
+        # Both halves of the mismatch, so a screenshot is a usable report.
+        assert "required_field" in html
+        assert "other_field" in html
 
     def test_template_variables(self):
         """Test get_template_variables method."""

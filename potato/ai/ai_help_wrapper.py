@@ -100,8 +100,16 @@ class DynamicAIHelp:
 
         return filtered_keys
 
-    def get_ai_help_data(self, instance: int, annotation_id: int, annotation_type: str) -> Dict[str, Any]:
-        """Get current AI help configuration with the new prompt structure"""
+    def get_ai_help_data(self, instance, annotation_id: int, annotation_type: str,
+                         page_index: int = None) -> Dict[str, Any]:
+        """Get current AI help configuration with the new prompt structure.
+
+        ``instance`` is the instance **id**; ``page_index`` is the annotator's
+        position, which is what ``ai_config.include.special_include`` is keyed
+        by. Passing the position as both is only correct under `fixed_order`.
+        """
+        if page_index is None:
+            page_index = instance
         try:
             context = {
                 'ai_assistant': None,
@@ -152,7 +160,7 @@ class DynamicAIHelp:
                 logger.debug(f"[get_ai_help_data] Could not determine if content is image: {e}")
 
             # Check if user specified specific assistant types
-            special_include_types = ai_cache_manager.get_special_include(instance, annotation_id)
+            special_include_types = ai_cache_manager.get_special_include(page_index, annotation_id)
             logger.debug(f"[get_ai_help_data] special_include_types: {special_include_types}")
 
             if special_include_types:
@@ -199,16 +207,19 @@ class DynamicAIHelp:
                 'error_message': 'AI help is unavailable for this item.',
             }
 
-    def render(self, instance: int, annotation_id: int, annotation_type) -> str:
+    def render(self, instance, annotation_id: int, annotation_type,
+               page_index: int = None) -> str:
         """Render AI help HTML with current data"""
-        context = self.get_ai_help_data(instance, annotation_id, annotation_type)
+        context = self.get_ai_help_data(instance, annotation_id, annotation_type,
+                                        page_index=page_index)
         context.update({
             'instance': instance,
             'annotation_id': annotation_id
         })
         return render_template_string(self.template, **context)
 
-def generate_ai_help_html(instance: int, annotation_id: int, annotation_type: str) -> Optional[str]:
+def generate_ai_help_html(instance, annotation_id: int, annotation_type: str,
+                          page_index: int = None) -> Optional[str]:
     """
     Generates dynamic AI help HTML using template rendering.
     Now works with the new prompt structure: {annotation_type: {prompt: ..., outputformat: ...}}
@@ -220,7 +231,8 @@ def generate_ai_help_html(instance: int, annotation_id: int, annotation_type: st
         logger.debug("[generate_ai_help_html] DYNAMICAIHELP is None - AI support not enabled")
         return ""  # AI support not enabled
 
-    result = DYNAMICAIHELP.render(instance, annotation_id, annotation_type)
+    result = DYNAMICAIHELP.render(instance, annotation_id, annotation_type,
+                                  page_index=page_index)
     logger.debug(f"[generate_ai_help_html] Rendered result: '{result[:100] if result else 'empty'}...'")
     return result
 

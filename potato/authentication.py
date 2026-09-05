@@ -468,6 +468,8 @@ class UserAuthenticator:
         # (e.g. wrong-format) user file. F-036.
         self.users_loaded_from_file = 0
         self.user_file_parse_errors = 0
+        #: Say where the roster lives once, not on every registration.
+        self._roster_path_announced = False
 
         # Load users from config file if it exists
         if os.path.isfile(self.user_config_path):
@@ -699,22 +701,32 @@ class UserAuthenticator:
         return result
 
     def save_user_config(self):
-        """Save user config to file.
+        """Write the roster, so an account survives a restart.
 
-        Saves when:
-        - auth_method is in_memory AND user_config_path was explicitly configured
-        - auth_method is not in_memory and not database (other file-based methods)
+        Saves for every method except `database`, which persists its own.
 
-        Skips when:
-        - auth_method is database (DB handles its own persistence)
-        - auth_method is in_memory with auto-generated default path (preserve old behavior)
+        This used to skip `in_memory` unless `authentication.user_config_path`
+        was set explicitly -- the default configuration, and the one every
+        example ships. An annotator who signed up, worked through the study and
+        came back after a restart was told their account did not exist, and the
+        sign-up form then accepted the same username with ANY password and
+        handed over the directory holding their annotations, because the
+        annotator directory is keyed on the username alone. Across a restart
+        the username WAS the whole credential. Nothing in the config could
+        change that: `secret_key` and `persist_sessions` cover the Flask
+        session, not the account.
+
+        The file is written to `authentication.user_config_path` when the
+        author names one, and next to the output directory otherwise.
         """
         if self.auth_method == "database":
             logger.debug("User config not saved - using database authentication (DB handles persistence)")
             return
 
-        if self.auth_method == "in_memory" and not self.user_config_path_explicit:
-            logger.debug("User config not saved - using in_memory with default path")
+        # Nothing to write, and no file to keep in step: don't create one. A
+        # task nobody has registered on should not sprout an empty roster in
+        # its directory.
+        if not self.userlist and not os.path.isfile(self.user_config_path or ""):
             return
 
         if self.user_config_path:
@@ -729,7 +741,14 @@ class UserAuthenticator:
                         f.write(json.dumps(output) + "\n")
                     else:
                         f.write(json.dumps({"username": k}) + "\n")
-            logger.info(f"User info file saved at: {self.user_config_path}")
+            if not self._roster_path_announced:
+                self._roster_path_announced = True
+                logger.info(
+                    "Accounts are stored in %s. Keep it with the annotation "
+                    "output: without it, a restart forgets every account that "
+                    "signed up.", self.user_config_path)
+            else:
+                logger.debug(f"User info file saved at: {self.user_config_path}")
         else:
             logger.warning("WARNING: user_config_path not specified, user registration info are not saved")
 

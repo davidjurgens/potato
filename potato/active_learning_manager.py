@@ -142,6 +142,39 @@ def feature_for_item(item, schema_type: str, source_field: str = None) -> str:
 # Query Strategies
 # ---------------------------------------------------------------------------
 
+def _consumes_raw_text(model) -> bool:
+    """True when `model` vectorizes its own input.
+
+    `_models[schema]` is a fitted `Pipeline` of (vectorizer, classifier), or a
+    calibrated wrapper around one, so it takes the raw strings. The query
+    strategies vectorized first and then handed the *features* to it, which
+    vectorized them a second time and raised
+
+        UncertaintySampling failed: 'csr_matrix' object has no attribute 'lower'
+
+    every run. The strategy fell back to a flat 0.5 for every instance, so the
+    ordering the config asked for was never the ordering it got -- and the two
+    INFO lines that followed the warning read like success.
+    """
+    if hasattr(model, "named_steps") or hasattr(model, "steps"):
+        return True
+    for attr in ("estimator", "base_estimator", "estimator_"):
+        inner = getattr(model, attr, None)
+        if inner is not None and inner is not model:
+            return _consumes_raw_text(inner)
+    return False
+
+
+def _predict_proba(model, vectorizer, texts, features=None):
+    """Class probabilities for `texts`, whatever `model` expects as input."""
+    if _consumes_raw_text(model):
+        return model.predict_proba(texts)
+    if features is None:
+        features = vectorizer.transform(texts)
+    return model.predict_proba(features)
+
+
+
 class QueryStrategy(ABC):
     """Base class for active learning query strategies."""
 
@@ -160,8 +193,7 @@ class UncertaintySampling(QueryStrategy):
 
     def rank(self, texts, model, vectorizer, annotated_texts=None):
         try:
-            features = vectorizer.transform(texts)
-            probas = model.predict_proba(features)
+            probas = _predict_proba(model, vectorizer, texts)
             # Score = 1 - max_prob (higher = more uncertain = higher priority)
             scores = 1.0 - np.max(probas, axis=1)
             ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
@@ -222,7 +254,7 @@ class BadgeStrategy(QueryStrategy):
             if hasattr(features, 'toarray'):
                 features = features.toarray()
 
-            probas = model.predict_proba(features)
+            probas = _predict_proba(model, vectorizer, texts, features)
             uncertainty = 1.0 - np.max(probas, axis=1)
 
             # Weight features by uncertainty
@@ -270,7 +302,7 @@ class BaldStrategy(QueryStrategy):
             if hasattr(features, 'toarray'):
                 features = features.toarray()
 
-            probas = model.predict_proba(features)
+            probas = _predict_proba(model, vectorizer, texts, features)
             # Average entropy
             avg_proba = probas
             entropy_avg = -np.sum(avg_proba * np.log(avg_proba + 1e-10), axis=1)
@@ -295,7 +327,7 @@ class BaldStrategy(QueryStrategy):
 
             all_probas = []
             for m in ensemble_models:
-                all_probas.append(m.predict_proba(features))
+                all_probas.append(_predict_proba(m, vectorizer, texts, features))
 
             all_probas = np.array(all_probas)  # (n_estimators, n_samples, n_classes)
 
@@ -442,6 +474,48 @@ class ICLClassifier:
 # Configuration
 # ---------------------------------------------------------------------------
 
+#: Short names accepted for ``active_learning.classifier.name`` and
+#: ``active_learning.vectorizer.name``. The code only ever understood fully
+#: qualified sklearn paths and nothing said so: `{name: logistic}` validated
+#: clean under `--strict`, then failed at the first training run with
+#: "not enough values to unpack (expected 2, got 1)" and trained the fallback
+#: LogisticRegression instead of what the config asked for. Both spellings work
+#: now, and a name that is neither is a config error rather than a log line.
+CLASSIFIER_ALIASES = {
+    "logistic": "sklearn.linear_model.LogisticRegression",
+    "logistic_regression": "sklearn.linear_model.LogisticRegression",
+    "logisticregression": "sklearn.linear_model.LogisticRegression",
+    "random_forest": "sklearn.ensemble.RandomForestClassifier",
+    "randomforest": "sklearn.ensemble.RandomForestClassifier",
+    "rf": "sklearn.ensemble.RandomForestClassifier",
+    "svm": "sklearn.svm.SVC",
+    "svc": "sklearn.svm.SVC",
+}
+
+VECTORIZER_ALIASES = {
+    "tfidf": "sklearn.feature_extraction.text.TfidfVectorizer",
+    "tf-idf": "sklearn.feature_extraction.text.TfidfVectorizer",
+    "tfidfvectorizer": "sklearn.feature_extraction.text.TfidfVectorizer",
+    "count": "sklearn.feature_extraction.text.CountVectorizer",
+    "counts": "sklearn.feature_extraction.text.CountVectorizer",
+    "bow": "sklearn.feature_extraction.text.CountVectorizer",
+    "countvectorizer": "sklearn.feature_extraction.text.CountVectorizer",
+    "sentence_transformers": "sentence-transformers",
+    "sentence-transformers": "sentence-transformers",
+    "embeddings": "sentence-transformers",
+}
+
+
+def resolve_classifier_name(name: str) -> str:
+    """A short classifier alias expanded to its import path, or `name` as given."""
+    return CLASSIFIER_ALIASES.get(str(name).strip().lower(), name)
+
+
+def resolve_vectorizer_name(name: str) -> str:
+    """A short vectorizer alias expanded to its import path, or `name` as given."""
+    return VECTORIZER_ALIASES.get(str(name).strip().lower(), name)
+
+
 @dataclass
 class ActiveLearningConfig:
     """Enhanced configuration for active learning."""
@@ -530,6 +604,9 @@ class ActiveLearningConfig:
             self.schema_names = []
         if self.llm_config is None:
             self.llm_config = {}
+        # Accept the short names as well as the dotted import paths.
+        self.classifier_name = resolve_classifier_name(self.classifier_name)
+        self.vectorizer_name = resolve_vectorizer_name(self.vectorizer_name)
         # Merge classifier_params into classifier_kwargs
         if self.classifier_params:
             self.classifier_kwargs.update(self.classifier_params)

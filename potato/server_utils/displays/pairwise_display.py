@@ -156,11 +156,26 @@ class PairwiseDisplay(BaseDisplay):
         if custom_labels and len(custom_labels) >= len(items):
             return custom_labels[:len(items)]
 
+        # A label carried in the DATA. `{"left": {"label": "Model A", "text":
+        # ...}}` is the natural way to write a comparison whose sides differ
+        # per item, and it was ignored: labels came only from
+        # display_options.labels, which is one fixed pair for the whole study,
+        # so every cell read "A" and "B" whatever the data said.
+        from_data = [
+            (item.get("label") or item.get("name") or item.get("title") or "")
+            if isinstance(item, dict) else ""
+            for item in items
+        ]
+        if all(from_data):
+            return [str(label) for label in from_data]
+
         # Default labels
         if len(items) == 2:
-            return ["A", "B"]
+            defaults = ["A", "B"]
         else:
-            return [f"Option {i + 1}" for i in range(len(items))]
+            defaults = [f"Option {i + 1}" for i in range(len(items))]
+        # Partial: keep each item's own label where it has one.
+        return [str(from_data[i]) or defaults[i] for i in range(len(items))]
 
     def _render_item(self, item: Any) -> str:
         """
@@ -181,7 +196,8 @@ class PairwiseDisplay(BaseDisplay):
             return escaped.replace('\n', '<br>')
 
         if isinstance(item, dict):
-            # Check for common patterns
+            # Check for common patterns. `label`/`name`/`title` are consumed by
+            # _get_labels, so they must not also be printed into the cell body.
             if "text" in item:
                 text = str(item["text"])
                 escaped = html.escape(text)

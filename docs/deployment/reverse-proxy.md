@@ -127,9 +127,18 @@ location /app1/api/ {
 ## Verifying
 
 1. Load `https://host/app1/` and confirm CSS/JS load (no 404s in DevTools).
-2. Make an annotation and confirm it autosaves (no "annotations not saved").
-3. Navigate Next/Previous and confirm media and data render.
-4. If using live agent eval, confirm the stream connects and updates.
+2. **Sign in.** The login form posts to `/app1/auth`, not `/auth`.
+3. Make an annotation and confirm it autosaves (no "annotations not saved").
+4. Navigate Next/Previous and confirm media and data render.
+5. Follow Logout, and the Finish link on the last item, and confirm neither
+   leaves the prefix.
+6. If using live agent eval, confirm the stream connects and updates.
+
+Step 2 is worth doing first, and on a browser with no session. Until v2.8.3 the
+login page was the one page the prefix did not reach: its two forms posted to
+`/auth` and `/register` at the public root, so a task mounted below a path
+could not admit a single annotator, while every page behind the login looked
+correct. `/done`, `/logout` and `/pocket` were unprefixed for the same reason.
 
 ## Notes and limitations
 

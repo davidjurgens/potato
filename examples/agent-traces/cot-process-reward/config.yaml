@@ -56,6 +56,9 @@ annotation_schemes:
     name: step_rewards
     description: "Verify the reward for each reasoning step: ✓ correct, ○ neutral, ✗ incorrect"
     steps_key: cot_steps
+    # cot_segmentation writes each step's prose under `text`. The widget's
+    # default step_text_key is `action`, which no segmented step carries.
+    step_text_key: text
     mode: per_step
     allow_neutral: true       # PRM800K-style 3-way (+1 / 0 / -1)
     inline_with_trace: true   # controls sit on each step in the cot_trace display

@@ -38,8 +38,16 @@ A rule fires for an item when **both**:
    decision (idempotent, replay-safe). `1.0` = always, `0.0` = never.
 
 > Common fields on an ingested trace: `metadata.source`
-> (`webhook`/`langsmith`/`langfuse`), `task_description`, plus any top-level
-> fields your payload includes that survive normalization.
+> (`webhook`/`langsmith`/`langfuse`), `task_description`, plus every top-level
+> field your payload includes. The webhook carries them all through, so a rule
+> can match on whatever your agent emits.
+
+Both keys are checked at config load. `sample` instead of `sample_rate` used to
+be read as nothing and silently default to 1.0, so a rule meant to fire on half
+the corpus fired on all of it. It is now an error naming the right spelling.
+`actions` must hold `{type: ...}` mappings; a list of bare strings booted with
+a reassuring "AutomationManager initialized with 1 rule(s)" and then threw on
+`/admin/automation`.
 
 ## Actions
 
@@ -55,7 +63,12 @@ A rule fires for an item when **both**:
 
 **Fast actions** run inline in the ingestion path (cheap, in-process). **Heavy
 actions** (`run_evaluator`, `fire_webhook`, `refresh_topics`) are dispatched to a
-background worker so ingestion never blocks. Every action records an outcome;
+background worker so ingestion never blocks.
+
+Rules run over the items in `data_files` as well as over runtime-ingested ones.
+Before v2.8.3 they did not. The engine was built after the corpus had finished
+loading, so `items_processed` stayed at 0 for a file-loaded study, and only
+traffic arriving after boot was ever seen. Every action records an outcome;
 failures are caught and logged as `error` outcomes — automation never breaks
 ingestion.
 

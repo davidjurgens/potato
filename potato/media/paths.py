@@ -89,3 +89,37 @@ def resolve_media_url(config: Any, reference: str,
     if path and os.path.isfile(path):
         return path
     return None
+
+#: Reference schemes that are already a complete URL and must be left alone.
+_ABSOLUTE_SCHEMES = ("http://", "https://", "data:", "blob:", "//")
+
+
+def media_href(config: Any, reference: str,
+               context: str = "media") -> str:
+    """The URL a browser should request for a stored media reference.
+
+    A project that sets `media_directory` has its files served at
+    ``/media/<path>``, but only the depth viewer ever built that URL: an
+    `image`, `gallery`, `video`, `audio`, `pdf` or `web_agent_trace` field
+    holding ``shelf_a.png`` emitted ``shelf_a.png`` verbatim, which the browser
+    resolved against the page and 404ed. Five of the six failed silently. The
+    workaround was to write ``media/shelf_a.png`` in the data file, which is
+    the media directory's name spelled twice.
+
+    Left untouched:
+      - absolute URLs and data/blob URIs -- already complete;
+      - anything already rooted at ``/`` -- the author is naming a server path,
+        including ``/media/...`` and ``/static/...``;
+      - a reference that does not name a file in the media directory -- it may
+        be a path the project serves another way, and inventing ``/media/`` for
+        it would replace a working reference with a 404.
+    """
+    ref = str(reference or "").strip()
+    if not ref or ref.startswith(_ABSOLUTE_SCHEMES) or ref.startswith("/"):
+        return ref
+
+    candidate = ref[len("media/"):] if ref.startswith("media/") else ref
+    _, path = resolve_media_path(config, candidate, context=context)
+    if path and os.path.isfile(path):
+        return "/media/" + candidate.lstrip("/")
+    return ref

@@ -94,22 +94,47 @@ active_learning:
     stop_words: "english"
 ```
 
+### Naming a classifier or a vectorizer
+
+Both take either a short name or a fully qualified import path. These are the
+same thing:
+
+```yaml
+active_learning:
+  classifier: {name: logistic}
+  vectorizer: {name: tfidf}
+```
+
+```yaml
+active_learning:
+  classifier: {name: sklearn.linear_model.LogisticRegression}
+  vectorizer: {name: sklearn.feature_extraction.text.TfidfVectorizer}
+```
+
+A dotted path is imported as written, so any scikit-learn-compatible estimator
+works. A bare word that is not one of the short names below is a config error
+naming the ones that are — it used to validate clean and then fall back to
+LogisticRegression at the first training run, with the failure only in the log.
+
 ### Supported Classifiers
 
-| Classifier | Use Case | Pros | Cons |
-|------------|----------|------|------|
-| `LogisticRegression` | Binary/multi-class | Fast, interpretable | Linear only |
-| `RandomForestClassifier` | Complex patterns | Robust, handles non-linear | Slower training |
-| `SVC` | High-dimensional data | Good with sparse data | Memory intensive |
-| `MultinomialNB` | Text classification | Very fast | Assumes independence |
+| Short name | Class | Use Case | Pros | Cons |
+|---|---|----------|------|------|
+| `logistic` | `LogisticRegression` | Binary/multi-class | Fast, interpretable | Linear only |
+| `random_forest` | `RandomForestClassifier` | Complex patterns | Robust, handles non-linear | Slower training |
+| `svm` | `SVC` | High-dimensional data | Good with sparse data | Memory intensive |
+| — | `MultinomialNB` | Text classification | Very fast | Assumes independence |
 
 ### Supported Vectorizers
 
-| Vectorizer | Use Case | Pros | Cons |
-|------------|----------|------|------|
-| `CountVectorizer` | Simple text features | Fast, simple | No word importance |
-| `TfidfVectorizer` | Text with word importance | Better performance | Slightly slower |
-| `HashingVectorizer` | Large datasets | Memory efficient | No feature names |
+| Short name | Class | Use Case | Pros | Cons |
+|---|---|----------|------|------|
+| `count` | `CountVectorizer` | Simple text features | Fast, simple | No word importance |
+| `tfidf` | `TfidfVectorizer` | Text with word importance | Better performance | Slightly slower |
+| `sentence-transformers` | sentence-transformers embeddings | Semantic similarity | Captures meaning | Downloads a model |
+| — | `HashingVectorizer` | Large datasets | Memory efficient | No feature names |
+
+A class with no short name is reached by its import path.
 
 ### Resolution Strategies
 

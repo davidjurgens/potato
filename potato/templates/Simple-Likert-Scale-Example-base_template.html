@@ -19,7 +19,7 @@
     rel="stylesheet"
     href="{{ url_for('static', filename='vendor/bootstrap-4.1.3.min.css') }}"
   />
-  <link rel="stylesheet" href="/static/styles/emphasis.css" />
+  <link rel="stylesheet" href="{{ url_prefix }}/static/styles/emphasis.css" />
   <script
     src="{{ url_for('static', filename='vendor/bootstrap-4.1.3.min.js') }}"
   ></script>
@@ -1526,7 +1526,7 @@
           <!-- 3. Jump to item form -->
           <div style="margin-left: 40px">
             <form
-              action="/go_to"
+              action="{{ url_prefix }}/go_to"
               method="post"
               class="d-flex align-items-center"
             >
@@ -1608,7 +1608,7 @@
             "
           >
             <a
-              href="/logout"
+              href="{{ url_prefix }}/logout"
               class="shadcn-button"
               style="
                 background-color: var(--light-color);

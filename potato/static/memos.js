@@ -32,11 +32,18 @@
         } catch (e) { /* storage blocked: the default just applies each load */ }
     }
 
+    // The panel is fixed and 360px wide. Without this the page kept its full
+    // width underneath it and the panel covered the Next button.
+    function setRail(open) {
+        document.body.classList.toggle("potato-rail-open", !!open);
+    }
+
     function openPanel() {
         var panel = el("memo-panel"), toggle = el("memo-panel-toggle");
         if (!panel || !toggle) return;
         panel.hidden = false;
         toggle.hidden = true;
+        setRail(true);
     }
 
     function currentInstanceId() {
@@ -235,6 +242,7 @@
             close.addEventListener("click", function () {
                 panel.hidden = true;
                 toggle.hidden = false;
+                setRail(false);
                 // Closing it means closing it, not closing it until the next item.
                 setDismissed(true);
             });

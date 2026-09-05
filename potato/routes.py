@@ -1203,6 +1203,23 @@ def submit_annotation():
         logger.error(f"Error saving annotation: {type(e).__name__}: {str(e)}", exc_info=True)
         return jsonify({"status": "error", "message": "Failed to save annotation"})
 
+def _username_owns_annotations(username: str) -> bool:
+    """True when this username already has an annotation directory on disk.
+
+    Used only to refuse a registration that would adopt it. Deliberately
+    narrow: the existence of the state file, nothing about its contents.
+    """
+    output_dir = config.get("output_annotation_dir")
+    if not output_dir or not username:
+        return False
+    try:
+        candidate = os.path.join(output_dir, username)
+        return (os.path.isdir(candidate)
+                and os.path.isfile(os.path.join(candidate, "user_state.json")))
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 @app.route("/register", methods=["POST"])
 def register():
     """
@@ -1233,6 +1250,24 @@ def register():
     # Register the user with the authenticator
     logger.debug("Adding user to authenticator...")
     user_authenticator = UserAuthenticator.get_instance()
+
+    # Refuse a username that already owns annotations but is not a known
+    # account. That combination means the roster and the output directory have
+    # gone out of step -- the roster file deleted, or the study moved without
+    # it -- and registering would hand a stranger somebody else's work,
+    # because an annotator's directory is keyed on the username alone.
+    if _username_owns_annotations(username):
+        logger.error(
+            "Refused registration for '%s': %s/%s already holds annotations "
+            "but the account is not in the roster. The roster file "
+            "(authentication.user_config_path) is missing or out of step with "
+            "the output directory; restore it rather than re-registering.",
+            username, config.get("output_annotation_dir", ""), username)
+        return render_template(
+            "home.html",
+            login_error="That username is already in use on this task. "
+                        "Ask the study administrator to restore your account.")
+
     result = user_authenticator.add_user(username, password)
 
     if result != "Success":
@@ -1953,7 +1988,8 @@ def annotate():
         acm = get_ai_cache_manager()
         if acm:
             acm.start_prefetch(user_state.current_instance_index,
-                               getattr(acm, "prefetch_page_count_on_prev", 0) )
+                               getattr(acm, "prefetch_page_count_on_prev", 0),
+                               instance_ids=user_state.instance_id_ordering)
     elif action == "next_instance":
         logger.debug(f"Moving to next instance for user: {username}")
         # Check required annotations before allowing forward navigation
@@ -1985,7 +2021,9 @@ def annotate():
                     return redirect(url_for("home"))
         acm = get_ai_cache_manager()
         if acm:
-            acm.start_prefetch(user_state.current_instance_index, getattr(acm,"prefetch_page_count_on_next", 0))
+            acm.start_prefetch(user_state.current_instance_index,
+                               getattr(acm, "prefetch_page_count_on_next", 0),
+                               instance_ids=user_state.instance_id_ordering)
 
     elif action == "go_to":
         # Try to get go_to from JSON first, then form
@@ -2008,8 +2046,11 @@ def annotate():
             go_to_id(username, go_to_value)
             acm = get_ai_cache_manager()
             if acm:
-                acm.start_prefetch(user_state.current_instance_index, 1)
-                acm.start_prefetch(user_state.current_instance_index, -1)
+                ordering = user_state.instance_id_ordering
+                acm.start_prefetch(user_state.current_instance_index, 1,
+                                   instance_ids=ordering)
+                acm.start_prefetch(user_state.current_instance_index, -1,
+                                   instance_ids=ordering)
 
         else:
             logger.warning('go_to action requested but no go_to value provided')
@@ -2119,7 +2160,14 @@ def get_ai_suggestion():
 
     ai_assistant = request.args.get('aiAssistant')
 
-    instance_id = user_state.get_current_instance_index()
+    # The item, by id. `get_current_instance_index()` is the annotator's
+    # POSITION in their own ordering, and the AI cache resolved it against the
+    # corpus in file order -- the same item only under `fixed_order`. Under
+    # `random` or any reordering strategy the hint was about a different item
+    # than the one on screen, and its answer was stamped onto the visible one.
+    instance_id = user_state.get_current_instance_id()
+    if instance_id is None:
+        return jsonify({"error": "No current instance"}), 400
 
     res = ais.get_ai_help(instance_id, annotation_id, ai_assistant)
     logger.debug(f"AI suggestion result: {res}")
@@ -2225,7 +2273,9 @@ def get_option_highlights(annotation_id):
     if ais is None:
         return jsonify({"error": "AI support not enabled"}), 400
 
-    instance_id = user_state.get_current_instance_index()
+    instance_id = user_state.get_current_instance_id()
+    if instance_id is None:
+        return jsonify({"error": "No current instance"}), 400
 
     # Get option highlights
     result = ais.get_option_highlights(instance_id, annotation_id)
@@ -2305,10 +2355,13 @@ def trigger_option_highlight_prefetch():
     if request.is_json and request.json:
         prefetch_count = request.json.get("count")
 
-    instance_id = user_state.get_current_instance_index()
-    ais.start_option_highlight_prefetch(instance_id, prefetch_count)
+    index = user_state.get_current_instance_index()
+    ais.start_option_highlight_prefetch(
+        index, prefetch_count,
+        instance_ids=user_state.instance_id_ordering)
 
-    return jsonify({"status": "prefetch_started", "from_instance": instance_id})
+    return jsonify({"status": "prefetch_started",
+                    "from_instance": user_state.get_current_instance_id()})
 
 
 @app.route("/health", methods=["GET"])
@@ -4239,7 +4292,8 @@ def _trigger_ai_prefetch_after_reorder(user_state) -> None:
         # Prefetch count from AI cache config
         prefetch_count = getattr(acm, 'prefetch_page_count_on_next', 5)
 
-        acm.start_prefetch(current_index, prefetch_count)
+        acm.start_prefetch(current_index, prefetch_count,
+                           instance_ids=getattr(user_state, "instance_id_ordering", None))
         logger.debug(f"Triggered AI prefetch after diversity reorder from index {current_index}")
 
     except Exception as e:
@@ -6669,8 +6723,17 @@ def span_api_frontend():
 def test_span_colors():
     """
     Serve a test page for visually verifying span colors.
+
+    The template is a local scratch page -- .gitignore carries
+    potato/templates/test_*.html -- so it is absent from an installed release.
+    Without this guard the route answers every user with a 500.
     """
-    return render_template("test_span_colors.html")
+    from jinja2 import TemplateNotFound
+
+    try:
+        return render_template("test_span_colors.html")
+    except TemplateNotFound:
+        return ("Span colour test page is not available in this build.", 404)
 
 def normalize_color(color_value):
     """
@@ -8802,10 +8865,15 @@ def ai_assistant():
         return jsonify({"html": "", "error": None})
 
     user_state = get_user_state(username)
-    instance = user_state.get_current_instance_index()
+    # The item is addressed by id; `special_include` is keyed by page number,
+    # so the position goes along separately. They coincide only under
+    # `fixed_order`.
+    instance = user_state.get_current_instance_id()
+    page_index = user_state.get_current_instance_index()
     annotation_type = _user_schemes[annotation_id]["annotation_type"]
 
-    result = generate_ai_help_html(instance, annotation_id, annotation_type)
+    result = generate_ai_help_html(instance, annotation_id, annotation_type,
+                                   page_index=page_index)
     logger.debug(f"[AI Assistant] Result for instance={instance}, annotation_id={annotation_id}, type={annotation_type}: '{result[:100] if result else 'empty'}...'")
     return result
 

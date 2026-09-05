@@ -336,7 +336,11 @@ def segment_cot(
             {
                 "index": i,
                 "text": chunk,
-                "type": infer_type_from_text(chunk),
+                # A chain of thought is reasoning by construction, so a chunk
+                # that matches no opener is a thought rather than an
+                # observation. Every step of every segmented CoT used to be
+                # badged "Observation" in the cot_trace display.
+                "type": infer_type_from_text(chunk, default="thought"),
                 "char_start": s,
                 "char_end": e,
             }

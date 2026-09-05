@@ -110,6 +110,9 @@ class _StubISM:
     def get_total_assignable_items_for_user(self, user_state):
         return 1
 
+    def get_progress_pending_ids_for_user(self, user_state):
+        return ["i1"]
+
 
 def _configure_render_mocks(monkeypatch, app, annotation_codebook_url):
     monkeypatch.setattr(fs, "app", app, raising=False)

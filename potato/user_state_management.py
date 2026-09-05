@@ -1025,7 +1025,18 @@ class UserStateManager:
         return UserPhase.POSTSTUDY in self.phase_type_to_name_to_page
 
     def save_user_state(self, user_state: UserState) -> None:
-        '''Saves the user state for the given user ID'''
+        '''Saves the user state for the given user ID.
+
+        A username string is accepted and resolved, because callers reach for
+        one: the MCP submit_annotation tool passed the name and got an
+        AttributeError deep inside this method, which surfaced as a 500 on the
+        one tool that records work.
+        '''
+        if isinstance(user_state, str):
+            resolved = self.get_user_state(user_state)
+            if resolved is None:
+                raise KeyError(f"No such annotator: {user_state}")
+            user_state = resolved
         # Figure out where this user's data would be stored on disk
         output_annotation_dir = self.config["output_annotation_dir"]
         username = user_state.get_user_id()

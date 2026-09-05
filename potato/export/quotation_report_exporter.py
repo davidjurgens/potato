@@ -9,7 +9,9 @@ Output columns:
     code             label applied to the span
     text             quoted span text
     start            character offset (inclusive)
-    end              character offset (exclusive)
+    end              character offset (exclusive). Potato's own convention;
+                     the REFI-QDA `endPosition` in a .qdpx names the LAST
+                     character, so it is one lower for the same span.
     field            display field key (for multi-field instances)
     instance_id      source item id
     source_doc       text_key value or item id, for cross-reference
@@ -106,13 +108,22 @@ class QuotationReportExporter(BaseExporter):
             spans = ann.get("spans", {}) or {}
             for schema_name, span_list in spans.items():
                 for span in span_list or []:
+                    # A stored span is
+                    # {schema, name, title, start, end, target_field}: the
+                    # code is under `name`, and there is no `text` -- the
+                    # words are sliced out of the item by offset. Reading
+                    # `label`/`annotation` gave every row an empty code and an
+                    # empty quotation, which in a *quotation report* is both
+                    # columns anyone opens it for. The qdpx exporter, on the
+                    # same spans, wrote both.
                     label = (
-                        span.get("label")
+                        span.get("name")
+                        or span.get("label")
                         or span.get("annotation")
                         or span.get("category")
                         or ""
                     )
-                    text = span.get("text", "")
+                    text = span.get("text") or context.covered_text(instance_id, span)
                     start = span.get("start") if span.get("start") is not None else span.get("start_offset", "")
                     end = span.get("end") if span.get("end") is not None else span.get("end_offset", "")
                     field = span.get("field") or span.get("target_field") or ""

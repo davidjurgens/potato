@@ -45,7 +45,8 @@ class TestGenerateAIHelpHTML:
                 instance=1, annotation_id=0, annotation_type="radio"
             )
             assert result == "<div>AI Help</div>"
-            mock_helper.render.assert_called_once_with(1, 0, "radio")
+            mock_helper.render.assert_called_once_with(
+                1, 0, "radio", page_index=None)
         finally:
             # Restore original state
             ai_help_wrapper.DYNAMICAIHELP = original

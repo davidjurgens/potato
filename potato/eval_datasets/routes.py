@@ -23,7 +23,8 @@ from __future__ import annotations
 
 from functools import wraps
 
-from flask import Blueprint, Response, jsonify, render_template, request, session
+from flask import (Blueprint, Response, jsonify, redirect, render_template,
+                   request, session, url_for)
 
 from potato.eval_datasets.manager import get_datasets_manager
 from potato.eval_datasets.models import Example
@@ -61,6 +62,18 @@ admin_required = require_permission(Permission.VIEW_ADMIN_DASHBOARD)
 
 
 # ----- pages -----
+
+@datasets_bp.route("", methods=["GET"])
+@datasets_bp.route("/", methods=["GET"])
+@admin_required
+@_enabled_required
+def index():
+    """The bare prefix, which is the URL the boot log's "Registered
+    datasets/experiments" line and the docs both send a reader to. It was a
+    404: every page under this blueprint lives at a deeper path, so the one
+    address anyone would type was the one address that did not exist."""
+    return redirect(url_for("datasets.admin"))
+
 
 @datasets_bp.route("/admin", methods=["GET"])
 @admin_required

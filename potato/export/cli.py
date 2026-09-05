@@ -420,6 +420,18 @@ def build_export_context(config_path: str) -> ExportContext:
     if not os.path.isabs(output_annotation_dir):
         output_annotation_dir = os.path.join(base_dir, output_annotation_dir)
 
+    # A `codebook: true` scheme sources its labels from the project database,
+    # not from the YAML -- the server applies that at boot. Reading the file
+    # back gives the labels the study STARTED with, so every code a coder
+    # added mid-study was missing from the codebook and qdpx exports, which in
+    # open coding is most of them.
+    try:
+        from potato.codebook.schema_bridge import apply_codebook_to_schemes
+        apply_codebook_to_schemes(config, task_dir=base_dir, seed=False)
+    except Exception:
+        logger.debug("Could not apply the project codebook to the export "
+                     "schemas; exporting the config\'s labels", exc_info=True)
+
     items = load_items_from_data_files(config, config_dir)
     annotations = load_annotations_from_output_dir(output_annotation_dir, schemas)
     phase_responses = load_phase_responses_from_output_dir(output_annotation_dir)

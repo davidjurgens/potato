@@ -609,17 +609,13 @@
     /**
      * Format an annotation value for display
      */
+    // The annotator-response cards and the decision form below them were
+    // formatting the same stored value two different ways: the form printed
+    // "Intervention: 30, Outcome measure: 20" while the card above it printed
+    // the raw storage dict, {"Exclude":"Exclude"} and
+    // {"selected_labels":"Modelling,Zero-shot"} included. One formatter now.
     function formatAnnotationValue(val) {
-        if (typeof val === 'string') return val;
-        if (typeof val === 'number') return String(val);
-        if (typeof val === 'object' && val !== null) {
-            var selected = Object.keys(val).filter(function (k) {
-                return val[k] === true || val[k] === 'true' || val[k] === 1;
-            });
-            if (selected.length > 0) return selected.join(', ');
-            return JSON.stringify(val);
-        }
-        return String(val);
+        return AdjudicationForms.formatAnswer(val);
     }
 
     /**

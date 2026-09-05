@@ -42,10 +42,22 @@ def server():
 
 
 def _register(server, username):
+    """Register, or sign in when the account is already there.
+
+    This suite boots the shipped example, so its output directory -- and now
+    its account roster -- outlive the run. Accounts persist across a restart
+    (they did not before v2.8.3), so the second run of this file registers a
+    username that already exists and gets the login page back.
+    """
     session = requests.Session()
     session.post(
         f"{server.base_url}/register",
         data={"action": "signup", "email": username, "pass": "pass"},
+        timeout=10,
+    )
+    session.post(
+        f"{server.base_url}/auth",
+        data={"action": "login", "email": username, "pass": "pass"},
         timeout=10,
     )
     return session

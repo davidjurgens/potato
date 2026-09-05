@@ -119,7 +119,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `ai_budget` |  | object |  | Cost estimate and spend cap for AI actions. The complaint about commercial platforms is not the price but the surprise -- credits consumed by auto-labelling and discovered at export time | `cap_usd` |
 | `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `image_key`, `option_highlighting` |
 | `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `system_prompt`, `ui` |
-| `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected |  |
+| `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected. Configured in four nested blocks, not as flat keys | `enabled`, `example_selection`, `llm_labeling`, `persistence`, `verification` |
 
 ## Qualitative Coding (QDA)
 

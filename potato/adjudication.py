@@ -532,26 +532,20 @@ class AdjudicationManager:
                     agreement_scores[schema] = score
                 continue
 
+            # One reader for "what did this annotator answer", shared with the
+            # exporter and /admin/iaa. Adjudication used to collapse any dict
+            # to its key set, which is the answer only for the
+            # {label: label} types: a constant_sum's keys are its options,
+            # identical for every annotator, so three different distributions
+            # scored 1.0 and the item was never routed.
             values = []
             for user_id, user_annots in item_annotations.items():
                 if schema in user_annots:
-                    val = user_annots[schema]
-                    # Normalize to comparable form
-                    if isinstance(val, dict):
-                        # Radio stores {label: label} (value is the label string)
-                        # and multiselect stores {label: value/true}. A label is
-                        # "selected" when its value is present/truthy. The old
-                        # filter (v is True / == "true" / == 1) dropped radio's
-                        # string value, collapsing every annotator to an empty
-                        # frozenset -> a spurious 1.0 agreement even on total
-                        # disagreement.
-                        falsey = (False, None, "", "false", "False", 0, "0")
-                        selected = frozenset(
-                            k for k, v in val.items() if v not in falsey
-                        )
-                        values.append(selected)
-                    else:
-                        values.append(val)
+                    values.append(
+                        annotation_values.comparable_value(
+                            scheme_def if scheme_def is not None
+                            else {"name": schema},
+                            user_annots[schema]))
 
             if len(values) < 2:
                 continue

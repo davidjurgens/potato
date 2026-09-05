@@ -32,31 +32,125 @@
       "additionalProperties": true,
       "description": "Order items by model uncertainty",
       "properties": {
-        "annotation_routing": {},
-        "bald_params": {},
-        "calibrate_probabilities": {},
-        "classifier": {},
-        "classifier_params": {},
-        "cold_start_strategy": {},
-        "confidence_method": {},
-        "database": {},
-        "enabled": {},
-        "hybrid_weights": {},
-        "icl_ensemble_params": {},
-        "llm": {},
-        "max_instances_to_reorder": {},
-        "min_annotations_per_instance": {},
-        "min_instances_for_training": {},
-        "model_persistence": {},
-        "query_strategy": {},
-        "random_sample_percent": {},
-        "resolution_strategy": {},
-        "routing_thresholds": {},
-        "schema_names": {},
-        "update_frequency": {},
-        "use_icl_ensemble": {},
-        "vectorizer": {},
-        "vectorizer_params": {}
+        "annotation_routing": {
+          "default": false,
+          "description": "Route high-confidence predictions past the annotator instead of asking",
+          "type": "boolean"
+        },
+        "bald_params": {
+          "default": {
+            "bootstrap_fraction": 0.8,
+            "n_estimators": 5
+          },
+          "description": "Ensemble size and bootstrap fraction for `query_strategy: bald`",
+          "type": "object"
+        },
+        "calibrate_probabilities": {
+          "default": true,
+          "description": "Calibrate the fitted model's probabilities, and keep the calibration only when it measurably helps",
+          "type": "boolean"
+        },
+        "classifier": {
+          "description": "The model that scores unlabeled items. `{name: ...}`, optionally with `hyperparameters`. `name` takes a short name (`logistic`, `random_forest`, `svm`) or a fully qualified import path such as `sklearn.linear_model.LogisticRegression`",
+          "type": "object"
+        },
+        "classifier_params": {
+          "description": "Extra keyword arguments passed to the classifier constructor",
+          "type": "object"
+        },
+        "cold_start_strategy": {
+          "default": "random",
+          "description": "How items are ordered before the first fit: random or llm",
+          "type": "string"
+        },
+        "confidence_method": {
+          "description": "How an LLM's confidence is read: logprobs, verbalized or consistency",
+          "type": "string"
+        },
+        "database": {
+          "description": "Ignored. Run history is recorded through the project database and needs no configuration",
+          "type": "object"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Turn active learning on. Also set `assignment_strategy: active_learning`, or nothing reorders",
+          "type": "boolean"
+        },
+        "hybrid_weights": {
+          "default": {
+            "diversity": 0.3,
+            "uncertainty": 0.7
+          },
+          "description": "Weights for `query_strategy: hybrid`. Must sum to 1.0",
+          "type": "object"
+        },
+        "icl_ensemble_params": {
+          "description": "How the ICL weight decays as real annotations accumulate",
+          "type": "object"
+        },
+        "llm": {
+          "description": "Use a model rather than a classifier for cold start and confidence: `{enabled, endpoint_url, model_name}`",
+          "type": "object"
+        },
+        "max_instances_to_reorder": {
+          "description": "Cap on how many unlabeled items are ranked per pass. They are sampled, not taken from the head of the file",
+          "type": "integer"
+        },
+        "min_annotations_per_instance": {
+          "default": 1,
+          "description": "How many annotations an item needs before it can be training data",
+          "type": "integer"
+        },
+        "min_instances_for_training": {
+          "default": 10,
+          "description": "How many labeled items must exist before the first fit. Below this the cold-start strategy decides the order",
+          "type": "integer"
+        },
+        "model_persistence": {
+          "description": "Save fitted models to disk: `{enabled, save_directory, retention_count}`",
+          "type": "object"
+        },
+        "query_strategy": {
+          "default": "uncertainty",
+          "description": "What \"informative\" means: uncertainty, diversity, badge, bald or hybrid",
+          "type": "string"
+        },
+        "random_sample_percent": {
+          "default": 0.2,
+          "description": "Fraction of each reordered batch left random, so the queue keeps exploring instead of only exploiting the model",
+          "type": "number"
+        },
+        "resolution_strategy": {
+          "default": "majority_vote",
+          "description": "How several annotators' labels become one training label: majority_vote, first, or unanimous",
+          "type": "string"
+        },
+        "routing_thresholds": {
+          "description": "Confidence bounds for routing: `{auto_label_min_confidence, show_suggestion_below}`",
+          "type": "object"
+        },
+        "schema_names": {
+          "description": "Which schemes are learned. Defaults to every scheme with something learnable to predict",
+          "type": "array"
+        },
+        "update_frequency": {
+          "default": 5,
+          "description": "Retrain after this many new annotations",
+          "type": "integer"
+        },
+        "use_icl_ensemble": {
+          "default": false,
+          "description": "Blend in-context-learning predictions into the ranking",
+          "type": "boolean"
+        },
+        "vectorizer": {
+          "description": "How items become features. `{name: ...}`, optionally with `hyperparameters`. `name` takes `tfidf`, `count` or `sentence-transformers`, or a fully qualified import path",
+          "type": "object"
+        },
+        "vectorizer_params": {
+          "description": "Extra keyword arguments passed to the vectorizer constructor. A YAML list for `ngram_range` is coerced to the tuple sklearn wants",
+          "type": "object"
+        }
       },
       "type": "object"
     },
@@ -1945,6 +2039,7 @@
             "mode": "per_step",
             "name": "step_rewards",
             "require_verification": true,
+            "step_text_key": "text",
             "steps_key": "cot_steps"
           },
           "source": "examples/agent-traces/cot-process-reward/config.yaml"
@@ -3835,7 +3930,31 @@
       "type": "object"
     },
     "icl_labeling": {
-      "description": "In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected",
+      "additionalProperties": true,
+      "description": "In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected. Configured in four nested blocks, not as flat keys",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Turn the labeler on",
+          "type": "boolean"
+        },
+        "example_selection": {
+          "description": "Which annotations become few-shot examples",
+          "type": "object"
+        },
+        "llm_labeling": {
+          "description": "When and how much the model labels",
+          "type": "object"
+        },
+        "persistence": {
+          "description": "Where predictions are written",
+          "type": "object"
+        },
+        "verification": {
+          "description": "Blind human checking of the model's labels",
+          "type": "object"
+        }
+      },
       "type": "object"
     },
     "instance_display": {

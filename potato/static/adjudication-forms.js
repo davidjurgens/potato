@@ -1110,6 +1110,7 @@ window.AdjudicationForms = (function () {
         getAnnotatorColor: getAnnotatorColor,
         formatTime: formatTime,
         escapeHtml: escapeHtml,
+        formatAnswer: formatAnswer,
         adoptSpan: adoptSpan,
         adoptAllSpans: adoptAllSpans,
         removeAdoptedSpan: removeAdoptedSpan,

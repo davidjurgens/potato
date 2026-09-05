@@ -224,6 +224,63 @@ class ICLLabeler:
         self._initialized = True
         logger.info("ICLLabeler initialized")
 
+    def _answer_text(self, schema_name: str, stored: Dict[str, Any]) -> str:
+        """One annotator's answer for one scheme, as the string a few-shot
+        example carries. Reads the storage shape through the shared
+        `annotation_values` reader, so a scheme that stores its answer in the
+        VALUE (hierarchical_multiselect, ranking, ...) is not read as its key.
+        """
+        from potato.server_utils import annotation_values
+
+        scheme = next(
+            (s for s in self._get_annotation_schemes()
+             if s.get('name') == schema_name),
+            {'name': schema_name})
+        value = annotation_values.comparable_value(scheme, stored)
+        if isinstance(value, frozenset):
+            return ', '.join(sorted(str(v) for v in value))
+        if isinstance(value, tuple):
+            return ', '.join(str(v) for v in value)
+        return '' if value is None else str(value)
+
+    def _explain_empty_refresh(self, rejected, max_annotators_seen,
+                               n_instances):
+        """Say WHY the example set is empty, once it is.
+
+        The threshold that keeps a study's examples at zero forever is
+        `example_selection.min_annotators_per_instance`, which defaults to 2:
+        on a study with `num_annotators_per_item: 1` no item can ever qualify,
+        the worker runs forever, and the only thing it prints is
+        "0 examples across 0 schemas" -- identical to a labeler that is simply
+        waiting for data.
+        """
+        if not n_instances:
+            logger.warning(
+                "ICL labeler found no annotations at all; nothing to build "
+                "examples from yet.")
+            return
+        if rejected.get("too_few_annotators") and not max_annotators_seen >= \
+                self.min_annotators_per_instance:
+            logger.warning(
+                "ICL labeler has 0 examples: every annotated item has at most "
+                "%d annotator(s) and "
+                "icl_labeling.example_selection.min_annotators_per_instance "
+                "is %d, so no item can qualify. Lower the threshold or raise "
+                "num_annotators_per_item.",
+                max_annotators_seen, self.min_annotators_per_instance)
+            return
+        if rejected.get("below_agreement"):
+            logger.warning(
+                "ICL labeler has 0 examples: %d item/scheme pair(s) were "
+                "below icl_labeling.example_selection."
+                "min_agreement_threshold (%.2f).",
+                rejected["below_agreement"], self.min_agreement_threshold)
+            return
+        if rejected.get("no_text"):
+            logger.warning(
+                "ICL labeler has 0 examples: %d qualifying item(s) had no "
+                "text under item_properties.text_key.", rejected["no_text"])
+
     def _get_ai_endpoint(self):
         """Get or create AI endpoint from config (reuses ai_support config)."""
         if self._ai_endpoint is None:
@@ -263,10 +320,15 @@ class ICLLabeler:
                 schemas = self._get_annotation_schemes()
                 schema_names = [s.get('name') for s in schemas if s.get('name')]
 
-                # Collect all annotations per instance
-                instance_annotations: Dict[str, Dict[str, List[Tuple[str, Any]]]] = defaultdict(
-                    lambda: defaultdict(list)
-                )  # instance_id -> schema_name -> [(user_id, value), ...]
+                # Collect all annotations per instance, ONE entry per
+                # annotator. Potato stores a label container per rendered
+                # option, so appending per option counted a multiselect
+                # annotator once for every box they ticked -- three ticks read
+                # as three annotators, and a single person could satisfy
+                # min_annotators_per_instance on their own.
+                instance_annotations: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(
+                    lambda: defaultdict(dict)
+                )  # instance_id -> schema_name -> {user_id: answer}
 
                 for username in get_users():
                     user_state = get_user_state(username)
@@ -278,35 +340,58 @@ class ICLLabeler:
                         if 'labels' not in instance_data:
                             continue
 
+                        per_schema: Dict[str, Dict[str, Any]] = defaultdict(dict)
                         for label, value in instance_data['labels'].items():
-                            schema_name = label.get_schema() if hasattr(label, 'get_schema') else str(label)
+                            schema_name = (label.get_schema()
+                                           if hasattr(label, 'get_schema')
+                                           else str(label))
+                            name = (label.get_name()
+                                    if hasattr(label, 'get_name') else '')
                             if schema_name in schema_names:
-                                instance_annotations[instance_id][schema_name].append((username, value))
+                                per_schema[schema_name][name] = value
 
-                # Find high-confidence examples
+                        for schema_name, stored in per_schema.items():
+                            answer = self._answer_text(schema_name, stored)
+                            if answer:
+                                instance_annotations[instance_id][schema_name][username] = answer
+
+                # Find high-confidence examples. The gate each candidate
+                # failed is counted, because "0 examples across 0 schemas" is
+                # what BOTH a misconfiguration and a not-yet-met threshold
+                # look like, and this log line is the labeler's only output.
+                rejected = {"too_few_annotators": 0, "below_agreement": 0,
+                            "no_text": 0}
+                max_annotators_seen = 0
                 for instance_id, schema_data in instance_annotations.items():
                     for schema_name, annotations in schema_data.items():
                         annotator_count = len(annotations)
+                        max_annotators_seen = max(max_annotators_seen,
+                                                  annotator_count)
 
                         if annotator_count < self.min_annotators_per_instance:
+                            rejected["too_few_annotators"] += 1
                             continue
 
                         # Count votes per label
-                        label_counts = Counter(value for _, value in annotations)
+                        label_counts = Counter(annotations.values())
                         most_common_label, most_common_count = label_counts.most_common(1)[0]
 
                         # Calculate agreement
                         agreement_score = most_common_count / annotator_count
 
+                        if agreement_score < self.min_agreement_threshold:
+                            rejected["below_agreement"] += 1
                         if agreement_score >= self.min_agreement_threshold:
                             # Get instance text
                             item = ism.get_item(instance_id)
                             instance_data = item.get_data() if item else None
                             if instance_data is None:
+                                rejected["no_text"] += 1
                                 continue
 
                             text = instance_data.get(text_key, '')
                             if not text:
+                                rejected["no_text"] += 1
                                 continue
 
                             example = HighConfidenceExample(
@@ -338,6 +423,9 @@ class ICLLabeler:
 
                 total_examples = sum(len(examples) for examples in new_examples.values())
                 logger.info(f"Refreshed high-confidence examples: {total_examples} examples across {len(new_examples)} schemas")
+                if not total_examples:
+                    self._explain_empty_refresh(rejected, max_annotators_seen,
+                                                len(instance_annotations))
 
             except Exception as e:
                 logger.error(f"Error refreshing examples: {e}")

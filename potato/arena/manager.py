@@ -57,10 +57,24 @@ class ArenaManager:
         return {}
 
     def record_preference(self, prompt: str, winner: str,
-                          ranking: Optional[List[str]] = None) -> None:
+                          ranking: Optional[List[str]] = None,
+                          responses: Optional[Dict[str, str]] = None) -> None:
+        """Record one human pick.
+
+        `responses` is `{model label: response text}` as the judge saw them.
+        The page now sends it, because recovering it from `self.history` is a
+        best-effort lookup keyed on the prompt string: a server bounce, a
+        prompt edited between run and pick, or 200 runs later and the entry is
+        gone. When it is, the preference is still counted for Elo and the
+        leaderboard but carries no text, and `export_dpo` skips it -- so
+        `/admin/arena/api/export_dpo` returned `{"count": 0}` right after a
+        preference that reported `"recorded": true`.
+        """
         field = [m.label for m in self.settings.models]
         with self._lock:
-            responses = self._latest_responses(prompt)
+            responses = {k: v for k, v in (responses or {}).items() if v}
+            if not responses:
+                responses = self._latest_responses(prompt)
             # chosen = winner's response; rejected = the responses it beat (for DPO)
             losers = [l for l in (ranking or field) if l and l != winner]
             self.preferences.appendleft({
@@ -68,6 +82,12 @@ class ArenaManager:
                 "chosen": responses.get(winner, ""),
                 "rejected": {l: responses.get(l, "") for l in losers},
             })
+            if not responses.get(winner):
+                logger.warning(
+                    "Preference for %r recorded without response text; it "
+                    "counts toward the leaderboard but cannot become a DPO "
+                    "pair.", winner)
+
             labels = ranking or field
             for lbl in labels:
                 self._compares[lbl] = self._compares.get(lbl, 0) + 1

@@ -71,8 +71,17 @@ def api_preference():
     if not winner:
         return jsonify({"error": "winner is required"}), 400
     mgr = get_arena_manager()
-    mgr.record_preference(body.get("prompt", ""), winner, body.get("ranking"))
-    return jsonify({"recorded": True, "leaderboard": mgr.leaderboard()})
+    # `responses` is what the judge actually compared. Sent with the pick so a
+    # DPO pair does not depend on the in-memory run history still holding a
+    # matching prompt.
+    responses = body.get("responses")
+    if not isinstance(responses, dict):
+        responses = None
+    mgr.record_preference(body.get("prompt", ""), winner,
+                          body.get("ranking"), responses=responses)
+    pairs = len(mgr.export_dpo())
+    return jsonify({"recorded": True, "dpo_pairs": pairs,
+                    "leaderboard": mgr.leaderboard()})
 
 
 @arena_bp.route("/api/leaderboard", methods=["GET"])

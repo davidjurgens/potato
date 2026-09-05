@@ -1334,11 +1334,19 @@
         openInvivo(sel, form);
     }
 
+    // The panel is fixed and 360px wide; the page has to give up that width
+    // or the panel sits on top of the annotation controls. See
+    // `.potato-rail-open` in styles.css.
+    function setRail(open) {
+        document.body.classList.toggle("potato-rail-open", !!open);
+    }
+
     function closePanel() {
         var panel = el("cb-panel");
         var toggle = el("cb-panel-toggle");
         if (panel) panel.hidden = true;
         if (toggle) { toggle.hidden = false; toggle.focus(); }
+        setRail(false);
     }
 
     function wire() {
@@ -1349,6 +1357,7 @@
             toggle.addEventListener("click", function () {
                 panel.hidden = false;
                 toggle.hidden = true;
+                setRail(true);
                 onInstance();
                 var n = el("cb-new-name");
                 if (n && !el("cb-composer").hidden) n.focus();

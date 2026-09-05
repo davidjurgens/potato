@@ -26,13 +26,13 @@
                 <span class="task-name">{{ annotation_task_name }} — Adjudication</span>
             </div>
             <div class="navbar-end" style="margin-left: auto;">
-                <a href="/annotate" class="adjudicate-btn">
+                <a href="{{ url_prefix }}/annotate" class="adjudicate-btn">
                     <i class="fas fa-edit" aria-hidden="true"></i> Annotate
                 </a>
                 <div class="user-pill">
                     <i class="fas fa-gavel" aria-hidden="true" style="font-size: 0.7rem;"></i>
                     <span class="username">{{ username }}</span>
-                    <a href="/logout" class="logout-btn">Logout</a>
+                    <a href="{{ url_prefix }}/logout" class="logout-btn">Logout</a>
                 </div>
             </div>
         </div>
@@ -183,7 +183,7 @@
     </script>
 
     <!-- Adjudication JS -->
-    <script src="{{ url_for('static', filename='adjudication-forms.js') }}?v=6"></script>
-    <script src="{{ url_for('static', filename='adjudication.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='adjudication-forms.js') }}?v=7"></script>
+    <script src="{{ url_for('static', filename='adjudication.js') }}?v=7"></script>
 </body>
 </html>

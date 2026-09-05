@@ -18,6 +18,7 @@ from flask import (
 )
 
 from potato.sessions.service import (
+    DEFAULT_SESSION_KEYS,
     SESSION_LEVEL_SUPPORTED_TYPES,
     get_session_level_schemes,
     session_aggregates,
@@ -87,11 +88,17 @@ def sessions_page():
     username = session.get("username")
     if not username:
         return redirect(url_for("home"))
+    # Name the field sessions are ACTUALLY grouped on. The page said
+    # "session_id/thread_id" whatever `sessions.key` was set to, so a project
+    # grouping on its own field read a description of someone else's.
+    explicit_key = (config.get("sessions") or {}).get("key")
+    session_key = explicit_key or "/".join(DEFAULT_SESSION_KEYS)
     return render_template(
         "sessions.html",
         annotation_task_name=config.get(
             "annotation_task_name", "Annotation Task"),
         username=username,
+        session_key=session_key,
         session_schemes=[_scheme_summary(s)
                          for s in get_session_level_schemes(config)],
     )

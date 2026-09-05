@@ -679,10 +679,227 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Order items by model uncertainty", type="object", category=AI,
         see_also=("assignment_strategy",),
     ),
+    "active_learning.enabled": _D(
+        "Turn active learning on. Also set `assignment_strategy: "
+        "active_learning`, or nothing reorders",
+        type="boolean", default=False, category=AI,
+    ),
+    "active_learning.classifier": _D(
+        "The model that scores unlabeled items. `{name: ...}`, optionally with "
+        "`hyperparameters`. `name` takes a short name (`logistic`, "
+        "`random_forest`, `svm`) or a fully qualified import path such as "
+        "`sklearn.linear_model.LogisticRegression`",
+        type="object", category=AI,
+    ),
+    "active_learning.vectorizer": _D(
+        "How items become features. `{name: ...}`, optionally with "
+        "`hyperparameters`. `name` takes `tfidf`, `count` or "
+        "`sentence-transformers`, or a fully qualified import path",
+        type="object", category=AI,
+    ),
+    "active_learning.min_annotations_per_instance": _D(
+        "How many annotations an item needs before it can be training data",
+        type="integer", default=1, category=AI,
+    ),
+    "active_learning.min_instances_for_training": _D(
+        "How many labeled items must exist before the first fit. Below this "
+        "the cold-start strategy decides the order",
+        type="integer", default=10, category=AI,
+    ),
+    "active_learning.max_instances_to_reorder": _D(
+        "Cap on how many unlabeled items are ranked per pass. They are "
+        "sampled, not taken from the head of the file",
+        type="integer", category=AI,
+    ),
+    "active_learning.update_frequency": _D(
+        "Retrain after this many new annotations",
+        type="integer", default=5, category=AI,
+    ),
+    "active_learning.resolution_strategy": _D(
+        "How several annotators\' labels become one training label: "
+        "majority_vote, first, or unanimous",
+        type="string", default="majority_vote", category=AI,
+    ),
+    "active_learning.random_sample_percent": _D(
+        "Fraction of each reordered batch left random, so the queue keeps "
+        "exploring instead of only exploiting the model",
+        type="number", default=0.2, category=AI,
+    ),
+    "active_learning.schema_names": _D(
+        "Which schemes are learned. Defaults to every scheme with something "
+        "learnable to predict",
+        type="array", category=AI,
+    ),
+    "active_learning.database": _D(
+        "Ignored. Run history is recorded through the project database and "
+        "needs no configuration",
+        type="object", category=AI,
+    ),
+    "active_learning.model_persistence": _D(
+        "Save fitted models to disk: `{enabled, save_directory, "
+        "retention_count}`",
+        type="object", category=AI,
+    ),
+    "active_learning.llm": _D(
+        "Use a model rather than a classifier for cold start and confidence: "
+        "`{enabled, endpoint_url, model_name}`",
+        type="object", category=AI,
+    ),
+    "active_learning.query_strategy": _D(
+        "What \"informative\" means: uncertainty, diversity, badge, bald or "
+        "hybrid",
+        type="string", default="uncertainty", category=AI,
+    ),
+    "active_learning.hybrid_weights": _D(
+        "Weights for `query_strategy: hybrid`. Must sum to 1.0",
+        type="object", default={"uncertainty": 0.7, "diversity": 0.3},
+        category=AI,
+    ),
+    "active_learning.cold_start_strategy": _D(
+        "How items are ordered before the first fit: random or llm",
+        type="string", default="random", category=AI,
+    ),
+    "active_learning.confidence_method": _D(
+        "How an LLM\'s confidence is read: logprobs, verbalized or "
+        "consistency",
+        type="string", category=AI,
+    ),
+    "active_learning.classifier_params": _D(
+        "Extra keyword arguments passed to the classifier constructor",
+        type="object", category=AI,
+    ),
+    "active_learning.vectorizer_params": _D(
+        "Extra keyword arguments passed to the vectorizer constructor. A YAML "
+        "list for `ngram_range` is coerced to the tuple sklearn wants",
+        type="object", category=AI,
+    ),
+    "active_learning.calibrate_probabilities": _D(
+        "Calibrate the fitted model\'s probabilities, and keep the "
+        "calibration only when it measurably helps",
+        type="boolean", default=True, category=AI,
+    ),
+    "active_learning.bald_params": _D(
+        "Ensemble size and bootstrap fraction for `query_strategy: bald`",
+        type="object", default={"n_estimators": 5, "bootstrap_fraction": 0.8},
+        category=AI,
+    ),
+    "active_learning.use_icl_ensemble": _D(
+        "Blend in-context-learning predictions into the ranking",
+        type="boolean", default=False, category=AI,
+    ),
+    "active_learning.icl_ensemble_params": _D(
+        "How the ICL weight decays as real annotations accumulate",
+        type="object", category=AI,
+    ),
+    "active_learning.annotation_routing": _D(
+        "Route high-confidence predictions past the annotator instead of "
+        "asking",
+        type="boolean", default=False, category=AI,
+    ),
+    "active_learning.routing_thresholds": _D(
+        "Confidence bounds for routing: `{auto_label_min_confidence, "
+        "show_suggestion_below}`",
+        type="object", category=AI,
+    ),
+
     "icl_labeling": _D(
         "In-context-learning labeler that builds few-shot prompts from "
-        "high-confidence annotations already collected",
+        "high-confidence annotations already collected. Configured in four "
+        "nested blocks, not as flat keys",
         type="object", category=AI,
+    ),
+    "icl_labeling.enabled": _D(
+        "Turn the labeler on", type="boolean", default=False, category=AI,
+    ),
+    "icl_labeling.example_selection": _D(
+        "Which annotations become few-shot examples",
+        type="object", category=AI,
+    ),
+    "icl_labeling.example_selection.min_agreement_threshold": _D(
+        "How much annotators must agree before an item can be an example",
+        type="number", default=0.8, category=AI,
+    ),
+    "icl_labeling.example_selection.min_annotators_per_instance": _D(
+        "How many annotators an item needs before it can be an example. The "
+        "default of 2 makes the labeler inert on a study with "
+        "`num_annotators_per_item: 1` -- no item can ever qualify",
+        type="integer", default=2, category=AI,
+    ),
+    "icl_labeling.example_selection.max_examples_per_schema": _D(
+        "Cap on few-shot examples per scheme",
+        type="integer", default=10, category=AI,
+    ),
+    "icl_labeling.example_selection.refresh_interval_seconds": _D(
+        "How often the example set is rebuilt from new annotations",
+        type="integer", default=300, category=AI,
+    ),
+    "icl_labeling.llm_labeling": _D(
+        "When and how much the model labels", type="object", category=AI,
+    ),
+    "icl_labeling.llm_labeling.batch_size": _D(
+        "Instances per labeling batch", type="integer", default=20,
+        category=AI,
+    ),
+    "icl_labeling.llm_labeling.trigger_threshold": _D(
+        "New annotations needed before a batch runs", type="integer",
+        default=5, category=AI,
+    ),
+    "icl_labeling.llm_labeling.confidence_threshold": _D(
+        "Predictions below this are not kept", type="number", default=0.7,
+        category=AI,
+    ),
+    "icl_labeling.llm_labeling.batch_interval_seconds": _D(
+        "Minimum wait between batches", type="integer", default=600,
+        category=AI,
+    ),
+    "icl_labeling.llm_labeling.max_total_labels": _D(
+        "Hard cap on how many instances the model may label in total",
+        type="integer", category=AI,
+    ),
+    "icl_labeling.llm_labeling.max_unlabeled_ratio": _D(
+        "Largest share of the unlabeled pool the model may take",
+        type="number", default=0.5, category=AI,
+    ),
+    "icl_labeling.llm_labeling.pause_on_low_accuracy": _D(
+        "Stop labeling when verification says the model is wrong too often",
+        type="boolean", default=True, category=AI,
+    ),
+    "icl_labeling.llm_labeling.min_accuracy_threshold": _D(
+        "The accuracy below which labeling pauses", type="number",
+        default=0.7, category=AI,
+    ),
+    "icl_labeling.verification": _D(
+        "Blind human checking of the model\'s labels",
+        type="object", category=AI,
+    ),
+    "icl_labeling.verification.enabled": _D(
+        "Route a sample of model labels to annotators", type="boolean",
+        default=True, category=AI,
+    ),
+    "icl_labeling.verification.sample_rate": _D(
+        "Share of model-labeled instances sent for checking", type="number",
+        default=0.2, category=AI,
+    ),
+    "icl_labeling.verification.selection_strategy": _D(
+        "Which of them to check: low_confidence or random", type="string",
+        default="low_confidence", category=AI,
+    ),
+    "icl_labeling.verification.mix_with_regular_assignments": _D(
+        "Hand verification items out through the normal assignment queue, "
+        "rather than only on request",
+        type="boolean", default=True, category=AI,
+    ),
+    "icl_labeling.verification.assignment_mix_rate": _D(
+        "Share of assignments that are verification items, when they are "
+        "mixed in",
+        type="number", default=0.2, category=AI,
+    ),
+    "icl_labeling.persistence": _D(
+        "Where predictions are written", type="object", category=AI,
+    ),
+    "icl_labeling.persistence.predictions_file": _D(
+        "Filename for the stored predictions, under the output directory",
+        type="string", default="icl_predictions.json", category=AI,
     ),
 
     # ------------------------------------------------------------------ ui --

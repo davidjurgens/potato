@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=27">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=29">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=1">
@@ -126,7 +126,7 @@
     {% endif %}
 
     <!-- Format Display Styles (document, code, etc.) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/format-displays.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/format-displays.css') }}?v=3">
 
     <!-- Document Bounding Box Styles -->
     {% if frontend_assets.document_bbox | default(false) %}
@@ -274,12 +274,12 @@
 
             <div class="navbar-end">
                 {% if is_adjudicator %}
-                <a href="/adjudicate" class="adjudicate-btn" title="Adjudication Mode">
+                <a href="{{ url_prefix }}/adjudicate" class="adjudicate-btn" title="Adjudication Mode">
                     <i class="fas fa-gavel"></i> {{ ui_lang.adjudicate }}
                 </a>
                 {% endif %}
                 {% if annotator_dashboard_enabled | default(false) %}
-                <a href="/progress" class="adjudicate-btn" title="View your progress">
+                <a href="{{ url_prefix }}/progress" class="adjudicate-btn" title="View your progress">
                     <i class="fas fa-chart-line"></i> {{ ui_lang.progress | default('Progress') }}
                 </a>
                 {% endif %}
@@ -292,13 +292,13 @@
                     <i class="fas fa-book-open"></i> {{ ui_lang.codebook }}
                 </a>
                 {% endif %}
-                <a id="compact-view-link" class="compact-view-link" href="/pocket" hidden
+                <a id="compact-view-link" class="compact-view-link" href="{{ url_prefix }}/pocket" hidden
                    title="Card-stack interface: one item per card, one click per label">
                     {{ ui_lang.compact_view|default('Compact view') }}
                 </a>
                 <div class="user-pill">
                     <span class="username" id="username-display">{{username}}</span>
-                    <a href="/logout" class="logout-btn">{{ ui_lang.logout }}</a>
+                    <a href="{{ url_prefix }}/logout" class="logout-btn">{{ ui_lang.logout }}</a>
                 </div>
             </div>
         </div>
@@ -346,7 +346,7 @@
                     <button id="error-retry-btn" class="shadcn-button shadcn-button-primary" onclick="loadCurrentInstance()">
                         <i class="fas fa-redo me-2"></i>{{ ui_lang.retry_button }}
                     </button>
-                    <a id="error-done-link" href="/done" class="shadcn-button shadcn-button-primary" style="display: none;">
+                    <a id="error-done-link" href="{{ url_prefix }}/done" class="shadcn-button shadcn-button-primary" style="display: none;">
                         <i class="fas fa-check me-2"></i>Finish
                     </a>
                 </div>
@@ -677,7 +677,7 @@
     <!-- Shared geometry for the bottom-anchored floating widgets below; must
          load before them. Unconditional: tiny, and several may be enabled at
          once (see the combined showcase example). -->
-    <script src="{{ url_for('static', filename='floating-panel-utils.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='floating-panel-utils.js') }}?v=6"></script>
     <!-- Boundary Lab: counterfactual boundary probing (conditional) -->
     {% if boundary_enabled | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/boundary.css') }}?v=5">
@@ -1022,7 +1022,7 @@
             </div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='memos.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='memos.js') }}?v=4"></script>
     {% endif %}
 
     <!-- Annotator search-and-claim sidebar. Rendered only when
@@ -1144,7 +1144,7 @@
             <div id="cb-mode-hint" class="cb-mode-hint"></div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='codebook.js') }}?v=15"></script>
+    <script src="{{ url_for('static', filename='codebook.js') }}?v=16"></script>
     {% endif %}
     {% endif %}
 </body>

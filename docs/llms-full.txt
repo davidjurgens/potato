@@ -4277,7 +4277,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `ai_budget` |  | object |  | Cost estimate and spend cap for AI actions. The complaint about commercial platforms is not the price but the surprise -- credits consumed by auto-labelling and discovered at export time | `cap_usd` |
 | `ai_support` |  | object |  | Model-backed label suggestions shown alongside each item | `ai_config`, `ai_config_file`, `cache_config`, `enabled`, `endpoint_type`, `features`, `image_key`, `option_highlighting` |
 | `chat_support` |  | object |  | In-task chat with a model | `ai_config`, `enabled`, `endpoint_type`, `system_prompt`, `ui` |
-| `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected |  |
+| `icl_labeling` |  | object |  | In-context-learning labeler that builds few-shot prompts from high-confidence annotations already collected. Configured in four nested blocks, not as flat keys | `enabled`, `example_selection`, `llm_labeling`, `persistence`, `verification` |
 
 ## Qualitative Coding (QDA)
 
@@ -16879,6 +16879,27 @@ output_annotation_dir: output   # .media_cache/ goes here
 Both `/media/` and `/media/proxy/` resolve against `media_directory` with the
 same path-traversal guard, so the proxy cannot reach outside it.
 
+### What to write in the data file
+
+Name the file as it sits inside `media_directory`:
+
+```json
+{"id": "i1", "photo": "shelf_a.png"}
+```
+
+Potato resolves that to `/media/shelf_a.png` for the `image`, `gallery`,
+`video`, `audio`, `pdf`, `audio_dialogue` and `web_agent_trace` displays.
+
+Four kinds of value are left exactly as written: absolute URLs, `data:` URIs,
+anything already starting with `/` (including `/media/...`), and a name that
+matches no file in the media directory, since the project may be serving that
+one another way.
+
+Before v2.8.3 only the depth viewer built the `/media/` URL. Every other
+display emitted the raw field value, so `shelf_a.png` reached the browser as a
+page-relative path and 404ed. The workaround was to write `media/shelf_a.png`,
+which spells the media directory's name twice. Both spellings work.
+
 ## Not yet supported
 
 DICOM, NIfTI and whole-slide (SVS) formats are **not** handled. The 16-bit
@@ -25547,8 +25568,16 @@ A rule fires for an item when **both**:
    decision (idempotent, replay-safe). `1.0` = always, `0.0` = never.
 
 > Common fields on an ingested trace: `metadata.source`
-> (`webhook`/`langsmith`/`langfuse`), `task_description`, plus any top-level
-> fields your payload includes that survive normalization.
+> (`webhook`/`langsmith`/`langfuse`), `task_description`, plus every top-level
+> field your payload includes. The webhook carries them all through, so a rule
+> can match on whatever your agent emits.
+
+Both keys are checked at config load. `sample` instead of `sample_rate` used to
+be read as nothing and silently default to 1.0, so a rule meant to fire on half
+the corpus fired on all of it. It is now an error naming the right spelling.
+`actions` must hold `{type: ...}` mappings; a list of bare strings booted with
+a reassuring "AutomationManager initialized with 1 rule(s)" and then threw on
+`/admin/automation`.
 
 ## Actions
 
@@ -25564,7 +25593,12 @@ A rule fires for an item when **both**:
 
 **Fast actions** run inline in the ingestion path (cheap, in-process). **Heavy
 actions** (`run_evaluator`, `fire_webhook`, `refresh_topics`) are dispatched to a
-background worker so ingestion never blocks. Every action records an outcome;
+background worker so ingestion never blocks.
+
+Rules run over the items in `data_files` as well as over runtime-ingested ones.
+Before v2.8.3 they did not. The engine was built after the corpus had finished
+loading, so `items_processed` stayed at 0 for a file-loaded study, and only
+traffic arriving after boot was ever seen. Every action records an outcome;
 failures are caught and logged as `error` outcomes — automation never breaks
 ingestion.
 
@@ -32309,22 +32343,47 @@ active_learning:
     stop_words: "english"
 ```
 
+### Naming a classifier or a vectorizer
+
+Both take either a short name or a fully qualified import path. These are the
+same thing:
+
+```yaml
+active_learning:
+  classifier: {name: logistic}
+  vectorizer: {name: tfidf}
+```
+
+```yaml
+active_learning:
+  classifier: {name: sklearn.linear_model.LogisticRegression}
+  vectorizer: {name: sklearn.feature_extraction.text.TfidfVectorizer}
+```
+
+A dotted path is imported as written, so any scikit-learn-compatible estimator
+works. A bare word that is not one of the short names below is a config error
+naming the ones that are — it used to validate clean and then fall back to
+LogisticRegression at the first training run, with the failure only in the log.
+
 ### Supported Classifiers
 
-| Classifier | Use Case | Pros | Cons |
-|------------|----------|------|------|
-| `LogisticRegression` | Binary/multi-class | Fast, interpretable | Linear only |
-| `RandomForestClassifier` | Complex patterns | Robust, handles non-linear | Slower training |
-| `SVC` | High-dimensional data | Good with sparse data | Memory intensive |
-| `MultinomialNB` | Text classification | Very fast | Assumes independence |
+| Short name | Class | Use Case | Pros | Cons |
+|---|---|----------|------|------|
+| `logistic` | `LogisticRegression` | Binary/multi-class | Fast, interpretable | Linear only |
+| `random_forest` | `RandomForestClassifier` | Complex patterns | Robust, handles non-linear | Slower training |
+| `svm` | `SVC` | High-dimensional data | Good with sparse data | Memory intensive |
+| — | `MultinomialNB` | Text classification | Very fast | Assumes independence |
 
 ### Supported Vectorizers
 
-| Vectorizer | Use Case | Pros | Cons |
-|------------|----------|------|------|
-| `CountVectorizer` | Simple text features | Fast, simple | No word importance |
-| `TfidfVectorizer` | Text with word importance | Better performance | Slightly slower |
-| `HashingVectorizer` | Large datasets | Memory efficient | No feature names |
+| Short name | Class | Use Case | Pros | Cons |
+|---|---|----------|------|------|
+| `count` | `CountVectorizer` | Simple text features | Fast, simple | No word importance |
+| `tfidf` | `TfidfVectorizer` | Text with word importance | Better performance | Slightly slower |
+| `sentence-transformers` | sentence-transformers embeddings | Semantic similarity | Captures meaning | Downloads a model |
+| — | `HashingVectorizer` | Large datasets | Memory efficient | No feature names |
+
+A class with no short name is reached by its import path.
 
 ### Resolution Strategies
 
@@ -33294,6 +33353,18 @@ icl_labeling:
 | `min_annotators_per_instance` | 2 | Minimum number of annotations required |
 | `max_examples_per_schema` | 10 | Maximum examples per schema in prompts |
 | `refresh_interval_seconds` | 300 | How often to refresh example pool |
+
+The default of 2 makes the labeler inert on a study with
+`num_annotators_per_item: 1`: no item can ever have two annotators, so no item
+can ever become an example, and the worker runs forever reporting
+`Refreshed high-confidence examples: 0 examples across 0 schemas`. Set it to 1
+for a single-annotator study, or raise `num_annotators_per_item`. When the pool
+comes back empty the log now names the gate that emptied it.
+
+All four of these live under `example_selection:`. The block is nested three
+deep, and a flat spelling — `min_confidence`, `num_examples`, `schema_names`
+directly under `icl_labeling:` — is now reported as an unrecognized key rather
+than accepted and ignored.
 
 #### LLM Labeling
 
@@ -41407,9 +41478,11 @@ Optional: set a custom expiry with `"ttl_hours": 48`.
 
 When `require_password: true` is set, a "Forgot Password?" link appears on the login page, directing annotators to the self-service reset form.
 
-## Shared User Credentials
+## Where accounts are stored
 
-By default, user credentials are stored in memory and not persisted between server restarts when using the `in_memory` authentication method. To share credentials across server restarts or between multiple server instances, configure an explicit `user_config_path`:
+Accounts created through the sign-up form are written to a JSONL file, and they
+are read back at the next boot. With the `in_memory` method that file is
+`user_config.json`, next to the output directory, unless you name another one:
 
 ```yaml
 authentication:
@@ -41417,11 +41490,27 @@ authentication:
   user_config_path: /shared/path/to/user_config.jsonl
 ```
 
-When `user_config_path` is explicitly set:
-- New user registrations are saved to the file automatically
+Name one when several server instances share a roster, or when you want the
+roster somewhere other than beside the annotations.
+
+Either way:
+- New registrations are written to the file as they happen
 - Password changes are persisted immediately
-- The file is in JSONL format (one JSON object per line)
-- Passwords are stored as `salt$hash` (never plaintext)
+- The format is JSONL (one JSON object per line)
+- Passwords are stored as `salt$hash`, never as plaintext
+
+**Keep the file with the annotation output.** An annotator's directory is named
+after their username, so a roster that has gone missing and an output directory
+that has not is a study where the next person to type that username would
+inherit somebody else's work. Potato refuses that registration rather than
+allowing it, which means the annotator cannot get back in until you restore the
+roster.
+
+Before v2.8.3, `in_memory` wrote nothing unless `user_config_path` was set
+explicitly. Accounts did not survive a restart: the annotator was told their
+account did not exist, and the sign-up form then accepted their username with
+any password at all. If you ran a study on an earlier build, the accounts from
+it are gone; the annotations are not.
 
 **Example `user_config.jsonl`:**
 ```json
@@ -52848,9 +52937,18 @@ location /app1/api/ {
 ## Verifying
 
 1. Load `https://host/app1/` and confirm CSS/JS load (no 404s in DevTools).
-2. Make an annotation and confirm it autosaves (no "annotations not saved").
-3. Navigate Next/Previous and confirm media and data render.
-4. If using live agent eval, confirm the stream connects and updates.
+2. **Sign in.** The login form posts to `/app1/auth`, not `/auth`.
+3. Make an annotation and confirm it autosaves (no "annotations not saved").
+4. Navigate Next/Previous and confirm media and data render.
+5. Follow Logout, and the Finish link on the last item, and confirm neither
+   leaves the prefix.
+6. If using live agent eval, confirm the stream connects and updates.
+
+Step 2 is worth doing first, and on a browser with no session. Until v2.8.3 the
+login page was the one page the prefix did not reach: its two forms posted to
+`/auth` and `/register` at the public root, so a task mounted below a path
+could not admit a single annotator, while every page behind the login looked
+correct. `/done`, `/logout` and `/pocket` were unprefixed for the same reason.
 
 ## Notes and limitations
 
@@ -54691,7 +54789,7 @@ display types, invalid `assignment_strategy` values, a missing
 
 ## OpenAPI 3.1 spec
 
-An index of Potato's HTTP surface: **445 paths / 482 operations**, generated by
+An index of Potato's HTTP surface: **447 paths / 484 operations**, generated by
 walking the live Flask `url_map`.
 
 Two extensions carry information a plain OpenAPI document cannot:

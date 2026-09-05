@@ -8,31 +8,6 @@
 # Regenerate the candidate list (then edit, do not overwrite):
 #   python -m pytest tests/unit/test_config_key_docs.py -q
 
-active_learning.annotation_routing
-active_learning.bald_params
-active_learning.calibrate_probabilities
-active_learning.classifier
-active_learning.classifier_params
-active_learning.cold_start_strategy
-active_learning.confidence_method
-active_learning.database
-active_learning.enabled
-active_learning.hybrid_weights
-active_learning.icl_ensemble_params
-active_learning.llm
-active_learning.max_instances_to_reorder
-active_learning.min_annotations_per_instance
-active_learning.min_instances_for_training
-active_learning.model_persistence
-active_learning.query_strategy
-active_learning.random_sample_percent
-active_learning.resolution_strategy
-active_learning.routing_thresholds
-active_learning.schema_names
-active_learning.update_frequency
-active_learning.use_icl_ensemble
-active_learning.vectorizer
-active_learning.vectorizer_params
 adjudication.adjudicator_users
 adjudication.agreement_threshold
 adjudication.enabled

@@ -50,9 +50,15 @@ from .base import BaseDisplay
 from ._trace_normalize import normalize_steps
 
 
-# Speaker labels / tool names that mark a step as the final answer to the user.
+# Speaker labels / tool names / step types that mark a step as the final answer
+# to the user. `\bfinal\b` is here because a bare `final` -- the obvious label,
+# and one real traces use -- matched nothing: the pattern required the word
+# "answer" after it, so the pane fell back to the last action and presented a
+# tool invocation to the annotator as what the agent produced, with the agent's
+# actual answer rendered as an observation hanging off that call.
 ANSWER_PATTERN = re.compile(
-    r"(final[\s_]*answer|send[\s_]*message|respond|response|finish|submit|conclusion)",
+    r"(final[\s_]*answer|\bfinal\b|send[\s_]*message|respond|response|finish"
+    r"|submit|conclusion|answer)",
     re.IGNORECASE,
 )
 
@@ -290,14 +296,17 @@ class EvalTraceDisplay(BaseDisplay):
         answer_idx = None
         last_action_idx = None
         for i, step in enumerate(steps):
-            stype = step.get("type", "")
+            stype = str(step.get("type", ""))
             speaker = str(step.get("speaker", ""))
             text = str(step.get("text", ""))
+            # The step's declared TYPE is checked too. A trace that says
+            # {"speaker": "final", "type": "final"} is naming its answer twice
+            # over and neither reading was consulted.
             if stype == "action":
                 last_action_idx = i
                 if ANSWER_PATTERN.search(speaker) or ANSWER_PATTERN.search(_tool_name(text)):
                     answer_idx = i
-            elif ANSWER_PATTERN.search(speaker):
+            elif ANSWER_PATTERN.search(speaker) or ANSWER_PATTERN.search(stype):
                 # An explicit "Final Answer" turn that isn't typed as an action.
                 answer_idx = i
         if answer_idx is not None:

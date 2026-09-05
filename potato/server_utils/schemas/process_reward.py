@@ -354,7 +354,9 @@ def _generate_internal(
             steps.forEach(function(step, idx) {{
                 var stepText = typeof step === 'string'
                     ? step
-                    : (step[CONFIG.step_text_key] || step.content || step.reasoning || JSON.stringify(step));
+                    : (step[CONFIG.step_text_key] || step.text || step.content
+                       || step.reasoning || step.thought || step.action
+                       || JSON.stringify(step));
 
                 var card = document.createElement('div');
                 card.className = 'prm-step-card';

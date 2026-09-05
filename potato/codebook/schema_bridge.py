@@ -52,13 +52,23 @@ def _seed_from_yaml(
             pass  # idempotent: re-seeding an existing code is fine
 
 
-def apply_codebook_to_schemes(config: Dict[str, Any]) -> None:
+def apply_codebook_to_schemes(config: Dict[str, Any],
+                              task_dir: str = None,
+                              seed: bool = True) -> None:
     """Mutate ``config['annotation_schemes']`` in place: for every
     scheme with ``codebook: true``, point ``labels`` at the codebook
     (seeding it from every codebook-backed scheme's YAML labels on first
-    run)."""
+    run).
+
+    ``task_dir`` overrides ``config['task_dir']``, which is relative to the
+    config file rather than to the process's cwd -- an export run from
+    anywhere else has to resolve it first. ``seed=False`` suppresses the
+    first-run bootstrap for read-only callers, so opening an export never
+    writes codes into a project.
+    """
     schemes = config.get("annotation_schemes") or []
-    task_dir = config.get("task_dir", ".")
+    if task_dir is None:
+        task_dir = config.get("task_dir", ".")
     project = _project_of(config)
 
     codebook_schemes = [s for s in schemes
@@ -74,7 +84,7 @@ def apply_codebook_to_schemes(config: Dict[str, Any]) -> None:
     # `is_empty()`: seeding is a first-run bootstrap, and re-seeding a
     # curated codebook would resurrect codes the researcher deleted.
     cb = Codebook.load(task_dir, project)
-    if cb.is_empty():
+    if seed and cb.is_empty():
         for scheme in codebook_schemes:
             _seed_from_yaml(task_dir, project, scheme.get("labels"))
         cb = Codebook.load(task_dir, project)

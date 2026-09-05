@@ -181,3 +181,9 @@ examples/video/mask-propagation/media/
 # Local deploy state. Holds secrets.json (admin API key, Flask session key) and
 # the built bundle. Committing it would publish the keys for a live deployment.
 .potato/
+
+# Account rosters. Written wherever a task runs, and they hold password
+# hashes -- a study's roster belongs with its annotation output, never in the
+# repository.
+user_config.json
+user_config.jsonl

@@ -63,14 +63,43 @@ def infer_type_from_speaker(speaker: str) -> str:
     return "observation"
 
 
-def infer_type_from_text(text: str) -> str:
-    """Infer a step type from free text content."""
-    lower = text.lower()
-    if lower.startswith(("i need to", "i should", "let me think", "my plan")):
+#: Openers that mean the step is the agent reasoning rather than reporting.
+_THOUGHT_OPENERS = (
+    "i need to", "i should", "i will", "i'll", "i am going to", "i'm going to",
+    "let me", "let's", "my plan", "first", "next", "then", "finally",
+    "so ", "because", "the plan", "we need to", "we should", "now i",
+    "to do this", "in order to", "this means", "therefore", "it looks like",
+)
+
+#: A leading list or step marker: "1. ", "2) ", "- ", "* ", "Step 3: ".
+_LIST_MARKER = re.compile(r"^\s*(?:step\s*\d+\s*[:.\-]|\d+[.)]|[-*\u2022])\s*",
+                          re.IGNORECASE)
+
+
+def infer_type_from_text(text: str, default: str = "observation") -> str:
+    """Infer a step type from free text content.
+
+    The list marker is stripped before the opener test, because a segmented
+    chain of thought numbers its steps: "1. First I need to reproduce the
+    failure" begins with "1." and so matched no opener, and every step of every
+    segmented CoT was typed -- and badged in the display -- "Observation".
+
+    `default` is what an unrecognized step becomes. A trace display leaves it
+    at "observation", which is what an unlabelled line in a trace usually is;
+    `cot_segmentation` passes "thought", because a chain of thought is
+    reasoning by construction.
+    """
+    stripped = _LIST_MARKER.sub("", text or "", count=1)
+    lower = stripped.lower()
+    if lower.startswith(_THOUGHT_OPENERS):
         return "thought"
-    if "(" in text and ")" in text and any(c.isalpha() for c in text.split("(")[0]):
-        return "action"
-    return "observation"
+    head = stripped.split("(")[0]
+    if "(" in stripped and ")" in stripped and head and any(c.isalpha() for c in head):
+        # A call looks like `tool(args)`, not like a sentence with a
+        # parenthetical aside in it.
+        if len(head.split()) <= 3:
+            return "action"
+    return default
 
 
 def format_action_text(action: Any) -> str:

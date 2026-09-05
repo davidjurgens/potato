@@ -102,6 +102,22 @@ body {
   line-height: 1.6;
 }
 
+/* A right-hand rail panel (memos, codebook) is position: fixed and 360px
+   wide, and the page underneath was not narrowed to make room. At a 1400px
+   viewport the memo panel covered the Next button outright:
+   elementFromPoint at the centre of Next returned the memo composer, so the
+   only navigation control on the page could not be clicked until the
+   annotator found the × in the panel header. Reserve the width instead.
+
+   Below 1024px the panel is most of the screen, so reserving its width would
+   leave nothing to annotate; there it stays an overlay and the annotator
+   closes it. */
+@media (min-width: 1024px) {
+  body.potato-rail-open {
+    padding-right: 360px;
+  }
+}
+
 /* Shadcn-style button */
 .shadcn-button {
   display: inline-flex;
@@ -2553,6 +2569,44 @@ fieldset[schema] {
   flex-direction: column;
 }
 
+/* Shown in place of the item when none of the configured display fields
+   exists in the data. Deliberately quiet rather than alarming: it is a
+   configuration problem, and the annotator's job is to stop and report it,
+   not to worry. */
+.instance-display-empty {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--muted-foreground);
+  border-radius: var(--radius);
+  background: var(--muted);
+  padding: var(--space-lg);
+}
+
+.instance-display-empty-title {
+  margin: 0 0 var(--space-xs);
+  font-weight: 600;
+}
+
+.instance-display-empty-body {
+  margin: 0;
+  /* Not --muted-foreground: on this block's own tinted background it measures
+     4.40:1, just under the 4.5:1 AA floor for 13px text, and this paragraph is
+     the whole instruction. */
+  color: #52525b;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+/* The field names are the actionable half of the message -- they are what the
+   reader copies into the bug report -- so they carry the block's strongest
+   contrast, not the code-pink default (4.09:1 here). */
+.instance-display-empty code {
+  word-break: break-word;
+  color: var(--foreground);
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+  padding: 0.05em 0.3em;
+}
+
 /* Individual display field container */
 .display-field {
   margin-bottom: var(--space-md);
@@ -4069,6 +4123,19 @@ body > .container-fluid {
   justify-content: center;
   flex: 1;
   gap: 0.75rem;
+  /* A flex item's default `min-width: auto` refuses to shrink below its own
+     content, so when the row ran out of room this section held its natural
+     width and pushed `.navbar-end` -- Logout -- off the right edge instead of
+     giving way. Reachability of Logout beats seeing every counter at once, so
+     this section is the one that yields, and it scrolls rather than clipping
+     so nothing is actually lost. Engages only when the row does not fit. */
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.potato-navbar .navbar-center::-webkit-scrollbar {
+  display: none;
 }
 
 .potato-navbar .navbar-divider {

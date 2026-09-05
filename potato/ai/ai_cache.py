@@ -49,9 +49,34 @@ def _get_scheme_field(annotation_id: int, field: str, default=None):
     return scheme[field]
 
 
-def _get_instance_text(instance_id: int) -> str:
+def _resolve_item(instance_id):
+    """The item an AI request is about, from its id.
+
+    Callers pass the **instance id**. They used to pass a position, and the
+    position they had was the annotator's place in their own ordering while
+    this indexed the corpus in file order -- the same number only under
+    `fixed_order`. Under `random`, `active_learning` or any other reordering
+    strategy the two diverge from the first item on, so the hint an annotator
+    read was about a different review than the one on their screen, and the
+    model's answer was stamped onto the visible item as a suggestion. Nothing
+    said so.
+
+    An int is still accepted and resolved positionally, because
+    `start_prefetch` walks corpus positions and `special_include` is keyed by
+    page number.
+    """
+    ism = get_item_state_manager()
+    if isinstance(instance_id, str):
+        item = ism.find_item(instance_id)
+        if item is None:
+            raise KeyError(instance_id)
+        return item
+    return ism.items()[instance_id]
+
+
+def _get_instance_text(instance_id) -> str:
     """Get the text content from an instance using the configured text_key."""
-    item = get_item_state_manager().items()[instance_id]
+    item = _resolve_item(instance_id)
     item_data = item.get_data()
 
     # Get the configured text_key
@@ -73,7 +98,7 @@ def _get_instance_text(instance_id: int) -> str:
 
     return str(item_data)
 
-def _get_instance_image(instance_id: int) -> Optional[str]:
+def _get_instance_image(instance_id) -> Optional[str]:
     """The item's image, when the config names a field that holds one.
 
     `_get_instance_text` returns exactly one field -- `item_properties.text_key`
@@ -92,7 +117,7 @@ def _get_instance_image(instance_id: int) -> Optional[str]:
     single-field behaviour exactly.
     """
     try:
-        item = get_item_state_manager().items()[instance_id]
+        item = _resolve_item(instance_id)
         item_data = item.get_data()
     except Exception:
         return None
@@ -382,7 +407,7 @@ class AiCacheManager:
             self.start_warmup()
 
     def _validate_assistant_compatibility(
-        self, instance_id: int, annotation_id: int, ai_assistant: str
+        self, instance_id, annotation_id: int, ai_assistant: str
     ) -> tuple:
         """
         Validate that the AI assistant is compatible with the input type and model capabilities.
@@ -587,7 +612,7 @@ class AiCacheManager:
                     logger.error(f"Error reading from disk: {e}")
             return None
     
-    def generate_likert(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_likert(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         from string import Template
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
@@ -653,7 +678,7 @@ Respond in JSON format: {{"keywords": ["<visual_feature_1>", "<visual_feature_2>
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_multiselect(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_multiselect(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
         labels = _get_scheme_field(annotation_id, "labels")
@@ -718,7 +743,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_radio(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_radio(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
         text = _get_instance_text(instance_id)
@@ -783,7 +808,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_number(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_number(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
         text = _get_instance_text(instance_id)
@@ -799,7 +824,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_select(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_select(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
         labels = _get_scheme_field(annotation_id, "labels")
@@ -818,7 +843,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_slider(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_slider(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
         min_value = _get_scheme_field(annotation_id, "min_value")
@@ -841,7 +866,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_span(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_span(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
         labels = _get_scheme_field(annotation_id, "labels")
@@ -860,7 +885,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
     
-    def generate_textbox(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def generate_textbox(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         logger.debug(f"Generating textbox for annotation_id: {annotation_id}")
         annotation_type = _get_scheme_field(annotation_id, "annotation_type")
         description = _get_scheme_field(annotation_id, "description")
@@ -877,7 +902,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         res = self.ai_endpoint.get_ai(data, output_format)
         return res
 
-    def generate_image_annotation(self, instance_id: int, annotation_id: int, ai_assistant: str) -> Dict:
+    def generate_image_annotation(self, instance_id, annotation_id: int, ai_assistant: str) -> Dict:
         """Generate AI assistance for image annotation tasks.
 
         Args:
@@ -899,7 +924,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             labels = [l.get("name", str(l)) for l in labels]
 
         # Get image URL from item data
-        item_data = get_item_state_manager().items()[instance_id].get_data()
+        item_data = _resolve_item(instance_id).get_data()
         image_url = self._extract_image_url(item_data)
 
         if not image_url:
@@ -944,7 +969,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         result = endpoint.get_visual_ai(data, output_format)
         return result
 
-    def generate_video_annotation(self, instance_id: int, annotation_id: int, ai_assistant: str) -> Dict:
+    def generate_video_annotation(self, instance_id, annotation_id: int, ai_assistant: str) -> Dict:
         """Generate AI assistance for video annotation tasks.
 
         Args:
@@ -966,7 +991,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             labels = [l.get("name", str(l)) for l in labels]
 
         # Get video URL from item data
-        item_data = get_item_state_manager().items()[instance_id].get_data()
+        item_data = _resolve_item(instance_id).get_data()
         video_url = self._extract_video_url(item_data)
 
         if not video_url:
@@ -1101,7 +1126,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             from potato.ai.visual_ai_endpoint import BaseVisualAIEndpoint
             return BaseVisualAIEndpoint.encode_image_to_base64(image_url)
 
-    def _generate_text_hint_for_visual(self, instance_id: int, annotation_id: int, ai_assistant: str) -> Dict:
+    def _generate_text_hint_for_visual(self, instance_id, annotation_id: int, ai_assistant: str) -> Dict:
         """Generate text-based hint when visual endpoint is not available."""
         description = config["annotation_schemes"][annotation_id].get("description", "")
         labels = config["annotation_schemes"][annotation_id].get("labels", [])
@@ -1148,7 +1173,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             "prefetch_count": self.option_highlighting_prefetch_count,
         }
 
-    def generate_option_highlights(self, instance_id: int, annotation_id: int) -> Dict:
+    def generate_option_highlights(self, instance_id, annotation_id: int) -> Dict:
         """Generate option highlighting suggestions for an annotation.
 
         Args:
@@ -1255,7 +1280,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             logger.error(f"Error generating option highlights: {e}")
             return {"error": str(e)}
 
-    def get_option_highlights(self, instance_id: int, annotation_id: int) -> Dict:
+    def get_option_highlights(self, instance_id, annotation_id: int) -> Dict:
         """Get option highlights from cache or generate them.
 
         Args:
@@ -1283,12 +1308,15 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
 
         return result
 
-    def start_option_highlight_prefetch(self, page_id: int, prefetch_amount: int = None):
+    def start_option_highlight_prefetch(self, page_id: int, prefetch_amount: int = None,
+                                        instance_ids=None):
         """Prefetch option highlights for upcoming items.
 
         Args:
-            page_id: Current page/instance index
+            page_id: Position in `instance_ids` to start from
             prefetch_amount: Number of items to prefetch (uses config default if None)
+            instance_ids: The annotator's ordering. Defaults to corpus order,
+                which is the same list only under `fixed_order`.
         """
         if not self.option_highlighting_enabled or not self.disk_cache_enabled:
             return
@@ -1297,20 +1325,21 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             prefetch_amount = self.option_highlighting_prefetch_count
 
         ism = get_item_state_manager()
+        ordering = list(instance_ids) if instance_ids else ism.get_instance_ids()
         with self.lock:
             # Calculate range
             if prefetch_amount >= 0:
                 start_idx = page_id
-                end_idx = min(start_idx + prefetch_amount, len(ism.items()))
+                end_idx = min(start_idx + prefetch_amount, len(ordering))
             else:
                 start_idx = max(page_id + prefetch_amount, 0)
                 end_idx = page_id
 
             keys = []
-            for i in range(start_idx, end_idx):
+            for i in range(max(0, start_idx), end_idx):
                 for annotation_id, scheme in enumerate(config["annotation_schemes"]):
                     if self.is_option_highlighting_enabled_for_scheme(annotation_id):
-                        key = (i, annotation_id, "option_highlight")
+                        key = (ordering[i], annotation_id, "option_highlight")
                         # Check if not already cached or in progress
                         if self.get_from_cache(key) is None and key not in self.in_progress:
                             keys.append(key)
@@ -1347,29 +1376,41 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             return None
         return self.special_includes.get(page_number_int).get(annotation_id_int)
 
-    def start_prefetch(self, page_id, prefetch_amount):
-        """Prefetches a fixed number of upcoming items to warm the cache."""
+    def start_prefetch(self, page_id, prefetch_amount, instance_ids=None):
+        """Warm the cache for the pages around `page_id`.
+
+        `page_id` is a position, and `instance_ids` says what that position
+        means. Callers in the annotation loop pass the annotator's own
+        ordering, so a reordering assignment strategy prefetches the items
+        that annotator will actually reach; without it the window is corpus
+        order, which is what `fixed_order` gives anyway.
+
+        Keys carry the resolved instance id, so a prefetched reply and the
+        on-demand request for the same item are the same cache entry.
+        """
         if not config.get("ai_support", {}).get("enabled") or not self.disk_cache_enabled:
             return
-        
+
         ism = get_item_state_manager()
+        ordering = list(instance_ids) if instance_ids else ism.get_instance_ids()
         with self.lock:
             # Calculate range bounds
             if prefetch_amount >= 0:
                 start_idx = page_id
-                end_idx = min(start_idx + prefetch_amount, len(ism.items()))
+                end_idx = min(start_idx + prefetch_amount, len(ordering))
             else:
                 start_idx = max(page_id - prefetch_amount, 0)
                 end_idx = page_id
 
             logger.debug(f"Prefetch range: start_idx={start_idx}, end_idx={end_idx}")
             keys = []
-            
-            for i in range(start_idx, end_idx):
+
+            for i in range(max(0, start_idx), end_idx):
                 # Check if this page should be included
                 if not self.should_include_page(i):
                     continue
-                
+                instance_id = ordering[i]
+
                 # Process each annotation scheme for this page
                 for annotation_id, scheme in enumerate(config["annotation_schemes"]):
                     if not self.should_include_scheme(i, annotation_id):
@@ -1383,7 +1424,9 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
                         raise Exception(f"{annotation_type} is not defined in ai_prompt")
                     
                     # Generate keys for this page/scheme combination
-                    scheme_keys = self.get_keys_for_scheme(i, annotation_type, annotation_id, ai_prompt)
+                    scheme_keys = self.get_keys_for_scheme(
+                        i, annotation_type, annotation_id, ai_prompt,
+                        instance_id=instance_id)
                     keys.extend(scheme_keys)
             
             if keys:
@@ -1411,9 +1454,18 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         
         return False
 
-    def get_keys_for_scheme(self, page_index, annotation_type, annotation_id, ai_prompt):
-        """Get all keys for a specific page combination."""
+    def get_keys_for_scheme(self, page_index, annotation_type, annotation_id,
+                            ai_prompt, instance_id=None):
+        """Get all cache keys for one page/scheme combination.
+
+        `page_index` selects the `special_include` entry (which is keyed by
+        page number, as the config declares it); `instance_id` is what the key
+        is built from, so it matches the on-demand lookup. They are the same
+        number only when the annotator's ordering is the corpus order.
+        """
         keys = []
+        if instance_id is None:
+            instance_id = page_index
         
         # Check if this page/annotation has specific overrides in special_includes
         if (page_index in self.special_includes and 
@@ -1423,11 +1475,11 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
             # Use special_includes (overrides include_all setting)
             specified_keys = self.special_includes[page_index][annotation_id]
             for key in specified_keys:
-                keys.append((page_index, annotation_id, key))
+                keys.append((instance_id, annotation_id, key))
         elif self.include_all:
             # No specific override, so include all available keys for this annotation type
             for key in ai_prompt[annotation_type]:
-                keys.append((page_index, annotation_id, key))
+                keys.append((instance_id, annotation_id, key))
         # If include_all is False and no special_include entry, return empty keys
         
         return keys
@@ -1453,7 +1505,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
 
                     future.add_done_callback(callback)
 
-    def get_ai_help(self, instance_id: int, annotation_id: int, ai_assistant: str) -> str:
+    def get_ai_help(self, instance_id, annotation_id: int, ai_assistant: str) -> str:
         """retrieves AI help either from cache, waits for in-progress, or computes on-demand."""
         key = (instance_id, annotation_id, ai_assistant)
 
@@ -1495,7 +1547,7 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
                 self.in_progress.pop(key, None)
             return f"Error: {str(e)}"
 
-    def compute_help(self, instance_id: int, annotation_id: int, ai_assistant: str):
+    def compute_help(self, instance_id, annotation_id: int, ai_assistant: str):
         # Validate that the assistant type is compatible with the model and input
         is_valid, error_message = self._validate_assistant_compatibility(
             instance_id, annotation_id, ai_assistant

@@ -21,6 +21,19 @@
     line-height: 1.6;
 }
 
+/* `preserve_structure: true` on a field whose value is plain text: the
+   paragraph breaks and speaker turns the author typed are the structure, so
+   keep them. Only set when the body has no block markup of its own -- see
+   DocumentDisplay._render_span_mode. */
+.document-content.document-preserve-structure {
+    white-space: pre-wrap;
+    /* pre-wrap alone wraps only at existing whitespace, so one long
+       unbroken run -- a URL, an id, a base64 blob, all ordinary in a
+       transcript -- runs straight out of the container. Measured: a
+       300-character token pushed a 400px box to 2314px. */
+    overflow-wrap: break-word;
+}
+
 /* Span target styling for document */
 .span-target-document .document-content {
     padding-top: 30px; /* Extra space for span labels */

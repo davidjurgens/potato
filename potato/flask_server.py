@@ -1576,6 +1576,32 @@ def apply_cot_segmentation_to_all(config: dict) -> None:
                 count, seg_config.get("strategy", "auto"))
 
 
+def _init_automation_manager_early(config: dict) -> None:
+    """Build the automation manager BEFORE the corpus loads.
+
+    `ItemStateManager.add_item` calls `automation.process_item` for every item,
+    static or ingested -- but the manager was built during blueprint
+    registration, which happens after `load_all_data`. So
+    `get_automation_manager()` returned None for every item in a file-loaded
+    corpus, `items_processed` stayed 0, and `automation` only ever saw traffic
+    that arrived after boot. The triage scorer beside it initializes earlier
+    and did run, which is why one of the pair worked and the other did not.
+
+    `configure_app` still calls `init_automation_manager` and no-ops when this
+    has already run, so the WSGI path keeps working unchanged.
+    """
+    if not (config.get("automation") or {}).get("enabled", False):
+        return
+    try:
+        from potato.automation import (get_automation_manager,
+                                       init_automation_manager)
+        if get_automation_manager() is None:
+            init_automation_manager(config)
+    except Exception as e:
+        logger.warning("Could not initialize the automation rules engine "
+                       "before loading data: %s", e)
+
+
 def load_all_data(config: dict):
     '''Loads instance and annotation data from the files specified in the config.'''
     load_annotation_schematic_data(config)
@@ -3078,7 +3104,15 @@ def render_page_with_annotations(username: str):
     finished_count = count_dataset_items(
         get_user_state(username).get_annotated_instance_ids()
     )
-    remaining_count = get_item_state_manager().get_total_assignable_items_for_user(get_user_state(username))
+    # Their own outstanding assignments AND what is still free in the pool.
+    # Counting only the pool told every annotator after the first that they
+    # were 100% done from their first save: a hold counts against an item's
+    # cap, so with two annotators on six items the pool is empty for the
+    # second one while their ordering holds all six.
+    remaining_count = count_dataset_items(
+        get_item_state_manager().get_progress_pending_ids_for_user(
+            get_user_state(username))
+    )
     # Total = finished + remaining (so counter shows "X / Total" not "X / Remaining")
     total_count = finished_count + remaining_count
 
@@ -4964,6 +4998,9 @@ def _initialize_from_config(config_file):
         init_ai_prompt(config)
         init_dynamic_ai_help()
 
+    # Before the corpus loads: add_item() runs the automation rules per item.
+    _init_automation_manager_early(config)
+
     # Load data
     load_all_data(config)
 
@@ -5251,6 +5288,9 @@ def run_server(args):
         init_ai_prompt(config)
         init_dynamic_ai_help()
 
+    # Before the corpus loads: add_item() runs the automation rules per item.
+    _init_automation_manager_early(config)
+
     load_all_data(config)
 
     # Initialize AI cache manager AFTER load_all_data() because
@@ -5461,6 +5501,21 @@ def run_server(args):
     # Initialize knowledge base manager for entity linking
     init_kb_manager(config)
     logger.info("Knowledge base manager initialized")
+
+    # Two blocks that ran without ever announcing themselves. The standard way
+    # to check a feature took -- enable it, look for its initialization line --
+    # had nothing to look for, so "on and working" and "silently ignored"
+    # printed the same thing at boot: nothing.
+    keystroke_cfg = config.get("keystroke_logging") or {}
+    if keystroke_cfg.get("enabled"):
+        logger.info(
+            "Keystroke logging enabled (raw streams in project.sqlite, "
+            "summaries mirrored into behavioral data)")
+
+    budget_cfg = config.get("ai_budget") or {}
+    if budget_cfg.get("cap_usd") is not None:
+        logger.info("AI budget cap set at $%s for this run",
+                    budget_cfg.get("cap_usd"))
 
     # Initialize agent session manager if agent_proxy is configured
     if "agent_proxy" in config:

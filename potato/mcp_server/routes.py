@@ -106,7 +106,10 @@ def authorize(tool_name: str, payload: Optional[dict] = None):
         audit("auth_failed", tool=tool_name)
         return None, _refuse(
             "A valid agent token is required. Send it as "
-            "'Authorization: Bearer <token>'.",
+            "'Authorization: Bearer <token>'. Tokens are created by "
+            "`potato mcp issue-token --config <config.yaml> --name <agent>`, which is "
+            "also what creates mcp_tokens.json in the task directory; there "
+            "are none until it has been run.",
             401,
         )
 
@@ -197,7 +200,12 @@ def manifest():
     record = verify_token(extract_bearer(request.headers), _config())
     if record is None:
         audit("auth_failed", tool="manifest")
-        return _refuse("A valid agent token is required.", 401)
+        return _refuse(
+            "A valid agent token is required. Create one with "
+            "`potato mcp issue-token --config <config.yaml> --name <agent>`; it is "
+            "what creates mcp_tokens.json in the task directory.",
+            401,
+        )
 
     granted = settings.get("tools") or []
     return jsonify({
@@ -381,7 +389,11 @@ def tool_submit_annotation(record, payload):
         payload.get("span_annotations") or [],
         payload.get("behavioral_data") or {},
     )
-    usm.save_user_state(username)
+    # The STATE, not the username: every other caller passes the object, and
+    # handing over the string raised AttributeError inside save_user_state --
+    # a 500 on the one MCP tool that records work, while mcp_audit.jsonl
+    # recorded the call as an ordinary success.
+    usm.save_user_state(state)
     audit("annotation_submitted", agent=record.name, target=username,
           instance_id=instance_id)
     return jsonify({"status": "ok", "instance_id": instance_id})

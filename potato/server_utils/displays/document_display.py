@@ -17,10 +17,64 @@ Usage:
 from typing import Dict, Any, List, Optional
 import html
 import logging
+import re
+
+from potato.server_utils.html_sanitizer import sanitize_html
 
 from .base import BaseDisplay
 
 logger = logging.getLogger(__name__)
+
+
+_BLOCK_MARKUP = re.compile(
+    r"<\s*(p|div|br|h[1-6]|ul|ol|li|table|pre|blockquote|section|article)\b",
+    re.IGNORECASE)
+
+_HEADING_RE = re.compile(r"<h([1-6])\b[^>]*>(.*?)</h\1>",
+                         re.IGNORECASE | re.DOTALL)
+
+
+def _headings_from_html(rendered_html: str, plain_text: str) -> List[Dict[str, Any]]:
+    """Outline entries recovered from the body's own heading tags.
+
+    ``show_outline`` used to read ``metadata["headings"]``, which only the file
+    format pipeline produces -- so on a field that holds a string the option
+    was accepted, documented, and did nothing. The headings are in the markup
+    either way; this reads them from there.
+    """
+    out: List[Dict[str, Any]] = []
+    for match in _HEADING_RE.finditer(rendered_html or ""):
+        title = re.sub(r"<[^>]+>", "", match.group(2))
+        title = html.unescape(" ".join(title.split()))
+        if not title:
+            continue
+        out.append({
+            "level": int(match.group(1)),
+            "title": title,
+            "offset": max(0, plain_text.find(title)),
+        })
+    return out
+
+
+def _safe_document_html(value: Any) -> str:
+    """The document body, with anything executable taken out.
+
+    This display was written for the format pipeline, which hands it
+    ``{rendered_html, metadata, text}`` where the HTML was produced by Potato
+    from a DOCX or Markdown file. A plain string field took the same path and
+    was emitted verbatim, so a corpus field of
+    ``<img src=x onerror=...>`` ran in every annotator's session -- stored XSS
+    through whoever supplies the transcripts. The pipeline's own output goes
+    through the same allowlist: a converted document is only as trustworthy as
+    the file it was converted from.
+
+    The allowlist is the one the rest of Potato renders instance text with, so
+    the formatting a document actually carries (headings, lists, tables,
+    emphasis, links, images) survives and the handlers do not.
+    """
+    if value is None:
+        return ""
+    return str(sanitize_html(str(value)))
 
 
 class DocumentDisplay(BaseDisplay):
@@ -79,16 +133,16 @@ class DocumentDisplay(BaseDisplay):
         # Handle different data formats
         if isinstance(data, dict):
             # Pre-extracted FormatOutput data
-            rendered_html = data.get("rendered_html", "")
+            rendered_html = _safe_document_html(data.get("rendered_html", ""))
             metadata = data.get("metadata", {})
             raw_text = data.get("text", "")
         elif isinstance(data, str):
             # Raw HTML or text content
-            rendered_html = data
+            rendered_html = _safe_document_html(data)
             metadata = {}
             raw_text = ""
         else:
-            rendered_html = f"<p>Unsupported content type: {type(data)}</p>"
+            rendered_html = f"<p>Unsupported content type: {html.escape(str(type(data)))}</p>"
             metadata = {}
             raw_text = ""
 
@@ -112,21 +166,32 @@ class DocumentDisplay(BaseDisplay):
             f'style="{style_str}">'
         )
 
+        # Extract plain text for span annotation (strip HTML tags)
+        plain_text = re.sub(r'<[^>]+>', '', rendered_html)
+        plain_text = ' '.join(plain_text.split())  # Normalize whitespace
+
         # Document outline/TOC if available and enabled
-        if options.get("show_outline") and metadata.get("headings"):
-            parts.append(self._render_outline(metadata["headings"]))
+        if options.get("show_outline"):
+            headings = (metadata.get("headings")
+                        or _headings_from_html(rendered_html, plain_text))
+            if headings:
+                parts.append(self._render_outline(headings))
 
         # Determine content classes - add text-content for span annotation compatibility
         is_span_target = field_config.get("span_target", False)
         content_classes = ["document-content"]
         if is_span_target:
             content_classes.append("text-content")
+        # `preserve_structure` defaults to true and had no effect at all: a
+        # transcript's blank lines collapsed and its speaker turns ran
+        # together. Only meaningful when the body carries no block markup of
+        # its own -- applying it to converted HTML would double every gap
+        # between tags.
+        if (options.get("preserve_structure", True)
+                and not _BLOCK_MARKUP.search(rendered_html or "")):
+            content_classes.append("document-preserve-structure")
         content_class_str = " ".join(content_classes)
 
-        # Extract plain text for span annotation (strip HTML tags)
-        import re
-        plain_text = re.sub(r'<[^>]+>', '', rendered_html)
-        plain_text = ' '.join(plain_text.split())  # Normalize whitespace
         data_original_attr = f'data-original-text="{html.escape(plain_text)}"' if is_span_target else ""
 
         # Collapsible wrapper if enabled
@@ -174,13 +239,13 @@ class DocumentDisplay(BaseDisplay):
 
         # Handle different data formats
         if isinstance(data, dict):
-            rendered_html = data.get("rendered_html", "")
+            rendered_html = _safe_document_html(data.get("rendered_html", ""))
             metadata = data.get("metadata", {})
         elif isinstance(data, str):
-            rendered_html = data
+            rendered_html = _safe_document_html(data)
             metadata = {}
         else:
-            rendered_html = f"<p>Unsupported content type: {type(data)}</p>"
+            rendered_html = f"<p>Unsupported content type: {html.escape(str(type(data)))}</p>"
             metadata = {}
 
         # Build container

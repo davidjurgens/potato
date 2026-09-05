@@ -253,7 +253,9 @@ def _generate_internal(
         function _buildStepCardHtml(step, idx) {{
             var stepText = typeof step === 'string'
                 ? step
-                : (step[CONFIG.step_text_key] || step.action_type || JSON.stringify(step));
+                : (step[CONFIG.step_text_key] || step.text || step.content
+                   || step.reasoning || step.thought || step.action_type
+                   || JSON.stringify(step));
             // Include the thought if available (VLM chain-of-thought)
             var thoughtHtml = '';
             if (step.thought) {{

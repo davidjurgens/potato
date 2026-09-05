@@ -1021,6 +1021,9 @@ def test_render_page_with_injected_qc_item_without_displayed_text(monkeypatch):
         def get_total_assignable_items_for_user(self, user_state):
             return 1
 
+        def get_progress_pending_ids_for_user(self, user_state):
+            return ["i1"]
+
     monkeypatch.setattr(fs, "app", app, raising=False)
     monkeypatch.setattr(fs, "config", {
         "annotation_task_name": "Sentiment Analysis with Quality Control",

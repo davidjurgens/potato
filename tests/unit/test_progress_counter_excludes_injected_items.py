@@ -146,6 +146,11 @@ def test_the_rendered_counter_never_exceeds_its_total(qc_manager, monkeypatch):
         def get_total_assignable_items_for_user(self, user_state):
             return 6
 
+        def get_progress_pending_ids_for_user(self, user_state):
+            # The real manager returns ids so the caller can discount
+            # platform-injected items; this study has six real ones left.
+            return ["real_%d" % n for n in range(6)]
+
     monkeypatch.setattr(fs, "app", app, raising=False)
     monkeypatch.setattr(fs, "config", {
         "annotation_task_name": "QC study",

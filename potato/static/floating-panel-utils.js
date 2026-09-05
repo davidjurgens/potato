@@ -39,6 +39,7 @@
     var W_NAV = 4;      // Previous / Next
     var W_CHROME = 4;   // the top navbar: progress, jump-to, logout
     var W_PANEL = 2;    // another open widget
+    var W_TEXT = 2;     // the item itself
     var W_INPUT = 1;    // an annotation input
 
     /**
@@ -74,6 +75,12 @@
             .forEach(function (el) { add(el, W_CHROME); });
         [].slice.call(document.querySelectorAll('input.annotation-input'))
             .forEach(function (el) { add(el, W_INPUT); });
+        // The item text. Truth Serum asks the annotator to predict what other
+        // people will say about a passage, and its card opened on top of the
+        // passage. It is usually the largest thing on the page, so a card can
+        // rarely clear it entirely -- but weighting it makes the scan prefer
+        // the corner that covers the least of it.
+        add(document.getElementById('instance-text'), W_TEXT);
         // Other open widgets must not be covered either (the combined showcase
         // example runs several of these at once).
         [].slice.call(document.querySelectorAll('.ts-panel, .boundary-panel, .ta-pill'))
