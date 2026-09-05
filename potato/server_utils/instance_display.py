@@ -258,7 +258,20 @@ class InstanceDisplayRenderer:
     MEDIA_REFERENCE_TYPES = {"image", "gallery", "video", "audio", "pdf",
                              "audio_dialogue", "web_agent_trace"}
 
-    def _resolve_media_references(self, field_type: str, data: Any) -> Any:
+    #: Keys inside a list-of-dicts field that hold a media reference. A
+    #: display cannot resolve these itself: `render(field_config, data)` gets
+    #: no project config, so `media_href` is not reachable from one. The
+    #: docstring below used to say each display resolved its own nested
+    #: references, which described a delegation that was never implementable
+    #: -- and neither `gallery` nor `web_agent_trace` implemented it.
+    NESTED_MEDIA_KEYS = {
+        # `_normalize_items` reads url_key, then "src", then "path".
+        "gallery": ("url", "src", "path"),
+        "web_agent_trace": ("screenshot_url",),
+    }
+
+    def _resolve_media_references(self, field_type: str, data: Any,
+                                  field: Dict[str, Any] = None) -> Any:
         """Turn bare media filenames into the ``/media/...`` URLs Potato serves.
 
         Applied at this one chokepoint rather than in each display, because
@@ -266,10 +279,11 @@ class InstanceDisplayRenderer:
         failed silently in the browser -- only `pdf` said anything, and only
         `depth_map` built the URL at all.
 
-        Anything that is not a plain string (or a list of them) is passed
-        through untouched: a `gallery` of ``{src, caption}`` dicts and a
-        `web_agent_trace` step list are the display's business, and each
-        resolves its own nested references.
+        A plain string, a list of strings, and the media-bearing keys of a list
+        of dicts are all resolved. The last of those is why `gallery` showed
+        the right tiles with the right captions and broken images: it is the
+        only shape that carries a caption, so it is the shape an author reaches
+        for, and it was the one falling through.
         """
         if field_type not in self.MEDIA_REFERENCE_TYPES:
             return data
@@ -277,10 +291,36 @@ class InstanceDisplayRenderer:
 
         if isinstance(data, str):
             return media_href(self.config, data, context=field_type)
-        if isinstance(data, list):
-            return [media_href(self.config, v, context=field_type)
-                    if isinstance(v, str) else v for v in data]
-        return data
+        if not isinstance(data, list):
+            return data
+
+        nested = self.NESTED_MEDIA_KEYS.get(field_type, ())
+        if nested and field:
+            # `url_key` renames the field the display reads, so resolving the
+            # default would resolve a key nothing renders. Read both spellings
+            # -- options are accepted flat OR under `display_options`, and the
+            # flat form is the one an author writes after seeing the option
+            # listed as an optional field of the display type.
+            configured = (field.get("url_key")
+                          or (field.get("display_options") or {}).get("url_key"))
+            if configured and configured not in nested:
+                nested = (configured,) + tuple(nested)
+
+        resolved = []
+        for value in data:
+            if isinstance(value, str):
+                resolved.append(media_href(self.config, value,
+                                           context=field_type))
+            elif isinstance(value, dict) and nested:
+                item = dict(value)
+                for key in nested:
+                    if isinstance(item.get(key), str):
+                        item[key] = media_href(self.config, item[key],
+                                               context=field_type)
+                resolved.append(item)
+            else:
+                resolved.append(value)
+        return resolved
 
     def _render_field(self, field: Dict[str, Any], instance_data: Dict[str, Any]) -> str:
         """
@@ -296,7 +336,7 @@ class InstanceDisplayRenderer:
         key = field["key"]
         field_type = field["type"]
         data = instance_data.get(key)
-        data = self._resolve_media_references(field_type, data)
+        data = self._resolve_media_references(field_type, data, field)
 
         # For format-based display types, process the file if data is a file path
         format_display_types = ["pdf", "document", "spreadsheet", "code"]
