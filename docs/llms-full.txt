@@ -53596,6 +53596,21 @@ Submit or update annotations for an instance.
 }
 ```
 
+Each key in `annotations` names a schema and a label in one flat string:
+`schema:::label`, or `schema:label`. Both are read; the browser sends the
+three-colon form, and a label whose own name contains a colon needs it.
+
+The value is the answer for that label, not a container. This nests the label
+under the schema and so names no label at all:
+
+```json
+{"annotations": {"sentiment": {"positive": "1"}}}
+```
+
+Nothing is stored for it. That is the shape annotations are *stored* in, which
+makes it the natural first guess. A request where no key can be read is
+refused with `400` listing the keys it could not read.
+
 **Request Body (Backend Format):**
 ```json
 {

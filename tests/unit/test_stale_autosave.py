@@ -88,9 +88,18 @@ class TestStaleAutosave:
             f"{self.server.base_url}/updateinstance",
             json={
                 "instance_id": "1",
-                "annotations": {"sentiment": {"positive": True}},
+                # `schema:::label`, not the nested stored shape: nesting names
+                # no label, so this test used to pass while storing nothing.
+                "annotations": {"sentiment:::positive": "true"},
             },
         )
         assert r.status_code == 200
         data = r.json()
         assert data.get("status") != "error", f"Expected success, got: {data}"
+
+        # "Accepted" has to mean stored. With the nested payload this test used
+        # to send, every key was skipped and the 200 said nothing.
+        stored = s.get(f"{self.server.base_url}/get_annotations",
+                       params={"instance_id": "1"}).json()
+        assert "positive" in str(stored.get("label_annotations", {})), (
+            f"the annotation was not stored: {stored}")

@@ -5759,6 +5759,39 @@ def update_instance():
                 return jsonify({"status": "error",
                                 "message": "'annotations' must be an object"}), 400
 
+            # Refuse a payload whose every key is unreadable, before anything
+            # is cleared or recorded. Keys are `schema:::label` (or the legacy
+            # `schema:label`); a key with neither names no label, so it stored
+            # nothing while the route answered 200 -- and a caller who cannot
+            # read the server log had no way to tell. The browser always sends
+            # the right shape, so this only ever reached the MCP tools, the
+            # simulator and evaluation harnesses.
+            #
+            # Decided here rather than after the write loop so a refusal is a
+            # true no-op: the pre-clear below drops stale labels, and running
+            # it for a request we are about to reject would be a half-write.
+            #
+            # Phase pages are exempt. A consent or survey question posts
+            # `{"age_consent": "Yes"}` -- the schema name with the answer as
+            # the value, because a phase question has no label to name. That
+            # shape is correct there, and refusing it would break every
+            # consent, instruction and post-study page.
+            _unreadable = [key for key in annotations
+                           if ":::" not in key and ":" not in key]
+            if (annotations and not is_phase_page_update
+                    and len(_unreadable) == len(annotations)):
+                shown = ", ".join(repr(k) for k in _unreadable[:5])
+                if len(_unreadable) > 5:
+                    shown += f", and {len(_unreadable) - 5} more"
+                logger.warning(
+                    "Rejected /updateinstance from %s: no annotation key named "
+                    "a schema and a label (%s)", username, shown)
+                return jsonify({
+                    "status": "error",
+                    "message": ("No annotation was stored: every key must name "
+                                "a schema and a label as 'schema:::label'. "
+                                f"Got: {shown}")}), 400
+
             # Pre-clear stale labels before re-writing. The client sends the COMPLETE
             # current state for these schemas, so any label not in the incoming set
             # should be removed.

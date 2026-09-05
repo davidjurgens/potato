@@ -74,7 +74,9 @@ def _work(base_url, user):
     for instance_id in assigned:
         session.post(f"{base_url}/updateinstance",
                      json={"instance_id": instance_id,
-                           "annotations": {"sentiment": {"positive": "true"}}})
+                           # `schema:::label`; the nested form names no label
+                           # and stored nothing, so this loop was a no-op.
+                           "annotations": {"sentiment:::positive": "true"}})
     return session, response, assigned
 
 
