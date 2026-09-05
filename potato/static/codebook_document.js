@@ -507,21 +507,37 @@
   function doImportParse() {
     var md = $("cbd-import-text").value;
     var target = $("cbd-import-target").value || "";
-    if (!target) { closeImport(); return; }
+    // Keep the dialog open and say what is wrong. Closing on an empty target
+    // discarded everything the author had typed, with no message: the dialog
+    // simply went away and nothing happened.
+    if (!md.trim()) { toast("Paste some markdown first.", true); return; }
+    if (!target) { toast("Pick where to add it.", true); return; }
     var parts = target.split(":");
     var kind = parts[0], id = parts.slice(1).join(":");
     api("POST", "/parse", { markdown: md }).then(function (res) {
       if (!res.ok) { toast("Parse failed.", true); return; }
-      closeImport();
-      // ensure editing mode, find/refresh the section, open its editor seeded
-      state.editing = true;
       // locate scope object from current doc
       var s = findScope(kind, id);
       if (!s) { toast("Pick a valid target.", true); return; }
+
+      // Re-render BEFORE looking the section up. An empty document section is
+      // deliberately not rendered unless we are editing, and setting
+      // `state.editing` alone does not put it in the DOM -- so importing into
+      // one found no element, threw on `sec.querySelector`, and killed the
+      // rest of this handler. The dialog had already closed by then, so the
+      // author saw their markdown vanish with no review step and no error.
+      state.editing = true;
+      document.body.classList.add("cbd-editing");
+      render();
+
       var sec = document.getElementById("sec-" + scopeKey(kind, id));
+      if (!sec) {
+        toast("Could not open that section for editing.", true);
+        return;
+      }
+      closeImport();
       // merge parsed blocks after existing ones
       var seed = (s.blocks || []).concat(res.body.blocks || []);
-      document.body.classList.add("cbd-editing");
       openEditor(sec, s, seed);
       sec.scrollIntoView({ behavior: "smooth", block: "start" });
       if ((res.body.blocks || []).some(function (b) { return b.classified === false; })) {
