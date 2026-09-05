@@ -28,9 +28,13 @@ import subprocess
 
 import pytest
 
-JS = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "potato", "static", "visual_ai_assistant.js")
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# The helper lives in ai_assistant_manager.js, which loads FIRST and publishes
+# it on `window`. That file is the one a TEXT study uses -- the "visual" manager
+# serves image and video tasks -- and it had the identical raw-innerHTML hint
+# branch, in a file whose own rationale branch already escaped.
+JS = os.path.join(ROOT, "potato", "static", "ai_assistant_manager.js")
+VISUAL_JS = os.path.join(ROOT, "potato", "static", "visual_ai_assistant.js")
 
 
 def _extract_helper():
@@ -38,7 +42,7 @@ def _extract_helper():
         source = handle.read()
     match = re.search(r"^function aiTextToSafeHtml\(text\) \{.*?^\}",
                       source, re.MULTILINE | re.DOTALL)
-    assert match, "aiTextToSafeHtml is gone from visual_ai_assistant.js"
+    assert match, "aiTextToSafeHtml is gone from ai_assistant_manager.js"
     return match.group(0)
 
 
@@ -96,3 +100,35 @@ class TestNothing:
     @pytest.mark.parametrize("value", ["", None])
     def test_empty_input_is_empty_output(self, value):
         assert _render(value) == ""
+
+
+class TestEveryModelPathUsesIt:
+    """The hint branch was the only raw one in a file that already escaped.
+
+    `renderRationale` called `this.escapeHtml` and `renderHint` interpolated
+    `data.hint` directly, three hundred lines apart -- the same question
+    answered twice in one file, once wrongly. Pinning every model-output site
+    here so the next one added has to be deliberate.
+    """
+
+    def _source(self, path):
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    @pytest.mark.parametrize("field", [
+        "data.hint", "data.suggestive_choice", "data.res",
+        "r.label", "r.reasoning",
+    ])
+    def test_the_field_is_not_interpolated_raw(self, field):
+        source = self._source(JS)
+        raw = "${" + field + "}"
+        assert raw not in source, (
+            f"{field} reaches innerHTML unescaped; wrap it in "
+            f"aiTextToSafeHtml()")
+
+    def test_the_visual_manager_reuses_the_shared_helper(self):
+        """Two files, one question. Both render MODEL output, so they get one
+        answer -- unlike the author-authored markdown surfaces, which
+        deliberately differ."""
+        source = self._source(VISUAL_JS)
+        assert "window.aiTextToSafeHtml" in source, source[:200]

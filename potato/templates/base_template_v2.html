@@ -666,7 +666,7 @@
     <script src="{{ url_for('static', filename='annotation_telemetry.js') }}?v=2"></script>
     {% endif %}
     <script src="{{ url_for('static', filename='span-core.js') }}?v=21"></script>
-    <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=3"></script>
     <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->
     <script src="{{ url_for('static', filename='display-logic.js') }}?v=4"></script>
     <!-- Instance display manager (for new instance_display configuration) -->
@@ -816,7 +816,7 @@
          projects finding objects with nowhere to show them. -->
     {% if (ai_enabled or frontend_assets.text_prompt | default(false))
           and ((frontend_assets.image_annotation | default(false)) or (frontend_assets.video_annotation | default(false))) %}
-    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=7"></script>
     {% endif %}
 
     <!-- Option highlighting dims the less-likely *discrete options* of a radio,

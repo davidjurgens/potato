@@ -4,8 +4,8 @@
     "version": "1"
   },
   "ai_assistant_manager.js": {
-    "sha256": "7e827f3f06c33283",
-    "version": "2"
+    "sha256": "d2c3978eaad2b156",
+    "version": "3"
   },
   "annotation.js": {
     "sha256": "70d6b37b2d7a1e4a",
@@ -420,8 +420,8 @@
     "version": "22"
   },
   "visual_ai_assistant.js": {
-    "sha256": "0170dc503b5772da",
-    "version": "6"
+    "sha256": "1d29967b81c0c0cb",
+    "version": "7"
   },
   "web-agent-overlays.js": {
     "sha256": "ba2cd17c89c458af",

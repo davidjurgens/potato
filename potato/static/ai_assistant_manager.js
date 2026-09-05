@@ -1,3 +1,38 @@
+
+/**
+ * Model output as safe HTML, with its inline markdown rendered.
+ *
+ * Two problems, one place. Model text was interpolated straight into
+ * `innerHTML`: a hint is generated from the item under annotation, so a
+ * document containing markup could put it on the page unescaped. And the
+ * model writes markdown -- `**Identify the pain points:**` is a normal thing
+ * for it to return -- which showed up as literal asterisks, with no lever
+ * available to the author except asking the model in the prompt not to
+ * format its answer.
+ *
+ * Escape first, then apply inline markdown to the escaped text, so every tag
+ * in the output is one this function put there.
+ */
+function aiTextToSafeHtml(text) {
+    const escaped = String(text == null ? '' : text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    return escaped
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
+        .replace(/\n/g, '<br>');
+}
+
+// Published so `visual_ai_assistant.js`, which loads after this file, uses
+// the same one. Both render MODEL output into `innerHTML`; that is one
+// question with one answer, unlike the author-authored surfaces which
+// deliberately differ.
+window.aiTextToSafeHtml = aiTextToSafeHtml;
+
 // Debug logging utility - respects the debug setting from server config
 function aiDebugLog(...args) {
     if (window.config && window.config.debug) {
@@ -482,7 +517,9 @@ class AIAssistantManager {
                     content = '<div>Unknown assistant type</div>';
             }
         } else {
-            content = data.res;
+            // A non-JSON assistant response is still model output, and it went
+            // into `innerHTML` below verbatim.
+            content = aiTextToSafeHtml(data.res);
         }
 
 
@@ -513,12 +550,12 @@ class AIAssistantManager {
             <div class="hint-section">
                 <div class="content-item">
                     <span class="label">Hint:</span>
-                    <span class="value">${data.hint || 'No hint available'}</span>
+                    <span class="value">${aiTextToSafeHtml(data.hint) || 'No hint available'}</span>
                 </div>
                 ${data.suggestive_choice ? `
                     <div class="content-item">
                         <span class="label">Suggestion:</span>
-                        <span class="value suggestion">${data.suggestive_choice}</span>
+                        <span class="value suggestion">${aiTextToSafeHtml(data.suggestive_choice)}</span>
                     </div>
                 ` : ''}
             </div>
@@ -726,8 +763,8 @@ class AIAssistantManager {
 
         const rationaleItems = rationales.map(r => `
             <div class="rationale-item">
-                <span class="rationale-label">${this.escapeHtml(r.label)}:</span>
-                <span class="rationale-reasoning">${this.escapeHtml(r.reasoning)}</span>
+                <span class="rationale-label">${aiTextToSafeHtml(r.label)}:</span>
+                <span class="rationale-reasoning">${aiTextToSafeHtml(r.reasoning)}</span>
             </div>
         `).join('');
 

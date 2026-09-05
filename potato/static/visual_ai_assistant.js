@@ -6,33 +6,15 @@
  * and Peaks.js timeline (video), with accept/reject UI.
  */
 
-/**
- * Model output as safe HTML, with its inline markdown rendered.
- *
- * Two problems, one place. Model text was interpolated straight into
- * `innerHTML`: a hint is generated from the item under annotation, so a
- * document containing markup could put it on the page unescaped. And the
- * model writes markdown -- `**Identify the pain points:**` is a normal thing
- * for it to return -- which showed up as literal asterisks, with no lever
- * available to the author except asking the model in the prompt not to
- * format its answer.
- *
- * Escape first, then apply inline markdown to the escaped text, so every tag
- * in the output is one this function put there.
- */
-function aiTextToSafeHtml(text) {
-    const escaped = String(text == null ? '' : text)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    return escaped
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
-        .replace(/\n/g, '<br>');
-}
+// `aiTextToSafeHtml` is defined in ai_assistant_manager.js, which loads
+// first. The fallback keeps this file usable on a page that does not load
+// that one -- an image-only study -- rather than throwing a ReferenceError
+// the moment a hint arrives.
+const aiTextToSafeHtml = window.aiTextToSafeHtml || function (text) {
+    return String(text == null ? '' : text)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+};
 
 
 class VisualAIAssistantManager {
