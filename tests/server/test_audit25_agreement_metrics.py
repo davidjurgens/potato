@@ -40,6 +40,17 @@ CERTAINTY = {
     "a2": [4, 5, 4, 3, 4, 5, 3, 1],
 }
 
+# A multiselect where one answer carries several labels and another carries
+# one. That mixture is the point: the shape of a single answer used to decide
+# its type, so this column held a tuple beside a string and simpledorff raised
+# sorting it. Nearly every real multiselect study looks like this.
+REASONS = {
+    "a1": [["age"], ["age", "meds"], ["meds"], ["age"],
+           ["age", "meds"], ["meds"], ["age"], ["meds"]],
+    "a2": [["age"], ["age", "meds"], ["age"], ["age"],
+           ["meds"], ["meds"], ["age", "meds"], ["meds"]],
+}
+
 EXPECTED_ELIGIBILITY_ALPHA = 0.6471   # nominal
 EXPECTED_CERTAINTY_ALPHA = 0.8649     # interval
 
@@ -52,6 +63,12 @@ def agreement_server():
             "name": "eligibility",
             "description": "Is this patient eligible?",
             "labels": ["eligible", "ineligible", "nei"],
+        },
+        {
+            "annotation_type": "multiselect",
+            "name": "reasons",
+            "description": "Why?",
+            "labels": ["age", "meds"],
         },
         {
             "annotation_type": "likert",
@@ -95,10 +112,14 @@ def _annotate_everything(server):
                     "instance_id": instance_id,
                     # Flat `schema:::label`. The nested shape stores nothing
                     # and now earns a 400.
-                    "annotations": {
-                        f"eligibility:::{ELIGIBILITY[annotator][index]}": "true",
-                        f"certainty:::{CERTAINTY[annotator][index]}": "true",
-                    },
+                    "annotations": dict(
+                        {
+                            f"eligibility:::{ELIGIBILITY[annotator][index]}": "true",
+                            f"certainty:::{CERTAINTY[annotator][index]}": "true",
+                        },
+                        **{f"reasons:::{label}": "true"
+                           for label in REASONS[annotator][index]},
+                    ),
                 },
             )
             assert response.status_code == 200, response.text
@@ -116,7 +137,7 @@ class TestAgreementMetricsProduceNumbers:
     def test_every_schema_reports_an_alpha_rather_than_an_error(
             self, agreement_server):
         by_schema = _agreement(agreement_server)["by_schema"]
-        for name in ("eligibility", "certainty"):
+        for name in ("eligibility", "certainty", "reasons"):
             assert "error" not in by_schema[name], (
                 f"{name} reported an error instead of a number: "
                 f"{by_schema[name]}")
@@ -169,12 +190,31 @@ class TestAgreementMetricsProduceNumbers:
         reads, so the page rendered blank rather than saying anything failed.
         """
         overall = _agreement(agreement_server)["overall"]
-        assert overall.get("schemas_evaluated") == 2
-        expected = (EXPECTED_ELIGIBILITY_ALPHA + EXPECTED_CERTAINTY_ALPHA) / 2
+        assert overall.get("schemas_evaluated") == 3
+        by_schema = _agreement(agreement_server)["by_schema"]
+        expected = sum(by_schema[n]["krippendorff_alpha"]
+                       for n in ("eligibility", "certainty", "reasons")) / 3
         assert overall["average_krippendorff_alpha"] == pytest.approx(
             expected, abs=1e-3)
         assert overall.get("average_cohen_kappa") is not None
         assert overall.get("average_fleiss_kappa") is not None
+
+    def test_a_multiselect_of_mixed_width_is_measured_rather_than_erroring(
+            self, agreement_server):
+        """One answer with two labels beside one with a single label.
+
+        The shape used to be chosen per answer, so this column carried a tuple
+        next to a string and simpledorff raised while sorting it to build the
+        coincidence matrix. The shape is decided for the whole schema now.
+        """
+        reasons = _agreement(agreement_server)["by_schema"]["reasons"]
+        assert "error" not in reasons, reasons
+        assert reasons["metric_type"] == "nominal"
+        assert reasons["items_evaluated"] == 8
+        # A real number, not NaN: the two annotators differ on three of eight.
+        assert isinstance(reasons["krippendorff_alpha"], float)
+        assert -1.0 <= reasons["krippendorff_alpha"] <= 1.0
+        assert reasons["krippendorff_alpha"] != pytest.approx(1.0)
 
     def test_one_annotator_per_item_is_not_counted_as_overlap(
             self, agreement_server):

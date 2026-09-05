@@ -1607,11 +1607,37 @@ class AdminDashboard:
                         # overlap on their own.
                         item_annotations.append({
                             "user": username,
-                            "value": names[0] if len(names) == 1 else list(names),
+                            "names": names,
                         })
 
                     if item_annotations:
                         annotations_by_item[item_id] = item_annotations
+
+                # One shape per SCHEMA, decided by the whole column rather than
+                # by each answer's own length. A multiselect where one annotator
+                # ticks two boxes and another ticks one produced a tuple beside
+                # a string, and simpledorff sorts the class column to build the
+                # coincidence matrix: "'<' not supported between instances of
+                # 'tuple' and 'str'". That is nearly every real multiselect
+                # study, and it fires without needing anyone to disagree.
+                #
+                # Schemas that only ever hold one answer -- radio, likert --
+                # stay scalar, which is what keeps the interval path below
+                # working and the reports readable.
+                multi_valued = any(
+                    len(annot["names"]) > 1
+                    for annots in annotations_by_item.values()
+                    for annot in annots
+                )
+                for annots in annotations_by_item.values():
+                    for annot in annots:
+                        # A list, so the shared normalizer turns EVERY answer in
+                        # this schema into a sorted tuple -- single-label ones
+                        # included. Handing it an already-made tuple would work
+                        # by accident, because the normalizer only unpacks lists
+                        # and would stringify the tuple instead.
+                        annot["value"] = (list(annot["names"])
+                                          if multi_valued else annot["names"][0])
 
                 # Filter items with minimum overlap
                 valid_items = {
@@ -1800,6 +1826,9 @@ class AdminDashboard:
                 value = annot["value"]
                 if isinstance(value, bool) or not isinstance(
                         value, (str, int, float)):
+                    # A tuple lands here when the schema turned out to be
+                    # multi-valued, and a set of labels has no interval
+                    # distance -- the caller falls back to nominal.
                     return None
                 try:
                     numeric[(item_id, annot["user"])] = float(value)
