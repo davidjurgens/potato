@@ -180,10 +180,12 @@
       "type": "string"
     },
     "agent_proxy": {
-      "description": "Run an agent as the subject of annotation. This block only configures the backend -- to put the chat on the page, add an `instance_display` field of `type: interactive_chat`, which renders the panel the annotator talks to. Set `enabled: false` to turn it off without deleting the block",
+      "description": "Run an agent as the subject of annotation. This block only configures the backend -- to put the chat on the page, add an `instance_display` field of `type: interactive_chat`, which renders the panel the annotator talks to. Connection settings (api_key, base_url, model) may be written directly in the block or under `ai_config` inside it, as the other model-backed blocks take them; a `base_url` pointing at an OpenAI-compatible server needs no key. Set `enabled: false` to turn it off without deleting the block",
       "examples": [
         {
-          "model": "gpt-4o-mini",
+          "ai_config": {
+            "model": "gpt-4o-mini"
+          },
           "type": "openai"
         }
       ],

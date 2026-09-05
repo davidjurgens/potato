@@ -22,12 +22,23 @@ from .base import BaseDisplay
 from .coding_trace_display import CodingTraceDisplay
 
 
+#: Field names that mean "this holds the task", for seeding the task box from
+#: a bare string. Anything else needs `task_field` to say so, because a string
+#: under `repo` or `path` is not an instruction.
+_TASK_FIELD_NAMES = frozenset({
+    "task", "task_description", "instruction", "instructions", "prompt",
+})
+
+
 class LiveCodingAgentDisplay(BaseDisplay):
     """Display type for live coding agent sessions."""
 
     name = "live_coding_agent"
     required_fields = ["key"]
     optional_fields = {
+        #: Item field holding the task to pre-fill the box with. Needed only
+        #: when the bound field is not itself named like a task.
+        "task_field": None,
         "show_file_tree": True,
         "show_reasoning": True,
         "collapse_long_outputs": True,
@@ -56,15 +67,26 @@ class LiveCodingAgentDisplay(BaseDisplay):
         options = self.get_display_options(field_config)
 
         # Seed the task box from the item, the way live_agent seeds its
-        # Starting URL. `key` is this display's only required field, so
-        # pointing it at the field holding the task is the obvious reading --
-        # and it was ignored, so the annotator retyped the task on every item.
+        # Starting URL -- but only when the field plausibly holds a task.
+        #
+        # A bare string is ambiguous in a way a URL is not: `{key: repo}` binds
+        # the display to a field holding "calc", and seeding that put a repo
+        # name in a box whose placeholder reads "Describe the coding task...".
+        # `repo` is what an author reaches for, since `working_dir` already
+        # answers the directory question from another block. So a bare string
+        # is used only when the field is NAMED like a task, or when
+        # `task_field` says which key to read; an object always may, because
+        # naming the key is the author saying what it is.
         task_text = ""
-        if isinstance(data, str):
-            task_text = data.strip()
-        elif isinstance(data, dict):
-            task_text = str(data.get("task_description")
-                            or data.get("task") or "").strip()
+        task_field = options.get("task_field")
+        if isinstance(data, dict):
+            task_text = str(
+                (data.get(task_field) if task_field else None)
+                or data.get("task_description") or data.get("task") or "").strip()
+        elif isinstance(data, str):
+            bound_key = field_config.get("key", "")
+            if task_field == bound_key or bound_key in _TASK_FIELD_NAMES:
+                task_text = data.strip()
         task_value = html.escape(task_text, quote=True)
 
         show_controls = options.get("show_controls", True)

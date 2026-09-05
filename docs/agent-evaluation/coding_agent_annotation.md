@@ -380,7 +380,12 @@ session that finishes on its own keeps its container until one of those
 happens, because the instruction box stays live and the annotator may still
 have something to ask.
 
-A crash escapes all three, so Potato sweeps leftover sandbox containers at
+Both SIGINT (Ctrl-C) and SIGTERM (`systemctl stop`, `docker stop`,
+supervisord, `kill`) release. Python runs its exit handlers for a signal it
+has a handler for, and SIGTERM has none by default, so Potato installs one —
+chained, so a process manager's own handler still runs.
+
+A crash escapes all of it, so Potato sweeps leftover sandbox containers at
 startup and logs how many it removed.
 
 To go further, install a drop-in container runtime and name it:

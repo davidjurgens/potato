@@ -4705,6 +4705,14 @@ def agent_chat_send():
         if isinstance(e, SandboxViolation):
             return jsonify({"error": str(e)}), 400
         logger.error("Agent chat send error: %s", traceback.format_exc())
+        # A misconfigured proxy never gets past _initialize, and "An internal
+        # error occurred" sent the person who could fix it looking in the wrong
+        # place -- the real message was in the log and the page said nothing.
+        # A ValueError from the factory is a config error, not a runtime one.
+        if isinstance(e, (ValueError, ImportError)):
+            return jsonify({
+                "error": "The agent is not configured correctly: %s" % e,
+            }), 400
         return jsonify({"error": "An internal error occurred"}), 400
 
 

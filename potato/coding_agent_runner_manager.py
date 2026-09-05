@@ -7,6 +7,7 @@ Mirrors AgentRunnerManager pattern.
 
 import atexit
 import logging
+import signal
 import threading
 import time
 import uuid
@@ -35,6 +36,7 @@ class CodingAgentRunnerManager:
         # that started it. Without this, stopping Potato left every live
         # container up, and only the next boot's sweep would find them.
         atexit.register(self._release_all)
+        self._install_termination_handler()
 
     @classmethod
     def get_instance(cls, **kwargs) -> "CodingAgentRunnerManager":
@@ -43,6 +45,43 @@ class CodingAgentRunnerManager:
                 if cls._instance is None:
                     cls._instance = cls(**kwargs)
         return cls._instance
+
+    def _install_termination_handler(self) -> None:
+        """Make SIGTERM run the atexit hook, so a stopped server frees its containers.
+
+        Python runs atexit handlers on a normal exit and on SIGINT (which
+        raises KeyboardInterrupt), but not on a signal it has no handler for --
+        and SIGTERM is what `systemctl stop`, `docker stop`, supervisord and a
+        plain `kill` all send. So Ctrl-C released every container and every
+        other way of stopping the server leaked them all.
+
+        Raising SystemExit is the whole fix: the interpreter unwinds normally
+        from there and atexit runs. The previous handler is chained rather than
+        replaced, because a process manager or WSGI server may have installed
+        its own and this must not be the thing that stops it running.
+
+        Only from the main thread, where signal handlers can be installed at
+        all; under a worker model the parent process owns the signal.
+        """
+        try:
+            if threading.current_thread() is not threading.main_thread():
+                return
+            previous = signal.getsignal(signal.SIGTERM)
+
+            def _terminate(signum, frame):
+                logger.info("SIGTERM received; releasing coding agent sandboxes")
+                try:
+                    self._release_all()
+                finally:
+                    if callable(previous) and previous not in (
+                            signal.SIG_DFL, signal.SIG_IGN):
+                        previous(signum, frame)
+                raise SystemExit(128 + signum)
+
+            signal.signal(signal.SIGTERM, _terminate)
+        except (ValueError, OSError, AttributeError) as e:
+            # No SIGTERM on this platform, or not the main thread after all.
+            logger.debug("Could not install a SIGTERM handler: %s", e)
 
     def _release_all(self) -> None:
         """Tear down every live sandbox. Registered with atexit."""

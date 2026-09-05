@@ -1221,11 +1221,15 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Run an agent as the subject of annotation. This block only configures "
         "the backend -- to put the chat on the page, add an `instance_display` "
         "field of `type: interactive_chat`, which renders the panel the "
-        "annotator talks to. Set `enabled: false` to turn it off without "
-        "deleting the block",
+        "annotator talks to. Connection settings (api_key, base_url, model) "
+        "may be written directly in the block or under `ai_config` inside it, "
+        "as the other model-backed blocks take them; a `base_url` pointing at "
+        "an OpenAI-compatible server needs no key. Set `enabled: false` to "
+        "turn it off without deleting the block",
         type="object", category=INTEG,
-        see_also=("instance_display",),
-        example={"type": "openai", "model": "gpt-4o-mini"},
+        see_also=("instance_display", "ai_support"),
+        example={"type": "openai",
+                 "ai_config": {"model": "gpt-4o-mini"}},
     ),
     "database": _D("Database connection for item or user storage", type="object", category=INTEG),
 
