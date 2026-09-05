@@ -102,7 +102,7 @@ The COCO exporter honours `label_id`, so a file keeps its original numbering
 through a round trip. Labels without a `label_id` are assigned IDs above the
 highest explicit one, so they never collide.
 
-## Image dimensions are required
+## Image dimensions on import
 
 COCO coordinates are absolute pixels; Potato stores them normalized to 0–1. The
 importer therefore needs each image's size and **fails loudly** if it is missing
@@ -116,8 +116,11 @@ Two fixes: repair the `images[]` entries, or pass `--image-dir` so sizes are
 read from the files directly (needs Pillow).
 
 The generated data file carries `image_width` / `image_height` on every row,
-which is also what the COCO and YOLO exporters need. Without those fields YOLO
-export refuses to run and COCO writes `width: 0, height: 0`.
+which is what the exporters read first. A data file written by hand usually
+does not, so when the fields are absent the exporters derive the size: from a mask's
+own RLE, or by reading the image. Carrying them is still worth it: it is
+faster, and it is the only thing that works when the images live somewhere the
+exporter cannot read.
 
 ## How imported annotations reach annotators
 

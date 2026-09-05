@@ -153,9 +153,18 @@ export as COCO compressed RLE with `iscrowd: 1` unless the annotation carries an
 explicit `iscrowd: 0`. Landmarks are skipped with a warning — COCO keypoints are
 not yet emitted.
 
-**Image dimensions are required.** They are read from `image_width`/`image_height`
-(or `width`/`height`) on each data item. Without them the export writes
-`width: 0, height: 0` and box geometry cannot be validated.
+**Image dimensions** come from `image_width`/`image_height` (or
+`width`/`height`) on the data item when it declares them. A data file usually
+names an image rather than measuring one, so when those fields are absent
+Potato derives the size: from a mask's own RLE, which needs no file access, or
+by reading the image. Declaring them is still faster and works when the image
+is somewhere the exporter cannot read.
+
+**Items nobody annotated are not exported.** Each CV exporter writes the
+annotations it finds, so an item that was shown and left unmarked appears in no
+image list and no annotation list. The export names how many were left out and
+which. For detector training an image with no objects is a negative example, so
+if you need those images, add them to the output yourself.
 
 **Usage:**
 ```bash
