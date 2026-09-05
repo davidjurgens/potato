@@ -172,6 +172,45 @@ def humanize_label(text: str) -> str:
     return " ".join(out)
 
 
+def bad_text_label_content(annotation_scheme: dict) -> str:
+    """The escape-hatch option's visible text, or "" when there is none.
+
+    Two spellings are accepted, because the documented one is not the obvious
+    one:
+
+        bad_text_label: Nothing quotable                 # shorthand
+        bad_text_label: {label_content: Nothing quotable}
+
+    Only the second used to render. The first is what a config author writes
+    after reading a one-line "Optional configuration for invalid text option"
+    in the reference, and it produced a scheme with one fewer option than
+    asked for, no warning at boot, and a clean `validate --strict`.
+
+    A dict without `label_content` is a mistake worth naming rather than
+    silently dropping, so it logs.
+    """
+    raw = annotation_scheme.get("bad_text_label")
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw.strip()
+    if isinstance(raw, Mapping):
+        content = raw.get("label_content")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        logger.warning(
+            "bad_text_label on %r has no 'label_content', so no escape-hatch "
+            "option was rendered. Write either `bad_text_label: <text>` or "
+            "`bad_text_label: {label_content: <text>}`.",
+            annotation_scheme.get("name", "?"))
+        return ""
+    logger.warning(
+        "bad_text_label on %r must be a string or an object with "
+        "'label_content', not %s; no option was rendered.",
+        annotation_scheme.get("name", "?"), type(raw).__name__)
+    return ""
+
+
 def display_label_text(label_data: Any, annotation_scheme: dict) -> str:
     """Resolve the *visible* text for a label.
 

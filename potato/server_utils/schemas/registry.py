@@ -721,7 +721,7 @@ def _register_builtin_schemas():
             name="error_span",
             generator=generate_error_span_layout,
             required_fields=["name", "description", "error_types"],
-            optional_fields=["severities", "show_score", "max_score"],
+            optional_fields=["severities", "show_score", "max_score", "source_field"],
             supports_keybindings=False,
             description="MQM-style error span annotation with typed severity for quality evaluation"
         ),

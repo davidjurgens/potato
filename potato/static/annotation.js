@@ -1678,6 +1678,16 @@ async function saveAnnotations({ background = false } = {}) {
             const responseText = await response.text();
             try {
                 const result = JSON.parse(responseText);
+                // A 2xx is not consent. `/updateinstance` answers with a body
+                // that says whether it stored anything, and refusals used to
+                // arrive at HTTP 200 -- so checking `response.ok` alone reported
+                // every discarded save as a save. Read the body too, and keep
+                // reading it: an older server still answers 200 here.
+                if (result && result.status === 'error') {
+                    console.warn('[DEBUG] saveAnnotations: server refused the save:', result.message);
+                    reportSaveRefused(result.message);
+                    return false;
+                }
                 debugLog('[DEBUG] saveAnnotations: annotations saved:', result);
                 handleQualityControlResponse(result);
             } catch (jsonError) {
@@ -1686,7 +1696,12 @@ async function saveAnnotations({ background = false } = {}) {
                 // Don't throw - the save may have succeeded even if response parsing failed
             }
         } else {
-            console.warn('[DEBUG] saveAnnotations: failed to save annotations:', await response.text());
+            let message = '';
+            try {
+                message = (JSON.parse(await response.text()) || {}).message || '';
+            } catch (e) { /* a non-JSON error body is still an error */ }
+            console.warn('[DEBUG] saveAnnotations: failed to save annotations:', response.status, message);
+            reportSaveRefused(message, response.status);
             return false;
         }
 
@@ -1705,6 +1720,37 @@ async function saveAnnotations({ background = false } = {}) {
         }
         return false;
     }
+}
+
+/**
+ * Tell the annotator that the server did not keep what they just did.
+ *
+ * The failure that motivated this was silent on both sides: the page kept
+ * working -- radios checked, span drawn, diff recomputed -- while every
+ * autosave for six minutes was refused for a session the server had already
+ * dropped. Clicking Next was the first visible sign, and by then the only
+ * place the work existed was the DOM.
+ *
+ * A lost session is the one case worth interrupting for, because no amount of
+ * retrying fixes it and the fix (sign in again in another tab) has to happen
+ * before the page is navigated. Everything else gets the quieter notice: the
+ * work is still on screen and the next edit reschedules a save.
+ */
+function reportSaveRefused(message, httpStatus) {
+    const sessionLost = httpStatus === 401 ||
+        /no active session|user state not found/i.test(String(message || ''));
+    if (sessionLost) {
+        showError(true,
+            'You are signed out, so nothing on this page is being saved. ' +
+            'Sign in again in another tab, then come back and edit anything ' +
+            'here to save it — do not reload or navigate away first.');
+        return;
+    }
+    showNotification(
+        'The server did not save that change' +
+        (message ? ' (' + message + ')' : '') +
+        '. Your work is still on screen.',
+        'error');
 }
 
 async function navigateToPrevious() {
@@ -5999,16 +6045,33 @@ function populateTextEdit(form, schemaName, data) {
 }
 
 function populateErrorSpan(form, schemaName, data, instanceText) {
+    // `source_field` names the field to mark errors in; without it this always
+    // rendered the configured text_key, so an MQM scheme meant to mark the
+    // translation marked the source instead.
+    const sourceField = form.getAttribute('data-source-field');
+    const sourceText = (sourceField && typeof data[sourceField] === 'string')
+        ? data[sourceField]
+        : instanceText;
+    if (sourceField && typeof data[sourceField] !== 'string') {
+        console.warn('[DynamicSchema] error_span ' + schemaName +
+            ' names source_field "' + sourceField +
+            '" but the item has no text under that key; showing the main text field.');
+    }
     const textContainer = document.getElementById(schemaName + '-text');
     if (textContainer && !textContainer.textContent.trim()) {
-        textContainer.textContent = instanceText;
+        textContainer.textContent = sourceText;
     }
 
     // Hide the duplicate "Text to Annotate" section — the error span container
-    // IS the interactive text area and showing the same text twice is confusing
-    const instanceTextSection = document.getElementById('instance-text');
-    if (instanceTextSection) {
-        instanceTextSection.style.display = 'none';
+    // IS the interactive text area and showing the same text twice is
+    // confusing. Only when it IS the same text: a scheme pointed at another
+    // field needs the main text left on screen, because that is the source the
+    // annotator is comparing against.
+    if (sourceText === instanceText) {
+        const instanceTextSection = document.getElementById('instance-text');
+        if (instanceTextSection) {
+            instanceTextSection.style.display = 'none';
+        }
     }
 }
 

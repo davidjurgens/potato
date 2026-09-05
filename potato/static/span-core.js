@@ -18,6 +18,84 @@ function spanCoreDebugWarn(...args) {
 }
 
 /**
+ * Span offsets on the wire are Unicode code point offsets, not UTF-16 units.
+ *
+ * A DOM Range and `String.length` both count UTF-16 code units, so an emoji --
+ * or any other non-BMP character -- costs two. Python counts code points, and
+ * every consumer of a stored span slices in Python: the exporter, span IAA,
+ * adjudication. Before this conversion existed, one 🔥 in an item shifted every
+ * span after it by one per surrogate pair, and the exporter wrote out the
+ * shifted text without noticing that `end` had run past the end of the string.
+ *
+ * The conversion lives at the two boundaries of the DOM offset space rather
+ * than at each call site that saves a span: `getOffsetsFromSelection()` hands
+ * back code points, and `getPositionsFromOffsets()` takes them. Everything in
+ * between -- `overlay.dataset.start`, the save payload, `user_state.json` --
+ * is one space, and it is Python's. (`getTextPositions()` needs no conversion:
+ * it locates its own range with `indexOf` and ignores the offsets passed to
+ * it, so it never leaves the UTF-16 space it measures in.)
+ */
+function spanTextHasAstral(text) {
+    // Surrogate pairs are the only place the two spaces disagree, and almost
+    // no corpus has one, so pay for the scan and skip the walk.
+    return typeof text === 'string' && /[\uD800-\uDBFF]/.test(text);
+}
+
+function spanIsSurrogatePairAt(text, i) {
+    const hi = text.charCodeAt(i);
+    if (hi < 0xD800 || hi > 0xDBFF || i + 1 >= text.length) return false;
+    const lo = text.charCodeAt(i + 1);
+    return lo >= 0xDC00 && lo <= 0xDFFF;
+}
+
+/** UTF-16 code unit offset -> code point offset, against `text`. */
+function spanUtf16ToCodePoint(text, utf16Index) {
+    if (!(utf16Index > 0) || !spanTextHasAstral(text)) return utf16Index;
+    let i = 0, cp = 0;
+    while (i < utf16Index && i < text.length) {
+        i += spanIsSurrogatePairAt(text, i) ? 2 : 1;
+        cp += 1;
+    }
+    return cp;
+}
+
+/** Code point offset -> UTF-16 code unit offset, against `text`. */
+function spanCodePointToUtf16(text, cpIndex) {
+    if (!(cpIndex > 0) || !spanTextHasAstral(text)) return cpIndex;
+    let i = 0, cp = 0;
+    while (cp < cpIndex && i < text.length) {
+        i += spanIsSurrogatePairAt(text, i) ? 2 : 1;
+        cp += 1;
+    }
+    return i;
+}
+
+/** Length of `text` in code points -- what Python's `len()` would return. */
+function spanCodePointLength(text) {
+    if (!spanTextHasAstral(text)) return text ? text.length : 0;
+    let i = 0, cp = 0;
+    while (i < text.length) {
+        i += spanIsSurrogatePairAt(text, i) ? 2 : 1;
+        cp += 1;
+    }
+    return cp;
+}
+
+/** Slice `text` by code point offsets, the way Python's `text[start:end]` does. */
+function spanSliceByCodePoints(text, start, end) {
+    if (!spanTextHasAstral(text)) return String(text || '').substring(start, end);
+    return text.substring(spanCodePointToUtf16(text, start),
+                          spanCodePointToUtf16(text, end));
+}
+
+if (typeof window !== 'undefined') {
+    window.spanUtf16ToCodePoint = spanUtf16ToCodePoint;
+    window.spanCodePointToUtf16 = spanCodePointToUtf16;
+    window.spanCodePointLength = spanCodePointLength;
+    window.spanSliceByCodePoints = spanSliceByCodePoints;
+}
+
+/**
  * Centralized Z-Index Management
  * All overlay z-index values defined in one place for consistency.
  * Higher values appear on top of lower values.
@@ -292,7 +370,8 @@ class UnifiedPositioningStrategy {
         }
 
         if (absoluteStart === null || absoluteEnd === null) {
-            console.warn('[SpanCore] Could not find absolute offsets for selection', {
+            console.warn('[SpanCore] Could not find absolute offsets for selection ' +
+                '(the selection did not start or end inside the annotatable text)', {
                 startContainer: startContainer.nodeName,
                 endContainer: endContainer.nodeName,
                 startOffset,
@@ -301,7 +380,15 @@ class UnifiedPositioningStrategy {
             return null;
         }
 
-        return { start: absoluteStart, end: absoluteEnd };
+        // The walk above counts UTF-16 code units, because that is what a DOM
+        // Range offset and node.textContent.length are. Hand back code points:
+        // everything past this return -- the overlay dataset, the save payload,
+        // user_state.json -- is read by Python.
+        const basis = this.getCanonicalText();
+        return {
+            start: spanUtf16ToCodePoint(basis, absoluteStart),
+            end: spanUtf16ToCodePoint(basis, absoluteEnd)
+        };
     }
 
     createSpanWithAlgorithm(start, end, text, options = {}) {
@@ -310,8 +397,12 @@ class UnifiedPositioningStrategy {
         }
 
         const canonicalText = this.getCanonicalText();
-        if (start < 0 || end > canonicalText.length || start >= end) {
-            console.warn('[SpanCore] Invalid span positions:', { start, end, textLength: canonicalText.length });
+        // Code point length, to match the space `start`/`end` are expressed in.
+        const canonicalLength = spanCodePointLength(canonicalText);
+        if (start < 0 || end > canonicalLength || start >= end) {
+            console.warn('[SpanCore] Refusing a span outside the text it indexes:',
+                { start, end, textLength: canonicalLength,
+                  container: this.container ? this.container.id : null });
             return null;
         }
 
@@ -469,6 +560,13 @@ class UnifiedPositioningStrategy {
             console.warn('[SpanCore] getPositionsFromOffsets: text-content element not found');
             return null;
         }
+
+        // `start`/`end` arrive as code point offsets -- from a stored span, an
+        // AI suggestion, or a keyword highlight, all of which were measured in
+        // Python. The walk below counts UTF-16 code units, so convert first.
+        const offsetBasis = this.getCanonicalText();
+        start = spanCodePointToUtf16(offsetBasis, start);
+        end = spanCodePointToUtf16(offsetBasis, end);
 
         // Collect text nodes with cumulative offsets
         const textNodes = [];
@@ -1718,7 +1816,18 @@ class SpanManager {
             color: color
         });
         if (!result) {
-            spanCoreDebugWarn('[SpanManager] handleTextSelection: createSpanFromSelection returned null for field=' + targetField);
+            // Warn, not debug-warn. A refused selection produces no span and
+            // no message, and the annotator's only evidence is that nothing
+            // happened -- which reads as a slip of the mouse rather than a
+            // refusal. Debug logging is off in every real deployment, so this
+            // was invisible in exactly the cases where it mattered.
+            console.warn('[SpanManager] The selection was not turned into a span',
+                {
+                    field: targetField,
+                    label: selectedLabel,
+                    schema: this.currentSchema,
+                    selected: String(selection).slice(0, 60),
+                });
             return;
         }
 

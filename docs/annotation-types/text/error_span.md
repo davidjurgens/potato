@@ -42,6 +42,30 @@ annotation_schemes:
 | `severities` | list | Minor(-1), Major(-5), Critical(-10) | Severity levels with penalty weights |
 | `show_score` | boolean | `true` | Display running quality score |
 | `max_score` | integer | `100` | Starting quality score |
+| `source_field` | string | `text_key` | Item field holding the text to mark errors in |
+
+### Marking a field other than the main text
+
+An MQM task usually holds the source and the translation in separate fields,
+and the errors belong to the translation. Name that field:
+
+```yaml
+item_properties:
+  id_key: id
+  text_key: source          # shown for reference
+
+annotation_schemes:
+  - annotation_type: error_span
+    name: translation_quality
+    description: "Mark errors in the translation"
+    source_field: translation
+    error_types:
+      - name: Accuracy
+```
+
+Without `source_field` the scheme marks up `text_key`, which for an MQM layout
+is the source rather than the translation. When `source_field` is set, the main
+text field stays on screen as the reference to compare against.
 
 ### Error Types Format
 

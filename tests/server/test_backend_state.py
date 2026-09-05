@@ -237,20 +237,32 @@ class TestBackendState:
         user_data = {"email": "f046_user", "pass": "test_password"}
         session.post(f"{flask_server.base_url}/register", data=user_data, timeout=5)
         session.post(f"{flask_server.base_url}/auth", data=user_data, timeout=5)
+        # Load the annotation page so the user has a real assignment, and use
+        # the instance they were actually given. Posting a hardcoded id hit the
+        # unassigned-instance guard (403) before the payload shape was ever
+        # examined, so the test passed on the wrong refusal.
+        session.get(f"{flask_server.base_url}/annotate", timeout=5)
+        current = session.get(
+            f"{flask_server.base_url}/api/current_instance", timeout=5)
+        assigned_id = (current.json() or {}).get("instance_id", "item_1") \
+            if current.status_code == 200 else "item_1"
 
         for bad in ["not_a_dict", ["a", "b"], 5, [{"x": 1}]]:
-            payload = {"instance_id": "item_1", "annotations": bad}
+            payload = {"instance_id": assigned_id, "annotations": bad}
             response = session.post(
                 f"{flask_server.base_url}/updateinstance", json=payload, timeout=5)
             assert response.status_code != 500, \
                 f"non-dict annotations {bad!r} caused a 500"
-            assert response.status_code == 200
+            # 400: a malformed payload is a client error, and the status line
+            # is the half the annotation page reads. Answering 200 here made a
+            # rejected save indistinguishable from a stored one.
+            assert response.status_code == 400
             assert response.json().get("status") == "error"
 
         # Server must remain healthy and still accept a well-formed payload afterward.
         ok = session.post(
             f"{flask_server.base_url}/updateinstance",
-            json={"instance_id": "item_1", "annotations": {}}, timeout=5)
+            json={"instance_id": assigned_id, "annotations": {}}, timeout=5)
         assert ok.status_code == 200
 
     def test_concurrent_user_operations(self, flask_server):

@@ -166,33 +166,66 @@ Potato supports admin-defined keyword highlights to help annotators identify rel
 
 ### Configuration
 
-Add a `keyword_highlights_file` to your configuration pointing to a TSV file:
+Point `keyword_highlights_file` at a file of keywords:
 
 ```yaml
-keyword_highlights_file: data/keywords.tsv
+keyword_highlights_file: data/keywords.csv
 ```
 
-The path is relative to the directory where you run the server (task_dir).
+The path is relative to `task_dir`, which is also the directory the server runs in.
 
-### TSV File Format
+### File format
 
-The keywords file should be tab-separated with three columns:
+A CSV or TSV with a header row:
 
 ```
-Word	Label	Schema
-love	positive	sentiment
-hate	negative	sentiment
-excel*	positive	sentiment
-disappoint*	negative	sentiment
+keyword,label,schema
+love,positive,sentiment
+hate,negative,sentiment
+excel*,positive,sentiment
+disappoint*,negative,sentiment
 ```
 
-| Column | Description |
-|--------|-------------|
-| **Word** | The keyword or phrase to highlight (supports `*` wildcards) |
-| **Label** | The annotation label associated with this keyword |
-| **Schema** | The annotation schema name this keyword is relevant to |
+| Column | Required | Description |
+|--------|----------|-------------|
+| `keyword` | yes | The word or phrase to highlight (supports `*` wildcards) |
+| `label` | no | The annotation label this keyword suggests |
+| `schema` | no | The annotation scheme the label belongs to |
+| `color` | no | A colour for this label, as `(r, g, b)` or `#rrggbb` |
 
-**Note:** Use actual tab characters between columns, not spaces.
+Columns are matched by name, so they can be in any order, and each accepts a
+few spellings: `keyword`/`word`/`pattern`/`term`, `label`/`category`/`tag`,
+`schema`/`scheme`, `color`/`colour`. A file whose header Potato does not
+recognise is read positionally as keyword, label, schema, and the log says so.
+
+Several other shapes load too. One keyword per line, with `#` comments:
+
+```
+latch
+swelled
+```
+
+A JSON array of keywords:
+
+```json
+["latch", "swelled"]
+```
+
+A JSON array of objects, which is where the label and schema go:
+
+```json
+[{"keyword": "latch", "label": "Hazard", "schema": "hazards"}]
+```
+
+A JSON object mapping each keyword to its label:
+
+```json
+{"latch": "Hazard"}
+```
+
+JSONL (one object per line) and the same shapes in YAML also work. The boot
+log names the format it read and how many patterns it found, so a file Potato
+cannot parse shows up at boot.
 
 ### Matching Behavior
 
@@ -217,6 +250,15 @@ ui:
         neutral: "(156, 163, 175)"   # Gray
 ```
 
+A `color` column in the keywords file sets the same thing per label, which is
+easier when the labels only exist for highlighting:
+
+```
+keyword,label,schema,color
+excellent,positive,sentiment,(34, 197, 94)
+terrible,negative,sentiment,#ef4444
+```
+
 If no color is specified, Potato automatically assigns colors from a default palette.
 
 ### Multiple Schemas
@@ -224,11 +266,11 @@ If no color is specified, Potato automatically assigns colors from a default pal
 A single keywords file can support multiple annotation schemas:
 
 ```
-Word	Label	Schema
-excellent	positive	sentiment
-terrible	negative	sentiment
-price	economic	topic
-election	political	topic
+keyword,label,schema
+excellent,positive,sentiment
+terrible,negative,sentiment
+price,economic,topic
+election,political,topic
 ```
 
 ### Randomization Settings
@@ -236,7 +278,7 @@ election	political	topic
 For research purposes, you can configure keyword highlight randomization to prevent annotators from relying solely on the highlights:
 
 ```yaml
-keyword_highlights_file: data/keywords.tsv
+keyword_highlights_file: data/keywords.csv
 
 keyword_highlight_settings:
   keyword_probability: 1.0       # Probability of showing each matched keyword (0.0-1.0)

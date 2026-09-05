@@ -161,34 +161,37 @@ class TestDialogueSpanIntegration:
         # First get the annotation page to establish the instance
         auth_session.get(f"{base}/annotate")
 
-        # Save a span annotation
-        annotation_data = {
-            "instance_id": "trace_001",
-            "schema": "issue_spans",
-            "label": "hallucination",
-            "start": 0,
-            "end": 10,
-            "target_field": "conversation"
-        }
+        # Save a span annotation.
+        #
+        # This used to post a `schema_name`/`label_name`/`label_value` payload,
+        # which `/updateinstance` accepts in neither of its two shapes -- it
+        # fell through to "Unknown data format" and stored nothing. The
+        # assertion was `status_code in (200, 302)`, and the route answered 200
+        # for every refusal, so a test named "save a span annotation" passed
+        # without one ever being saved. Post the shape the route documents, and
+        # check the span came back.
         resp = auth_session.post(
             f"{base}/updateinstance",
             json={
                 "instance_id": "trace_001",
-                "schema_name": "issue_spans",
-                "label_name": "hallucination",
-                "label_value": {
-                    "span": {
-                        "start": 0,
-                        "end": 10,
-                        "text": "I will sea",
-                        "label": "hallucination",
-                        "target_field": "conversation"
-                    }
-                }
+                "annotations": {},
+                "span_annotations": [{
+                    "schema": "issue_spans",
+                    "name": "hallucination",
+                    "title": "hallucination",
+                    "start": 0,
+                    "end": 10,
+                    "value": "I will sea",
+                    "target_field": "conversation",
+                }],
             }
         )
-        # Accept 200 or 302 (redirect)
-        assert resp.status_code in (200, 302)
+        assert resp.status_code == 200, resp.text
+        assert resp.json().get("status") != "error", resp.text
+
+        stored = auth_session.get(f"{base}/api/spans/trace_001").json()
+        assert any(sp.get("start") == 0 and sp.get("end") == 10
+                   for sp in stored.get("spans", [])), stored
 
     def test_span_api_returns_correct_text_for_dialogue(self, auth_session):
         """The /api/spans endpoint should extract text correctly from dialogue data."""

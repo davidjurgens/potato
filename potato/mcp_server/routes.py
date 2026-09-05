@@ -136,15 +136,14 @@ def authorize(tool_name: str, payload: Optional[dict] = None):
                 400,
             )
 
-    from potato.server_utils.rbac import get_rbac_manager
+    from potato.server_utils.rbac import (
+        DEFAULT_ROLE_PERMISSIONS, get_rbac_manager, grant_mcp_permissions)
 
     manager = get_rbac_manager()
+    # The role on the token itself: the agent is not a registered user, so
+    # `rbac.user_role_assignments` will not know it.
+    role_permissions = set(DEFAULT_ROLE_PERMISSIONS.get(record.role, set()))
     if not manager.has_permission(record.name, tool.permission):
-        # Fall back to the role on the token itself: the agent is not a
-        # registered user, so `rbac.user_role_assignments` will not know it.
-        from potato.server_utils.rbac import DEFAULT_ROLE_PERMISSIONS
-
-        role_permissions = DEFAULT_ROLE_PERMISSIONS.get(record.role, set())
         if tool.permission not in role_permissions:
             audit("permission_denied", tool=tool_name, agent=record.name,
                   role=record.role, permission=tool.permission)
@@ -152,6 +151,12 @@ def authorize(tool_name: str, payload: Optional[dict] = None):
                 f"The '{record.role}' role does not carry "
                 f"'{tool.permission}', which '{tool_name}' requires."
             )
+
+    # Publish what this token carries, so a handler that reaches an
+    # admin-gated method is not refused by a second gate that only understands
+    # browser sessions and admin API keys -- an agent has neither. Scoped to
+    # this request, and never wider than what was just checked.
+    grant_mcp_permissions(role_permissions | {tool.permission})
 
     scope = settings.get("scope") or {}
     users = scope.get("users")
@@ -177,7 +182,21 @@ def mcp_tool(tool_name: str):
                 return refusal
             audit("call", tool=tool_name, agent=record.name, role=record.role,
                   args=sorted(payload))
-            return view(record, payload, *args, **kwargs)
+            # Record the outcome, not only the attempt. The audit log said
+            # `submit_annotation` had been called and stopped there, so a tool
+            # that raised on every invocation left a trail indistinguishable
+            # from one that worked. An audit log that only logs intent is not
+            # an audit log.
+            try:
+                response = view(record, payload, *args, **kwargs)
+            except Exception as e:  # noqa: BLE001 - re-raised below
+                audit("error", tool=tool_name, agent=record.name,
+                      error=f"{type(e).__name__}: {e}")
+                raise
+            status = response[1] if isinstance(response, tuple) and len(response) > 1 else 200
+            if isinstance(status, int) and status >= 400:
+                audit("refused", tool=tool_name, agent=record.name, status=status)
+            return response
 
         return wrapper
 
@@ -381,22 +400,70 @@ def tool_submit_annotation(record, payload):
     if state is None:
         return _refuse(f"No such annotator: {username}", 404)
 
-    # Same four-argument shape /updateinstance uses, so an agent's annotation
-    # is stored exactly like a human's rather than through a second path.
-    state.set_annotation(
-        instance_id,
-        annotations,
-        payload.get("span_annotations") or [],
-        payload.get("behavioral_data") or {},
-    )
+    # Write through the same typed accessors /updateinstance uses.
+    #
+    # `set_annotation()` takes the payload verbatim, and the payload is JSON:
+    # plain strings where `Label` objects belong, plain dicts where
+    # `SpanAnnotation` objects belong. The state then cannot be serialised --
+    # `to_json()` calls `label.get_schema()` on a str -- so every submission
+    # 500ed on save while mcp_audit.jsonl logged it as an ordinary call. The
+    # one tool that records work was the one tool that did not work, and the
+    # audit trail said otherwise.
+    #
+    # Two shapes are accepted, matching what /updateinstance takes:
+    #   {"schema": {"label": value}}   nested
+    #   {"schema": value}              a scalar answer for a single-field scheme
+    from potato.item_state_management import Label, SpanAnnotation
+
+    written = 0
+    for schema_name, label_data in annotations.items():
+        if isinstance(label_data, dict):
+            for label_name, value in label_data.items():
+                state.add_label_annotation(
+                    instance_id, Label(str(schema_name), str(label_name)), value)
+                written += 1
+        else:
+            # `text_box` is the name /submit_annotation gives a bare scalar.
+            state.add_label_annotation(
+                instance_id, Label(str(schema_name), "text_box"), label_data)
+            written += 1
+
+    spans_written = 0
+    for span in payload.get("span_annotations") or []:
+        if not isinstance(span, dict):
+            return _refuse("every span_annotation must be an object", 400)
+        missing = [k for k in ("schema", "name", "start", "end") if k not in span]
+        if missing:
+            return _refuse(
+                f"span_annotation is missing {', '.join(missing)}", 400)
+        try:
+            start, end = int(span["start"]), int(span["end"])
+        except (TypeError, ValueError):
+            return _refuse("span_annotation start/end must be integers", 400)
+        annotation = SpanAnnotation(
+            schema=str(span["schema"]),
+            name=str(span["name"]),
+            title=str(span.get("title") or span["name"]),
+            start=start,
+            end=end,
+            id=span.get("id"),
+            target_field=span.get("target_field"),
+        )
+        state.add_span_annotation(instance_id, annotation,
+                                  span.get("value", span["name"]))
+        spans_written += 1
+
+    behavioral = payload.get("behavioral_data") or {}
+    if behavioral:
+        state.instance_id_to_behavioral_data[instance_id] = behavioral
+
     # The STATE, not the username: every other caller passes the object, and
-    # handing over the string raised AttributeError inside save_user_state --
-    # a 500 on the one MCP tool that records work, while mcp_audit.jsonl
-    # recorded the call as an ordinary success.
+    # handing over the string raised AttributeError inside save_user_state.
     usm.save_user_state(state)
     audit("annotation_submitted", agent=record.name, target=username,
-          instance_id=instance_id)
-    return jsonify({"status": "ok", "instance_id": instance_id})
+          instance_id=instance_id, labels=written, spans=spans_written)
+    return jsonify({"status": "ok", "instance_id": instance_id,
+                    "labels_written": written, "spans_written": spans_written})
 
 
 @mcp_bp.route("/api/mcp/tools/assign_items", methods=["POST"])

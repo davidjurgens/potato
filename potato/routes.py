@@ -1107,7 +1107,7 @@ def submit_annotation():
 
     if 'username' not in session:
         logger.warning("Annotation submission without active session")
-        return jsonify({"status": "error", "message": "No active session"})
+        return jsonify({"status": "error", "message": "No active session"}), 401
 
     user_id = session['username']
     logger.debug(f"Using user_id: {user_id}")
@@ -1136,7 +1136,7 @@ def submit_annotation():
 
     if not instance_id:
         logger.warning("Missing instance_id")
-        return jsonify({"status": "error", "message": "Missing instance_id"})
+        return jsonify({"status": "error", "message": "Missing instance_id"}), 400
 
     try:
         logger.debug(f"Getting user state for user_id: {user_id}")
@@ -1201,7 +1201,7 @@ def submit_annotation():
 
     except Exception as e:
         logger.error(f"Error saving annotation: {type(e).__name__}: {str(e)}", exc_info=True)
-        return jsonify({"status": "error", "message": "Failed to save annotation"})
+        return jsonify({"status": "error", "message": "Failed to save annotation"}), 500
 
 def _username_owns_annotations(username: str) -> bool:
     """True when this username already has an annotation directory on disk.
@@ -5648,20 +5648,25 @@ def update_instance():
 
     if 'username' not in session:
         logger.warning("Update instance without active session")
-        return jsonify({"status": "error", "message": "No active session"})
+        # HTTP status, not just a body. Every refusal here used to answer 200,
+        # and the page only checks `response.ok` -- so a save that the server
+        # threw away looked identical to one it stored. An annotator worked
+        # through a ten-scheme item for six minutes against a dropped session;
+        # the first sign was the login screen, and the work was gone.
+        return jsonify({"status": "error", "message": "No active session"}), 401
 
     if request.is_json:
         logger.debug(f"Received JSON data: {request.json}")
         raw_instance_id = request.json.get("instance_id")
         if raw_instance_id is None or str(raw_instance_id).strip() == "":
             logger.warning(f"Received update with null/empty instance_id from user {session.get('username')}")
-            return jsonify({"status": "error", "message": "Missing instance_id"})
+            return jsonify({"status": "error", "message": "Missing instance_id"}), 400
         instance_id = str(raw_instance_id)  # Normalize to string
         username = session['username']
         user_state = get_user_state(username)
         if not user_state:
             logger.error(f"User state not found for user: {username}")
-            return jsonify({"status": "error", "message": "User state not found"})
+            return jsonify({"status": "error", "message": "User state not found"}), 401
 
         # Synthetic phase-page saves use a sentinel instance ID from annotation.js.
         # They should be routed by the current user phase instead of assignment checks.
@@ -5674,7 +5679,7 @@ def update_instance():
             assigned_ids = user_state.get_assigned_instance_ids()
             if assigned_ids and instance_id not in assigned_ids:
                 logger.warning(f"User {username} tried to update unassigned instance {instance_id}")
-                return jsonify({"status": "error", "message": "Instance not assigned to user"})
+                return jsonify({"status": "error", "message": "Instance not assigned to user"}), 403
 
         # If a synthetic phase-page save arrives while the backend still thinks the user
         # is in annotation, acknowledge it without writing item state. This avoids a
@@ -5732,7 +5737,7 @@ def update_instance():
                     f"Rejected /updateinstance from {username}: 'annotations' is "
                     f"{type(annotations).__name__}, expected object")
                 return jsonify({"status": "error",
-                                "message": "'annotations' must be an object"})
+                                "message": "'annotations' must be an object"}), 400
 
             # Pre-clear stale labels before re-writing. The client sends the COMPLETE
             # current state for these schemas, so any label not in the incoming set
@@ -5790,6 +5795,7 @@ def update_instance():
             span_annotations = request.json.get("span_annotations", [])
             for span_data in span_annotations:
                 if isinstance(span_data, dict) and "schema" in span_data:
+                    _warn_if_span_exceeds_text(instance_id, span_data)
                     # Format-specific coordinates (PDF page/bbox, spreadsheet cell,
                     # etc). Previously dropped here, so PDF anchor geometry never
                     # persisted. anchor_kind/page are folded into the deterministic
@@ -6077,7 +6083,7 @@ def update_instance():
                     user_state.add_label_annotation(instance_id, label, value)
         else:
             logger.warning("Unknown data format in /updateinstance")
-            return jsonify({"status": "error", "message": "Unknown data format"})
+            return jsonify({"status": "error", "message": "Unknown data format"}), 400
 
         # Collect all annotations for this instance. Used by both QC validation
         # and the webhook payload below — must be defined unconditionally, since
@@ -9030,6 +9036,48 @@ def reset_password_with_token(token):
                              title=config.get("annotation_task_name", "Annotation Platform"),
                              token=token,
                              error="Failed to reset password. Please try again.")
+
+
+
+def _warn_if_span_exceeds_text(instance_id, span_data):
+    """Log a span whose ``end`` runs past the field it indexes.
+
+    Offsets arrive from the browser and are read back in Python, and the two
+    count characters differently: a DOM Range counts UTF-16 code units, so one
+    emoji costs two, while ``len()`` counts code points. When those spaces
+    disagree the corruption is silent -- the exporter slices the shifted range
+    and writes out neighbouring characters -- and the one observable symptom is
+    an ``end`` past the end of the string. Say so rather than storing it
+    quietly; the span itself is kept, because refusing it would discard an
+    annotator's work over an offset the server cannot re-derive.
+    """
+    try:
+        end = int(span_data.get("end"))
+    except (TypeError, ValueError):
+        return
+    try:
+        item = get_item_state_manager().find_item(str(instance_id))
+    except Exception:  # noqa: BLE001 - a diagnostic must never break a save
+        return
+    # `get_data()`, not `.data`: Item exposes its payload through the accessor,
+    # and `__getattr__` resolves unknown names against the data dict itself, so
+    # `getattr(item, "data", None)` returns None for every item that has no
+    # field literally called "data" -- which is all of them.
+    data = item.get_data() if item is not None else None
+    if not isinstance(data, dict):
+        return
+    field = span_data.get("target_field") or (
+        (config.get("item_properties", {}) or {}).get("text_key", "text"))
+    source = data.get(field)
+    if not isinstance(source, str) or end <= len(source):
+        return
+    logger.warning(
+        "Span on %s (%s:%s) ends at %d but field %r is only %d characters. "
+        "The stored offsets index text that does not exist; anything slicing "
+        "them -- exports, span IAA, adjudication -- will read the wrong "
+        "characters.",
+        instance_id, span_data.get("schema"), span_data.get("name"),
+        end, field, len(source))
 
 
 def configure_routes(flask_app, app_config):

@@ -455,7 +455,12 @@ class SpanLinkManager {
         const strategy = strategies[spanOverlay.dataset.targetField] ||
             (window.spanManager && window.spanManager.positioningStrategy);
         if (strategy && typeof strategy.getCanonicalText === 'function') {
-            const slice = strategy.getCanonicalText().substring(start, end);
+            // `start`/`end` are code point offsets; `substring` counts UTF-16
+            // units. Slice the way Python would so an emoji earlier in the item
+            // does not shift the snippet the annotator reads.
+            const slice = window.spanSliceByCodePoints
+                ? window.spanSliceByCodePoints(strategy.getCanonicalText(), start, end)
+                : strategy.getCanonicalText().substring(start, end);
             if (slice.trim()) return slice.trim();
         }
 
@@ -465,15 +470,21 @@ class SpanLinkManager {
             const originalText = textContent.getAttribute('data-original-text');
             // Strip HTML tags and normalize whitespace like span-core does
             const cleanText = originalText.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-            console.log(`[SpanLinkManager] getSpanText: start=${start}, end=${end}, text="${cleanText.substring(start, end)}"`);
-            return cleanText.substring(start, end);
+            const cleanSlice = window.spanSliceByCodePoints
+                ? window.spanSliceByCodePoints(cleanText, start, end)
+                : cleanText.substring(start, end);
+            console.log(`[SpanLinkManager] getSpanText: start=${start}, end=${end}, text="${cleanSlice}"`);
+            return cleanSlice;
         }
 
         // Fallback: try to get from spanManager if available
         if (window.spanManager && typeof window.spanManager.getCanonicalText === 'function') {
             const canonicalText = window.spanManager.getCanonicalText();
-            console.log(`[SpanLinkManager] getSpanText from spanManager: start=${start}, end=${end}, text="${canonicalText.substring(start, end)}"`);
-            return canonicalText.substring(start, end);
+            const managerSlice = window.spanSliceByCodePoints
+                ? window.spanSliceByCodePoints(canonicalText, start, end)
+                : canonicalText.substring(start, end);
+            console.log(`[SpanLinkManager] getSpanText from spanManager: start=${start}, end=${end}, text="${managerSlice}"`);
+            return managerSlice;
         }
 
         // Last resort fallback
@@ -1030,13 +1041,41 @@ class SpanLinkManager {
         }));
     }
 
+    /**
+     * Up to two span labels this task actually offers, for the guidance line.
+     *
+     * Read off the label picker rather than the config, because the picker is
+     * what the annotator is being told to look at -- if a label is not there,
+     * naming it in the instructions is worse than naming nothing.
+     */
+    exampleSpanLabels() {
+        const labels = [];
+        document.querySelectorAll('input[for_span="true"]').forEach((input) => {
+            if (labels.length >= 2 || !input.id) return;
+            const chip = document.querySelector(
+                'label[for="' + (window.CSS && CSS.escape ? CSS.escape(input.id) : input.id) + '"]');
+            const text = chip ? (chip.textContent || '').trim() : '';
+            if (text && labels.indexOf(text) === -1) labels.push(text);
+        });
+        return labels;
+    }
+
     renderSlotsOrGuidance() {
         // Not linking yet — guide the two prerequisites in order.
         if (!this.isLinkMode || !this.currentLinkType) {
             if (this.spanOverlayCount() === 0) {
+                // Name this task's own labels. The example used to be a
+                // hardcoded "question / answer" from a different study, so a
+                // task whose labels are PLACE, PERSON and ORG told its
+                // annotators to pick one of two labels it does not have.
+                const examples = this.exampleSpanLabels();
+                const eg = examples.length
+                    ? ' (e.g. ' + examples.map(l =>
+                        '<strong>' + this.escapeHtml(l) + '</strong>').join(' / ') + ')'
+                    : '';
                 return '<p class="span-link-guide"><span class="span-link-step">1</span>' +
-                    'Highlight spans first: pick a label above the transcript (e.g. ' +
-                    '<strong>question</strong> / <strong>answer</strong>) and drag across the text. ' +
+                    'Highlight spans first: pick a label above' + eg +
+                    ', then drag across the text. ' +
                     'Then <span class="span-link-step">2</span> choose a link type here to connect them.</p>';
             }
             return '<p class="span-link-guide"><span class="span-link-step">2</span>' +

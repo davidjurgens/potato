@@ -37,6 +37,25 @@ from potato.item_store import build_store as build_item_store
 ITEM_STATE_MANAGER = None
 _ITEM_STATE_MANAGER_LOCK = threading.Lock()
 
+#: The project's ``item_properties.text_key``, published here so ``Item`` can
+#: read it. ``Item`` predates any config plumbing and is constructed in places
+#: that have none (tests, the item store, migration tools), so this is set once
+#: at manager init and defaults to None -- with no config the old guesswork is
+#: exactly what happens.
+_CONFIGURED_TEXT_KEY = None
+
+
+def set_configured_text_key(key):
+    """Record ``item_properties.text_key`` for :meth:`Item.get_text`."""
+    global _CONFIGURED_TEXT_KEY
+    _CONFIGURED_TEXT_KEY = key if isinstance(key, str) and key else None
+
+
+def get_configured_text_key():
+    """The configured text key, or None when no project has been loaded."""
+    return _CONFIGURED_TEXT_KEY
+
+
 def init_item_state_manager(config: dict) -> ItemStateManager:
     """
     Initialize the singleton ItemStateManager instance.
@@ -77,6 +96,7 @@ def clear_item_state_manager():
     global ITEM_STATE_MANAGER
     with _ITEM_STATE_MANAGER_LOCK:
         ITEM_STATE_MANAGER = None
+        set_configured_text_key(None)
 
 def get_item_state_manager() -> ItemStateManager:
     """
@@ -261,15 +281,32 @@ class Item:
         """
         Get the text content from the item data.
 
-        This method intelligently extracts text from various data structures,
-        trying common keys first, then falling back to string conversion.
+        Prefers the project's configured ``item_properties.text_key``, then the
+        conventional field names, then any string field.
+
+        The configured key has to come first. Without it the guesses run in
+        dict order, and a study whose text lives under a name of its own --
+        ``review``, ``post``, ``report`` -- gets whichever string field the
+        loader happened to write first, which for most data files is the id.
+        That is not a display bug; it is what gets sent to the model. An LLM
+        judge asked to grade instance ``P08`` answered, accurately, that it had
+        been given "a single alphanumeric code ... and contains no text", and
+        the resulting non-verdict was recorded as the judge's opinion of the
+        item and scored against the human's.
 
         Returns:
             str: The text content for annotation
         """
         if isinstance(self.item_data, dict):
-            # Try to get text from common keys
-            for key in ['text', 'content', 'message', 'title']:
+            configured = get_configured_text_key()
+            keys = ([configured] if configured else []) + [
+                k for k in ('text', 'content', 'message', 'title')
+                if k != configured
+            ]
+            for key in keys:
+                # Presence, not type: a dialogue item's `text` is a list, and
+                # callers have always received it as one. Only the ordering of
+                # the keys changed here.
                 if key in self.item_data:
                     return self.item_data[key]
             # If no text key found, return the first string value
@@ -879,6 +916,8 @@ class ItemStateManager:
         # Cache the config for later
         self.config = config
         self.logger = logging.getLogger(__name__)
+        set_configured_text_key(
+            (config.get('item_properties', {}) or {}).get('text_key'))
 
         # Thread-safe lock for concurrent access to item data
         self._lock = threading.RLock()

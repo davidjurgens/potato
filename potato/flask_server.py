@@ -266,8 +266,26 @@ class ActiveLearningState:
             self.id_to_selection_type[iid] = st
             self.id_to_update_round[iid] = self.cur_round
 
-# Set session timeout duration (e.g., 30 minutes)
-SESSION_TIMEOUT = timedelta(minutes=1)
+#: How long a signed-in session may sit idle before it is cleared. Overridable
+#: with ``session_timeout_minutes``; eight hours is one working day, which is
+#: the unit an annotation shift is actually measured in.
+#:
+#: This used to be one minute, and nobody was ever signed out, because the gate
+#: below never ran (see :func:`before_request`). Two defects cancelling: the
+#: moment the gate was fixed, a one-minute timeout would have evicted every
+#: annotator mid-item.
+DEFAULT_SESSION_TIMEOUT_MINUTES = 8 * 60
+SESSION_TIMEOUT = timedelta(minutes=DEFAULT_SESSION_TIMEOUT_MINUTES)
+
+
+def get_session_timeout() -> timedelta:
+    """The configured idle-session timeout."""
+    try:
+        minutes = float(config.get("session_timeout_minutes",
+                                   DEFAULT_SESSION_TIMEOUT_MINUTES))
+    except (TypeError, ValueError):
+        return SESSION_TIMEOUT
+    return timedelta(minutes=minutes) if minutes > 0 else SESSION_TIMEOUT
 
 
 def _read_cached_template_text(path: str) -> str:
@@ -1740,55 +1758,305 @@ def load_highlights_data(config: dict) -> None:
 
     try:
         with open(keyword_highlights_file, 'r', encoding='utf-8') as f:
-            import csv
-            reader = csv.DictReader(f, delimiter='\t')
+            raw = f.read()
+    except OSError as e:
+        logger.error(f"Error reading keyword highlights file: {e}")
+        return
 
-            for row in reader:
-                word = row.get('Word', '').strip()
-                label = row.get('Label', '').strip()
-                schema = row.get('Schema', '').strip()
-
-                if not word:
-                    continue
-
-                # Convert wildcard pattern to regex
-                # Escape special regex characters except *
-                escaped = re.escape(word).replace(r'\*', r'\w*')
-
-                # Add word boundary markers for exact matching
-                # If pattern starts with wildcard, don't require word boundary at start
-                # If pattern ends with wildcard, don't require word boundary at end
-                if word.startswith('*'):
-                    pattern = escaped
-                else:
-                    pattern = r'\b' + escaped
-
-                if word.endswith('*'):
-                    pattern = pattern
-                else:
-                    pattern = pattern + r'\b'
-
-                try:
-                    compiled_regex = re.compile(pattern, re.IGNORECASE)
-                    patterns_list.append({
-                        'pattern': word,
-                        'regex': compiled_regex,
-                        'label': label,
-                        'schema': schema
-                    })
-
-                    # Also populate the emphasis corpus for backward compatibility
-                    emphasis_map[word].add(HighlightSchema(label=label, schema=schema))
-
-                except re.error as e:
-                    logger.warning(f"Invalid regex pattern for keyword '{word}': {e}")
-                    continue
-
-        logger.info(f"Loaded {len(patterns_list)} keyword highlight patterns")
-
-    except Exception as e:
+    try:
+        entries, detected_format = _parse_keyword_highlight_entries(
+            raw, keyword_highlights_file)
+    except Exception as e:  # noqa: BLE001 - a bad file must not stop the boot
         logger.error(f"Error loading keyword highlights file: {e}")
         patterns_list.clear()
+        return
+
+    for entry in entries:
+        word = entry["word"]
+        label, schema, color = entry["label"], entry["schema"], entry["color"]
+
+        # Convert wildcard pattern to regex.
+        # Escape special regex characters except *.
+        escaped = re.escape(word).replace(r'\*', r'\w*')
+
+        # Word boundaries, except where the author asked for a wildcard edge.
+        pattern = escaped if word.startswith('*') else r'\b' + escaped
+        if not word.endswith('*'):
+            pattern = pattern + r'\b'
+
+        try:
+            compiled_regex = re.compile(pattern, re.IGNORECASE)
+        except re.error as e:
+            logger.warning(f"Invalid regex pattern for keyword '{word}': {e}")
+            continue
+
+        patterns_list.append({
+            'pattern': word,
+            'regex': compiled_regex,
+            'label': label,
+            'schema': schema,
+        })
+        # Also populate the emphasis corpus for backward compatibility
+        emphasis_map[word].add(HighlightSchema(label=label, schema=schema))
+
+        # A per-keyword colour goes into the same registry the span schemas
+        # use, which is where /keyword_highlights reads it back from.
+        if color:
+            from potato.server_utils.schemas.span import set_span_color
+            set_span_color(schema, label, _as_rgb_triple(color, word))
+
+    if patterns_list:
+        logger.info("Loaded %d keyword highlight patterns from %s (read as %s)",
+                    len(patterns_list), keyword_highlights_file, detected_format)
+    else:
+        logger.warning(
+            "Loaded 0 keyword highlight patterns from %s (read as %s). "
+            "Accepted formats: a CSV or TSV with a 'keyword' header column "
+            "(plus optional label, schema, color), one keyword per line, or "
+            "JSON/JSONL/YAML holding a list of keywords, a list of objects, "
+            "or a {keyword: label} mapping. See "
+            "docs/administration/productivity.md",
+            keyword_highlights_file, detected_format)
+
+
+def _as_rgb_triple(color, context=""):
+    """Normalise a colour to the ``(r, g, b)`` string the span registry stores.
+
+    Hex is accepted because it is what people write, but it cannot be stored
+    raw: the span label chip builds its CSS as ``"rgb" + color``, so a
+    ``#ffcc00`` in the registry renders as ``rgb#ffcc00`` and the chip loses
+    its colour.
+    """
+    value = str(color or "").strip()
+    if value.startswith("#"):
+        digits = value[1:]
+        if len(digits) == 3:
+            digits = "".join(ch * 2 for ch in digits)
+        if len(digits) == 6:
+            try:
+                r, g, b = (int(digits[i:i + 2], 16) for i in (0, 2, 4))
+                return f"({r}, {g}, {b})"
+            except ValueError:
+                pass
+        logger.warning("Ignoring unreadable colour %r for keyword %r", color, context)
+        return ""
+    return value
+
+
+#: Column names accepted for each field of a keyword-highlights table, matched
+#: case-insensitively with spaces/underscores/hyphens ignored. The names people
+#: actually write differ from the ones the original TSV used, and a header the
+#: reader does not recognise costs the study its highlights silently.
+KEYWORD_HIGHLIGHT_COLUMNS = {
+    "word": ("keyword", "word", "pattern", "term", "text", "phrase"),
+    "label": ("label", "category", "class", "tag", "name"),
+    "schema": ("schema", "scheme", "annotationscheme", "annotationschema"),
+    "color": ("color", "colour", "highlightcolor", "highlightcolour"),
+}
+
+
+def _normalize_keyword_column(name):
+    return "".join(ch for ch in str(name or "").lower()
+                   if ch.isalnum())
+
+
+def _keyword_column_map(header_cells):
+    """Map a header row's cells onto (word, label, schema, color) positions."""
+    mapping = {}
+    for index, cell in enumerate(header_cells):
+        normalized = _normalize_keyword_column(cell)
+        for field, aliases in KEYWORD_HIGHLIGHT_COLUMNS.items():
+            if normalized in aliases and field not in mapping:
+                mapping[field] = index
+    return mapping
+
+
+def _keyword_entry(word, label="", schema="", color=""):
+    word = str(word or "").strip()
+    if not word:
+        return None
+    return {
+        "word": word,
+        "label": str(label or "").strip(),
+        "schema": str(schema or "").strip(),
+        "color": str(color or "").strip(),
+    }
+
+
+def _keyword_entries_from_object(row):
+    """One entry from a mapping, whatever the keys are called."""
+    resolved = {}
+    for key, value in row.items():
+        normalized = _normalize_keyword_column(key)
+        for field, aliases in KEYWORD_HIGHLIGHT_COLUMNS.items():
+            if normalized in aliases and field not in resolved:
+                resolved[field] = value
+    return _keyword_entry(resolved.get("word"), resolved.get("label"),
+                          resolved.get("schema"), resolved.get("color"))
+
+
+def _parse_keyword_highlight_entries(raw, path):
+    """Parse a keyword-highlights file into entry dicts.
+
+    Every documented shape is header-first, and headers are matched by name
+    rather than by position, so the columns can be in any order and can be
+    called any of several sensible things -- ``keyword``/``word``/``pattern``
+    for the term, ``label``/``category``/``tag`` for what to call it. See
+    ``docs/administration/productivity.md``.
+
+    Accepted:
+
+        keyword,label,schema         CSV or TSV with a header row
+        keyword                      a single-column file, header optional
+        [{"keyword": ..., ...}]      JSON array of objects, or of strings
+        {"latch": "Hazard"}          JSON object mapping keyword to label
+        {"keyword": ...}             JSONL, one object per line
+        (the same shapes in YAML)
+
+    Before this read more than one of them, three of the four obvious things
+    to write loaded zero patterns and logged "Loaded 0", which reads as an
+    empty file rather than an unrecognised one. Nothing downstream fails when
+    highlighting is missing, so a study just ran without the highlights its
+    author configured.
+
+    Returns a list of ``{word, label, schema, color}`` dicts; ``label``,
+    ``schema`` and ``color`` are "" where the file does not carry them.
+    """
+    import csv
+    import json
+
+    text = (raw or "").strip()
+    if not text:
+        return [], "empty"
+
+    extension = os.path.splitext(path or "")[1].lower()
+    content_lines = [line for line in text.splitlines()
+                     if line.strip() and not line.lstrip().startswith("#")]
+    # JSONL first when it looks like JSONL, so the whole-file JSON parse does
+    # not fail on it and log a misleading "does not parse".
+    looks_like_jsonl = (
+        len(content_lines) > 1
+        and all(line.lstrip().startswith("{") for line in content_lines)
+    )
+
+    if not looks_like_jsonl and (text[0] in "[{" or extension == ".json"):
+        entries, fmt = _parse_keyword_json(text, path)
+        if entries is not None:
+            return entries, fmt
+
+    if extension in (".yaml", ".yml"):
+        try:
+            import yaml as _yaml
+            data = _yaml.safe_load(text)
+        except Exception as e:  # noqa: BLE001 - fall through to delimited text
+            logger.warning("%s did not parse as YAML (%s); reading it as "
+                           "delimited text instead", path, e)
+        else:
+            entries = _keyword_entries_from_data(data, path)
+            if entries is not None:
+                return entries, "yaml"
+
+    lines = content_lines
+    if not lines:
+        return [], "empty"
+
+    # JSONL: every line its own JSON object.
+    if lines and all(line.lstrip().startswith("{") for line in lines):
+        entries = []
+        for line in lines:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                entries = None
+                break
+            entry = _keyword_entries_from_object(row) if isinstance(row, dict) else None
+            if entry:
+                entries.append(entry)
+        if entries is not None:
+            return entries, "jsonl"
+
+    delimiter = "\t" if "\t" in lines[0] else ("," if "," in lines[0] else None)
+    if delimiter is None:
+        # Single column. A lone "keyword" header line would otherwise become a
+        # keyword in its own right.
+        if _normalize_keyword_column(lines[0]) in KEYWORD_HIGHLIGHT_COLUMNS["word"]:
+            lines = lines[1:]
+        entries = [_keyword_entry(line) for line in lines]
+        return [e for e in entries if e], "one keyword per line"
+
+    header_cells = next(csv.reader([lines[0]], delimiter=delimiter))
+    columns = _keyword_column_map(header_cells)
+    if "word" in columns:
+        entries = []
+        for row in csv.reader(lines[1:], delimiter=delimiter):
+            def cell(field):
+                index = columns.get(field)
+                return row[index] if index is not None and index < len(row) else ""
+            entry = _keyword_entry(cell("word"), cell("label"),
+                                   cell("schema"), cell("color"))
+            if entry:
+                entries.append(entry)
+        return entries, f"delimited with a header ({', '.join(header_cells)})"
+
+    # No recognisable header. Read positionally and say so: a file whose first
+    # column is not the keyword will produce nonsense, and the log line is the
+    # only place that becomes visible.
+    logger.warning(
+        "%s has no recognised header row, so its columns are being read "
+        "positionally as keyword, label, schema. Add a header line -- "
+        "'keyword,label,schema' -- to be explicit.", path)
+    entries = []
+    for row in csv.reader(lines, delimiter=delimiter):
+        entry = _keyword_entry(*(list(row) + ["", "", ""])[:4])
+        if entry:
+            entries.append(entry)
+    return entries, "delimited, no header"
+
+
+def _parse_keyword_json(text, path):
+    """(entries, format) from JSON text, or (None, None) if it is not JSON."""
+    import json
+    try:
+        data = json.loads(text)
+    except ValueError:
+        logger.warning("%s starts like JSON but does not parse; reading it "
+                       "as delimited text instead", path)
+        return None, None
+    entries = _keyword_entries_from_data(data, path)
+    if entries is None:
+        return [], "json"
+    return entries, "json"
+
+
+def _keyword_entries_from_data(data, path):
+    """Entries from already-parsed JSON/YAML, or None if the shape is wrong."""
+    if isinstance(data, dict):
+        # {"latch": "Hazard"} -- keyword to label.
+        entries = []
+        for key, value in data.items():
+            if isinstance(value, dict):
+                entry = _keyword_entries_from_object(dict(value, keyword=key))
+            else:
+                entry = _keyword_entry(key, value)
+            if entry:
+                entries.append(entry)
+        return entries
+    if isinstance(data, list):
+        entries = []
+        for row in data:
+            if isinstance(row, str):
+                entry = _keyword_entry(row)
+            elif isinstance(row, dict):
+                entry = _keyword_entries_from_object(row)
+            else:
+                entry = None
+            if entry:
+                entries.append(entry)
+        return entries
+    logger.warning("%s parsed to %s; expected a list or an object",
+                   path, type(data).__name__)
+    return None
+
 
 def load_phase_data(config: dict) -> None:
     # Lazy import - only when this function is called
@@ -2264,7 +2532,13 @@ def get_displayed_text(text):
 
     # Handle list inputs (for dialogue or pairwise comparisons with list_as_text config)
     if isinstance(text, list):
-        list_config = config.get("list_as_text", {})
+        # `list_as_text: true` is what a config author writes after reading a
+        # one-line "render list-valued fields as text": the sub-keys are not
+        # obvious and turning the feature on is. A bare bool used to reach
+        # `.get()` and raise AttributeError, so take it as "on, with defaults".
+        list_config = config.get("list_as_text")
+        if not isinstance(list_config, dict):
+            list_config = {}
         prefix_type = list_config.get("text_list_prefix_type", "alphabet")
         horizontal = list_config.get("horizontal", False)
         alternating_shading = list_config.get("alternating_shading", False)
@@ -2356,33 +2630,61 @@ def init_user_state(username):
 
 def is_session_valid() -> bool:
     """
-    Check if the current session is valid based on the creation time.
+    Check whether the current session has been idle longer than the timeout.
+
+    An unstamped session counts as valid: `created_at` is written by
+    :func:`init_user_state`, and a session that reached a protected route
+    without going through it is a session the timeout has nothing to say about.
+    Treating it as expired would sign people out for a bookkeeping gap.
     """
-    if 'created_at' not in session:
-        return False
-    return datetime.now() - session['created_at'] < SESSION_TIMEOUT
+    stamped = session.get('last_seen_at') or session.get('created_at')
+    if stamped is None:
+        return True
+    return datetime.now() - stamped < get_session_timeout()
+
+
+#: Paths served without a session. Prefixes end in "/" and are matched with
+#: startswith; everything else must match exactly.
+#:
+#: "/" was in this list as a prefix, and `startswith("/")` is true of every
+#: path there is -- so the gate below returned early on every request and no
+#: session was ever checked. A prefix list that contains the root prefix is not
+#: a list.
+_UNAUTHENTICATED_PATHS = frozenset({
+    '/', '/auth', '/register', '/favicon.ico', '/robots.txt', '/health',
+    '/logout', '/forgot-password', '/reset-password',
+})
+_UNAUTHENTICATED_PREFIXES = ('/static/', '/api/')
+
 
 @app.before_request
 def before_request():
     """
-    Check session validity before processing any request.
-    Only enforce session validation for protected routes.
+    Clear a session that has been idle past the timeout, and refresh one that
+    has not. Applies only to requests that already carry a signed-in user;
+    anonymous requests are the login flow's business, not this gate's.
     """
     # Skip session validation in debug mode
     if config.get("debug", False):
         return None
 
-    # Allow unauthenticated access to these endpoints
-    allowed_paths = [
-        '/', '/auth', '/register', '/static/', '/favicon.ico', '/robots.txt', '/health', '/api/', '/api/instance/', '/api/instances', '/api/config', '/api/status', '/api/heartbeat'
-    ]
     path = request.path
-    if any(path == allowed or path.startswith(allowed) for allowed in allowed_paths):
+    if path in _UNAUTHENTICATED_PATHS or path.startswith(_UNAUTHENTICATED_PREFIXES):
+        return None
+
+    if 'username' not in session:
         return None
 
     if not is_session_valid():
-        session.clear()  # Clear the session
-        return redirect(url_for('home'))  # Redirect to home page (login/register)
+        logger.info("Session for %s expired after %s idle; clearing it",
+                    session.get('username'), get_session_timeout())
+        session.clear()
+        return redirect(url_for('home'))
+
+    # Idle timeout, not an absolute one: a working annotator is not signed out
+    # mid-shift. Stamped per request, so the clock restarts on every action.
+    session['last_seen_at'] = datetime.now()
+
 
 def get_users():
     """
@@ -4008,13 +4310,29 @@ def randomize_options(soup, orders):
                          or fieldset)
             options = container.find_all('div', class_='shadcn-radio-option',
                                          recursive=False)
+            if not options:
+                logger.warning(
+                    "Randomization asked for on radio %r but no option "
+                    "elements were found; the configured order is what was "
+                    "shown.", legend.string)
             for div in reorder(options, wanted, _option_label):
                 container.append(div)
 
         elif annotation_type == 'multiselect':
             grid = fieldset.find('div', class_='shadcn-multiselect-grid') or fieldset
-            options = grid.find_all('div', class_='shadcn-multiselect-option',
+            # `shadcn-multiselect-item` is what the generator emits. This
+            # looked for `-option`, matched nothing, and reordered nothing --
+            # so `option_randomization: true` on a multiselect was inert, and
+            # silently so: the order was computed, recorded as the order shown,
+            # and then not shown. The recorded orders are wrong for any study
+            # that ran with it.
+            options = grid.find_all('div', class_='shadcn-multiselect-item',
                                     recursive=False)
+            if not options:
+                logger.warning(
+                    "Randomization asked for on multiselect %r but no option "
+                    "elements were found; the configured order is what was "
+                    "shown.", legend.string)
             for div in reorder(options, wanted, _option_label):
                 grid.append(div)
 
@@ -4101,17 +4419,24 @@ def filter_dynamic_options(soup, schemes, instance_data):
         if not form:
             continue
 
+        removed = 0
         if annotation_type == 'radio':
             for option_div in form.find_all('div', class_='shadcn-radio-option'):
                 input_el = option_div.find('input', type='radio')
                 if input_el and input_el.get('value') not in visible_set:
                     option_div.decompose()
+                    removed += 1
 
         elif annotation_type == 'multiselect':
-            for option_div in form.find_all('div', class_='shadcn-multiselect-option'):
+            # `shadcn-multiselect-item`, not `-option`: the class name here did
+            # not match the markup, so `dynamic_options` on a multiselect
+            # removed nothing. An item naming two of six labels rendered all
+            # six, with nothing in the log to say the filter had run.
+            for option_div in form.find_all('div', class_='shadcn-multiselect-item'):
                 input_el = option_div.find('input', type='checkbox')
                 if input_el and input_el.get('value') not in visible_set:
                     option_div.decompose()
+                    removed += 1
 
         elif annotation_type == 'select':
             select_el = form.find('select')
@@ -4123,6 +4448,13 @@ def filter_dynamic_options(soup, schemes, instance_data):
                         continue
                     if val not in visible_set:
                         option.decompose()
+                        removed += 1
+
+        if not removed:
+            logger.debug(
+                "dynamic_options on %r removed nothing: %s names %d label(s) "
+                "and every option is in that list.",
+                schema_name, field_name, len(visible_set))
 
     return soup
 

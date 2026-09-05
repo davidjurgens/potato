@@ -209,8 +209,8 @@ Allows annotators to highlight and label specific text spans.
 
 **Optional Fields:**
 - `sequential_key_binding` (boolean): Enable keyboard shortcuts
-- `bad_text_label` (object): Option for marking text as unannotatable
-  - `label_content` (string): Text for the "bad text" option
+- `bad_text_label` (string or object): Option for marking text as unannotatable.
+  Write the text directly, or as `{label_content: <text>}`
 
 **Example:**
 ```yaml
@@ -220,8 +220,7 @@ annotation_schemes:
     description: "Highlight positive and negative phrases"
     labels: ["positive", "negative", "neutral"]
     sequential_key_binding: true
-    bad_text_label:
-      label_content: "No answer"
+    bad_text_label: "No answer"
 ```
 
 ### 5. Slider (`slider`)

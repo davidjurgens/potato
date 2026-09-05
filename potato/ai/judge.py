@@ -211,6 +211,22 @@ class JudgeService:
         if endpoint is None:
             return None
 
+        # Refuse rather than grade nothing. A judge handed an empty item, or
+        # handed the item's own id, still answers and answers confidently:
+        # asked to grade the string "P08" it returned `unclear` at confidence
+        # 1.0, and the banner rendered that as "High confidence - 100%" over
+        # the annotator's form. That reply is not a verdict on the item, so it
+        # must not be stored as one, compared against the human, or offered for
+        # Accept. Only these two cases are refused -- a genuinely one-word item
+        # is a legitimate thing to judge.
+        resolved = str(instance_text or "").strip()
+        if not resolved or resolved == str(instance_id).strip():
+            logger.warning(
+                "Judge: refusing to judge %s/%s -- the resolved item text is "
+                "%r. Check item_properties.text_key.",
+                instance_id, schema_info.get("name", ""), instance_text)
+            return None
+
         schema_name = schema_info.get("name", "")
         valid_labels = extract_labels(schema_info)
         rubric = self.get_rubric(schema_info)

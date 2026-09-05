@@ -8,7 +8,7 @@
     "version": "2"
   },
   "annotation.js": {
-    "sha256": "280f0477a11e106c",
+    "sha256": "009038e89c3f2904",
     "version": "40"
   },
   "annotation_critique.js": {
@@ -52,7 +52,7 @@
     "version": "3"
   },
   "coreference-manager.js": {
-    "sha256": "6079f8cf8a564aff",
+    "sha256": "9a04297e4c9de0e5",
     "version": "6"
   },
   "css/agent-chat.css": {
@@ -356,11 +356,11 @@
     "version": "1"
   },
   "span-core.js": {
-    "sha256": "947835bbcd1140fc",
+    "sha256": "8b31bc3c2d95b359",
     "version": "19"
   },
   "span-link-manager.js": {
-    "sha256": "643b3403ec23892e",
+    "sha256": "6461cb278105a953",
     "version": "16"
   },
   "span-link-styles.css": {
@@ -376,7 +376,7 @@
     "version": "1"
   },
   "styles.css": {
-    "sha256": "fd9875808388e3a5",
+    "sha256": "730e3177176a4263",
     "version": "29"
   },
   "thinkaloud.js": {

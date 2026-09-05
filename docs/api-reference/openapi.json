@@ -8437,6 +8437,29 @@
         ]
       }
     },
+    "/judge_calibration/results": {
+      "get": {
+        "operationId": "get_judge_calibration_results",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "The judge labels generated so far.",
+        "tags": [
+          "judge_calibration"
+        ],
+        "x-potato-auth": [
+          "admin_required"
+        ]
+      }
+    },
     "/judge_calibration/run": {
       "post": {
         "operationId": "post_judge_calibration_run",

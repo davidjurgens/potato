@@ -1382,8 +1382,20 @@ input[type="range"]::-moz-range-thumb {
   font-weight: 500;
 }
 
+/* The "nothing to mark" escape hatch, below the label grid.
+   It is a block, so its label stretched the full row -- an 828px hit area
+   beside 84px label chips, which reads as a heading rather than an option.
+   (It never showed at all until `bad_text_label` accepted the string form,
+   so the width was never visible to notice.) */
 .shadcn-span-bad-text {
   margin-top: 1rem;
+  display: flex;
+  align-items: center;
+}
+
+.shadcn-span-bad-text .shadcn-span-label {
+  flex: 0 1 auto;
+  color: var(--muted-foreground, #52525b);
 }
 
 /* Text Styles */

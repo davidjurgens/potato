@@ -31,6 +31,10 @@ from potato.validate_cli import (
 def _write_config(tmp_path: Path, body: str) -> str:
     p = tmp_path / "config.yaml"
     p.write_text(body)
+    # The data file every fixture below names. `validate` checks that the paths
+    # a config declares actually exist -- it used to skip that, which is how a
+    # config that could not boot reported "OK -- no issues found".
+    (tmp_path / "data.jsonl").write_text('{"id": "1", "text": "hello"}\n')
     return str(p)
 
 

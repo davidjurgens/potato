@@ -42,6 +42,8 @@ def generate_error_span_layout(annotation_scheme):
             - severities: List of {name, weight} dicts
             - show_score: Whether to show quality score
             - max_score: Maximum quality score
+            - source_field: Item field holding the text to annotate. Defaults
+              to the configured text_key.
 
     Returns:
         tuple: (html_string, key_bindings)
@@ -56,6 +58,13 @@ def _generate_error_span_layout_internal(annotation_scheme):
     severities = annotation_scheme.get('severities', DEFAULT_SEVERITIES)
     show_score = annotation_scheme.get('show_score', True)
     max_score = annotation_scheme.get('max_score', DEFAULT_MAX_SCORE)
+    # Which item field carries the text to mark errors in. Without it the
+    # scheme always renders `text_key`, so an MQM task -- where the source is
+    # the text field and the errors are in the translation -- marked up the
+    # source. `text_edit` and `extractive_qa` already name their field this
+    # way; nothing about `error_types`/`severities`/`show_score` hinted that
+    # this one could not.
+    source_field = annotation_scheme.get('source_field', '')
 
     if not error_types:
         raise ValueError(f"error_span schema '{schema_name}' requires 'error_types'")
@@ -108,6 +117,7 @@ def _generate_error_span_layout_internal(annotation_scheme):
           data-annotation-id="{escape_html_content(str(annotation_scheme.get('annotation_id', '')))}"
           data-annotation-type="error_span"
           data-schema-name="{escape_html_content(schema_name)}"
+          data-source-field="{escape_html_content(source_field)}"
           {layout_attrs}>
         <fieldset schema_name="{escape_html_content(schema_name)}">
             <legend class="shadcn-error-span-title">{escape_html_content(description)}</legend>

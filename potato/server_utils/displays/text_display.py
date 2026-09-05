@@ -11,6 +11,20 @@ from typing import Dict, Any, List
 from .base import BaseDisplay
 
 
+def _format_list(items):
+    """Render a list-valued field the way the main text field renders one.
+
+    Falls back to newline-joined items when `get_displayed_text` cannot be
+    reached (a display rendered outside a running server, e.g. the preview
+    tool), because a readable fallback beats a repr.
+    """
+    try:
+        from potato.flask_server import get_displayed_text
+        return get_displayed_text(items)
+    except Exception:  # noqa: BLE001 - rendering must not fail over formatting
+        return "<br>".join(html.escape(str(item)) for item in items)
+
+
 class TextDisplay(BaseDisplay):
     """
     Display type for text content.
@@ -60,8 +74,16 @@ class TextDisplay(BaseDisplay):
         if data is None:
             return '<span class="text-placeholder">No content</span>'
 
-        # Convert to string if needed
-        text = str(data)
+        # `str()` on a list is a Python repr, and an annotator was shown
+        # ['open', 'unverified', 'priority-1'] -- square brackets and single
+        # quotes -- for a list-valued field. Route lists through the same
+        # formatter the main text field uses, so `list_as_text` governs both.
+        #
+        # That formatter returns markup (the item prefixes are <b> tags), so
+        # it is sanitized rather than escaped: escaping it a second time shows
+        # the annotator the tags themselves.
+        is_formatted_list = isinstance(data, list)
+        text = _format_list(data) if is_formatted_list else str(data)
 
         # Get display options
         options = self.get_display_options(field_config)
@@ -70,7 +92,7 @@ class TextDisplay(BaseDisplay):
         max_height = options.get("max_height")
 
         # Process the text
-        if self.allow_html:
+        if self.allow_html or is_formatted_list:
             # Sanitize HTML but allow safe tags
             from potato.server_utils.html_sanitizer import sanitize_html
             content = str(sanitize_html(text))

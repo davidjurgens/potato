@@ -49,25 +49,30 @@ class TestStaleAutosave:
         return s
 
     def test_none_instance_id_rejected(self):
-        """Sending instance_id=None should return an error, not create 'None' entry."""
+        """instance_id=None is a 400, not a 200 with an error body.
+
+        The status code is the half the page reads: `saveAnnotations` checks
+        `response.ok` first, so a refusal at 200 was indistinguishable from a
+        stored save.
+        """
         s = self._login()
         r = s.post(
             f"{self.server.base_url}/updateinstance",
             json={"instance_id": None, "annotations": {}},
         )
-        assert r.status_code == 200
+        assert r.status_code == 400
         data = r.json()
         assert data["status"] == "error"
         assert "instance_id" in data["message"].lower() or "missing" in data["message"].lower()
 
     def test_empty_instance_id_rejected(self):
-        """Sending instance_id='' should return an error."""
+        """instance_id='' is a 400."""
         s = self._login()
         r = s.post(
             f"{self.server.base_url}/updateinstance",
             json={"instance_id": "", "annotations": {}},
         )
-        assert r.status_code == 200
+        assert r.status_code == 400
         data = r.json()
         assert data["status"] == "error"
 

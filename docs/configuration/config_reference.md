@@ -95,6 +95,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `port` |  | integer | `8000` | Port to listen on. The -p flag overrides this |  |
 | `server` |  | object |  | Nested port/host/debug block, an alternative to the top-level keys | `debug`, `host`, `port` |
 | `session_lifetime_days` |  | integer | `2` | Days before a persisted session expires |  |
+| `session_timeout_minutes` |  | integer | `480` | How long a signed-in session may sit idle before the server clears it. The clock restarts on every request, so it bounds inactivity, not the length of a shift |  |
 | `site_dir` |  | string |  | Directory holding the HTML templates for this task |  |
 | `site_file` |  | string |  | Specific template file to render the annotation page with |  |
 
@@ -168,7 +169,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `instance_display` |  | object |  | How each item is rendered: one entry per field, with a type drawn from the display registry (text, image, audio, video, ...) | `fields`, `layout`, `resizable` |
 | `jumping_to_id_disabled` |  | boolean |  | Remove the jump-to-item control |  |
 | `layout` |  | object |  | How the annotation questions are arranged on the page: a grid, collapsible groups, an explicit order, and responsive breakpoints. Without it every scheme stacks full-width in config order | `breakpoints`, `grid`, `groups`, `order`, `styling` |
-| `list_as_text` |  | object |  | Render list-valued fields as text rather than as a list | `alternating_shading`, `horizontal`, `text_list_prefix_type` |
+| `list_as_text` |  | object |  | How a list-valued field is laid out. Sub-keys: text_list_prefix_type (alphabet, number, bullet or none), horizontal, alternating_shading. `true` turns it on with the defaults | `alternating_shading`, `horizontal`, `text_list_prefix_type` |
 | `task_layout` |  | string |  | Custom HTML for the annotation form area |  |
 | `ui` |  | object |  | Interface toggles |  |
 | `ui_config` |  | object |  | Additional interface settings |  |
@@ -182,11 +183,11 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `annotation_instructions` |  | string |  | Instructions shown on every annotation page, as inline text; a filename here renders as that filename |  |
 | `completion_code` |  | string |  | Code shown when an annotator finishes, for crowdsourcing payout |  |
 | `custom_footer_html` |  | string |  | HTML appended to every page |  |
-| `header_file` |  | string |  | HTML file rendered above the item |  |
+| `header_file` |  | string |  | Ignored. The header template path is no longer configurable, and nothing reads this key -- `potato validate` reports it |  |
 | `header_logo` |  | string |  | Logo image shown in the header |  |
 | `highlight_linebreaks` |  | boolean |  | Make line breaks visible in item text |  |
 | `keyword_highlight_settings` |  | object |  | Styling for keyword highlights |  |
-| `keyword_highlights_file` |  | string |  | File of keywords to highlight in item text |  |
+| `keyword_highlights_file` |  | string |  | File of keywords to highlight in item text. A CSV or TSV with a `keyword` header column (plus optional label, schema, color) is the documented form; one keyword per line, and JSON/JSONL/YAML holding a keyword list, an object list or a {keyword: label} map, are read too. A `*` in a keyword matches any run of word characters. See docs/administration/productivity.md |  |
 
 ## Annotation Features
 
@@ -308,7 +309,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `coreference` | `span_schema` | `entity_types`, `allow_singletons`, `visual_display` | Coreference chain annotation for grouping mentions of the same entity | `examples/span/coreference/config.yaml` |
 | `emergent_behavior` | (none beyond name/description) | `steps_key`, `agent_key`, `behaviors`, `allow_note` | Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift | `examples/agent-traces/emergent-behavior/config.yaml` |
 | `episode_annotation` | (none beyond name/description) | `source_field`, `episode_field`, `layers`, `phases`, `outcomes`, `failure_causes`, `reward_range`, `series_shown`, `max_lanes`, `min_phases`, `max_phases` | Embodied robot episode: synchronized video streams and time-series lanes with phase, outcome and dense-reward annotation | `examples/embodied/lerobot-episode/config.yaml` |
-| `error_span` | `error_types` | `severities`, `show_score`, `max_score` | MQM-style error span annotation with typed severity for quality evaluation | `examples/classification/error-span/config.yaml` |
+| `error_span` | `error_types` | `severities`, `show_score`, `max_score`, `source_field` | MQM-style error span annotation with typed severity for quality evaluation | `examples/classification/error-span/config.yaml` |
 | `event_annotation` | `event_types`, `span_schema` | `visual_display` | N-ary event annotation with triggers and typed arguments | `examples/span/event-annotation/config.yaml` |
 | `extractive_qa` | (none beyond name/description) | `question_field`, `passage_field`, `allow_unanswerable`, `highlight_color` | SQuAD-style extractive question answering with answer span highlighting | `examples/classification/extractive-qa/config.yaml` |
 | `failure_attribution` | (none beyond name/description) | `steps_key`, `agent_key`, `agents` | Multi-agent failure attribution: responsible agent + decisive step + reason | `examples/agent-traces/failure-attribution/config.yaml` |

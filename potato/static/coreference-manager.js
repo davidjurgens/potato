@@ -333,18 +333,49 @@
             this._updateButtonStates();
         }
 
+        /**
+         * What entity type a new chain should carry.
+         *
+         * In order: the annotator's explicit choice, then the label the
+         * chained mentions agree on, then nothing.
+         *
+         * The last step used to be `entityTypes[0]`, so a chain over two PLACE
+         * mentions was written to disk as PERSON -- whichever type happened to
+         * be listed first -- with no radio shown, no warning, and a widget that
+         * read "PERSON (2)". A coreference corpus built that way is typed
+         * wrong throughout and looks fine. An unset type renders as "Chain N",
+         * which is at least true.
+         */
+        _entityTypeForSelection() {
+            if (!this.entityTypes.length) return '';
+
+            var checked = this.container.querySelector(
+                'input[name="' + this.schemaName + '_entity_type"]:checked');
+            if (checked && checked.value) return checked.value;
+
+            var labels = [];
+            for (var i = 0; i < this.selectedSpanIds.length; i++) {
+                var id = this.selectedSpanIds[i];
+                var overlay = document.querySelector(
+                    '[data-annotation-id="' + (window.CSS && CSS.escape
+                        ? CSS.escape(id) : id) + '"]');
+                var label = overlay && overlay.dataset ? overlay.dataset.label : '';
+                if (label && labels.indexOf(label) === -1) labels.push(label);
+            }
+            // Only when the mentions agree, and only when the agreed label is
+            // one this scheme actually offers -- a span label from a different
+            // scheme is not an entity type.
+            if (labels.length === 1 && this.entityTypes.indexOf(labels[0]) !== -1) {
+                return labels[0];
+            }
+            return '';
+        }
+
         createChain() {
             if (this.selectedSpanIds.length === 0 && !this.allowSingletons) return;
             if (this.selectedSpanIds.length === 0) return;
 
-            // Get selected entity type
-            var entityType = '';
-            if (this.entityTypes.length > 0) {
-                var checkedRadio = this.container.querySelector(
-                    'input[name="' + this.schemaName + '_entity_type"]:checked'
-                );
-                entityType = checkedRadio ? checkedRadio.value : this.entityTypes[0];
-            }
+            var entityType = this._entityTypeForSelection();
 
             var chain = {
                 id: 'chain_' + this.nextChainId++,
@@ -620,7 +651,7 @@
             for (var j = 0; j < this.chains.length; j++) {
                 var chain = this.chains[j];
                 for (var k = 0; k < chain.spanIds.length; k++) {
-                    var spanEl = document.querySelector('[data-span-id="' + chain.spanIds[k] + '"]');
+                    var spanEl = this._findSpanElement(chain.spanIds[k]);
                     if (spanEl) {
                         spanEl.classList.add(highlightClass);
                         spanEl.style.setProperty('--chain-color', chain.color);
@@ -632,17 +663,55 @@
             }
         }
 
+        /** The overlay for a span id, whichever attribute carries it. */
+        _findSpanElement(spanId) {
+            var escaped = (window.CSS && CSS.escape) ? CSS.escape(spanId) : spanId;
+            return document.querySelector('[data-annotation-id="' + escaped + '"]') ||
+                   document.querySelector('[data-span-id="' + escaped + '"]');
+        }
+
+        /**
+         * The words a mention marks.
+         *
+         * The chain list showed "(span entities_PLACE_26_39)" -- it looked
+         * mentions up by `data-span-id` while span-core writes
+         * `data-annotation-id`, so every lookup missed and every mention
+         * rendered as its internal id. Deciding whether two mentions corefer
+         * is the entire task, and the widget was showing offsets instead of
+         * words.
+         *
+         * An overlay is a positioned box, not the text, so the text comes from
+         * slicing the canonical string by the overlay's offsets -- by code
+         * point, the way the offsets are stored.
+         */
         _getMentionTexts(spanIds) {
             var texts = [];
             for (var i = 0; i < spanIds.length; i++) {
-                var spanEl = document.querySelector('[data-span-id="' + spanIds[i] + '"]');
-                if (spanEl) {
-                    texts.push(spanEl.textContent || spanEl.innerText || '');
-                } else {
-                    texts.push('(span ' + spanIds[i] + ')');
-                }
+                texts.push(this._mentionText(spanIds[i]));
             }
             return texts;
+        }
+
+        _mentionText(spanId) {
+            var el = this._findSpanElement(spanId);
+            if (el && el.dataset && el.dataset.start !== undefined) {
+                var start = parseInt(el.dataset.start, 10);
+                var end = parseInt(el.dataset.end, 10);
+                var strategies = (window.spanManager && window.spanManager.fieldStrategies) || {};
+                var strategy = strategies[el.dataset.targetField] ||
+                    (window.spanManager && window.spanManager.positioningStrategy);
+                if (strategy && typeof strategy.getCanonicalText === 'function' &&
+                    !isNaN(start) && !isNaN(end)) {
+                    var text = strategy.getCanonicalText();
+                    var slice = window.spanSliceByCodePoints
+                        ? window.spanSliceByCodePoints(text, start, end)
+                        : text.substring(start, end);
+                    if (slice && slice.trim()) return slice.trim();
+                }
+            }
+            var inline = el ? (el.textContent || el.innerText || '').trim() : '';
+            if (inline) return inline;
+            return '(span ' + spanId + ')';
         }
 
         /** The SpanLink form of one chain. Same shape span_link posts. */

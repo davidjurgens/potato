@@ -107,6 +107,7 @@ KNOWN_CONFIG_KEYS = {
     "server": {"port", "host", "debug"},
     "port": None,
     "host": None,
+    "session_timeout_minutes": None,
     "customjs": None,
     "customjs_hostname": None,
     "site_dir": None,
@@ -4714,6 +4715,61 @@ def validate_file_paths(config_data: Dict[str, Any], project_dir: str, config_fi
                             )
                 except ConfigSecurityError as e:
                     raise ConfigSecurityError(f"header_logo: {str(e)}")
+
+
+def warn_about_unreadable_optional_files(config_data: Dict[str, Any],
+                                         project_dir: str) -> List[str]:
+    """Describe optional files a config names that the server will not find.
+
+    These are the paths the server shrugs off: a missing
+    ``keyword_highlights_file`` costs the study its highlights and logs one
+    line at boot. `potato validate` said "OK -- no issues found" for all of
+    them, so the one tool whose job is to catch this before launch was the one
+    that did not.
+
+    Warnings rather than errors, because the server really does start. Under
+    ``--strict`` they fail, which is what CI wants.
+
+    Also names ``header_file``, which is read by nothing at all: the header
+    template path was made non-configurable and the key was left behind, so it
+    is inert whether the file exists or not.
+    """
+    messages: List[str] = []
+    if not isinstance(config_data, dict):
+        return messages
+
+    task_dir = config_data.get('task_dir') or '.'
+    try:
+        base_dir = validate_path_security(task_dir, project_dir)
+    except ConfigSecurityError:
+        return messages
+
+    if config_data.get('header_file'):
+        messages.append(
+            "'header_file' is read by nothing: the header template path is no "
+            "longer configurable. Delete the key -- the file it names is "
+            "never opened, present or not."
+        )
+
+    for key in ('keyword_highlights_file', 'annotation_codebook_url'):
+        value = config_data.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        if value.startswith(("http://", "https://")):
+            continue
+        try:
+            resolved = validate_path_security(value, base_dir, project_dir)
+        except ConfigSecurityError as e:
+            messages.append(f"{key}: {e}")
+            continue
+        if not os.path.exists(resolved):
+            messages.append(
+                f"{key} names {value!r}, which does not exist (looked in "
+                f"{resolved}). The server starts anyway and the feature is "
+                f"silently off."
+            )
+
+    return messages
 
 
 def validate_training_config(config_data: Dict[str, Any], project_dir: str, config_file_dir: str = None) -> None:

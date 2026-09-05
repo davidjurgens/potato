@@ -637,6 +637,10 @@ def load_catalog(code: str):
         )
         return None
 
+    if code == BASE_LANGUAGE_CODE:
+        # Nothing to merge -- the defaults are already English.
+        return {}
+
     path = CATALOG_DIR / f"{code}.yaml"
     if not path.is_file():
         available = ", ".join(sorted(available_language_codes())) or "(none)"
@@ -682,8 +686,21 @@ def load_catalog(code: str):
     return catalog
 
 
-def available_language_codes():
-    """Return the set of language codes with a bundled catalog on disk."""
+#: English needs no catalog: it *is* ``ui_lang_defaults``, the dict every other
+#: language merges on top of. Leaving it out of the available set made
+#: ``ui_language: en`` -- the key's own documented default -- report an unknown
+#: language code and fail ``validate --strict``. Writing the default down broke
+#: the build.
+BASE_LANGUAGE_CODE = "en"
+
+
+def bundled_catalog_codes():
+    """Language codes with a translation catalog file on disk.
+
+    English is deliberately absent: it is `ui_lang_defaults`, not a catalog.
+    Anything that reads a catalog off disk wants this set; anything asking
+    "can this build render X" wants :func:`available_language_codes`.
+    """
     if not CATALOG_DIR.is_dir():
         return set()
     return {
@@ -691,6 +708,11 @@ def available_language_codes():
         for p in CATALOG_DIR.glob("*.yaml")
         if is_valid_language_code(p.stem)
     }
+
+
+def available_language_codes():
+    """Language codes this build can render, including the built-in English."""
+    return {BASE_LANGUAGE_CODE} | bundled_catalog_codes()
 
 
 def resolve_ui_language(ui_lang_config, defaults):

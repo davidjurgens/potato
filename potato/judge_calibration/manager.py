@@ -247,9 +247,38 @@ class JudgeCalibrationManager:
                 "phase": self.phase.get_current_phase().to_str(),
                 "generating": self.is_generating(),
                 "results": self.store.count(),
+                # Where those results are, and how to read them. "results: 6"
+                # on its own reads as "six labels are available" and gave no
+                # way to reach them: the report is only built after the human
+                # phase, and nothing else exposed the store.
+                "results_dir": self.config.state_dir,
+                "results_url": "/judge_calibration/results",
                 "error": error,
                 **self._progress,
             }
+
+    def get_results(self, model: Optional[str] = None,
+                    instance_id: Optional[str] = None) -> Dict[str, Any]:
+        """The judge labels generated so far, optionally filtered.
+
+        Generation writes to `state_dir` and the report is built later, from
+        the human phase. Between those two points the labels existed and were
+        counted but could not be read back from anywhere, so a run that had
+        clearly done work looked like it had produced nothing.
+        """
+        with self._lock:
+            results = self.store.all_results()
+        if model:
+            results = [r for r in results if r.model == model]
+        if instance_id:
+            results = [r for r in results if r.instance_id == str(instance_id)]
+        return {
+            "count": len(results),
+            "phase": self.phase.get_current_phase().to_str(),
+            "state_dir": self.config.state_dir,
+            "models": sorted({r.model for r in results}),
+            "results": [r.to_dict() for r in results],
+        }
 
     def get_status(self) -> Dict[str, Any]:
         with self._lock:

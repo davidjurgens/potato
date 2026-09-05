@@ -4253,6 +4253,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `port` |  | integer | `8000` | Port to listen on. The -p flag overrides this |  |
 | `server` |  | object |  | Nested port/host/debug block, an alternative to the top-level keys | `debug`, `host`, `port` |
 | `session_lifetime_days` |  | integer | `2` | Days before a persisted session expires |  |
+| `session_timeout_minutes` |  | integer | `480` | How long a signed-in session may sit idle before the server clears it. The clock restarts on every request, so it bounds inactivity, not the length of a shift |  |
 | `site_dir` |  | string |  | Directory holding the HTML templates for this task |  |
 | `site_file` |  | string |  | Specific template file to render the annotation page with |  |
 
@@ -4326,7 +4327,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `instance_display` |  | object |  | How each item is rendered: one entry per field, with a type drawn from the display registry (text, image, audio, video, ...) | `fields`, `layout`, `resizable` |
 | `jumping_to_id_disabled` |  | boolean |  | Remove the jump-to-item control |  |
 | `layout` |  | object |  | How the annotation questions are arranged on the page: a grid, collapsible groups, an explicit order, and responsive breakpoints. Without it every scheme stacks full-width in config order | `breakpoints`, `grid`, `groups`, `order`, `styling` |
-| `list_as_text` |  | object |  | Render list-valued fields as text rather than as a list | `alternating_shading`, `horizontal`, `text_list_prefix_type` |
+| `list_as_text` |  | object |  | How a list-valued field is laid out. Sub-keys: text_list_prefix_type (alphabet, number, bullet or none), horizontal, alternating_shading. `true` turns it on with the defaults | `alternating_shading`, `horizontal`, `text_list_prefix_type` |
 | `task_layout` |  | string |  | Custom HTML for the annotation form area |  |
 | `ui` |  | object |  | Interface toggles |  |
 | `ui_config` |  | object |  | Additional interface settings |  |
@@ -4340,11 +4341,11 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `annotation_instructions` |  | string |  | Instructions shown on every annotation page, as inline text; a filename here renders as that filename |  |
 | `completion_code` |  | string |  | Code shown when an annotator finishes, for crowdsourcing payout |  |
 | `custom_footer_html` |  | string |  | HTML appended to every page |  |
-| `header_file` |  | string |  | HTML file rendered above the item |  |
+| `header_file` |  | string |  | Ignored. The header template path is no longer configurable, and nothing reads this key -- `potato validate` reports it |  |
 | `header_logo` |  | string |  | Logo image shown in the header |  |
 | `highlight_linebreaks` |  | boolean |  | Make line breaks visible in item text |  |
 | `keyword_highlight_settings` |  | object |  | Styling for keyword highlights |  |
-| `keyword_highlights_file` |  | string |  | File of keywords to highlight in item text |  |
+| `keyword_highlights_file` |  | string |  | File of keywords to highlight in item text. A CSV or TSV with a `keyword` header column (plus optional label, schema, color) is the documented form; one keyword per line, and JSON/JSONL/YAML holding a keyword list, an object list or a {keyword: label} map, are read too. A `*` in a keyword matches any run of word characters. See docs/administration/productivity.md |  |
 
 ## Annotation Features
 
@@ -4466,7 +4467,7 @@ Set via `annotation_schemes[].annotation_type` in your config.
 | `coreference` | `span_schema` | `entity_types`, `allow_singletons`, `visual_display` | Coreference chain annotation for grouping mentions of the same entity | `examples/span/coreference/config.yaml` |
 | `emergent_behavior` | (none beyond name/description) | `steps_key`, `agent_key`, `behaviors`, `allow_note` | Cross-lane emergent-behavior tagging: mark turn-sets for collusion/groupthink/cascade/role-drift | `examples/agent-traces/emergent-behavior/config.yaml` |
 | `episode_annotation` | (none beyond name/description) | `source_field`, `episode_field`, `layers`, `phases`, `outcomes`, `failure_causes`, `reward_range`, `series_shown`, `max_lanes`, `min_phases`, `max_phases` | Embodied robot episode: synchronized video streams and time-series lanes with phase, outcome and dense-reward annotation | `examples/embodied/lerobot-episode/config.yaml` |
-| `error_span` | `error_types` | `severities`, `show_score`, `max_score` | MQM-style error span annotation with typed severity for quality evaluation | `examples/classification/error-span/config.yaml` |
+| `error_span` | `error_types` | `severities`, `show_score`, `max_score`, `source_field` | MQM-style error span annotation with typed severity for quality evaluation | `examples/classification/error-span/config.yaml` |
 | `event_annotation` | `event_types`, `span_schema` | `visual_display` | N-ary event annotation with triggers and typed arguments | `examples/span/event-annotation/config.yaml` |
 | `extractive_qa` | (none beyond name/description) | `question_field`, `passage_field`, `allow_unanswerable`, `highlight_color` | SQuAD-style extractive question answering with answer span highlighting | `examples/classification/extractive-qa/config.yaml` |
 | `failure_attribution` | (none beyond name/description) | `steps_key`, `agent_key`, `agents` | Multi-agent failure attribution: responsible agent + decisive step + reason | `examples/agent-traces/failure-attribution/config.yaml` |
@@ -7869,8 +7870,8 @@ Allows annotators to highlight and label specific text spans.
 
 **Optional Fields:**
 - `sequential_key_binding` (boolean): Enable keyboard shortcuts
-- `bad_text_label` (object): Option for marking text as unannotatable
-  - `label_content` (string): Text for the "bad text" option
+- `bad_text_label` (string or object): Option for marking text as unannotatable.
+  Write the text directly, or as `{label_content: <text>}`
 
 **Example:**
 ```yaml
@@ -7880,8 +7881,7 @@ annotation_schemes:
     description: "Highlight positive and negative phrases"
     labels: ["positive", "negative", "neutral"]
     sequential_key_binding: true
-    bad_text_label:
-      label_content: "No answer"
+    bad_text_label: "No answer"
 ```
 
 ### 5. Slider (`slider`)
@@ -13219,6 +13219,30 @@ annotation_schemes:
 | `severities` | list | Minor(-1), Major(-5), Critical(-10) | Severity levels with penalty weights |
 | `show_score` | boolean | `true` | Display running quality score |
 | `max_score` | integer | `100` | Starting quality score |
+| `source_field` | string | `text_key` | Item field holding the text to mark errors in |
+
+### Marking a field other than the main text
+
+An MQM task usually holds the source and the translation in separate fields,
+and the errors belong to the translation. Name that field:
+
+```yaml
+item_properties:
+  id_key: id
+  text_key: source          # shown for reference
+
+annotation_schemes:
+  - annotation_type: error_span
+    name: translation_quality
+    description: "Mark errors in the translation"
+    source_field: translation
+    error_types:
+      - name: Accuracy
+```
+
+Without `source_field` the scheme marks up `text_key`, which for an MQM layout
+is the source rather than the translation. When `source_field` is set, the main
+text field stays on screen as the reference to compare against.
 
 ### Error Types Format
 
@@ -33914,6 +33938,18 @@ judge_calibration:
 
 You can also override most of these interactively in the admin wizard and re-run.
 
+### Where the generated labels go
+
+The judge's labels are written to `state_dir` as soon as generation finishes,
+under `<output_annotation_dir>/.judge_calibration` when `state_dir` is unset —
+not at the project root, and not in `output.dir`, which only receives the
+report once the human phase closes.
+
+Between those two points, read them from `GET /judge_calibration/results`
+(`?model=` and `?instance_id=` narrow it). `GET /judge_calibration/progress`
+reports the same directory and URL alongside its count, so a run showing
+`results: 6` says where those six are.
+
 ### Supported annotation types
 
 | Type | Status | Metrics |
@@ -44376,33 +44412,66 @@ Potato supports admin-defined keyword highlights to help annotators identify rel
 
 ### Configuration
 
-Add a `keyword_highlights_file` to your configuration pointing to a TSV file:
+Point `keyword_highlights_file` at a file of keywords:
 
 ```yaml
-keyword_highlights_file: data/keywords.tsv
+keyword_highlights_file: data/keywords.csv
 ```
 
-The path is relative to the directory where you run the server (task_dir).
+The path is relative to `task_dir`, which is also the directory the server runs in.
 
-### TSV File Format
+### File format
 
-The keywords file should be tab-separated with three columns:
+A CSV or TSV with a header row:
 
 ```
-Word	Label	Schema
-love	positive	sentiment
-hate	negative	sentiment
-excel*	positive	sentiment
-disappoint*	negative	sentiment
+keyword,label,schema
+love,positive,sentiment
+hate,negative,sentiment
+excel*,positive,sentiment
+disappoint*,negative,sentiment
 ```
 
-| Column | Description |
-|--------|-------------|
-| **Word** | The keyword or phrase to highlight (supports `*` wildcards) |
-| **Label** | The annotation label associated with this keyword |
-| **Schema** | The annotation schema name this keyword is relevant to |
+| Column | Required | Description |
+|--------|----------|-------------|
+| `keyword` | yes | The word or phrase to highlight (supports `*` wildcards) |
+| `label` | no | The annotation label this keyword suggests |
+| `schema` | no | The annotation scheme the label belongs to |
+| `color` | no | A colour for this label, as `(r, g, b)` or `#rrggbb` |
 
-**Note:** Use actual tab characters between columns, not spaces.
+Columns are matched by name, so they can be in any order, and each accepts a
+few spellings: `keyword`/`word`/`pattern`/`term`, `label`/`category`/`tag`,
+`schema`/`scheme`, `color`/`colour`. A file whose header Potato does not
+recognise is read positionally as keyword, label, schema, and the log says so.
+
+Several other shapes load too. One keyword per line, with `#` comments:
+
+```
+latch
+swelled
+```
+
+A JSON array of keywords:
+
+```json
+["latch", "swelled"]
+```
+
+A JSON array of objects, which is where the label and schema go:
+
+```json
+[{"keyword": "latch", "label": "Hazard", "schema": "hazards"}]
+```
+
+A JSON object mapping each keyword to its label:
+
+```json
+{"latch": "Hazard"}
+```
+
+JSONL (one object per line) and the same shapes in YAML also work. The boot
+log names the format it read and how many patterns it found, so a file Potato
+cannot parse shows up at boot.
 
 ### Matching Behavior
 
@@ -44427,6 +44496,15 @@ ui:
         neutral: "(156, 163, 175)"   # Gray
 ```
 
+A `color` column in the keywords file sets the same thing per label, which is
+easier when the labels only exist for highlighting:
+
+```
+keyword,label,schema,color
+excellent,positive,sentiment,(34, 197, 94)
+terrible,negative,sentiment,#ef4444
+```
+
 If no color is specified, Potato automatically assigns colors from a default palette.
 
 ### Multiple Schemas
@@ -44434,11 +44512,11 @@ If no color is specified, Potato automatically assigns colors from a default pal
 A single keywords file can support multiple annotation schemas:
 
 ```
-Word	Label	Schema
-excellent	positive	sentiment
-terrible	negative	sentiment
-price	economic	topic
-election	political	topic
+keyword,label,schema
+excellent,positive,sentiment
+terrible,negative,sentiment
+price,economic,topic
+election,political,topic
 ```
 
 ### Randomization Settings
@@ -44446,7 +44524,7 @@ election	political	topic
 For research purposes, you can configure keyword highlight randomization to prevent annotators from relying solely on the highlights:
 
 ```yaml
-keyword_highlights_file: data/keywords.tsv
+keyword_highlights_file: data/keywords.csv
 
 keyword_highlight_settings:
   keyword_probability: 1.0       # Probability of showing each matched keyword (0.0-1.0)
@@ -54739,7 +54817,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **159 top-level config keys**, **61 annotation types**, and
+It currently covers **160 top-level config keys**, **61 annotation types**, and
 **24 display types**.
 
 ### Editor validation
@@ -54789,7 +54867,7 @@ display types, invalid `assignment_strategy` values, a missing
 
 ## OpenAPI 3.1 spec
 
-An index of Potato's HTTP surface: **447 paths / 484 operations**, generated by
+An index of Potato's HTTP surface: **448 paths / 485 operations**, generated by
 walking the live Flask `url_map`.
 
 Two extensions carry information a plain OpenAPI document cannot:

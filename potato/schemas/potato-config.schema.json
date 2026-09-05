@@ -3875,7 +3875,7 @@
       "type": "string"
     },
     "header_file": {
-      "description": "HTML file rendered above the item",
+      "description": "Ignored. The header template path is no longer configurable, and nothing reads this key -- `potato validate` reports it",
       "type": "string"
     },
     "header_logo": {
@@ -4299,7 +4299,10 @@
       "type": "object"
     },
     "keyword_highlights_file": {
-      "description": "File of keywords to highlight in item text",
+      "description": "File of keywords to highlight in item text. A CSV or TSV with a `keyword` header column (plus optional label, schema, color) is the documented form; one keyword per line, and JSON/JSONL/YAML holding a keyword list, an object list or a {keyword: label} map, are read too. A `*` in a keyword matches any run of word characters. See docs/administration/productivity.md",
+      "examples": [
+        "keywords.csv"
+      ],
       "type": "string"
     },
     "layout": {
@@ -4343,7 +4346,13 @@
     },
     "list_as_text": {
       "additionalProperties": true,
-      "description": "Render list-valued fields as text rather than as a list",
+      "description": "How a list-valued field is laid out. Sub-keys: text_list_prefix_type (alphabet, number, bullet or none), horizontal, alternating_shading. `true` turns it on with the defaults",
+      "examples": [
+        {
+          "alternating_shading": true,
+          "text_list_prefix_type": "number"
+        }
+      ],
       "properties": {
         "alternating_shading": {},
         "horizontal": {},
@@ -4901,6 +4910,11 @@
     "session_lifetime_days": {
       "default": 2,
       "description": "Days before a persisted session expires",
+      "type": "integer"
+    },
+    "session_timeout_minutes": {
+      "default": 480,
+      "description": "How long a signed-in session may sit idle before the server clears it. The clock restarts on every request, so it bounds inactivity, not the length of a shift",
       "type": "integer"
     },
     "sessions": {

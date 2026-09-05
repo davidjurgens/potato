@@ -3,7 +3,8 @@
 Covers potato/server_utils/i18n.py:
 - load_catalog: valid code, unknown code, path-traversal rejection, key filtering
 - resolve_ui_language: string / legacy-dict / _base+overrides forms, precedence
-- available_language_codes: discovers the shipped catalogs
+- available_language_codes: what this build can render (bundled catalogs + English)
+- bundled_catalog_codes: the catalogs on disk
 - catalog integrity: every bundled catalog matches the whitelist exactly and
   preserves the {token} placeholders (a drift guard so new keys can't silently
   desync the defaults, the whitelist, and the translations)
@@ -15,6 +16,7 @@ import pytest
 
 from potato.server_utils.i18n import (
     available_language_codes,
+    bundled_catalog_codes,
     is_valid_language_code,
     load_catalog,
     resolve_ui_language,
@@ -118,11 +120,25 @@ class TestAvailableCodes:
         for expected in ["es", "ar", "fr", "de", "pt", "zh", "hi", "ja", "ru", "ko"]:
             assert expected in codes, f"missing bundled catalog: {expected}"
 
+    def test_english_is_renderable_without_a_catalog(self):
+        """`ui_language: en` is the key's documented default.
+
+        It was absent from this set and so reported as an unknown language
+        code, which made writing the default down fail `validate --strict`.
+        """
+        assert "en" in available_language_codes()
+        assert "en" not in bundled_catalog_codes()
+
 
 class TestCatalogIntegrity:
-    """Drift guards: keep defaults, whitelist, and all catalogs in lockstep."""
+    """Drift guards: keep defaults, whitelist, and all catalogs in lockstep.
 
-    @pytest.mark.parametrize("code", sorted(available_language_codes()))
+    Parametrized on the catalogs that exist as files. English is a renderable
+    language with no catalog -- it IS the defaults these files merge onto --
+    so asking to read `en.yaml` is asking for a file that should not exist.
+    """
+
+    @pytest.mark.parametrize("code", sorted(bundled_catalog_codes()))
     def test_catalog_keys_match_whitelist_exactly(self, code):
         # load_catalog filters to the whitelist, so a mismatch means the raw
         # file is missing a key or carries an unknown one. Read raw to catch
@@ -136,7 +152,7 @@ class TestCatalogIntegrity:
         assert not missing, f"{code}.yaml missing keys: {sorted(missing)}"
         assert not extra, f"{code}.yaml has non-whitelisted keys: {sorted(extra)}"
 
-    @pytest.mark.parametrize("code", sorted(available_language_codes()))
+    @pytest.mark.parametrize("code", sorted(bundled_catalog_codes()))
     def test_placeholders_preserved(self, code):
         cat = load_catalog(code)
         for key, expected_tokens in PLACEHOLDER_KEYS.items():
@@ -145,7 +161,7 @@ class TestCatalogIntegrity:
                 f"{code}.yaml {key}: placeholders {got} != {expected_tokens}"
             )
 
-    @pytest.mark.parametrize("code", sorted(available_language_codes()))
+    @pytest.mark.parametrize("code", sorted(bundled_catalog_codes()))
     def test_direction_is_valid(self, code):
         cat = load_catalog(code)
         assert cat["html_dir"] in ("ltr", "rtl")

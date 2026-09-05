@@ -50,9 +50,15 @@ def arguments():
         # tests/unit/test_cli_dispatch.py enforces that the two sets are disjoint.
         choices=['start', 'migrate', 'reset-password', 'codebook',
                  'repair-annotations'],
+        # "currently supporting: start, migrate, ..." read as the complete
+        # list of what Potato does, and it is not -- nine more commands are
+        # dispatched before this parser runs and appear only in the epilog. A
+        # reader who took the sentence at face value concluded `potato mcp`
+        # and `potato validate` did not exist. Name what this argument accepts,
+        # and say where the rest are.
         help=(
-            "set the mode when potato is used, currently supporting: start, "
-            "migrate, reset-password, codebook, repair-annotations"
+            "what to do with the config file. See 'other commands' below for "
+            "the ones that take their own arguments instead"
         ),
         default="start",
     )

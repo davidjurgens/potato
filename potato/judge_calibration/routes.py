@@ -7,6 +7,7 @@ Admin-gated endpoints for the calibration wizard:
 - GET  /judge_calibration/progress  -> generation progress (JSON, polled)
 - POST /judge_calibration/report    -> build the report
 - GET  /judge_calibration/report    -> rendered report.html
+- GET  /judge_calibration/results   -> judge labels generated so far (JSON)
 - GET  /judge_calibration/status    -> status (JSON)
 
 Human blind-labeling happens through Potato's standard ``/annotate`` flow —
@@ -118,6 +119,23 @@ def run():
     if not started:
         return jsonify({"error": "Generation already in progress"}), 409
     return jsonify({"started": True, "progress": manager.get_progress()})
+
+
+@judge_calibration_bp.route("/results", methods=["GET"])
+@admin_required
+@_enabled_required
+def results():
+    """The judge labels generated so far.
+
+    ``?model=`` and ``?instance_id=`` narrow it. This is the only way to read
+    the generated labels before the human phase closes and the report is
+    built -- until it existed, `/status` counted them and nothing served them.
+    """
+    manager = get_judge_calibration_manager()
+    return jsonify(manager.get_results(
+        model=request.args.get("model"),
+        instance_id=request.args.get("instance_id"),
+    ))
 
 
 @judge_calibration_bp.route("/report", methods=["POST"])

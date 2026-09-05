@@ -213,6 +213,9 @@ class RBACManager:
         if self.has_valid_admin_key(request, session):
             return True
 
+        if permission in mcp_granted_permissions():
+            return True
+
         if self._debug_enabled() and permission != Permission.ADJUDICATE:
             return True
 
@@ -224,6 +227,41 @@ class RBACManager:
         if session is not None:
             sso_claims = session.get("sso_claims")
         return self.has_permission(username, permission, sso_claims)
+
+
+# ---------------------------------------------------------------------------
+# MCP agent authorization
+# ---------------------------------------------------------------------------
+#
+# The MCP surface authorizes a call before dispatching it: the token's role is
+# checked against the tool's declared permission in `mcp_server.routes`. A tool
+# whose handler then calls an admin-gated method hit a *second* gate that only
+# knows about admin API keys and browser sessions, and an agent has neither --
+# so `live_get_agreement`, granted to an admin-role token and logged as such,
+# came back "Admin access required". Two authorization systems disagreeing
+# about the same caller.
+#
+# The MCP gate publishes what it granted here, for the duration of one request,
+# and this is the only writer.
+
+def grant_mcp_permissions(permissions):
+    """Record what the MCP gate authorized for the current request."""
+    try:
+        from flask import g
+        g._mcp_granted_permissions = frozenset(permissions or ())
+    except Exception:  # pragma: no cover - no app context, nothing to grant
+        pass
+
+
+def mcp_granted_permissions():
+    """Permissions the MCP gate granted this request, or an empty set."""
+    try:
+        from flask import g, has_request_context
+        if not has_request_context():
+            return frozenset()
+        return getattr(g, "_mcp_granted_permissions", frozenset())
+    except Exception:  # pragma: no cover
+        return frozenset()
 
 
 # ---------------------------------------------------------------------------

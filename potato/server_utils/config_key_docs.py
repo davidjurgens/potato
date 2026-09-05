@@ -359,6 +359,12 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Interface to bind. 0.0.0.0 exposes the server beyond localhost",
         type="string", default="localhost", category=SERVER,
     ),
+    "session_timeout_minutes": _D(
+        "How long a signed-in session may sit idle before the server clears "
+        "it. The clock restarts on every request, so it bounds inactivity, not "
+        "the length of a shift",
+        type="integer", default=480, category=SERVER,
+    ),
     "server": _D(
         "Nested port/host/debug block, an alternative to the top-level keys",
         type="object", category=SERVER,
@@ -1074,8 +1080,12 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "base_css": _D("Extra stylesheet to load", type="string", category=UI),
     "hide_navbar": _D("Hide the top navigation bar", type="boolean", category=UI),
     "list_as_text": _D(
-        "Render list-valued fields as text rather than as a list",
+        "How a list-valued field is laid out. Sub-keys: "
+        "text_list_prefix_type (alphabet, number, bullet or none), "
+        "horizontal, alternating_shading. `true` turns it on with the "
+        "defaults",
         type="object", category=UI,
+        example={"text_list_prefix_type": "number", "alternating_shading": True},
     ),
     "horizontal_key_bindings": _D(
         "Lay keyboard shortcut hints out horizontally", type="boolean", category=UI,
@@ -1110,14 +1120,24 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="string", category=CONTENT,
     ),
     "custom_footer_html": _D("HTML appended to every page", type="string", category=CONTENT),
-    "header_file": _D("HTML file rendered above the item", type="string", category=CONTENT),
+    "header_file": _D(
+        "Ignored. The header template path is no longer configurable, and "
+        "nothing reads this key -- `potato validate` reports it",
+        type="string", category=CONTENT,
+    ),
     "header_logo": _D("Logo image shown in the header", type="string", category=CONTENT),
     "completion_code": _D(
         "Code shown when an annotator finishes, for crowdsourcing payout",
         type="string", category=CONTENT,
     ),
     "keyword_highlights_file": _D(
-        "File of keywords to highlight in item text", type="string", category=CONTENT,
+        "File of keywords to highlight in item text. A CSV or TSV with a "
+        "`keyword` header column (plus optional label, schema, color) is the "
+        "documented form; one keyword per line, and JSON/JSONL/YAML holding a "
+        "keyword list, an object list or a {keyword: label} map, are read too. "
+        "A `*` in a keyword matches any run of word characters. See "
+        "docs/administration/productivity.md",
+        type="string", category=CONTENT, example="keywords.csv",
     ),
     "keyword_highlight_settings": _D(
         "Styling for keyword highlights", type="object", category=CONTENT,

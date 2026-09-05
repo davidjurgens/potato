@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import json
 import logging
+import inspect
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -114,13 +115,69 @@ def build_connected_server(url: str, token: str, root: Optional[str] = None):
     return mcp_server, manifest
 
 
+#: JSON Schema type name -> the Python annotation FastMCP builds a schema from.
+_PARAM_TYPES = {
+    "string": str,
+    "integer": int,
+    "number": float,
+    "boolean": bool,
+    "object": Dict[str, Any],
+    "array": List[Any],
+}
+
+
+def _forwarder_signature(parameters: List[dict]):
+    """An `inspect.Signature` matching what the remote tool documents.
+
+    FastMCP derives a tool's inputSchema from the callable's signature, so a
+    forwarder written as `f(arguments=None)` publishes exactly one property
+    called `arguments` -- which is what every live tool used to advertise. An
+    agent reading that list learned the tool's name and nothing else, and
+    passing the obvious thing (`{"instance_id": "W01"}`) was silently dropped
+    in favour of the wrapper the schema never mentioned.
+
+    Required parameters come first: a signature cannot put a parameter without
+    a default after one with a default.
+    """
+    ordered = ([p for p in parameters if p.get("required")] +
+               [p for p in parameters if not p.get("required")])
+    params, annotations = [], {}
+    for spec in ordered:
+        pname = spec.get("name")
+        if not pname:
+            continue
+        annotation = _PARAM_TYPES.get(spec.get("type", "string"), Any)
+        if spec.get("required"):
+            default = inspect.Parameter.empty
+        else:
+            annotation = Optional[annotation]
+            default = spec.get("default", None)
+        params.append(inspect.Parameter(
+            pname, inspect.Parameter.KEYWORD_ONLY,
+            default=default, annotation=annotation))
+        annotations[pname] = annotation
+    return inspect.Signature(params), annotations
+
+
 def _register_forwarder(mcp_server, client: PotatoClient, entry: dict) -> None:
     """Add one remote tool, named `live_<tool>` to keep it distinct."""
     name = entry["name"]
     summary = entry.get("summary", "")
     destructive = entry.get("destructive", False)
+    # `[]` means "this tool takes nothing" and `None` means "this instance is
+    # too old to say" -- two different answers that must not collapse.
+    parameters = entry.get("parameters")
+    publishes_schema = parameters is not None
+    parameters = parameters or []
 
     description = summary
+    if parameters:
+        described = ", ".join(
+            f"{p['name']} ({p.get('type', 'string')}"
+            f"{', required' if p.get('required') else ''})"
+            for p in parameters if p.get("name")
+        )
+        description += f". Arguments: {described}"
     if destructive:
         description += (
             ". Destroys annotation work: the call must include "
@@ -128,12 +185,37 @@ def _register_forwarder(mcp_server, client: PotatoClient, entry: dict) -> None:
             "mcp.destructive."
         )
 
-    def forwarder(arguments: Optional[Dict[str, Any]] = None) -> Any:
-        """Forward to the remote instance."""
-        try:
-            return client.call(name, arguments or {})
-        except RemoteError as e:
-            return {"error": str(e)}
+    if publishes_schema:
+        signature, annotations = _forwarder_signature(parameters)
+
+        def forwarder(**kwargs: Any) -> Any:
+            """Forward to the remote instance."""
+            # Drop the omitted optionals rather than sending explicit nulls:
+            # the remote reads `payload.get(k)`, and a null would override a
+            # server-side default with None.
+            payload = {k: v for k, v in kwargs.items() if v is not None}
+            try:
+                return client.call(name, payload)
+            except RemoteError as e:
+                return {"error": str(e)}
+
+        forwarder.__signature__ = signature
+        forwarder.__annotations__ = dict(annotations, **{"return": Any})
+    else:
+        # An older instance publishes no parameter list. Keep the wrapper form
+        # so `connect` still works against it, and say so in the description
+        # rather than leaving the agent to discover it from an error string.
+        description += (
+            ". This instance does not publish an argument schema; pass "
+            'arguments as a nested object, e.g. {"arguments": {...}}.'
+        )
+
+        def forwarder(arguments: Optional[Dict[str, Any]] = None) -> Any:
+            """Forward to the remote instance."""
+            try:
+                return client.call(name, arguments or {})
+            except RemoteError as e:
+                return {"error": str(e)}
 
     forwarder.__name__ = f"live_{name}"
     forwarder.__doc__ = description or f"Call {name} on the connected instance."

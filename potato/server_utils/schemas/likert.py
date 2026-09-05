@@ -14,6 +14,7 @@ that can be used for collecting ordinal data responses. The scale supports:
 """
 
 import logging
+from collections.abc import Mapping
 
 from potato.ai.ai_help_wrapper import get_ai_wrapper, get_dynamic_ai_help
 
@@ -23,7 +24,9 @@ from .identifier_utils import (
     generate_element_value,
     generate_validation_attribute,
     escape_html_content,
-    generate_layout_attributes
+    generate_layout_attributes,
+    bad_text_label_content,
+    display_label_text
 )
 from .radio import generate_radio_layout
 
@@ -58,6 +61,41 @@ def generate_likert_layout(annotation_scheme):
     """
     return safe_generate_layout(annotation_scheme, _generate_likert_layout_internal)
 
+
+def _radio_scheme_for_labelled_likert(annotation_scheme):
+    """Carry `displaying_score` and `bad_text_label` into the radio path.
+
+    A likert with an explicit `labels` list is rendered by the radio
+    generator, which knows about neither option -- so both were accepted by
+    the validator, documented as optional on likert, and silently dropped.
+    A scale asking for an "Unreadable" escape hatch rendered five points and
+    no way out of them.
+
+    The original scheme is not mutated: it is the config's own dict, shared
+    with the validator, the preview tool and the exported spec.
+    """
+    scheme = dict(annotation_scheme)
+    labels = list(scheme.get("labels") or [])
+
+    if scheme.get("displaying_score"):
+        # Number each option in the order it is written. `displayed_label`
+        # changes only what is shown -- the stored value stays the label name.
+        numbered = []
+        for position, label_data in enumerate(labels, 1):
+            visible = display_label_text(label_data, annotation_scheme)
+            entry = dict(label_data) if isinstance(label_data, Mapping) else {"name": label_data}
+            entry["displayed_label"] = f"{position}. {visible}"
+            numbered.append(entry)
+        labels = numbered
+
+    bad_text_content = bad_text_label_content(scheme)
+    if bad_text_content:
+        labels = labels + [{"name": "bad_text", "displayed_label": bad_text_content}]
+
+    scheme["labels"] = labels
+    return scheme
+
+
 def _generate_likert_layout_internal(annotation_scheme):
     """
     Internal function to generate likert layout after validation.
@@ -67,7 +105,8 @@ def _generate_likert_layout_internal(annotation_scheme):
     # Use radio layout if complex labels specified
     if "labels" in annotation_scheme:
         logger.info(f"Complex labels detected for {annotation_scheme['name']}, using radio layout")
-        return generate_radio_layout(annotation_scheme, horizontal=False)
+        return generate_radio_layout(
+            _radio_scheme_for_labelled_likert(annotation_scheme), horizontal=False)
 
     # Validate required fields
     required_fields = ["size", "min_label", "max_label"]
@@ -173,7 +212,8 @@ def _generate_likert_layout_internal(annotation_scheme):
     """
 
     # Add optional bad text input for invalid/problematic cases
-    if "label_content" in annotation_scheme.get("bad_text_label", {}):
+    bad_text_content = bad_text_label_content(annotation_scheme)
+    if bad_text_content:
         logger.debug(f"Adding bad text option for {annotation_scheme['name']}")
         bad_text_identifiers = generate_element_identifier(annotation_scheme['name'], "bad_text", "radio")
         schematic += f"""
@@ -195,7 +235,7 @@ def _generate_likert_layout_internal(annotation_scheme):
                        onclick="onlyOne(this);registerAnnotation(this);">
                 <label class="shadcn-likert-button" for="{bad_text_identifiers['id']}"></label>
                 <span class="shadcn-likert-bad-text-label">
-                    {escape_html_content(annotation_scheme['bad_text_label']['label_content'])}
+                    {escape_html_content(bad_text_content)}
                 </span>
             </div>
         """

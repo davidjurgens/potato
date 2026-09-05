@@ -39,7 +39,9 @@ from potato.server_utils.config_module import (
     ConfigValidationError,
     ConfigSecurityError,
     normalize_config_before_validation,
+    validate_file_paths,
     validate_yaml_structure,
+    warn_about_unreadable_optional_files,
 )
 
 
@@ -139,6 +141,12 @@ def validate_config_file(config_file: str) -> ValidationReport:
             project_dir=config_file_dir,
             config_file_dir=config_file_dir,
         )
+        # The path checks the server runs at boot. They lived only on the boot
+        # path, so `validate` reported "OK -- no issues found" for a config
+        # naming a header_logo that does not exist, which then refused to
+        # start. A preflight that passes a config the server rejects is worse
+        # than no preflight.
+        validate_file_paths(config_data, config_file_dir, config_file_dir)
     except (ConfigValidationError, ConfigSecurityError) as e:
         report.ok = False
         report.errors.append(str(e))
@@ -153,6 +161,14 @@ def validate_config_file(config_file: str) -> ValidationReport:
 
     report.unknown_keys = collector.unknown_keys
     report.other_warnings = collector.other_warnings
+    # Optional files the server merely shrugs off. Not fatal here either --
+    # but named, so `--strict` can refuse them and a human can see them.
+    try:
+        report.other_warnings.extend(
+            warn_about_unreadable_optional_files(config_data, config_file_dir))
+    except Exception as e:  # noqa: BLE001 - a warning pass must not fail the run
+        report.other_warnings.append(
+            f"Could not check optional file paths ({type(e).__name__}): {e}")
     return report
 
 

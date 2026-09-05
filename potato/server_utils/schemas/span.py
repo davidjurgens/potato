@@ -12,7 +12,9 @@ from .identifier_utils import (
     generate_element_identifier,
     generate_validation_attribute,
     escape_html_content,
-    generate_layout_attributes
+    generate_layout_attributes,
+    display_label_text,
+    bad_text_label_content
 )
 
 
@@ -256,11 +258,20 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
                 label2key[label] = shortcut_key
                 key_bindings.append((shortcut_key, f"{scheme_name}: {label}"))
 
-        # Format label content
-        if "displaying_score" in annotation_scheme and annotation_scheme["displaying_score"]:
-            label_content = f"{key_value}.{label}"
+        # Format label content.
+        #
+        # `displaying_score` prefixes the chip with the keyboard shortcut, the
+        # way radio does. It used to interpolate `key_value`, which for a plain
+        # string label IS the label -- so every chip read "Defect.Defect", on
+        # the picker the annotator reads before every selection. Use the key
+        # actually allocated, and fall back to the label's position; with
+        # neither, show no prefix rather than a doubled name.
+        visible = display_label_text(label_data, annotation_scheme)
+        if annotation_scheme.get("displaying_score"):
+            prefix = label2key.get(label) or (str(i) if len(labels) <= 10 else "")
+            label_content = f"{prefix}. {visible}" if prefix else visible
         else:
-            label_content = label
+            label_content = visible
 
         # Generate name with span prefix so ingestion code can skip this
         name_with_span = f"span_label:::{scheme_name}"
@@ -295,7 +306,8 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
     schematic += "</div>"
 
     # Add optional bad text option
-    if "label_content" in annotation_scheme.get("bad_text_label", {}):
+    bad_text_content = bad_text_label_content(annotation_scheme)
+    if bad_text_content:
         bad_text_identifiers = generate_element_identifier(annotation_scheme['name'], "bad_text", "checkbox")
 
         schematic += f"""
@@ -309,7 +321,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
                        onclick="onlyOne(this)"
                        validation="{validation}">
                 <label for="{bad_text_identifiers['id']}" class="shadcn-span-label">
-                    {escape_html_content(annotation_scheme["bad_text_label"]["label_content"])}
+                    {escape_html_content(bad_text_content)}
                 </label>
             </div>
         """
@@ -319,9 +331,7 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
             and annotation_scheme["sequential_key_binding"]
             and len(annotation_scheme["labels"]) <= 10
         ):
-            key_bindings.append(
-                (0, f"{scheme_name}: {annotation_scheme['bad_text_label']['label_content']}")
-            )
+            key_bindings.append((0, f"{scheme_name}: {bad_text_content}"))
 
     schematic += "</fieldset></form>"
     return schematic, key_bindings

@@ -90,6 +90,18 @@ judge_calibration:
 
 You can also override most of these interactively in the admin wizard and re-run.
 
+### Where the generated labels go
+
+The judge's labels are written to `state_dir` as soon as generation finishes,
+under `<output_annotation_dir>/.judge_calibration` when `state_dir` is unset —
+not at the project root, and not in `output.dir`, which only receives the
+report once the human phase closes.
+
+Between those two points, read them from `GET /judge_calibration/results`
+(`?model=` and `?instance_id=` narrow it). `GET /judge_calibration/progress`
+reports the same directory and URL alongside its count, so a run showing
+`results: 6` says where those six are.
+
 ### Supported annotation types
 
 | Type | Status | Metrics |
