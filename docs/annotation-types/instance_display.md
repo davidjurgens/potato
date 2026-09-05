@@ -120,6 +120,23 @@ Did you mean 'speaker_key'? Accepted options: ...
 That check found four dead keys in Potato's own example configs, so it is worth
 running `potato validate` over an existing project after upgrading.
 
+### Options every display type takes
+
+Three options belong to the resizable container Potato wraps around each field
+rather than to any one renderer, so they work on every display type:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `resizable` | `true` | Wrap the field in a container the annotator can drag to resize. Set `false` to leave the field at its natural height. |
+| `max_height` | `500` | How tall the field may grow before it scrolls inside itself. |
+| `min_height` | `100` | How short it may be dragged. |
+
+Lengths accept a number or a CSS length: `400`, `"400px"`, `"50vh"` and
+`"calc(100vh - 200px)"` all work. A bare number means pixels.
+
+`resizable: false` is worth knowing about for a short field — a one-line label
+in a drag handle looks like a mistake.
+
 ### Text Display
 
 ```yaml

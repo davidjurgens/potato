@@ -8,7 +8,7 @@ visual traces, or any ordered collection of images with optional captions.
 import html
 from typing import Dict, Any, List
 
-from .base import BaseDisplay
+from .base import BaseDisplay, css_pixels
 
 
 class GalleryDisplay(BaseDisplay):
@@ -152,19 +152,12 @@ class GalleryDisplay(BaseDisplay):
     def _build_css(self, layout: str, thumbnail_size: int, max_height: int,
                    columns: int, zoomable: bool) -> str:
         """Build CSS for the gallery layout."""
-        # Ensure numeric types for CSS arithmetic
-        try:
-            thumbnail_size = int(thumbnail_size)
-        except (ValueError, TypeError):
-            thumbnail_size = 300
-        try:
-            max_height = int(max_height)
-        except (ValueError, TypeError):
-            max_height = 400
-        try:
-            columns = int(columns)
-        except (ValueError, TypeError):
-            columns = 3
+        # Numeric, because the layout below computes `max_height - 40`. A bare
+        # int() raises on "220px" and was caught into the default, so a length
+        # written the way the rest of the block is written silently reverted.
+        thumbnail_size = css_pixels(thumbnail_size, 300)
+        max_height = css_pixels(max_height, 400)
+        columns = css_pixels(columns, 3)
 
         layout_css = ""
 

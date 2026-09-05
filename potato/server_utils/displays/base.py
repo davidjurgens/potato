@@ -34,8 +34,11 @@ Span Target Contract:
 """
 
 import html as html_module
+import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class BaseDisplay(ABC):
@@ -452,3 +455,58 @@ def render_display_container(
     parts.append(f'</div>')
 
     return "\n".join(parts)
+
+
+def css_length(value: Any, fallback: str = "") -> str:
+    """A CSS length from a config value that may or may not carry a unit.
+
+    Six display types built one by appending ``px`` unconditionally, so an
+    author who wrote ``max_height: "220px"`` got ``max-height: 220pxpx`` --
+    an invalid declaration, dropped by the browser, leaving the field
+    unclamped with nothing said. That is not an exotic mistake: the same
+    `instance_display` block takes ``layout.grid.gap``, which REQUIRES a unit,
+    so writing both lengths the same way is what following the documentation
+    produces.
+
+    `video_display` already had this right, one file away from five that did
+    not.
+
+    A bare number, as an int or as a string, is a pixel count. Anything else
+    is passed through -- it already carries a unit, or it is `auto`, `calc()`
+    or a `var()`.
+    """
+    if value is None or isinstance(value, bool):
+        return fallback
+    if isinstance(value, (int, float)):
+        return f"{value}px"
+    text = str(value).strip()
+    if not text:
+        return fallback
+    try:
+        float(text)
+    except ValueError:
+        return text
+    return f"{text}px"
+
+
+def css_pixels(value: Any, default: int) -> int:
+    """A pixel COUNT, for the displays that do arithmetic on it.
+
+    `gallery` computes ``max_height - 40``, so it needs a number rather than a
+    length. It used a bare ``int()``, which raises on ``"220px"`` and was
+    caught into the default -- the same silent revert, one layer along.
+    """
+    if isinstance(value, bool) or value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = str(value).strip().lower()
+    if text.endswith("px"):
+        text = text[:-2].strip()
+    try:
+        return int(float(text))
+    except (TypeError, ValueError):
+        logger.warning(
+            "display: %r is not a usable pixel length; using %d instead. "
+            "Write a number, or a length in px.", value, default)
+        return default

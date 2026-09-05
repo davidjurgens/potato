@@ -407,11 +407,18 @@ class InstanceDisplayRenderer:
         Returns:
             HTML wrapped in resizable container
         """
+        from potato.server_utils.displays.base import css_length
+
         display_options = field.get("display_options", {})
         max_height = display_options.get("max_height", 500)
         min_height = display_options.get("min_height", 100)
 
-        style = f"max-height: {max_height}px; min-height: {min_height}px; position: relative;"
+        # Both lengths go through `css_length`: `px` used to be appended
+        # unconditionally, so `max_height: "220px"` produced `220pxpx` --
+        # invalid, dropped, and the field simply never clamped.
+        style = (f"max-height: {css_length(max_height, '500px')}; "
+                 f"min-height: {css_length(min_height, '100px')}; "
+                 f"position: relative;")
 
         return f'''<div class="display-field-resizable" style="{style}">
             {inner_html}

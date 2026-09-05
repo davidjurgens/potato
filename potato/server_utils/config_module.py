@@ -7022,6 +7022,20 @@ def validate_instance_display_config(config_data: Dict[str, Any]) -> None:
     _check_display_only_deprecation(config_data)
 
 
+#: Options the resizable WRAPPER reads, for every display type, rather than any
+#: one renderer. `InstanceDisplayRenderer._wrap_resizable` runs on every field
+#: unless `resizable` turns it off, and reads all three -- so validating them
+#: against a single type's `optional_fields` refused the option that switches
+#: the wrapper off (`resizable`, declared by 0 of 24 types) and the one that
+#: sets its floor (`min_height`, also 0 of 24). `max_height` is declared by 11
+#: types for their own use, so it happened to pass on those and was refused on
+#: the other 13.
+#:
+#: The schema registry has had `UNIVERSAL_OPTIONAL_FIELDS` for the same reason:
+#: a key read by shared machinery belongs to the machinery, not to each type.
+UNIVERSAL_DISPLAY_OPTIONS = {"resizable", "max_height", "min_height"}
+
+
 def _reject_unknown_display_options(field_type: str, options: Dict[str, Any], path: str) -> None:
     """Reject a display option the renderer will never read.
 
@@ -7047,7 +7061,9 @@ def _reject_unknown_display_options(field_type: str, options: Dict[str, Any], pa
     if definition is None or not definition.optional_fields:
         return
 
-    accepted = set(definition.optional_fields or {}) | set(definition.required_fields or [])
+    accepted = (set(definition.optional_fields or {})
+                | set(definition.required_fields or [])
+                | UNIVERSAL_DISPLAY_OPTIONS)
     for key in options:
         if key in accepted:
             continue

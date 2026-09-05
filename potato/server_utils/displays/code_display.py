@@ -18,7 +18,7 @@ from typing import Dict, Any, List, Optional
 import html
 import logging
 
-from .base import BaseDisplay
+from .base import BaseDisplay, css_length
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ class CodeDisplay(BaseDisplay):
         max_width = options.get("max_width")
 
         if max_height:
-            styles.append(f"max-height: {max_height}px")
+            styles.append(f"max-height: {css_length(max_height)}")
             styles.append("overflow-y: auto")
         if max_width:
             styles.append(f"max-width: {max_width}px")

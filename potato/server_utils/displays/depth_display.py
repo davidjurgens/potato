@@ -28,7 +28,7 @@ import html
 import json
 from typing import Any, Dict, List
 
-from .base import BaseDisplay
+from .base import BaseDisplay, css_length
 
 
 class DepthDisplay(BaseDisplay):
@@ -73,7 +73,8 @@ class DepthDisplay(BaseDisplay):
 
         style = ""
         if options.get("max_height"):
-            style = f' style="max-height: {html.escape(str(options["max_height"]))}px"'
+            style = (' style="max-height: '
+                     f'{html.escape(css_length(options["max_height"]))}"')
 
         return f"""
         <div class="depth-display" id="{html.escape(safe_id, quote=True)}"

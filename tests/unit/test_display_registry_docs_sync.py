@@ -48,7 +48,17 @@ def _documented_types():
     in the table.
     """
     text = DISPLAY_DOC.read_text(encoding="utf-8")
-    return set(re.findall(r"^\|\s*`([a-z_]+)`\s*\|", text, flags=re.MULTILINE))
+    # Only the display-type section. The same document also carries an options
+    # table -- `resizable`, `max_height`, `min_height` -- whose rows have the
+    # identical shape, and reading those as display types made this guard fail
+    # on a correct doc. Scoping it here rather than loosening the pattern keeps
+    # the check exact: a row in the type table, and nowhere else.
+    section = re.search(
+        r"^## Supported Display Types\s*$(.*?)^## ", text,
+        flags=re.MULTILINE | re.DOTALL)
+    scope = section.group(1) if section else text
+    return set(re.findall(r"^\|\s*`([a-z_]+)`\s*\|", scope,
+                          flags=re.MULTILINE))
 
 
 def _fallback_types():

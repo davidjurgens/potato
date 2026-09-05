@@ -21,7 +21,7 @@ import re
 
 from potato.server_utils.html_sanitizer import sanitize_html
 
-from .base import BaseDisplay
+from .base import BaseDisplay, css_length
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ class DocumentDisplay(BaseDisplay):
         styles = []
         max_height = options.get("max_height")
         if max_height:
-            styles.append(f"max-height: {max_height}px")
+            styles.append(f"max-height: {css_length(max_height)}")
             styles.append("overflow-y: auto")
         style_str = "; ".join(styles) if styles else ""
 
@@ -283,7 +283,7 @@ class DocumentDisplay(BaseDisplay):
         # Container styles
         styles = ["position: relative"]
         if max_height:
-            styles.append(f"max-height: {max_height}px")
+            styles.append(f"max-height: {css_length(max_height)}")
             styles.append("overflow-y: auto")
         style_str = "; ".join(styles)
 
