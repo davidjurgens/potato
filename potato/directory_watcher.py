@@ -172,7 +172,27 @@ class DirectoryWatcher:
                 except Exception as e:
                     logger.error(f"Error loading {file_path}: {e}")
 
-        logger.info(f"Directory load complete: {total_added} total instances loaded")
+        if total_added:
+            logger.info(
+                f"Directory load complete: {total_added} total instances loaded")
+        else:
+            # A study with no items is not a state anyone asks for, and it is
+            # indistinguishable at INFO from a study that loaded fine. Every
+            # cause lands here -- wrong directory, wrong extension, empty
+            # files -- so this is the one line worth raising.
+            skipped = self._skipped_files(files)
+            detail = ""
+            if skipped:
+                shown = ", ".join(skipped[:5])
+                if len(skipped) > 5:
+                    shown += f", and {len(skipped) - 5} more"
+                detail = (f" {len(skipped)} file(s) were skipped because their "
+                          f"extension is not one of "
+                          f"{', '.join(self.SUPPORTED_EXTENSIONS)}: {shown}.")
+            logger.warning(
+                f"Loaded 0 instances from data_directory "
+                f"'{self.data_directory}'. Annotators will see an empty "
+                f"study.{detail}")
         return total_added
 
     def start_watching(self) -> None:
@@ -346,6 +366,29 @@ class DirectoryWatcher:
             pattern = os.path.join(self.data_directory, f"*{ext}")
             files.extend(glob.glob(pattern))
         return sorted(files)
+
+    def _skipped_files(self, loaded: List[str]) -> List[str]:
+        """Files in the directory this watcher will not read.
+
+        Reported because the alternative is a study that boots clean and hands
+        the first annotator nothing: a directory of `.md` or `.txt` is scanned,
+        matched by no pattern, and the only trace is `0 total instances` at
+        INFO.
+        """
+        loaded_set = {os.path.abspath(path) for path in loaded}
+        skipped = []
+        try:
+            entries = sorted(os.listdir(self.data_directory))
+        except OSError:
+            return skipped
+        for name in entries:
+            path = os.path.join(self.data_directory, name)
+            if not os.path.isfile(path) or name.startswith("."):
+                continue
+            if os.path.abspath(path) in loaded_set:
+                continue
+            skipped.append(name)
+        return skipped
 
     def _process_file(self, file_path: str) -> Tuple[int, int]:
         """

@@ -5566,8 +5566,18 @@ def get_span_data(instance_id):
                 None,
             )
             is_dialogue = field_cfg and field_cfg.get("type") == "dialogue"
+            is_document = field_cfg and field_cfg.get("type") == "document"
 
-            if is_dialogue and isinstance(field_data, list):
+            if is_document:
+                # Same contract as dialogue: the offsets index what the browser
+                # holds, so reconstruct that rather than a collapsed copy of it.
+                from potato.server_utils.displays.base import (
+                    document_dom_text, resolve_display_options)
+                payload = (field_data.get("rendered_html", "")
+                           if isinstance(field_data, dict) else field_data)
+                field_text = document_dom_text(
+                    payload, resolve_display_options(field_cfg))
+            elif is_dialogue and isinstance(field_data, list):
                 from potato.server_utils.displays.base import (
                     resolve_display_options)
                 opts = resolve_display_options(field_cfg)

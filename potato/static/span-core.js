@@ -247,14 +247,47 @@ class UnifiedPositioningStrategy {
         return textContent;
     }
 
-    normalizeText(text) {
-        // For code displays (pre/code elements), preserve newlines for accurate positioning
-        // Check if we're inside a code display
-        if (this.container && (
-            this.container.closest('.code-display') ||
+    /**
+     * How much of the container's whitespace the browser actually keeps.
+     *
+     * Asked of the computed style rather than a list of class names. The
+     * class allowlist this replaced named the code displays and nothing else,
+     * so a `document` field -- which carries `white-space: pre-wrap` via
+     * `.document-preserve-structure` -- had its newlines collapsed out of the
+     * offset basis while the offset walk went on counting them. The basis
+     * ended up one character short per collapsed run, which put the tail of
+     * every such field past the bounds check in createSpanWithAlgorithm() and
+     * made it silently unselectable.
+     *
+     * @returns {'all'|'newlines'|'none'} how much whitespace to preserve.
+     */
+    preservedWhitespace() {
+        if (!this.container) return 'none';
+        let whiteSpace = '';
+        try {
+            whiteSpace = window.getComputedStyle(this.container).whiteSpace || '';
+        } catch (e) {
+            whiteSpace = '';
+        }
+        if (/^(pre|pre-wrap|break-spaces)$/.test(whiteSpace)) return 'all';
+        if (whiteSpace === 'pre-line') return 'newlines';
+        // Code displays keep their newlines even if the computed style did not
+        // say so -- an unstyled <pre> inside one still lays out as preformatted.
+        if (this.container.closest('.code-display') ||
             this.container.closest('.code-simple') ||
-            this.container.querySelector('pre')
-        )) {
+            this.container.querySelector('pre')) {
+            return 'newlines';
+        }
+        return 'none';
+    }
+
+    normalizeText(text) {
+        const preserved = this.preservedWhitespace();
+        // Nothing to normalise, and nothing to trim: the offset walk sums raw
+        // node.textContent.length, so any character removed here shifts every
+        // offset that follows it.
+        if (preserved === 'all') return text;
+        if (preserved === 'newlines') {
             // Only normalize multiple spaces to single space, keep newlines
             return text.replace(/[ \t]+/g, ' ').trim();
         }

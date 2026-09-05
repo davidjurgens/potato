@@ -328,6 +328,32 @@ def concatenate_dialogue_text(data: Any, speaker_key: str = "speaker", text_key:
 TURN_SEPARATOR = "\n"
 
 
+def document_dom_text(value: Any, options: Optional[Dict[str, Any]] = None) -> str:
+    """The text a ``document`` field puts in the DOM.
+
+    That text is the basis its span offsets index, so every consumer of those
+    offsets has to reconstruct it the same way -- the same contract
+    :func:`reconstruct_dialogue_dom_text` carries for dialogue, and it broke
+    the same way. The display wrote a whitespace-collapsed
+    ``data-original-text`` while the DOM kept the raw newlines (the field
+    carries ``white-space: pre-wrap``), so offsets counted characters the
+    bounds check did not have: the tail of every document became silently
+    unselectable, and `/get_annotations` sliced the collapsed form and handed
+    back text shifted by one character per collapsed run.
+
+    Whitespace is collapsed only when the browser will collapse it -- when
+    ``preserve_structure`` is off, or when the body carries block markup of
+    its own and the display therefore does not apply the pre-wrap class.
+    """
+    from potato.server_utils.displays.document_display import (
+        _BLOCK_MARKUP, _dom_text_of, _safe_document_html)
+
+    rendered = _safe_document_html(value)
+    preserves = bool((options or {}).get("preserve_structure", True)
+                     and not _BLOCK_MARKUP.search(rendered or ""))
+    return _dom_text_of(rendered, collapse=not preserves)
+
+
 def reconstruct_dialogue_dom_text(
     data: Any,
     speaker_key: str = "speaker",

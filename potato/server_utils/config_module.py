@@ -4208,6 +4208,39 @@ def validate_data_directory_config(config_data: Dict[str, Any]) -> None:
     if not data_directory.strip():
         raise ConfigValidationError("data_directory cannot be empty")
 
+    # A directory holding nothing this loader reads is the one failure that
+    # looks exactly like success: the server boots clean, `validate` passes,
+    # and the first annotator gets an empty study. Warn rather than raise --
+    # a watched directory is legitimately empty at boot, and the poller will
+    # fill it -- but say so, so `--strict` can refuse a study that would open
+    # with nothing in it.
+    resolved_directory = os.path.join(
+        config_data.get("task_dir") or ".", data_directory)
+    if os.path.isdir(resolved_directory):
+        from potato.directory_watcher import DirectoryWatcher
+        extensions = DirectoryWatcher.SUPPORTED_EXTENSIONS
+        entries = [name for name in sorted(os.listdir(resolved_directory))
+                   if os.path.isfile(os.path.join(resolved_directory, name))
+                   and not name.startswith(".")]
+        readable = [name for name in entries
+                    if name.lower().endswith(extensions)]
+        if not readable:
+            supported = ", ".join(extensions)
+            if entries:
+                shown = ", ".join(entries[:5])
+                if len(entries) > 5:
+                    shown += f", and {len(entries) - 5} more"
+                logger.warning(
+                    "data_directory '%s' holds %d file(s), none with an "
+                    "extension this loader reads (%s): %s. The study will "
+                    "open with no items.",
+                    data_directory, len(entries), supported, shown)
+            elif not config_data.get("watch_data_directory"):
+                logger.warning(
+                    "data_directory '%s' is empty and watch_data_directory is "
+                    "not set, so nothing will ever be loaded from it. The "
+                    "study will open with no items.", data_directory)
+
     # Validate watch_data_directory if present
     if "watch_data_directory" in config_data:
         watch_enabled = config_data["watch_data_directory"]

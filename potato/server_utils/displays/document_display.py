@@ -77,6 +77,25 @@ def _safe_document_html(value: Any) -> str:
     return str(sanitize_html(str(value)))
 
 
+def _dom_text_of(rendered_html: str, collapse: bool) -> str:
+    """The text the browser will hold for this markup.
+
+    Tags out, entities decoded -- `&amp;` occupies five characters in the
+    markup and one in the DOM, and an offset basis that counts the markup form
+    is wrong by four for every ampersand in the document.
+
+    `collapse` mirrors what CSS will do. Under `white-space: pre-wrap` the
+    browser keeps newlines and runs of spaces, so the basis must keep them
+    too; without it the browser collapses them and the basis must match that
+    instead.
+    """
+    text = re.sub(r"<[^>]+>", "", rendered_html or "")
+    text = html.unescape(text)
+    if collapse:
+        return " ".join(text.split())
+    return text
+
+
 class DocumentDisplay(BaseDisplay):
     """
     Display type for rendered documents (DOCX, Markdown, HTML).
@@ -166,17 +185,6 @@ class DocumentDisplay(BaseDisplay):
             f'style="{style_str}">'
         )
 
-        # Extract plain text for span annotation (strip HTML tags)
-        plain_text = re.sub(r'<[^>]+>', '', rendered_html)
-        plain_text = ' '.join(plain_text.split())  # Normalize whitespace
-
-        # Document outline/TOC if available and enabled
-        if options.get("show_outline"):
-            headings = (metadata.get("headings")
-                        or _headings_from_html(rendered_html, plain_text))
-            if headings:
-                parts.append(self._render_outline(headings))
-
         # Determine content classes - add text-content for span annotation compatibility
         is_span_target = field_config.get("span_target", False)
         content_classes = ["document-content"]
@@ -187,10 +195,31 @@ class DocumentDisplay(BaseDisplay):
         # together. Only meaningful when the body carries no block markup of
         # its own -- applying it to converted HTML would double every gap
         # between tags.
-        if (options.get("preserve_structure", True)
-                and not _BLOCK_MARKUP.search(rendered_html or "")):
+        preserves_whitespace = bool(
+            options.get("preserve_structure", True)
+            and not _BLOCK_MARKUP.search(rendered_html or ""))
+        if preserves_whitespace:
             content_classes.append("document-preserve-structure")
         content_class_str = " ".join(content_classes)
+
+        # The span offset basis. This has to be character-for-character what
+        # the browser will put in the container's text nodes, because
+        # span-core sums raw node.textContent.length to get offsets and then
+        # bounds-checks them against this attribute. Collapsing it
+        # unconditionally made the two disagree by one character per collapsed
+        # run: the tail of the document became unselectable (the bounds check
+        # refused every span reaching into it, silently) and every span that
+        # was accepted stored text sliced at the wrong place.
+        # Same computation `document_dom_text()` performs for every consumer of
+        # these offsets; this path has the sanitized body already.
+        plain_text = _dom_text_of(rendered_html, collapse=not preserves_whitespace)
+
+        # Document outline/TOC if available and enabled
+        if options.get("show_outline"):
+            headings = (metadata.get("headings")
+                        or _headings_from_html(rendered_html, plain_text))
+            if headings:
+                parts.append(self._render_outline(headings))
 
         data_original_attr = f'data-original-text="{html.escape(plain_text)}"' if is_span_target else ""
 

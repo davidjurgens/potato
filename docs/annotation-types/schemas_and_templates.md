@@ -223,6 +223,24 @@ annotation_schemes:
     bad_text_label: "No answer"
 ```
 
+**Label colors.** Give a label its own color by writing it as an object:
+
+```yaml
+    labels:
+      - {name: "positive", color: "#22c55e"}
+      - {name: "negative", color: "rgb(239, 68, 68)"}
+      - "neutral"                     # takes the next palette color
+```
+
+Accepted forms are `#rrggbb`, `#rgb`, `rgb(r, g, b)` and `(r, g, b)`. Named
+CSS colors such as `red` are not read. A color Potato cannot parse falls back
+to an automatically assigned palette color; `potato validate` reports that,
+and fails on it under `--strict`.
+
+Alpha is not carried through. Potato takes the three channels from an `rgba()`
+and applies its own opacity, so that highlights and label chips stay legible
+over text at a consistent weight. Write the color you want at full strength.
+
 ### 5. Slider (`slider`)
 
 Provides a continuous range for numerical ratings.

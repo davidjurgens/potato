@@ -106,18 +106,31 @@ class ExportContext:
         and `/api/spans` already uses it; this is the third caller.
         """
         value = item.get(field_name)
-        if isinstance(value, str):
-            return value
-        if not isinstance(value, list):
-            return None
-
         from potato.server_utils.displays.base import (
             concatenate_dialogue_text,
+            document_dom_text,
             reconstruct_dialogue_dom_text,
             resolve_display_options,
         )
 
         field_config = self._display_field_config(field_name)
+        if field_config.get("type") == "document":
+            # A `document` field carries the same contract as `dialogue`: its
+            # offsets index what the browser holds, which is the body with tags
+            # stripped and entities decoded, and whitespace collapsed only when
+            # the display does not apply the pre-wrap class. Returning the raw
+            # string was right only for a document that happens to be plain
+            # text with no markup and no entities.
+            payload = (value.get("rendered_html", "")
+                       if isinstance(value, dict) else value)
+            if payload is None:
+                return None
+            return document_dom_text(payload, resolve_display_options(field_config))
+        if isinstance(value, str):
+            return value
+        if not isinstance(value, list):
+            return None
+
         # Resolve the options the way the DISPLAY resolves them -- flat on the
         # field or nested -- or the two anchor to different strings and every
         # dialogue span exports shifted by the width of the turn numbering.
