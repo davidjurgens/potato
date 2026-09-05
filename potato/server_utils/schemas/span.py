@@ -83,6 +83,70 @@ def get_span_color(schema, span_label):
     return None
 
 
+def parse_rgb_triple(color):
+    """Parse a colour into the ``(r, g, b)`` string span colours are stored in.
+
+    Hex and ``rgb()`` forms are accepted because that is what people write, but
+    neither can be stored raw: the span chip builds its CSS as
+    ``"rgb" + color``, so a ``#ffcc00`` in the registry renders as
+    ``rgb#ffcc00`` and the chip loses its colour entirely.
+
+    Returns "" for something unreadable. Pure -- no logging -- so config
+    validation can call it and report on its own logger.
+    """
+    value = str(color or "").strip()
+    if not value:
+        return ""
+    if value.startswith("(") and value.endswith(")"):
+        parts = [p.strip() for p in value[1:-1].split(",")]
+        if len(parts) == 3:
+            try:
+                r, g, b = (int(float(p)) for p in parts)
+                return f"({r}, {g}, {b})"
+            except ValueError:
+                return ""
+        return ""
+    if value.startswith("#"):
+        digits = value[1:]
+        if len(digits) == 3:
+            digits = "".join(ch * 2 for ch in digits)
+        if len(digits) == 6:
+            try:
+                r, g, b = (int(digits[i:i + 2], 16) for i in (0, 2, 4))
+                return f"({r}, {g}, {b})"
+            except ValueError:
+                return ""
+        return ""
+    if value.lower().startswith(("rgb(", "rgba(")):
+        try:
+            inner = value[value.index("(") + 1:value.rindex(")")]
+        except ValueError:
+            return ""
+        parts = [p.strip() for p in inner.split(",")]
+        if len(parts) >= 3:
+            try:
+                r, g, b = (int(float(p)) for p in parts[:3])
+                return f"({r}, {g}, {b})"
+            except ValueError:
+                return ""
+    return ""
+
+
+def to_rgb_triple(color, context=""):
+    """parse_rgb_triple, warning when the colour is unreadable.
+
+    Returns "" so the caller falls back to the palette rather than emitting
+    broken CSS.
+    """
+    triple = parse_rgb_triple(color)
+    if not triple and str(color or "").strip():
+        logger.warning(
+            "Ignoring unreadable color %r%s; falling back to the palette. "
+            "Write it as '#rrggbb', 'rgb(r, g, b)' or '(r, g, b)'.",
+            color, f" for {context}" if context else "")
+    return triple
+
+
 def set_span_color(schema, span_label, color):
     """
     Sets the color of a span with this label as a string with an RGB triple in parentheses.
@@ -228,9 +292,25 @@ def _generate_span_layout_internal(annotation_scheme, horizontal=False):
             key_value = label_data.get("key_value", label)
             tooltip = _generate_tooltip(label_data)
 
-        # Check for color mappings
+        # Check for color mappings.
+        #
+        # An inline `color` on the label outranks the palette, and has to be
+        # recorded through set_span_color like any other colour. Without that,
+        # the generator auto-assigned a palette colour and wrote it into
+        # `ui.spans.span_colors`, which /api/colors reads before it looks at
+        # inline colours and only fills a label it has not already seen. The
+        # inline colour was parsed and then masked by a palette entry the
+        # generator had just invented. The author's config had no `ui` block;
+        # this code created one.
+        inline_color = (label_data.get("color")
+                        if isinstance(label_data, dict) else None)
         custom_color = get_span_color(scheme_name, label)
-        if custom_color:
+        inline_triple = to_rgb_triple(
+            inline_color, f"{scheme_name}:{label}") if inline_color else ""
+        if inline_triple:
+            span_color = inline_triple
+            set_span_color(scheme_name, label, span_color)
+        elif custom_color:
             span_color = custom_color
         else:
             # Assign a color from palette

@@ -1820,27 +1820,17 @@ def load_highlights_data(config: dict) -> None:
 
 
 def _as_rgb_triple(color, context=""):
-    """Normalise a colour to the ``(r, g, b)`` string the span registry stores.
+    """Normalise a keyword colour to the ``(r, g, b)`` string the registry stores.
 
-    Hex is accepted because it is what people write, but it cannot be stored
-    raw: the span label chip builds its CSS as ``"rgb" + color``, so a
-    ``#ffcc00`` in the registry renders as ``rgb#ffcc00`` and the chip loses
-    its colour.
+    Delegates to the span registry's own parser, which is the thing that
+    decides what a stored colour may look like. This used to be a second
+    implementation that read hex and passed everything else through
+    unchanged -- so a keyword colour written ``rgb(0, 128, 255)`` was stored
+    raw and the chip rendered ``rgbrgb(0, 128, 255)``, the exact failure the
+    hex branch existed to prevent.
     """
-    value = str(color or "").strip()
-    if value.startswith("#"):
-        digits = value[1:]
-        if len(digits) == 3:
-            digits = "".join(ch * 2 for ch in digits)
-        if len(digits) == 6:
-            try:
-                r, g, b = (int(digits[i:i + 2], 16) for i in (0, 2, 4))
-                return f"({r}, {g}, {b})"
-            except ValueError:
-                pass
-        logger.warning("Ignoring unreadable colour %r for keyword %r", color, context)
-        return ""
-    return value
+    from potato.server_utils.schemas.span import to_rgb_triple
+    return to_rgb_triple(color, f"keyword {context!r}" if context else "")
 
 
 #: Column names accepted for each field of a keyword-highlights table, matched
@@ -4949,10 +4939,22 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         # the first tool call, which would strand an annotator mid-task.
         _preflight_coding_agent_sandbox(config)
 
+        # Build the manager HERE, at boot, on the main thread.
+        #
+        # It installs a SIGTERM handler so a stopped server releases its
+        # containers, and a signal handler can only be installed from the main
+        # thread. Every other construction site is inside a route handler --
+        # `_get_manager()` in routes_live_coding_agent -- so the first
+        # construction was always on a worker thread, the main-thread guard
+        # always fired, and the handler was never installed at all. Correct
+        # code at the wrong install site: SIGINT released and SIGTERM leaked,
+        # which is every way of stopping a server except Ctrl-C.
+        from potato.coding_agent_runner_manager import CodingAgentRunnerManager
+        CodingAgentRunnerManager.get_instance()
+
         import atexit
         def _cleanup_coding_agent_sessions():
             try:
-                from potato.coding_agent_runner_manager import CodingAgentRunnerManager
                 CodingAgentRunnerManager.clear_instance()
             except Exception as e:
                 logger.warning(f"Failed to clean up coding agent sessions: {e}")

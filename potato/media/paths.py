@@ -94,6 +94,77 @@ def resolve_media_url(config: Any, reference: str,
 _ABSOLUTE_SCHEMES = ("http://", "https://", "data:", "blob:", "//")
 
 
+#: References already warned about, so a 500-item dataset naming the same bad
+#: path logs once rather than once per render. Capped, because the set is keyed
+#: on data a project supplies.
+_warned_refs: set = set()
+_WARNED_REFS_LIMIT = 512
+
+#: Absolute prefixes Potato genuinely serves. A leading `/` outside these is
+#: not a route, whatever else it might be.
+_SERVED_PREFIXES = ("/media/", "/static/", "/files/", "/data/")
+
+
+def _warn_once(key: str, message: str, *args) -> None:
+    if key in _warned_refs:
+        return
+    if len(_warned_refs) < _WARNED_REFS_LIMIT:
+        _warned_refs.add(key)
+    logger.warning(message, *args)
+
+
+def _warn_if_filesystem_path(ref: str, context: str) -> None:
+    """Say something when an absolute *filesystem* path is used as a media URL.
+
+    A leading `/` is normally an author naming a server route, which is why
+    media_href leaves it alone. But `/private/tmp/shelf_a.png` is not a route:
+    it goes to the browser verbatim, 404s, and logs nothing, so the annotator
+    sees a broken image and the author has nothing to search for. The sibling
+    case -- `../outside/far.png` -- is refused *and* logged, and these two
+    should not differ in how findable they are.
+
+    The test is that the string names a real file on this machine outside the
+    paths Potato serves. Potato serves no arbitrary filesystem root, so a
+    reference that resolves on disk was meant as a file, not a URL.
+    """
+    if ref.startswith(_SERVED_PREFIXES):
+        return
+    try:
+        is_file = os.path.isfile(ref)
+    except (OSError, ValueError):
+        return
+    if not is_file:
+        return
+    _warn_once(
+        ref,
+        "%s was given the absolute filesystem path %s. That is sent to the "
+        "browser as a URL, which will 404 -- Potato serves files from "
+        "media_directory at /media/<name>, not from the filesystem root. Move "
+        "the file under media_directory and name it relative to that.",
+        context, ref)
+
+
+def _warn_unresolved(config: Any, ref: str, context: str) -> None:
+    """Say something when a relative reference names a file Potato will not serve.
+
+    Only fires when the file exists somewhere else on disk. A relative
+    reference that resolves nowhere may well be a path the project serves by
+    some other route, and warning about those would make the log useless.
+    """
+    try:
+        exists_elsewhere = os.path.isfile(ref)
+    except (OSError, ValueError):
+        return
+    if not exists_elsewhere:
+        return
+    _warn_once(
+        "rel:" + ref,
+        "%s references %s, which exists on disk but not under "
+        "media_directory (%s), so the browser will 404 on it. Move the file "
+        "there, or set media_directory to the directory that holds it.",
+        context, ref, media_root(config))
+
+
 def media_href(config: Any, reference: str,
                context: str = "media") -> str:
     """The URL a browser should request for a stored media reference.
@@ -115,11 +186,18 @@ def media_href(config: Any, reference: str,
         it would replace a working reference with a 404.
     """
     ref = str(reference or "").strip()
-    if not ref or ref.startswith(_ABSOLUTE_SCHEMES) or ref.startswith("/"):
+    if not ref or ref.startswith(_ABSOLUTE_SCHEMES):
+        return ref
+    if ref.startswith("/"):
+        _warn_if_filesystem_path(ref, context)
         return ref
 
     candidate = ref[len("media/"):] if ref.startswith("media/") else ref
     _, path = resolve_media_path(config, candidate, context=context)
     if path and os.path.isfile(path):
         return "/media/" + candidate.lstrip("/")
+    if path is not None:
+        # path is None only when resolve_media_path refused the reference, and
+        # it has already said why. One bad reference, one line.
+        _warn_unresolved(config, ref, context)
     return ref

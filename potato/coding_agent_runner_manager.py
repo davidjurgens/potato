@@ -65,6 +65,14 @@ class CodingAgentRunnerManager:
         """
         try:
             if threading.current_thread() is not threading.main_thread():
+                # Whoever built the manager first decides whether this works,
+                # so say when it did not. Built from a route handler, this
+                # returns here every time and the leak is silent.
+                logger.warning(
+                    "Coding agent manager first built on %s, not the main "
+                    "thread, so no SIGTERM handler was installed: a stopped "
+                    "server will leak its sandbox containers. Build it at "
+                    "boot instead.", threading.current_thread().name)
                 return
             previous = signal.getsignal(signal.SIGTERM)
 

@@ -2920,6 +2920,8 @@ def validate_label_list_elements(scheme, path):
     list and none of them looked inside it, and each new annotation type added
     another. Anything with a `labels` or `options` key gets checked here once.
     """
+    from potato.server_utils.schemas.span import parse_rgb_triple
+
     for key in ('labels', 'options'):
         values = scheme.get(key)
         if not isinstance(values, list):
@@ -2928,6 +2930,21 @@ def validate_label_list_elements(scheme, path):
             message = _label_shape_error(value, path, index, key)
             if message:
                 raise ConfigValidationError(message)
+            # An inline `color` that cannot be parsed is not fatal -- the label
+            # falls back to the palette and the task still runs. But it is
+            # silent, and the author asked for a specific colour, so say so and
+            # let `--strict` refuse it.
+            if not isinstance(value, dict):
+                continue
+            color = value.get('color')
+            if color in (None, '') or parse_rgb_triple(color):
+                continue
+            logger.warning(
+                "%s.%s[%d] ('%s') has color %r, which Potato cannot read, so "
+                "the label will be drawn in an automatically assigned palette "
+                "color instead. Write it as '#rrggbb', 'rgb(r, g, b)' or "
+                "'(r, g, b)'. Named CSS colors are not read.",
+                path, key, index, value.get('name', '?'), color)
 
 
 def _validate_segment_schemes(segment_schemes, path):
