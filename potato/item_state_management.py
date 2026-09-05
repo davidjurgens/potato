@@ -2563,27 +2563,60 @@ class ItemStateManager:
         if len(annotators) < 2:
             return 0.0
 
-        # Aggregate per-schema labels + spans
+        # Aggregate per-schema labels + spans.
+        #
+        # Both accessors return the FLAT container -- `{Label: value}` and
+        # `{SpanAnnotation: value}` -- despite docstrings that promise a
+        # mapping keyed by schema name. Unpacking either two names at a time
+        # bound the first to the annotation OBJECT and the second to the value
+        # string, which the comprehension then iterated one character at a
+        # time: "eligible" became ('b','e','e','g','i','i','l','l').
+        #
+        # The consequence was a constant 0.0, for two reasons at once. Two
+        # annotators who agree carry the same key, so their tuples match and
+        # the ratio is (1-1)/(2-1). Two who DISAGREE carry different keys --
+        # eligibility/eligible against eligibility/ineligible -- so each group
+        # holds one user, is skipped for having fewer than two, and the
+        # function returns 0.0 having collected nothing. Grouping by label
+        # also split a multiselect's ticked boxes apart, so a set of labels was
+        # never compared as a set.
+        from potato.server_utils import annotation_values
+
         schema_to_user_value: Dict[str, Dict[str, tuple]] = defaultdict(dict)
         for uid in annotators:
             ustate = usm.get_user_state(uid) if hasattr(usm, "get_user_state") else None
             if ustate is None:
                 continue
-            for schema, labels in (ustate.get_label_annotations(instance_id) or {}).items():
-                # Represent as a tuple of label names so dict-style equality works.
-                value = tuple(sorted(
-                    str(getattr(l, "name", l.get("name") if isinstance(l, dict) else l))
-                    for l in labels
-                ))
-                schema_to_user_value[schema][uid] = value
-            for schema, spans in (ustate.get_span_annotations(instance_id) or {}).items():
-                value = tuple(sorted(
-                    (int(getattr(s, "start", s["start"] if isinstance(s, dict) else 0)),
-                     int(getattr(s, "end", s["end"] if isinstance(s, dict) else 0)),
-                     str(getattr(s, "name", s.get("name") if isinstance(s, dict) else "")))
-                    for s in spans
-                ))
-                schema_to_user_value[f"__span__{schema}"][uid] = value
+            grouped = annotation_values.group_by_schema(
+                ustate.get_label_annotations(instance_id) or {})
+            for schema, values in grouped.items():
+                # The names chosen, which is where the answer lives: radio
+                # stores {"eligible": True} and likert {"4": "4"}. Shared with
+                # the agreement report and adjudication so the three cannot
+                # disagree about what a person answered.
+                names = annotation_values.selected_labels(values)
+                if not names:
+                    continue
+                schema_to_user_value[schema][uid] = tuple(sorted(names))
+
+            for span, _ in (ustate.get_span_annotations(instance_id) or {}).items():
+                schema = str(getattr(span, "schema",
+                                     span.get("schema") if isinstance(span, dict)
+                                     else ""))
+                key = f"__span__{schema}"
+                signature = (
+                    int(getattr(span, "start",
+                                span["start"] if isinstance(span, dict) else 0)),
+                    int(getattr(span, "end",
+                                span["end"] if isinstance(span, dict) else 0)),
+                    str(getattr(span, "name",
+                                span.get("name") if isinstance(span, dict) else "")),
+                )
+                # One signature per span, accumulated into a sorted tuple: a
+                # user's answer for a span schema is the SET of spans they drew,
+                # so overwriting per span would have compared only the last one.
+                schema_to_user_value[key][uid] = tuple(sorted(
+                    schema_to_user_value[key].get(uid, ()) + (signature,)))
 
         if not schema_to_user_value:
             return 0.0

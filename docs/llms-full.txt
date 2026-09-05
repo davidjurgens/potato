@@ -35834,6 +35834,12 @@ max_annotations_per_item: 4
 
 **How it works**: Calculates a disagreement score based on the ratio of unique annotations to total annotations. Higher disagreement items are assigned first.
 
+The score compares the labels each annotator chose for a schema, and takes the
+highest ratio across schemas. An item needs two annotators before it can score
+above zero, so early in a study every item scores 0.0 and the order is
+arbitrary. Set `max_annotations_per_item` to at least 2, otherwise the strategy
+has nothing to compare.
+
 **Best for**: Quality control and resolving ambiguous items.
 
 #### 5. Diversity Clustering Assignment (`diversity_clustering`)

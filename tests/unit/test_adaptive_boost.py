@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from potato.item_state_management import ItemStateManager
+from potato.item_state_management import ItemStateManager, Label
 
 
 @pytest.fixture
@@ -22,15 +22,25 @@ def config():
     }
 
 
-def _make_label(name):
-    m = MagicMock()
-    m.name = name
-    return m
+def _make_user_state(answers_by_iid):
+    """A stand-in for the real accessor, returning the shape it really returns.
 
+    ``get_label_annotations`` hands back the FLAT ``{Label: value}`` container,
+    not ``{schema_name: [label, ...]}``. These fixtures used to mock the nested
+    shape, so they exercised a contract the production code has never produced
+    -- which is how `_calculate_disagreement_score` shipped returning 0.0 for
+    every item with three unit tests reporting that adaptive boost worked.
 
-def _make_user_state(label_by_iid):
+    ``answers_by_iid`` is ``{instance_id: {schema: label_name}}``; the stored
+    value is the radio convention, ``{"pos": True}`` flattened onto the key.
+    """
     ustate = MagicMock()
-    ustate.get_label_annotations.side_effect = lambda iid: label_by_iid.get(iid, {})
+
+    def _labels(iid):
+        return {Label(schema, name): True
+                for schema, name in answers_by_iid.get(iid, {}).items()}
+
+    ustate.get_label_annotations.side_effect = _labels
     ustate.get_span_annotations.return_value = {}
     return ustate
 
@@ -42,8 +52,8 @@ class TestAdaptiveBoost:
 
         # Two annotators give different labels for the same schema
         users = {
-            "u1": _make_user_state({"item_1": {"sentiment": [_make_label("pos")]}}),
-            "u2": _make_user_state({"item_1": {"sentiment": [_make_label("neg")]}}),
+            "u1": _make_user_state({"item_1": {"sentiment": "pos"}}),
+            "u2": _make_user_state({"item_1": {"sentiment": "neg"}}),
         }
         usm = MagicMock()
         usm.get_user_state.side_effect = lambda uid: users.get(uid)
@@ -60,8 +70,8 @@ class TestAdaptiveBoost:
         ism.add_item("item_1", {"text": "x"})
 
         users = {
-            "u1": _make_user_state({"item_1": {"sentiment": [_make_label("pos")]}}),
-            "u2": _make_user_state({"item_1": {"sentiment": [_make_label("pos")]}}),
+            "u1": _make_user_state({"item_1": {"sentiment": "pos"}}),
+            "u2": _make_user_state({"item_1": {"sentiment": "pos"}}),
         }
         usm = MagicMock()
         usm.get_user_state.side_effect = lambda uid: users.get(uid)
@@ -78,8 +88,8 @@ class TestAdaptiveBoost:
         ism.add_item("item_1", {"text": "x"})
 
         users = {
-            "u1": _make_user_state({"item_1": {"sentiment": [_make_label("pos")]}}),
-            "u2": _make_user_state({"item_1": {"sentiment": [_make_label("neg")]}}),
+            "u1": _make_user_state({"item_1": {"sentiment": "pos"}}),
+            "u2": _make_user_state({"item_1": {"sentiment": "neg"}}),
         }
         usm = MagicMock()
         usm.get_user_state.side_effect = lambda uid: users.get(uid)
