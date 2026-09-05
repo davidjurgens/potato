@@ -671,6 +671,29 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                             }});
                         }}
 
+                        // Method 5: an `instance_display` image field, anywhere
+                        // on the page. Methods 1-3 all search inside
+                        // #instance-text, which an instance_display page does
+                        // not use -- so a study whose photo rendered perfectly
+                        // in an `image` display field told the annotator the
+                        // item had no image and to move on, over an item that
+                        // was perfectly annotatable.
+                        if (!imageUrl) {{
+                            var displayImg = document.querySelector(
+                                '.image-container img[data-source-url], '
+                                + '.display-field img[data-source-url], '
+                                + '.image-container img, .display-field img');
+                            if (displayImg) {{
+                                var candidate = displayImg.getAttribute('data-source-url')
+                                    || displayImg.getAttribute('src');
+                                if (candidate) {{
+                                    imageUrl = candidate;
+                                    console.log('[ImageAnnotation] Found URL from an '
+                                        + 'instance_display image field:', imageUrl);
+                                }}
+                            }}
+                        }}
+
                         if (!imageUrl) {{
                             console.error('[ImageAnnotation] No image URL found! Check that the instance data contains an image URL.');
                         }}
@@ -694,8 +717,9 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                             // addressed to somebody who is not reading it and
                             // could not act on it if they were.
                             console.warn(
-                                'potato: no image URL for this item. Check that the item data '
-                                + 'has an image URL under text_key or source_field.');
+                                'potato: no image URL for this item. Name the field '
+                                + 'holding it with `source_field` on the '
+                                + 'image_annotation scheme, or point text_key at it.');
                             // The annotator still needs to know the empty canvas
                             // is the item and not a broken tool.
                             if (typeof manager._showCanvasMessage === 'function') {{

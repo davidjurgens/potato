@@ -8,7 +8,7 @@
     "version": "2"
   },
   "annotation.js": {
-    "sha256": "009038e89c3f2904",
+    "sha256": "c99eb07058fb6a72",
     "version": "40"
   },
   "annotation_critique.js": {
@@ -356,7 +356,7 @@
     "version": "1"
   },
   "span-core.js": {
-    "sha256": "8b31bc3c2d95b359",
+    "sha256": "0534f1bb67390b02",
     "version": "19"
   },
   "span-link-manager.js": {
@@ -376,7 +376,7 @@
     "version": "1"
   },
   "styles.css": {
-    "sha256": "730e3177176a4263",
+    "sha256": "fb8f132ed94823ea",
     "version": "29"
   },
   "thinkaloud.js": {

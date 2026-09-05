@@ -9640,6 +9640,10 @@ annotation_schemes:
     labels: [person, car]
 ```
 
+Name it when there is more than one image field, or when the field the scheme
+should draw on is not the one it would otherwise find. With a single image
+field, `image_annotation` picks it up on its own.
+
 ## Example: Image Classification
 
 A complete example showing image classification:
@@ -30197,6 +30201,13 @@ Both halves go into the prompt. Sending only the picture is how a hint ends up
 written with confidence about the wrong half of the item. A model handed a
 stock photo and asked to triage "the export button spins forever" will say it
 was given no context and suggest **Other**.
+
+The field may hold an `http(s)` URL, a data URI, or a filename under
+`media_directory` — the same forms the `image` display accepts. A local file is
+read off disk and sent as base64, so nothing goes over the loopback interface
+(which the SSRF guard refuses anyway). A value that is neither a URL nor a file
+Potato can find is logged, and the model is asked without the picture — so a
+hint that reasons only about the text means checking that log line.
 
 ### Best Practices for Visual AI
 

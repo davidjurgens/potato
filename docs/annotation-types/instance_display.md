@@ -354,6 +354,10 @@ annotation_schemes:
     labels: [person, car]
 ```
 
+Name it when there is more than one image field, or when the field the scheme
+should draw on is not the one it would otherwise find. With a single image
+field, `image_annotation` picks it up on its own.
+
 ## Example: Image Classification
 
 A complete example showing image classification:

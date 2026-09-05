@@ -205,21 +205,73 @@ def _is_image_url(text: str) -> bool:
         return True
     return False
 
-def _get_image_data_from_url(url: str) -> ImageData:
-    """Download image from URL and return as ImageData.
+def _image_data_from_local_media(reference: str) -> Optional[ImageData]:
+    """Read an image the project ships itself, or None if it does not.
 
-    Includes SSRF protection to prevent fetching from private/internal IPs.
+    `image_key` names a data field, and a project that ships its images the
+    ordinary way puts a bare filename there and sets `media_directory` -- which
+    the display resolves and the AI path did not. The value went straight to
+    the URL fetcher, which refused it as a non-HTTP URL and returned None, and
+    the model then answered from the caption alone. The annotator got a fluent
+    hint about a picture the model was never given, with nothing on the page to
+    say so.
+
+    Reading it off disk rather than fetching `/media/...` over HTTP keeps this
+    off the network entirely -- the server already has the bytes, and a
+    loopback fetch is exactly what the SSRF guard below exists to refuse.
+    """
+    import base64
+    import mimetypes
+
+    try:
+        from potato.media.paths import resolve_media_url
+        path = resolve_media_url(config, reference, context="ai image")
+    except Exception as e:  # noqa: BLE001 - never break a hint over this
+        logger.debug("Could not resolve %r as local media: %s", reference, e)
+        return None
+    if not path:
+        return None
+
+    try:
+        with open(path, "rb") as f:
+            payload = f.read()
+    except OSError as e:
+        logger.warning("Could not read local image %s: %s", path, e)
+        return None
+
+    mime_type = mimetypes.guess_type(path)[0] or "image/jpeg"
+    logger.debug("Sending local media %s to the model as %s", path, mime_type)
+    return ImageData(source='base64',
+                     data=base64.b64encode(payload).decode('utf-8'),
+                     mime_type=mime_type)
+
+
+def _get_image_data_from_url(url: str) -> ImageData:
+    """Resolve an image reference to bytes the model can be given.
+
+    A project's own media is read from disk; anything else is downloaded, with
+    SSRF protection to prevent fetching from private/internal IPs.
     """
     import base64
     import ipaddress
     import socket
     from urllib.parse import urlparse
 
+    # The project's own files first: a bare filename or a `/media/...` path
+    # under `media_directory` is not a URL and never will be.
+    local = _image_data_from_local_media(url)
+    if local is not None:
+        return local
+
     # SSRF protection: validate URL scheme and resolve hostname
     try:
         parsed = urlparse(url)
         if parsed.scheme not in ('http', 'https'):
-            logger.warning(f"Blocked non-HTTP image URL: {url[:100]}")
+            logger.warning(
+                "Cannot send %r to the model: it is neither an http(s) URL nor "
+                "a file under media_directory (%s). The model will answer "
+                "without seeing the image.",
+                url[:100], (config.get("media_directory") or "media"))
             return None
 
         hostname = parsed.hostname

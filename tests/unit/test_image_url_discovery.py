@@ -59,8 +59,15 @@ class TestGuardIsPresent:
         assert "source_field" not in canvas_message
 
     def test_the_config_advice_survives_in_the_console(self, bootstrap_js):
+        """The console keeps the advice, and names the key that fixes it.
+
+        Asserted on the property rather than the sentence: the guard is about
+        who the advice is addressed to, so pinning its exact wording only made
+        it fail when the wording got better.
+        """
         assert "console.warn(" in bootstrap_js
-        assert "under text_key or source_field" in bootstrap_js
+        warn_call = bootstrap_js.split("console.warn(", 1)[1][:400]
+        assert "source_field" in warn_call
 
     def test_regex_escapes_survive_the_f_string(self, bootstrap_js):
         """The generator is an f-string, so `\\s` has to be written `\\\\s`."""

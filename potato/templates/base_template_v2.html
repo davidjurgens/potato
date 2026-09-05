@@ -343,7 +343,7 @@
                 <div id="error-state" class="error-message" style="display: none;">
                     <h5><i class="fas fa-exclamation-triangle me-2"></i>{{ ui_lang.error_heading }}</h5>
                     <p id="error-message-text"></p>
-                    <button id="error-retry-btn" class="shadcn-button shadcn-button-primary" onclick="loadCurrentInstance()">
+                    <button id="error-retry-btn" class="shadcn-button shadcn-button-primary" onclick="retryAfterError()">
                         <i class="fas fa-redo me-2"></i>{{ ui_lang.retry_button }}
                     </button>
                     <a id="error-done-link" href="{{ url_prefix }}/done" class="shadcn-button shadcn-button-primary" style="display: none;">

@@ -1736,6 +1736,40 @@ async function saveAnnotations({ background = false } = {}) {
  * before the page is navigated. Everything else gets the quieter notice: the
  * work is still on screen and the next edit reschedules a save.
  */
+/**
+ * The Retry button on the error panel.
+ *
+ * It used to call `loadCurrentInstance()`, which rebuilds the form from the
+ * *server-rendered HTML already in the document* -- the render that happened
+ * when the page was first loaded. Any answer given since then is not in those
+ * `checked` attributes, so after the session-recovery flow the form came back
+ * blank over answers that were safely on disk, with the header still reading
+ * "Not labeled". The span survived only because it is re-fetched over HTTP.
+ * That is the worst possible moment for an empty form: the annotator has just
+ * been told their work was at risk, so a blank one reads as "it was lost".
+ *
+ * So: save what is on screen first, and reload only once the server has it.
+ * A reload is a real round trip, which is what makes the answers come back;
+ * reloading by hand was the workaround, and this is it made into the button.
+ */
+async function retryAfterError() {
+    const retryBtn = document.getElementById('error-retry-btn');
+    if (retryBtn) retryBtn.disabled = true;
+    try {
+        // `false` means the save was refused; its own handler has already put
+        // the reason on screen, so leave the panel up rather than reloading
+        // into a page that will refuse the next edit too.
+        const saved = await saveAnnotations();
+        if (saved === false) return;
+    } catch (e) {
+        console.warn('[Retry] Could not save before reloading:', e);
+        return;
+    } finally {
+        if (retryBtn) retryBtn.disabled = false;
+    }
+    window.location.reload();
+}
+
 function reportSaveRefused(message, httpStatus) {
     const sessionLost = httpStatus === 401 ||
         /no active session|user state not found/i.test(String(message || ''));

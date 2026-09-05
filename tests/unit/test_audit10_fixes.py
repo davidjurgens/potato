@@ -184,10 +184,13 @@ class TestDiagnosticsGoToTheLogNotThePage:
 
         source = inspect.getsource(image_annotation)
         # The advice itself survives -- in console.warn, where the person who
-        # wrote the config will find it. (Matched loosely: the literal is
-        # wrapped across source lines.)
+        # wrote the config will find it. Asserted on the property, not on the
+        # sentence: this guard is about WHO the advice is addressed to, and
+        # pinning the wording made it fail when the wording improved.
         assert "console.warn(" in source
-        assert "under text_key or source_field" in source
+        warn_call = source.split("console.warn(", 1)[1][:400]
+        assert "source_field" in warn_call, (
+            "the console advice must still name the key that fixes it")
         # ...but it is not inside the message painted on the canvas.
         canvas_call = source.split("_showCanvasMessage(", 1)[1][:200]
         assert "text_key" not in canvas_call

@@ -115,6 +115,13 @@ written with confidence about the wrong half of the item. A model handed a
 stock photo and asked to triage "the export button spins forever" will say it
 was given no context and suggest **Other**.
 
+The field may hold an `http(s)` URL, a data URI, or a filename under
+`media_directory` — the same forms the `image` display accepts. A local file is
+read off disk and sent as base64, so nothing goes over the loopback interface
+(which the SSRF guard refuses anyway). A value that is neither a URL nor a file
+Potato can find is logged, and the model is asked without the picture — so a
+hint that reasons only about the text means checking that log line.
+
 ### Best Practices for Visual AI
 
 1. **For image classification with explanations**: Use a vision-capable LLM like `ollama_vision` with Qwen-VL or LLaVA

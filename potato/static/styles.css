@@ -337,6 +337,32 @@ body {
   width: auto;
 }
 
+/* A legend is a heading, and headings are bold -- but `pure_display` puts a
+   whole block of prose in one, and every paragraph inherited the 600 weight.
+   `<b>` marking each definition's term was then invisible against text that
+   was already bold, and the page read as one shouted block.
+
+   Block children carry body weight; inline emphasis inside them stands out
+   again, which is the entire reason it was written. The legend's own direct
+   text is untouched, so a one-line schema title still reads as a heading. */
+.annotation-form legend > p,
+.annotation-form legend > ul,
+.annotation-form legend > ol,
+.annotation-form legend > div,
+.annotation-form legend > table,
+.annotation-form legend > blockquote {
+  font-weight: 400;
+  color: var(--foreground);
+}
+
+.annotation-form legend > p:first-child {
+  margin-top: 0;
+}
+
+.annotation-form legend > p:last-child {
+  margin-bottom: 0;
+}
+
 /* ai help */
 .ai-help {
   position: relative;

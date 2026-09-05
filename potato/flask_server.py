@@ -2058,6 +2058,36 @@ def _keyword_entries_from_data(data, path):
     return None
 
 
+def _check_phase_schemes(schemes, source, phase_name):
+    """Refuse a phase file whose entries cannot be rendered, and say which.
+
+    The generator raises `KeyError: 'annotation_type'` and the boot aborts --
+    correct, since a phase the author asked for and did not get is never the
+    safe outcome, but the message names neither the file nor the entry. On a
+    survey file with a dozen questions that leaves the author reading all
+    twelve. Name the file, the position, and the question.
+    """
+    required = ("annotation_type", "name", "description")
+    problems = []
+    for index, scheme in enumerate(schemes or []):
+        if not isinstance(scheme, dict):
+            problems.append(
+                f"  entry {index}: expected a question object, got "
+                f"{type(scheme).__name__}")
+            continue
+        missing = [key for key in required if not scheme.get(key)]
+        if missing:
+            named = scheme.get("name") or scheme.get("description") or "(unnamed)"
+            problems.append(
+                f"  entry {index} ({named!r}) is missing: {', '.join(missing)}")
+    if problems:
+        raise ValueError(
+            f"{source} cannot be rendered as the '{phase_name}' phase.\n"
+            + "\n".join(problems)
+            + "\nEvery question needs annotation_type, name and description."
+        )
+
+
 def load_phase_data(config: dict) -> None:
     # Lazy import - only when this function is called
     from server_utils.front_end import generate_html_from_schematic
@@ -2251,6 +2281,8 @@ def load_phase_data(config: dict) -> None:
                         phase_scheme_fname = get_abs_or_rel_path(phase['file'], config)
                         logger.debug(f"Resolved phase file for {phase_name}: {phase_scheme_fname}")
                         file_schemes = get_phase_annotation_schemes(phase_scheme_fname)
+                        _check_phase_schemes(file_schemes, phase_scheme_fname,
+                                             phase_name)
                         if phase_labeling_schemes:
                             # Append file schemes after instrument schemes
                             phase_labeling_schemes.extend(file_schemes)

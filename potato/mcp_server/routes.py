@@ -382,6 +382,56 @@ def tool_add_items(record, payload):
     })
 
 
+def _declared_labels(schema_name: str):
+    """The label names a scheme declares, or None when it declares none."""
+    for scheme in _config().get("annotation_schemes", []) or []:
+        if not isinstance(scheme, dict) or scheme.get("name") != schema_name:
+            continue
+        labels = scheme.get("labels")
+        if not isinstance(labels, list):
+            return None
+        names = []
+        for label in labels:
+            if isinstance(label, str):
+                names.append(label)
+            elif isinstance(label, dict) and label.get("name"):
+                names.append(str(label["name"]))
+        return names or None
+    return None
+
+
+def _resolve_scalar_label(schema_name: str, value):
+    """Turn ``{"schema": value}`` into the (label_name, value) pair to store.
+
+    A browser answer to a choice scheme stores the CHOSEN LABEL as the label
+    name: ``{Label("disposition", "Feature request"): "Feature request"}``.
+    This wrote ``Label(schema, "text_box")`` for every scalar, so an agent's
+    answer exported as `disposition.text_box` beside a human's
+    `disposition.Feature request` -- two columns for one question, and nothing
+    downstream that keys on the label name could join them.
+
+    A scheme with no `labels` is free text, where "text_box" is right.
+
+    Returns ``((label_name, value), None)`` or ``(None, <refusal response>)``.
+    """
+    labels = _declared_labels(schema_name)
+    if labels is None:
+        # Free text: the label name is the field, and the value is the answer.
+        return ("text_box", value), None
+
+    chosen = str(value)
+    if chosen not in labels:
+        return None, _refuse(
+            f"{chosen!r} is not a label of {schema_name!r}. Send one of "
+            f"{labels}, or use the nested form "
+            f'{{"{schema_name}": {{"<label>": <value>}}}} to answer several '
+            f"at once.",
+            400,
+        )
+    # Same shape a browser answer takes: the label is its own value.
+    return (chosen, chosen), None
+
+
 @mcp_bp.route("/api/mcp/tools/submit_annotation", methods=["POST"])
 @mcp_tool("submit_annotation")
 def tool_submit_annotation(record, payload):
@@ -399,6 +449,24 @@ def tool_submit_annotation(record, payload):
     state = usm.get_user_state(username)
     if state is None:
         return _refuse(f"No such annotator: {username}", 404)
+
+    # Refuse rather than write somewhere else. `add_label_annotation` routes by
+    # the annotator's CURRENT phase, so submitting for an annotator still on
+    # the consent page put the answers on the consent page and answered
+    # `status: ok, labels_written: 2` -- the named instance got nothing, a
+    # phase page got two junk answers, and the agent had no way to tell which
+    # had happened.
+    from potato.phase import UserPhase
+
+    phase = state.get_phase()
+    if phase != UserPhase.ANNOTATION:
+        return _refuse(
+            f"{username} is in the {getattr(phase, 'name', phase)} phase, not "
+            f"ANNOTATION, so an answer for instance {instance_id!r} has nowhere "
+            f"to go -- writes are routed by the annotator's current phase, not "
+            f"by the instance id. Have them reach the annotation phase first.",
+            409,
+        )
 
     # Write through the same typed accessors /updateinstance uses.
     #
@@ -422,11 +490,14 @@ def tool_submit_annotation(record, payload):
                 state.add_label_annotation(
                     instance_id, Label(str(schema_name), str(label_name)), value)
                 written += 1
-        else:
-            # `text_box` is the name /submit_annotation gives a bare scalar.
-            state.add_label_annotation(
-                instance_id, Label(str(schema_name), "text_box"), label_data)
-            written += 1
+            continue
+        resolved, refusal = _resolve_scalar_label(str(schema_name), label_data)
+        if refusal is not None:
+            return refusal
+        label_name, value = resolved
+        state.add_label_annotation(
+            instance_id, Label(str(schema_name), label_name), value)
+        written += 1
 
     spans_written = 0
     for span in payload.get("span_annotations") or []:

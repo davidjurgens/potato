@@ -330,44 +330,10 @@ class UnifiedPositioningStrategy {
         };
         collectTextNodes(this.container);
 
-        // Find the offset for start and end
-        let absoluteStart = null;
-        let absoluteEnd = null;
-
-        for (const tn of textNodes) {
-            if (tn.node === startContainer) {
-                absoluteStart = tn.start + startOffset;
-            }
-            if (tn.node === endContainer) {
-                absoluteEnd = tn.start + endOffset;
-            }
-        }
-
-        // Handle case where start/end containers are element nodes
-        if (absoluteStart === null && startContainer.nodeType === Node.ELEMENT_NODE) {
-            // startOffset is the index of the child node
-            if (startOffset < startContainer.childNodes.length) {
-                const childNode = startContainer.childNodes[startOffset];
-                for (const tn of textNodes) {
-                    if (tn.node === childNode || tn.node.parentNode === childNode) {
-                        absoluteStart = tn.start;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (absoluteEnd === null && endContainer.nodeType === Node.ELEMENT_NODE) {
-            if (endOffset > 0 && endOffset <= endContainer.childNodes.length) {
-                const childNode = endContainer.childNodes[endOffset - 1];
-                for (const tn of textNodes) {
-                    if (tn.node === childNode || tn.node.parentNode === childNode) {
-                        absoluteEnd = tn.end;
-                        break;
-                    }
-                }
-            }
-        }
+        const absoluteStart = this.resolveBoundaryOffset(
+            textNodes, startContainer, startOffset);
+        const absoluteEnd = this.resolveBoundaryOffset(
+            textNodes, endContainer, endOffset);
 
         if (absoluteStart === null || absoluteEnd === null) {
             console.warn('[SpanCore] Could not find absolute offsets for selection ' +
@@ -389,6 +355,69 @@ class UnifiedPositioningStrategy {
             start: spanUtf16ToCodePoint(basis, absoluteStart),
             end: spanUtf16ToCodePoint(basis, absoluteEnd)
         };
+    }
+
+    /**
+     * The character offset of a DOM boundary point, in the walk's own space.
+     *
+     * A boundary is a (container, offset) pair. When the container is a text
+     * node the answer is arithmetic. When it is an ELEMENT the boundary sits
+     * *between* that element's children, and the answer is "how much collected
+     * text precedes it".
+     *
+     * That element case used to be two special-cased branches: one that only
+     * ran when `startOffset < childNodes.length`, and one that only ran when
+     * `endOffset > 0`. A drag that begins at the end of an existing span, or
+     * ends at the beginning of one, produces exactly the two boundaries those
+     * branches excluded -- so the selection resolved to null and the span was
+     * refused. Partially overlapping an existing span is the normal way to
+     * mark a longer phrase over a shorter one, and it was the one gesture that
+     * could not be made. (Enclosing a span worked, which is why it first
+     * looked like a same-scheme problem.)
+     *
+     * Measured with a collapsed Range rather than by inspecting child indices,
+     * so every boundary shape a browser can produce resolves the same way.
+     *
+     * @returns {number|null} the offset, or null when the boundary is outside
+     *   the annotatable text entirely.
+     */
+    resolveBoundaryOffset(textNodes, container, offset) {
+        if (!container) return null;
+
+        for (const tn of textNodes) {
+            if (tn.node === container) return tn.start + offset;
+        }
+        if (container.nodeType !== Node.ELEMENT_NODE) return null;
+
+        const probe = document.createRange();
+        try {
+            probe.setStart(container, offset);
+            probe.collapse(true);
+        } catch (e) {
+            return null;
+        }
+
+        // Everything that ends at or before the boundary precedes it. Nothing
+        // ending before it means the boundary sits ahead of all collected
+        // text, which is offset 0 -- not a failure.
+        let resolved = 0;
+        let inRange = false;
+        for (const tn of textNodes) {
+            let position;
+            try {
+                position = probe.comparePoint(tn.node, tn.node.length);
+            } catch (e) {
+                continue;   // a node outside the probe's root
+            }
+            if (position <= 0) {
+                resolved = tn.end;
+                inRange = true;
+            } else {
+                inRange = true;
+                break;
+            }
+        }
+        return inRange ? resolved : null;
     }
 
     createSpanWithAlgorithm(start, end, text, options = {}) {
@@ -2273,30 +2302,64 @@ class SpanManager {
      * Insert admin keyword highlights using the same visual system as AI spans.
      * @param {Array} keywords - Array of keyword objects with {label, start, end, text, reasoning, schema, color}
      */
-    insertKeywordHighlights(keywords) {
+    /**
+     * @param {Array} keywords
+     * @param {number} attempt  retry counter; see the readiness check below
+     */
+    insertKeywordHighlights(keywords, attempt = 0) {
         if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+            return;
+        }
+
+        // The first call can arrive before the field strategies have finished
+        // initializing (they await fonts), so "not ready" is the normal state
+        // for a moment on every load, not a fault. Retry a few times and warn
+        // only once it is clear the page will never be ready -- a warning that
+        // fires on every healthy load is one nobody reads.
+        const LAST_ATTEMPT = 8;
+        const RETRY_MS = 150;
+        const target = this.overlayTargetFor(
+            keywords[0] && keywords[0].target_field);
+        if (!target || !target.strategy || !target.strategy.isInitialized) {
+            if (attempt < LAST_ATTEMPT) {
+                setTimeout(() => this.insertKeywordHighlights(keywords, attempt + 1),
+                           RETRY_MS);
+                return;
+            }
+            console.warn('[SpanManager] Gave up drawing ' + keywords.length +
+                ' keyword highlight(s): no initialized span overlay container ' +
+                'on this page for field ' +
+                JSON.stringify(keywords[0] && keywords[0].target_field));
             return;
         }
 
         // Clear any existing admin keyword highlights
         this.clearKeywordHighlights();
 
-        const spanOverlays = document.getElementById('span-overlays');
-        if (!spanOverlays) {
-            return;
-        }
-
         const createdOverlays = [];
 
         keywords.forEach((keyword) => {
             const { label, start, end, text, reasoning, schema, color } = keyword;
 
-            if (!this.positioningStrategy || !this.positioningStrategy.isInitialized) {
+            // Resolve the container and strategy for the field these offsets
+            // index. This used to be `#span-overlays` and
+            // `this.positioningStrategy` unconditionally -- neither of which
+            // exists on an `instance_display` page, where overlays live in
+            // `span-overlays-<field>` and each field has its own strategy. The
+            // function returned at the first `if (!spanOverlays)` with no log,
+            // so the whole feature ended one step before the reader: the file
+            // loaded, the API answered with correct offsets, and the annotator
+            // saw plain text.
+            const where = this.overlayTargetFor(keyword.target_field);
+            if (!where || !where.strategy || !where.strategy.isInitialized) {
+                console.warn('[SpanManager] Nowhere to draw this keyword ' +
+                    'highlight:', { start, end, text, field: keyword.target_field });
                 return;
             }
+            const { strategy, container: spanOverlays } = where;
 
             // Use getPositionsFromOffsets() which respects the provided offsets
-            const positions = this.positioningStrategy.getPositionsFromOffsets(start, end);
+            const positions = strategy.getPositionsFromOffsets(start, end);
             if (!positions || positions.length === 0) {
                 console.warn('[SpanManager] No positions found for admin keyword:', { start, end, text });
                 return;
@@ -2311,7 +2374,7 @@ class SpanManager {
             };
 
             const keywordColor = color || 'rgba(245, 158, 11, 0.8)';
-            const overlay = this.positioningStrategy.createOverlay(span, positions, {
+            const overlay = strategy.createOverlay(span, positions, {
                 isAiSpan: true,  // Use bordered style
                 color: keywordColor
             });
@@ -2336,13 +2399,48 @@ class SpanManager {
      * Clear all admin keyword highlight overlays.
      */
     clearKeywordHighlights() {
-        const spanOverlays = document.getElementById('span-overlays');
-        if (spanOverlays) {
-            const keywordOverlays = spanOverlays.querySelectorAll('.keyword-highlight-overlay');
-            keywordOverlays.forEach(overlay => overlay.remove());
-        }
+        // Every container, not just `#span-overlays`: a multi-field page has
+        // one per field, and leaving those behind stacked a fresh set of
+        // highlights on top of the previous item's on every navigation.
+        document.querySelectorAll('.keyword-highlight-overlay')
+            .forEach(overlay => overlay.remove());
 
         this.keywordHighlights = [];
+    }
+
+    /**
+     * Where to draw an overlay for offsets measured against `targetField`.
+     *
+     * Returns `{strategy, container}` or null when the page has neither.
+     * Multi-field pages (`instance_display`) put overlays in
+     * `span-overlays-<field>` and give each field its own strategy; a legacy
+     * page has one `#span-overlays` and one `positioningStrategy`.
+     */
+    overlayTargetFor(targetField) {
+        const field = targetField || '';
+        const fields = this.fieldStrategies || {};
+
+        if (field && fields[field]) {
+            const container = document.getElementById(`span-overlays-${field}`);
+            if (container) return { strategy: fields[field], container };
+        }
+
+        const legacy = document.getElementById('span-overlays');
+        if (this.positioningStrategy && legacy) {
+            return { strategy: this.positioningStrategy, container: legacy };
+        }
+
+        // Named field is absent or unknown: fall back to the first field that
+        // has both halves, so a keyword whose target_field the page does not
+        // carry still lands somewhere visible rather than nowhere.
+        for (const key of Object.keys(fields)) {
+            const container = document.getElementById(`span-overlays-${key}`);
+            if (container) return { strategy: fields[key], container };
+        }
+        if (legacy && this.positioningStrategy) {
+            return { strategy: this.positioningStrategy, container: legacy };
+        }
+        return null;
     }
 
     // ==================== RESIZE HANDLING ====================

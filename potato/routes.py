@@ -6969,9 +6969,19 @@ def get_keyword_highlights(instance_id):
             cached_state = user_state.get_keyword_highlight_state(decoded_instance_id)
         if cached_state:
             logger.debug(f"Returning cached keyword highlights for {instance_id}")
+            # A state cached before target_field existed carries none, so stamp
+            # it here too -- otherwise the second visit to an item renders
+            # nothing on a multi-field page while the first one worked.
+            cached_field = (config.get("item_properties", {}) or {}).get(
+                "text_key", "text")
+            cached_keywords = cached_state.get("highlights", []) or []
+            for keyword in cached_keywords:
+                if isinstance(keyword, dict):
+                    keyword.setdefault("target_field", cached_field)
             return jsonify({
-                "keywords": cached_state.get("highlights", []),
+                "keywords": cached_keywords,
                 "instance_id": instance_id,
+                "target_field": cached_field,
                 "from_cache": True
             })
 
@@ -7006,6 +7016,13 @@ def get_keyword_highlights(instance_id):
 
         original_text = instance.get_text()
         logger.debug(f"Instance text length: {len(original_text)}")
+        # Which field these offsets index. `get_text()` returns the configured
+        # text_key, and on an `instance_display` page the client needs the name
+        # to pick the right per-field overlay container and positioning
+        # strategy -- without it every highlight was measured against one field
+        # and drawn against another, or not drawn at all.
+        keyword_target_field = (
+            config.get("item_properties", {}) or {}).get("text_key", "text")
 
     except Exception as e:
         logger.error(f"Error getting instance text: {e}")
@@ -7098,9 +7115,13 @@ def get_keyword_highlights(instance_id):
 
     logger.debug("=== GET_KEYWORD_HIGHLIGHTS END ===")
 
+    for keyword in keywords:
+        keyword.setdefault("target_field", keyword_target_field)
+
     return jsonify({
         "keywords": keywords,
         "instance_id": instance_id,
+        "target_field": keyword_target_field,
         "from_cache": False
     })
 
