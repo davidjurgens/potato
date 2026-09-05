@@ -238,10 +238,26 @@ class ImageAnnotationManager {
             return;
         }
 
-        // Get parent container dimensions
+        // Get parent container dimensions. BOTH of them: the height was
+        // hardcoded at 600 while `.canvas-wrapper` is `height: 500px` with
+        // `overflow: hidden`, so the canvas stood about 104px taller than the
+        // box that displays it on every image study, whatever the image. The
+        // excess is not scrollable either -- the wrapper hides overflow rather
+        // than scrolling it -- so the bottom of every image was unreachable
+        // and unmarked, and clicks aimed into that band went nowhere.
         const container = canvasEl.parentElement;
         const width = container.clientWidth || 800;
-        const height = 600;
+        // The WRAPPER, not `parentElement`: fabric re-parents the canvas into
+        // its own `.canvas-container`, which is sized to the canvas, so
+        // reading a height from the parent gives back the height it already
+        // has. `closest` finds the wrapper from either side of that move.
+        //
+        // This usually reports 0, because the manager is built before the
+        // wrapper has been laid out, which is why the fallback still matters
+        // and why `_syncCanvasHeightToWrapper` runs again once the image
+        // arrives.
+        const wrapper = canvasEl.closest('.canvas-wrapper');
+        const height = (wrapper && wrapper.clientHeight) || 600;
 
         this.canvas = new fabric.Canvas(this.canvasId, {
             width: width,
@@ -788,8 +804,37 @@ class ImageAnnotationManager {
      * resizing the window left the canvas at whatever width it happened to
      * have when the page first rendered.
      */
+    /**
+     * Make the canvas as tall as the box that displays it.
+     *
+     * `.canvas-wrapper` is `height: 500px` with `overflow: hidden`, and the
+     * canvas height was a hardcoded 600, so about 104px of every image study
+     * was clipped -- not scrollable, because the wrapper hides overflow rather
+     * than scrolling it. Clicks aimed into that band went nowhere, which is
+     * how it was found: two of four polygon vertices silently missing.
+     *
+     * It runs here rather than only at construction because the wrapper has no
+     * layout yet when the manager is built -- `clientHeight` reads 0 -- so the
+     * constructor cannot know the right answer. By the time an image has
+     * loaded, it can.
+     *
+     * Returns whether it changed anything, so callers can re-fit.
+     */
+    _syncCanvasHeightToWrapper() {
+        if (!this.canvas || this.deepZoom) return false;
+        const element = this.canvas.getElement();
+        const wrapper = element && element.closest('.canvas-wrapper');
+        const target = wrapper && wrapper.clientHeight;
+        if (!target || Math.abs(target - this.canvas.getHeight()) < 2) {
+            return false;
+        }
+        this.canvas.setHeight(target);
+        return true;
+    }
+
     _fitImageToCanvas() {
         if (!this.image) return;
+        this._syncCanvasHeightToWrapper();
 
         const canvasWidth = this.canvas.getWidth();
         const canvasHeight = this.canvas.getHeight();
@@ -3013,17 +3058,38 @@ class ImageAnnotationManager {
         const canvasWidth = this.canvas.getWidth();
         const canvasHeight = this.canvas.getHeight();
 
-        const scale = Math.min(
-            canvasWidth / (this.image.width * this.image.scaleX),
-            canvasHeight / (this.image.height * this.image.scaleY),
-            1
-        );
+        // Fit to what is VISIBLE, which is the wrapper's client box, not the
+        // canvas. Fitting to the canvas could never do anything:
+        // `_fitImageToCanvas` has already scaled the image to that canvas, so
+        // one of the two ratios below is exactly 1 and the `1` clamp pins the
+        // result at 1 -- this control was an arithmetically guaranteed
+        // duplicate of "100%" for every image at every zoom level.
+        //
+        // Still measured against the wrapper even now the canvas is sized to
+        // it, because CSS can constrain the wrapper afterwards:
+        // `max-height: calc(100vh - 200px)` does exactly that on a short
+        // window, and the canvas does not follow it.
+        const wrapper = this.canvas.getElement()
+            && this.canvas.getElement().closest('.canvas-wrapper');
+        const viewWidth = (wrapper && wrapper.clientWidth) || canvasWidth;
+        const viewHeight = (wrapper && wrapper.clientHeight) || canvasHeight;
 
-        this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
-        this.canvas.zoomToPoint(
-            new fabric.Point(canvasWidth / 2, canvasHeight / 2),
-            scale
-        );
+        const imageWidth = this.image.width * this.image.scaleX;
+        const imageHeight = this.image.height * this.image.scaleY;
+        const scale = Math.min(viewWidth / imageWidth,
+                               viewHeight / imageHeight, 1);
+
+        // Placed rather than zoomed about a point. `zoomToPoint` holds one
+        // point fixed, and the only points available are the canvas centre --
+        // which is not the visible centre when CSS has shrunk the wrapper --
+        // so the correctly scaled image still sat too low to fit. Setting the
+        // transform puts the image's top-left where it belongs and needs no
+        // fixed point at all.
+        const offsetX = (viewWidth - imageWidth * scale) / 2
+            - this.image.left * scale;
+        const offsetY = (viewHeight - imageHeight * scale) / 2
+            - this.image.top * scale;
+        this.canvas.setViewportTransform([scale, 0, 0, scale, offsetX, offsetY]);
 
         // Re-render masks to match new viewport
         this._renderAllMasks();
