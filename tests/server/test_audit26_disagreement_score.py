@@ -219,3 +219,102 @@ class TestDisagreementScoreOverSpans:
         for both annotators, which reads as agreement.
         """
         assert _score("2") == pytest.approx(1.0)
+
+
+# The score is only half of MAX_DIVERSITY. The auditor verified the score and
+# the adaptive boost through a real study, and said outright what that did not
+# establish: with every candidate scoring 1.0, the SELECTION was decided by
+# saturation and the ORDERING never had to discriminate. Isolating the ordering
+# needs several assignable items carrying DIFFERENT non-zero scores at the same
+# instant, which means a cap above the number of annotators who have answered.
+#
+# Three annotators, a cap of four, and three items built to score 1.0, 0.5 and
+# 0.0: distinct answers over (n - 1) annotators.
+#
+# The contested item is placed LAST on purpose. Sorting by a constant leaves
+# dict order, which here is 1, 2, 3 -- so a fixture with the contested item
+# first would be served correctly by the broken code too.
+SPREAD = {
+    "c1": ["low", "low", "low"],
+    "c2": ["low", "low", "medium"],
+    "c3": ["low", "high", "high"],
+}
+EXPECTED_SCORES = {"1": 0.0, "2": 0.5, "3": 1.0}
+
+
+@pytest.fixture(scope="module")
+def ordering_server():
+    schemes = [{
+        "annotation_type": "radio",
+        "name": "severity",
+        "description": "How severe?",
+        "labels": ["low", "medium", "high"],
+    }]
+    with TestConfigManager("audit26_max_diversity_order", schemes,
+                           num_instances=3,
+                           assignment_strategy="max_diversity",
+                           num_annotators_per_item=4) as cfg:
+        server = FlaskTestServer(port=9053, config_file=cfg.config_path,
+                                 debug=True)
+        if not server.start():
+            pytest.fail("Failed to start server")
+
+        for annotator in ("c1", "c2", "c3"):
+            session = requests.Session()
+            session.post(f"{server.base_url}/register",
+                         data={"email": f"{annotator}@lab.org", "pass": "pw"})
+            session.post(f"{server.base_url}/auth",
+                         data={"email": f"{annotator}@lab.org", "pass": "pw"})
+            session.get(f"{server.base_url}/annotate")
+            for index in range(3):
+                response = session.post(
+                    f"{server.base_url}/updateinstance",
+                    json={"instance_id": str(index + 1),
+                          "annotations": {
+                              f"severity:::{SPREAD[annotator][index]}": "true"}})
+                assert response.status_code == 200, response.text
+        time.sleep(0.2)
+        yield server
+        server.stop()
+
+
+class TestMaxDiversityOrdering:
+
+    def test_the_three_items_carry_three_different_scores(self, ordering_server):
+        """Guards the guard. If the scores tie, the ordering assertion below
+        passes on any stable sort and proves nothing -- which is exactly the
+        limitation of a fixture where every candidate scores 1.0."""
+        actual = {iid: _score(iid) for iid in ("1", "2", "3")}
+        for iid, expected in EXPECTED_SCORES.items():
+            assert actual[iid] == pytest.approx(expected), actual
+        assert len(set(actual.values())) == 3, actual
+
+    def test_a_new_annotator_is_served_the_most_contested_item_first(
+            self, ordering_server):
+        """What `max_diversity` promises, observed from the client.
+
+        Sorting by a constant leaves dict order, which for this fixture is
+        1, 2, 3 -- the same as the correct answer. So the fixture deliberately
+        makes the CONTESTED item the one dict order would serve last.
+        """
+        session = requests.Session()
+        session.post(f"{ordering_server.base_url}/register",
+                     data={"email": "c4@lab.org", "pass": "pw"})
+        session.post(f"{ordering_server.base_url}/auth",
+                     data={"email": "c4@lab.org", "pass": "pw"})
+        page = session.get(f"{ordering_server.base_url}/annotate")
+
+        import re
+        match = re.search(r'id="instance_id"[^>]*value="([^"]*)"', page.text)
+        assert match, "no instance served"
+        served_first = match.group(1)
+
+        # Named, not derived. Comparing against scores computed at test time
+        # is satisfied trivially when every score is the same broken constant:
+        # 0.0 == max(0.0, 0.0, 0.0). The fixture decides which item is most
+        # contested, so the fixture is what this asserts against.
+        most_contested = max(EXPECTED_SCORES, key=EXPECTED_SCORES.get)
+        assert served_first == most_contested, (
+            f"served {served_first} first; {most_contested} is the contested "
+            f"one and {served_first} is what plain dict order would serve. "
+            f"Live scores: { {i: _score(i) for i in ('1', '2', '3')} }")
