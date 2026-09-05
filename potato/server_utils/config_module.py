@@ -3968,6 +3968,33 @@ def validate_phase_order(config_data: Dict[str, Any]) -> None:
                 phase_name, phase_name,
             )
 
+    # More than one annotation phase. The names in `phases.order` are the
+    # author's, so nothing stops two of them declaring `type: annotation`, and
+    # the config validates -- but the annotation flow owns the item queue and
+    # finishes the study when the queue is empty. The second phase is never
+    # served: the annotator reaches "Complete" after the first pass, and
+    # nothing anywhere says the phase they configured did not run.
+    #
+    # Warned rather than refused, because the study still works as a
+    # single-pass one, and an author who wanted two passes over the same items
+    # needs to know that is not what they have.
+    annotation_phases = [
+        name for name in order
+        if isinstance(name, str)
+        and (name == "annotation"
+             or (isinstance(phases.get(name), dict)
+                 and phases[name].get("type") == "annotation"))
+    ]
+    if len(annotation_phases) > 1:
+        logger.warning(
+            "phases.order declares %d annotation phases (%s), and only the "
+            "first is ever served: the annotation flow owns the item queue "
+            "and ends the study when it is empty. Use one annotation phase; "
+            "for a second pass over the same items, see adjudication or a "
+            "second annotator.",
+            len(annotation_phases), ", ".join(annotation_phases),
+        )
+
 
 def validate_quality_control_config(config_data: Dict[str, Any]) -> None:
     """
