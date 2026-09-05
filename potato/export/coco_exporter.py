@@ -17,6 +17,7 @@ from .cv_utils import (
     decode_rle,
     flatten_polygon,
     extract_image_annotations,
+    blank_item_warning,
     get_image_dimensions,
     get_image_filename,
     normalize_annotation_object,
@@ -261,6 +262,12 @@ class COCOExporter(BaseExporter):
                 output_path)
             files_written.extend(panoptic_files)
             warnings.extend(panoptic_warnings)
+
+        # Items nobody marked produce no record at all, so they are
+        # absent from the output rather than present and empty.
+        _blank = blank_item_warning(context, 'the COCO file')
+        if _blank:
+            warnings.append(_blank)
 
         return ExportResult(
             success=True,

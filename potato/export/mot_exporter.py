@@ -33,6 +33,7 @@ from typing import Dict, List, Optional, Tuple
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     extract_image_annotations,
+    blank_item_warning,
     get_image_dimensions,
     normalize_annotation_object,
 )
@@ -161,6 +162,12 @@ class MOTExporter(BaseExporter):
                 f"fresh ones starting at 10000. A gt.txt with id -1 is a "
                 f"detection file rather than ground truth, so ids are never "
                 f"left unset.")
+
+        # Items nobody marked produce no record at all, so they are
+        # absent from the output rather than present and empty.
+        _blank = blank_item_warning(context, 'the MOT export')
+        if _blank:
+            warnings.append(_blank)
 
         return ExportResult(
             success=True,

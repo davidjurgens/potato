@@ -15,6 +15,7 @@ from typing import Optional, Tuple, List
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     extract_image_annotations,
+    blank_item_warning,
     get_image_dimensions,
     get_image_filename,
     build_category_mapping,
@@ -127,6 +128,12 @@ class MaskExporter(BaseExporter):
                     img.save(mask_file)
                     files_written.append(mask_file)
                     masks_exported += 1
+
+        # Items nobody marked produce no record at all, so they are
+        # absent from the output rather than present and empty.
+        _blank = blank_item_warning(context, 'the mask export')
+        if _blank:
+            warnings.append(_blank)
 
         return ExportResult(
             success=True,

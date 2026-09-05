@@ -159,3 +159,64 @@ class TestCOCOExportCarriesTheDimensions:
         sizes = {img["file_name"]: (img["width"], img["height"])
                  for img in coco["images"]}
         assert sizes == {"a.png": (640, 400), "b.png": (320, 240)}, sizes
+
+
+class TestBlankItemsAreReported:
+    """An item nobody marked is absent from every CV export.
+
+    Audit 27. The auditor's three-image study exported two images from every
+    one of eleven formats; `grep -rl street3` across all of them returned
+    nothing -- not even an image entry with an empty annotation list. Each
+    exporter walks `context.annotations`, so an item with no marks produces no
+    record at all.
+
+    Whether it SHOULD be there is a real design question and differs by format:
+    most of these are annotation interchange rather than dataset manifests, and
+    an empty entry is noise in several of them. What is not defensible is the
+    silence. A researcher reconciling "I had 300 images" against a COCO file
+    listing 214 cannot tell whether the rest errored or were simply blank, and
+    for detector training an image with no objects is a negative example rather
+    than a missing one.
+    """
+
+    def _context(self, tmp_path, annotated_ids, all_ids):
+        name = _write_png(str(tmp_path))
+        return ExportContext(
+            config={"task_dir": str(tmp_path), "media_directory": "media"},
+            annotations=[_mask_annotation(iid) for iid in annotated_ids],
+            items={iid: {"image": name} for iid in all_ids},
+            schemas=[{"annotation_type": "image_annotation", "name": "img",
+                      "labels": [{"name": "affected"}]}],
+            output_dir="",
+        )
+
+    def test_an_unmarked_item_is_named_in_the_warnings(self, tmp_path):
+        context = self._context(tmp_path, ["a"], ["a", "b", "c"])
+        with tempfile.TemporaryDirectory() as out:
+            result = COCOExporter().export(context, out)
+        assert result.success
+        blank = [w for w in result.warnings if "no image annotation" in w]
+        assert blank, result.warnings
+        assert "b" in blank[0] and "c" in blank[0], blank
+        assert "2 item(s)" in blank[0], blank
+
+    def test_a_study_where_everything_was_marked_says_nothing(self, tmp_path):
+        """The control. A warning that always fires is not a warning."""
+        context = self._context(tmp_path, ["a", "b"], ["a", "b"])
+        with tempfile.TemporaryDirectory() as out:
+            result = COCOExporter().export(context, out)
+        assert result.success
+        assert not [w for w in result.warnings if "no image annotation" in w], \
+            result.warnings
+
+    def test_the_export_still_succeeds_and_still_writes_the_marked_images(
+            self, tmp_path):
+        """The warning reports; it does not refuse. The blank items are a
+        judgment call for the researcher, not an error."""
+        context = self._context(tmp_path, ["a"], ["a", "b", "c"])
+        with tempfile.TemporaryDirectory() as out:
+            result = COCOExporter().export(context, out)
+            with open(os.path.join(out, "annotations.json")) as handle:
+                coco = json.load(handle)
+        assert result.success
+        assert [img["id"] for img in coco["images"]] == [1], coco["images"]

@@ -27,6 +27,7 @@ from typing import List, Optional, Tuple
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     extract_image_annotations,
+    blank_item_warning,
     get_image_dimensions,
     get_image_filename,
     normalize_annotation_object,
@@ -103,6 +104,12 @@ class KITTIExporter(BaseExporter):
                 f"{count} {obj_type} annotation(s) were not written: KITTI's 2D "
                 f"label format holds boxes only. Export to COCO to keep "
                 f"{obj_type} geometry.")
+
+        # Items nobody marked produce no record at all, so they are
+        # absent from the output rather than present and empty.
+        _blank = blank_item_warning(context, 'the KITTI export')
+        if _blank:
+            warnings.append(_blank)
 
         return ExportResult(
             success=True,

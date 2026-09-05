@@ -1417,3 +1417,42 @@ def build_coco_category_map(
         for name in sorted(ordered, key=lambda n: category_map[n])
     ]
     return category_map, categories
+
+
+def items_without_image_annotations(context: Any) -> List[str]:
+    """Instance ids in the study that carry no image annotation from anyone.
+
+    Every CV exporter here walks ``context.annotations``, so an item nobody
+    marked produces no record and is absent from the output entirely -- no
+    image entry, no empty annotation list, nothing. For detector training an
+    image with no objects is a negative example, and dropping it changes what
+    the model learns.
+    """
+    annotated = set()
+    for annotation in getattr(context, "annotations", None) or []:
+        if extract_image_annotations(annotation):
+            annotated.add(annotation.get("instance_id", ""))
+    return [iid for iid in (getattr(context, "items", None) or {})
+            if iid not in annotated]
+
+
+def blank_item_warning(context: Any, destination: str = "this export"):
+    """The warning for items that carry no image annotation, or ``None``.
+
+    Says nothing about whether they should be there -- most of these formats
+    are annotation interchange rather than dataset manifests, and the right
+    answer differs by format. What is not defensible is the silence: a
+    researcher reconciling "I had 300 images" against a file listing 214
+    cannot tell whether the rest errored or were simply blank.
+    """
+    blank = items_without_image_annotations(context)
+    if not blank:
+        return None
+    shown = ", ".join(sorted(blank)[:5])
+    more = f", and {len(blank) - 5} more" if len(blank) > 5 else ""
+    return (
+        f"{len(blank)} item(s) carry no image annotation and are absent from "
+        f"{destination}: {shown}{more}. For detector training an image with "
+        f"no objects is a negative example; if you need them, add them to the "
+        f"output manually or export a format that lists images separately."
+    )

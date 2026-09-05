@@ -29,6 +29,7 @@ from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     decode_rle,
     extract_image_annotations,
+    blank_item_warning,
     get_image_dimensions,
     normalize_annotation_object,
     polygons_to_rle,
@@ -150,6 +151,12 @@ class DAVISExporter(BaseExporter):
                 f"{overflow} object(s) exceeded id {MAX_OBJECT_ID} and were "
                 f"omitted: an indexed PNG reserves 0 for background and 255 "
                 f"for void, so it cannot hold more objects than that.")
+
+        # Items nobody marked produce no record at all, so they are
+        # absent from the output rather than present and empty.
+        _blank = blank_item_warning(context, 'the DAVIS export')
+        if _blank:
+            warnings.append(_blank)
 
         return ExportResult(
             success=True,

@@ -28,6 +28,7 @@ from xml.etree.ElementTree import Element, ElementTree, SubElement, indent
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     extract_image_annotations,
+    blank_item_warning,
     get_image_dimensions,
     get_image_filename,
     normalize_annotation_object,
@@ -112,6 +113,12 @@ class CVATExporter(BaseExporter):
         tree = ElementTree(root)
         indent(tree, space="  ")
         tree.write(out_file, encoding="utf-8", xml_declaration=True)
+
+        # Items nobody marked produce no record at all, so they are
+        # absent from the output rather than present and empty.
+        _blank = blank_item_warning(context, 'the CVAT XML')
+        if _blank:
+            warnings.append(_blank)
 
         return ExportResult(
             success=True,

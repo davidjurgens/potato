@@ -16,6 +16,7 @@ from .cv_utils import (
     build_category_mapping,
     normalize_bbox,
     extract_image_annotations,
+    blank_item_warning,
     get_image_dimensions,
     get_image_filename,
     normalize_annotation_object,
@@ -164,6 +165,12 @@ class YOLOExporter(BaseExporter):
             f.write(f"nc: {len(sorted_labels)}\n")
             f.write(f"names: [{', '.join(repr(n) for n, _ in sorted_labels)}]\n")
         files_written.append(data_yaml)
+
+        # Items nobody marked produce no record at all, so they are
+        # absent from the output rather than present and empty.
+        _blank = blank_item_warning(context, 'the YOLO export')
+        if _blank:
+            warnings.append(_blank)
 
         return ExportResult(
             success=True,

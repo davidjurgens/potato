@@ -40,6 +40,7 @@ from typing import Dict, List, Optional, Tuple
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     extract_image_annotations,
+    blank_item_warning,
     get_image_dimensions,
     get_image_filename,
     normalize_annotation_object,
@@ -134,6 +135,12 @@ class DarwinExporter(BaseExporter):
             warnings.append(
                 f"{count} {obj_type} annotation(s) were not written: Darwin "
                 f"JSON has no equivalent shape.")
+
+        # Items nobody marked produce no record at all, so they are
+        # absent from the output rather than present and empty.
+        _blank = blank_item_warning(context, 'the Darwin export')
+        if _blank:
+            warnings.append(_blank)
 
         return ExportResult(
             success=True,
