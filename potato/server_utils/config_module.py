@@ -2125,6 +2125,46 @@ def validate_codebook_config(config_data: Dict[str, Any]) -> None:
             "the shared codebook).", mode)
 
 
+def _reject_duplicate_scheme_names(schemes: Any, path: str) -> None:
+    """Refuse two annotation schemes sharing a `name`.
+
+    Storage is keyed by scheme name and so is the rendered form: two schemes
+    called `verdict` emit every one of their inputs as `name="verdict"`, which
+    in HTML is one mutually exclusive radio group. The annotator answers the
+    first question, answers the second, and watches the first clear itself --
+    and only one answer reaches the file. Nothing said anything: the config
+    validated, the boot log was quiet, and both questions rendered looking
+    independent.
+
+    Raised rather than warned. There is no configuration in which this is what
+    the author meant -- the second scheme cannot store anything of its own --
+    so the study is not degraded, it is broken, and it loses data while
+    appearing to work.
+
+    Duplicate LABELS inside one scheme have been caught for a long time, with a
+    good message, at render time. This is the same idea one level up, where the
+    consequence is worse and nothing was checking.
+    """
+    if not isinstance(schemes, list):
+        return
+    seen: Dict[str, int] = {}
+    for index, scheme in enumerate(schemes):
+        if not isinstance(scheme, dict):
+            continue
+        name = scheme.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        if name in seen:
+            raise ConfigValidationError(
+                f"{path}[{index}].name '{name}' is already used by "
+                f"{path}[{seen[name]}]. Two schemes with one name share a "
+                f"storage key and one HTML input group, so answering the "
+                f"second clears the first and only one answer is saved. "
+                f"Give each scheme its own name."
+            )
+        seen[name] = index
+
+
 def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
     """
     Validate annotation schemes configuration.
@@ -2170,6 +2210,7 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
         if not schemes:
             raise ConfigValidationError("annotation_schemes cannot be empty")
 
+        _reject_duplicate_scheme_names(schemes, "annotation_schemes")
         for i, scheme in enumerate(schemes):
             validate_single_annotation_scheme(scheme, f"annotation_schemes[{i}]")
 
@@ -2186,6 +2227,8 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
                     if not schemes:
                         raise ConfigValidationError(f"Phase {phase_id} annotation_schemes cannot be empty")
 
+                    _reject_duplicate_scheme_names(
+                        schemes, f"phases[{i}].annotation_schemes")
                     for j, scheme in enumerate(schemes):
                         validate_single_annotation_scheme(scheme, f"phases[{i}].annotation_schemes[{j}]")
                 elif 'file' in phase or 'type' in phase or 'instrument' in phase or 'instruments' in phase:
@@ -2209,6 +2252,8 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
                     if not schemes:
                         raise ConfigValidationError(f"Phase {phase_name} annotation_schemes cannot be empty")
 
+                    _reject_duplicate_scheme_names(
+                        schemes, f"phases.{phase_name}.annotation_schemes")
                     for j, scheme in enumerate(schemes):
                         validate_single_annotation_scheme(scheme, f"phases.{phase_name}.annotation_schemes[{j}]")
                 elif 'file' in phase or 'type' in phase or 'instrument' in phase or 'instruments' in phase:
