@@ -236,6 +236,17 @@ cannot parse shows up at boot.
   - `*happy` matches "unhappy", "happy"
   - `dis*ed` matches "disappointed", "dismayed"
 
+### Fields scanned
+
+Potato scans `item_properties.text_key` and every `instance_display` field
+carrying `span_target: true` — that is, every field an annotator can mark. A
+`dialogue` field is scanned as its rendered text, speaker labels and line
+breaks included, so the offsets line up with what the browser measured.
+
+`/api/keyword_highlights/<instance_id>` reports the list under
+`fields_scanned`, and each match names its own `target_field`. A field without
+`span_target` is skipped: there is nowhere to draw a highlight on it.
+
 ### Configuring Colors
 
 Colors for keyword highlights are configured in the `ui.spans.span_colors` section, matching the schema and label names:

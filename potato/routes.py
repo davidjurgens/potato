@@ -6982,6 +6982,12 @@ def get_keyword_highlights(instance_id):
                 "keywords": cached_keywords,
                 "instance_id": instance_id,
                 "target_field": cached_field,
+                # Derived from what is cached, so the cached and fresh
+                # responses carry the same keys -- a caller should not have to
+                # know which branch answered it.
+                "fields_scanned": sorted({
+                    k.get("target_field", cached_field)
+                    for k in cached_keywords if isinstance(k, dict)}),
                 "from_cache": True
             })
 
@@ -7014,15 +7020,14 @@ def get_keyword_highlights(instance_id):
                 logger.error(f"Instance not found: {instance_id}")
                 return jsonify({"error": "Instance not found"}), 404
 
-        original_text = instance.get_text()
-        logger.debug(f"Instance text length: {len(original_text)}")
-        # Which field these offsets index. `get_text()` returns the configured
-        # text_key, and on an `instance_display` page the client needs the name
-        # to pick the right per-field overlay container and positioning
-        # strategy -- without it every highlight was measured against one field
-        # and drawn against another, or not drawn at all.
-        keyword_target_field = (
-            config.get("item_properties", {}) or {}).get("text_key", "text")
+        # Every field an annotator can draw a span on, not just text_key.
+        # The scan used to read `instance.get_text()` alone, so on a page with
+        # two span targets -- a conversation and a summary line -- an author who
+        # configured keyword highlighting got it on the summary and none on the
+        # conversation, with nothing to say the other field was never looked at.
+        keyword_fields = _keyword_scan_fields(instance)
+        logger.debug("Scanning %d field(s) for keywords: %s",
+                     len(keyword_fields), [f for f, _ in keyword_fields])
 
     except Exception as e:
         logger.error(f"Error getting instance text: {e}")
@@ -7030,7 +7035,8 @@ def get_keyword_highlights(instance_id):
 
     # Find all keyword matches in the text
     keywords = []
-    seen_spans = set()  # Track (start, end) to avoid duplicate overlapping matches
+    # (field, start, end): the same offsets in two fields are two matches.
+    seen_spans = set()
 
     # Track color assignments for keyword labels (schema -> label -> color)
     keyword_color_counter = 0
@@ -7041,13 +7047,14 @@ def get_keyword_highlights(instance_id):
         schema = pattern_info['schema']
         pattern_str = pattern_info['pattern']
 
-        for match in regex.finditer(original_text):
+        for field_name, field_text in keyword_fields:
+          for match in regex.finditer(field_text):
             start = match.start()
             end = match.end()
             matched_text = match.group()
 
             # Skip if we already have a match at this exact position
-            span_key = (start, end)
+            span_key = (field_name, start, end)
             if span_key in seen_spans:
                 continue
 
@@ -7083,17 +7090,22 @@ def get_keyword_highlights(instance_id):
                 "reasoning": f"Keyword: {pattern_str} → {label}",
                 "schema": schema,
                 "color": rgba_color,
+                "target_field": field_name,
                 "type": "keyword"
             })
 
-    # Generate random word highlights (distractors)
+    # Generate random word highlights (distractors) against the primary field.
     random_highlights = []
-    if random_word_prob > 0:
+    if random_word_prob > 0 and keyword_fields:
+        primary_field, primary_text = keyword_fields[0]
+        taken = {(s, e) for f, s, e in seen_spans if f == primary_field}
         random_highlights = generate_random_word_highlights(
-            original_text, rng, random_word_prob,
+            primary_text, rng, random_word_prob,
             random_word_label, random_word_schema,
-            seen_spans
+            taken
         )
+        for highlight in random_highlights:
+            highlight.setdefault("target_field", primary_field)
         keywords.extend(random_highlights)
 
     # Sort by start position
@@ -7115,15 +7127,77 @@ def get_keyword_highlights(instance_id):
 
     logger.debug("=== GET_KEYWORD_HIGHLIGHTS END ===")
 
+    primary_field = keyword_fields[0][0] if keyword_fields else (
+        (config.get("item_properties", {}) or {}).get("text_key", "text"))
     for keyword in keywords:
-        keyword.setdefault("target_field", keyword_target_field)
+        keyword.setdefault("target_field", primary_field)
 
     return jsonify({
         "keywords": keywords,
         "instance_id": instance_id,
-        "target_field": keyword_target_field,
+        "target_field": primary_field,
+        "fields_scanned": [name for name, _ in keyword_fields],
         "from_cache": False
     })
+
+
+def _keyword_scan_fields(instance):
+    """(field_name, text) for every field keyword highlighting should scan.
+
+    Highlights are drawn as overlays anchored to a field's own offsets, and the
+    renderer can now draw on any field -- so the scan should cover any field the
+    annotator can see a span on, not just `item_properties.text_key`.
+
+    A `dialogue` field is scanned as its RENDERED text, because that is what its
+    offsets index; `reconstruct_dialogue_dom_text` is the same server half of
+    the contract `/api/spans` and the exporter use.
+
+    The text_key field comes first, so it stays the default target for anything
+    that has no field of its own (the distractor highlights).
+    """
+    from potato.server_utils.displays.base import (
+        concatenate_dialogue_text,
+        reconstruct_dialogue_dom_text,
+    )
+
+    item_data = instance.get_data()
+    if not isinstance(item_data, dict):
+        text = instance.get_text()
+        return [("text", text)] if isinstance(text, str) and text else []
+
+    text_key = (config.get("item_properties", {}) or {}).get("text_key", "text")
+    display_fields = (config.get("instance_display", {}) or {}).get("fields", []) or []
+
+    wanted = []
+    if text_key:
+        wanted.append((text_key, {}))
+    for entry in display_fields:
+        if not isinstance(entry, dict):
+            continue
+        key = entry.get("key")
+        # Only fields an annotator can mark. A caption or an id rendered beside
+        # the text is not somewhere a keyword overlay can be drawn.
+        if not key or key == text_key or not entry.get("span_target"):
+            continue
+        wanted.append((key, entry))
+
+    scanned = []
+    for key, entry in wanted:
+        value = item_data.get(key)
+        if isinstance(value, str) and value:
+            scanned.append((key, value))
+        elif isinstance(value, list) and value:
+            options = entry.get("display_options", {}) or {}
+            if entry.get("type") == "dialogue":
+                scanned.append((key, reconstruct_dialogue_dom_text(
+                    value,
+                    speaker_key=options.get("speaker_key", "speaker"),
+                    text_key=options.get("text_key", "text"),
+                    show_turn_numbers=options.get("show_turn_numbers", False),
+                )))
+            else:
+                scanned.append((key, concatenate_dialogue_text(value)))
+    return scanned
 
 
 def generate_random_word_highlights(text: str, rng, probability: float,

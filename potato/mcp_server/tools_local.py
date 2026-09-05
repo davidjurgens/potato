@@ -240,6 +240,12 @@ def list_examples(
         "count": len(results),
         "examples": [
             {
+                # `name` is what `get_example` takes, and it is the same value
+                # as `dir`. Returning only `dir` cost a caller two round trips:
+                # passing it as `dir=` is a schema error and the basename and
+                # task_name are both "No example named". Both keys are emitted
+                # so the join is copy-paste either way.
+                "name": r["dir"],
                 "dir": r["dir"],
                 "path": r["path"],
                 "task_name": r["task_name"],
@@ -253,19 +259,32 @@ def list_examples(
     }
 
 
-def get_example(name: str) -> Dict[str, Any]:
+def get_example(name: Optional[str] = None,
+                dir: Optional[str] = None) -> Dict[str, Any]:
     """The full config text of one example, by directory or path.
 
     Accepts `classification/check-box`, `examples/classification/check-box`, or
     the path to its config.yaml.
+
+    `dir` is accepted as well as `name` because that is the key
+    `list_examples` returns each example under, and reaching for it is the
+    obvious move.
     """
     from potato.server_utils.examples_manifest import load_manifest
+
+    wanted_name = name or dir
+    if not wanted_name:
+        return {
+            "error": "Pass the example's directory, e.g. "
+                     "get_example('classification/check-box').",
+            "hint": "Use list_examples() and pass an entry's `name` (or `dir`).",
+        }
 
     manifest = load_manifest()
     if not manifest:
         return {"error": "The examples catalog is unavailable."}
 
-    wanted = name.rstrip("/")
+    wanted = wanted_name.rstrip("/")
     candidates = [wanted, f"examples/{wanted}"]
     if wanted.endswith("config.yaml"):
         candidates.append(os.path.dirname(wanted))
@@ -280,9 +299,16 @@ def get_example(name: str) -> Dict[str, Any]:
             break
 
     if entry is None:
+        # Name the shape that works. "No example named 'check-box'" left a
+        # caller guessing between the basename, the task_name and the path.
+        tail = wanted.rsplit("/", 1)[-1]
+        near = [e["dir"] for e in manifest["examples"]
+                if tail and tail in e["dir"]][:5]
         return {
-            "error": f"No example named {name!r}",
-            "hint": "Use list_examples() to find one.",
+            "error": f"No example named {wanted_name!r}",
+            "hint": "Pass the `dir` value from list_examples(), which looks "
+                    "like 'classification/check-box'.",
+            "did_you_mean": near,
         }
 
     repo_root = os.path.dirname(

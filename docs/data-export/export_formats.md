@@ -440,6 +440,12 @@ not answer, so a schema only some annotators reached is still in the file.
 | `label` | string | The span's label |
 | `text` | string | The text content of the span |
 
+`text` is derived from the offsets at export time rather than stored, so it can
+never disagree with them. Offsets on a `dialogue` field index that field's
+*rendered* text — `"{speaker}: {text}"`, one turn per line, which is what the
+annotator saw. The exporter reconstructs that string, so the column reads the
+same as for a plain text field.
+
 **items.parquet schema:**
 
 | Column | Type | Description |

@@ -33,7 +33,7 @@ item_properties:
 task_dir: .
 
 # Live agent configuration
-# Supported endpoint_type values: anthropic_vision, ollama_vision
+# Supported endpoint_type values: anthropic_vision, ollama_vision, openai_vision
 live_agent:
   # --- Ollama (local, no API key needed) ---
   endpoint_type: ollama_vision
@@ -51,6 +51,15 @@ live_agent:
   #   model: claude-sonnet-4-20250514
   #   api_key: ${ANTHROPIC_API_KEY}
   #   max_tokens: 4096
+  #   temperature: 0.3
+
+  # --- Any OpenAI-compatible vision server, including a local vLLM ---
+  # endpoint_type: openai_vision
+  # ai_config:
+  #   model: your-vision-model
+  #   base_url: http://your-host:8000/v1
+  #   api_key: ${OPENAI_API_KEY}     # many local servers accept any value
+  #   max_tokens: 1024
   #   temperature: 0.3
   system_prompt: |
     You are a web browsing agent. You can see screenshots of web pages and take actions to complete tasks.

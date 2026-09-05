@@ -43,9 +43,17 @@ class TestKeywordHighlightsAreDrawn:
         assert "Gave up drawing" in source
 
     def test_the_api_names_the_field_its_offsets_index(self):
+        """Every keyword says which field it was measured against.
+
+        Asserted on the behaviour rather than on a variable name: audit 16
+        widened the scan to several fields and renamed the carrier, which broke
+        this without changing anything it was written to protect.
+        """
         source = _read("potato/routes.py")
-        assert '"target_field": keyword_target_field' in source
-        assert 'keyword.setdefault("target_field", keyword_target_field)' in source
+        assert '"target_field"' in source
+        # Stamped on each keyword, and reported on the response.
+        assert 'keyword.setdefault("target_field", primary_field)' in source
+        assert '"target_field": primary_field' in source
         # The cached branch too, or the second visit to an item draws nothing.
         assert 'keyword.setdefault("target_field", cached_field)' in source
 

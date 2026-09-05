@@ -26,9 +26,12 @@ Configuration example:
 
 import html
 import json
+import logging
 from typing import Any, Dict, List
 
 from .base import BaseDisplay
+
+logger = logging.getLogger(__name__)
 
 
 class LiveAgentDisplay(BaseDisplay):
@@ -101,12 +104,30 @@ class LiveAgentDisplay(BaseDisplay):
             "allow_instructions": allow_instructions,
         }), quote=True)
 
-        # Extract task info from instance data if available
+        # Extract task info from instance data if available.
+        #
+        # `key` is this display's only required field, so naming a field that
+        # holds the URL is the obvious reading -- and it was the one shape not
+        # handled: a string value left the Starting URL box empty with its
+        # placeholder, and the annotator retyped the same URL on every item.
         task_desc = ""
         start_url = ""
         if isinstance(data, dict):
             task_desc = data.get("task_description", "")
             start_url = data.get("start_url", data.get("url", ""))
+        elif isinstance(data, str) and data.strip():
+            candidate = data.strip()
+            if candidate.startswith(("http://", "https://")):
+                start_url = candidate
+            else:
+                # Seeding a non-URL would send the agent somewhere meaningless,
+                # so leave the box on its placeholder and say why.
+                logger.warning(
+                    "live_agent field %r holds %r, which is not an http(s) URL, "
+                    "so the Starting URL box was left empty. Point `key` at a "
+                    "field holding the URL, or an object with `start_url` and "
+                    "`task_description`.",
+                    field_config.get("key", ""), candidate[:80])
 
         css = self._build_css(max_w, max_h, filmstrip_size)
         html_content = self._build_html(

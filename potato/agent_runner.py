@@ -144,6 +144,50 @@ For each step, analyze the current screenshot and respond with a JSON object:
 Always respond with valid JSON only. No markdown, no extra text."""
 
 
+#: Action types :meth:`_execute_action` knows how to run.
+KNOWN_ACTION_TYPES = frozenset({
+    "click", "type", "scroll", "navigate", "wait", "done",
+})
+
+
+def _coerce_action(action, thought=""):
+    """Turn whatever the model put under ``action`` into an action dict.
+
+    A small model asked for `{"thought": ..., "action": "...", "done": false}`
+    answers with a STRING action, and that is the common case rather than the
+    exotic one. The old code ran `if "type" not in action` -- a substring test
+    on a string -- and then assigned into it, which raised TypeError and killed
+    the agent thread at step 0 with the Python error printed in the annotator's
+    panel.
+
+    A string that names an action Potato can run is honoured. Anything else
+    becomes a wait, with the text preserved under ``_thought`` so the panel
+    shows what the model said instead of nothing. The caller strips that key.
+    """
+    if isinstance(action, dict):
+        if "type" not in action:
+            action = dict(action)
+            action["type"] = "wait"
+        return action
+
+    if isinstance(action, str):
+        candidate = action.strip()
+        if candidate.lower() in KNOWN_ACTION_TYPES:
+            return {"type": candidate.lower()}
+        logger.warning(
+            "Agent returned a string action %r that names no known action "
+            "(%s). Waiting instead. If this is your own system prompt, ask "
+            "for an object: \"action\": {\"type\": \"click\", \"x\": 0, \"y\": 0}.",
+            candidate[:120], ", ".join(sorted(KNOWN_ACTION_TYPES)))
+        return {"type": "wait", "_thought": candidate if not thought else ""}
+
+    if action is not None:
+        logger.warning(
+            "Agent returned an action of type %s; waiting instead.",
+            type(action).__name__)
+    return {"type": "wait"}
+
+
 class AgentRunner:
     """
     Runs an AI agent that browses the web via Playwright.
@@ -830,12 +874,26 @@ class AgentRunner:
             logger.warning(f"Failed to parse LLM response as JSON: {text[:200]}")
             return text, {"type": "wait"}
 
-        thought = parsed.get("thought", "")
-        action = parsed.get("action", {"type": "wait"})
+        # Valid JSON of an unexpected shape needs the same defence as invalid
+        # JSON, and did not have it. A model that answers with a bare string or
+        # a list reached `parsed.get` and raised AttributeError; the exception
+        # surfaced in the annotator's panel as "Error: 'str' object ..." with
+        # the viewer black, and the run ended at step 0.
+        if not isinstance(parsed, dict):
+            logger.warning(
+                "Agent reply parsed as %s, not an object; treating it as a "
+                "thought with no action: %s",
+                type(parsed).__name__, text[:200])
+            return text, {"type": "wait"}
 
-        # Validate action has a type
-        if "type" not in action:
-            action["type"] = "wait"
+        thought = parsed.get("thought", "")
+        action = _coerce_action(parsed.get("action"), thought)
+        if not thought and isinstance(action, dict):
+            # A string action carries the model's intent; keep it as the
+            # thought rather than showing the annotator an empty panel.
+            thought = action.pop("_thought", "") or thought
+        elif isinstance(action, dict):
+            action.pop("_thought", None)
 
         return thought, action
 

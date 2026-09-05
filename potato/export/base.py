@@ -72,16 +72,62 @@ class ExportContext:
             field_name = (self.config.get("item_properties", {})
                           or {}).get("text_key", "text")
 
-        source = item.get(field_name)
-        if not isinstance(source, str):
+        source = self._span_anchor_text(item, field_name)
+        if source is None:
             # Fall back to the configured text field: an older span may carry a
             # target_field the item no longer has.
-            source = item.get((self.config.get("item_properties", {})
-                               or {}).get("text_key", "text"))
-        if not isinstance(source, str):
+            fallback = (self.config.get("item_properties", {})
+                        or {}).get("text_key", "text")
+            source = self._span_anchor_text(item, fallback)
+        if source is None:
             return ""
 
         return source[start:end]
+
+    def _display_field_config(self, field_name: str) -> dict:
+        """The `instance_display` entry for a field, or {}."""
+        fields = (self.config.get("instance_display", {}) or {}).get("fields", [])
+        for entry in fields or []:
+            if isinstance(entry, dict) and entry.get("key") == field_name:
+                return entry
+        return {}
+
+    def _span_anchor_text(self, item: dict, field_name: str):
+        """The exact string a span's offsets index, or None.
+
+        A `dialogue` field holds a list of turns, and its offsets are measured
+        in the browser against the *rendered* container -- speaker labels,
+        separators and all. The exporter only handled `str` sources, so every
+        span on a conversational field exported with `text: ""`: not wrong, but
+        unresolvable without rediscovering the join convention, and that is the
+        whole coreference-over-dialogue and transcript-error-span family.
+
+        `reconstruct_dialogue_dom_text()` is the server half of that contract
+        and `/api/spans` already uses it; this is the third caller.
+        """
+        value = item.get(field_name)
+        if isinstance(value, str):
+            return value
+        if not isinstance(value, list):
+            return None
+
+        from potato.server_utils.displays.base import (
+            concatenate_dialogue_text,
+            reconstruct_dialogue_dom_text,
+        )
+
+        field_config = self._display_field_config(field_name)
+        options = field_config.get("display_options", {}) or {}
+        if field_config.get("type") == "dialogue":
+            return reconstruct_dialogue_dom_text(
+                value,
+                speaker_key=options.get("speaker_key", "speaker"),
+                text_key=options.get("text_key", "text"),
+                show_turn_numbers=options.get("show_turn_numbers", False),
+            )
+        # A list field that is not a declared dialogue: join it the way the
+        # display does, which is what the offsets were measured against.
+        return concatenate_dialogue_text(value)
 
 
 @dataclass

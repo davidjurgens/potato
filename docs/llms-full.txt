@@ -44493,6 +44493,17 @@ cannot parse shows up at boot.
   - `*happy` matches "unhappy", "happy"
   - `dis*ed` matches "disappointed", "dismayed"
 
+### Fields scanned
+
+Potato scans `item_properties.text_key` and every `instance_display` field
+carrying `span_target: true` — that is, every field an annotator can mark. A
+`dialogue` field is scanned as its rendered text, speaker labels and line
+breaks included, so the offsets line up with what the browser measured.
+
+`/api/keyword_highlights/<instance_id>` reports the list under
+`fields_scanned`, and each match names its own `target_field`. A field without
+`span_target` is skipped: there is nowhere to draw a highlight on it.
+
 ### Configuring Colors
 
 Colors for keyword highlights are configured in the `ui.spans.span_colors` section, matching the schema and label names:
@@ -45184,6 +45195,12 @@ not answer, so a schema only some annotators reached is still in the file.
 | `end` | int | Character offset where the span ends |
 | `label` | string | The span's label |
 | `text` | string | The text content of the span |
+
+`text` is derived from the offsets at export time rather than stored, so it can
+never disagree with them. Offsets on a `dialogue` field index that field's
+*rendered* text — `"{speaker}: {text}"`, one turn per line, which is what the
+annotator saw. The exporter reconstructs that string, so the column reads the
+same as for a plain text field.
 
 **items.parquet schema:**
 
