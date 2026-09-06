@@ -4572,7 +4572,7 @@
       "type": "string"
     },
     "min_annotators_per_instance": {
-      "description": "Floor on annotators per item before it counts as done",
+      "description": "NOT ENFORCED. Reads as a floor on annotators per item, but nothing consults it when deciding what to assign or when an item is done. Use num_annotators_per_item, which is the cap that is enforced",
       "type": "integer"
     },
     "mturk": {

@@ -132,6 +132,19 @@ batch_assignment:
       instances: ["r2_item_001", "r2_item_002"]
 ```
 
+`assignment_strategy: batch` is not optional here. A group's `schemes`
+binding is honoured under any strategy, but its `instances` list is read
+only by the batch strategy, and the default is `fixed_order`. Omit the
+strategy line and each cohort visibly gets its own questions — which
+reads as proof the config took effect — while every annotator is served
+every item, and nothing in the collected data shows the split did not
+happen. The server warns at load when groups list instances under
+another strategy.
+
+An annotator in no group is served nothing under this strategy, and gets
+a page saying so. Adding data or raising `num_annotators_per_item` will
+not give them work; only adding them to a group's `annotators` list will.
+
 For long batches, move the instance list into a separate data file. If the
 batch file is already a full Potato input data file, use `data_file`: Potato
 will load the items and use the same file to define the group order. This lets

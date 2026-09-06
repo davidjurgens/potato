@@ -1914,20 +1914,24 @@ def annotate():
             # line in the log. On a pilot that reads as a broken study; in the
             # field it pays people for a page they could not work on.
             #
-            # The phase is deliberately left at ANNOTATION: if more data
-            # arrives, or num_annotators_per_item is raised, a reload gives
-            # them work.
+            # The phase is deliberately left at ANNOTATION so a reload
+            # gives them work once whatever _diagnose_no_work names has
+            # been dealt with -- more data, a raised cap, a group they
+            # belong to, a quota above zero.
+            reason, headline, explanation, advice = _diagnose_no_work(
+                username, user_state)
             logger.warning(
-                f"No items could be assigned to {username}: every item already "
-                f"has its full complement of annotators "
-                f"(num_annotators_per_item={_configured_annotator_cap()}). "
-                f"Showing the no-work page rather than the completion page. "
-                f"Raise num_annotators_per_item or add data to give them work."
+                "No items could be assigned to %s (%s): %s. Showing the "
+                "no-work page rather than the completion page.",
+                username, reason, advice,
             )
             return render_template(
                 "no_work_available.html",
                 annotation_task_name=config.get(
                     "annotation_task_name", "Annotation Platform"),
+                no_work_reason=reason,
+                no_work_headline=headline,
+                no_work_explanation=explanation,
             )
 
     # IBWS: Check if round is complete and advance if needed
@@ -6425,6 +6429,113 @@ def poststudy():
     else:
         logger.debug("GET <-- POSTSTUDY")
         return get_current_page_html(config, username)
+
+def _diagnose_no_work(username, user_state):
+    """Why did assignment return nothing for this user?
+
+    Returns ``(reason, headline, explanation, admin_advice)`` -- the last
+    of which goes in the log, and the other three on the page.
+
+    The page used to state one cause unconditionally, and by the time
+    three unrelated causes had been driven to it (a used-up study, an
+    annotator outside every batch group, and a study where nobody is
+    qualified for any category) it named the first one every time. On
+    the latter two that is not merely unhelpful: the items are
+    unannotated and unsaturated, so "every item already has as many
+    annotators as it needs" is false, and the advice it gives -- add
+    data, raise the cap -- cannot help.
+
+    Checks run most-specific-first. Saturation is last because it is the
+    answer that is true when nothing more specific is.
+    """
+    from potato.item_state_management import get_item_state_manager
+    ism = get_item_state_manager()
+
+    total_items = 0
+    try:
+        total_items = len(ism.get_instance_ids())
+    except Exception:
+        logger.debug("no-work diagnosis: item count unavailable", exc_info=True)
+
+    if total_items == 0:
+        return (
+            "no_data",
+            "This study has no items yet",
+            "There is nothing to annotate because no data has been "
+            "loaded. This is not about your account.",
+            "the study has no data loaded — check data_files, or the "
+            "watched directory if this study ingests data live",
+        )
+
+    quota = getattr(user_state, "max_assignments", -1)
+    if quota == 0:
+        return (
+            "zero_quota",
+            "Your account is set to zero items",
+            "This study gives your account a quota of zero items, so "
+            "nothing was assigned to you. Nothing has been recorded "
+            "against your account.",
+            f"{username} resolves to a per-annotator quota of 0 — check "
+            "per_annotator_quota (by_user, by_user_role, default) and "
+            "max_annotations_per_user",
+        )
+
+    strategy = str(getattr(ism, "assignment_strategy", "") or "")
+    strategy = strategy.rsplit(".", 1)[-1].lower()
+
+    if "batch" in strategy:
+        try:
+            group = ism.get_group_name_for_user(username)
+        except Exception:
+            group = None
+            logger.debug("no-work diagnosis: group lookup failed",
+                         exc_info=True)
+        if not group:
+            return (
+                "no_batch_group",
+                "You are not in an annotator group for this study",
+                "This study hands each item to a named group of "
+                "annotators, and your account is not in any of them, so "
+                "nothing was assigned to you. Nothing has been recorded "
+                "against your account.",
+                f"{username} is in no batch_assignment group — add them to "
+                "a group's `annotators` list (adding data or raising "
+                "num_annotators_per_item will not help)",
+            )
+
+    if "category" in strategy and not getattr(
+            ism, "dynamic_expertise_enabled", False):
+        qualified = set()
+        try:
+            qualified = set(user_state.get_qualified_categories() or ())
+        except Exception:
+            logger.debug("no-work diagnosis: qualification lookup failed",
+                         exc_info=True)
+        if not qualified:
+            return (
+                "no_qualified_category",
+                "You are not qualified for any category yet",
+                "This study serves each annotator only the categories "
+                "they have qualified for, and you have not qualified for "
+                "any, so nothing was assigned to you. Nothing has been "
+                "recorded against your account.",
+                f"{username} has no qualified categories — static "
+                "category_based assignment grants these only by passing a "
+                "training phase on categorized questions. Add training, or "
+                "set category_assignment.dynamic.enabled: true",
+            )
+
+    return (
+        "saturated",
+        "There is no work left for you",
+        "Every item in this study already has as many annotators as it "
+        "needs, so nothing could be assigned to you. You have not "
+        "annotated anything, and nothing has been recorded against your "
+        "account.",
+        f"every item is at num_annotators_per_item="
+        f"{_configured_annotator_cap()} — raise it or add more data",
+    )
+
 
 def _configured_annotator_cap():
     """The per-item annotator cap this study is running with, for the log.

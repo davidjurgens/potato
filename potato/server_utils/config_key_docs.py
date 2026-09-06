@@ -425,7 +425,10 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="integer|object", default=3, category=ASSIGN,
     ),
     "min_annotators_per_instance": _D(
-        "Floor on annotators per item before it counts as done",
+        "NOT ENFORCED. Reads as a floor on annotators per item, but "
+        "nothing consults it when deciding what to assign or when an "
+        "item is done. Use num_annotators_per_item, which is the cap "
+        "that is enforced",
         type="integer", category=ASSIGN,
     ),
     "alert_time_each_instance": _D(

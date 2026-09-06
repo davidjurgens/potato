@@ -1249,6 +1249,31 @@ def load_training_data(config: dict) -> None:
     # either, and carry the key through to the Item below.
     training_text_key = config.get("item_properties", {}).get("text_key", "text")
 
+    # Which key on a training instance names its categories. Three spellings
+    # reach here from reasonable authors, and only the first used to work:
+    #
+    #   category    the historic singular, and the only one that worked
+    #   categories  the plural -- the same word the READER uses
+    #               (`get_training_instance_categories`), and it was worse
+    #               than ignored: `item_data = dict(instance)` copied the
+    #               author's value and the `update()` below then overwrote
+    #               it with the empty list normalized from the absent
+    #               singular
+    #   <category_key>  whatever `item_properties.category_key` is set to --
+    #               the one category spelling the author has already
+    #               committed to, because it is how the corpus is tagged
+    #
+    # Two of the three passed training and qualified the annotator for
+    # nothing, which lands them on the no-work page telling them to add
+    # categorized training questions -- which is what they did.
+    corpus_category_key = config.get(
+        "item_properties", {}).get("category_key")
+    training_category_keys = ["category", "categories"]
+    if corpus_category_key and corpus_category_key not in training_category_keys:
+        training_category_keys.append(corpus_category_key)
+
+    instances_with_categories = 0
+
     for instance in training_instances:
         # Validate required fields
         if 'id' not in instance or 'correct_answers' not in instance:
@@ -1264,18 +1289,27 @@ def load_training_data(config: dict) -> None:
             if scheme_name not in scheme_names:
                 logger.warning(f"Training instance {instance['id']} contains unknown scheme: {scheme_name}")
 
-        # Normalize category field (can be string or list)
-        category_value = instance.get('category')
-        if category_value is not None:
+        # Normalize the category field (string or list), from whichever of
+        # the accepted keys this author used.
+        categories = []
+        for category_key in training_category_keys:
+            category_value = instance.get(category_key)
+            if category_value is None:
+                continue
             if isinstance(category_value, str):
-                categories = [category_value]
+                categories = [category_value] if category_value.strip() else []
             elif isinstance(category_value, list):
-                categories = [c for c in category_value if isinstance(c, str) and c.strip()]
+                categories = [c for c in category_value
+                              if isinstance(c, str) and c.strip()]
             else:
-                logger.warning(f"Training instance {instance['id']} has invalid category type: {type(category_value)}")
+                logger.warning(
+                    f"Training instance {instance['id']} has invalid "
+                    f"'{category_key}' type: {type(category_value)}")
                 categories = []
-        else:
-            categories = []
+            if categories:
+                break
+        if categories:
+            instances_with_categories += 1
 
         # Create Item object for training instance.
         #
@@ -1297,6 +1331,28 @@ def load_training_data(config: dict) -> None:
 
         training_item = Item(instance['id'], item_data)
         training_items.append(training_item)
+
+    # Category-based assignment qualifies an annotator ONLY from their
+    # per-category training scores, so training questions that carry no
+    # category qualify nobody -- the annotator passes training and is then
+    # served nothing. Silent until now, and invisible from the config
+    # alone, because the training block exists and looks complete.
+    cat_config = config.get("category_assignment")
+    dynamic_config = (cat_config or {}).get("dynamic")
+    dynamic_on = (isinstance(dynamic_config, dict)
+                  and bool(dynamic_config.get("enabled")))
+    if (str(config.get("assignment_strategy") or "").lower()
+            in ("category_based", "category-based")
+            and not dynamic_on
+            and instances_with_categories == 0):
+        logger.warning(
+            "assignment_strategy is category_based, but none of the %d "
+            "training question(s) carries a category, so no annotator can "
+            "qualify for one and every one of them will be served nothing. "
+            "Tag each training question with %s.",
+            len(training_items),
+            " or ".join(repr(k) for k in training_category_keys),
+        )
 
     logger.info(f"Loaded {len(training_items)} training instances")
     logger.debug(f"Training instances: {[item.get_id() for item in training_items]}")

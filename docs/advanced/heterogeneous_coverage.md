@@ -74,6 +74,21 @@ When `register_annotator` records an annotation:
 
 The boost is one-shot per item.
 
+### `min_annotators_per_instance` is not enforced
+
+`min_annotators_per_instance`, and the structured spelling
+`num_annotators_per_item.min`, are read from the config and then never
+consulted. Nothing holds an item open until that many annotators have
+seen it. The name invites reading it as the floor to
+`num_annotators_per_item`'s ceiling, so a config setting both looks like
+it brackets coverage between two numbers; it does not, and the study can
+end with items at a single annotator. The server warns at load if you
+set either.
+
+Use `num_annotators_per_item` for the coverage you want. An item retires
+when it reaches that number, so the cap and the target are the same
+value.
+
 ## Per-annotator quota
 
 `per_annotator_quota` controls *how many items each annotator gets assigned*
@@ -99,6 +114,13 @@ user_roles:
 
 Resolution: `by_user[uid]` → `by_user_role[user_roles[uid]]` →
 `default` → legacy `max_annotations_per_user`.
+
+Read that order as a chain of first-match-wins, not a chain of ceilings.
+Setting `default` means `max_annotations_per_user` is never reached for
+any annotator: the two keys compose only when `default` is absent, and
+the server warns at load if you set both. A quota of `0` is legal and
+means that account is served nothing — the annotator gets a page saying
+so rather than the completion page.
 
 ## Adjudication auto-routing
 

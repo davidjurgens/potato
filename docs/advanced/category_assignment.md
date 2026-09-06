@@ -12,6 +12,19 @@ The category-based assignment system works as follows:
 4. **Qualification**: Users who meet the threshold accuracy for a category are "qualified"
 5. **Assignment**: During annotation, users only receive instances from their qualified categories
 
+**A training phase is required.** Step 3 is the only thing that grants a
+qualification, so a study configured for `category_based` with no
+`training` block never qualifies anyone: no categorized item is a
+candidate for any annotator, and only the fallback serves anything. The
+default fallback (`uncategorized`) hides this on a mixed corpus, because
+it hands out exactly the items with no category and so the feature looks
+alive. On a fully categorized corpus every annotator is served nothing.
+The server warns at load when this is the configuration you have.
+
+`category_assignment.dynamic.enabled` is the alternative: it infers
+expertise from annotation behaviour instead of training results and does
+not need a training phase.
+
 ## Configuration
 
 ### Basic Setup
@@ -83,6 +96,19 @@ Your data files should include the category field:
 Instances with `null` category or missing category field are considered "uncategorized" and will be assigned via fallback behavior.
 
 ### Training Data
+
+**Every training question needs a category.** Qualification is computed
+only from per-category training scores, so an uncategorized training set
+qualifies nobody: the annotator passes training and is then served
+nothing. The server warns at load if no training question carries one.
+
+Three keys are accepted, and they mean the same thing:
+
+| Key | Notes |
+|-----|-------|
+| `category` | String or list. Wins if more than one key is present |
+| `categories` | List or string |
+| whatever `item_properties.category_key` names | The same key your corpus is tagged with |
 
 Training instances should include categories to enable per-category assessment:
 

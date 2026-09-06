@@ -1044,8 +1044,13 @@ class ItemStateManager:
         category_assignment_config = config.get('category_assignment', {})
         self.category_fallback = category_assignment_config.get('fallback', 'uncategorized')
 
-        # Dynamic expertise mode - uses probabilistic routing based on annotator agreement
-        dynamic_config = category_assignment_config.get('dynamic', {})
+        # Dynamic expertise mode - uses probabilistic routing based on annotator agreement.
+        # `dynamic: true` is the natural shorthand and is refused at config
+        # validation; the isinstance guard is so a manager built directly
+        # (tests, tooling) gets a disabled flag rather than an AttributeError.
+        dynamic_config = category_assignment_config.get('dynamic')
+        if not isinstance(dynamic_config, dict):
+            dynamic_config = {}
         self.dynamic_expertise_enabled = dynamic_config.get('enabled', False)
 
         # Batch assignment restricts items to explicit annotator cohorts. Groups
@@ -1711,6 +1716,29 @@ class ItemStateManager:
         cap = self._get_annotator_cap_for_item(instance_id)
         return cap >= 0 and len(self.instance_annotators[instance_id]) >= cap
 
+    def count_over_collected_items(self) -> Dict[str, int]:
+        """Items carrying MORE annotations than their cap asks for.
+
+        Returns ``{instance_id: annotation_count}`` for every item over
+        its cap, empty when the study collected what it was configured
+        to. Items with an unlimited cap can never be over-collected and
+        are not counted.
+
+        This is possible without anything being broken: the assignment
+        relaxation hands out an item that is held but unanswered, so two
+        annotators can both be assigned an item neither has submitted
+        yet, and nothing re-checks the cap at submission. Before this it
+        left no trace -- no warning, no count -- and an agreement number
+        computed over an over-collected item is quietly not the design
+        that was configured.
+        """
+        over = {}
+        for instance_id, annotators in self.instance_annotators.items():
+            cap = self._get_annotator_cap_for_item(instance_id)
+            if cap >= 0 and len(annotators) > cap:
+                over[str(instance_id)] = len(annotators)
+        return over
+
     def _model_review_candidates(self, user_state: 'UserState') -> list:
         """
         Prelabelled items this user has not seen, least confident first.
@@ -1962,8 +1990,14 @@ class ItemStateManager:
         takes stale holds back -- is off by default.
 
         So the cap is enforced, and then relaxed if enforcing it would have sent
-        somebody away empty-handed. The second pass still respects annotations,
-        which are the count the study actually cares about.
+        somebody away empty-handed. The second pass still respects annotations
+        *at assignment time* -- it will not hand out an item that already has
+        its full complement of submitted annotations. That is not a guarantee
+        about the collected data: two annotators can both be assigned an item
+        neither has answered yet, and nothing re-checks the cap at submission,
+        so an over-subscribed pool can end with an item carrying more
+        annotations than num_annotators_per_item. `count_over_collected_items`
+        is what makes that visible afterwards.
         """
         assigned = self._assign_pass(user_state)
         if assigned:
@@ -1977,11 +2011,16 @@ class ItemStateManager:
         finally:
             self._holds_are_binding = True
         if assigned:
+            # The advice is only advice when it is not already taken: on a
+            # study running instance_reclaim this used to tell the operator
+            # to turn on the feature they were watching work.
+            hint = ("" if self.reclaim_enabled else
+                    " Enable instance_reclaim to hand those back "
+                    "automatically instead.")
             self.logger.info(
                 "Assigned %d item(s) to %s that another annotator holds but "
-                "has not submitted. Enable instance_reclaim to hand those back "
-                "automatically instead.",
-                assigned, getattr(user_state, 'user_id', None))
+                "has not submitted.%s",
+                assigned, getattr(user_state, 'user_id', None), hint)
         return assigned
 
     def _assign_pass(self, user_state: 'UserState') -> int:

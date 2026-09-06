@@ -72,7 +72,7 @@ if any of these are also configured:
 | Conflicting feature | Why |
 |---------------------|-----|
 | `assignment_strategy`: random / diversity_clustering / max_diversity / active_learning / llm_confidence / least_annotated / category_based | Self-selection breaks sampling/ordering |
-| `max_annotations_per_item` / `num_annotators_per_item` / `min_annotators_per_instance` > 1 | IAA overlap can't be guaranteed |
+| `max_annotations_per_item` / `num_annotators_per_item` > 1 | IAA overlap can't be guaranteed |
 | `attention_checks.enabled` / `gold_standards.enabled` | QC items could be located/avoided |
 | `icl_labeling.enabled` | Blind LLM-verification tasks must not be findable |
 | `adjudication.enabled` | The adjudication queue is curated |

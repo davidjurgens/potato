@@ -1858,6 +1858,12 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
     # Warn about phases named in the order that no block defines
     validate_phase_order(config_data)
 
+    # Warn about quota / batch-group keys that will never be read
+    warn_unreachable_quota_keys(config_data)
+    warn_batch_groups_need_the_batch_strategy(config_data)
+    warn_category_assignment_cannot_qualify(config_data)
+    warn_unenforced_coverage_floor(config_data)
+
     # Validate quality control configuration if present
     validate_quality_control_config(config_data)
 
@@ -3979,6 +3985,194 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
             )
 
 
+def warn_unreachable_quota_keys(config_data: Dict[str, Any]) -> None:
+    """Warn when a quota key in the config will never be read.
+
+    `_resolve_user_quota` tries `per_annotator_quota.by_user`, then
+    `by_user_role`, then `default`, and only falls through to
+    `max_annotations_per_user` if none of those answered. Setting
+    `default` therefore makes the global unreachable for every
+    annotator, and an author who sets both reasonably reads the global
+    as a ceiling the quota refines. It is not: it is dead config, and
+    nothing in the collected data shows which number was in force.
+
+    The two keys DO compose when `default` is absent, so this warns on
+    `default` specifically rather than on the block.
+    """
+    quota = config_data.get("per_annotator_quota")
+    if not isinstance(quota, dict):
+        return
+
+    if (quota.get("default") is not None
+            and config_data.get("max_annotations_per_user") is not None):
+        logger.warning(
+            "max_annotations_per_user (%s) will never be read: "
+            "per_annotator_quota.default (%s) answers first for every "
+            "annotator, and the global is only a fallback for when no "
+            "quota rule matches. Remove per_annotator_quota.default to "
+            "make the global the study-wide ceiling, or remove "
+            "max_annotations_per_user to stop it looking like one.",
+            config_data["max_annotations_per_user"], quota["default"],
+        )
+
+    # A role declared in user_roles that no by_user_role entry names.
+    # Falling through to the default is the right behaviour and a
+    # perfectly good config, so this warns only on a NEAR miss --
+    # `by_user_role: {exprt: 7}` against `user_roles: {alice: expert}`,
+    # where every expert silently gets the default. Warning on every
+    # unnamed role would refuse correct configs under `--strict`, which
+    # treats warnings as errors.
+    by_role = quota.get("by_user_role")
+    roles = config_data.get("user_roles")
+    if isinstance(by_role, dict) and by_role and isinstance(roles, dict):
+        import difflib
+
+        declared = {str(r) for r in roles.values()}
+        for role in sorted(declared - set(by_role)):
+            near = difflib.get_close_matches(role, list(by_role), n=1,
+                                             cutoff=0.8)
+            if near:
+                logger.warning(
+                    "user_roles declares the role %r, but "
+                    "per_annotator_quota.by_user_role names %r instead. "
+                    "Nothing matches, so every annotator with role %r "
+                    "falls through to the default quota. If those are "
+                    "meant to be the same role, one of them is "
+                    "misspelled.",
+                    role, near[0], role,
+                )
+
+
+def warn_unenforced_coverage_floor(config_data: Dict[str, Any]) -> None:
+    """Warn that the coverage floor is not enforced.
+
+    `min_annotators_per_instance` and the structured
+    `num_annotators_per_item.min` both set
+    `ItemStateManager.min_annotations_per_item`, which is assigned in
+    three places and read in none. No assignment or retirement decision
+    consults it.
+
+    The name is the problem: it reads as the floor to
+    `num_annotators_per_item`'s ceiling, so an author setting both
+    believes they have bracketed coverage at "between 3 and 5". They get
+    the ceiling. Nothing in the collected data shows the floor was not
+    applied -- the study simply ends with some items at one annotator.
+    """
+    nap = config_data.get("num_annotators_per_item")
+    key = None
+    if isinstance(nap, dict) and nap.get("min") is not None:
+        key = "num_annotators_per_item.min"
+    elif config_data.get("min_annotators_per_instance") is not None:
+        key = "min_annotators_per_instance"
+    if key is None:
+        return
+
+    logger.warning(
+        "%s is not enforced. Potato reads it, stores it, and never "
+        "consults it when deciding what to assign or when an item is "
+        "finished, so it does not hold items open until that many "
+        "annotators have seen them. num_annotators_per_item is the cap "
+        "that IS enforced; set it to the coverage you need and let items "
+        "retire when they reach it.",
+        key,
+    )
+
+
+def warn_category_assignment_cannot_qualify(config_data: Dict[str, Any]) -> None:
+    """Warn when `category_based` assignment has no way to qualify anyone.
+
+    The static path serves an annotator only the categories they are
+    qualified for, and the one thing that grants a qualification is
+    passing a **training phase** whose questions carry categories
+    (`calculate_and_set_qualifications`, called from the training
+    handler). With no training block, `qualified_categories` stays empty
+    for every annotator forever, so a categorized item is never a
+    candidate for anybody and only the fallback serves anything.
+
+    The default fallback is what hides it: `uncategorized` hands out
+    exactly the items with no category, so on a mixed corpus the feature
+    looks alive and on a fully categorized one every annotator is served
+    nothing. `category_assignment.dynamic.enabled` takes a different
+    path and is unaffected.
+    """
+    strategy = str(config_data.get("assignment_strategy") or "").lower()
+    if strategy not in ("category_based", "category-based"):
+        return
+
+    cat = config_data.get("category_assignment")
+    cat = cat if isinstance(cat, dict) else {}
+    dynamic = cat.get("dynamic")
+    if isinstance(dynamic, dict) and dynamic.get("enabled"):
+        return
+
+    if isinstance(config_data.get("training"), dict):
+        return
+
+    fallback = cat.get("fallback", "uncategorized")
+    consequence = {
+        "uncategorized": "only items with no category will ever be served",
+        "random": "every annotator is served items from every category, "
+                  "which is what the strategy exists to avoid",
+        "none": "no annotator will be served anything at all",
+    }.get(str(fallback), "only the %r fallback will serve anything" % fallback)
+
+    logger.warning(
+        "assignment_strategy is category_based but this study has no "
+        "training phase and category_assignment.dynamic.enabled is not "
+        "set. Qualifications are granted only by passing training on "
+        "categorized questions, so no annotator will ever qualify for a "
+        "category and %s (fallback: %r). Add a `training` block whose "
+        "questions carry categories, or set "
+        "category_assignment.dynamic.enabled: true.",
+        consequence, fallback,
+    )
+
+
+def warn_batch_groups_need_the_batch_strategy(config_data: Dict[str, Any]) -> None:
+    """Warn when `batch_assignment.groups` carry item lists that nothing
+    will read.
+
+    The groups are loaded whatever the strategy, and their `schemes`
+    binding is honoured whatever the strategy -- but the item lists are
+    only consulted by `_assign_batch`, which runs under
+    `assignment_strategy: batch`. The default is `fixed_order`, so a
+    config that omits the strategy gets cohorts visibly answering
+    different questions (which reads as proof the config took effect)
+    while every annotator is served every item. Nothing in the collected
+    data shows the split did not happen.
+
+    A group that only binds schemes and lists no items is a legitimate
+    config under any strategy, and does not warn.
+    """
+    batch = config_data.get("batch_assignment")
+    if not isinstance(batch, dict):
+        return
+    groups = batch.get("groups")
+    if not isinstance(groups, list):
+        return
+
+    strategy = str(config_data.get("assignment_strategy") or "").lower()
+    if strategy == "batch":
+        return
+
+    with_items = [g.get("name", i) for i, g in enumerate(groups)
+                  if isinstance(g, dict) and g.get("instances")]
+    if not with_items:
+        return
+
+    logger.warning(
+        "batch_assignment group(s) %s list instances, but "
+        "assignment_strategy is %s. Group item lists are only read under "
+        "`assignment_strategy: batch`, so every annotator will be served "
+        "every item -- any `schemes` binding on the groups still applies, "
+        "which is why the config looks like it took effect. Add "
+        "`assignment_strategy: batch` to honour the item lists.",
+        ", ".join(repr(n) for n in with_items),
+        repr(config_data.get("assignment_strategy")) if strategy
+        else "unset (defaults to fixed_order)",
+    )
+
+
 def validate_phase_order(config_data: Dict[str, Any]) -> None:
     """Warn about names in `phases.order` that no phase defines.
 
@@ -5381,6 +5575,16 @@ def validate_category_assignment_config(config_data: Dict[str, Any]) -> None:
     if 'category_key' in cat_config:
         if not isinstance(cat_config['category_key'], str) or not cat_config['category_key'].strip():
             raise ConfigValidationError("category_assignment.category_key must be a non-empty string")
+
+    # Validate dynamic expertise block. Every reader does
+    # `dynamic.get('enabled')`, so the natural shorthand
+    # `dynamic: true` used to reach them and raise AttributeError while
+    # building the item state manager -- a crash at boot, from a config
+    # that validated.
+    if 'dynamic' in cat_config and not isinstance(cat_config['dynamic'], dict):
+        raise ConfigValidationError(
+            "category_assignment.dynamic must be a dictionary. To turn "
+            "dynamic expertise on, write `dynamic: {enabled: true}`.")
 
     # Validate qualification settings
     if 'qualification' in cat_config:

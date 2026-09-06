@@ -280,7 +280,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `max_annotations_per_item` |  | integer | `-1` | Cap on how many annotators may label one item. -1 means unlimited |  |
 | `max_annotations_per_user` |  | integer | `-1` | Cap on how many dataset items one annotator may receive. Left unset, the cap is the number of items loaded, so every annotator is offered the whole corpus; -1 is explicit unlimited, which is what a dynamic data source needs for items added after boot to be assignable. Injected attention checks and gold items do not count against it |  |
 | `max_session_seconds` |  | integer |  | Hard limit on one annotation session |  |
-| `min_annotators_per_instance` |  | integer |  | Floor on annotators per item before it counts as done |  |
+| `min_annotators_per_instance` |  | integer |  | NOT ENFORCED. Reads as a floor on annotators per item, but nothing consults it when deciding what to assign or when an item is done. Use num_annotators_per_item, which is the cap that is enforced |  |
 | `num_annotators_per_item` |  | integer or object | `3` | Target annotators per item. Either a plain count or a mapping carrying `default` plus overlap-sampling and adaptive-boost rules |  |
 | `per_annotator_quota` |  | object |  | Per-annotator workload caps: `default`, plus `by_user` and `by_user_role` overrides. Any other sub-key is rejected at load rather than ignored |  |
 | `random_seed` |  | integer |  | Seed for assignment shuffling, so an ordering can be reproduced |  |

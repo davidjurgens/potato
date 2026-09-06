@@ -211,8 +211,24 @@ class AdminDashboard:
             minutes = (total_working_time % 3600) // 60
             formatted_time = f"{hours}h {minutes}m"
 
+            # Items carrying more annotations than the cap asked for. The
+            # assignment relaxation can hand out an item that is held but
+            # unanswered, so two annotators can both be assigned an item
+            # neither has submitted; nothing re-checks the cap at
+            # submission. Left uncounted, an agreement number computed
+            # over those items is quietly not the design configured.
+            try:
+                over_collected = (
+                    get_item_state_manager().count_over_collected_items())
+            except Exception:
+                self.logger.debug("over-collection count unavailable",
+                                  exc_info=True)
+                over_collected = {}
+
             return {
                 "overview": {
+                    "over_collected_items": len(over_collected),
+                    "over_collected_item_ids": sorted(over_collected)[:20],
                     "total_users": len(users),
                     "active_users": active_users,
                     "completed_users": completed_users,
