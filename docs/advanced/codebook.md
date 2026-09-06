@@ -49,6 +49,13 @@ by name and pre-authorized by invite token, which makes them
 collaborators rather than anonymous workers on a HIT, and an open
 codebook is a legitimate design for expert coding.
 
+`login.type: url_direct` with no provider named is **not** locked — a
+public self-registration study is a legitimate design. It does warn,
+because anyone who has the link can self-register and so anyone who has
+the link can rename and delete codes. Set `codebook_mode: fixed` if that
+is not what you want, or name the platform with `crowdsourcing.provider`
+and the force-lock applies.
+
 ### Seeding colors and definitions from the config
 
 The seed takes more than the name. A label written in the object form

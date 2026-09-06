@@ -96,3 +96,70 @@ def test_annotator_claim_is_allowed_without_a_crowd_backend():
     config_module.validate_search_assignment_compat({
         "search": {"enabled": True, "annotator_claim": True},
         "assignment_strategy": "fixed_order"})
+
+
+class TestUrlDirectExposure:
+    """`login.type: url_direct` with no provider is deliberately NOT
+    force-locked: a public self-registration study is a legitimate design
+    and locking it would change behaviour for someone paying nobody.
+
+    But the crowd registry hands that config a LegacyUrlDirectProvider --
+    Potato's own answer to "is this a crowd deployment" is yes -- and
+    url_direct means anyone with the link self-registers. An open
+    codebook there is reachable by a passer-by, which is a bigger opening
+    than the Prolific case it sits next to. So it warns.
+    """
+
+    def _warnings(self, caplog):
+        return [r.message for r in caplog.records
+                if r.levelname == "WARNING"]
+
+    def test_url_direct_with_an_open_codebook_warns(self, caplog):
+        with caplog.at_level("WARNING"):
+            config_module.validate_codebook_config({
+                "codebook_mode": "open", "login": {"type": "url_direct"}})
+        assert any("self-register" in m for m in self._warnings(caplog)), \
+            self._warnings(caplog)
+
+    def test_it_is_not_force_locked(self):
+        """The warning must not have quietly become a lock -- that is the
+        behaviour change this deliberately does not make."""
+        assert config_module.get_codebook_mode({
+            "codebook_mode": "open",
+            "login": {"type": "url_direct"}}) == "open"
+
+    def test_a_named_platform_gets_the_force_lock_message_instead(
+            self, caplog):
+        """One warning, not two: naming the provider force-locks, and the
+        self-registration advice would then be telling the author to do
+        what the server already did."""
+        with caplog.at_level("WARNING"):
+            config_module.validate_codebook_config({
+                "codebook_mode": "open",
+                "login": {"type": "url_direct"},
+                "crowdsourcing": {"provider": "prolific"}})
+        messages = self._warnings(caplog)
+        assert any("force-locking" in m for m in messages), messages
+        assert not any("self-register" in m for m in messages), messages
+
+    def test_an_expert_invite_study_is_silent(self, caplog):
+        """Experts reach a url_direct study through pre-authorized invite
+        tokens, so 'anyone with the link' is not true of them."""
+        with caplog.at_level("WARNING"):
+            config_module.validate_codebook_config({
+                "codebook_mode": "open",
+                "login": {"type": "url_direct"},
+                "crowdsourcing": {"provider": "expert"}})
+        assert self._warnings(caplog) == []
+
+    def test_a_fixed_codebook_is_silent(self, caplog):
+        with caplog.at_level("WARNING"):
+            config_module.validate_codebook_config({
+                "codebook_mode": "fixed", "login": {"type": "url_direct"}})
+        assert self._warnings(caplog) == []
+
+    def test_a_standard_login_is_silent(self, caplog):
+        with caplog.at_level("WARNING"):
+            config_module.validate_codebook_config({
+                "codebook_mode": "open", "login": {"type": "standard"}})
+        assert self._warnings(caplog) == []

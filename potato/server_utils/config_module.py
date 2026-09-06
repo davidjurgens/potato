@@ -2135,8 +2135,9 @@ def get_codebook_mode(config_data: Dict[str, Any]) -> str:
 
 
 def validate_codebook_config(config_data: Dict[str, Any]) -> None:
-    """Reject an invalid ``codebook_mode`` value, and warn when a crowd
-    backend overrides a requested non-fixed mode."""
+    """Reject an invalid ``codebook_mode`` value, warn when a crowd
+    backend overrides a requested non-fixed mode, and warn when an open
+    codebook sits behind url_direct self-registration."""
     raw = config_data.get("codebook_mode")
     if raw is None:
         raw = (config_data.get("codebook") or {}).get("mode")
@@ -2152,8 +2153,27 @@ def validate_codebook_config(config_data: Dict[str, Any]) -> None:
     if mode != "fixed" and _crowd_backend(config_data):
         logging.warning(
             "codebook_mode=%s requested with a crowdsourcing backend; "
-            "force-locking to 'fixed' (paid annotators must not reshape "
-            "the shared codebook).", mode)
+            "force-locking to 'fixed' (recruited annotators must not "
+            "reshape the shared codebook).", mode)
+        return
+
+    # `login.type: url_direct` with no `crowdsourcing.provider` is NOT
+    # force-locked -- a public self-registration study is a legitimate
+    # design and locking it would change behaviour for people paying
+    # nobody. But the registry hands this config a
+    # LegacyUrlDirectProvider, i.e. Potato's own answer to "is this a
+    # crowd deployment" is yes, and url_direct means any visitor with the
+    # link self-registers. So an open codebook here is reachable by a
+    # passer-by, which is worth one line in the log rather than silence.
+    login_type = (config_data.get("login") or {}).get("type")
+    has_provider = bool((config_data.get("crowdsourcing") or {}).get("provider"))
+    if mode != "fixed" and login_type == "url_direct" and not has_provider:
+        logging.warning(
+            "codebook_mode=%s with login.type: url_direct. Anyone who has "
+            "the link can self-register, so anyone who has the link can "
+            "add, rename and delete codes in the shared codebook. Set "
+            "codebook_mode: fixed, or name the platform with "
+            "crowdsourcing.provider so the force-lock applies.", mode)
 
 
 def _reject_duplicate_scheme_names(schemes: Any, path: str) -> None:
