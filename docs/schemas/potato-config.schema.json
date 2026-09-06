@@ -3361,7 +3361,7 @@
       "type": "string"
     },
     "codebook_mode": {
-      "description": "Top-level shorthand for codebook.mode, and the value that wins when both are set. Unset it resolves to open under qda_mode/solo_mode and fixed otherwise; a crowdsourcing backend force-locks fixed",
+      "description": "Top-level shorthand for codebook.mode, and the value that wins when both are set. Unset it resolves to open under qda_mode/solo_mode and fixed otherwise; a crowdsourcing backend force-locks fixed, whichever way the platform is named, with crowdsourcing.provider: expert the one exception (hired by name rather than recruited)",
       "examples": [
         "open"
       ],

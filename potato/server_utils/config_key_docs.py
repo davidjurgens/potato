@@ -1320,7 +1320,9 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "codebook_mode": _D(
         "Top-level shorthand for codebook.mode, and the value that wins when "
         "both are set. Unset it resolves to open under qda_mode/solo_mode and "
-        "fixed otherwise; a crowdsourcing backend force-locks fixed",
+        "fixed otherwise; a crowdsourcing backend force-locks fixed, whichever "
+        "way the platform is named, with crowdsourcing.provider: expert the "
+        "one exception (hired by name rather than recruited)",
         type="string", category=QDA, example="open",
         see_also=("codebook.mode", "crowdsourcing"),
     ),

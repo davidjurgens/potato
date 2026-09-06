@@ -2051,12 +2051,12 @@ def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
         conflicts.append("adjudication.enabled (the adjudication queue "
                          "is curated)")
 
-    login_type = (config_data.get("login") or {}).get("type")
-    crowd = (
-        "mturk" in config_data or "prolific" in config_data
-        or login_type in ("mturk", "prolific")
-    )
-    if crowd:
+    # Shared with the codebook force-lock rather than reimplemented. This
+    # was a second inline copy of the legacy-only test, so a study naming
+    # its platform the documented way (`crowdsourcing.provider`) was
+    # allowed a configuration the refusal exists to prevent -- the same
+    # miss, one function away.
+    if _crowd_backend(config_data):
         conflicts.append("crowdsourcing backend (HIT = the assigned "
                          "unit; self-selection breaks payment/coverage)")
 
@@ -2075,12 +2075,37 @@ def validate_search_assignment_compat(config_data: Dict[str, Any]) -> None:
 _CODEBOOK_MODES = ("fixed", "extensible", "open")
 
 
+#: Crowd providers whose annotators are hired by name and pre-authorized
+#: individually, where an open codebook is a legitimate design -- a hired
+#: expert coder doing QDA is a collaborator, not an anonymous worker on a
+#: HIT. Every other provider force-locks, INCLUDING a name this version
+#: does not recognize: a security control that a typo can switch off is
+#: not a control, and a provider added later should arrive locked and be
+#: trusted deliberately rather than by omission.
+_TRUSTED_CROWD_PROVIDERS = frozenset({"expert"})
+
+
 def _crowd_backend(config_data: Dict[str, Any]) -> bool:
+    """Is this a deployment whose annotators are recruited, rather than
+    people the researcher knows?
+
+    Reads `crowdsourcing.provider` as well as the legacy spellings. It
+    used to read only the legacy ones, so the documented way to name a
+    crowd platform -- the key the codebook_mode registry entry itself
+    points at -- did not engage the force-lock. Two configs naming the
+    same platform, one legacy and one current, gave paid annotators
+    opposite protection, and the protected one was the legacy spelling.
+    """
     login_type = (config_data.get("login") or {}).get("type")
-    return (
-        "mturk" in config_data or "prolific" in config_data
-        or login_type in ("mturk", "prolific")
-    )
+    if "mturk" in config_data or "prolific" in config_data:
+        return True
+    if login_type in ("mturk", "prolific"):
+        return True
+
+    provider = (config_data.get("crowdsourcing") or {}).get("provider")
+    if provider:
+        return str(provider).strip().lower() not in _TRUSTED_CROWD_PROVIDERS
+    return False
 
 
 def get_codebook_mode(config_data: Dict[str, Any]) -> str:

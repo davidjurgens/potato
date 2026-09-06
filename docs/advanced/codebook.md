@@ -38,7 +38,16 @@ annotation_schemes:
 | `annotation_schemes[].codebook` | `false` | Opt this scheme into codebook-sourced labels. |
 
 A **crowdsourcing backend force-locks `fixed`** regardless of the
-requested mode — paid annotators must not reshape the shared codebook.
+requested mode — recruited annotators must not reshape the shared
+codebook. It applies however the platform is named: a top-level
+`prolific:`/`mturk:` block, `login.type`, or `crowdsourcing.provider`.
+A provider name Potato does not recognize locks too, so a typo cannot
+switch the control off.
+
+`crowdsourcing.provider: expert` is the one exception. Experts are hired
+by name and pre-authorized by invite token, which makes them
+collaborators rather than anonymous workers on a HIT, and an open
+codebook is a legitimate design for expert coding.
 
 ### Seeding colors and definitions from the config
 
