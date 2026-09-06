@@ -107,6 +107,21 @@ An unpriced model does not block a capped run either. The cap is a dollar
 ceiling with no dollar figure to compare against, so Potato logs a warning
 saying so and lets the run proceed.
 
+What `ai_budget.cap_usd` does and does not bind:
+
+| Model | Cap |
+|---|---|
+| priced above the cap | refuses before the first call |
+| priced below the cap | runs |
+| a local endpoint (vLLM, Ollama, …) | runs; priced at zero, not unpriced |
+| absent from the price table | runs, with a warning; the cap does not bind |
+
+The last row is the one to know about, because the models most likely to be
+missing are the newest ones — which is what a study starting today reaches
+for — and the provider meter is running either way. Add the model to
+`PRICE_TABLE` in `potato/ai/cost.py`, or check the log for
+`has no price on record`.
+
 ### Self-hosted models
 
 vLLM, Ollama and the local vision models report `cost_usd: 0` and
