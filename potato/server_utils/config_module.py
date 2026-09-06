@@ -361,7 +361,7 @@ KNOWN_CONFIG_KEYS = {
     # re-calibration prompt that fires when the latest window falls below the
     # project baseline. See potato/server_utils/iaa/drift.py.
     # Cost estimate + spend cap for AI actions. See potato/ai/cost.py.
-    "ai_budget": {"cap_usd"},
+    "ai_budget": {"cap_usd", "prices"},
     "calibration": {"enabled", "windows", "window_by", "drop_threshold"},
     "judge_alignment": {"enabled", "ai_support", "schemas", "few_shot", "inline"},
     # Boundary Lab: counterfactual boundary probing (decision boundaries,
@@ -1159,6 +1159,67 @@ def resolve_num_annotators_per_item(config_data: Dict[str, Any]) -> int:
     return -1
 
 
+def validate_ai_budget_prices(config_data: Dict[str, Any]) -> None:
+    """Refuse a malformed `ai_budget.prices` rather than pricing against it.
+
+    Raised, not warned. Every other shape check in this module can afford to
+    warn because the wrong value produces a visible wrong result. This one
+    does not: a price is read by the spend cap and by nothing else, so a
+    transposed pair or a bare number becomes a cap that refuses affordable
+    runs or permits expensive ones, and the config that caused it looks fine.
+    """
+    budget = config_data.get("ai_budget")
+    if not isinstance(budget, dict) or "prices" not in budget:
+        return
+
+    prices = budget["prices"]
+    if not isinstance(prices, dict):
+        raise ConfigValidationError(
+            "ai_budget.prices must be a mapping of model name to "
+            "[input, output] USD per million tokens, got "
+            f"{type(prices).__name__}: {prices!r}"
+        )
+
+    for model, pair in prices.items():
+        where = f"ai_budget.prices[{model!r}]"
+        if not isinstance(model, str) or not model.strip():
+            raise ConfigValidationError(
+                f"{where}: model names must be non-empty strings.")
+        if isinstance(pair, (str, bytes)) or not isinstance(pair, (list, tuple)):
+            raise ConfigValidationError(
+                f"{where} must be a two-item [input, output] list of USD per "
+                f"million tokens, got {type(pair).__name__}: {pair!r}"
+            )
+        if len(pair) != 2:
+            raise ConfigValidationError(
+                f"{where} must have exactly two entries "
+                f"[input, output], got {len(pair)}: {pair!r}"
+            )
+        for value, role in zip(pair, ("input", "output")):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ConfigValidationError(
+                    f"{where}: the {role} price must be a number, got "
+                    f"{type(value).__name__}: {value!r}"
+                )
+            if value < 0:
+                raise ConfigValidationError(
+                    f"{where}: the {role} price must not be negative, got "
+                    f"{value!r}. Use an ai_support endpoint_type Potato knows "
+                    "is local if the run is free."
+                )
+        if pair[1] < pair[0]:
+            # True of every published rate from all three vendors that
+            # PRICE_TABLE covers. Warned rather than raised: it is evidence of
+            # a swap, not proof of one, and refusing a real price nobody can
+            # override is worse than saying so.
+            logger.warning(
+                "%s has output (%s) cheaper than input (%s). Every published "
+                "rate Potato ships is the other way round, so check the pair "
+                "is not reversed -- the cap is the only thing that reads it.",
+                where, pair[1], pair[0],
+            )
+
+
 def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
     """
     Validate types for commonly misconfigured optional fields.
@@ -1203,6 +1264,8 @@ def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
     # Validate per_annotator_quota structured dict
     if 'per_annotator_quota' in config_data:
         validate_per_annotator_quota(config_data['per_annotator_quota'])
+
+    validate_ai_budget_prices(config_data)
 
     # Emit a deprecation warning if max_annotations_per_item is set alongside
     # num_annotators_per_item; reject silent inconsistencies (both set to

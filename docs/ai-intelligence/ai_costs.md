@@ -118,17 +118,18 @@ What `ai_budget.cap_usd` does and does not bind:
 
 The last row is the one to know about, because the models most likely to be
 missing are the newest ones — which is what a study starting today reaches
-for — and the provider meter is running either way. Add the model to
-`PRICE_TABLE` in `potato/ai/cost.py`, or check the log for
-`has no price on record`.
+for — and the provider meter is running either way. Set `ai_budget.prices`
+for the model, or add it to `PRICE_TABLE` in `potato/ai/cost.py`. The log
+says `has no price on record` either way.
 
 ### Prices matched from a model's family
 
 Prices are matched on the longest table row contained in the model name, so
-a model with no row of its own inherits its family's. `gpt-4.1-nano` is
-priced from `gpt-4.1`; `claude-opus-5` from `claude-opus`. Those runs are
-not unpriced — they carry a confident number that belongs to a different
-model, and the cap is checked against it.
+a model with no row of its own inherits its family's. A future
+`claude-opus-4-9` would be priced from `claude-opus-4` at $15/$75, the
+retired generation's rate, while its real siblings `claude-opus-4-5` through
+`4-8` cost $5/$25. Those runs are not unpriced — they carry a confident
+number that belongs to a different model, and the cap is checked against it.
 
 The error runs both ways. An unlisted new generation is usually priced from
 an older, cheaper row, so a cap lets spend through. An unlisted cheap
@@ -138,6 +139,10 @@ affordable.
 A capped run whose price came from the family rather than the model logs
 `matched to the nearest family in PRICE_TABLE`. A dated snapshot of a listed
 model — `gpt-4o-2024-08-06` — is the same model and stays quiet.
+`gpt-4o-2024-05-13` is listed separately because it costs twice what the
+`gpt-4o` alias costs.
+
+Set `ai_budget.prices` to give a model its own price without editing Potato.
 
 ### Self-hosted models
 
@@ -148,9 +153,36 @@ The token count is still reported, since it predicts how long the run takes.
 
 ### The price table goes stale
 
-Every estimate carries `as_of`. A stale price still gives you the order of
-magnitude; presented as a quote it would not. The table lives in
-`potato/ai/cost.py`.
+Every estimate carries `as_of`, and the table was last checked on 2026-09-05
+against the three vendors' own pricing pages. A stale price still gives you
+the order of magnitude; presented as a quote it would not.
+
+That refresh is the argument for checking it yourself. Three Anthropic rows
+carried a retired generation's prices: `claude-opus` said $15/$75 when Opus
+4.5 and later cost $5/$25, so every current Opus was priced at three times
+its rate, in the direction that makes a cap refuse work you could afford.
+Rows are now per generation rather than per family, because a family does not
+have one price.
+
+New models arrive faster than Potato releases do. Rather than wait for one,
+set `ai_budget.prices` with the number from the vendor's page:
+
+```yaml
+ai_budget:
+  cap_usd: 25.0
+  prices:
+    # USD per million tokens, [input, output]
+    some-vendor-model-v9: [3.00, 24.00]
+```
+
+Keys are matched by the same longest-substring rule as the built-in table,
+so a family name or a single dated snapshot both work, and an override wins
+over the built-in row. A malformed entry is refused at load rather than
+warned about: the cap is the only thing that reads these numbers, so a
+transposed pair produces a cap that quietly refuses affordable runs from a
+config that looks fine.
+
+The table lives in `potato/ai/cost.py`.
 
 ---
 
@@ -182,6 +214,7 @@ wrong.
 | Key | Type | Default | What it does |
 |---|---|---|---|
 | `ai_budget.cap_usd` | number | none | Dollar ceiling. A run projected to cross it is refused before it starts |
+| `ai_budget.prices` | object | none | Per-model `[input, output]` USD per million tokens, merged over the built-in table |
 
 ---
 

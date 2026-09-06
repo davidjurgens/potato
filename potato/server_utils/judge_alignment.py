@@ -376,6 +376,9 @@ def estimate_batch_cost(cfg: Dict[str, Any], texts: List[str],
         prompt_overhead_chars=600,
         max_output_tokens=int(ai_config.get("max_tokens", 100)),
         calls_per_item=calls_per_item,
+        # A model newer than this release has no row, so without this the cap
+        # would not bind at all for the studies most likely to be expensive.
+        price_overrides=(cfg.get("ai_budget") or {}).get("prices"),
     )
 
 

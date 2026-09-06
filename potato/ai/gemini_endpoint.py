@@ -7,7 +7,10 @@ Integration with Google's Gemini API for LLM inference.
 from google import genai
 from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError
 
-DEFAULT_MODEL = "gemini-2.0-flash-exp"
+# Was gemini-2.0-flash-exp: an experimental preview, and unpriced, so a
+# study that never set a model ran uncapped. See the note in
+# anthropic_endpoint.
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 class GeminiEndpoint(BaseAIEndpoint):

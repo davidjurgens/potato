@@ -211,6 +211,10 @@
             25.0
           ],
           "type": "number"
+        },
+        "prices": {
+          "description": "Per-model prices, USD per million tokens, as {model_substring: [input, output]}. Merged over the built-in table and matched by the same longest-substring rule, so a family name or one dated snapshot both work. A table shipped in a release is stale the moment a vendor ships a model, and an unpriced model means cap_usd does not bind; this prices one without waiting for a release",
+          "type": "object"
         }
       },
       "type": "object"

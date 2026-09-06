@@ -46,23 +46,101 @@ from typing import Any, Dict, List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
-#: When the prices below were last checked. Reported with every estimate so a
-#: stale table is visible rather than silently trusted.
-PRICES_AS_OF = "2026-08"
+#: When the prices below were last checked, against the three vendors' own
+#: pricing pages. Reported with every estimate so a stale table is visible
+#: rather than silently trusted.
+PRICES_AS_OF = "2026-09-05"
 
-#: USD per 1,000,000 tokens, (input, output), keyed by a model-name prefix.
-#: Longest prefix wins, so "gpt-4o-mini" is not priced as "gpt-4o".
+#: USD per 1,000,000 tokens, (input, output), keyed by a model-name substring.
+#: Longest match wins, so "gpt-4o-mini" is not priced as "gpt-4o".
+#:
+#: These are BASE published rates. Batch (-50%), prompt caching, US-only
+#: inference (x1.1) and long-context tiers all move the real number and none of
+#: them is modeled here, so an estimate is a floor on a capped run rather than
+#: an invoice.
+#:
+#: Rows are per GENERATION, not per family, because a family does not have one
+#: price: Opus 4 and 4.1 are $15/$75 while Opus 4.5 and later are $5/$25, and
+#: Sonnet 4.x is $3/$15 while Sonnet 5 is $2/$10. The single "claude-opus" row
+#: that used to stand here carried the retired generation's number and so
+#: over-priced every current Opus threefold -- an error in the direction that
+#: makes a cap refuse runs the researcher could afford.
+#:
+#: Adding a model: put the price in from the vendor's page, never from memory
+#: or from the family it resembles. `price_matched_exactly` exists because a
+#: guessed price is read by a spend cap, not by a person, and gpt-4.1-nano at
+#: its parent's rate is a twentyfold error nobody sees.
 PRICE_TABLE: Dict[str, tuple] = {
+    # --- OpenAI ---------------------------------------------------------
+    "gpt-3.5-turbo": (0.50, 1.50),
+    "gpt-3.5-turbo-1106": (1.00, 2.00),
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-4o": (2.50, 10.00),
-    "gpt-4.1-mini": (0.40, 1.60),
+    # A dated snapshot at a DIFFERENT price from the alias it snapshots.
+    # Without this row it matches "gpt-4o", and `price_matched_exactly`
+    # calls a dated suffix an exact match, so it would be priced at half
+    # and stay silent about it.
+    "gpt-4o-2024-05-13": (5.00, 15.00),
     "gpt-4.1": (2.00, 8.00),
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-4.1-nano": (0.10, 0.40),
+    "o1": (15.00, 60.00),
+    "o1-pro": (150.00, 600.00),
+    "o3": (2.00, 8.00),
     "o3-mini": (1.10, 4.40),
-    "claude-haiku": (0.80, 4.00),
-    "claude-sonnet": (3.00, 15.00),
-    "claude-opus": (15.00, 75.00),
+    "o3-pro": (20.00, 80.00),
+    "o4-mini": (1.10, 4.40),
+    "gpt-5": (1.25, 10.00),
+    "gpt-5-mini": (0.25, 2.00),
+    "gpt-5-nano": (0.05, 0.40),
+    "gpt-5-pro": (15.00, 120.00),
+    "gpt-5.1": (1.25, 10.00),
+    "gpt-5.2": (1.75, 14.00),
+    "gpt-5.2-pro": (21.00, 168.00),
+    "gpt-5.4": (2.50, 15.00),
+    "gpt-5.4-mini": (0.75, 4.50),
+    "gpt-5.4-nano": (0.20, 1.25),
+    "gpt-5.4-pro": (30.00, 180.00),
+    "gpt-5.5": (5.00, 30.00),
+    "gpt-5.5-pro": (30.00, 180.00),
+    "gpt-5.6-luna": (0.20, 1.20),
+    "gpt-5.6-terra": (2.00, 12.00),
+    "gpt-5.6-sol": (4.00, 20.00),
+    "gpt-6-astra": (10.00, 50.00),
+    # --- Anthropic ------------------------------------------------------
+    "claude-3-5-haiku": (0.80, 4.00),
+    "claude-haiku-3-5": (0.80, 4.00),
+    "claude-haiku-4-5": (1.00, 5.00),
+    "claude-sonnet-4": (3.00, 15.00),
+    "claude-sonnet-4-5": (3.00, 15.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-sonnet-5": (2.00, 10.00),
+    "claude-opus-4": (15.00, 75.00),
+    "claude-opus-4-1": (15.00, 75.00),
+    "claude-opus-4-5": (5.00, 25.00),
+    "claude-opus-4-6": (5.00, 25.00),
+    "claude-opus-4-7": (5.00, 25.00),
+    "claude-opus-4-8": (5.00, 25.00),
+    "claude-opus-5": (5.00, 25.00),
+    "claude-fable-5": (10.00, 50.00),
+    "claude-mythos-5": (10.00, 50.00),
+    # --- Google ---------------------------------------------------------
+    # The pro rows are the <=200k-token tier; longer prompts cost more.
     "gemini-2.5-flash": (0.30, 2.50),
+    "gemini-2.5-flash-lite": (0.10, 0.40),
     "gemini-2.5-pro": (1.25, 10.00),
+    "gemini-3.1-flash-lite": (0.25, 1.50),
+    "gemini-3.1-pro": (2.00, 12.00),
+    "gemini-3.5-flash": (1.50, 9.00),
+    "gemini-3.5-flash-lite": (0.30, 2.50),
+    # Promotional through 2026-12-31; the published rate doubles 2027-01-01.
+    "gemini-3.6-flash": (0.75, 3.75),
+    "gemini-3.7-flash": (0.75, 3.75),
+    "gemini-3.8-flash": (0.75, 3.75),
+    # Retired: no longer on Google's pricing page as of PRICES_AS_OF. Kept
+    # because `cap_usd` binds only priced models, so deleting a row stops the
+    # cap binding for anyone still on it -- worse than a price that cannot be
+    # re-verified.
     "gemini-1.5-flash": (0.075, 0.30),
     "gemini-1.5-pro": (1.25, 5.00),
 }
@@ -140,21 +218,37 @@ class CostEstimate:
 _SNAPSHOT_HEAD = re.compile(r"^(?:20\d{2}|20\d{6})$")
 
 
-def _price_match(model: str, endpoint_type: str = "") -> Optional[tuple]:
+def _price_match(model: str, endpoint_type: str = "",
+                 overrides: Optional[Dict[str, Any]] = None) -> Optional[tuple]:
     """``(matched_prefix, prices)`` or None. The prefix is what makes an
-    inexact match reportable."""
+    inexact match reportable.
+
+    `overrides` is `ai_budget.prices` from the config, merged over the built-in
+    table. It exists because a table baked into a release is stale the moment a
+    vendor ships a model: the rows here were three generations behind when they
+    were last checked, and the person who notices is running a study today, not
+    waiting for a Potato release. An override key is matched by the same
+    longest-substring rule, so naming a whole family or one dated snapshot both
+    work.
+    """
     if (endpoint_type or "").lower() in LOCAL_ENDPOINTS:
         return ("", (0.0, 0.0))
 
+    table = PRICE_TABLE
+    if overrides:
+        table = {**PRICE_TABLE, **{str(k).lower(): tuple(v)
+                                   for k, v in overrides.items()}}
+
     name = (model or "").lower()
     best = None
-    for prefix, prices in PRICE_TABLE.items():
+    for prefix, prices in table.items():
         if prefix in name and (best is None or len(prefix) > len(best[0])):
             best = (prefix, prices)
     return best
 
 
-def price_for(model: str, endpoint_type: str = "") -> Optional[tuple]:
+def price_for(model: str, endpoint_type: str = "",
+              overrides: Optional[Dict[str, Any]] = None) -> Optional[tuple]:
     """
     ``(input, output)`` USD per million tokens, or None if unknown.
 
@@ -167,11 +261,12 @@ def price_for(model: str, endpoint_type: str = "") -> Optional[tuple]:
     for "gpt-4o-mini" and commits it for "gpt-4.1-nano", which inherits its
     parent's row. `price_matched_exactly` is how a caller finds out.
     """
-    match = _price_match(model, endpoint_type)
+    match = _price_match(model, endpoint_type, overrides)
     return match[1] if match else None
 
 
-def price_matched_exactly(model: str, endpoint_type: str = "") -> bool:
+def price_matched_exactly(model: str, endpoint_type: str = "",
+                          overrides: Optional[Dict[str, Any]] = None) -> bool:
     """Did this model get its OWN price, or its family's?
 
     True when the model is not priced by prefix at all (local, or absent from
@@ -190,7 +285,7 @@ def price_matched_exactly(model: str, endpoint_type: str = "") -> bool:
     were affordable. The second is the one that makes someone believe the
     feature is broken.
     """
-    match = _price_match(model, endpoint_type)
+    match = _price_match(model, endpoint_type, overrides)
     if match is None or not match[0]:
         return True
     prefix = match[0]
@@ -219,7 +314,8 @@ def estimate_tokens(texts: Sequence[str], prompt_overhead_chars: int = 0,
 
 def estimate(texts: Sequence[str], model: str, endpoint_type: str = "",
              prompt_overhead_chars: int = 0, max_output_tokens: int = 100,
-             calls_per_item: int = 1) -> CostEstimate:
+             calls_per_item: int = 1,
+             price_overrides: Optional[Dict[str, Any]] = None) -> CostEstimate:
     """
     Project the cost of running a model over ``texts``.
 
@@ -228,13 +324,16 @@ def estimate(texts: Sequence[str], model: str, endpoint_type: str = "",
             than once -- the position-bias probe judges everything twice, and
             an estimate that halved its cost would be exactly the surprise
             this exists to prevent.
+        price_overrides: `ai_budget.prices` from the config. Lets a study price
+            a model this release has never heard of, instead of running
+            uncapped or against a neighbour's rate.
     """
     input_tokens, output_tokens = estimate_tokens(
         texts, prompt_overhead_chars, max_output_tokens)
     input_tokens *= max(1, calls_per_item)
     output_tokens *= max(1, calls_per_item)
 
-    prices = price_for(model, endpoint_type)
+    prices = price_for(model, endpoint_type, price_overrides)
     result = CostEstimate(
         n_items=len(texts), input_tokens=input_tokens,
         output_tokens=output_tokens, model=model,
@@ -320,13 +419,20 @@ def check_before_running(config: Dict[str, Any], projected: CostEstimate,
             "run cannot be checked against it. Projected %s tokens.",
             projected.model, f"{projected.total_tokens:,}")
         return
-    if not projected.local and not price_matched_exactly(projected.model):
+    # Read with the same overrides the estimate was priced with. Checking
+    # against the bare table would warn that a model has no row while the
+    # study's own ai_budget.prices row is the one that priced it -- telling
+    # somebody their fix did not work when it did.
+    overrides = (config.get("ai_budget") or {}).get("prices")
+    if not projected.local and not price_matched_exactly(
+            projected.model, overrides=overrides):
         logger.warning(
             "ai_budget.cap_usd is being checked against a price %r does not "
             "have a row for: it was matched to the nearest family in "
             "PRICE_TABLE, so this projection may be wrong in either "
-            "direction. Add %r to PRICE_TABLE in potato/ai/cost.py to check "
-            "the cap against its real price.",
+            "direction. Set ai_budget.prices[%r] in your config to check the "
+            "cap against its real price, or add a PRICE_TABLE row in "
+            "potato/ai/cost.py.",
             projected.model, projected.model)
 
     projected_total = spent_usd + projected.cost_usd

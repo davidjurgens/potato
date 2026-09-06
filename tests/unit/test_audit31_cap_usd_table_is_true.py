@@ -36,7 +36,11 @@ TEXTS = ["an item to label"] * 500
 #: claims to be; `test_the_fixture_matches_the_row` proves that rather
 #: than assuming it.
 ROW_MODELS = {
-    "priced above the cap": ("claude-opus", ""),
+    # Was the bare family name "claude-opus", which stopped being a row in
+    # the 2026-09-05 refresh: a family does not have one price, since Opus
+    # 4.x-retired is $15/$75 and 4.5+ is $5/$25. A named generation is what
+    # a researcher would actually write anyway.
+    "priced above the cap": ("claude-opus-5", ""),
     "priced below the cap": ("gpt-4o-mini", ""),
     "a local endpoint (vLLM, Ollama, …)": ("any-local-model", "vllm"),
     "absent from the price table": ("a-model-with-no-price", ""),

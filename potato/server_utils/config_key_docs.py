@@ -2506,6 +2506,15 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "because a dollar ceiling has no dollar figure to compare against",
         type="number", category=AI, example=25.0,
     ),
+    "ai_budget.prices": _D(
+        "Per-model prices, USD per million tokens, as "
+        "{model_substring: [input, output]}. Merged over the built-in table "
+        "and matched by the same longest-substring rule, so a family name or "
+        "one dated snapshot both work. A table shipped in a release is stale "
+        "the moment a vendor ships a model, and an unpriced model means "
+        "cap_usd does not bind; this prices one without waiting for a release",
+        type="object", category=AI, see_also=("ai_budget.cap_usd",),
+    ),
     "calibration": _D(
         "Agreement drift tracking and the re-calibration prompt on /admin/iaa. "
         "Agreement is scored per time window so a fall in recent work is "

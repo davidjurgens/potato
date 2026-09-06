@@ -8,7 +8,12 @@ from typing import Dict, List
 import anthropic
 from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError, ModelCapabilities
 
-DEFAULT_MODEL = "claude-3-5-sonnet-20241022"
+# Claude 3.5 Sonnet stood here until 2026-09-05. It is retired, so the
+# default failed outright, and it was also unpriced: the spend cap binds
+# only models in potato.ai.cost.PRICE_TABLE, and "claude-3-5-sonnet-..."
+# matches no row, so a study that never set a model had no cap at all.
+# Both properties are requirements of a default, not nice-to-haves.
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_HINT_PROMPT = '''
     You are assisting a user with an annotation task.
         The annotation instruction is : {description}
