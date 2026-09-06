@@ -40,6 +40,7 @@ token count, because that is what predicts how long the run takes.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -132,6 +133,27 @@ class CostEstimate:
                 f"An estimate, not a quote.")
 
 
+#: A trailing component that names a dated snapshot of the SAME model rather
+#: than a different one: "gpt-4o-2024-08-06" is gpt-4o. Anything else after a
+#: matched prefix -- "-mini", "-nano", "-5", "-4-5" -- may be a different
+#: model at a different price, which is what `price_matched_exactly` reports.
+_SNAPSHOT_HEAD = re.compile(r"^(?:20\d{2}|20\d{6})$")
+
+
+def _price_match(model: str, endpoint_type: str = "") -> Optional[tuple]:
+    """``(matched_prefix, prices)`` or None. The prefix is what makes an
+    inexact match reportable."""
+    if (endpoint_type or "").lower() in LOCAL_ENDPOINTS:
+        return ("", (0.0, 0.0))
+
+    name = (model or "").lower()
+    best = None
+    for prefix, prices in PRICE_TABLE.items():
+        if prefix in name and (best is None or len(prefix) > len(best[0])):
+            best = (prefix, prices)
+    return best
+
+
 def price_for(model: str, endpoint_type: str = "") -> Optional[tuple]:
     """
     ``(input, output)`` USD per million tokens, or None if unknown.
@@ -140,16 +162,44 @@ def price_for(model: str, endpoint_type: str = "") -> Optional[tuple]:
     expensive parent -- "gpt-4o-mini" costs a sixteenth of "gpt-4o", and
     getting that backwards is a sixteen-fold error in the direction that
     stops people using the feature.
-    """
-    if (endpoint_type or "").lower() in LOCAL_ENDPOINTS:
-        return (0.0, 0.0)
 
-    name = (model or "").lower()
-    best = None
-    for prefix, prices in PRICE_TABLE.items():
-        if prefix in name and (best is None or len(prefix) > len(best[0])):
-            best = (prefix, prices)
-    return best[1] if best else None
+    The rule only protects variants somebody listed, so it prevents that error
+    for "gpt-4o-mini" and commits it for "gpt-4.1-nano", which inherits its
+    parent's row. `price_matched_exactly` is how a caller finds out.
+    """
+    match = _price_match(model, endpoint_type)
+    return match[1] if match else None
+
+
+def price_matched_exactly(model: str, endpoint_type: str = "") -> bool:
+    """Did this model get its OWN price, or its family's?
+
+    True when the model is not priced by prefix at all (local, or absent from
+    the table -- absence is reported elsewhere and loudly), when the name
+    matches a table row exactly, or when the only thing after the row is a
+    dated snapshot of the same model.
+
+    False when a suffix follows the matched row that could name a different
+    model: "gpt-4.1-nano" priced from "gpt-4.1", "claude-opus-5" priced from
+    "claude-opus". Those are not unpriced -- they are confidently priced at
+    another model's rate, and unlike an absent price nothing said so.
+
+    The error runs both ways. An unlisted new generation tends to be priced
+    from an older, cheaper row, so a cap lets spend through; an unlisted cheap
+    variant is priced from its expensive parent, so a cap refuses runs that
+    were affordable. The second is the one that makes someone believe the
+    feature is broken.
+    """
+    match = _price_match(model, endpoint_type)
+    if match is None or not match[0]:
+        return True
+    prefix = match[0]
+    remainder = (model or "").lower().split(prefix, 1)[1]
+    remainder = remainder.strip("-")
+    if not remainder:
+        return True
+    head = remainder.split("-", 1)[0]
+    return bool(_SNAPSHOT_HEAD.match(head))
 
 
 def estimate_tokens(texts: Sequence[str], prompt_overhead_chars: int = 0,
@@ -253,6 +303,11 @@ def check_before_running(config: Dict[str, Any], projected: CostEstimate,
     no dollar figure to compare it against. Saying so is better than either
     refusing a run that might be free or waving through one that might not be.
 
+    A model priced from its FAMILY rather than its own row does not block
+    either, but it does say so. That is the quieter of the two failures: an
+    absent price is reported, while "gpt-4.1-nano" priced at gpt-4.1's rate is
+    a confident number nobody was told to doubt.
+
     Raises:
         SpendCapExceeded: When the projection crosses the cap.
     """
@@ -265,6 +320,14 @@ def check_before_running(config: Dict[str, Any], projected: CostEstimate,
             "run cannot be checked against it. Projected %s tokens.",
             projected.model, f"{projected.total_tokens:,}")
         return
+    if not projected.local and not price_matched_exactly(projected.model):
+        logger.warning(
+            "ai_budget.cap_usd is being checked against a price %r does not "
+            "have a row for: it was matched to the nearest family in "
+            "PRICE_TABLE, so this projection may be wrong in either "
+            "direction. Add %r to PRICE_TABLE in potato/ai/cost.py to check "
+            "the cap against its real price.",
+            projected.model, projected.model)
 
     projected_total = spent_usd + projected.cost_usd
     if projected_total > cap:

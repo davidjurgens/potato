@@ -80,8 +80,33 @@ def _work(base_url, user):
     return session, response, assigned
 
 
+@pytest.fixture
+def exhausted_pool(server):
+    """Every item has its one annotator before the test body runs.
+
+    These tests used to rely on `test_the_first_three_each_get_one_item`
+    having run earlier in the class. That is true in a full-suite run and
+    false whenever another module resets the in-process singletons in
+    between -- FlaskTestServer shares them, so a targeted run of some
+    other subset silently emptied the user and item state mid-class. The
+    surplus tests then met an UNSATURATED study, the fourth annotator was
+    given an item, and the failure looked exactly like the bug they exist
+    to catch. A test that reports a defect because of what else ran is
+    worse than no test.
+
+    Idempotent: with the pool already exhausted, `_work` finds each
+    worker's existing assignment and re-posts the same annotation.
+    """
+    srv, _ = server
+    for i in range(3):
+        _work(srv.base_url, f"worker{i}")
+    return server
+
+
 class TestSurplusAnnotator:
-    """Ordered: the pool has to be exhausted before the surplus case exists."""
+    """The pool has to be exhausted before the surplus case exists. Each
+    test establishes that itself rather than inheriting it from the one
+    above -- see `exhausted_pool`."""
 
     def test_the_first_three_each_get_one_item(self, server):
         srv, _ = server
@@ -91,43 +116,43 @@ class TestSurplusAnnotator:
             assert len(assigned) == 1, f"worker{i} got {assigned}"
             assert "There is no work left for you" not in response.text
 
-    def test_the_fourth_is_not_told_they_finished(self, server):
+    def test_the_fourth_is_not_told_they_finished(self, exhausted_pool):
         # The exact wrong sentence, named so a regression cannot slip past by
         # rewording the right one.
-        srv, _ = server
+        srv, _ = exhausted_pool
         _, response, assigned = _work(srv.base_url, "worker_surplus")
         assert response.status_code == 200
         assert assigned == []
         assert "You have completed the annotation task" not in response.text
         assert "Thank You!" not in response.text
 
-    def test_the_fourth_is_told_there_is_no_work(self, server):
-        srv, _ = server
+    def test_the_fourth_is_told_there_is_no_work(self, exhausted_pool):
+        srv, _ = exhausted_pool
         _, response, _assigned = _work(srv.base_url, "worker_surplus_2")
         assert "There is no work left for you" in response.text
         assert "You have not annotated anything" in response.text
 
-    def test_they_stay_in_the_annotation_phase_so_new_data_reaches_them(self, server):
+    def test_they_stay_in_the_annotation_phase_so_new_data_reaches_them(self, exhausted_pool):
         # Advancing the phase was what produced the completion page, and it is
         # a one-way door: a user moved to DONE never returns to /annotate even
         # if the study later gains items or raises its annotator count.
         from potato.phase import UserPhase
         from potato.user_state_management import get_user_state_manager
 
-        srv, _ = server
+        srv, _ = exhausted_pool
         session, _, _assigned = _work(srv.base_url, "worker_surplus_3")
         state = get_user_state_manager().get_user_state("worker_surplus_3")
         assert state.get_phase() == UserPhase.ANNOTATION
         again = session.get(f"{srv.base_url}/annotate")
         assert "There is no work left for you" in again.text
 
-    def test_nothing_is_recorded_against_them(self, server):
+    def test_nothing_is_recorded_against_them(self, exhausted_pool):
         # They annotated nothing, so nothing should exist under their name --
         # the completion page's "your responses are saved" was false as well
         # as misleading.
         from potato.user_state_management import get_user_state_manager
 
-        srv, _ = server
+        srv, _ = exhausted_pool
         _work(srv.base_url, "worker_surplus_4")
         state = get_user_state_manager().get_user_state("worker_surplus_4")
         assert not state.get_annotated_instance_ids()

@@ -122,6 +122,23 @@ for — and the provider meter is running either way. Add the model to
 `PRICE_TABLE` in `potato/ai/cost.py`, or check the log for
 `has no price on record`.
 
+### Prices matched from a model's family
+
+Prices are matched on the longest table row contained in the model name, so
+a model with no row of its own inherits its family's. `gpt-4.1-nano` is
+priced from `gpt-4.1`; `claude-opus-5` from `claude-opus`. Those runs are
+not unpriced — they carry a confident number that belongs to a different
+model, and the cap is checked against it.
+
+The error runs both ways. An unlisted new generation is usually priced from
+an older, cheaper row, so a cap lets spend through. An unlisted cheap
+variant is priced from its expensive parent, so a cap refuses runs that were
+affordable.
+
+A capped run whose price came from the family rather than the model logs
+`matched to the nearest family in PRICE_TABLE`. A dated snapshot of a listed
+model — `gpt-4o-2024-08-06` — is the same model and stays quiet.
+
 ### Self-hosted models
 
 vLLM, Ollama and the local vision models report `cost_usd: 0` and
