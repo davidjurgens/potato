@@ -37,24 +37,36 @@ annotation_schemes:
 | `codebook_mode` (or `codebook.mode`) | `open` under qda/solo; `fixed` in standard mode | Governs annotator edit rights (see below). |
 | `annotation_schemes[].codebook` | `false` | Opt this scheme into codebook-sourced labels. |
 
-A **crowdsourcing backend force-locks `fixed`** regardless of the
-requested mode — recruited annotators must not reshape the shared
-codebook. It applies however the platform is named: a top-level
-`prolific:`/`mturk:` block, `login.type`, or `crowdsourcing.provider`.
-A provider name Potato does not recognize locks too, so a typo cannot
-switch the control off.
+A **crowd backend force-locks `fixed`** regardless of the requested
+mode — recruited annotators must not reshape the shared codebook. What
+counts as one:
 
-`crowdsourcing.provider: expert` is the one exception. Experts are hired
-by name and pre-authorized by invite token, which makes them
-collaborators rather than anonymous workers on a HIT, and an open
-codebook is a legitimate design for expert coding.
+| Configuration | Codebook |
+|---|---|
+| `crowdsourcing.provider`, any value except `expert` | locked |
+| `crowdsourcing.provider` Potato does not recognize | locked |
+| top-level `prolific:` or `mturk:` block | locked |
+| `login.type: prolific` or `mturk` | locked |
+| `crowdsourcing.provider: expert` | as requested |
+| `login.type: url_direct` alone | as requested, with a warning |
+| anything else | as requested |
 
-`login.type: url_direct` with no provider named is **not** locked — a
-public self-registration study is a legitimate design. It does warn,
-because anyone who has the link can self-register and so anyone who has
-the link can rename and delete codes. Set `codebook_mode: fixed` if that
-is not what you want, or name the platform with `crowdsourcing.provider`
-and the force-lock applies.
+An unrecognized provider name locks because a control a typo can switch
+off is not a control, and because a provider added later should arrive
+locked and be trusted deliberately.
+
+`crowdsourcing.provider: expert` is exempt. Experts are hired by name and
+pre-authorized by invite token, which makes them collaborators rather
+than anonymous workers on a HIT, and an open codebook is a legitimate
+design for expert coding.
+
+`login.type: url_direct` with no provider named is **not** locked, even
+though the crowd registry treats that config as a crowd deployment. A
+public self-registration study is a legitimate design, and locking it
+would change what existing studies do. It warns instead: anyone who has
+the link can self-register, so anyone who has the link can rename and
+delete codes. Set `codebook_mode: fixed`, or name the platform with
+`crowdsourcing.provider` and the force-lock applies.
 
 ### Seeding colors and definitions from the config
 

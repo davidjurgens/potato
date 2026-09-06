@@ -1320,9 +1320,11 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     "codebook_mode": _D(
         "Top-level shorthand for codebook.mode, and the value that wins when "
         "both are set. Unset it resolves to open under qda_mode/solo_mode and "
-        "fixed otherwise; a crowdsourcing backend force-locks fixed, whichever "
-        "way the platform is named, with crowdsourcing.provider: expert the "
-        "one exception (hired by name rather than recruited)",
+        "fixed otherwise. A crowd backend force-locks fixed: any "
+        "crowdsourcing.provider except expert (including a name Potato does "
+        "not recognize), a top-level mturk/prolific block, or login.type "
+        "mturk/prolific. login.type: url_direct on its own does NOT lock -- "
+        "it warns, because anyone with the link can self-register",
         type="string", category=QDA, example="open",
         see_also=("codebook.mode", "crowdsourcing"),
     ),
