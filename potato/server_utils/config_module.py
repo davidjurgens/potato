@@ -934,7 +934,8 @@ _OPTIONAL_INT_FIELDS = {
     "alert_time_each_instance": ("seconds to alert per instance", False),
     "max_annotations_per_item": ("max annotations per item", True),  # -1 = unlimited
     "max_annotations_per_user": ("max annotations per user", True),
-    "min_annotators_per_instance": ("minimum annotators per instance", False),
+    "min_annotators_per_instance": (
+        "deprecated spelling of num_annotators_per_item", False),
     "random_seed": ("random seed", True),
     "max_session_seconds": ("max session duration in seconds", False),
 }
@@ -1126,7 +1127,23 @@ def resolve_num_annotators_per_item(config_data: Dict[str, Any]) -> int:
         1. num_annotators_per_item (int form)            → that value
         2. num_annotators_per_item.default               → that value
         3. max_annotations_per_item (legacy)             → that value
-        4. otherwise                                     → -1 (unlimited)
+        4. min_annotators_per_instance (legacy)          → that value
+        5. otherwise                                     → -1 (unlimited)
+
+    ``min_annotators_per_instance`` is a deprecated spelling of the same
+    setting, not a second one. It named a coverage floor that was parsed,
+    stored on ``ItemStateManager.min_annotations_per_item``, and read
+    nowhere: no assignment or retirement decision consulted it, so a study
+    asking for three annotators an item got as many as it got. Reading it
+    as the cap is what the author meant by writing it, and it is the only
+    number in the config with a claim on that slot.
+
+    This changes behaviour for a config that sets it alone: the cap moves
+    from unlimited to the stated number, and items now retire when they
+    reach it. Setting it alongside a canonical spelling that disagrees is
+    refused in ``validate_optional_field_types`` rather than resolved
+    here -- silently picking one of two numbers an author wrote down is
+    the failure this key already caused once.
     """
     val = config_data.get("num_annotators_per_item")
     if isinstance(val, int) and not isinstance(val, bool):
@@ -1136,6 +1153,9 @@ def resolve_num_annotators_per_item(config_data: Dict[str, Any]) -> int:
     legacy = config_data.get("max_annotations_per_item")
     if isinstance(legacy, int) and not isinstance(legacy, bool):
         return legacy
+    renamed = config_data.get("min_annotators_per_instance")
+    if isinstance(renamed, int) and not isinstance(renamed, bool):
+        return renamed
     return -1
 
 
@@ -1203,6 +1223,54 @@ def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
             "instead. Setting both is redundant.",
             DeprecationWarning,
             stacklevel=2,
+        )
+
+    # `min_annotators_per_instance` is the same setting under an older,
+    # worse name. It was parsed and never read, so every study that set it
+    # got unlimited coverage while its config said three. Treating it as a
+    # deprecated spelling of `num_annotators_per_item` is the only reading
+    # under which the number the author wrote reaches the assigner.
+    #
+    # Refused rather than resolved when it disagrees with a canonical
+    # spelling: two different numbers for one slot is a question only the
+    # author can answer, and guessing is what produced the original defect.
+    if 'min_annotators_per_instance' in config_data:
+        renamed = config_data['min_annotators_per_instance']
+        if not isinstance(renamed, int) or isinstance(renamed, bool) or renamed < 1:
+            raise ConfigValidationError(
+                "'min_annotators_per_instance' must be a positive integer "
+                f"(annotators per item), got {renamed!r}."
+            )
+        for other_key in ('num_annotators_per_item', 'max_annotations_per_item'):
+            if other_key not in config_data:
+                continue
+            other = config_data[other_key]
+            other_int = other.get('default') if isinstance(other, dict) else other
+            if other_int is not None and other_int != renamed:
+                raise ConfigValidationError(
+                    f"'min_annotators_per_instance' and '{other_key}' are both set "
+                    f"with conflicting values ({renamed} vs {other_int}). They are "
+                    "the same setting: annotators collected per item. "
+                    "'min_annotators_per_instance' never named a separate floor -- "
+                    "it was read and never enforced. Drop it and keep "
+                    "'num_annotators_per_item', which is the canonical key."
+                )
+        import warnings as _w
+        _w.warn(
+            "'min_annotators_per_instance' is deprecated; use "
+            "'num_annotators_per_item' instead. It is now read as the "
+            "annotators-per-item count rather than being ignored, so an item "
+            f"retires at {renamed} annotators where it previously had no cap.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        logger.warning(
+            "min_annotators_per_instance: %s is deprecated and has been read as "
+            "num_annotators_per_item: %s. Until now it was parsed and never "
+            "consulted, so this study collected an unlimited number of "
+            "annotators per item; it will now retire an item at %s. Rename the "
+            "key to num_annotators_per_item to silence this.",
+            renamed, renamed, renamed,
         )
 
     # Validate assignment_strategy enum
@@ -4089,37 +4157,38 @@ def warn_unreachable_quota_keys(config_data: Dict[str, Any]) -> None:
 
 
 def warn_unenforced_coverage_floor(config_data: Dict[str, Any]) -> None:
-    """Warn that the coverage floor is not enforced.
+    """Warn that `num_annotators_per_item.min` is not enforced.
 
-    `min_annotators_per_instance` and the structured
-    `num_annotators_per_item.min` both set
-    `ItemStateManager.min_annotations_per_item`, which is assigned in
-    three places and read in none. No assignment or retirement decision
-    consults it.
+    It sets `ItemStateManager.min_annotations_per_item`, which is
+    assigned and never read. No assignment or retirement decision
+    consults it, so nothing holds an item open until that many
+    annotators have seen it.
 
-    The name is the problem: it reads as the floor to
-    `num_annotators_per_item`'s ceiling, so an author setting both
-    believes they have bracketed coverage at "between 3 and 5". They get
-    the ceiling. Nothing in the collected data shows the floor was not
-    applied -- the study simply ends with some items at one annotator.
+    The name is the problem: inside a mapping that also carries
+    `default`, `min` reads as the floor to that ceiling, so an author
+    writing `{min: 3, default: 5}` believes they have bracketed coverage
+    between two numbers. They get the ceiling, and nothing in the
+    collected data shows otherwise -- the study simply ends with some
+    items at one annotator.
+
+    The flat spelling `min_annotators_per_instance` is handled in
+    `validate_optional_field_types` instead: it names no other setting,
+    so it is now read as a deprecated alias for the cap rather than
+    warned about and discarded. `min` cannot take that route, because a
+    key inside `num_annotators_per_item` cannot be an alias for the
+    mapping it lives in.
     """
     nap = config_data.get("num_annotators_per_item")
-    key = None
-    if isinstance(nap, dict) and nap.get("min") is not None:
-        key = "num_annotators_per_item.min"
-    elif config_data.get("min_annotators_per_instance") is not None:
-        key = "min_annotators_per_instance"
-    if key is None:
+    if not (isinstance(nap, dict) and nap.get("min") is not None):
         return
 
     logger.warning(
-        "%s is not enforced. Potato reads it, stores it, and never "
-        "consults it when deciding what to assign or when an item is "
-        "finished, so it does not hold items open until that many "
-        "annotators have seen them. num_annotators_per_item is the cap "
-        "that IS enforced; set it to the coverage you need and let items "
-        "retire when they reach it.",
-        key,
+        "num_annotators_per_item.min is not enforced. Potato reads it, "
+        "stores it, and never consults it when deciding what to assign or "
+        "when an item is finished, so it does not hold items open until "
+        "that many annotators have seen them. num_annotators_per_item's "
+        "`default` is the cap that IS enforced; set it to the coverage you "
+        "need and let items retire when they reach it."
     )
 
 

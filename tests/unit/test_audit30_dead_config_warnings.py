@@ -168,21 +168,26 @@ class TestCategoryAssignment:
 
 
 class TestCoverageFloor:
-    """`min_annotators_per_instance` is inert. Until it is implemented or
+    """`num_annotators_per_item.min` is inert. Until it is implemented or
     removed, the config must say so rather than accept a guarantee the
-    software never made."""
+    software never made.
 
-    def test_the_legacy_spelling_is_flagged(self, caplog):
+    The flat spelling `min_annotators_per_instance` left this warning: it
+    named no setting `num_annotators_per_item` did not, so it became a
+    deprecated alias for the cap instead of a discarded floor. Warning
+    that it is not enforced would now be false.
+    See tests/unit/test_audit32_min_annotators_alias.py.
+    """
+
+    def test_the_flat_spelling_is_no_longer_called_unenforced(self, caplog):
         with caplog.at_level("WARNING", logger="potato.server_utils.config_module"):
             config_module.warn_unenforced_coverage_floor(
                 {"min_annotators_per_instance": 3})
-        msgs = _warnings(caplog)
-        assert any("min_annotators_per_instance is not enforced" in m
-                   for m in msgs), msgs
+        assert _warnings(caplog) == []
 
     def test_the_structured_spelling_is_flagged(self, caplog):
-        """`num_annotators_per_item.min` reaches the same unread
-        attribute, so the same config is inert written either way."""
+        """`num_annotators_per_item.min` reaches an attribute nothing
+        reads, and cannot be aliased to the mapping it lives in."""
         with caplog.at_level("WARNING", logger="potato.server_utils.config_module"):
             config_module.warn_unenforced_coverage_floor(
                 {"num_annotators_per_item": {"default": 5, "min": 3}})

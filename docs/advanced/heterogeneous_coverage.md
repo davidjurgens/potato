@@ -74,20 +74,32 @@ When `register_annotator` records an annotation:
 
 The boost is one-shot per item.
 
-### `min_annotators_per_instance` is not enforced
+### `min_annotators_per_instance` is a deprecated name for the cap
 
-`min_annotators_per_instance`, and the structured spelling
-`num_annotators_per_item.min`, are read from the config and then never
-consulted. Nothing holds an item open until that many annotators have
-seen it. The name invites reading it as the floor to
-`num_annotators_per_item`'s ceiling, so a config setting both looks like
-it brackets coverage between two numbers; it does not, and the study can
-end with items at a single annotator. The server warns at load if you
-set either.
+`min_annotators_per_instance` sets the same thing `num_annotators_per_item`
+sets: how many annotators an item collects. It used to be read from the
+config and then never consulted, so a study that asked for three
+annotators an item collected an unlimited number, and nothing in the
+output said the number had been discarded.
 
-Use `num_annotators_per_item` for the coverage you want. An item retires
-when it reaches that number, so the cap and the target are the same
-value.
+It is now read as the cap. If you set it alone, items retire at that
+number where before they did not retire at all, so check any running
+study that uses it. Setting it alongside `num_annotators_per_item` or
+`max_annotations_per_item` with a different value is refused at load:
+two numbers for one setting is a question only you can answer.
+
+Rename it to `num_annotators_per_item`, which is the canonical spelling.
+
+### `num_annotators_per_item.min` is not enforced
+
+The nested `min` is read and never consulted. Inside a mapping that also
+carries `default`, it reads as the floor to that ceiling, so
+`{min: 3, default: 5}` looks like it brackets coverage between two
+numbers. It does not &mdash; you get the ceiling, and the study can end
+with items at a single annotator. The server warns at load if you set it.
+
+Use `default` for the coverage you want. An item retires when it reaches
+that number, so the cap and the target are the same value.
 
 ## Per-annotator quota
 

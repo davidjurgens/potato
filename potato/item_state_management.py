@@ -948,13 +948,22 @@ class ItemStateManager:
             'boost_to': int(adaptive_cfg.get('boost_to', 0)),
         }
 
-        # Minimum coverage floor; forces continued assignment even if some
-        # users have not yet rated an item.
+        # `num_annotators_per_item.min`, parsed and stored. Nothing reads it.
+        #
+        # The comment that stood here said it "forces continued assignment
+        # even if some users have not yet rated an item", which was never
+        # true: no assignment or retirement decision has ever consulted this
+        # attribute. config_module.warn_unenforced_coverage_floor says so at
+        # load rather than leaving the claim in a comment nobody reads.
+        #
+        # The flat spelling `min_annotators_per_instance` used to land here
+        # too. It now resolves through `resolve_num_annotators_per_item` into
+        # `max_annotations_per_item` above, as a deprecated alias for the cap
+        # -- the only reading under which the number an author wrote reaches
+        # the assigner.
         self.min_annotations_per_item = None
         if isinstance(nap, dict) and nap.get('min') is not None:
             self.min_annotations_per_item = int(nap['min'])
-        elif config.get('min_annotators_per_instance') is not None:
-            self.min_annotations_per_item = int(config['min_annotators_per_instance'])
 
         # Track which annotators have worked on each item
         self.instance_annotators = defaultdict(set)

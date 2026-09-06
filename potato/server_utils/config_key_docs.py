@@ -425,10 +425,11 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="integer|object", default=3, category=ASSIGN,
     ),
     "min_annotators_per_instance": _D(
-        "NOT ENFORCED. Reads as a floor on annotators per item, but "
-        "nothing consults it when deciding what to assign or when an "
-        "item is done. Use num_annotators_per_item, which is the cap "
-        "that is enforced",
+        "DEPRECATED spelling of num_annotators_per_item, and read as it. "
+        "It named a coverage floor that was parsed and never consulted, so "
+        "a study asking for three annotators an item collected an unlimited "
+        "number. Setting it alongside num_annotators_per_item or "
+        "max_annotations_per_item with a different value is refused",
         type="integer", category=ASSIGN,
     ),
     "alert_time_each_instance": _D(
