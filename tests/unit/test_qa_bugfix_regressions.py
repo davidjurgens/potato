@@ -335,6 +335,47 @@ class TestItemExposesDataFields:
             _ = it.__wrapped__
 
 
+class TestTemplateItemResolvesDataFirst:
+    """Issue #170: a data column named after an Item attribute must still
+    reach the template. `instance_obj.labels[0]` over a record with a "labels"
+    column used to resolve to Item.labels — the empty annotation dict — and
+    every dynamic label rendered blank."""
+
+    def test_colliding_data_field_wins_in_templates(self):
+        from potato.item_state_management import Item, TemplateItem
+        view = TemplateItem(Item("1", {"labels": ["Sounds great", "Coool"]}))
+        assert view.labels[0] == "Sounds great"
+
+    def test_the_item_itself_is_unchanged(self):
+        from potato.item_state_management import Item, TemplateItem
+        item = Item("1", {"labels": ["Sounds great"]})
+        TemplateItem(item)
+        assert item.labels == {}
+
+    def test_non_colliding_fields_and_methods_still_resolve(self):
+        from potato.item_state_management import Item, TemplateItem
+        view = TemplateItem(Item("1", {"gifs": ["one.gif"], "text": "hi"}))
+        assert view.gifs[0] == "one.gif"
+        assert view.item_id == "1"
+        assert view.get_text() == "hi"
+        assert view.get_data() == {"gifs": ["one.gif"], "text": "hi"}
+
+    def test_missing_field_raises_attribute_error(self):
+        from potato.item_state_management import Item, TemplateItem
+        view = TemplateItem(Item("1", {"text": "hi"}))
+        with pytest.raises(AttributeError):
+            _ = view.nonexistent_field
+
+    def test_the_view_renders_the_example_labels(self):
+        from jinja2 import Template
+        from potato.item_state_management import Item, TemplateItem
+        item = Item("1", {"text": "Is not this awesome?!",
+                          "labels": ["Sounds great", "Coool", "Nice"]})
+        html = Template("{{instance_obj.labels[0]}}|{{instance_obj.labels[2]}}").render(
+            instance_obj=TemplateItem(item))
+        assert html == "Sounds great|Nice"
+
+
 class TestPromptOptimizerConstructs:
     """F-022: PromptOptimizer must accept prompt_optimization as a dataclass
     (not only a dict); previously it called .get() on the dataclass -> crash

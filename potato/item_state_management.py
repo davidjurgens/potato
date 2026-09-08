@@ -338,6 +338,52 @@ class Item:
         return (f"Item(id:{self.item_id}, data:{self.item_data}, "
                 f"metadata:{self.__dict__.get('_metadata') or {}})")
 
+
+class TemplateItem:
+    """
+    The view of an :class:`Item` that templates get as ``instance_obj``.
+
+    ``Item.__getattr__`` exposes data fields as attributes, but Python calls it
+    only when normal lookup fails. A data field named after a real attribute
+    therefore never reaches the template: ``{{instance_obj.labels[0]}}`` over a
+    record with a ``labels`` column resolved to ``Item.labels``, the empty
+    annotation dict, and every dynamic label rendered blank (issue #170).
+
+    This wrapper resolves data fields first and delegates everything else to
+    the item, so a data column can carry any name. It does not change ``Item``
+    itself: ``labels`` and ``span_annotations`` stay writable for the forks
+    that use them, and Python callers keep the real object.
+    """
+
+    def __init__(self, item):
+        self._item = item
+
+    def __getattr__(self, name):
+        # Underscored names are never data fields. Answering for them here
+        # would also recurse through _item before __init__ has set it.
+        if not name.startswith("_"):
+            data = self._item.item_data
+            if isinstance(data, dict) and name in data:
+                return data[name]
+        return getattr(self._item, name)
+
+    def __getitem__(self, key):
+        data = self._item.item_data
+        if isinstance(data, dict):
+            return data[key]
+        raise KeyError(key)
+
+    def __contains__(self, key):
+        data = self._item.item_data
+        return isinstance(data, dict) and key in data
+
+    def __str__(self):
+        return str(self._item)
+
+    def __repr__(self):
+        return f"TemplateItem({self._item!r})"
+
+
 class Label:
     """
     A utility class for representing a single label in any annotation scheme.
