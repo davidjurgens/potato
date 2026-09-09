@@ -2154,7 +2154,22 @@ def get_ai_suggestion():
     if annotation_id < 0 or annotation_id >= num_schemes:
         return jsonify({"error": "annotationId out of range"}), 400
 
+    # `aiAssistant` is user-supplied and was the one parameter here not
+    # checked: an unrecognized name reached
+    # `ai_prompt[annotation_type].get(ai_assistant).get("output_format")` and
+    # raised AttributeError on None -- a 500, four lines after `annotationId`
+    # gets a clean 400. Valid names come from the prompt registry rather than a
+    # literal list, so adding a prompt file cannot leave this behind.
     ai_assistant = request.args.get('aiAssistant')
+    scheme = (config.get("annotation_schemes") or [])[annotation_id]
+    annotation_type = scheme.get("annotation_type") if isinstance(scheme, dict) else None
+    available = (get_ai_prompt() or {}).get(annotation_type) or {}
+    if ai_assistant not in available:
+        return jsonify({
+            "error": f"Unknown aiAssistant {ai_assistant!r} for annotation "
+                     f"type {annotation_type!r}",
+            "available": sorted(available),
+        }), 400
 
     # The item, by id. `get_current_instance_index()` is the annotator's
     # POSITION in their own ordering, and the AI cache resolved it against the

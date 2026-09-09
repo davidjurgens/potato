@@ -817,11 +817,27 @@ class AIAssistantManager {
             const labelElement = annotationForm.querySelector(`label[for="${input.id}"]`);
             const labelText = labelElement?.textContent?.toLowerCase().trim();
 
-            // Check if this input matches the suggested label
+            // Check if this input matches the suggested label.
+            //
+            // There used to be a fourth clause, `suggestedLabelStr.includes(
+            // inputValue)`, testing in the opposite direction to the other
+            // three: any label whose NAME appeared anywhere inside the
+            // suggestion matched. So a model declining to commit had its
+            // non-answer rendered to the annotator as an endorsement, with a
+            // sparkle and a title reading "AI Suggested":
+            //
+            //   "The reviewer does not say anything about the food."  -> No
+            //   "I know the answer is unclear."                       -> No
+            //   "The image is not a circle, it is a square."   -> square AND circle
+            //
+            // English makes that ordinary rather than exotic: "not", "know",
+            // "another", "north" all contain "no", and short labels are the
+            // normal case for a two-way scheme. The other three clauses absorb
+            // label/id/text mismatches and none of them can match across a
+            // whole sentence; only that one could.
             const isMatch = inputValue === suggestedLabelStr ||
                             inputId?.includes(suggestedLabelStr) ||
-                            labelText?.includes(suggestedLabelStr) ||
-                            suggestedLabelStr.includes(inputValue);
+                            labelText?.includes(suggestedLabelStr);
 
             if (isMatch) {
                 aiDebugLog('[AIAssistant] Found matching label:', { inputValue, labelText, suggestedLabelStr });

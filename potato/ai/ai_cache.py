@@ -321,6 +321,70 @@ def clear_ai_cache_manager():
     global AICACHEMANAGER
     AICACHEMANAGER = None
 
+#: Response keys that name a label the annotator is being pointed at.
+_SUGGESTION_KEYS = ("suggestive_choice", "suggestive_choices")
+
+
+def _label_names(labels) -> list:
+    """The scheme's label names, however the config spelled them."""
+    if not isinstance(labels, (list, tuple)):
+        return []
+    names = []
+    for label in labels:
+        if isinstance(label, dict):
+            name = label.get("name")
+        else:
+            name = label
+        if name is not None and str(name) != "":
+            names.append(str(name))
+    return names
+
+
+def validate_suggested_choice(result, labels):
+    """Drop a suggested choice that is not one of the scheme's labels.
+
+    `suggestive_choice` was passed to the client unchecked, and the client
+    highlighted any label whose name appeared anywhere inside it. So a model
+    declining to commit -- "The reviewer does not say anything about the food."
+    -- was rendered to the annotator as an endorsement of `No`, sparkle and
+    all, because "does not" contains "no". A model that answers with a whole
+    sentence of advice is not rare, and neither is a two-way scheme with short
+    labels.
+
+    Checked here rather than only in the client because the client fix depends
+    on the model returning a bare label, and this does not. A rejected value is
+    kept under `suggestive_choice_rejected` rather than deleted, so the record
+    still shows what the model said.
+    """
+    if not isinstance(result, dict):
+        return result
+    names = _label_names(labels)
+    if not names:
+        # Numeric scales and free-text schemes have nothing to check against.
+        return result
+    lowered = {name.lower(): name for name in names}
+
+    for key in _SUGGESTION_KEYS:
+        if key not in result:
+            continue
+        value = result[key]
+        values = value if isinstance(value, list) else [value]
+        kept, rejected = [], []
+        for candidate in values:
+            match = lowered.get(str(candidate).strip().lower())
+            (kept if match else rejected).append(match or candidate)
+        if rejected:
+            logger.warning(
+                "AI suggested %r, which is not one of this scheme's labels "
+                "(%s); not highlighting it.", rejected, ", ".join(names))
+            result[f"{key}_rejected"] = (
+                rejected if isinstance(value, list) else rejected[0])
+        result[key] = kept if isinstance(value, list) else (
+            kept[0] if kept else "")
+
+    return result
+
+
 class AiCacheManager:
     def __init__(self):
         ai_support = config["ai_support"]
@@ -1611,27 +1675,33 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         annotation_type_str = config["annotation_schemes"][annotation_id]["annotation_type"]
         annotation_type = Annotation_Type(annotation_type_str)
         if annotation_type == Annotation_Type.LIKERT:
-            return self.generate_likert(instance_id, annotation_id, ai_assistant)
+            result = self.generate_likert(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.RADIO:
-            return self.generate_radio(instance_id, annotation_id, ai_assistant)
+            result = self.generate_radio(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.MULTISELECT:
-            return self.generate_multiselect(instance_id, annotation_id, ai_assistant)
+            result = self.generate_multiselect(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.NUMBER:
-            return self.generate_number(instance_id, annotation_id, ai_assistant)
+            result = self.generate_number(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.SELECT:
-            return self.generate_select(instance_id, annotation_id, ai_assistant)
+            result = self.generate_select(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.SLIDER:
-            return self.generate_slider(instance_id, annotation_id, ai_assistant)
+            result = self.generate_slider(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.SPAN:
-            return self.generate_span(instance_id, annotation_id, ai_assistant)
+            result = self.generate_span(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.TEXTBOX:
-            return self.generate_textbox(instance_id, annotation_id, ai_assistant)
+            result = self.generate_textbox(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.IMAGE_ANNOTATION:
-            return self.generate_image_annotation(instance_id, annotation_id, ai_assistant)
+            result = self.generate_image_annotation(instance_id, annotation_id, ai_assistant)
         elif annotation_type == Annotation_Type.VIDEO_ANNOTATION:
-            return self.generate_video_annotation(instance_id, annotation_id, ai_assistant)
+            result = self.generate_video_annotation(instance_id, annotation_id, ai_assistant)
         else:
             raise ValueError(f"Unknown annotation type: {annotation_type}")
+
+        # Every generator funnels through here, so this is the one place a
+        # suggested choice can be checked against what the scheme actually
+        # offers.
+        return validate_suggested_choice(
+            result, _get_scheme_field(annotation_id, "labels"))
 
     def get_cache_stats(self) -> Dict[str, int]:
         """returns statistics on disk cache and in-progress cache entries."""
