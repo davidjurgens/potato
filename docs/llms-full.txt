@@ -34562,9 +34562,16 @@ The table lives in `potato/ai/cost.py`.
 Unpriced runs are counted apart from the dollar total. Folding them in as zero
 would report a project using an unpriced model as having spent nothing.
 
-Each run records whether its figure was estimated or measured, so the total can
-be checked against an invoice — which is how anyone finds out an estimate was
-wrong.
+A run is recorded once it finishes, for the items it attempted. A batch that
+stops partway — the judge service goes away, a position-bias probe dies on its
+second scheme — is charged for the part that reached the model, not for the
+whole projection. Failed calls count: a call that came back empty was billed.
+
+Every figure in the total is an estimate, scaled per item rather than measured.
+The endpoints do not report token usage, so every row carries `estimated: 1` and
+nothing writes a measured one yet. The column is there anyway, because a total
+that mixed the two without saying which was which could not be checked against
+an invoice, which is how anyone finds out an estimate was wrong.
 
 ---
 
@@ -40415,6 +40422,16 @@ restart. The log doubles as the session's audit trail: blind votes,
 timestamps, discussion, and every post-reveal change with its majority
 context. `GET /rooms/api/<CODE>/export` (host or admin) returns the log plus
 computed metrics as JSON.
+
+While a room is open, the export is redacted the same way the room page is:
+revealed items in full, unrevealed items as voter counts only, and blind
+`vote_cast` events with their labels stripped. The host is a voting member, so
+an unredacted live export would let one participant read everyone else's
+independent judgment before casting their own, and `blind_alpha` is computed as
+though that had not happened. Closing the room lifts the redaction, and the
+download link only appears on the closed-session screen anyway, so nothing is
+withheld from whoever is collecting the data. The payload carries
+`redacted: true` while the redaction applies.
 
 With `persist_votes: true` (the default), each member's **final** vote on a
 revealed item is written into their regular annotation state when the host

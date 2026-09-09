@@ -6,7 +6,7 @@ Two things were wrong, one of them destructive:
 * `create_room` accepted any schema with a `labels` list. Image, video, audio
   and spatial schemas all have one — their class palettes — and closing an item
   writes the vote by *deleting* every annotation for that schema and storing
-  `Label(schema, "car") = "true"`. Pointing rooms at `object_detection` fed a
+  `Label(schema, "car") = "on"`. Pointing rooms at `object_detection` fed a
   session that quietly replaced each member's geometry with a class name.
 * the room page rendered the item as `item_text || "(no text)"`, so a norming
   session on an image project showed the literal string "(no text)" and asked

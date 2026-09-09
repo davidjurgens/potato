@@ -2458,6 +2458,48 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
         validate_display_logic_references(all_schemes)
         _validate_turn_level_bindings(config_data, all_schemes)
         _validate_session_level_schemes(config_data, all_schemes)
+        _validate_rooms_block(config_data)
+
+
+def _validate_rooms_block(config_data: Dict[str, Any]) -> None:
+    """Cross-check the rooms block against the schemes it needs.
+
+    ``rooms.enabled: true`` with nothing to vote on parses to
+    ``enabled = False`` and warns at boot, on the rooms logger -- which
+    ``potato validate`` does not listen to. So a config that turns rooms on and
+    then 404s at /rooms validated clean, and the author's next move was to hunt
+    for a typo that was not there.
+    """
+    rooms = config_data.get('rooms') or {}
+    if not isinstance(rooms, dict) or not rooms.get('enabled'):
+        return
+
+    # Top-level schemes only, because that is the list rooms itself reads.
+    # A scheme declared under `phases` is invisible to rooms, so counting it
+    # here would suppress the warning for exactly the config that breaks.
+    top_level = [s for s in (config_data.get('annotation_schemes') or [])
+                 if isinstance(s, dict)]
+    named = rooms.get('schema')
+    scheme_names = [s.get('name') for s in top_level]
+    if named:
+        if named not in scheme_names:
+            logger.warning(
+                "rooms.schema is '%s' but no annotation scheme has that name — "
+                "rooms will refuse to open. Schemes here: %s.",
+                named, scheme_names or 'none',
+            )
+        return
+
+    # The autopick rooms itself runs. Imported rather than restated so the two
+    # cannot drift into disagreeing about which config is valid.
+    from potato.rooms.config import _autopick_schema
+    if not _autopick_schema(config_data):
+        logger.warning(
+            "rooms.enabled is true but no radio or likert annotation scheme "
+            "was found and rooms.schema is not set — rooms will be disabled "
+            "and /rooms will return 404. Set rooms.schema to the scheme "
+            "members should vote on."
+        )
 
 
 def _validate_session_level_schemes(config_data: Dict[str, Any], schemes: List[Dict[str, Any]]) -> None:

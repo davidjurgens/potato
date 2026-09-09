@@ -139,7 +139,7 @@ def votable_schema_error(app_config, schema_name):
     """Why this schema cannot be voted on in a room, or None if it can.
 
     A room stores a member's final vote by *deleting* every annotation for the
-    schema and writing ``Label(schema, "cat") = "true"``. On a schema whose
+    schema and writing ``Label(schema, "cat") = "on"``. On a schema whose
     answer is a JSON blob — geometry, spans, timelines, rollouts — that is not
     a vote, it is the annotator's work being replaced by a class name. Image,
     video, audio and spatial schemas all carry a ``labels`` list (their class

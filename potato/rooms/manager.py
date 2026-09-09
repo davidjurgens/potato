@@ -368,7 +368,11 @@ class RoomsManager:
                                  if isinstance(l, Label)
                                  and l.get_schema() == room.schema]:
                     del annotations[existing]
-                annotations[Label(room.schema, label)] = "true"
+                # "on" is what the browser posts for a selected radio,
+                # and so what /updateinstance stores. A room vote is an
+                # annotation like any other; writing "true" here left the
+                # same answer spelled two ways in one exported column.
+                annotations[Label(room.schema, label)] = "on"
                 if username not in ism.instance_annotators[instance_id]:
                     ism.register_annotator(instance_id, username)
                 usm.save_user_state(user_state)
@@ -380,14 +384,34 @@ class RoomsManager:
     # Export
 
     def export_room(self, room: Room) -> Dict[str, Any]:
+        """The session log. Blind votes stay blind until the room closes.
+
+        Export is host-or-admin, and the host is a voting member, so a full
+        export mid-session handed one participant every other member's
+        independent judgement before casting their own -- and ``blind_alpha``,
+        the number the room exists to produce, is computed as though that
+        never happened. A live room therefore exports exactly what ``to_state``
+        already shows its members: revealed items in full, unrevealed items as
+        voter counts, and vote events through ``public_view``.
+
+        Closing the room lifts it. Nothing is lost to the researcher, who
+        exports afterwards -- the download link only appears on the closed
+        screen -- and the host who closes a room to peek has ended the session
+        and their own vote with it.
+        """
         with self.lock:
+            live = room.status != CLOSED
             return {
                 "room": room.to_summary(),
                 "schema": room.schema,
-                "items": [s.to_dict(include_votes=True)
+                "items": [s.to_dict(include_votes=s.revealed or not live)
                           for s in room.item_states.values()],
                 "metrics": self.metrics(room),
-                "events": list(room.events),
+                "events": ([Room.public_view(e) for e in room.events] if live
+                           else list(room.events)),
+                # Named, because an export that is quietly thinner than the
+                # one the caller expected reads as missing data.
+                "redacted": live,
             }
 
 

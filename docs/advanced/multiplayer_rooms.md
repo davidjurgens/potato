@@ -84,6 +84,16 @@ timestamps, discussion, and every post-reveal change with its majority
 context. `GET /rooms/api/<CODE>/export` (host or admin) returns the log plus
 computed metrics as JSON.
 
+While a room is open, the export is redacted the same way the room page is:
+revealed items in full, unrevealed items as voter counts only, and blind
+`vote_cast` events with their labels stripped. The host is a voting member, so
+an unredacted live export would let one participant read everyone else's
+independent judgment before casting their own, and `blind_alpha` is computed as
+though that had not happened. Closing the room lifts the redaction, and the
+download link only appears on the closed-session screen anyway, so nothing is
+withheld from whoever is collecting the data. The payload carries
+`redacted: true` while the redaction applies.
+
 With `persist_votes: true` (the default), each member's **final** vote on a
 revealed item is written into their regular annotation state when the host
 advances — room work counts as real annotations and flows into every

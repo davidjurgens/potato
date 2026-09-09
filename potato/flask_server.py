@@ -5458,6 +5458,26 @@ def _apply_proxy_fix_from_env(flask_app):
     )
 
 
+def _init_rooms_if_enabled(config):
+    """Start Multiplayer Rooms, and say so only if they actually started.
+
+    `parse_rooms_config` can turn rooms off after being told to turn them on --
+    no radio or likert scheme to vote on, most often -- and returns None.
+    Logging "initialized successfully" one line under that warning sends the
+    author hunting for a typo in a config that is fine.
+    """
+    if not config.get("rooms", {}).get("enabled", False):
+        return None
+    logger.info("Initializing Multiplayer Rooms...")
+    from potato.rooms import init_rooms_manager
+    manager = init_rooms_manager(config)
+    if manager is None:
+        logger.warning("Multiplayer Rooms are disabled; /rooms will 404")
+    else:
+        logger.info("Multiplayer Rooms initialized successfully")
+    return manager
+
+
 def _initialize_from_config(config_file):
     """
     Perform full server initialization from a config file path.
@@ -5618,11 +5638,7 @@ def _initialize_from_config(config_file):
         init_psychometrics_manager(config)
         logger.info("Psychometrics initialized successfully")
     # Initialize Multiplayer Rooms if enabled (parity with run_server()).
-    if config.get("rooms", {}).get("enabled", False):
-        logger.info("Initializing Multiplayer Rooms...")
-        from potato.rooms import init_rooms_manager
-        init_rooms_manager(config)
-        logger.info("Multiplayer Rooms initialized successfully")
+    _init_rooms_if_enabled(config)
 
     # Initialize Judge Calibration if enabled (parity with run_server()).
     if config.get("judge_calibration", {}).get("enabled", False):
@@ -5893,11 +5909,7 @@ def run_server(args):
         init_psychometrics_manager(config)
         logger.info("Psychometrics initialized successfully")
     # Initialize Multiplayer Rooms if enabled
-    if config.get("rooms", {}).get("enabled", False):
-        logger.info("Initializing Multiplayer Rooms...")
-        from potato.rooms import init_rooms_manager
-        init_rooms_manager(config)
-        logger.info("Multiplayer Rooms initialized successfully")
+    _init_rooms_if_enabled(config)
 
     # Initialize Judge Calibration if enabled
     if config.get("judge_calibration", {}).get("enabled", False):
