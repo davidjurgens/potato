@@ -98,6 +98,7 @@ class AIUsageEvent:
         response_timestamp: When the AI response was received
         suggestion_accepted: The value the user accepted (None if rejected/ignored)
         final_annotation: What the user ultimately annotated for this schema
+        reconstructed: True when the request half was never seen
         time_to_decision_ms: Milliseconds from response to user action
     """
     request_timestamp: float
@@ -107,6 +108,12 @@ class AIUsageEvent:
     suggestion_accepted: Optional[str] = None
     final_annotation: Optional[str] = None
     time_to_decision_ms: Optional[int] = None
+    #: True when the request half of the exchange was never seen, so this
+    #: record was assembled from the decision alone. A reload between request
+    #: and accept, an expired session, or a client that only reports decisions
+    #: all produce one. Without it, such a record is indistinguishable from a
+    #: complete exchange whose timing happens to be missing.
+    reconstructed: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -118,6 +125,7 @@ class AIUsageEvent:
             'suggestion_accepted': self.suggestion_accepted,
             'final_annotation': self.final_annotation,
             'time_to_decision_ms': self.time_to_decision_ms,
+            'reconstructed': self.reconstructed,
         }
 
     @classmethod
@@ -131,6 +139,7 @@ class AIUsageEvent:
             suggestion_accepted=data.get('suggestion_accepted'),
             final_annotation=data.get('final_annotation'),
             time_to_decision_ms=data.get('time_to_decision_ms'),
+            reconstructed=bool(data.get('reconstructed', False)),
         )
 
 
@@ -290,6 +299,15 @@ class BehavioralData:
     total_time_ms: int = 0
     interactions: List[InteractionEvent] = field(default_factory=list)
     ai_usage: List[AIUsageEvent] = field(default_factory=list)
+    #: schema -> the value a model seeded this instance with, before the
+    #: annotator touched it. An accepted seed is otherwise indistinguishable
+    #: from an independent answer: an "accepter" who changed nothing stores
+    #: exactly the prediction file, in a record of identical shape to someone
+    #: who worked it out. Without this a study using `pre_annotation` cannot
+    #: report its own model-acceptance rate from its own data. The mirror of
+    #: `AIUsageEvent.final_annotation`, which is the same fact from the other
+    #: end -- ai_support records what was accepted and never what was saved.
+    pre_annotation_seeds: Dict[str, Any] = field(default_factory=dict)
     annotation_changes: List[AnnotationChange] = field(default_factory=list)
     navigation_history: List[Dict[str, Any]] = field(default_factory=list)
     focus_time_by_element: Dict[str, int] = field(default_factory=dict)
@@ -311,6 +329,7 @@ class BehavioralData:
                 e.to_dict() if hasattr(e, 'to_dict') else e
                 for e in self.interactions
             ],
+            'pre_annotation_seeds': dict(self.pre_annotation_seeds),
             'ai_usage': [
                 e.to_dict() if hasattr(e, 'to_dict') else e
                 for e in self.ai_usage
@@ -352,6 +371,9 @@ class BehavioralData:
         ]
 
         # Reconstruct AI usage events
+        seeds = data.get('pre_annotation_seeds')
+        if isinstance(seeds, dict):
+            bd.pre_annotation_seeds = dict(seeds)
         ai_usage = data.get('ai_usage', [])
         bd.ai_usage = [
             AIUsageEvent.from_dict(e) if isinstance(e, dict) else e
@@ -406,6 +428,48 @@ class BehavioralData:
         )
         self.ai_usage.append(event)
         return event
+
+    def record_pre_annotation_seeds(self, values_by_schema: Dict[str, Any]) -> None:
+        """Note which schemas a model answered before the annotator saw them.
+
+        Recorded once, when the seed is applied. A later save does not clear
+        it: the point is to be able to compare what was suggested with what was
+        submitted, which needs both.
+        """
+        for schema, value in values_by_schema.items():
+            self.pre_annotation_seeds.setdefault(schema, value)
+
+    def record_final_annotations(self, values_by_schema: Dict[str, Any]) -> int:
+        """Stamp what was actually saved onto this instance's AI usage events.
+
+        `final_annotation` is documented as "What the user ultimately annotated
+        for this schema" and was declared, serialized and read back -- and
+        never assigned. It read `null` on a record where the annotator accepted
+        a suggestion and saved it unchanged.
+
+        It is the field the whole subsystem exists for. `suggestion_accepted`
+        records the CLICK. An annotator who accepts a suggestion and then
+        changes their mind before saving leaves a record saying they accepted
+        it and nothing saying what they submitted, so the acceptance rate you
+        can compute is the one at the moment of the click rather than the one
+        that survived into the dataset -- and the second is the number a paper
+        reports.
+
+        Returns how many events were stamped.
+        """
+        stamped = 0
+        for event in self.ai_usage:
+            schema = (event.schema_name if hasattr(event, "schema_name")
+                      else event.get("schema_name"))
+            if schema not in values_by_schema:
+                continue
+            value = values_by_schema[schema]
+            if hasattr(event, "final_annotation"):
+                event.final_annotation = value
+            else:
+                event["final_annotation"] = value
+            stamped += 1
+        return stamped
 
     def add_annotation_change(self, schema_name: str, action: str,
                              label_name: Optional[str] = None,

@@ -60,7 +60,8 @@ from potato.admin import admin_dashboard
 from potato.ai.ai_help_wrapper import generate_ai_help_html
 from potato.ai.ai_prompt import get_ai_prompt
 from potato.server_utils.schemas.span import get_span_color, set_span_color, SPAN_COLOR_PALETTE
-from potato.server_utils.annotation_keys import split_annotation_key
+from potato.server_utils.annotation_keys import (
+    split_annotation_key, is_selection_marker)
 
 # Import annotation history
 from potato.annotation_history import AnnotationHistoryManager
@@ -6184,6 +6185,8 @@ def update_instance():
         # webhooks can be enabled without quality control (otherwise the webhook
         # emit block raises UnboundLocalError and every save 500s). F-030.
         all_annotations = {}
+        #: schema -> the label the annotator settled on, for `final_annotation`.
+        final_by_schema = {}
         if "annotations" in request.json:
             for key, value in request.json.get("annotations", {}).items():
                 # Parse schema:label format. `:::` first -- it is the form
@@ -6203,6 +6206,12 @@ def update_instance():
                     # Both keys are kept because the bare one is what the
                     # webhook payload and auto-promotion have always carried.
                     all_annotations[key] = value
+                    # What the annotator ends up with, as a LABEL. The value
+                    # beside it is the form's own marker ("on"), and
+                    # `suggestion_accepted` holds a label -- comparing the two
+                    # is the whole point of recording both.
+                    final_by_schema[schema_name] = (
+                        label_name if is_selection_marker(value) else value)
                 else:
                     all_annotations[key] = value
         elif "schema" in request.json:
@@ -6216,6 +6225,17 @@ def update_instance():
         # Quality control validation (attention checks and gold standards)
         qc_manager = get_quality_control_manager()
         qc_result = None
+
+        # Stamp what was actually saved onto this instance's AI usage
+        # events. `final_annotation` is what the AI-usage subsystem exists to
+        # answer and was never assigned -- `suggestion_accepted` records the
+        # click, so an annotator who accepted a suggestion and then changed
+        # their mind before saving left a record saying they accepted it and
+        # nothing saying what they submitted.
+        if final_by_schema:
+            _bd = user_state.instance_id_to_behavioral_data.get(instance_id)
+            if _bd is not None and hasattr(_bd, "record_final_annotations"):
+                _bd.record_final_annotations(final_by_schema)
 
         if qc_manager:
             # How long the annotator had the item on screen, as measured by the
@@ -7697,6 +7717,7 @@ def track_ai_usage():
     elif event_type in ('accept', 'reject'):
         accepted_value = data.get('accepted_value') if event_type == 'accept' else None
         # Update the most recent AI event for this schema
+        matched = False
         if hasattr(bd, 'ai_usage'):
             for ai_event in reversed(bd.ai_usage):
                 event_schema = ai_event.schema_name if hasattr(ai_event, 'schema_name') else ai_event.get('schema_name')
@@ -7708,7 +7729,34 @@ def track_ai_usage():
                     else:
                         ai_event['suggestion_accepted'] = accepted_value
                         ai_event['time_to_decision_ms'] = int((timestamp - ai_event['response_timestamp']) * 1000)
+                    matched = True
                     break
+
+            if not matched:
+                # An accept with no open request used to be dropped and
+                # answered `{"status": "ok"}` -- identical to the answer a
+                # complete sequence gets. The browser saw success and the
+                # researcher got a dataset where some annotators appear never
+                # to have used the assistant. A reload between request and
+                # accept, an expired session, or a client that only reports
+                # decisions all produce that gap.
+                #
+                # The acceptance is recorded rather than refused, because it
+                # happened. `response_timestamp` stays None, so
+                # `time_to_decision_ms` is absent rather than invented, and
+                # `reconstructed` says the request half was never seen.
+                logger.warning(
+                    "AI %s for schema %r on %s had no open request; recording "
+                    "it without one.", event_type, schema_name, instance_id)
+                event = AIUsageEvent(
+                    request_timestamp=timestamp,
+                    schema_name=schema_name,
+                    suggestion_accepted=accepted_value,
+                )
+                event.reconstructed = True
+                bd.ai_usage.append(event)
+                return jsonify({"status": "ok", "event_type": event_type,
+                                "reconstructed": True})
 
     return jsonify({"status": "ok", "event_type": event_type})
 

@@ -103,6 +103,7 @@ class QualityControlConfig:
     # Pre-annotation config
     pre_annotation_enabled: bool = False
     pre_annotation_field: str = "predictions"
+    pre_annotation_predictions_file: Optional[str] = None
     pre_annotation_allow_modification: bool = True
     pre_annotation_show_confidence: bool = False
     pre_annotation_highlight_threshold: float = 0.7
@@ -159,9 +160,15 @@ class QualityControlManager:
         self.promoted_gold_items: List[Dict] = []  # Items promoted to gold via consensus
         self.promoted_gold_labels: Dict[str, Dict[str, Any]] = {}  # Promoted item_id -> consensus_label
 
+        #: item_id -> predictions, from `pre_annotation.predictions_file`.
+        #: Kept apart from `pre_annotations`, which caches whatever was found
+        #: on the item itself.
+        self.file_pre_annotations: Dict[str, Dict[str, Any]] = {}
+
         # Load data files if configured
         self._load_attention_checks()
         self._load_gold_standards()
+        self._load_prediction_file()
 
         # Restore results recorded by earlier runs of this study.
         self._load_results()
@@ -472,6 +479,7 @@ class QualityControlManager:
         if pre_config.get('enabled', False):
             qc.pre_annotation_enabled = True
             qc.pre_annotation_field = pre_config.get('field', 'predictions')
+            qc.pre_annotation_predictions_file = pre_config.get('predictions_file')
             qc.pre_annotation_allow_modification = pre_config.get('allow_modification', True)
             qc.pre_annotation_show_confidence = pre_config.get('show_confidence', False)
             qc.pre_annotation_highlight_threshold = pre_config.get('highlight_low_confidence', 0.7)
@@ -1253,6 +1261,10 @@ class QualityControlManager:
 
         field = self.qc_config.pre_annotation_field
         if field not in item_data:
+            from_file = self.file_pre_annotations.get(str(item_id))
+            if from_file:
+                self.pre_annotations[item_id] = from_file
+                return from_file
             return None
 
         pre_data = item_data[field]
@@ -1263,6 +1275,76 @@ class QualityControlManager:
         # Cache for later use
         self.pre_annotations[item_id] = pre_data
         return pre_data
+
+    def _load_prediction_file(self) -> None:
+        """Load `pre_annotation.predictions_file`, if one is named.
+
+        The key was accepted by the config, published in the JSON schema, and
+        read by nothing. Its sibling `field` works, so an author who set
+        `predictions_file`, booted clean and saw no pre-filled answers had no
+        reason to suspect the key -- they would suspect their paths, their data
+        shape, or the feature. `validate --strict` said "OK".
+
+        It is also the more natural of the two spellings. Every other
+        file-shaped key in Potato names a file (`gold_standards.items_file`,
+        `attention_checks.items_file`, `data_files`), while the route that
+        worked required folding the predictions into every item of the corpus.
+        Someone arriving with a model's output file will reach for this one.
+
+        Two shapes are accepted, because both are what a model writes: a
+        mapping of item id to predictions, and a list of records each naming
+        its own id.
+        """
+        path_name = self.qc_config.pre_annotation_predictions_file
+        if not self.qc_config.pre_annotation_enabled or not path_name:
+            return
+
+        path = Path(self.base_dir) / path_name
+        if not path.is_file():
+            self.logger.warning(
+                "pre_annotation.predictions_file %s does not exist; no "
+                "pre-annotations will be seeded from a file.", path)
+            return
+
+        try:
+            if path.suffix.lower() in (".jsonl", ".ndjson"):
+                records = self._load_json_or_jsonl(str(path))
+            else:
+                with open(path, "r", encoding="utf-8") as handle:
+                    records = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            self.logger.warning(
+                "Could not read pre_annotation.predictions_file %s: %s",
+                path, exc)
+            return
+
+        field = self.qc_config.pre_annotation_field
+        loaded = {}
+        if isinstance(records, dict):
+            for item_id, predictions in records.items():
+                if isinstance(predictions, dict):
+                    loaded[str(item_id)] = predictions
+        elif isinstance(records, list):
+            for record in records:
+                if not isinstance(record, dict):
+                    continue
+                item_id = record.get("id") or record.get("instance_id")
+                if item_id is None:
+                    continue
+                predictions = record.get(field, record.get("predictions"))
+                if isinstance(predictions, dict):
+                    loaded[str(item_id)] = predictions
+
+        self.file_pre_annotations = loaded
+        if loaded:
+            self.logger.info(
+                "Loaded pre-annotations for %d item(s) from %s",
+                len(loaded), path)
+        else:
+            self.logger.warning(
+                "pre_annotation.predictions_file %s held no usable records. "
+                "Expected {item_id: {schema: value}} or a list of records each "
+                "with an `id` and a %r object.", path, field)
 
     def get_pre_annotations(self, item_id: str) -> Optional[Dict[str, Any]]:
         """Get cached pre-annotations for an item."""

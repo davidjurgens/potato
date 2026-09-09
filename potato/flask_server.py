@@ -3946,6 +3946,20 @@ def render_page_with_annotations(username: str):
     # user with no annotations, so guard on falsiness rather than `is None`.
     if not annotations and pre_annotation_data:
         logger.debug(f"Applying pre-annotations for instance {instance_id}")
+        # Note what the model answered before the annotator saw it. An accepted
+        # seed is otherwise indistinguishable from an independent answer, so a
+        # study using `pre_annotation` cannot report its own model-acceptance
+        # rate from its own data. The mirror of `final_annotation` on the
+        # ai_support side.
+        try:
+            from potato.interaction_tracking import (
+                get_or_create_behavioral_data as _get_bd)
+            _bd = _get_bd(
+                user_state.instance_id_to_behavioral_data, instance_id)
+            if hasattr(_bd, "record_pre_annotation_seeds"):
+                _bd.record_pre_annotation_seeds(dict(pre_annotation_data))
+        except Exception as exc:  # pragma: no cover - never block the page
+            logger.debug("Could not record pre-annotation provenance: %s", exc)
         scheme_dict = {}
         annotations = defaultdict(dict)
         for it in config['annotation_schemes']:
