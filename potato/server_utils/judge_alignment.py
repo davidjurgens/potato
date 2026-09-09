@@ -309,30 +309,37 @@ def run_judge_batch(config: Dict[str, Any], users: List[str],
     check_batch_against_cap(cfg, projected, "judge_batch")
 
     n_judged, n_failed, version_seen = 0, 0, None
-    for schema in judge_scoped_schemas(cfg):
-        schema_name = schema.get("name")
-        ids = annotated_instance_ids(users, schema_name)
-        if max_per_schema:
-            ids = ids[:max_per_schema]
-        examples = _few_shot_examples(schema_name, use_few_shot, few_shot_cfg)
-        for iid in ids:
-            try:
-                item = ism.get_item(iid)
-                text = item.get_text() if item else ""
-            except Exception:
-                text = ""
-            shots = [e for e in examples if e.get("id") != iid] or None
-            pred = service.judge_instance(iid, schema, text, few_shot_examples=shots)
-            if pred is None:
-                n_failed += 1
-                continue
-            save_prediction(cfg, pred)
-            version_seen = pred.prompt_version
-            n_judged += 1
+    try:
+        for schema in judge_scoped_schemas(cfg):
+            schema_name = schema.get("name")
+            ids = annotated_instance_ids(users, schema_name)
+            if max_per_schema:
+                ids = ids[:max_per_schema]
+            examples = _few_shot_examples(schema_name, use_few_shot, few_shot_cfg)
+            for iid in ids:
+                try:
+                    item = ism.get_item(iid)
+                    text = item.get_text() if item else ""
+                except Exception:
+                    text = ""
+                shots = [e for e in examples if e.get("id") != iid] or None
+                pred = service.judge_instance(iid, schema, text,
+                                              few_shot_examples=shots)
+                if pred is None:
+                    n_failed += 1
+                    continue
+                save_prediction(cfg, pred)
+                version_seen = pred.prompt_version
+                n_judged += 1
+    finally:
+        # Failures count: a call that reached the model and came back empty
+        # was still billed. What must NOT count is the tail of a batch that
+        # stopped early -- that is the drift this replaced.
+        record_batch_spend(cfg, projected, "judge_batch", n_judged + n_failed)
 
     return {"judged": n_judged, "failed": n_failed,
             "prompt_version": version_seen,
-            "estimated_cost": projected.to_dict()}
+            "estimated_cost": projected.rescaled(n_judged + n_failed).to_dict()}
 
 
 def _judge_batch_work(cfg: Dict[str, Any], users: List[str], ism,
@@ -383,12 +390,36 @@ def estimate_batch_cost(cfg: Dict[str, Any], texts: List[str],
 
 
 def check_batch_against_cap(cfg: Dict[str, Any], projected, action: str) -> None:
-    """Refuse the run if it would cross the cap, and log it if it would not."""
+    """
+    Refuse the run if it would cross the cap.
+
+    Checks only. The spend is recorded by `record_batch_spend` once the run is
+    over, because a batch can be refused, fail on every call, or stop short,
+    and charging the project up front for work that never happened makes the
+    running total drift up and the cap refuse the next batch against money
+    nobody spent.
+    """
     from potato.ai import cost
 
     spent = cost.total_spend(cfg).get("cost_usd", 0.0)
     cost.check_before_running(cfg, projected, spent)
-    cost.record_spend(cfg, action, projected, estimated=True)
+
+
+def record_batch_spend(cfg: Dict[str, Any], projected, action: str,
+                       n_attempted: int) -> None:
+    """
+    Charge the project for the ``n_attempted`` items that actually ran.
+
+    Call this in a ``finally``: a batch that dies partway still spent money on
+    everything before the exception, and a total that omits it is wrong in the
+    direction that lets the next run through.
+    """
+    from potato.ai import cost
+
+    if n_attempted <= 0:
+        return
+    cost.record_spend(cfg, action, projected.rescaled(n_attempted),
+                      estimated=True)
 
 
 def _few_shot_examples(schema_name: str, enabled: bool, cfg: Dict[str, Any]) -> List[dict]:

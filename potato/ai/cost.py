@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
@@ -180,6 +180,37 @@ class CostEstimate:
     @property
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens
+
+    def rescaled(self, n_items: int) -> "CostEstimate":
+        """
+        This projection, for ``n_items`` instead of the number projected.
+
+        A batch is priced before it runs and can then run short: calls fail,
+        the loop is cut off, the whole thing errors on the first item. Charging
+        the project for work that never left the machine makes the running
+        total drift up and the cap refuse batches against money nobody spent.
+
+        Scaled per item rather than measured. The endpoints do not report token
+        usage, so this is still the same estimate -- it just covers the items
+        actually attempted. A run that failed on every call is charged for
+        those calls, because a call that reached the model and came back empty
+        was still billed.
+        """
+        if n_items >= self.n_items or self.n_items <= 0:
+            return self
+        n_items = max(0, n_items)
+        share = n_items / self.n_items
+        return replace(
+            self,
+            n_items=n_items,
+            input_tokens=int(self.input_tokens * share),
+            output_tokens=int(self.output_tokens * share),
+            cost_usd=(None if self.cost_usd is None
+                      else round(self.cost_usd * share, 6)),
+            notes=list(self.notes) + [
+                f"Projected for {self.n_items} item(s); {n_items} were "
+                f"attempted, so this is scaled to those."],
+        )
 
     def to_dict(self) -> dict:
         return {

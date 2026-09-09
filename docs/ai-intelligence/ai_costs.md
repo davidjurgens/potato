@@ -203,9 +203,16 @@ The table lives in `potato/ai/cost.py`.
 Unpriced runs are counted apart from the dollar total. Folding them in as zero
 would report a project using an unpriced model as having spent nothing.
 
-Each run records whether its figure was estimated or measured, so the total can
-be checked against an invoice — which is how anyone finds out an estimate was
-wrong.
+A run is recorded once it finishes, for the items it attempted. A batch that
+stops partway — the judge service goes away, a position-bias probe dies on its
+second scheme — is charged for the part that reached the model, not for the
+whole projection. Failed calls count: a call that came back empty was billed.
+
+Every figure in the total is an estimate, scaled per item rather than measured.
+The endpoints do not report token usage, so every row carries `estimated: 1` and
+nothing writes a measured one yet. The column is there anyway, because a total
+that mixed the two without saying which was which could not be checked against
+an invoice, which is how anyone finds out an estimate was wrong.
 
 ---
 

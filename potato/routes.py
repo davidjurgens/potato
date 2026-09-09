@@ -3654,7 +3654,8 @@ def admin_judge_position_bias():
                 break
 
         from potato.server_utils.judge_alignment import (
-            check_batch_against_cap, estimate_batch_cost, save_position_bias)
+            check_batch_against_cap, estimate_batch_cost, record_batch_spend,
+            save_position_bias)
 
         # This is the most expensive action in the tool: TWO model calls per
         # item per schema. Pricing it at one call would understate it by half,
@@ -3666,15 +3667,24 @@ def admin_judge_position_bias():
 
         service = JudgeService(config)
         report = {}
-        for scheme in schemas:
-            results = position_bias.probe_batch(service, scheme, items)
-            summary = position_bias.summarize(results)
-            # Stored WITHOUT the per-item results: the eval card needs the
-            # rates, and keeping every verdict pair would grow the file by a
-            # row per item on every re-run.
-            save_position_bias(config, scheme.get("name"), summary)
-            summary["results"] = [r.to_dict() for r in results]
-            report[scheme.get("name")] = summary
+        n_probed = 0
+        try:
+            for scheme in schemas:
+                results = position_bias.probe_batch(service, scheme, items)
+                n_probed += len(results)
+                summary = position_bias.summarize(results)
+                # Stored WITHOUT the per-item results: the eval card needs the
+                # rates, and keeping every verdict pair would grow the file by
+                # a row per item on every re-run.
+                save_position_bias(config, scheme.get("name"), summary)
+                summary["results"] = [r.to_dict() for r in results]
+                report[scheme.get("name")] = summary
+        finally:
+            # Charged for the schemes that ran, not the ones the projection
+            # covered. A probe that dies on the second of three schemes has
+            # spent a third of the money, not all of it.
+            record_batch_spend(config, projected, "position_bias_probe",
+                               n_probed)
     except SpendCapExceeded as exc:
         return jsonify({"error": str(exc), "cap_usd": exc.cap,
                         "spent_usd": exc.spent,
@@ -3685,7 +3695,7 @@ def admin_judge_position_bias():
         return jsonify({"error": str(exc)}), 500
 
     return jsonify({"schemas": report, "n_items_sampled": len(items),
-                    "estimated_cost": projected.to_dict()})
+                    "estimated_cost": projected.rescaled(n_probed).to_dict()})
 
 
 @app.route("/admin/api/rollout/judge-batch", methods=["POST"])
