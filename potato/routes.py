@@ -330,7 +330,14 @@ def serve_media(filepath):
     if not os.path.isfile(requested):
         abort(404)
 
-    return send_from_directory(media_dir, filepath)
+    response = send_from_directory(media_dir, filepath)
+    # Range support exists and worked -- a range request gets 206 with a
+    # correct Content-Range -- and was never advertised on the 200. Chrome's
+    # media element probes with a range regardless, which is why seeking always
+    # worked and why this went unnoticed; anything that reads the header first
+    # takes its absence at its word.
+    response.headers.setdefault("Accept-Ranges", "bytes")
+    return response
 
 
 def serve_trace_screenshot(filepath):

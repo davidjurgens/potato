@@ -48,3 +48,14 @@ __all__ = [
     "ffmpeg_available",
     "transcode_video",
 ]
+
+
+# Registered at import: every path that serves a media file goes through this
+# package, and the type has to be pinned before the first `send_from_directory`
+# answers. Without it the content type Potato serves is whatever the host's
+# /etc/mime.types happens to say -- which on a common host is `audio/mp4a-latm`
+# for .m4a and `audio/x-flac` for .flac, the two types Chrome reports it cannot
+# play.
+from potato.media.mime import register_media_mime_types  # noqa: E402
+
+register_media_mime_types()

@@ -260,6 +260,20 @@ def safe_generate_layout(annotation_scheme: dict, layout_function: callable, *ar
         return layout_function(annotation_scheme, *args, **kwargs)
 
     except Exception as e:
+        # A generator is NOT a validation surface. Everything raised below this
+        # line is caught, logged and replaced with an error card on the page --
+        # so `potato validate --strict` still reports "OK", and a study ships
+        # with one question replaced by a red box. That is the right behaviour
+        # for the page (one broken scheme must not take the whole task down),
+        # and it is why a check placed in a generator fails open.
+        #
+        # Config-level refusals belong in `config_module.validate_*`, which is
+        # the only surface `validate` reads. Three separate checks this week
+        # existed somewhere that could not refuse: an inverted `number` range
+        # here, `require_fully_annotated` read by nothing at top level, and
+        # `min_response_time` measured by the client. If a config should be
+        # rejected, reject it in config_module; raise here only for what cannot
+        # be known until render time.
         schema_name = annotation_scheme.get('name', 'unknown')
         logger.error(f"Failed to generate layout for schema '{schema_name}': {e}")
 
