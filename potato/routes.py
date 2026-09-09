@@ -31,7 +31,9 @@ import logging
 import traceback
 import datetime
 from datetime import timedelta
-from flask import Flask, Response, session, render_template, request, redirect, url_for, jsonify, make_response
+from flask import (Flask, Response, session, render_template, request,
+                   redirect, url_for, jsonify, make_response,
+                   after_this_request)
 import time
 import uuid
 
@@ -1464,6 +1466,27 @@ def training():
     # Handle POST requests (annotation submission)
     if request.method == 'POST':
         logger.debug(f'POST -> TRAINING: {request.form}')
+
+        # Persist the graded training state however this handler returns.
+        #
+        # Nothing saved after grading, so `total_correct`, `total_attempts`,
+        # `total_mistakes`, `passed` and `failed` all stayed at their initial
+        # values on disk while the in-memory object was correct. The page and
+        # the log showed "Total Mistakes: 1"; the file said 0. Anything reading
+        # the state -- an admin report, a restart, the DONE page deciding
+        # whether this annotator failed qualification -- saw a study where
+        # nobody had answered anything.
+        #
+        # Registered here rather than at each exit because the grading block
+        # has nine of them, between the pass, fail, retry and advance paths.
+        @after_this_request
+        def _persist_training_state(response):
+            try:
+                get_user_state_manager().save_user_state(user_state)
+            except Exception:
+                logger.exception(
+                    "Could not persist training state for %s", username)
+            return response
 
         # Get the current training instance
         current_instance = user_state.get_current_training_instance()
@@ -6684,6 +6707,33 @@ def done():
     if user_state.get_phase() != UserPhase.DONE:
         # If not in the done phase, redirect
         return home()
+
+    # Someone removed by the training gate is in DONE, and DONE rendered as
+    # success: "You have completed the annotation task and your responses are
+    # saved." They completed nothing -- they failed qualification and never saw
+    # a real item. For a paid annotator that is the difference between "you did
+    # not qualify" and "you finished, expect payment", and the page below hands
+    # out a completion code and fires the crowd provider's completion.
+    #
+    # The right page already exists. The training route renders it, but the
+    # client POSTs to /annotate and then calls window.location.reload(), so the
+    # rendered body is discarded and the reload lands here. Deciding it from
+    # the persisted state rather than from a response body is what makes it
+    # actually reach the annotator.
+    training_state = user_state.get_training_state()
+    if training_state is not None and training_state.is_failed():
+        logger.info(
+            "%s reached DONE by failing training; showing the qualification "
+            "page rather than the completion page.", username)
+        return render_template(
+            "training_failed.html",
+            message=("You did not pass the qualification questions, so the "
+                     "task did not start."),
+            total_mistakes=training_state.get_total_mistakes(),
+            max_mistakes=training_state.max_mistakes,
+            annotation_task_name=config.get("annotation_task_name",
+                                            "Annotation Platform"),
+            username=username)
 
     # Get completion code from config
     completion_code = config.get("completion_code", "")
