@@ -19,6 +19,7 @@ from .cv_utils import (
     extract_image_annotations,
     blank_item_warning,
     get_image_dimensions,
+    has_image_annotation_record,
     get_image_filename,
     normalize_annotation_object,
     polygons_to_rle,
@@ -66,7 +67,15 @@ class COCOExporter(BaseExporter):
             instance_id = ann.get("instance_id", "")
             item = context.items.get(instance_id, {})
             img_anns = extract_image_annotations(ann)
-            if not img_anns:
+            # An annotator who opened the image and drew nothing produces
+            # `image_annotations: {schema: []}`, which `extract_image_annotations`
+            # filters out. Skipping the record here minted no image entry, so a
+            # confirmed negative came out identical to an image nobody opened --
+            # and in COCO an image with no annotations is a negative example and
+            # therefore training data. The entry is still minted; there are just
+            # no objects to attach to it.
+            reviewed = has_image_annotation_record(ann)
+            if not img_anns and not reviewed:
                 continue
 
             # Dimensions are read per annotation record, NOT only when a new
@@ -277,7 +286,10 @@ class COCOExporter(BaseExporter):
 
         # Items nobody marked produce no record at all, so they are
         # absent from the output rather than present and empty.
-        _blank = blank_item_warning(context, 'the COCO file')
+        # COCO writes the confirmed negative, so only items nobody
+        # opened are genuinely absent.
+        _blank = blank_item_warning(context, 'the COCO file',
+                                    reviewed_counts_as_present=True)
         if _blank:
             warnings.append(_blank)
 

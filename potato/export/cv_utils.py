@@ -214,6 +214,30 @@ def extract_image_annotations(annotation: dict) -> List[Tuple[str, List[dict]]]:
     return results
 
 
+def has_image_annotation_record(annotation: dict) -> bool:
+    """True when an annotator reviewed this image, whatever they drew.
+
+    `extract_image_annotations` drops a schema whose object list is empty, so a
+    record saying "opened, drew nothing" is indistinguishable from no record at
+    all -- and the COCO exporter, which iterates annotations, minted no image
+    entry for it.
+
+    In COCO those are different claims. An image present with no annotations is
+    a NEGATIVE EXAMPLE and therefore training data; an image absent is missing
+    data. A detection set round-tripped through Potato lost every negative it
+    arrived with and every negative its annotators confirmed, and the stats said
+    3 images where 4 went in.
+
+    An item nobody annotated at all has no record here and is still dropped,
+    which is a different question and a defensible one.
+    """
+    image_annotations = annotation.get("image_annotations")
+    if not isinstance(image_annotations, dict):
+        return False
+    return any(isinstance(objects, list)
+               for objects in image_annotations.values())
+
+
 #: Dimensions read off disk, keyed by absolute path. An export walks every
 #: annotation record, and two annotators on one image means two lookups for the
 #: same file.
@@ -1520,7 +1544,8 @@ def build_coco_category_map(
     return category_map, categories
 
 
-def items_without_image_annotations(context: Any) -> List[str]:
+def items_without_image_annotations(
+        context: Any, reviewed_counts_as_present: bool = False) -> List[str]:
     """Instance ids in the study that carry no image annotation from anyone.
 
     Every CV exporter here walks ``context.annotations``, so an item nobody
@@ -1528,16 +1553,26 @@ def items_without_image_annotations(context: Any) -> List[str]:
     image entry, no empty annotation list, nothing. For detector training an
     image with no objects is a negative example, and dropping it changes what
     the model learns.
+
+    ``reviewed_counts_as_present`` is for a format that WRITES the confirmed
+    negative, which COCO now does: an annotator who opened the image and drew
+    nothing gets an image entry with no annotations. Without this flag the
+    warning would name that item as absent from a file it is in, which is a
+    worse lie than the silence it replaced.
     """
     annotated = set()
     for annotation in getattr(context, "annotations", None) or []:
-        if extract_image_annotations(annotation):
+        present = bool(extract_image_annotations(annotation))
+        if not present and reviewed_counts_as_present:
+            present = has_image_annotation_record(annotation)
+        if present:
             annotated.add(annotation.get("instance_id", ""))
     return [iid for iid in (getattr(context, "items", None) or {})
             if iid not in annotated]
 
 
-def blank_item_warning(context: Any, destination: str = "this export"):
+def blank_item_warning(context: Any, destination: str = "this export",
+                       reviewed_counts_as_present: bool = False):
     """The warning for items that carry no image annotation, or ``None``.
 
     Says nothing about whether they should be there -- most of these formats
@@ -1546,7 +1581,8 @@ def blank_item_warning(context: Any, destination: str = "this export"):
     researcher reconciling "I had 300 images" against a file listing 214
     cannot tell whether the rest errored or were simply blank.
     """
-    blank = items_without_image_annotations(context)
+    blank = items_without_image_annotations(
+        context, reviewed_counts_as_present=reviewed_counts_as_present)
     if not blank:
         return None
     shown = ", ".join(sorted(blank)[:5])

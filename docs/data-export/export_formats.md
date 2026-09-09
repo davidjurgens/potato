@@ -173,11 +173,17 @@ normalized, so a zero width makes every box, polygon and point on that image
 come out as `[0, 0, 0, 0]`. Declare `image_width` and `image_height` for those
 items.
 
-**Items nobody annotated are not exported.** Each CV exporter writes the
-annotations it finds, so an item that was shown and left unmarked appears in no
-image list and no annotation list. The export names how many were left out and
-which. For detector training an image with no objects is a negative example, so
-if you need those images, add them to the output yourself.
+**Items with no saved annotation record are not exported.** Each CV exporter
+writes the annotations it finds, so an item that was never assigned, or was
+assigned and never saved, appears in no image list and no annotation list. The
+export names how many were left out and which.
+
+**An item an annotator opened and left empty is different**, and COCO writes
+it: the image gets an entry with no annotations, which is what a negative
+example is. The distinction matters because "reviewed, contains nothing" is
+training data and "no record was ever saved" is missing data, and the two used
+to come out identical. The other CV formats still omit both; if you need
+negatives from those, add the images to the output yourself.
 
 **Usage:**
 ```bash
