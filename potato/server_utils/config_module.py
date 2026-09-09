@@ -2307,8 +2307,22 @@ def _crowd_backend(config_data: Dict[str, Any]) -> bool:
     if login_type in ("mturk", "prolific"):
         return True
 
-    provider = (config_data.get("crowdsourcing") or {}).get("provider")
-    if provider:
+    crowdsourcing = config_data.get("crowdsourcing") or {}
+    if "provider" in crowdsourcing:
+        # PRESENCE, not truthiness. `provider:` with nothing after it is
+        # `None`, and `provider: ""` is the empty string -- both falsy, so both
+        # used to skip this branch entirely and resolve to `open`, letting a
+        # plain annotator create codes in a shared codebook. Both mean "I was
+        # naming a crowd platform and the value is missing": a half-finished
+        # edit, or a template whose substitution did not happen.
+        #
+        # An unrecognized provider NAME already locks, deliberately -- the
+        # comment on _TRUSTED_CROWD_PROVIDERS says a security control a typo
+        # can switch off is not a control. An absent value is the same kind of
+        # mistake and gets the same answer.
+        provider = crowdsourcing.get("provider")
+        if provider is None or not str(provider).strip():
+            return True
         return str(provider).strip().lower() not in _TRUSTED_CROWD_PROVIDERS
     return False
 
@@ -2346,20 +2360,35 @@ def validate_codebook_config(config_data: Dict[str, Any]) -> None:
     raw = config_data.get("codebook_mode")
     if raw is None:
         raw = (config_data.get("codebook") or {}).get("mode")
-    if raw is None:
-        return
 
-    mode = str(raw).strip().lower()
-    if mode not in _CODEBOOK_MODES:
-        raise ConfigValidationError(
-            f"codebook_mode must be one of {', '.join(_CODEBOOK_MODES)}; "
-            f"got {raw!r}."
+    if raw is not None:
+        mode = str(raw).strip().lower()
+        if mode not in _CODEBOOK_MODES:
+            raise ConfigValidationError(
+                f"codebook_mode must be one of {', '.join(_CODEBOOK_MODES)}; "
+                f"got {raw!r}."
+            )
+    else:
+        # The mode the config would have had, computed the same way
+        # `get_codebook_mode` computes it, minus the force-lock.
+        single = (
+            (config_data.get("qda_mode") or {}).get("enabled")
+            or (config_data.get("solo_mode") or {}).get("enabled")
         )
+        mode = "open" if single else "fixed"
+
+    # The warning used to fire only for an author who wrote the mode
+    # explicitly, which is backwards. Someone who wrote `codebook_mode: open`
+    # and was overruled at least knows the key exists and can go looking.
+    # Someone who never wrote it has nothing in their config to connect the
+    # behaviour to -- and QDA is exactly the workflow where an open codebook is
+    # the documented default, so it is the case where the surprise is largest.
     if mode != "fixed" and _crowd_backend(config_data):
         logging.warning(
-            "codebook_mode=%s requested with a crowdsourcing backend; "
-            "force-locking to 'fixed' (recruited annotators must not "
-            "reshape the shared codebook).", mode)
+            "codebook_mode=%s%s with a crowdsourcing backend; force-locking "
+            "to 'fixed' (recruited annotators must not reshape the shared "
+            "codebook).",
+            mode, " requested" if raw is not None else " (the default here)")
         return
 
     # `login.type: url_direct` with no `crowdsourcing.provider` is NOT
