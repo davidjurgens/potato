@@ -72,6 +72,25 @@ def prm_blob_to_step_labels(label_val: Any) -> Dict[int, Any]:
     return out
 
 
+#: The label values `_export_swebench` recognizes. A radio scheme outside this
+#: vocabulary contributes nothing to any of the four outputs.
+_SWEBENCH_OUTCOMES = frozenset({
+    "success", "resolved", "correct",
+    "failure", "unresolved", "incorrect",
+    "partial", "partially_resolved",
+})
+
+
+def _label_names(scheme: Dict[str, Any]) -> set:
+    """A scheme's label names, however the config spelled them."""
+    names = set()
+    for label in (scheme.get("labels") or []):
+        name = label.get("name") if isinstance(label, dict) else label
+        if name is not None:
+            names.add(str(name))
+    return names
+
+
 class CodingEvalExporter(BaseExporter):
     """Export coding agent annotations for ML training pipelines."""
 
@@ -113,6 +132,27 @@ class CodingEvalExporter(BaseExporter):
                 files_written.append(path)
                 stats["code_reviews"] = count
 
+        if not files_written:
+            # `success=True` was returned unconditionally, so a study that
+            # cleared the gate but held none of the four shapes printed
+            # "Export successful! Files written:" with nothing under it, exit
+            # 0, and an empty directory.
+            return ExportResult(
+                success=False,
+                format_name=self.format_name,
+                files_written=[],
+                warnings=warnings,
+                errors=[
+                    "Nothing was written: none of the requested types "
+                    f"({', '.join(export_types)}) found data in this study. "
+                    "coding_eval reads process_reward steps, pairwise "
+                    "preferences, code_review annotations, and radio schemes "
+                    "whose labels are SWE-bench outcomes "
+                    f"({', '.join(sorted(_SWEBENCH_OUTCOMES))})."
+                ],
+                stats=stats,
+            )
+
         return ExportResult(
             success=True,
             format_name=self.format_name,
@@ -125,13 +165,27 @@ class CodingEvalExporter(BaseExporter):
         if not context.annotations:
             return False, "No annotations to export"
 
-        # Check for relevant schema types
+        # `radio` used to be in this set, which is the most generic scheme type
+        # Potato has -- nearly every study declares one, so nearly every study
+        # cleared this gate and then got a successful export of nothing. A radio
+        # scheme only reaches this exporter through `_export_swebench`, and only
+        # when its labels are the outcome vocabulary that reads, so that is what
+        # is checked rather than the type.
         schema_types = {s.get("annotation_type") for s in context.schemas}
-        relevant = schema_types & {"process_reward", "code_review", "pairwise", "radio"}
-        if not relevant:
-            return False, "No coding evaluation schemas found (process_reward, code_review, pairwise, radio)"
+        if schema_types & {"process_reward", "code_review", "pairwise"}:
+            return True, ""
 
-        return True, ""
+        if any(s.get("annotation_type") == "radio"
+               and _label_names(s) & _SWEBENCH_OUTCOMES
+               for s in context.schemas):
+            return True, ""
+
+        return False, (
+            "No coding evaluation schemas found. coding_eval needs a "
+            "process_reward, code_review or pairwise scheme, or a radio scheme "
+            "whose labels are SWE-bench outcomes "
+            f"({', '.join(sorted(_SWEBENCH_OUTCOMES))})."
+        )
 
     def _export_prm(self, context: ExportContext, output_dir: str) -> Tuple[Optional[str], int]:
         """Export PRM training data."""

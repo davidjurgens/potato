@@ -110,12 +110,38 @@ def _generate_internal(
         }}
 
         function uniqueAgents(steps) {{
-            if (CONFIG.agents && CONFIG.agents.length) return CONFIG.agents.slice();
-            var seen = [], out = [];
+            // `agents` used to REPLACE the observed roster. An agent who
+            // acted in the trace but is missing from the config could not be
+            // selected -- while the step select, which labels from the data,
+            // named them on their own step. So the widget showed the annotator
+            // that the agent existed and then refused to let them be chosen,
+            // and the saved record read as a coherent judgment about someone
+            // else. Configured names come first (a deliberate roster keeps its
+            // order); observed names that are missing are appended rather than
+            // dropped.
+            var configured = (CONFIG.agents && CONFIG.agents.length)
+                ? CONFIG.agents.slice() : [];
+            var seen = configured.slice(), out = configured.slice();
             steps.forEach(function(s, i) {{
                 var a = agentOf(s, i);
                 if (seen.indexOf(a) < 0) {{ seen.push(a); out.push(a); }}
             }});
+            if (configured.length) {{
+                var extra = out.slice(configured.length);
+                if (extra.length) {{
+                    console.warn('[' + SCHEMA + '] agent(s) ' + extra.join(', ')
+                        + ' act in this item but are not in the '
+                        + 'scheme `agents:` list; offering them anyway.');
+                }}
+                var absent = configured.filter(function(a) {{
+                    return seen.indexOf(a) < 0 || !steps.some(function(s, i) {{
+                        return agentOf(s, i) === a; }});
+                }});
+                if (absent.length) {{
+                    console.warn('[' + SCHEMA + '] `agents:` names '
+                        + absent.join(', ') + ', absent from this item.');
+                }}
+            }}
             return out;
         }}
 
