@@ -3569,12 +3569,12 @@ def render_page_with_annotations(username: str):
     )
 
     custom_js = ""
-    if config["customjs"] and config.get("customjs_hostname"):
+    if config.get("customjs") and config.get("customjs_hostname"):
         custom_js = (
             f'<script src="http://{config["customjs_hostname"]}/potato.js"' +
             ' defer></script>'
         )
-    elif config["customjs"]:
+    elif config.get("customjs"):
         custom_js = (
             '<script src="http://localhost:4173/potato.js" ' +
             ' defer></script>'
@@ -5790,9 +5790,18 @@ def run_server(args):
         config["port"] = args.port
         logger.debug(f"Port set from command line: {args.port}")
 
-    # Apply persist_sessions flag from command line
-    config["persist_sessions"] = args.persist_sessions
-    logger.debug(f"Session persistence set from command line: {args.persist_sessions}")
+    # Apply persist_sessions flag from command line.
+    #
+    # Only when it was given. `--persist-sessions` is store_true with no `--no-`
+    # counterpart, so its absence can never mean "turn this off" -- and writing
+    # the default here overwrote `persist_sessions: true` from the config file
+    # on the path everyone uses. The author got no error, no warning and not the
+    # behaviour, and `configure_session`'s refusal to run persistent sessions
+    # without a `secret_key` never saw the value, so the one configuration the
+    # code goes out of its way to reject was the one that booted quietly.
+    if getattr(args, "persist_sessions", False):
+        config["persist_sessions"] = True
+        logger.debug("Session persistence enabled from command line")
 
     # --- Add support for random seed ---
     # Admins can set 'random_seed' in config YAML to control assignment randomness (default 1234)

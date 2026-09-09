@@ -629,7 +629,7 @@ class QualityControlManager:
             return None
 
         expected = self.attention_expected[item_id]
-        passed = self._compare_responses(expected, response)
+        answer_ok = self._compare_responses(expected, response)
 
         # A response faster than min_response_time fails the check, which is what
         # the key is documented to do. It used to only log, and the log line
@@ -641,26 +641,44 @@ class QualityControlManager:
             too_fast = True
             self.logger.warning(f"User {user_id} responded to attention check {item_id} "
                               f"in {response_time_seconds:.1f}s (min: {self.qc_config.attention_min_response_time}s)")
-            passed = False
-
-        # Record result — at most one result per (user, item) pair.
-        # Re-saves on the same item replace the prior result rather than
-        # appending, so a single attention-check item can only count once.
-        result = AttentionCheckResult(
-            item_id=item_id,
-            user_id=user_id,
-            passed=passed,
-            expected=expected,
-            actual=response,
-            response_time_seconds=response_time_seconds,
-            too_fast=too_fast
-        )
 
         with self._lock:
             user_results = self.attention_results[user_id]
             previous_failures = len([r for r in user_results if not r.passed])
 
-            # Replace any existing result for this (user, item) pair
+            # At most one result per (user, item) pair, merged rather than
+            # replaced. The annotation page saves twice for one click -- on
+            # selection, then again on Next -- and the second save carries the
+            # seconds spent looking at the confirmed answer. Keeping the last
+            # result therefore erased every min_response_time violation in the
+            # ordinary flow: a check answered in 3.9s against a minimum of 8
+            # was rewritten as a 40.9s pass by a Next that changed nothing, and
+            # the violation survived only as a log line.
+            #
+            # A re-save may correct the ANSWER. It may not launder the TIMING,
+            # so `too_fast` is sticky and the recorded time is the fastest one
+            # seen -- that is the reading min_response_time is about.
+            prior = next((r for r in user_results if r.item_id == item_id), None)
+            if prior is not None:
+                too_fast = too_fast or prior.too_fast
+                if prior.response_time_seconds is not None:
+                    response_time_seconds = (
+                        prior.response_time_seconds
+                        if response_time_seconds is None
+                        else min(response_time_seconds,
+                                 prior.response_time_seconds))
+
+            passed = answer_ok and not too_fast
+            result = AttentionCheckResult(
+                item_id=item_id,
+                user_id=user_id,
+                passed=passed,
+                expected=expected,
+                actual=response,
+                response_time_seconds=response_time_seconds,
+                too_fast=too_fast
+            )
+
             self.attention_results[user_id] = [
                 r for r in user_results if r.item_id != item_id
             ]
@@ -1134,59 +1152,114 @@ class QualityControlManager:
             True if responses match
         """
         for key, expected_value in expected.items():
-            # Handle both "schema_name" and "schema_name:label_name" formats
-            actual_value = None
-
-            # Direct match
-            if key in actual:
-                actual_value = actual[key]
-            else:
-                # Check for prefixed keys (schema_name:label_name format)
-                for actual_key, val in actual.items():
-                    if actual_key.startswith(key + ":") or actual_key == key:
-                        actual_value = val
-                        break
-
-            if actual_value is None:
+            readings = self._answer_readings(key, actual)
+            if not readings:
                 return False
-
-            # Drawn answers (boxes, polygons, masks, points) are graded by
-            # overlap, not equality. Two annotators never produce byte-identical
-            # geometry, so string comparison failed EVERY image gold standard and
-            # attention check regardless of how well the annotator drew — making
-            # both features unusable on vision projects.
-            #
-            # Checked before the list branch below, because a geometry answer IS
-            # a list and would otherwise be set-compared as though the objects
-            # were label strings (and unhashable dicts would raise).
-            #
-            # Shares its comparator with training practice questions
-            # (server_utils.training_grading) so a project's gold standards and
-            # its training answers are graded to the same standard.
-            if looks_like_geometry(expected_value):
-                if not geometry_answer_is_correct(
-                    actual_value, expected_value, self._geometry_tolerance()
-                ):
-                    return False
-                continue
-
-            # Compare values
-            if isinstance(expected_value, list):
-                if not isinstance(actual_value, list):
-                    actual_value = [actual_value]
-                if set(expected_value) != set(actual_value):
-                    return False
-            elif isinstance(expected_value, dict):
-                if not isinstance(actual_value, dict):
-                    return False
-                if not self._compare_responses(expected_value, actual_value):
-                    return False
-            else:
-                # Simple value comparison
-                if str(expected_value).lower() != str(actual_value).lower():
-                    return False
-
+            if not any(self._value_matches(expected_value, reading)
+                       for reading in readings):
+                return False
         return True
+
+    #: Values a client sends for "this option is selected" where the option
+    #: itself is carried by the key. The browser's own default for a checked
+    #: radio is "on"; rooms wrote "true" until it was aligned.
+    _SELECTED_MARKERS = {"on", "true", "yes", "1", "checked", "selected"}
+
+    def _answer_readings(self, key: str, actual: Dict[str, Any]) -> List[Any]:
+        """Every defensible reading of the annotator's answer for one schema.
+
+        ``/updateinstance`` accepts two payload shapes for the same selection,
+        and quality control only ever read one of them. The annotation page
+        posts ``{"sarcasm:Sarcastic": "Sarcastic"}`` -- the label in both
+        halves -- so comparing the value happened to work there. A client that
+        posts what the form element actually holds sends
+        ``{"sarcasm:Sarcastic": "on"}``, where the answer is in the KEY and the
+        value is the DOM default. Potato's own simulator sends that shape, so a
+        simulated annotator failed every check it was given no matter what it
+        answered, and anyone validating a QC config with the simulator saw 0%
+        and no reason for it.
+
+        Returned most-specific first. A reading is a candidate, not a claim:
+        the caller passes the check if any one of them matches.
+        """
+        readings: List[Any] = []
+        if key in actual:
+            readings.append(actual[key])
+
+        prefix = key + ":"
+        selected, values = [], []
+        for actual_key, val in actual.items():
+            if not actual_key.startswith(prefix):
+                continue
+            values.append(val)
+            label = actual_key[len(prefix):]
+            if self._is_selected(val):
+                selected.append(label)
+
+        if len(values) == 1:
+            readings.append(values[0])
+        elif values:
+            readings.append(values)
+
+        # Multiselect: the labels the annotator ticked, both as a set and --
+        # when there is exactly one -- as the bare label, because a single-choice
+        # expected answer is written as a string, not a one-element list.
+        if selected:
+            readings.append(selected)
+            if len(selected) == 1:
+                readings.append(selected[0])
+
+        return readings
+
+    def _is_selected(self, value: Any) -> bool:
+        """Whether a posted value means "this option was chosen"."""
+        if value is None or value is False:
+            return False
+        if isinstance(value, str):
+            return value.strip() != "" and value.strip().lower() != "off"
+        return bool(value) or value == 0
+
+    def _value_matches(self, expected_value: Any, actual_value: Any) -> bool:
+        """One expected answer against one reading of the actual answer."""
+        if actual_value is None:
+            return False
+
+        # Drawn answers (boxes, polygons, masks, points) are graded by
+        # overlap, not equality. Two annotators never produce byte-identical
+        # geometry, so string comparison failed EVERY image gold standard and
+        # attention check regardless of how well the annotator drew — making
+        # both features unusable on vision projects.
+        #
+        # Checked before the list branch below, because a geometry answer IS
+        # a list and would otherwise be set-compared as though the objects
+        # were label strings (and unhashable dicts would raise).
+        #
+        # Shares its comparator with training practice questions
+        # (server_utils.training_grading) so a project's gold standards and
+        # its training answers are graded to the same standard.
+        if looks_like_geometry(expected_value):
+            return geometry_answer_is_correct(
+                actual_value, expected_value, self._geometry_tolerance())
+
+        if isinstance(expected_value, list):
+            if not isinstance(actual_value, list):
+                actual_value = [actual_value]
+            try:
+                return set(expected_value) == set(actual_value)
+            except TypeError:
+                # Unhashable members: fall back to an order-insensitive
+                # comparison rather than raising out of a grading pass.
+                return (len(expected_value) == len(actual_value)
+                        and all(e in actual_value for e in expected_value))
+        if isinstance(expected_value, dict):
+            return (isinstance(actual_value, dict)
+                    and self._compare_responses(expected_value, actual_value))
+        if isinstance(actual_value, list):
+            # A single expected answer against a multi-reading: matches when
+            # that is the only thing the annotator chose.
+            return (len(actual_value) == 1
+                    and self._value_matches(expected_value, actual_value[0]))
+        return str(expected_value).lower() == str(actual_value).lower()
 
     def get_all_attention_results(self) -> Dict[str, List[Dict]]:
         """Get all attention check results for all users."""

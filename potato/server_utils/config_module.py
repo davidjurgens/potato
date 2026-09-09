@@ -633,6 +633,12 @@ KNOWN_CONFIG_KEYS = {
     "_bws_pool_items": None,
 }
 
+#: Keys `attention_checks.failure_handling` actually reads. The unknown-key pass
+#: stops at the top level, so nothing else was checking inside this block.
+ATTENTION_FAILURE_HANDLING_KEYS = {
+    "warn_threshold", "warn_message", "block_threshold", "block_message",
+}
+
 
 # --- Deprecated config keys ------------------------------------------------- #
 
@@ -4506,6 +4512,20 @@ def validate_quality_control_config(config_data: Dict[str, Any]) -> None:
                 if not isinstance(failure_config, dict):
                     raise ConfigValidationError("attention_checks.failure_handling must be a dictionary")
 
+                # The block is small and fixed, and nothing outside this list is
+                # read. An invented key -- `action: warn` is the natural guess,
+                # and it is not in the docs -- was accepted in silence, left the
+                # thresholds at their defaults, and the author concluded the
+                # feature did nothing.
+                unknown = sorted(set(failure_config) - ATTENTION_FAILURE_HANDLING_KEYS)
+                if unknown:
+                    logger.warning(
+                        "attention_checks.failure_handling: %s not recognized and "
+                        "will be ignored. It accepts %s.",
+                        ", ".join(repr(k) for k in unknown),
+                        ", ".join(sorted(ATTENTION_FAILURE_HANDLING_KEYS)),
+                    )
+
                 if "warn_threshold" in failure_config:
                     warn = failure_config["warn_threshold"]
                     if not isinstance(warn, int) or warn < 1:
@@ -6548,17 +6568,32 @@ def init_config(args):
 
         # Only override config settings if command line arguments are explicitly provided
         config_updates = {
-            "verbose": args.verbose,
-            "very_verbose": args.very_verbose,
             # Store an ABSOLUTE path: the server chdir's into task_dir at startup,
             # so a relative path would be re-resolved against the wrong CWD later
             # (e.g. admin export doubled the project path). CWD is still the
             # original launch dir here (chdir happens further below).
             "__config_file__": os.path.abspath(args.config_file),
-            "customjs": args.customjs,
-            "customjs_hostname": args.customjs_hostname,
-            "persist_sessions": args.persist_sessions,
         }
+
+        # The comment above was the whole intent, and these five did not honour
+        # it: they were written into config_updates unconditionally, so argparse's
+        # own default landed on top of the YAML. `persist_sessions: true` in a
+        # config file therefore did nothing at all -- no error, no warning, not
+        # the behaviour -- and `configure_session`'s refusal to run persistent
+        # sessions without a `secret_key` could not fire on the path everyone
+        # uses, because the value never reached it. The same shape silently reset
+        # `customjs_hostname` to None and `customjs`/`verbose`/`very_verbose` to
+        # False for anyone who set them in YAML.
+        #
+        # None of the four flags has a `--no-` counterpart, so absence can never
+        # mean "off" and only the truthy case is a real instruction. The string
+        # argument counts as given when it is a string.
+        for flag in ("verbose", "very_verbose", "customjs", "persist_sessions"):
+            if getattr(args, flag, False):
+                config_updates[flag] = True
+        cli_customjs_hostname = getattr(args, "customjs_hostname", None)
+        if isinstance(cli_customjs_hostname, str):
+            config_updates["customjs_hostname"] = cli_customjs_hostname
 
         # Only override debug if explicitly set to True via command line
         # or if config file doesn't have a debug setting

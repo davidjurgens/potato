@@ -21528,8 +21528,16 @@ Create a JSON file with your attention check items:
 4. A response faster than `min_response_time` fails whatever it says; the clock
    runs from when the item appeared on screen to when the annotator saved
 5. Failures are tracked per-user, at most one result per annotator per check
-   item, so changing an answer does not add a second result
-6. Warnings and blocks are triggered at configured thresholds
+   item, so changing an answer does not add a second result. Re-saves merge
+   rather than replace. The answer is taken from the latest save, the recorded
+   time is the fastest one seen, and a check that failed on speed stays failed —
+   the annotation page saves twice for one answer, on selection and again on
+   Next, and that second save carries the seconds spent looking at an answer
+   already given
+6. The comparison accepts either shape the annotation endpoint takes for a
+   selection: the label in the value, or the label in the key with the form's
+   own `on` as the value
+7. Warnings and blocks are triggered at configured thresholds
 
 Attention-check and gold results are written to
 `<output_annotation_dir>/quality_control_results.json` as they are recorded, and
