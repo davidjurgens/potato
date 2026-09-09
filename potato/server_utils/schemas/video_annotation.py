@@ -504,6 +504,20 @@ def _generate_html(
                             }}
                         }}
 
+                        // Method 1b: the item's own field, read straight off
+                        // the page. Method 1 needs an `instance_display` block
+                        // to have emitted a `.video-container[data-field-key]`;
+                        // this is what makes `source_field` work on its own,
+                        // and it comes before the "any video on the page"
+                        // steps because a named field is an explicit choice.
+                        if (!videoUrl && config.sourceField
+                                && window.potatoInstanceField) {{
+                            videoUrl = window.potatoInstanceField(config.sourceField);
+                            if (videoUrl) {{
+                                console.log('[VideoAnnotation DEBUG] Found video via instance data:', videoUrl);
+                            }}
+                        }}
+
                         // Method 2: Find any video element with data-source-url
                         if (!videoUrl) {{
                             var anyVideo = document.querySelector('video[data-source-url]');

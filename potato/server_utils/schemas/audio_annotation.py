@@ -566,7 +566,18 @@ def _generate_html(
                             }}
                         }}
 
-                        // 3. Fallback: Try instance-text or text-content containers
+                        // 3. The item's own field, read straight off the page.
+                        // Steps 1 and 2 both need an `instance_display` block;
+                        // this is what makes `source_field` work on its own.
+                        if (!audioUrl && config.sourceField
+                                && window.potatoInstanceField) {{
+                            audioUrl = window.potatoInstanceField(config.sourceField);
+                            if (audioUrl) {{
+                                console.log('[AudioAnnotation] Found audio URL from instance data:', audioUrl);
+                            }}
+                        }}
+
+                        // 4. Fallback: Try instance-text or text-content containers
                         if (!audioUrl) {{
                             var instanceContainer = document.getElementById('instance-text') || document.getElementById('text-content');
                             console.log('[AudioAnnotation] Fallback - Instance container:', instanceContainer);

@@ -665,6 +665,11 @@
     </script>
     <script src="{{ url_for('static', filename='annotation_telemetry.js') }}?v=2"></script>
     {% endif %}
+    <!-- The item's own fields, read by any widget configured with
+         `source_field`. Unconditional and tiny: the `instance_data` block it
+         reads is on every annotation page, and the media widgets need it
+         whether or not `instance_display` is declared. -->
+    <script src="{{ url_for('static', filename='instance-fields.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='span-core.js') }}?v=21"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=3"></script>
     <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->

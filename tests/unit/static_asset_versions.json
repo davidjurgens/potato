@@ -195,6 +195,10 @@
     "sha256": "44f86cac34ef4ab1",
     "version": "3"
   },
+  "instance-fields.js": {
+    "sha256": "cb1f0a5360129790",
+    "version": "1"
+  },
   "interaction_tracker.js": {
     "sha256": "efe5dc811c72a00a",
     "version": "2"

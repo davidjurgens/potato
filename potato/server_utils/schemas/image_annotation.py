@@ -671,6 +671,18 @@ def _generate_html(annotation_scheme, js_config, schema_name, labels, tools, ai_
                             }});
                         }}
 
+                        // Method 4b: the item's own field, read straight off
+                        // the page. Method 4 needs an `instance_display` block
+                        // to have emitted a matching element; this is what
+                        // makes `source_field` work on its own.
+                        if (!imageUrl && config.sourceField
+                                && window.potatoInstanceField) {{
+                            imageUrl = window.potatoInstanceField(config.sourceField);
+                            if (imageUrl) {{
+                                console.log('[ImageAnnotation] Found URL from instance data:', imageUrl);
+                            }}
+                        }}
+
                         // Method 5: an `instance_display` image field, anywhere
                         // on the page. Methods 1-3 all search inside
                         // #instance-text, which an instance_display page does
