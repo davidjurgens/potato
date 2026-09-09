@@ -35,7 +35,8 @@ Data contract:
         thought / system        -> Reasoning
         action                  -> Function Calls (with adjacent observation
                                    rendered as a nested "↳ result")
-        observation             -> nested under its preceding call
+        observation             -> nested under its preceding call, or
+                                   Reasoning when there is no call above it
     The Final Answer pane shows the trace's answer-like step (a step whose
     speaker/tool matches "final answer", "send_message", "respond", etc.),
     falling back to the last action. Make an explicit final answer by ending
@@ -325,6 +326,17 @@ class EvalTraceDisplay(BaseDisplay):
         groups: List[Dict[str, Any]] = []
         current: Optional[Dict[str, Any]] = None
 
+        # Whether any action precedes each position, computed over the WHOLE
+        # trace rather than what survives `exclude_idx`. An observation whose
+        # call was promoted to the Final Answer pane is not orphaned -- the
+        # call exists, it moved -- and must stay a nested result.
+        action_before: List[bool] = []
+        seen_action = False
+        for step in steps:
+            action_before.append(seen_action)
+            if str(step.get("type", "")) == "action":
+                seen_action = True
+
         def new_group() -> Dict[str, Any]:
             g = {"index": len(groups), "thoughts": [], "calls": []}
             groups.append(g)
@@ -348,8 +360,18 @@ class EvalTraceDisplay(BaseDisplay):
                     current = new_group()
                 if current["calls"]:
                     current["calls"][-1]["results"].append(step)
-                else:
+                elif action_before[i]:
+                    # Its call was promoted to the Final Answer pane. Keep it
+                    # where a result belongs.
                     current["calls"].append({"call": None, "results": [step]})
+                else:
+                    # No call anywhere above it, so it is not a call result,
+                    # and putting it under Function Calls makes that pane
+                    # assert something false about it. A chat trace has no
+                    # calls at all, and its first turn is the user's prompt.
+                    # Reasoning is the honest home for content that is neither
+                    # a call nor the final answer.
+                    current["thoughts"].append(step)
             else:  # system / error → treat as a reasoning-side note
                 if current is None:
                     current = new_group()

@@ -23,6 +23,7 @@ The workflow:
 5. Final dataset CLI merges unanimous + adjudicated decisions
 """
 
+import hashlib
 import json
 import logging
 import math
@@ -1265,3 +1266,81 @@ def clear_adjudication_manager():
     global _ADJUDICATION_MANAGER
     with _ADJUDICATION_LOCK:
         _ADJUDICATION_MANAGER = None
+
+
+# ---------------------------------------------------------------------------
+# Blind adjudication
+# ---------------------------------------------------------------------------
+
+#: Keys in an AdjudicationItem payload that are keyed by annotator id.
+_ANNOTATOR_KEYED = ("annotations", "span_annotations", "behavioral_data")
+
+
+def annotator_aliases(instance_id: str, user_ids) -> Dict[str, str]:
+    """Map each annotator to a display alias for one item.
+
+    ``show_annotator_names: false`` exists so the adjudicator's judgment is not
+    coloured by who produced which answer. It was applied only in the browser
+    (``config.show_annotator_names ? userId : 'Annotator'``) while both API
+    endpoints shipped the addresses, so the blind came off in the network tab
+    -- and the adjudicator is simultaneously the party being blinded and the
+    party holding the session.
+
+    The alias is stable for the item, because the panes group answers by
+    annotator and a decision may be submitted, reloaded and revised. It is
+    ordered by a hash of ``(instance_id, user_id)`` rather than by sorting,
+    because sorted addresses put the same person first on every item and leak
+    the alphabet.
+    """
+    ordered = sorted(
+        (str(u) for u in user_ids),
+        key=lambda u: hashlib.sha256(
+            f"{instance_id}\x00{u}".encode("utf-8")).hexdigest())
+    return {user_id: f"Annotator {n}"
+            for n, user_id in enumerate(ordered, start=1)}
+
+
+def blind_item_dict(item_dict: Dict[str, Any],
+                    aliases: Dict[str, str]) -> Dict[str, Any]:
+    """Re-key an item payload onto aliases, dropping any real id."""
+    result = dict(item_dict)
+    for key in _ANNOTATOR_KEYED:
+        section = result.get(key)
+        if isinstance(section, dict):
+            result[key] = {aliases.get(user_id, "Annotator"): value
+                           for user_id, value in section.items()}
+    return result
+
+
+def blind_annotator_signals(signals: Dict[str, Any],
+                            aliases: Dict[str, str]) -> Dict[str, Any]:
+    """Re-key annotator signals, including the ``user_id`` inside each value.
+
+    The address was stated twice -- as the key and again in the body -- so
+    re-keying alone would have left it on the wire.
+    """
+    blinded = {}
+    for user_id, signal in signals.items():
+        alias = aliases.get(user_id, "Annotator")
+        if isinstance(signal, dict):
+            signal = dict(signal)
+            if "user_id" in signal:
+                signal["user_id"] = alias
+        blinded[alias] = signal
+    return blinded
+
+
+def unblind_user_id(value: Any, aliases: Dict[str, str]) -> Any:
+    """Turn an alias back into the real annotator id.
+
+    The adjudication UI records geometry decisions as ``{annotator, idx}``
+    references, so whatever the API called an annotator comes back on submit.
+    Without this the picks resolve against nothing and the adjudicator's chosen
+    boxes are silently dropped from the stored decision.
+    """
+    if not isinstance(value, str):
+        return value
+    for real_id, alias in aliases.items():
+        if alias == value:
+            return real_id
+    return value

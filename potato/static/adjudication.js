@@ -498,7 +498,7 @@
 
                     responseHtml += '<div class="adj-annotator-card" data-annotator="' + userId + '">';
                     responseHtml += '<div class="adj-annotator-name">' +
-                        (config.show_annotator_names ? AdjudicationForms.escapeHtml(userId) : 'Annotator') + '</div>';
+                        AdjudicationForms.escapeHtml(userId) + '</div>';
                     responseHtml += '<div class="adj-annotator-value">' + schemaSpans.length + ' span(s)</div>';
                     schemaSpans.forEach(function(span) {
                         responseHtml += '<div class="adj-span-summary">' +
@@ -531,7 +531,7 @@
 
                     responseHtml += '<div class="adj-annotator-card" data-annotator="' + userId + '">';
                     responseHtml += '<div class="adj-annotator-name">' +
-                        (config.show_annotator_names ? AdjudicationForms.escapeHtml(userId) : 'Annotator') + '</div>';
+                        AdjudicationForms.escapeHtml(userId) + '</div>';
                     responseHtml += '<div class="adj-annotator-value">' + summary + '</div>';
                     if (config.show_timing_data && timing) {
                         responseHtml += '<div class="adj-annotator-timing">';
@@ -561,7 +561,7 @@
 
                     responseHtml += '<div class="adj-annotator-card" data-annotator="' + userId + '">';
                     responseHtml += '<div class="adj-annotator-name">' +
-                        (config.show_annotator_names ? AdjudicationForms.escapeHtml(userId) : 'Annotator') + '</div>';
+                        AdjudicationForms.escapeHtml(userId) + '</div>';
                     responseHtml += '<div class="adj-annotator-value">' + AdjudicationForms.escapeHtml(valueStr) + '</div>';
 
                     if (config.show_timing_data && timing) {
@@ -744,7 +744,9 @@
             label_decisions: result.decisions,
             span_decisions: result.spanDecisions || [],
             source: result.sources,
-            confidence: (document.getElementById('adj-confidence') || {}).value || 'medium',
+            // No `|| 'medium'`: an absent confidence has to reach the server
+            // absent, or the export cannot tell a default from a choice.
+            confidence: (document.getElementById('adj-confidence') || {}).value || '',
             notes: (document.getElementById('adj-notes') || {}).value || '',
             error_taxonomy: errorTags,
             guideline_update_flag: (document.getElementById('adj-guideline-flag') || {}).checked || false,

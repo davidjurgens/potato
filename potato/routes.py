@@ -70,7 +70,9 @@ from potato.logging_config import is_ui_debug_enabled, get_debug_log_settings
 from potato.quality_control import get_quality_control_manager
 
 # Import adjudication
-from potato.adjudication import get_adjudication_manager, AdjudicationDecision
+from potato.adjudication import (
+    get_adjudication_manager, AdjudicationDecision, annotator_aliases,
+    blind_item_dict, blind_annotator_signals, unblind_user_id)
 
 # Import diversity manager
 from potato.diversity_manager import get_diversity_manager
@@ -9890,12 +9892,29 @@ def _resolve_adjudicated_geometry(adj_mgr, instance_id, label_decisions):
         logger.error("Could not load annotations to resolve adjudication: %s", exc)
         return label_decisions
 
+    # Under blind adjudication the UI was handed aliases, so that is what the
+    # picks come back as. Without turning them back the adopted boxes resolve
+    # against nothing and the adjudicator's choices are dropped from the
+    # stored decision -- with only a warning in the log.
+    aliases = {}
+    if adj_mgr and not adj_mgr.adj_config.show_annotator_names:
+        item = adj_mgr.get_item(instance_id)
+        if item:
+            aliases = annotator_aliases(instance_id, item.annotations)
+
     resolved = dict(label_decisions)
     for schema, value in needs_resolving.items():
         scheme = schemes.get(schema)
+        picks = value.get("adopted_annotations") or []
+        if aliases:
+            picks = [
+                {**pick, "annotator": unblind_user_id(pick.get("annotator"),
+                                                      aliases)}
+                if isinstance(pick, dict) else pick
+                for pick in picks
+            ]
         objects = annotation_values.resolve_adopted(
-            scheme, value.get("adopted_annotations") or [],
-            per_schema_by_user.get(schema, {}))
+            scheme, picks, per_schema_by_user.get(schema, {}))
         if objects:
             # Stored exactly as the client writes it: a JSON array under _data.
             resolved[schema] = {"_data": json.dumps(objects)}
@@ -9905,6 +9924,39 @@ def _resolve_adjudicated_geometry(adj_mgr, instance_id, label_decisions):
                 "resolved; keeping the raw decision", instance_id, schema)
 
     return resolved
+
+
+def _adjudication_policy_error(adj_mgr, data):
+    """The reason this submission is refused, or None.
+
+    An override is a decision that does not match what the annotators agreed
+    on -- it is exactly the case a reader will later want the reasoning for,
+    so `require_notes_on_override` refuses one without notes rather than
+    publishing it unexplained.
+    """
+    if not adj_mgr or not getattr(adj_mgr, "adj_config", None):
+        return None
+    cfg = adj_mgr.adj_config
+
+    source = data.get("source")
+    is_override = False
+    if isinstance(source, str):
+        is_override = source == "override"
+    elif isinstance(source, dict):
+        is_override = "override" in {str(v) for v in source.values()}
+
+    if getattr(cfg, "require_notes_on_override", False) and is_override:
+        if not str(data.get("notes") or "").strip():
+            return ("This decision overrides the annotators, and the task is "
+                    "configured to require a note explaining why "
+                    "(require_notes_on_override).")
+
+    if getattr(cfg, "require_confidence", False):
+        if not str(data.get("confidence") or "").strip():
+            return ("A confidence value is required for this task "
+                    "(require_confidence).")
+
+    return None
 
 
 def _check_adjudicator_auth():
@@ -10030,10 +10082,16 @@ def adjudicate_api_queue():
         filter_status=filter_status,
     )
 
-    return jsonify({
-        "items": [item.to_dict() for item in items],
-        "total": len(items),
-    })
+    payload = []
+    for item in items:
+        item_dict = item.to_dict()
+        if not adj_mgr.adj_config.show_annotator_names:
+            item_dict = blind_item_dict(
+                item_dict,
+                annotator_aliases(item.instance_id, item.annotations))
+        payload.append(item_dict)
+
+    return jsonify({"items": payload, "total": len(payload)})
 
 
 @app.route('/adjudicate/api/item/<instance_id>', methods=['GET'])
@@ -10063,12 +10121,18 @@ def adjudicate_api_item(instance_id):
             user_id, instance_id
         )
 
+    item_dict = item.to_dict()
+    if not adj_mgr.adj_config.show_annotator_names:
+        aliases = annotator_aliases(instance_id, item.annotations)
+        item_dict = blind_item_dict(item_dict, aliases)
+        annotator_signals = blind_annotator_signals(annotator_signals, aliases)
+
     similar_items = []
     if adj_mgr.adj_config.similarity_enabled:
         similar_items = adj_mgr.get_similar_items(instance_id)
 
     return jsonify({
-        "item": item.to_dict(),
+        "item": item_dict,
         "item_text": item_text,
         "item_data": item_data,
         "item_display_html": _adjudication_display_html(item_data),
@@ -10953,6 +11017,15 @@ def adjudicate_api_submit():
         if not instance_id:
             return jsonify({"error": "instance_id is required"}), 400
 
+        # `require_notes_on_override` and `require_confidence` were enforced
+        # only in the browser. An override with empty notes returned
+        # {"status": "ok"} and reached both export files, and a submission
+        # with no confidence key at all was published as "medium" -- a value
+        # researchers filter on, recorded as though it had been chosen.
+        policy_error = _adjudication_policy_error(adj_mgr, data)
+        if policy_error:
+            return jsonify({"error": policy_error}), 400
+
         # Resolve any {annotator, idx} picks into real annotation objects
         # BEFORE storing. The adjudication UI records geometry decisions as
         # references; stored that way the adjudicated result is unusable — no
@@ -10968,7 +11041,9 @@ def adjudicate_api_submit():
             label_decisions=label_decisions,
             span_decisions=data.get('span_decisions', []),
             source=data.get('source', {}),
-            confidence=data.get('confidence', 'medium'),
+            # Absent stays absent. A default here is indistinguishable in
+            # the export from a considered choice.
+            confidence=data.get('confidence') or '',
             notes=data.get('notes', ''),
             error_taxonomy=data.get('error_taxonomy', []),
             guideline_update_flag=data.get('guideline_update_flag', False),

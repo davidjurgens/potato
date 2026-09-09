@@ -111,9 +111,17 @@
                                 {% if adj_config.require_confidence %}
                                 <div class="adj-metadata-field">
                                     <label for="adj-confidence">Confidence</label>
-                                    <select id="adj-confidence">
+                                    <!-- No preselected value. "Medium" was
+                                         selected by default, so an adjudicator
+                                         who never looked at this control
+                                         published "medium" indistinguishably
+                                         from one who chose it -- and
+                                         confidence is a field researchers
+                                         filter on. -->
+                                    <select id="adj-confidence" required>
+                                        <option value="" selected disabled>Choose one</option>
                                         <option value="high">High</option>
-                                        <option value="medium" selected>Medium</option>
+                                        <option value="medium">Medium</option>
                                         <option value="low">Low</option>
                                     </select>
                                 </div>
@@ -183,7 +191,7 @@
     </script>
 
     <!-- Adjudication JS -->
-    <script src="{{ url_for('static', filename='adjudication-forms.js') }}?v=7"></script>
-    <script src="{{ url_for('static', filename='adjudication.js') }}?v=7"></script>
+    <script src="{{ url_for('static', filename='adjudication-forms.js') }}?v=8"></script>
+    <script src="{{ url_for('static', filename='adjudication.js') }}?v=8"></script>
 </body>
 </html>

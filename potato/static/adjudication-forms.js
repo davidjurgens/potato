@@ -62,9 +62,14 @@ window.AdjudicationForms = (function () {
     /**
      * Create annotator chip HTML
      */
-    function createChip(annotatorId, timing, showName, fastWarningMs) {
+    function createChip(annotatorId, timing, fastWarningMs) {
         var colorClass = getAnnotatorColor(annotatorId);
-        var name = showName ? annotatorId : 'Annotator';
+        // The id the server sent. Under `show_annotator_names: false` the
+        // server already substituted a per-item alias ("Annotator 1"), so
+        // there is nothing left to hide here -- and collapsing every
+        // annotator to the same literal removed the one thing the panes
+        // need, which is telling two answers by the same person apart.
+        var name = annotatorId;
         var timeStr = formatTime(timing);
         var isWarning = fastWarningMs > 0 && timing > 0 && timing < fastWarningMs;
 
@@ -132,7 +137,7 @@ window.AdjudicationForms = (function () {
             var chipsHtml = '';
             annotators.forEach(function(uid) {
                 var timing = getTimingMs(behavioralData, uid);
-                chipsHtml += createChip(uid, timing, config.show_annotator_names, config.fast_decision_warning_ms);
+                chipsHtml += createChip(uid, timing, config.fast_decision_warning_ms);
             });
 
             html += '<label class="adj-radio-option" data-value="' + labelName + '">' +
@@ -183,7 +188,7 @@ window.AdjudicationForms = (function () {
             var chipsHtml = '';
             annotators.forEach(function(uid) {
                 var timing = getTimingMs(behavioralData, uid);
-                chipsHtml += createChip(uid, timing, config.show_annotator_names, config.fast_decision_warning_ms);
+                chipsHtml += createChip(uid, timing, config.fast_decision_warning_ms);
             });
 
             html += '<label class="adj-checkbox-option" data-value="' + labelName + '">' +
@@ -288,7 +293,7 @@ window.AdjudicationForms = (function () {
                 '<input type="checkbox" class="adj-text-select-cb" data-annotator="' + userId + '" data-schema="' + schemaName + '">' +
                 '</label>';
             html += '<span class="adj-annotator-name">' +
-                (config.show_annotator_names ? userId : 'Annotator') + '</span>';
+                userId + '</span>';
             if (timeStr) {
                 html += '<span class="adj-annotator-timing"><i class="fas fa-clock"></i> ' + timeStr + '</span>';
             }
@@ -358,7 +363,7 @@ window.AdjudicationForms = (function () {
             html += '<div class="adj-span-annotator-group">';
             html += '<div class="adj-span-annotator-header">';
             html += '<span class="adj-annotator-chip ' + colorClass + '">' +
-                (config.show_annotator_names ? userId : 'Annotator') +
+                userId +
                 (timeStr ? ' <span class="adj-chip-timing">' + timeStr + '</span>' : '') +
                 '</span>';
             html += '<button type="button" class="adj-span-adopt-all-btn" data-annotator="' + userId +
@@ -513,7 +518,7 @@ window.AdjudicationForms = (function () {
             html += '<div class="adj-complex-annotator-group">';
             html += '<div class="adj-complex-annotator-header">';
             html += '<span class="adj-annotator-chip ' + colorClass + '">' +
-                (config.show_annotator_names ? escapeHtml(userId) : 'Annotator') +
+                escapeHtml(userId) +
                 (timeStr ? ' <span class="adj-chip-timing">' + timeStr + '</span>' : '') +
                 '</span>';
             html += '<button type="button" class="adj-complex-adopt-all-btn" data-annotator="' + userId +
@@ -573,7 +578,7 @@ window.AdjudicationForms = (function () {
             html += '<div class="adj-complex-annotator-group">';
             html += '<div class="adj-complex-annotator-header">';
             html += '<span class="adj-annotator-chip ' + colorClass + '">' +
-                (config.show_annotator_names ? userId : 'Annotator') +
+                userId +
                 (timeStr ? ' <span class="adj-chip-timing">' + timeStr + '</span>' : '') +
                 '</span>';
             html += '<button type="button" class="adj-complex-adopt-all-btn" data-annotator="' + userId +
@@ -708,7 +713,7 @@ window.AdjudicationForms = (function () {
 
         options.forEach(function (opt, idx) {
             var timing = getTimingMs(behavioralData, opt.userId);
-            var chip = createChip(opt.userId, timing, config.show_annotator_names,
+            var chip = createChip(opt.userId, timing,
                 config.fast_decision_warning_ms);
             html += '<label class="adj-adopt-option">' +
                 '<input type="radio" name="adj-adopt-' + schemaName + '" ' +
