@@ -490,10 +490,17 @@ def _write_text_seed_user(output_dir: str, username: str, schema_name: str,
     user_dir = os.path.join(output_dir, "annotation_output", username)
     os.makedirs(user_dir, exist_ok=True)
 
+    # An entity-free sentence gets an EMPTY record, not no record. Skipping it
+    # left the item in the corpus with no evidence anyone had reviewed it,
+    # while `[]` is what "reviewed, no entities" looks like -- and the CoNLL
+    # exporter already writes that correctly, so the round trip lost the
+    # sentence on the way in rather than on the way out.
+    #
+    # This is not fabricating a claim. A CoNLL file asserts something about
+    # every sentence, including "this one has no entities", which is what an
+    # O-only sentence means. Recording it preserves a claim the source made.
     span_to_value = {}
     for document in result.documents:
-        if not document.spans:
-            continue
         span_to_value[document.instance_id] = [
             [span.as_client_span(schema_name), "1"] for span in document.spans
         ]
@@ -509,10 +516,13 @@ def _write_text_seed_user(output_dir: str, username: str, schema_name: str,
     with open(os.path.join(user_dir, "user_state.json"), "w") as f:
         json.dump(state, f, indent=2)
 
+    with_spans = sum(1 for spans in span_to_value.values() if spans)
     logger.warning(
-        "--seed-user wrote %d item(s) as '%s'. This is fabricated annotator "
+        "--seed-user wrote %d item(s) as '%s', %d of them carrying spans and "
+        "%d recorded as reviewed with none. This is fabricated annotator "
         "work; do not include it in agreement or adjudication analysis.",
-        len(span_to_value), username)
+        len(span_to_value), username, with_spans,
+        len(span_to_value) - with_spans)
 
 
 def _run_hub_import(parsed, options) -> int:
@@ -732,10 +742,13 @@ def _write_seed_user(output_dir: str, username: str, schema_name: str,
     user_dir = os.path.join(output_dir, "annotation_output", username)
     os.makedirs(user_dir, exist_ok=True)
 
+    # An image with no objects gets an EMPTY record, not no record. Skipping it
+    # left the item in the project with no evidence anyone had reviewed it, so
+    # a negative example that arrived in the source file could not survive the
+    # round trip -- the exporter writes a confirmed negative, and there was
+    # nothing to tell it one had been confirmed.
     label_to_value = {}
     for image in result.images:
-        if not image.objects:
-            continue
         label_to_value[image.instance_id] = [
             [{"schema": schema_name, "name": "_data"},
              json.dumps(image.objects)]
@@ -748,7 +761,11 @@ def _write_seed_user(output_dir: str, username: str, schema_name: str,
     with open(os.path.join(user_dir, "user_state.json"), "w") as f:
         json.dump(state, f, indent=2)
 
+    with_objects = sum(1 for record in label_to_value.values()
+                       if json.loads(record[0][1]))
     logger.warning(
-        "--seed-user wrote %d item(s) as '%s'. This is fabricated annotator "
+        "--seed-user wrote %d item(s) as '%s', %d of them carrying objects and "
+        "%d recorded as reviewed with none. This is fabricated annotator "
         "work; do not include it in agreement or adjudication analysis.",
-        len(label_to_value), username)
+        len(label_to_value), username, with_objects,
+        len(label_to_value) - with_objects)
