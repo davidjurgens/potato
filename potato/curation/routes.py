@@ -83,15 +83,34 @@ def api_build():
     return jsonify({"indexed": count})
 
 
+#: What POST /api/search reads. `k` is an accepted spelling of `top_k`: it is
+#: the name most callers reach for, and sending it used to return the default
+#: ten -- which reads as an index that cannot discriminate rather than as an
+#: argument that was thrown away.
+_SEARCH_KEYS = {"query", "anchor_id", "top_k", "k", "threshold"}
+
+
 @curation_bp.route("/api/search", methods=["POST"])
 @admin_required
 @_enabled_required
 def api_search():
     body = request.get_json(silent=True) or {}
+
+    # An argument this endpoint does not read is reported, not ignored. The
+    # result of ignoring one is a plausible answer to a question nobody asked,
+    # and there is nothing in the response to say so.
+    unknown = sorted(set(body) - _SEARCH_KEYS)
+    if unknown:
+        return jsonify({
+            "error": "Unknown parameter(s): " + ", ".join(unknown),
+            "accepted": sorted(_SEARCH_KEYS),
+        }), 400
+
     mgr = get_curation_manager()
     try:
+        top_k = body.get("top_k", body.get("k", 10))
         hits = mgr.search(query=body.get("query", ""), anchor_id=body.get("anchor_id", ""),
-                          top_k=int(body.get("top_k", 10)),
+                          top_k=int(top_k),
                           threshold=float(body.get("threshold", 0.0)))
     except Exception as e:
         return jsonify({"error": str(e)}), 400

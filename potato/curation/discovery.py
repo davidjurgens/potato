@@ -142,6 +142,19 @@ def _axial_label(llm, examples: List[str]) -> Tuple[str, str]:
         return "", ""
 
 
+def _no_label_reason(llm, examples) -> str:
+    """Why this cluster came back unnamed, in the description field."""
+    if llm is None:
+        return ("Unnamed: no AI endpoint was available, so no axial code was "
+                "generated. Configure ai_support (and pass use_llm: true) and "
+                "refresh to have clusters named.")
+    if not examples:
+        return ("Unnamed: no representative text could be read for this "
+                "cluster, so there was nothing to name it from.")
+    return ("Unnamed: the model was asked for an axial code and did not "
+            "return one. The server log has the reason.")
+
+
 def discover_failure_modes(index, get_text: Callable[[str], str], k: int = 6,
                            llm: Any = None, max_examples: int = 4,
                            seed: int = 12345,
@@ -167,6 +180,15 @@ def discover_failure_modes(index, get_text: Callable[[str], str], k: int = 6,
         label, desc = ("", "")
         if llm is not None and examples:
             label, desc = _axial_label(llm, examples)
+        if not label:
+            # Say WHY a cluster has no name. An unnamed cluster used to arrive
+            # as `topic-3` with an empty description whether no endpoint was
+            # configured, the caller asked for clustering only, or the model
+            # answered and returned nothing -- three different situations, one
+            # blank, and the only way to find out which was to fetch the
+            # members and guess. The endpoint warning goes to the server log,
+            # which the caller of this API does not read.
+            desc = desc or _no_label_reason(llm, examples)
         clusters.append(DiscoveredCluster(
             cluster_id=cid, member_ids=members, size=len(members),
             examples=examples, suggested_label=label, suggested_description=desc))

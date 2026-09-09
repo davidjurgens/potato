@@ -92,6 +92,11 @@ LLM labeling is optional (`use_llm: false` returns clusters + examples for fully
 manual coding). Restrict to a subset (e.g. only failed traces) with `instance_ids`.
 This complements the MAST tagging schema: discover the modes, then tag at scale.
 
+A cluster that comes back without a label says why in its description: no
+endpoint was available, no representative text could be read, or the model was
+asked and returned nothing. Those need different fixes, and the endpoint warning
+goes to the server log, which whoever called the API is not reading.
+
 ## Topics (persisted auto-grouping)
 
 Where discovery is a one-shot analysis, **Topics** are the durable artifact:
@@ -126,10 +131,15 @@ automation:
 
 ## API summary
 
+`/api/search` rejects a parameter it does not read, with a 400 naming what it
+accepts. An ignored argument comes back as a plausible answer to a question
+nobody asked, and there is nothing in the result to say so.
+
+
 | Method | Path | Purpose |
 |--------|------|---------|
 | POST | `/admin/catalog/api/build` | Build the embedding index over current items |
-| POST | `/admin/catalog/api/search` | `{query\|anchor_id, top_k, threshold}` |
+| POST | `/admin/catalog/api/search` | `{query\|anchor_id, top_k, threshold}`; `k` is accepted for `top_k` |
 | POST | `/admin/catalog/api/discover` | `{k, instance_ids?, use_llm?}` → candidate failure-mode clusters |
 | POST | `/admin/catalog/api/topics/refresh` | `{k, instance_ids?, use_llm?}` → persist clusters as topics |
 | GET | `/admin/catalog/api/topics` | List topics (name/description/size) |

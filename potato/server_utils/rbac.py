@@ -179,11 +179,16 @@ class RBACManager:
         # Lazy import to avoid a circular dependency at module load.
         from potato.server_utils.admin_key import get_admin_api_key
 
-        api_key = self._extract_api_key(request, session)
-        if not api_key:
-            return False
+        # Resolved first, and unconditionally, because this call is what
+        # auto-generates the key and writes it to {task_dir}/admin_api_key.txt.
+        # Returning early on a missing header meant an unauthenticated request
+        # was told "Admin authentication required" while the file naming the
+        # required key did not yet exist -- and presenting a WRONG key created
+        # it, which is the wrong way round. Anyone whose first admin request
+        # was to a route gated here had nowhere to read the answer.
         expected_key = get_admin_api_key(self.config)
-        if not expected_key:
+        api_key = self._extract_api_key(request, session)
+        if not api_key or not expected_key:
             return False
         return hmac.compare_digest(str(api_key), str(expected_key))
 
