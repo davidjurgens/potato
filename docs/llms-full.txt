@@ -10156,6 +10156,7 @@ instance_display:
       display_options:
         annotation_mode: row   # row, cell, or range
         show_headers: true
+        header_row: false      # First row of a list-of-lists is the header
         max_height: 400
         striped: true          # Alternating row colors
         hoverable: true        # Highlight on hover
@@ -10163,6 +10164,11 @@ instance_display:
         selectable: true       # Enable row/cell selection
         compact: false         # Compact table styling
 ```
+
+**Where the columns come from:**
+- A list of dictionaries, or `{columns, rows}` with dictionary rows: every key any row has, in the order it first appears. A row that omits a key gets an empty cell rather than a shifted one, so a JSON-lines export that drops empty fields keeps all its columns
+- `columns` or `headers` in the data: exactly those, in that order. Naming them is choosing them, including choosing to leave one out
+- A list of lists: no headers, unless `header_row: true` says the first row is one. It is off by default because promoting row 0 on a list that has no header line would take a real row out of the data
 
 **Annotation Modes:**
 - `row` - Annotate entire rows (default)

@@ -23,6 +23,34 @@ from .base import BaseDisplay, display_text
 logger = logging.getLogger(__name__)
 
 
+def _column_union(rows) -> list:
+    """Every column any row has, in the order it first appears.
+
+    Columns used to come from row 0 alone, and every row was then projected
+    onto them: `[row.get(h, "") for h in headers]`. A key that first appeared
+    later was dropped, values and all, with no warning and no log line.
+
+    The shape this hits is a JSON-lines export that omits a field when it is
+    empty, which is what most APIs and `to_json(orient="records")` produce.
+    Measured on a three-row table whose second row carried a RETRACTION_NOTE
+    the first did not: the rendered table read country/year/cases over all
+    three rows, well-formed, and the cell saying the figures were withdrawn was
+    not in the `<table>` at all.
+
+    Three rows is the worst case for noticing -- with row 0 sparse you lose a
+    column from every later row and the table still looks complete.
+    """
+    headers, seen = [], set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for key in row:
+            if key not in seen:
+                seen.add(key)
+                headers.append(key)
+    return headers
+
+
 class SpreadsheetDisplay(BaseDisplay):
     """
     Display type for tabular/spreadsheet data.
@@ -36,6 +64,12 @@ class SpreadsheetDisplay(BaseDisplay):
     optional_fields = {
         "annotation_mode": "row",    # "row", "cell", or "range"
         "show_headers": True,        # Show column headers
+        # A list-of-lists carries its header the way a CSV does: as the first
+        # row. There was no way to say so, so `show_headers: true` had nothing
+        # to act on and the header line was rendered as data row 1. Opt-in
+        # rather than inferred, because a wrong guess here silently promotes a
+        # real row out of the data.
+        "header_row": False,         # First row of a list-of-lists is the header
         "max_height": 400,           # Max container height
         "max_width": None,           # Max container width
         "striped": True,             # Alternating row colors
@@ -132,17 +166,20 @@ class SpreadsheetDisplay(BaseDisplay):
             # rather than positional.
             if rows and isinstance(rows[0], dict):
                 if not headers:
-                    headers = list(rows[0].keys())
+                    headers = _column_union(rows)
                 rows = [[row.get(h, "") for h in headers] for row in rows]
         elif isinstance(data, list):
             if data and isinstance(data[0], dict):
                 # List of dictionaries
-                headers = list(data[0].keys()) if data else []
+                headers = _column_union(data)
                 rows = [[row.get(h, "") for h in headers] for row in data]
             else:
                 # List of lists
                 rows = data
                 headers = []
+                if data and options.get("header_row"):
+                    headers = [str(c) for c in data[0]]
+                    rows = data[1:]
         else:
             return f'<div class="spreadsheet-error">Unsupported data format</div>'
 
