@@ -60,6 +60,7 @@ from potato.admin import admin_dashboard
 from potato.ai.ai_help_wrapper import generate_ai_help_html
 from potato.ai.ai_prompt import get_ai_prompt
 from potato.server_utils.schemas.span import get_span_color, set_span_color, SPAN_COLOR_PALETTE
+from potato.server_utils.annotation_keys import split_annotation_key
 
 # Import annotation history
 from potato.annotation_history import AnnotationHistoryManager
@@ -979,9 +980,9 @@ def _incoming_schema_names(annotations: dict) -> set:
     """
     names = set()
     for key in annotations or {}:
-        sep = ":::" if ":::" in key else (":" if ":" in key else None)
-        if sep:
-            names.add(key.split(sep, 1)[0])
+        parsed = split_annotation_key(key)
+        if parsed:
+            names.add(parsed[0])
     return names
 
 
@@ -4063,6 +4064,26 @@ def admin_api_quality_control():
     return jsonify(result)
 
 
+@app.route("/admin/api/expertise", methods=["GET"])
+def admin_api_expertise():
+    """
+    Per-annotator, per-category expertise scores for dynamic category routing.
+
+    Admin-only. Returns ``enabled: False`` when the dynamic router is off.
+
+    There was no way to read these at all: the scores lived in memory, nothing
+    persisted them, and no route reported them, so a router that had recorded
+    36 agreements and no disagreement in a run with a flat dissenter could only
+    be caught by running the server with -v and reading DEBUG lines. A router
+    whose state cannot be looked at cannot be checked against the suspicion
+    that one of your annotators is being routed oddly.
+    """
+    result = admin_dashboard.get_expertise_data()
+    if isinstance(result, tuple):
+        return jsonify(result[0]), result[1]
+    return jsonify(result)
+
+
 @app.route("/admin/api/writing_process", methods=["GET"])
 def admin_api_writing_process():
     """
@@ -6117,9 +6138,12 @@ def update_instance():
         all_annotations = {}
         if "annotations" in request.json:
             for key, value in request.json.get("annotations", {}).items():
-                # Parse schema:label format
-                if ":" in key:
-                    schema_name, label_name = key.split(":", 1)
+                # Parse schema:label format. `:::` first -- it is the form
+                # this route's own refusal message asks callers to send, and
+                # splitting on the first colon reads its label as "::Sincere".
+                parsed = split_annotation_key(key)
+                if parsed is not None:
+                    schema_name, label_name = parsed
                     all_annotations[schema_name] = value
                     # ALSO keep the label. The annotation page happens to put
                     # it in the value as well, so collapsing to `schema` looked
@@ -6209,8 +6233,11 @@ def update_instance():
                 if gold_result is not None:
                     qc_result = {"type": "gold_standard", **gold_result}
 
-            # Record regular item for attention check frequency tracking
-            if not qc_manager.is_attention_check(instance_id) and not qc_manager.is_gold_standard(instance_id):
+            # Record regular item for attention check frequency tracking.
+            # An auto-promoted item is served as ordinary work, so it counts
+            # here; only the configured pool is injected and must not.
+            if (not qc_manager.is_attention_check(instance_id)
+                    and not qc_manager.is_configured_gold_standard(instance_id)):
                 qc_manager.record_regular_item(username)
 
                 # Track for gold standard auto-promotion
@@ -9552,6 +9579,7 @@ def configure_routes(flask_app, app_config):
     app.add_url_rule("/admin/api/code_cooccurrence", "admin_api_code_cooccurrence", admin_api_code_cooccurrence, methods=["GET"])
     app.add_url_rule("/admin/api/code_crosstab", "admin_api_code_crosstab", admin_api_code_crosstab, methods=["GET"])
     app.add_url_rule("/admin/api/quality_control", "admin_api_quality_control", admin_api_quality_control, methods=["GET"])
+    app.add_url_rule("/admin/api/expertise", "admin_api_expertise", admin_api_expertise, methods=["GET"])
     app.add_url_rule("/admin/api/behavioral_analytics", "admin_api_behavioral_analytics", admin_api_behavioral_analytics, methods=["GET"])
     app.add_url_rule("/admin/api/writing_process", "admin_api_writing_process", admin_api_writing_process, methods=["GET"])
     app.add_url_rule("/admin/api/annotation_process", "admin_api_annotation_process", admin_api_annotation_process, methods=["GET"])

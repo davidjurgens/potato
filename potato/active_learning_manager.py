@@ -1566,31 +1566,11 @@ class ActiveLearningManager:
     # the training subsystem, where an auto-label means "write a prediction and
     # let model review adjudicate it" rather than "silently invent an
     # annotation".
-
-        """Calculate confidence scores for instances."""
-        instance_scores = []
-        model = self._models[schema_name]
-
-        for instance_id in instance_ids:
-            item = item_manager.get_item(instance_id)
-            if not item:
-                continue
-
-            text = feature_for_item(
-                item, self.config.schema_types.get(schema_name, ""),
-                self.config.schema_source_fields.get(schema_name))
-
-            try:
-                # Get prediction probabilities
-                probas = model.predict_proba([text])[0]
-                confidence = np.max(probas)
-                instance_scores.append((instance_id, confidence))
-            except Exception as e:
-                self.logger.warning(f"Error predicting for instance {instance_id}: {e}")
-                # Default to low confidence for failed predictions
-                instance_scores.append((instance_id, 0.1))
-
-        return instance_scores
+    #
+    # Its deletion took the wrong `def` with it and left a verbatim second copy
+    # of `_calculate_confidence_scores`'s body sitting after the `return`,
+    # unreachable. Nothing was lost -- the two bodies were identical -- but it
+    # read as a method and was not one.
 
     def _apply_reordering(self, sorted_instances: List[Tuple[str, float]], item_manager: ItemStateManager):
         """Apply the new ordering to the item manager."""
@@ -1631,9 +1611,33 @@ class ActiveLearningManager:
 
         # Update item manager ordering
         item_manager.reorder_instances(final_order)
+        # Say whether the ordering will actually be SERVED. Two servers with
+        # the same data and the same annotations, differing only in
+        # `assignment_strategy`, logged an identical "Reordered N instances"
+        # line -- one of them serving the ranked pool and one serving the file
+        # order -- and `/admin/active-learning/stats` reported `enabled: true`
+        # for both. `enabled: true` under the wrong strategy is the likeliest
+        # misconfiguration of this feature and nothing detected it.
         self.logger.info(
-            f"Reordered {len(final_order)} instances "
-            f"({len(head)} ranked, {len(tail)} exploration)")
+            "Reordered %d instances (%d ranked, %d exploration); %s",
+            len(final_order), len(head), len(tail),
+            self._serving_note(item_manager))
+
+    def _serving_note(self, item_manager: ItemStateManager) -> str:
+        """Whether the reordered pool is what annotators will be served."""
+        if self.is_ordering_served(item_manager):
+            return "assignment_strategy: active_learning, so this is the order annotators get"
+        strategy = getattr(item_manager, "assignment_strategy", None)
+        name = getattr(strategy, "value", strategy)
+        return (f"assignment_strategy is {name!r}, NOT active_learning, so this "
+                "ordering is computed and never served")
+
+    def is_ordering_served(self, item_manager: ItemStateManager) -> bool:
+        """True when `assignment_strategy` hands out the reordered pool."""
+        from potato.item_state_management import AssignmentStrategy
+
+        return getattr(item_manager, "assignment_strategy",
+                       None) == AssignmentStrategy.ACTIVE_LEARNING
 
     def check_and_trigger_training(self):
         """Check if training should be triggered and queue it if needed.
@@ -1701,6 +1705,21 @@ class ActiveLearningManager:
                 "use_icl_ensemble": self.config.use_icl_ensemble,
                 "annotation_routing": self.config.annotation_routing,
             }
+
+        # `enabled: true` says the reordering is COMPUTED. Whether anyone is
+        # served it is a different key, because it is a different question and
+        # the two came apart silently: the stats were identical on a server
+        # serving the ranked pool and one serving the file order.
+        try:
+            from potato.item_state_management import get_item_state_manager
+
+            item_manager = get_item_state_manager()
+            strategy = getattr(item_manager, "assignment_strategy", None)
+            stats["assignment_strategy"] = getattr(strategy, "value", strategy)
+            stats["ordering_is_served"] = self.is_ordering_served(item_manager)
+        except Exception:
+            stats["assignment_strategy"] = None
+            stats["ordering_is_served"] = None
 
             # In-process metrics, newest last. The durable history lives in
             # `training_runs` and is read below.

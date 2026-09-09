@@ -41,6 +41,11 @@ layer can both import it without a loaded server config.
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from potato.server_utils.annotation_keys import (
+    SCALAR_ANSWER_TYPES,
+    is_selection_marker,
+)
+
 logger = logging.getLogger(__name__)
 
 #: Labels that coexist with a schema's real answer instead of competing with it.
@@ -55,8 +60,13 @@ SINGLE_SELECT_TYPES = frozenset({"radio", "likert", "confidence"})
 MULTI_SELECT_TYPES = frozenset({"multiselect"})
 
 
-def is_selected(label_name: str, value: Any) -> bool:
-    """Whether an entry represents a chosen option (see rule 3)."""
+def is_selected(label_name: str, value: Any, markers_ok: bool = True) -> bool:
+    """Whether an entry represents a chosen option (see rule 3).
+
+    ``markers_ok`` is False for schemas whose stored value IS the answer -- a
+    free-text field holding the literal word "on" must not be read as its label
+    name. Everywhere else a marker means the label carries the answer.
+    """
     if value is True:
         return True
     if isinstance(value, bool):          # False is not a selection
@@ -67,6 +77,8 @@ def is_selected(label_name: str, value: Any) -> bool:
         if value.lower() == "true":
             return True
         if label_name and value == label_name:
+            return True
+        if markers_ok and label_name and is_selection_marker(value):
             return True
     return False
 
@@ -110,7 +122,14 @@ def collapse_entries(entries: Sequence[Tuple[str, Any]],
                 return value, None, "exempt"
         return None, None, "empty"
 
-    selected = [ln for ln, v in main if is_selected(ln, v)]
+    # A client posting what the form element holds sends the browser's own
+    # marker -- {"stance:Sincere": "on"} -- where the annotation page repeats
+    # the label in the value. Only the second was recognised, so a radio
+    # answered by the simulator, an API caller, a room or a phone collapsed to
+    # the string "on" in conditional display logic and in the export, and the
+    # label was gone.
+    markers_ok = annotation_type not in SCALAR_ANSWER_TYPES
+    selected = [ln for ln, v in main if is_selected(ln, v, markers_ok)]
 
     if annotation_type in MULTI_SELECT_TYPES:
         # Presence means checked — syncAnnotationsFromDOM deletes unchecked boxes

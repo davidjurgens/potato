@@ -1416,6 +1416,29 @@
         ]
       }
     },
+    "/admin/api/expertise": {
+      "get": {
+        "operationId": "get_admin_api_expertise",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "summary": "Per-annotator, per-category expertise scores for dynamic category routing.",
+        "tags": [
+          "core"
+        ],
+        "x-potato-auth": [
+          "inline:admin_access"
+        ]
+      }
+    },
     "/admin/api/export": {
       "post": {
         "operationId": "post_admin_api_export",

@@ -63,6 +63,12 @@ The field name in your data files that contains the category. Categories can be:
 - A single string: `"category": "economics"`
 - A list of strings: `"category": ["economics", "finance"]`
 
+`category_assignment.category_key` is accepted as the same setting, so either
+placement works. `item_properties.category_key` wins if both are set. Earlier
+versions read only `item_properties.category_key`, so a config using the other
+spelling ran with every item uncategorized, fell through to the
+`uncategorized` fallback, and looked healthy while routing nothing.
+
 #### `category_assignment`
 
 | Option | Type | Default | Description |
@@ -342,6 +348,22 @@ category_assignment:
 | `learning_rate` | float | 0.1 | How quickly expertise scores update (0.0-1.0) |
 | `update_interval_seconds` | integer | 60 | Seconds between expertise recalculation |
 | `base_probability` | float | 0.1 | Minimum probability of receiving any category |
+
+### Reading the scores
+
+`GET /admin/api/expertise` (admin API key) reports each annotator's score per
+category with the counts behind it — agreements, disagreements and total
+evaluated — because a score of 1.0 from four agreements and a score of 1.0
+nothing has ever disagreed with look identical and mean different things. The
+response also echoes the settings in force.
+
+Scores are written to `expertise_scores.json` in the output directory as the
+worker runs and on shutdown, and read back at boot. Earlier versions held them
+in memory only, so a study restarted on day two relearned every score from the
+neutral 0.5 without saying so.
+
+The worker's log line reports annotations **scored**, not the size of the pool
+it walked.
 
 ### Agreement Methods
 

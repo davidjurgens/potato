@@ -11,15 +11,43 @@ Key features:
 - Expertise increases when annotator agrees with consensus, decreases otherwise
 """
 
+import json
 import logging
+import os
 import threading
 import time
 from collections import defaultdict, Counter
+from potato.server_utils.annotation_keys import answer_from_entries
 from dataclasses import dataclass, field
 from typing import Dict, Set, List, Optional, Any, Tuple
 from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+
+def _schema_answer(instance_annotations: dict, schema_name: str):
+    """One annotator's answer for one schema, as a comparable value.
+
+    This read used to take the stored VALUE, which for a radio is the DOM
+    marker "on". Consensus was then "on", every annotator's answer was "on",
+    and `agreed = (user_annotation == consensus_value)` was True by
+    construction. Measured: 36 agreements and no disagreement in a run where
+    one annotator dissented from both colleagues on every item of a category,
+    with every expertise score climbing to 1.0 and probabilistic routing
+    staying uniform -- random assignment reporting success.
+
+    The label NAME is the answer. `annotation_keys.answer_from_entries` is the
+    single definition of that rule.
+    """
+    labels = (instance_annotations or {}).get('labels')
+    if not labels:
+        return None
+    entries = [(label.get_name(), value) for label, value in labels.items()
+               if label.get_schema() == schema_name]
+    if not entries:
+        return None
+    return answer_from_entries(entries)
+
 
 
 class AgreementMethod(Enum):
@@ -182,8 +210,64 @@ class ExpertiseManager:
         self._worker_thread: Optional[threading.Thread] = None
         self._stop_worker = threading.Event()
 
+        #: Annotations actually scored since boot. The worker's log line used
+        #: to report the size of the pool it walked, which never changes.
+        self.total_scored = 0
+
+        # Scores were held in memory only. `to_dict`/`from_dict` existed and
+        # had no caller anywhere, so a study restarted on day two relearned
+        # every score from the neutral 0.5 and nothing said so -- and since
+        # there is no route reporting expertise either, the only way to observe
+        # the router at all was to run with -v and read DEBUG lines.
+        self._store_path = self._resolve_store_path()
+        self._load_scores()
+
         self._initialized = True
-        logger.info("ExpertiseManager initialized")
+        logger.info(
+            "ExpertiseManager initialized: agreement=%s, learning_rate=%s, "
+            "update_interval=%ss, min_annotations_for_consensus=%s, "
+            "base_probability=%s, scores at %s",
+            self.agreement_method.value, self.learning_rate,
+            self.update_interval_seconds, self.min_annotations_for_consensus,
+            self.base_probability, self._store_path or "(memory only)")
+
+    def _resolve_store_path(self) -> Optional[str]:
+        """Where expertise scores live between runs, or None if nowhere."""
+        task_dir = (self.config.get("output_annotation_dir")
+                    or self.config.get("task_dir"))
+        if not task_dir:
+            return None
+        return os.path.join(task_dir, "expertise_scores.json")
+
+    def _load_scores(self) -> None:
+        """Restore scores from the previous run, saying so either way."""
+        if not self._store_path or not os.path.exists(self._store_path):
+            if self._store_path:
+                logger.info(
+                    "No expertise scores found at %s; every annotator starts "
+                    "at the neutral 0.5", self._store_path)
+            return
+        try:
+            with open(self._store_path, "r", encoding="utf-8") as fh:
+                self.from_dict(json.load(fh))
+            logger.info("Restored expertise scores for %d annotators from %s",
+                        len(self.user_profiles), self._store_path)
+        except (OSError, ValueError) as exc:
+            logger.warning(
+                "Could not read expertise scores from %s (%s); every annotator "
+                "starts at the neutral 0.5", self._store_path, exc)
+
+    def _save_scores(self) -> None:
+        """Persist scores. Failure is logged, never raised into the worker."""
+        if not self._store_path:
+            return
+        try:
+            os.makedirs(os.path.dirname(self._store_path), exist_ok=True)
+            with open(self._store_path, "w", encoding="utf-8") as fh:
+                json.dump(self.to_dict(), fh, indent=2)
+        except (OSError, TypeError) as exc:
+            logger.warning("Could not write expertise scores to %s: %s",
+                           self._store_path, exc)
 
     def get_user_profile(self, user_id: str) -> UserExpertiseProfile:
         """Get or create expertise profile for a user."""
@@ -218,11 +302,10 @@ class ExpertiseManager:
             if user_state:
                 all_annotations = user_state.get_all_annotations()
                 if instance_id in all_annotations:
-                    instance_annotations = all_annotations[instance_id]
-                    if 'labels' in instance_annotations:
-                        for label, value in instance_annotations['labels'].items():
-                            if label.get_schema() == schema_name:
-                                annotations.append((username, value))
+                    answer = _schema_answer(
+                        all_annotations[instance_id], schema_name)
+                    if answer is not None:
+                        annotations.append((username, answer))
 
         if len(annotations) < self.min_annotations_for_consensus:
             return None
@@ -252,7 +335,7 @@ class ExpertiseManager:
         category: str,
         user_annotation: Any,
         consensus_value: Any
-    ) -> bool:
+    ) -> Optional[bool]:
         """
         Update a user's expertise based on agreement with consensus.
 
@@ -264,7 +347,10 @@ class ExpertiseManager:
             consensus_value: The consensus annotation value
 
         Returns:
-            True if user agreed with consensus, False otherwise
+            True if the user agreed, False if they disagreed, None if this
+            instance was already scored. The skip used to return False, which
+            is indistinguishable from a disagreement -- and the caller counted
+            it as work done either way.
         """
         with self._lock:
             profile = self.get_user_profile(user_id)
@@ -272,7 +358,7 @@ class ExpertiseManager:
             # Skip if already evaluated
             eval_key = f"{instance_id}:{category}"
             if eval_key in profile.evaluated_instances:
-                return False
+                return None
 
             # Determine agreement
             agreed = (user_annotation == consensus_value)
@@ -353,18 +439,26 @@ class ExpertiseManager:
                             continue
 
                         # Find user's annotation for this schema
-                        user_value = None
-                        for label, value in instance_annotations['labels'].items():
-                            if label.get_schema() == primary_schema:
-                                user_value = value
-                                break
+                        user_value = _schema_answer(
+                            instance_annotations, primary_schema)
 
                         if user_value is not None:
-                            self.update_user_expertise(
+                            # Count what was SCORED, not what was offered. The
+                            # counter incremented unconditionally while the
+                            # update returned early on the already-scored
+                            # guard, so "Background worker: 36 expertise
+                            # updates" was logged on every tick forever after
+                            # 36 real updates happened once. It was a constant
+                            # dressed as throughput, and it read the same
+                            # whether the router was learning or had been idle
+                            # for eight hours.
+                            scored = self.update_user_expertise(
                                 username, instance_id, category,
                                 user_value, consensus_value
                             )
-                            updates_per_user[username] += 1
+                            if scored is not None:
+                                updates_per_user[username] += 1
+                                self.total_scored += 1
 
         except Exception as e:
             logger.error(f"Error evaluating instances: {e}")
@@ -467,7 +561,9 @@ class ExpertiseManager:
         self._stop_worker.set()
         self._worker_thread.join(timeout=5.0)
         self._worker_thread = None
-        logger.info("Stopped expertise background worker")
+        self._save_scores()
+        logger.info("Stopped expertise background worker; scores saved to %s",
+                    self._store_path or "(memory only)")
 
     def _background_worker_loop(self) -> None:
         """Main loop for the background worker."""
@@ -476,9 +572,13 @@ class ExpertiseManager:
         while not self._stop_worker.is_set():
             try:
                 updates = self.evaluate_all_instances()
-                if updates:
-                    total_updates = sum(updates.values())
-                    logger.info(f"Background worker: {total_updates} expertise updates")
+                total_updates = sum(updates.values()) if updates else 0
+                if total_updates:
+                    logger.info(
+                        "Expertise: scored %d new annotations across %d "
+                        "annotators (%d scored in total so far)",
+                        total_updates, len(updates), self.total_scored)
+                    self._save_scores()
             except Exception as e:
                 logger.error(f"Background worker error: {e}")
 

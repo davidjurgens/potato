@@ -247,11 +247,9 @@ See [Active Learning Guide](../ai-intelligence/active_learning_guide.md) for ful
 
 #### 8. LLM Confidence Assignment (`llm_confidence`)
 
-Uses LLM confidence scores to prioritize items. Currently falls back to random assignment.
-
-```yaml
-assignment_strategy: llm_confidence
-```
+**Not implemented.** The value is accepted and items are assigned at random.
+The server warns about it at boot. Use `active_learning` for uncertainty-ranked
+assignment, or `model_review` to serve the least confident predictions first.
 
 ---
 

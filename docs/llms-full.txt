@@ -4431,7 +4431,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `alert_time_each_instance` |  | integer | `10000000` | Seconds an annotator may spend on one item before being warned. The default is effectively no limit |  |
-| `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, or psychometric |  |
+| `assignment_strategy` |  | string (one of: random, fixed_order, active_learning, llm_confidence, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, psychometric, model_review) | `fixed_order` | How items are handed out: random, fixed_order, active_learning, max_diversity, least_annotated, category_based, diversity_clustering, batch, priority, model_review or psychometric. `llm_confidence` is accepted and assigns at random -- it is not implemented |  |
 | `automatic_assignment` |  | object |  | Assign items to annotators automatically as they arrive |  |
 | `batch_assignment` |  | object |  | Split items into named groups and assign whole batches | `annotator_key`, `auto_assign_annotators`, `groups` |
 | `instance_reclaim` |  | object |  | Take assignments back from annotators who abandoned them so the items can go out again. `enabled` (false) and `timeout_hours` (24), plus optional `stale`, `manual`, `quality_control` and `prolific` sections each carrying `preserve_completed_annotations` |  |
@@ -21567,10 +21567,10 @@ gold_standards:
   items_file: "gold_standards.json"
 
   # How to use gold standards
-  mode: "mixed"              # Options: training, mixed, separate
-  # - training: Show only during training phase
-  # - mixed: Mix into regular annotation (silent tracking)
-  # - separate: Dedicated evaluation phase
+  mode: "mixed"              # Options: mixed, separate, training
+  # - mixed: inject into the annotation stream on the frequency below
+  # - separate: accepted, and behaves exactly as mixed
+  # - training: serves nothing at all. See the note below.
 
   # For mixed mode, how often to inject
   frequency: 20              # Insert one every 20 items
@@ -21579,6 +21579,10 @@ gold_standards:
   accuracy:
     min_threshold: 0.7       # Minimum required accuracy (70%)
     evaluation_count: 10     # Evaluate after this many gold items
+  # Evaluated whether or not feedback is on. Annotators under the threshold
+  # appear in `gold_standards.below_accuracy_threshold` in
+  # /admin/api/quality_control, and are named in the server log the first time
+  # they cross it. Only the message TO the annotator depends on `feedback`.
 
   # Feedback settings (disabled by default for silent tracking)
   # Enable for training scenarios where you want to give annotators feedback
@@ -21592,6 +21596,46 @@ gold_standards:
     min_annotators: 3          # Minimum annotators before checking
     agreement_threshold: 1.0   # 1.0 = unanimous, 0.8 = 80% agree
 ```
+
+### What each mode does
+
+`mixed` is the implemented mode: gold items are injected into the annotation
+stream every `frequency` items, and graded silently unless `feedback` is on.
+
+`separate` is accepted and takes the same code path as `mixed`. There is no
+dedicated evaluation block; the server says so at boot.
+
+`training` serves no gold items. Nothing delivers them during the training
+phase, so a study configured this way loads its gold file, logs the same lines
+as a working config, and measures nothing. Both the server and
+`potato validate --strict` now refuse to let that pass quietly. To grade during
+training, put practice questions in the training phase's own config — they use
+the same comparator.
+
+### Grading and the payload shape
+
+Answers reach the server as `{"schema:label": value}` or
+`{"schema:::label": value}`; both are accepted and both are graded the same
+way. When the value is a selection marker — `on`, `true`, `yes`, `1`, `checked`
+or `selected` — the answer is the **label**, which is what a browser form, the
+simulator and most API callers send. When the value is anything else it is the
+answer, which is what a free-text or numeric schema stores.
+
+### Auto-promotion
+
+An item is promoted when `min_annotators` have answered it and they agree.
+Agreement is measured per schema on the resolved label, so two annotators
+giving opposite answers do not promote, and a schema only one of them answered
+is not treated as unanimous.
+
+A promoted item is graded when an annotator meets it in the ordinary stream; it
+is never injected. The headline gold accuracy therefore depends on when an
+annotator arrived: items promoted behind them count, items promoted ahead of
+them do not. `/admin/api/quality_control` reports `configured_correct` /
+`configured_total` per annotator alongside the totals, because the configured
+pool is the same for everyone and is the comparable number. `total_items`
+counts everything currently gradeable, with `configured_items` and
+`promoted_items` broken out.
 
 ### Gold Standard Items File Format
 
@@ -32655,6 +32699,20 @@ how long it took, and where the model was saved. There is nothing to configure.
 The records go into the project's SQLite database alongside the rest of Potato's
 state, and you can read them at `GET /admin/active-learning/stats`.
 
+### Is the ordering being served?
+
+`active_learning.enabled: true` means the pool is being **reordered**. Whether
+anyone is served that order is a separate question, decided by
+`assignment_strategy`, and the two came apart silently: two servers with the
+same data and the same annotations, one serving the ranked pool and one serving
+the file order, logged an identical `Reordered N instances` line and reported
+the same stats.
+
+The reorder line names the strategy and whether the order will be used, and
+`GET /admin/active-learning/stats` carries `assignment_strategy` and
+`ordering_is_served`. `enabled: true` under the wrong
+strategy is the likeliest way to misconfigure this feature.
+
 Earlier versions documented `database_enabled` and a `database_config` block
 with MySQL connection details. Neither key did anything: the code behind them
 created no tables and saved no metrics. Both are ignored if you still have them
@@ -35500,6 +35558,12 @@ The field name in your data files that contains the category. Categories can be:
 - A single string: `"category": "economics"`
 - A list of strings: `"category": ["economics", "finance"]`
 
+`category_assignment.category_key` is accepted as the same setting, so either
+placement works. `item_properties.category_key` wins if both are set. Earlier
+versions read only `item_properties.category_key`, so a config using the other
+spelling ran with every item uncategorized, fell through to the
+`uncategorized` fallback, and looked healthy while routing nothing.
+
 #### `category_assignment`
 
 | Option | Type | Default | Description |
@@ -35779,6 +35843,22 @@ category_assignment:
 | `learning_rate` | float | 0.1 | How quickly expertise scores update (0.0-1.0) |
 | `update_interval_seconds` | integer | 60 | Seconds between expertise recalculation |
 | `base_probability` | float | 0.1 | Minimum probability of receiving any category |
+
+### Reading the scores
+
+`GET /admin/api/expertise` (admin API key) reports each annotator's score per
+category with the counts behind it — agreements, disagreements and total
+evaluated — because a score of 1.0 from four agreements and a score of 1.0
+nothing has ever disagreed with look identical and mean different things. The
+response also echoes the settings in force.
+
+Scores are written to `expertise_scores.json` in the output directory as the
+worker runs and on shutdown, and read back at boot. Earlier versions held them
+in memory only, so a study restarted on day two relearned every score from the
+neutral 0.5 without saying so.
+
+The worker's log line reports annotations **scored**, not the size of the pool
+it walked.
 
 ### Agreement Methods
 
@@ -36151,11 +36231,9 @@ See [Active Learning Guide](../ai-intelligence/active_learning_guide.md) for ful
 
 #### 8. LLM Confidence Assignment (`llm_confidence`)
 
-Uses LLM confidence scores to prioritize items. Currently falls back to random assignment.
-
-```yaml
-assignment_strategy: llm_confidence
-```
+**Not implemented.** The value is accepted and items are assigned at random.
+The server warns about it at boot. Use `active_learning` for uncertainty-ranked
+assignment, or `model_review` to serve the least confident predictions first.
 
 ---
 
@@ -55314,7 +55392,7 @@ display types, invalid `assignment_strategy` values, a missing
 
 ## OpenAPI 3.1 spec
 
-An index of Potato's HTTP surface: **448 paths / 485 operations**, generated by
+An index of Potato's HTTP surface: **449 paths / 486 operations**, generated by
 walking the live Flask `url_map`.
 
 Two extensions carry information a plain OpenAPI document cannot:

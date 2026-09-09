@@ -221,6 +221,20 @@ how long it took, and where the model was saved. There is nothing to configure.
 The records go into the project's SQLite database alongside the rest of Potato's
 state, and you can read them at `GET /admin/active-learning/stats`.
 
+### Is the ordering being served?
+
+`active_learning.enabled: true` means the pool is being **reordered**. Whether
+anyone is served that order is a separate question, decided by
+`assignment_strategy`, and the two came apart silently: two servers with the
+same data and the same annotations, one serving the ranked pool and one serving
+the file order, logged an identical `Reordered N instances` line and reported
+the same stats.
+
+The reorder line names the strategy and whether the order will be used, and
+`GET /admin/active-learning/stats` carries `assignment_strategy` and
+`ordering_is_served`. `enabled: true` under the wrong
+strategy is the likeliest way to misconfigure this feature.
+
 Earlier versions documented `database_enabled` and a `database_config` block
 with MySQL connection details. Neither key did anything: the code behind them
 created no tables and saved no metrics. Both are ignored if you still have them

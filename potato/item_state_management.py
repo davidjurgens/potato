@@ -1031,14 +1031,44 @@ class ItemStateManager:
         else:
             self.assignment_strategy = AssignmentStrategy.FIXED_ORDER
 
+        if self.assignment_strategy == AssignmentStrategy.LLM_CONFIDENCE:
+            # It sits in the same enum as the strategies that work, and its
+            # only disclosure was a source comment and a DEBUG line. Measured:
+            # the order it serves is shuffled against the configured order even
+            # with a fitted classifier available.
+            self.logger.warning(
+                "assignment_strategy: llm_confidence is not implemented and "
+                "assigns items at random. Use active_learning for "
+                "uncertainty-ranked assignment, or model_review to serve the "
+                "least confident predictions first.")
+
         # Set up random seed for assignment strategies
         self.random_seed = config.get('random_seed', 1234)
         self.random = random.Random(self.random_seed)
         self.logger.info(f"ItemStateManager initialized with random_seed={self.random_seed}")
 
-        # Category-based assignment support
+        # Category-based assignment support.
+        #
+        # Both spellings are read. `category_assignment.category_key` was
+        # documented, given an example, accepted by validation and read by
+        # nothing: an author who put the key in the block named after the
+        # feature got a study that ran perfectly with zero categories in it,
+        # because every item fell into the `uncategorized` fallback and the
+        # whole corpus was handed over. Putting it where the code read it gave
+        # a study that correctly refused to serve. Both drew the identical
+        # validator warning -- a true alarm in one case and a false one in the
+        # other.
         item_properties = config.get('item_properties', {})
-        self.category_key = item_properties.get('category_key', None)
+        category_assignment = config.get('category_assignment') or {}
+        self.category_key = (item_properties.get('category_key')
+                             or category_assignment.get('category_key')
+                             or None)
+        if (category_assignment.get('category_key')
+                and not item_properties.get('category_key')):
+            self.logger.info(
+                "Reading the item category from category_assignment."
+                "category_key=%r. item_properties.category_key is the other "
+                "accepted spelling.", self.category_key)
 
         # Maps category name to set of instance IDs in that category
         self.category_to_instance_ids: Dict[str, Set[str]] = defaultdict(set)

@@ -5177,6 +5177,74 @@ function handleQualityControlResponse(result) {
     if (isWarning) {
         showNotification(message || 'Please read items carefully before answering.', 'warning');
     }
+
+    // Gold standard feedback. Nothing rendered this: the function reacted to
+    // `blocked` and `warning` only, so turning `feedback` on put the correct
+    // answer in a response body the annotator could read in devtools and
+    // showed them nothing on the page. That is the wrong way round for the one
+    // mode meant to teach.
+    if (qcResult && qcResult.type === 'gold_standard' && qcResult.silent !== true) {
+        showGoldStandardFeedback(qcResult);
+    }
+}
+
+/**
+ * Show feedback for a graded gold standard item.
+ *
+ * Only reached when `gold_standards.feedback` is on -- a silent study returns
+ * `{recorded: true, silent: true}` and nothing here fires.
+ * @param {object} qcResult - The qc_result block from /updateinstance
+ */
+function showGoldStandardFeedback(qcResult) {
+    const parts = [];
+    if (qcResult.correct === true) {
+        parts.push('Correct.');
+    } else if (qcResult.correct === false) {
+        parts.push('That is not the expected answer.');
+    }
+    if (qcResult.gold_label) {
+        const expected = formatGoldLabel(qcResult.gold_label);
+        if (expected) {
+            parts.push('Expected: ' + expected + '.');
+        }
+    }
+    if (qcResult.explanation) {
+        parts.push(qcResult.explanation);
+    }
+    if (parts.length) {
+        showNotification(parts.join(' '), qcResult.correct ? 'success' : 'warning');
+    }
+
+    if (qcResult.accuracy_warning) {
+        const current = Math.round((qcResult.current_accuracy || 0) * 100);
+        const required = Math.round((qcResult.required_accuracy || 0) * 100);
+        showNotification(
+            'Your accuracy on check items is ' + current + '%, below the ' +
+            required + '% this task asks for. Please read each item carefully.',
+            'warning');
+    }
+}
+
+/**
+ * Render a gold label for display: "Sarcastic", or "stance: Sarcastic" when
+ * more than one schema is graded.
+ * @param {object|string} goldLabel - The expected answer
+ * @returns {string} A human-readable rendering
+ */
+function formatGoldLabel(goldLabel) {
+    if (typeof goldLabel === 'string') {
+        return goldLabel;
+    }
+    if (!goldLabel || typeof goldLabel !== 'object') {
+        return '';
+    }
+    const entries = Object.entries(goldLabel);
+    if (entries.length === 1) {
+        return String(entries[0][1]);
+    }
+    return entries.map(function (pair) {
+        return pair[0] + ': ' + String(pair[1]);
+    }).join(', ');
 }
 
 /**
@@ -5190,7 +5258,12 @@ function showNotification(message, type = 'info') {
     if (!container) {
         container = document.createElement('div');
         container.id = 'notification-container';
-        container.style.cssText = 'position: fixed; top: 80px; right: 20px; z-index: 9999;';
+        // A max-width the container never had. Every message that used it was
+        // one short sentence, so nothing was constraining the box; gold
+        // standard feedback carries the expected label and an explanation and
+        // is several times longer.
+        container.style.cssText = 'position: fixed; top: 80px; right: 20px; ' +
+            'z-index: 9999; max-width: min(360px, calc(100vw - 40px));';
         document.body.appendChild(container);
     }
 
@@ -5205,6 +5278,8 @@ function showNotification(message, type = 'info') {
         font-weight: 500;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         animation: slideIn 0.3s ease;
+        line-height: 1.45;
+        overflow-wrap: break-word;
         background-color: ${type === 'info' ? '#e0f2fe' : type === 'success' ? '#dcfce7' : type === 'warning' ? '#fef3c7' : '#fee2e2'};
         color: ${type === 'info' ? '#0369a1' : type === 'success' ? '#166534' : type === 'warning' ? '#92400e' : '#dc2626'};
         border: 1px solid ${type === 'info' ? '#7dd3fc' : type === 'success' ? '#86efac' : type === 'warning' ? '#fcd34d' : '#fca5a5'};

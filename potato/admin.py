@@ -2142,6 +2142,55 @@ class AdminDashboard:
             self.logger.error(f"Error getting quality control data: {e}")
             return {"error": f"Failed to get quality control data: {str(e)}"}, 500
 
+    def get_expertise_data(self) -> Dict[str, Any]:
+        """Per-annotator, per-category expertise for the dynamic router.
+
+        Reports the scores AND the counts they were computed from, because a
+        score of 1.0 from four agreements and a score of 1.0 that nothing has
+        ever disagreed with look identical and mean different things.
+        """
+        if not self.check_admin_access():
+            return {"error": "Admin access required"}, 403
+
+        try:
+            from potato.expertise_manager import get_expertise_manager
+
+            manager = get_expertise_manager()
+            if not manager:
+                return {
+                    "enabled": False,
+                    "message": ("Dynamic category expertise is not enabled "
+                                "(category_assignment.dynamic.enabled)"),
+                }
+
+            by_user = {}
+            for user_id, profile in manager.user_profiles.items():
+                by_user[user_id] = {
+                    category: {
+                        "score": expertise.expertise_score,
+                        "agreements": expertise.agreements,
+                        "disagreements": expertise.disagreements,
+                        "evaluated": expertise.total_evaluated,
+                    }
+                    for category, expertise in profile.category_expertise.items()
+                }
+
+            return {
+                "enabled": True,
+                "scored_since_boot": manager.total_scored,
+                "store_path": manager._store_path,
+                "learning_rate": manager.learning_rate,
+                "agreement_method": manager.agreement_method.value,
+                "update_interval_seconds": manager.update_interval_seconds,
+                "min_annotations_for_consensus": manager.min_annotations_for_consensus,
+                "base_probability": manager.base_probability,
+                "by_user": by_user,
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error getting expertise data: {e}")
+            return {"error": f"Failed to get expertise data: {str(e)}"}, 500
+
     def _behavioral_sequence(self, value: Any) -> list:
         """Normalize behavioral list-like values to a safe list."""
         if value is None:

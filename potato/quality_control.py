@@ -20,6 +20,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from collections import defaultdict
 
+from potato.server_utils.annotation_keys import (
+    canonical_wire_answer,
+    split_annotation_key,
+)
 from potato.server_utils.training_grading import (
     DEFAULT_GEOMETRY_TOLERANCE,
     geometry_answer_is_correct,
@@ -137,6 +141,9 @@ class QualityControlManager:
         self.gold_labels: Dict[str, Dict[str, Any]] = {}  # item_id -> gold_label
         self.gold_explanations: Dict[str, str] = {}  # item_id -> explanation
         self.gold_results: Dict[str, List[GoldStandardResult]] = defaultdict(list)  # user_id -> results
+        #: Annotators already logged as under `accuracy.min_threshold`, so the
+        #: warning fires on the crossing rather than on every later gold item.
+        self._gold_below_threshold: Set[str] = set()
 
         # Pre-annotation data (stored per-item)
         self.pre_annotations: Dict[str, Dict[str, Any]] = {}  # item_id -> pre_annotation_data
@@ -532,6 +539,7 @@ class QualityControlManager:
             self.logger.info(f"Loaded {len(self.gold_items)} gold standard items")
             self._warn_if_nothing_loaded(
                 "Gold standards", self.gold_items, file_path, ("id", "gold_label"))
+            self._warn_about_gold_mode()
 
         except (json.JSONDecodeError, ValueError) as e:
             self.logger.error(f"Failed to parse gold standards file: {e}")
@@ -739,6 +747,48 @@ class QualityControlManager:
         """Check if an item is a gold standard."""
         return item_id in self.gold_labels
 
+    def is_configured_gold_standard(self, item_id: str) -> bool:
+        """Whether the item came from `items_file` rather than auto-promotion.
+
+        A promoted item is never INJECTED -- it is served as ordinary work and
+        graded when it comes up -- so it must still count towards the spacing
+        of the checks that are injected. Treating it as a check removed it from
+        that counter, and a study promoting aggressively quietly starved its
+        own injection frequency.
+        """
+        return item_id in self.gold_labels and item_id not in self.promoted_gold_labels
+
+    def _warn_about_gold_mode(self) -> None:
+        """Say at boot what the configured mode will actually do.
+
+        `mode: training` loads the items, logs the same two lines as a working
+        config, passes `validate --strict`, and serves nothing: nothing in the
+        codebase delivers gold items during the training phase. The one honest
+        signal this subsystem has -- "enabled but NOT RUNNING" -- did not fire
+        for the single mode where they are enabled and not running.
+
+        `separate` and `mixed` are the same code path. A config author who
+        chose `separate` expecting a dedicated evaluation block gets items
+        mixed into the annotation stream, and had no way to find that out.
+        """
+        if not self.gold_items:
+            return
+        mode = self.qc_config.gold_mode
+        if mode == "training":
+            self.logger.warning(
+                "gold_standards.mode is 'training': %d gold items are loaded "
+                "and NONE will be served. No code path delivers gold items "
+                "during the training phase. Use mode: mixed to inject them "
+                "into the annotation stream, or the training phase's own "
+                "practice questions to grade during training.",
+                len(self.gold_items))
+        elif mode == "separate":
+            self.logger.info(
+                "gold_standards.mode 'separate' behaves as 'mixed': %d gold "
+                "items are injected into the annotation stream every %s items, "
+                "not held back for a dedicated evaluation block.",
+                len(self.gold_items), self.qc_config.gold_frequency)
+
     def should_inject_gold_standard(self, user_id: str, items_since_last: Optional[int] = None) -> bool:
         """
         Determine if a gold standard should be injected.
@@ -847,6 +897,13 @@ class QualityControlManager:
         show_feedback = (self.qc_config.gold_show_correct_answer or
                         self.qc_config.gold_show_explanation)
 
+        # The accuracy threshold is a MEASUREMENT and is evaluated whether or
+        # not the annotator is told. It used to sit inside the feedback branch
+        # below, so configuring `accuracy.min_threshold` on a silent study --
+        # the mode gold standards are recommended for -- evaluated nothing at
+        # all, and the admin dashboard had no way to learn who was under it.
+        below_threshold = self._note_accuracy_threshold(user_id)
+
         if not show_feedback:
             # Silent recording - just indicate it was recorded, no user feedback
             return {"recorded": True, "silent": True}
@@ -860,15 +917,47 @@ class QualityControlManager:
         if self.qc_config.gold_show_explanation and explanation:
             response_data["explanation"] = explanation
 
-        # Check accuracy threshold (only show warning if feedback is enabled)
-        accuracy_data = self.get_gold_accuracy(user_id)
-        if accuracy_data["total"] >= self.qc_config.gold_evaluation_count:
-            if accuracy_data["accuracy"] < self.qc_config.gold_min_accuracy:
-                response_data["accuracy_warning"] = True
-                response_data["current_accuracy"] = accuracy_data["accuracy"]
-                response_data["required_accuracy"] = self.qc_config.gold_min_accuracy
+        if below_threshold:
+            accuracy_data = self.get_gold_accuracy(user_id)
+            response_data["accuracy_warning"] = True
+            response_data["current_accuracy"] = accuracy_data["accuracy"]
+            response_data["required_accuracy"] = self.qc_config.gold_min_accuracy
 
         return response_data
+
+    def _note_accuracy_threshold(self, user_id: str) -> bool:
+        """Whether this annotator is under `accuracy.min_threshold`, logged once.
+
+        Silence is the default for gold standards, and silence towards the
+        ANNOTATOR is right. Silence towards the researcher is not: the
+        threshold exists to tell them who to look at.
+        """
+        accuracy_data = self.get_gold_accuracy(user_id)
+        if accuracy_data["total"] < self.qc_config.gold_evaluation_count:
+            return False
+        if accuracy_data["accuracy"] >= self.qc_config.gold_min_accuracy:
+            self._gold_below_threshold.discard(user_id)
+            return False
+        if user_id not in self._gold_below_threshold:
+            self._gold_below_threshold.add(user_id)
+            self.logger.warning(
+                "%s is below the gold standard accuracy threshold: %.2f over "
+                "%d evaluated items, threshold %.2f",
+                user_id, accuracy_data["accuracy"], accuracy_data["total"],
+                self.qc_config.gold_min_accuracy)
+        return True
+
+    def users_below_accuracy_threshold(self) -> List[str]:
+        """Annotators under `accuracy.min_threshold`, recomputed from results."""
+        if not self.qc_config.gold_standards_enabled:
+            return []
+        under = []
+        for user_id in list(self.gold_results.keys()):
+            accuracy_data = self.get_gold_accuracy(user_id)
+            if (accuracy_data["total"] >= self.qc_config.gold_evaluation_count
+                    and accuracy_data["accuracy"] < self.qc_config.gold_min_accuracy):
+                under.append(user_id)
+        return sorted(under)
 
     def get_gold_accuracy(self, user_id: str) -> Dict[str, Any]:
         """Get gold standard accuracy for a user."""
@@ -923,8 +1012,13 @@ class QualityControlManager:
             return None
 
         with self._lock:
-            # Record this annotation
-            self.item_annotations[item_id][user_id] = response
+            # Record the ANSWER, not the wire payload. A payload carries the
+            # same selection twice -- {"stance": "on", "stance:Sincere": "on"}
+            # -- and grouping by wire key made the "stance": "on" half agree
+            # between two annotators who had answered OPPOSITELY. The item was
+            # then promoted as unanimous with a consensus label asserting both
+            # answers, and everyone graded against it afterwards was wrong.
+            self.item_annotations[item_id][user_id] = canonical_wire_answer(response)
 
             # Check if we have enough annotators
             annotations = self.item_annotations[item_id]
@@ -964,6 +1058,13 @@ class QualityControlManager:
 
         # Check agreement for each schema
         for schema, values in schema_responses.items():
+            # A schema only one annotator answered is not unanimous, it is
+            # unopposed. Without this a partially-answered item promotes on a
+            # single opinion as soon as any OTHER schema has enough of them.
+            if len(values) < self.qc_config.gold_auto_promote_min_annotators:
+                all_schemas_agree = False
+                break
+
             # Calculate agreement ratio
             from collections import Counter
             value_counts = Counter(str(v).lower() for v in values)
@@ -1186,15 +1287,20 @@ class QualityControlManager:
         if key in actual:
             readings.append(actual[key])
 
-        prefix = key + ":"
+        # Both separators, because the route accepts both and its own 400
+        # message asks callers for the one that used to be misread. Splitting
+        # on the first colon turned `stance:::Sincere` into the label
+        # "::Sincere", so an annotator following the documented shape scored
+        # 0% on every gold item and attention check while storing exactly the
+        # same annotation as one who scored 100%.
         selected, values = [], []
         for actual_key, val in actual.items():
-            if not actual_key.startswith(prefix):
+            parsed = split_annotation_key(actual_key)
+            if parsed is None or parsed[0] != key:
                 continue
             values.append(val)
-            label = actual_key[len(prefix):]
             if self._is_selected(val):
-                selected.append(label)
+                selected.append(parsed[1])
 
         if len(values) == 1:
             readings.append(values[0])
@@ -1322,9 +1428,17 @@ class QualityControlManager:
                 }
 
             # Gold standard metrics
+            # `total_items` used to read len(self.gold_items), which counts the
+            # configured pool only, while `by_item` below is built from every
+            # graded item. A study with auto-promotion on reported 3 total and
+            # listed 13.
             gold_metrics = {
                 "enabled": self.qc_config.gold_standards_enabled,
-                "total_items": len(self.gold_items),
+                "total_items": len(self.gold_labels),
+                "configured_items": len(self.gold_items),
+                "promoted_items": len(self.promoted_gold_labels),
+                "mode": self.qc_config.gold_mode,
+                "below_accuracy_threshold": self.users_below_accuracy_threshold(),
                 "total_evaluations": sum(len(r) for r in self.gold_results.values()),
                 "total_correct": sum(
                     len([x for x in r if x.correct])
@@ -1341,10 +1455,23 @@ class QualityControlManager:
             for user_id, results in self.gold_results.items():
                 correct = len([r for r in results if r.correct])
                 total = len(results)
+                # Auto-promotion makes the headline denominator depend on when
+                # an annotator arrived: items promoted behind them are graded,
+                # items promoted ahead of them are not. Three annotators on the
+                # same 12 items scored 2/2, 2/2 and 10/10. The configured pool
+                # is the same for everyone, so it is the comparable number and
+                # it is reported alongside.
+                configured = [r for r in results
+                              if self.is_configured_gold_standard(r.item_id)]
+                configured_correct = len([r for r in configured if r.correct])
                 gold_metrics["by_user"][user_id] = {
                     "correct": correct,
                     "total": total,
-                    "accuracy": correct / total if total > 0 else 0
+                    "accuracy": correct / total if total > 0 else 0,
+                    "configured_correct": configured_correct,
+                    "configured_total": len(configured),
+                    "configured_accuracy": (configured_correct / len(configured)
+                                            if configured else 0),
                 }
 
             # Per-item accuracy

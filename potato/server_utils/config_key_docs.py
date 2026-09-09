@@ -399,8 +399,9 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     # ----------------------------------------------------------- assignment --
     "assignment_strategy": _D(
         "How items are handed out: random, fixed_order, active_learning, "
-        "llm_confidence, max_diversity, least_annotated, category_based, "
-        "diversity_clustering, batch, priority, or psychometric",
+        "max_diversity, least_annotated, category_based, diversity_clustering, "
+        "batch, priority, model_review or psychometric. `llm_confidence` is "
+        "accepted and assigns at random -- it is not implemented",
         type="string", default="fixed_order", category=ASSIGN,
     ),
     "automatic_assignment": _D(
@@ -1735,6 +1736,36 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Probabilistic expertise routing, which learns who is good at what from "
         "agreement instead of a fixed qualification. Carries its own `enabled`",
         type="object", category=FEATURES,
+    ),
+    "category_assignment.dynamic.enabled": _D(
+        "Turn expertise routing on. Starts a background worker that scores "
+        "annotations against consensus",
+        type="boolean", default=False, category=FEATURES,
+    ),
+    "category_assignment.dynamic.min_annotations_for_consensus": _D(
+        "How many annotators must have answered an item before it is used to "
+        "score anyone. Below this the item is skipped, not counted as agreement",
+        type="integer", default=2, category=FEATURES,
+    ),
+    "category_assignment.dynamic.agreement_method": _D(
+        "How consensus is decided: `majority_vote`, `super_majority` (two "
+        "thirds) or `unanimous`",
+        type="string", default="majority_vote", category=FEATURES,
+    ),
+    "category_assignment.dynamic.learning_rate": _D(
+        "How far one agreement or disagreement moves a score, as an "
+        "exponential moving average. Scores start at the neutral 0.5",
+        type="number", default=0.1, category=FEATURES,
+    ),
+    "category_assignment.dynamic.update_interval_seconds": _D(
+        "Seconds between scoring passes. The default is the difference between "
+        "routing that responds within a session and routing that does not",
+        type="integer", default=60, category=FEATURES,
+    ),
+    "category_assignment.dynamic.base_probability": _D(
+        "Floor on the routing probability of any category, so an annotator who "
+        "scores badly in one is still sent some of it",
+        type="number", default=0.1, category=FEATURES,
     ),
     "diversity_ordering": _D(
         "Embed and cluster the corpus, then serve items round-robin across "

@@ -114,10 +114,10 @@ gold_standards:
   items_file: "gold_standards.json"
 
   # How to use gold standards
-  mode: "mixed"              # Options: training, mixed, separate
-  # - training: Show only during training phase
-  # - mixed: Mix into regular annotation (silent tracking)
-  # - separate: Dedicated evaluation phase
+  mode: "mixed"              # Options: mixed, separate, training
+  # - mixed: inject into the annotation stream on the frequency below
+  # - separate: accepted, and behaves exactly as mixed
+  # - training: serves nothing at all. See the note below.
 
   # For mixed mode, how often to inject
   frequency: 20              # Insert one every 20 items
@@ -126,6 +126,10 @@ gold_standards:
   accuracy:
     min_threshold: 0.7       # Minimum required accuracy (70%)
     evaluation_count: 10     # Evaluate after this many gold items
+  # Evaluated whether or not feedback is on. Annotators under the threshold
+  # appear in `gold_standards.below_accuracy_threshold` in
+  # /admin/api/quality_control, and are named in the server log the first time
+  # they cross it. Only the message TO the annotator depends on `feedback`.
 
   # Feedback settings (disabled by default for silent tracking)
   # Enable for training scenarios where you want to give annotators feedback
@@ -139,6 +143,46 @@ gold_standards:
     min_annotators: 3          # Minimum annotators before checking
     agreement_threshold: 1.0   # 1.0 = unanimous, 0.8 = 80% agree
 ```
+
+### What each mode does
+
+`mixed` is the implemented mode: gold items are injected into the annotation
+stream every `frequency` items, and graded silently unless `feedback` is on.
+
+`separate` is accepted and takes the same code path as `mixed`. There is no
+dedicated evaluation block; the server says so at boot.
+
+`training` serves no gold items. Nothing delivers them during the training
+phase, so a study configured this way loads its gold file, logs the same lines
+as a working config, and measures nothing. Both the server and
+`potato validate --strict` now refuse to let that pass quietly. To grade during
+training, put practice questions in the training phase's own config — they use
+the same comparator.
+
+### Grading and the payload shape
+
+Answers reach the server as `{"schema:label": value}` or
+`{"schema:::label": value}`; both are accepted and both are graded the same
+way. When the value is a selection marker — `on`, `true`, `yes`, `1`, `checked`
+or `selected` — the answer is the **label**, which is what a browser form, the
+simulator and most API callers send. When the value is anything else it is the
+answer, which is what a free-text or numeric schema stores.
+
+### Auto-promotion
+
+An item is promoted when `min_annotators` have answered it and they agree.
+Agreement is measured per schema on the resolved label, so two annotators
+giving opposite answers do not promote, and a schema only one of them answered
+is not treated as unanimous.
+
+A promoted item is graded when an annotator meets it in the ordinary stream; it
+is never injected. The headline gold accuracy therefore depends on when an
+annotator arrived: items promoted behind them count, items promoted ahead of
+them do not. `/admin/api/quality_control` reports `configured_correct` /
+`configured_total` per annotator alongside the totals, because the configured
+pool is the same for everyone and is the comparable number. `total_items`
+counts everything currently gradeable, with `configured_items` and
+`promoted_items` broken out.
 
 ### Gold Standard Items File Format
 

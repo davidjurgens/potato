@@ -192,7 +192,22 @@ KNOWN_CONFIG_KEYS = {
         "annotation_routing", "routing_thresholds",
     },
     "category_assignment": {
-        "enabled", "category_key", "qualification", "fallback", "dynamic",
+        "enabled": None,
+        # Accepted as the other spelling of item_properties.category_key,
+        # which is where the code used to look and only there -- so a config
+        # putting it in the block named after the feature ran with every item
+        # uncategorized and looked healthy.
+        "category_key": None,
+        "qualification": None,
+        "fallback": None,
+        "dynamic": {
+            "enabled": None,
+            "min_annotations_for_consensus": None,
+            "agreement_method": None,
+            "learning_rate": None,
+            "update_interval_seconds": None,
+            "base_probability": None,
+        },
     },
     "batch_assignment": {
         "groups", "annotator_key", "auto_assign_annotators",
@@ -4612,6 +4627,17 @@ def validate_quality_control_config(config_data: Dict[str, Any]) -> None:
                 valid_modes = ["training", "mixed", "separate"]
                 if gold_config["mode"] not in valid_modes:
                     raise ConfigValidationError(f"gold_standards.mode must be one of: {', '.join(valid_modes)}")
+                # Accepted, loaded, logged like a working config, and serving
+                # nothing: no code path delivers gold items during the training
+                # phase. Warn here so `validate --strict` catches it before a
+                # study runs to completion measuring no accuracy at all.
+                if gold_config["mode"] == "training":
+                    logger.warning(
+                        "gold_standards.mode is 'training', which serves no "
+                        "gold items: nothing delivers them during the training "
+                        "phase. Use mode: mixed to inject them into the "
+                        "annotation stream, or put practice questions in the "
+                        "training phase's own config to grade during training.")
 
             # Validate frequency
             if "frequency" in gold_config:
