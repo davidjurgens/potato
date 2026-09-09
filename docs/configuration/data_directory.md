@@ -85,6 +85,20 @@ Each file can contain multiple instances. The `id_key` and `text_key` from `item
    - New instances are added
    - Existing instances are updated (annotations are preserved)
 4. Removed files: instances remain in the system (to preserve any annotations)
+5. The search index is rebuilt, so items that arrived after startup are
+   findable through `/admin/api/search` and the curation catalog
+
+### Annotators who already finished
+
+An annotator who has annotated everything assigned to them is topped up from
+the pool on their next visit, so a standing group of annotators consumes an
+incoming stream without anyone creating new accounts. Every assignment cap
+still applies: an annotator for whom nothing can be assigned falls through to
+the completion page as before.
+
+Earlier versions only ran assignment for a user holding *nothing*, so a
+returning annotator was retired the first time they drained their queue, and
+saw a completion code while unassigned items sat in the pool.
 
 ## Example Directory Structure
 

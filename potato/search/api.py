@@ -30,8 +30,12 @@ def _annotator_claim_enabled() -> bool:
 
 
 def _serialize(hits) -> list:
+    # `id` is an alias for `instance_id`. Every other Potato endpoint that
+    # returns items calls it `id`, so a caller reading `id` off a search hit
+    # got nothing back and had a count with anonymous rows under it.
     return [
-        {"instance_id": h.instance_id, "snippet": h.snippet, "score": h.score}
+        {"instance_id": h.instance_id, "id": h.instance_id,
+         "snippet": h.snippet, "score": h.score}
         for h in hits
     ]
 

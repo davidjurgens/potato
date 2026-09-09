@@ -46,6 +46,33 @@ In the [match finding example
 project](https://github.com/davidjurgens/potato-showcase/tree/master/match_finding),
 html tags are used to create two seperate boxes for the finding pairs.
 
+### What the body field can hold
+
+The field named by `item_properties.text_key` is expected to be a string, a
+list or a dictionary. A `null`, a number or a boolean renders as an empty
+string or as the bare value, and the server names the offending ids at
+startup. Earlier versions raised a `TypeError` that named nothing, which on a
+large export meant bisecting by hand.
+
+Three things happen to a string on the way to the page, and each is worth
+knowing before you prepare data:
+
+**Runs of spaces and tabs collapse to one space.** Span offsets have to match
+what the browser measures, and this is how they are kept in step. It means the
+default rendering path destroys indentation, a diff gutter and any
+column-aligned table. If horizontal whitespace carries meaning in your data,
+declare [`instance_display`](../annotation-types/instance_display.md) — that path preserves it
+exactly, including at `type: text`. The server warns at startup when an item's
+text contains a tab or a run of spaces and no `instance_display` is declared.
+
+**Control characters are stripped**, other than newline.
+
+**HTML is sanitized, not escaped.** Tags on an allowlist (`<b>`, `<i>`,
+`<span>` and similar) render as formatting; `<script>` and anything else is
+escaped and inert. This is deliberate: span highlights are injected into the
+item as markup, so escaping the whole field would break them. So scraped
+markup in your corpus becomes formatting rather than visible text.
+
 
 ## Displaying a list or a dictionary of instances
 Potato can display an instance that is a list or a dictionary rather than a string. Set

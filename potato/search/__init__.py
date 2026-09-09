@@ -15,6 +15,7 @@ from .service import (
     get_search,
     init_search,
     init_search_from_item_state,
+    reindex_from_item_state,
     search_settings,
 )
 
@@ -25,6 +26,7 @@ __all__ = [
     "FTS5Backend",
     "init_search",
     "init_search_from_item_state",
+    "reindex_from_item_state",
     "get_search",
     "clear_search",
     "search_settings",

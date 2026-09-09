@@ -110,6 +110,11 @@ class DirectoryWatcher:
         Raises:
             ValueError: If data_directory is not configured or doesn't exist
         """
+        # Kept so a scan can reindex search: the boot index runs before the
+        # directory load, so anything this watcher brings in is otherwise
+        # annotatable and unfindable.
+        self.config = config
+
         self.data_directory = config.get("data_directory")
         if not self.data_directory:
             raise ValueError("data_directory must be configured")
@@ -296,6 +301,7 @@ class DirectoryWatcher:
                 added, updated = self._scan_and_process()
                 if added > 0 or updated > 0:
                     logger.info(f"Directory scan: {added} instances added, {updated} updated")
+                    self._reindex_search()
             except Exception as e:
                 logger.error(f"Error in directory watch loop: {e}", exc_info=True)
 
@@ -303,6 +309,20 @@ class DirectoryWatcher:
             self._stop_event.wait(timeout=self.poll_interval)
 
         logger.debug("Directory watch loop ended")
+
+    def _reindex_search(self) -> None:
+        """Put newly arrived items into the search index.
+
+        Without this an item that arrives after boot is annotatable and
+        unfindable: /admin/api/search reports a count that silently excludes
+        everything the watcher brought in.
+        """
+        try:
+            from potato.search import reindex_from_item_state
+
+            reindex_from_item_state(self.config)
+        except Exception as e:
+            logger.warning(f"Search reindex after directory scan skipped: {e}")
 
     def _scan_and_process(self) -> Tuple[int, int]:
         """
@@ -495,8 +515,14 @@ class DirectoryWatcher:
         Parse a JSON or JSONL file.
 
         Supports both:
-        - JSONL format: One JSON object per line
-        - JSON format: Single JSON array or object per line
+        - JSON format: one array or object spanning the whole file
+        - JSONL format: one JSON object per line
+
+        The whole-file parse is tried first. It used to read line by line
+        only, so a pretty-printed `.json` array -- which is what everyone
+        writes, and what the `data_files` loader has always accepted -- failed
+        on line 1 and the study loaded zero instances from a directory whose
+        files were perfectly good.
 
         Args:
             file_path: Path to the JSON/JSONL file
@@ -504,27 +530,39 @@ class DirectoryWatcher:
         Returns:
             List[dict]: List of parsed instance dictionaries
         """
+        with open(file_path, 'rt', encoding=self.encoding) as f:
+            whole = f.read()
+
+        stripped = whole.strip()
+        if stripped.startswith('['):
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Invalid JSON array in {file_path}: {e}") from e
+            if not isinstance(parsed, list):
+                raise ValueError(f"Expected a JSON array in {file_path}")
+            return [item for item in parsed if isinstance(item, dict)]
+
         instances = []
 
-        with open(file_path, 'rt', encoding=self.encoding) as f:
-            for line_no, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
+        for line_no, line in enumerate(stripped.splitlines(), 1):
+            line = line.strip()
+            if not line:
+                continue
 
-                try:
-                    item = json.loads(line)
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Invalid JSON at line {line_no} in {file_path}: {e}"
+                ) from e
 
-                    # Handle both single objects and arrays
-                    if isinstance(item, list):
-                        instances.extend(item)
-                    else:
-                        instances.append(item)
-
-                except json.JSONDecodeError as e:
-                    raise ValueError(
-                        f"Invalid JSON at line {line_no} in {file_path}: {e}"
-                    ) from e
+            # Handle both single objects and arrays
+            if isinstance(item, list):
+                instances.extend(item)
+            else:
+                instances.append(item)
 
         return instances
 

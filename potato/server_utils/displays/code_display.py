@@ -78,13 +78,19 @@ class CodeDisplay(BaseDisplay):
         # Generate code HTML
         is_span_target = field_config.get("span_target", False)
         code_html = self._render_code(code, language, options, field_key, is_span_target)
-        return self._wrap_content(code_html, options, field_key)
+        # Pass the RESOLVED language through. _wrap_content used to recompute
+        # it from options alone, so an item carrying its own
+        # metadata.language highlighted correctly inside and still emitted
+        # data-language="text" on the wrapper -- which is the attribute a
+        # highlighter reads.
+        return self._wrap_content(code_html, options, field_key, language)
 
     def _wrap_content(
         self,
         content: str,
         options: Dict[str, Any],
-        field_key: str
+        field_key: str,
+        language: Optional[str] = None
     ) -> str:
         """
         Wrap code content in container with styles.
@@ -101,7 +107,7 @@ class CodeDisplay(BaseDisplay):
             styles.append("overflow-x: auto")
 
         style_str = "; ".join(styles) if styles else ""
-        language = options.get("language") or "text"
+        language = language or options.get("language") or "text"
         theme = options.get("theme", "default")
 
         return f'''

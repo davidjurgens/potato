@@ -95,6 +95,26 @@ def _inject_quality_control_item_if_needed(username, user_state):
     return inject_quality_control_item_if_needed(username, user_state, config)
 
 
+def _has_annotated_all_assigned(user_state) -> bool:
+    """Whether every item this user holds has been annotated.
+
+    Distinct from holding nothing: a user who drained their queue still HOLDS
+    those items, so a check on assignment count alone reads them as busy
+    forever.
+    """
+    try:
+        assigned = set(user_state.get_assigned_instance_ids() or ())
+    except Exception:
+        return False
+    if not assigned:
+        return False
+    try:
+        annotated = set(user_state.get_annotated_instance_ids() or ())
+    except Exception:
+        return False
+    return assigned.issubset(annotated)
+
+
 def _reclaim_blocked_user_assignments(username, user_state, current_instance_id=None):
     """Release unannotated assignments after a user is blocked."""
     item_manager = get_item_state_manager()
@@ -1851,9 +1871,20 @@ def annotate():
         except Exception:
             logger.debug("Device routing check failed", exc_info=True)
 
-    # If the user hasn't yet been assigned anything to annotate, do so now
-    if not user_state.has_assignments():
-        logger.debug(f"User {username} has no assignments, assigning instances")
+    # If the user hasn't yet been assigned anything to annotate, do so now.
+    #
+    # Also top up when they hold assignments and have annotated all of them.
+    # The condition used to be "holds nothing", so a returning annotator was
+    # permanently retired the first time they drained their queue: on a
+    # `watch_data_directory` study -- a corpus that keeps arriving, which
+    # implies a standing pool of annotators who come back -- they were shown
+    # the completion page, with a completion code, while unassigned items sat
+    # in the pool. The only way to consume the incoming stream was to keep
+    # creating accounts. Assignment still respects every cap, so an annotator
+    # who is genuinely finished gets nothing and falls through to completion
+    # exactly as before.
+    if not user_state.has_assignments() or _has_annotated_all_assigned(user_state):
+        logger.debug(f"User {username} has no unannotated assignments, assigning instances")
         get_item_state_manager().assign_instances_to_user(user_state)
         logger.debug(f"User has assignments after assignment: {user_state.has_assignments()}")
 
@@ -8993,28 +9024,42 @@ def generate_video_waveform():
         video_url = data['video_url']
         logger.debug(f"Video URL for waveform: {video_url}")
 
-        # Try to generate waveform using the existing WaveformService
+        # Use the initialised service. Building a new one per request gave
+        # every call its own `WaveformService initialized:` line and a
+        # `waveform_cache` path relative to whatever the process CWD happened
+        # to be, so two requests could disagree about where the cache lives.
         try:
-            from potato.server_utils.waveform_service import WaveformService
-            waveform_service = WaveformService(
-                cache_dir=config.get("waveform_cache_dir", "waveform_cache"),
-                task_dir=config.get("task_dir", "."),
+            from potato.server_utils.waveform_service import (
+                WaveformService, get_waveform_service,
             )
 
-            # Generate waveform from video (will extract audio track)
-            result = waveform_service.generate_waveform(video_url)
+            waveform_service = get_waveform_service()
+            if waveform_service is None:
+                waveform_service = WaveformService(
+                    cache_dir=config.get("waveform_cache_dir", "waveform_cache"),
+                    task_dir=config.get("task_dir", "."),
+                )
 
-            if result.get('status') == 'ready':
-                return jsonify({
-                    "status": "ready",
-                    "waveform_url": result.get('waveform_url'),
-                    "cache_key": result.get('cache_key')
-                })
-            else:
-                return jsonify({
-                    "status": result.get('status', 'pending'),
-                    "message": result.get('message', 'Waveform generation in progress')
-                })
+            # `generate_waveform` never existed on WaveformService, so this
+            # route answered 500 for every request in every format -- including
+            # a video with a real audio track, which is the case it exists for.
+            # The method that does the work is `get_waveform_url`; audiowaveform
+            # reads the audio track out of a video container directly.
+            waveform_url = waveform_service.get_waveform_url(video_url)
+
+            if waveform_url:
+                return jsonify({"status": "ready", "waveform_url": waveform_url})
+
+            # No waveform: either audiowaveform is absent or the file has no
+            # readable audio track. Both are ordinary, and the client can draw
+            # its own -- so this is a 200 with a reason, not a failure.
+            return jsonify({
+                "status": "unavailable",
+                "message": ("No waveform could be generated for this video. "
+                            "Either audiowaveform is not installed or the file "
+                            "has no readable audio track."),
+                "use_client_fallback": True,
+            })
 
         except ImportError:
             logger.warning("WaveformService not available for video waveform generation")
@@ -9025,11 +9070,12 @@ def generate_video_waveform():
             })
 
     except Exception as e:
-        logger.error(f"Error generating video waveform: {e}")
-        return jsonify({
-            "error": str(e),
-            "use_client_fallback": True
-        }), 500
+        # A 500 carrying `use_client_fallback: True` reads as a routine
+        # degradation on the client, which is how a route that had never
+        # worked went unnoticed. The status code is the failure; the body says
+        # what broke.
+        logger.exception("Error generating video waveform")
+        return jsonify({"status": "error", "error": str(e)}), 500
 
     finally:
         logger.debug("=== GENERATE_VIDEO_WAVEFORM END ===")

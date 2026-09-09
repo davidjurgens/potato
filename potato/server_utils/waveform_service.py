@@ -171,7 +171,27 @@ class WaveformService:
         Uses the same containment rule as the rest of the server: realpath the
         candidate and refuse anything that leaves the base directory, which
         catches `..` and symlinks pointing out.
+
+        `/media/clip.wav` is tried first, through the shared media resolver.
+        It is a SERVER URL rather than a filesystem path -- it is what the
+        audio widget puts on the page and what `media_directory` documents --
+        but `os.path.isabs()` is true for it, so realpath sent it to the host
+        root and the containment check refused it. Measured: twelve clips
+        across six formats all returned `use_client_fallback` in 0.00s, the
+        `audiowaveform` binary was never invoked, and the cache stayed empty,
+        with one WARNING per request as the only sign. The containment rule was
+        right; the path shape was never checked against it.
         """
+        try:
+            from potato.media.paths import resolve_media_url
+            from potato.server_utils.config_module import config as _config
+
+            resolved = resolve_media_url(_config, path, context="Waveform")
+            if resolved:
+                return resolved
+        except Exception:
+            logger.debug("Media-URL resolution unavailable", exc_info=True)
+
         base = os.path.realpath(self._task_dir or os.getcwd())
         candidate = os.path.realpath(
             path if os.path.isabs(path) else os.path.join(base, path)

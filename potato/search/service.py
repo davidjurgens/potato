@@ -137,6 +137,32 @@ def init_search_from_item_state(
     return init_search(config, rows=_rows_from_item_state(config))
 
 
+def reindex_from_item_state(config: Dict[str, Any]) -> int:
+    """Rebuild the index over whatever is loaded now.
+
+    The boot index is built before the `data_directory` load runs, so a
+    directory-loaded study indexed nothing -- "FTS5 indexed 0 instances" -- and
+    the watcher's later additions did not index either. `/admin/api/search`
+    then answered `{"count": 0}` on a corpus where every item matched, which is
+    indistinguishable from "no matches", and everything built on it (the
+    curation catalog) went with it.
+
+    Returns the number of instances indexed, or 0 when search is off.
+    """
+    settings = search_settings(config)
+    if not settings["enabled"]:
+        return 0
+    backend = get_search()
+    if backend is None:
+        backend = init_search_from_item_state(config)
+        return 0 if backend is None else 1
+    try:
+        return backend.index(_rows_from_item_state(config))
+    except Exception as exc:
+        logger.warning("Search reindex failed: %s", exc)
+        return 0
+
+
 def get_search() -> Optional[SearchBackend]:
     return _SEARCH
 

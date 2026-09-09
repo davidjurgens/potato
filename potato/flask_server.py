@@ -1010,15 +1010,67 @@ def _render_displayed_text(text_key: str) -> None:
     Args:
         text_key: The key in item data containing the text to display
     """
+    unusable = []
+    whitespace_carrying = []
+    declares_display = bool(config.get("instance_display"))
+
     for item in get_item_state_manager().items():
         item_data = item.get_data()
 
         # Validate text key exists before rendering
         if text_key in item_data:
-            item_data["displayed_text"] = get_displayed_text(item_data[text_key])
+            raw = item_data[text_key]
+            if raw is None or isinstance(raw, (int, float, bool)):
+                unusable.append((item.get_id(), type(raw).__name__))
+            elif (not declares_display and isinstance(raw, str)
+                  and ("\t" in raw or "  " in raw)):
+                whitespace_carrying.append(item.get_id())
+            item_data["displayed_text"] = get_displayed_text(raw)
         else:
             item_data["displayed_text"] = ""
             logger.warning(f"No text found for item {item.get_id()}, using empty string")
+
+    _warn_about_unusable_text(text_key, unusable, whitespace_carrying)
+
+
+def _warn_about_unusable_text(text_key, unusable, whitespace_carrying) -> None:
+    """Name the rows whose text will not display as the author wrote it.
+
+    Two separate problems, both previously silent:
+
+    * A null or numeric `text_key` used to raise a TypeError out of `re.sub`
+      with no id, no field and no file in the traceback. It now renders as
+      empty or as the number, and the ids are named here once.
+
+    * The default rendering path collapses runs of spaces and tabs to a single
+      space, because span offsets have to match the client's. That is a real
+      constraint, but it silently destroys the indentation of code, a diff
+      gutter and any column-aligned text. Declaring `instance_display` uses a
+      path that preserves it exactly, so the warning names the condition and
+      the fix rather than the transform.
+    """
+    def _named(ids, limit=5):
+        shown = ", ".join(str(i) for i in ids[:limit])
+        if len(ids) > limit:
+            shown += f", and {len(ids) - limit} more"
+        return shown
+
+    if unusable:
+        kinds = sorted({kind for _iid, kind in unusable})
+        logger.warning(
+            "%d item(s) have a '%s' that is not text (%s): %s. They display as "
+            "empty or as the bare value; an annotator cannot read what is not "
+            "there.",
+            len(unusable), text_key, "/".join(kinds),
+            _named([iid for iid, _kind in unusable]))
+
+    if whitespace_carrying:
+        logger.warning(
+            "%d item(s) have a '%s' containing tabs or runs of spaces, and no "
+            "`instance_display` is declared: %s. The default rendering path "
+            "collapses horizontal whitespace, so indentation and column "
+            "alignment are lost. Declare `instance_display` to keep them.",
+            len(whitespace_carrying), text_key, _named(whitespace_carrying))
 
 
 def _load_from_data_sources(config: dict, ism, id_key: str, text_key: str) -> None:
@@ -2639,6 +2691,17 @@ def get_displayed_text(text):
     - alternating_shading: Shade every other turn (for dialogue readability)
     """
     import re
+
+    # A text field that is null, a number or a bool is a data error, and it
+    # used to be a TypeError out of re.sub several branches below -- naming no
+    # id, no field and no file, which on a 20k-row export leaves bisecting by
+    # hand as the next move. The function already branches for dict and list;
+    # it just was not total. `_warn_about_unusable_text` names the rows at
+    # load time so the researcher hears about them once, with ids.
+    if text is None:
+        return ""
+    if isinstance(text, (int, float, bool)):
+        return str(text)
 
     # Handle dict inputs (for tree structures, agent traces, complex data)
     # Convert to JSON string for display — the actual rendering is handled by
@@ -6119,6 +6182,17 @@ def run_server(args):
             # Load all files from the directory
             count = dw.load_directory()
             logger.info(f"Loaded {count} instances from data_directory: {config['data_directory']}")
+
+            # The search index was built above, BEFORE this load, so it
+            # indexed nothing. /admin/api/search answered {"count": 0} on a
+            # corpus where every item matched -- indistinguishable from "no
+            # matches" -- and the curation catalog went with it.
+            if count:
+                try:
+                    from potato.search import reindex_from_item_state
+                    reindex_from_item_state(config)
+                except Exception as e:
+                    logger.warning(f"Search reindex after directory load skipped: {e}")
 
             # Start watching if enabled
             if config.get("watch_data_directory", False):
