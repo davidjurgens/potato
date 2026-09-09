@@ -526,7 +526,30 @@ def generate_slider_layout_internal(annotation_scheme):
         raise Exception(
             f'Slider scale for "{annotation_scheme["name"]}" must have minimum value < max value ({min_value} >= {max_value})'
         )
-    
+
+    # The browser clamps an out-of-range `value` on a range input, so the
+    # element ended up at the boundary while the tooltip and the JS that
+    # positions the thumb were both painted with the raw number. Declared 99 on
+    # a 0..10 slider: input value 10, tooltip "99", thumb at the right end --
+    # consistent with both readings, and the disagreement lives exactly in the
+    # state the annotator sees FIRST. Someone who agrees with the default and
+    # saves without touching the control reads 99 and stores 10.
+    #
+    # Clamped rather than refused: the widget is usable and the study runs, so
+    # this is a boot warning rather than a validation failure that would stop a
+    # task working today. `min_value >= max_value` above still raises, because
+    # that one leaves nothing to render.
+    if starting_value < min_value or starting_value > max_value:
+        clamped = min(max(starting_value, min_value), max_value)
+        logger.warning(
+            "Slider %r has starting_value %s outside its range %s..%s. Using "
+            "%s. The browser clamps the control either way; before this the "
+            "tooltip still showed %s, so the annotator was told the default "
+            "was a value the slider cannot hold.",
+            annotation_scheme["name"], starting_value, min_value, max_value,
+            clamped, starting_value)
+        starting_value = clamped
+
     show_labels = annotation_scheme.get("show_labels", True)
     min_label = str(min_value) if show_labels else ''
     max_label = str(max_value) if show_labels else ''

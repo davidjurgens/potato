@@ -169,6 +169,7 @@ def _generate_input_attributes(annotation_scheme):
         str: Space-separated attribute string
     """
     attrs = []
+    bounds = {}
 
     for attr, keys in (("min", ("min_value", "min")),
                        ("max", ("max_value", "max")),
@@ -177,6 +178,38 @@ def _generate_input_attributes(annotation_scheme):
             if key in annotation_scheme:
                 attrs.append(f'{attr}="{escape_html_content(str(annotation_scheme[key]))}"')
                 logger.debug("Setting %s from '%s': %s", attr, key, annotation_scheme[key])
+                bounds[attr] = annotation_scheme[key]
                 break
 
+    _refuse_inverted_range(annotation_scheme, bounds)
     return " ".join(attrs)
+
+
+def _refuse_inverted_range(annotation_scheme, bounds):
+    """Raise when min > max, which `slider` and `range_slider` already do.
+
+    `<input type="number" min="10" max="1">` cannot be filled: Chrome reports
+    every value invalid, with its own message -- "Minimum value (10) must be
+    less than the maximum value (1)" -- which is the check Potato skipped. One
+    such field makes `form.checkValidity()` false for the whole page, so a
+    scheme nobody could answer blocks every other scheme beside it.
+
+    Refused rather than warned, unlike the slider's out-of-range
+    `starting_value`: there is no usable widget to keep running here, and both
+    spellings of the bounds are checked so `min:`/`max:` is not a way around
+    the check that `min_value:`/`max_value:` gets.
+    """
+    if "min" not in bounds or "max" not in bounds:
+        return
+    try:
+        low, high = float(bounds["min"]), float(bounds["max"])
+    except (TypeError, ValueError):
+        # A non-numeric bound is a different complaint and the browser will
+        # ignore the attribute; do not turn it into this error.
+        return
+    if low > high:
+        raise Exception(
+            f'Number scheme "{annotation_scheme.get("name", "?")}" has a '
+            f'minimum above its maximum ({bounds["min"]} > {bounds["max"]}), '
+            f"so no value can be entered and the whole page fails validation."
+        )

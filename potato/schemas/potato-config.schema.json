@@ -2980,11 +2980,8 @@
           "type": "boolean"
         },
         "failure_handling": {
-          "description": "What to do when an annotator fails a check. A bare action name, or a mapping with warn/block thresholds and messages",
-          "type": [
-            "string",
-            "object"
-          ]
+          "description": "Warn and block thresholds, and the messages shown at each",
+          "type": "object"
         },
         "frequency": {
           "description": "Insert a check every N items",

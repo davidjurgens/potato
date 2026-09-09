@@ -3525,6 +3525,37 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
             if scheme['min_value'] >= scheme['max_value']:
                 raise ConfigValidationError(f"{path}.min_value must be less than max_value")
 
+            starting = scheme['starting_value']
+            if isinstance(starting, (int, float)) and not (
+                    scheme['min_value'] <= starting <= scheme['max_value']):
+                # Not fatal: the generator clamps it and the widget works. This
+                # is here so `validate` says it rather than leaving it to a
+                # boot log nobody reads.
+                logger.warning(
+                    "%s.starting_value %s is outside %s..%s and will be "
+                    "clamped. The browser clamps the control either way; the "
+                    "tooltip used to show the unclamped number, so the "
+                    "annotator was shown a default the slider cannot hold.",
+                    path, starting, scheme['min_value'], scheme['max_value'])
+
+    elif annotation_type == 'number':
+        # `slider` and `range_slider` refuse an inverted range; `number` took
+        # one and rendered `<input type="number" min="10" max="1">`, which
+        # cannot be filled -- Chrome reports every value invalid and one such
+        # field makes `form.checkValidity()` false for the WHOLE page, so a
+        # scheme nobody can answer blocks every other scheme beside it.
+        #
+        # Both spellings are read, because the generator reads both and
+        # checking only one would leave a way around this.
+        low = scheme.get('min_value', scheme.get('min'))
+        high = scheme.get('max_value', scheme.get('max'))
+        if isinstance(low, (int, float)) and isinstance(high, (int, float)):
+            if low > high:
+                raise ConfigValidationError(
+                    f"{path} has a minimum above its maximum ({low} > {high}), "
+                    f"so no value can be entered and the whole page fails "
+                    f"validation")
+
     elif annotation_type == 'span':
         if 'labels' not in scheme:
             raise ConfigValidationError(f"{path} missing 'labels' field for span annotation type")
@@ -3924,6 +3955,23 @@ def validate_single_annotation_scheme(scheme: Dict[str, Any], path: str) -> None
         if 'total_points' in scheme:
             if not isinstance(scheme['total_points'], int) or scheme['total_points'] < 1:
                 raise ConfigValidationError(f"{path}.total_points must be a positive integer")
+
+        # Both constraints are enforced at the widget, and they could
+        # contradict each other. Four labels, 10 points, `min_per_item: 5`:
+        # filling the declared minimum in every box -- the only thing each
+        # input's `min="5"` allows -- gives "Allocated: 20 / 10, Remaining:
+        # -10". There is no allocation that satisfies both, so the form cannot
+        # be completed at all.
+        total = scheme.get('total_points', 100)
+        minimum = scheme.get('min_per_item', 0)
+        if (isinstance(total, int) and isinstance(minimum, (int, float))
+                and isinstance(scheme.get('labels'), list)):
+            floor = minimum * len(scheme['labels'])
+            if floor > total:
+                raise ConfigValidationError(
+                    f"{path} cannot be completed: min_per_item {minimum} "
+                    f"across {len(scheme['labels'])} labels needs at least "
+                    f"{floor} points, but total_points is {total}")
 
     elif annotation_type == 'semantic_differential':
         if 'pairs' not in scheme:
