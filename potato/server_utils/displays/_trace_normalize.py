@@ -28,10 +28,14 @@ Supported input formats (see ``normalize_steps``):
     - list of {speaker, text} dicts         -> dialogue-style turns
     - list of {thought, action, observation}-> one dict expands to 1-3 steps
     - list of {step_type, content} dicts    -> explicit typing
+    - list of {role, content} dicts         -> chat/agent-log turns
 """
 
+import logging
 import re
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 # Default background colors for step types (consumed by displays' CSS builders).
@@ -102,11 +106,22 @@ def infer_type_from_text(text: str, default: str = "observation") -> str:
     return default
 
 
+#: Where a structured action keeps its arguments. `input` is what a tool-use
+#: block carries; without it the arguments were dropped and the annotator saw
+#: `read_file()` for a call that named a file.
+_ACTION_ARG_KEYS = ("params", "parameters", "input", "args", "arguments")
+
+
 def format_action_text(action: Any) -> str:
     """Render an action value as ``tool(args)`` when it is a structured dict."""
     if isinstance(action, dict):
         tool = action.get("tool", action.get("name", ""))
-        params = action.get("params", action.get("parameters", {}))
+        params = {}
+        for key in _ACTION_ARG_KEYS:
+            value = action.get(key)
+            if isinstance(value, dict) and value:
+                params = value
+                break
         if params:
             args = ", ".join(f"{k}={repr(v)}" for k, v in params.items())
             return f"{tool}({args})"
@@ -135,6 +150,62 @@ def _passthrough(step: Dict[str, Any], item: Dict[str, Any], skip_ids: bool = Fa
     return step
 
 
+#: Chat roles carry a fixed vocabulary that mostly does not name a step type,
+#: unlike the display labels format 1 uses ("Thought", "Environment"). So a
+#: role that says nothing defers to the text, which is what the opener
+#: heuristics are for.
+_ROLE_TYPES = {
+    "system": "system",
+    # A `tool` / `function` message carries what the tool RETURNED. The call
+    # itself lives in the preceding assistant turn's `tool_calls`. Typing it as
+    # an action put a tool's stdout in eval_trace's "Final Answer" pane, which
+    # falls back to the last action.
+    "tool": "observation",
+    "function": "observation",
+    "error": "error",
+}
+
+
+def _type_for_role(role: str, text: str) -> str:
+    """Step type for a `{role, content}` turn."""
+    mapped = _ROLE_TYPES.get(role.strip().lower())
+    if mapped:
+        return mapped
+    inferred = infer_type_from_speaker(role)
+    if inferred != "observation":
+        return inferred
+    return infer_type_from_text(text)
+
+
+def _content_text(content: Any) -> str:
+    """Flatten a `content` value to display text.
+
+    A chat message's content is a string, or the API's list of typed blocks.
+    A block list rendered with `str()` reaches the annotator as a Python repr,
+    which is the third place on this project that has happened.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                if block.get("type") == "text" and block.get("text"):
+                    parts.append(str(block["text"]))
+                elif block.get("type") == "tool_use":
+                    parts.append(format_action_text({
+                        "name": block.get("name", "tool"),
+                        "input": block.get("input", {})}))
+                elif block.get("text"):
+                    parts.append(str(block["text"]))
+        return "\n".join(p for p in parts if p)
+    if content is None:
+        return ""
+    return str(content)
+
+
 def normalize_steps(
     data: Any,
     speaker_key: str = "speaker",
@@ -153,7 +224,7 @@ def normalize_steps(
     if not isinstance(data, list):
         return steps
 
-    for item in data:
+    for index, item in enumerate(data):
         if isinstance(item, str):
             step_type = infer_type_from_text(item)
             steps.append({"type": step_type, "speaker": "", "text": item})
@@ -201,5 +272,33 @@ def normalize_steps(
                     "timestamp": item.get("timestamp", ""),
                     "screenshot": item.get("screenshot", ""),
                 }, item))
+            # Format 4: role/content -- what an agent log is on disk, and what
+            # every chat-completions API returns. `coding_trace` and
+            # `audio_dialogue` already parse it; the three displays on this
+            # normalizer used to drop it, so a four-message trace rendered
+            # "No trace steps found" and a three-message one rendered two cards
+            # and a summary reading "2 steps".
+            elif "role" in item and "content" in item:
+                role = str(item.get("role", ""))
+                text = _content_text(item["content"])
+                steps.append(_passthrough({
+                    "type": item.get("step_type") or _type_for_role(role, text),
+                    "speaker": role,
+                    "text": text,
+                    "timestamp": item.get("timestamp", ""),
+                    "screenshot": item.get("screenshot", ""),
+                }, item))
+            else:
+                # Dropping a turn shortens the sequence, and turn ids are
+                # positional when the data carries none -- so a silent drop
+                # also re-points every annotation after it. Say which item and
+                # what it looked like.
+                logger.warning(
+                    "trace step %d was not in any recognized format and has "
+                    "been skipped; its keys are %s. Supported shapes are "
+                    "{%s, %s}, {thought, action, observation}, "
+                    "{step_type, content} and {role, content}.",
+                    index, sorted(str(k) for k in item)[:12],
+                    speaker_key, text_key)
 
     return steps
