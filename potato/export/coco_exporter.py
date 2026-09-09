@@ -85,6 +85,18 @@ class COCOExporter(BaseExporter):
 
                 file_name = get_image_filename(item) or instance_id
 
+                # A zero here is not a missing field, it is a broken export:
+                # the client stores normalized coordinates, so every object on
+                # this image comes out as [0, 0, 0, 0]. It used to be written
+                # with an empty `warnings` list, which reads as a clean run.
+                if width <= 0 or height <= 0:
+                    warnings.append(
+                        f"Could not determine the pixel size of {file_name} "
+                        f"({instance_id}); its annotations are written against "
+                        f"a 0x0 frame and every coordinate is 0. Add "
+                        f"`image_width` and `image_height` to the item, or "
+                        f"make the file readable from the media directory.")
+
                 image_entry = {
                     "id": image_id,
                     "file_name": file_name,

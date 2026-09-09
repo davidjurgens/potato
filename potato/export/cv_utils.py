@@ -8,6 +8,7 @@ from typing import Dict, List, Tuple, Any, Optional
 import logging
 import math
 import os
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +278,33 @@ def get_image_dimensions(item: dict, default_width: int = 0,
     if derived is not None:
         return derived
 
+    if width <= 0 or height <= 0:
+        _warn_unmeasurable(item)
     return (width, height)
+
+
+_UNMEASURABLE_SEEN: set = set()
+
+
+def _warn_unmeasurable(item: dict) -> None:
+    """Say once, per image, that its size could not be established.
+
+    Zero is not a neutral fallback here: the client stores normalized
+    coordinates, so every box, polygon and point in the export gets multiplied
+    by it and comes out as ``[0, 0, 0, 0]``. An export that writes zeros with
+    an empty warning list reads as a clean run over annotations that all sit
+    at the origin, which is indistinguishable from an annotator who drew
+    nothing.
+    """
+    name = get_image_filename(item) or item.get("id") or "<unnamed item>"
+    if name in _UNMEASURABLE_SEEN:
+        return
+    _UNMEASURABLE_SEEN.add(name)
+    logger.warning(
+        "export: could not determine the pixel size of %s, so its annotations "
+        "are being written against a 0x0 frame and every coordinate will be 0. "
+        "Add `image_width` and `image_height` to the item, or make the file "
+        "readable from the media directory.", name)
 
 
 def _dimensions_from_masks(annotation: Any) -> Optional[Tuple[int, int]]:
@@ -338,10 +365,29 @@ def _dimensions_from_file(config: Any, item: dict) -> Optional[Tuple[int, int]]:
         return _DIMENSION_CACHE[path]
     if not os.path.isfile(path):
         return None
+    if os.path.splitext(path)[1].lower() == ".svg":
+        dimensions = _svg_dimensions(path)
+        if dimensions is not None:
+            _DIMENSION_CACHE[path] = dimensions
+        return dimensions
     try:
         from PIL import Image
         with Image.open(path) as image:
-            dimensions = (int(image.width), int(image.height))
+            width, height = int(image.width), int(image.height)
+            # The browser applies EXIF orientation before showing the image, so
+            # the annotator draws in the DISPLAYED frame. PIL reports the
+            # STORED frame. For the four orientations that transpose the axes
+            # the two disagree, and every box in the export is paired with a
+            # width and height that belong to a 90-degree rotation of the
+            # picture the annotator saw -- so a box on the subject's face
+            # normalizes to somewhere off the edge of the frame.
+            #
+            # The tag is read rather than calling ImageOps.exif_transpose(),
+            # which decodes and rotates the whole image to learn two numbers.
+            orientation = image.getexif().get(0x0112)
+            if orientation in (5, 6, 7, 8):
+                width, height = height, width
+            dimensions = (width, height)
     except Exception:
         logger.debug("export could not read the dimensions of %s", path)
         return None
@@ -349,6 +395,61 @@ def _dimensions_from_file(config: Any, item: dict) -> Optional[Tuple[int, int]]:
         return None
     _DIMENSION_CACHE[path] = dimensions
     return dimensions
+
+
+_SVG_TAG = re.compile(r"<svg\b[^>]*>", re.IGNORECASE | re.DOTALL)
+_SVG_ATTR = re.compile(
+    r"\b(width|height|viewBox)\s*=\s*[\"']([^\"']*)[\"']", re.IGNORECASE)
+_SVG_LENGTH = re.compile(r"^\s*([0-9]*\.?[0-9]+)\s*(px)?\s*$", re.IGNORECASE)
+
+
+def _svg_dimensions(path: str) -> Optional[Tuple[int, int]]:
+    """``(width, height)`` for an SVG, read from its root element.
+
+    Pillow cannot open an SVG, so the whole family used to fall through to
+    ``(0, 0)`` -- and a zero width is what every normalized coordinate gets
+    multiplied by, so an SVG study exported every box as ``[0, 0, 0, 0]``.
+
+    Read with a bounded regex over the first 8 KB rather than an XML parser:
+    the file is annotator-supplied, and an XML parser on untrusted input buys
+    entity expansion attacks in exchange for nothing this needs. Only the
+    opening tag matters, and it is at the top by definition.
+
+    `width`/`height` win when they are plain lengths. A percentage or a unit
+    this cannot read falls back to `viewBox`, which is always in user units.
+    """
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            head = handle.read(8192)
+    except OSError:
+        return None
+    tag = _SVG_TAG.search(head)
+    if not tag:
+        return None
+    attrs = {name.lower(): value
+             for name, value in _SVG_ATTR.findall(tag.group(0))}
+
+    def length(value):
+        match = _SVG_LENGTH.match(value or "")
+        if not match:
+            return None
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+
+    width = length(attrs.get("width"))
+    height = length(attrs.get("height"))
+    if not width or not height:
+        box = (attrs.get("viewbox") or "").replace(",", " ").split()
+        if len(box) == 4:
+            try:
+                width, height = float(box[2]), float(box[3])
+            except ValueError:
+                return None
+    if not width or not height or width <= 0 or height <= 0:
+        return None
+    return (int(round(width)), int(round(height)))
 
 
 def get_image_filename(item: dict) -> Optional[str]:

@@ -160,6 +160,19 @@ Potato derives the size: from a mask's own RLE, which needs no file access, or
 by reading the image. Declaring them is still faster and works when the image
 is somewhere the exporter cannot read.
 
+A JPEG carrying an EXIF orientation tag is measured in the frame the browser
+displays rather than the frame it is stored in, because the displayed frame is
+the one the annotator drew in. A photo stored 4032x3024 and rotated by its tag
+exports as 3024x4032. An SVG is measured from its opening tag: `width` and
+`height` when they are plain lengths, `viewBox` otherwise.
+
+When the size cannot be established at all (a missing file, a remote URL, a
+path outside the media directory), the export writes zeros and reports it, in
+the log and in the export's own warnings list. Coordinates are stored
+normalized, so a zero width makes every box, polygon and point on that image
+come out as `[0, 0, 0, 0]`. Declare `image_width` and `image_height` for those
+items.
+
 **Items nobody annotated are not exported.** Each CV exporter writes the
 annotations it finds, so an item that was shown and left unmarked appears in no
 image list and no annotation list. The export names how many were left out and
