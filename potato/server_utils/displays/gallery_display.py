@@ -11,6 +11,19 @@ from typing import Dict, Any, List
 from .base import BaseDisplay, css_pixels, display_text
 
 
+#: Extensions a browser plays in a `<video>` element. Checked before the query
+#: string, because a signed media url carries one.
+_VIDEO_EXTENSIONS = (".mp4", ".m4v", ".webm", ".ogv", ".mov")
+
+
+def _is_video_url(url) -> bool:
+    """Whether this url names a video rather than an image."""
+    if not isinstance(url, str):
+        return False
+    path = url.split("?", 1)[0].split("#", 1)[0]
+    return path.lower().endswith(_VIDEO_EXTENSIONS)
+
+
 class GalleryDisplay(BaseDisplay):
     """
     Display type for ordered image galleries with captions.
@@ -72,11 +85,27 @@ class GalleryDisplay(BaseDisplay):
 
             zoom_attr = 'data-zoomable="true"' if zoomable else ''
 
+            # `gallery` is the only display that takes a LIST of urls, so it is
+            # where anyone with several media files per item starts -- and
+            # multi-camera robot demonstrations, side-by-side model rollouts
+            # and frame-grid temporal segmentation are all lists of video.
+            # Every url used to go into an `<img>` unconditionally, so three
+            # clips rendered as three broken images with nothing in the log and
+            # nothing on the page.
+            if _is_video_url(item["url"]):
+                media_html = (
+                    f'<video src="{url}" class="gallery-img gallery-video" '
+                    f'controls preload="metadata" '
+                    f'aria-label="Video {i + 1}"></video>')
+            else:
+                media_html = (
+                    f'<img src="{url}" alt="Image {i + 1}" '
+                    f'class="gallery-img" loading="lazy" {zoom_attr} />')
+
             item_html = f'''
             <div class="gallery-item" data-index="{i}">
                 <div class="gallery-img-wrapper">
-                    <img src="{url}" alt="Image {i + 1}"
-                         class="gallery-img" loading="lazy" {zoom_attr} />
+                    {media_html}
                 </div>
                 {caption_html}
             </div>

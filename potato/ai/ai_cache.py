@@ -619,7 +619,8 @@ class AiCacheManager:
         ) or (text if _is_image_url(text) else None)
         if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision query for image URL: {text[:50]}...")
-            image_data = _get_image_data_from_url(vision_image)
+            image_data, _attached = self.resolve_vision_image(
+                instance_id, vision_image)
             if image_data:
                 try:
                     return self.ai_endpoint.query_with_image(prompt, image_data, output_format)
@@ -746,7 +747,8 @@ class AiCacheManager:
         text_block = _item_text_block(text, vision_image)
         if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision for likert {ai_assistant} on image: {text[:50]}...")
-            image_data = _get_image_data_from_url(vision_image)
+            image_data, _attached = self.resolve_vision_image(
+                instance_id, vision_image)
             if image_data:
                 # Build vision-specific prompts based on ai_assistant type
                 if ai_assistant == "hint":
@@ -809,7 +811,8 @@ Respond in JSON format: {{"keywords": ["<visual_feature_1>", "<visual_feature_2>
         text_block = _item_text_block(text, vision_image)
         if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision for multiselect {ai_assistant} on image: {text[:50]}...")
-            image_data = _get_image_data_from_url(vision_image)
+            image_data, _attached = self.resolve_vision_image(
+                instance_id, vision_image)
             if image_data:
                 # Format labels for the prompt
                 label_names = [l.get('name', l) if isinstance(l, dict) else l for l in labels]
@@ -874,7 +877,8 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         text_block = _item_text_block(text, vision_image)
         if self.endpoint_supports_vision and vision_image:
             logger.debug(f"Using vision for radio {ai_assistant} on image: {text[:50]}...")
-            image_data = _get_image_data_from_url(vision_image)
+            image_data, _attached = self.resolve_vision_image(
+                instance_id, vision_image)
             if image_data:
                 # Format labels for the prompt
                 label_names = [l.get('name', l) if isinstance(l, dict) else l for l in labels]
@@ -1663,6 +1667,53 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
                 self.in_progress.pop(key, None)
             return f"Error: {str(e)}"
 
+    #: (instance_id, url) -> whether the bytes were obtained. Bounded because a
+    #: long-running server would otherwise keep one entry per item ever asked
+    #: about.
+    _VISION_VERDICT_LIMIT = 2048
+
+    def resolve_vision_image(self, instance_id, vision_image):
+        """Bytes for the model, and whether they were actually obtained.
+
+        A missing image, a moved media directory or a mistyped `image_key` all
+        produced a normal-shaped reply in the normal time with the same JSON
+        keys, because the code falls through to a text-only request. Nothing
+        said so anywhere: not the response, not the log.
+
+        On a vision study that is the difference between an answer about the
+        picture and an answer about the prompt. The model that was measured
+        happened to decline to guess and returned a generic hint, but that is a
+        property of one model at temperature 0 rather than of the system -- a
+        different model would invent a shape with the same confidence it
+        invents everything else, and nothing downstream could tell.
+        """
+        if not (self.endpoint_supports_vision and vision_image):
+            return None, False
+
+        image_data = _get_image_data_from_url(vision_image)
+        if not image_data:
+            logger.warning(
+                "Vision request for %s could not load %r, so the model is "
+                "being sent TEXT ONLY. Its answer will have the same shape as "
+                "a vision answer.", instance_id, vision_image)
+        self._remember_vision_verdict(instance_id, bool(image_data))
+        return image_data, bool(image_data)
+
+    def _remember_vision_verdict(self, instance_id, attached: bool) -> None:
+        verdicts = getattr(self, "_vision_verdicts", None)
+        if verdicts is None:
+            from collections import OrderedDict
+
+            verdicts = self._vision_verdicts = OrderedDict()
+        verdicts.pop(instance_id, None)
+        verdicts[instance_id] = attached
+        while len(verdicts) > self._VISION_VERDICT_LIMIT:
+            verdicts.popitem(last=False)
+
+    def vision_verdict(self, instance_id):
+        """Whether the last request for this item carried an image, or None."""
+        return getattr(self, "_vision_verdicts", {}).get(instance_id)
+
     def compute_help(self, instance_id, annotation_id: int, ai_assistant: str):
         # Validate that the assistant type is compatible with the model and input
         is_valid, error_message = self._validate_assistant_compatibility(
@@ -1700,8 +1751,17 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
         # Every generator funnels through here, so this is the one place a
         # suggested choice can be checked against what the scheme actually
         # offers.
-        return validate_suggested_choice(
+        result = validate_suggested_choice(
             result, _get_scheme_field(annotation_id, "labels"))
+
+        # And the one place to say whether the model actually saw the picture.
+        # A text-only fallback is indistinguishable from a vision answer in
+        # both shape and timing, so the distinction has to be recorded rather
+        # than inferred.
+        attached = self.vision_verdict(instance_id)
+        if isinstance(result, dict) and attached is not None:
+            result["image_attached"] = attached
+        return result
 
     def get_cache_stats(self) -> Dict[str, int]:
         """returns statistics on disk cache and in-progress cache entries."""
