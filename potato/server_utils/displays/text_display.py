@@ -8,7 +8,7 @@ Supports span annotation targeting when used with span annotation schemes.
 import html
 from typing import Dict, Any, List
 
-from .base import BaseDisplay
+from .base import BaseDisplay, display_text
 
 
 def _format_list(items):
@@ -82,8 +82,13 @@ class TextDisplay(BaseDisplay):
         # That formatter returns markup (the item prefixes are <b> tags), so
         # it is sanitized rather than escaped: escaping it a second time shows
         # the annotator the tags themselves.
+        # A dict got `str()` here, which is a Python repr -- and the DEFAULT
+        # rendering path (`flask_server.get_displayed_text`) has always emitted
+        # indented JSON for one. The two disagreed, and this is the path the
+        # docs push authors toward, so it was the worse of the two on exactly
+        # the data an author most likely has a structured record for.
         is_formatted_list = isinstance(data, list)
-        text = _format_list(data) if is_formatted_list else str(data)
+        text = _format_list(data) if is_formatted_list else display_text(data)
 
         # Get display options
         options = self.get_display_options(field_config)

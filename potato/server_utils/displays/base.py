@@ -33,6 +33,7 @@ Span Target Contract:
     See displays/ARCHITECTURE.md for the full contract.
 """
 
+import json
 import html as html_module
 import logging
 from abc import ABC, abstractmethod
@@ -249,6 +250,46 @@ class BaseDisplay(ABC):
 
         result.update(field_config.get("display_options", {}) or {})
         return result
+
+
+def display_text(value: Any) -> str:
+    """One value, rendered as text a person can read.
+
+    `str()` on a dict or a list is a Python repr, and annotators were shown
+    `{'headline': 'NESTED_HEADLINE', 'sub': 'NESTED_SUB'}` -- braces, single
+    quotes and all -- across seventeen of the twenty-four displays. It reached
+    the page four separate ways before this existed: dialogue turn text,
+    multi_agent_discussion, spreadsheet cells, and an API's typed content
+    blocks in the trace displays.
+
+    A dict becomes indented JSON, which is what the DEFAULT rendering path in
+    `flask_server.get_displayed_text` has always produced for one. The two
+    paths disagreed, and the `instance_display` path -- the one Potato's own
+    docs push authors toward -- was the worse of the two.
+
+    Lists keep their own formatter, because `list_as_text` governs how a
+    list-valued field reads and that is a deliberate config surface. Callers
+    that handle lists themselves should keep doing so; this is for the
+    scalar-or-structured case.
+
+    Returns TEXT, never markup. Callers escape or sanitize as they already do.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        # Before the numeric branch: bool is an int subclass.
+        return str(value)
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, (dict, list, tuple)):
+        try:
+            return json.dumps(value, ensure_ascii=False, indent=2,
+                              default=str)
+        except (TypeError, ValueError):
+            return str(value)
+    return str(value)
 
 
 def resolve_display_options(field_config: Dict[str, Any]) -> Dict[str, Any]:

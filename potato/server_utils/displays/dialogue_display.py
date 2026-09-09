@@ -9,7 +9,7 @@ import html
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Union
 
-from .base import BaseDisplay
+from .base import BaseDisplay, display_text
 
 #: Keys copied from a source turn dict in addition to the shared
 #: ``_trace_normalize.PASSTHROUGH_KEYS``.
@@ -187,7 +187,10 @@ class DialogueDisplay(BaseDisplay):
             if show_turn_numbers:
                 turn_number_html = f'<span class="turn-number">[{i + 1}]</span>'
 
-            escaped_text = html.escape(str(text))
+            # A turn whose `text` is a dict or a list -- an API's typed
+            # content blocks, for one -- reached the annotator as a Python
+            # repr under `str()`.
+            escaped_text = html.escape(display_text(text))
 
             # For span target, add data attributes
             span_attrs = ""

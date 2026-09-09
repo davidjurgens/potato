@@ -8,7 +8,7 @@ visual traces, or any ordered collection of images with optional captions.
 import html
 from typing import Dict, Any, List
 
-from .base import BaseDisplay, css_pixels
+from .base import BaseDisplay, css_pixels, display_text
 
 
 class GalleryDisplay(BaseDisplay):
@@ -67,7 +67,7 @@ class GalleryDisplay(BaseDisplay):
 
             caption_html = ""
             if show_captions and caption:
-                escaped_caption = html.escape(str(caption))
+                escaped_caption = html.escape(display_text(caption))
                 caption_html = f'<div class="gallery-caption">{escaped_caption}</div>'
 
             zoom_attr = 'data-zoomable="true"' if zoomable else ''

@@ -18,7 +18,7 @@ from typing import Dict, Any, List, Optional
 import html
 import logging
 
-from .base import BaseDisplay
+from .base import BaseDisplay, display_text
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +277,8 @@ class SpreadsheetDisplay(BaseDisplay):
                 )
 
             for col_idx, cell in enumerate(row):
-                cell_value = str(cell) if cell is not None else ""
+                # A nested object in a cell rendered as `{'k': 'v'}`.
+                cell_value = display_text(cell)
                 cell_classes = ["spreadsheet-cell"]
                 if mode == "cell":
                     cell_classes.append("selectable-cell")

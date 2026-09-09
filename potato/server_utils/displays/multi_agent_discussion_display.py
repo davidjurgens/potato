@@ -29,7 +29,7 @@ import hashlib
 import html
 from typing import Any, Dict, List
 
-from .base import BaseDisplay
+from .base import BaseDisplay, display_text
 from ._trace_normalize import PASSTHROUGH_KEYS
 
 # Color palette for agent identity (border/avatar). Chosen for contrast on
@@ -140,7 +140,9 @@ class MultiAgentDiscussionDisplay(BaseDisplay):
         turn_html_list = []
         for i, turn in enumerate(turns):
             speaker = str(turn.get("speaker", ""))
-            text = str(turn.get("text", ""))
+            # Not `str()`: a turn carrying typed content blocks rendered
+            # as a Python repr.
+            text = display_text(turn.get("text", ""))
             raw_agent = str(turn.get("agent_id", "") or "")
             agent_id = raw_agent or speaker or "unknown"
             addressee = str(turn.get("addressee", ""))
