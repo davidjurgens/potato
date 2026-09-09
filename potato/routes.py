@@ -80,60 +80,18 @@ from potato.flask_server import get_displayed_text
 
 
 def _inject_quality_control_item_if_needed(username, user_state):
-    qc_manager = get_quality_control_manager()
-    if not qc_manager:
-        return
+    """Delegates to `server_utils.quality_control_injection`.
 
-    current_instance = user_state.get_current_instance()
-    current_instance_id = current_instance.get_id() if current_instance else None
-    if current_instance_id and (
-        qc_manager.is_attention_check(current_instance_id) or qc_manager.is_gold_standard(current_instance_id)
-    ):
-        return
+    It moved there so `/pocket/api/batch` could call it too. A blueprint cannot
+    import this module at request time -- the `@app.route` decorators re-run and
+    Flask refuses -- so the shared logic has to live somewhere neither surface
+    owns.
+    """
+    from potato.server_utils.quality_control_injection import (
+        inject_quality_control_item_if_needed,
+    )
 
-    assigned_ids = set(user_state.get_assigned_instance_ids())
-    annotated_ids = set(user_state.get_annotated_instance_ids()) if hasattr(user_state, "get_annotated_instance_ids") else set()
-    seen_qc_ids = assigned_ids | annotated_ids
-
-    current_index = user_state.get_current_instance_index()
-    insert_index = current_index + 1 if current_index >= 0 else 0
-
-    def inject_item(item_data):
-        item_id = item_data.get("id")
-        if not item_id or item_id in seen_qc_ids:
-            return False
-
-        prepared_item = dict(item_data)
-        text_key = config.get("item_properties", {}).get("text_key", "text")
-        if "displayed_text" not in prepared_item:
-            raw_text = prepared_item.get(text_key, prepared_item.get("text", ""))
-            prepared_item["displayed_text"] = get_displayed_text(raw_text) if raw_text is not None else ""
-
-        item_manager = get_item_state_manager()
-        if item_manager.has_item(item_id):
-            existing_item = item_manager.get_item(item_id)
-            if existing_item and isinstance(existing_item.get_data(), dict):
-                existing_data = existing_item.get_data()
-                if "displayed_text" not in existing_data:
-                    existing_data["displayed_text"] = prepared_item["displayed_text"]
-            item = item_manager.get_item(item_id)
-        else:
-            item_manager.add_item(item_id, prepared_item)
-            item = item_manager.get_item(item_id)
-
-        return user_state.assign_instance_at_index(item, insert_index)
-
-    if qc_manager.should_inject_attention_check(username):
-        attention_item = qc_manager.get_attention_check_item(username)
-        if attention_item and inject_item(attention_item):
-            logger.info(f"Injected attention check {attention_item.get('id')} for user {username}")
-            return
-
-    if qc_manager.should_inject_gold_standard(username):
-        gold_item = qc_manager.get_gold_standard_item(username)
-        if gold_item and inject_item(gold_item):
-            logger.info(f"Injected gold standard {gold_item.get('id')} for user {username}")
-            return
+    return inject_quality_control_item_if_needed(username, user_state, config)
 
 
 def _reclaim_blocked_user_assignments(username, user_state, current_instance_id=None):
@@ -6163,6 +6121,16 @@ def update_instance():
                 if ":" in key:
                     schema_name, label_name = key.split(":", 1)
                     all_annotations[schema_name] = value
+                    # ALSO keep the label. The annotation page happens to put
+                    # it in the value as well, so collapsing to `schema` looked
+                    # lossless; anything posting what the form element holds
+                    # sends `{"sarcasm:Sincere": "on"}`, and this threw away
+                    # the only copy of the answer. Grading then compared the
+                    # expected label against the string "on" and failed every
+                    # check and gold item, however well they were answered.
+                    # Both keys are kept because the bare one is what the
+                    # webhook payload and auto-promotion have always carried.
+                    all_annotations[key] = value
                 else:
                     all_annotations[key] = value
         elif "schema" in request.json:

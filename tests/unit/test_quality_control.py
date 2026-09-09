@@ -950,10 +950,16 @@ def test_attention_check_injection_wires_into_annotate_flow(monkeypatch):
         stub_ism = StubISM()
         user_state = StubUserState()
 
-        monkeypatch.setattr("potato.routes.get_quality_control_manager", lambda: qc_manager)
-        monkeypatch.setattr("potato.routes.get_item_state_manager", lambda: stub_ism)
+        # Patch the managers where they LIVE, not where routes imported them.
+        # The injector moved to server_utils.quality_control_injection so
+        # /pocket/api/batch could call it (a blueprint cannot import routes at
+        # request time -- the @app.route decorators re-run and Flask refuses).
+        # Patching potato.routes measured the import site rather than the
+        # behaviour, so it went green while the shared function ran unpatched.
+        monkeypatch.setattr("potato.quality_control.get_quality_control_manager", lambda: qc_manager)
+        monkeypatch.setattr("potato.item_state_management.get_item_state_manager", lambda: stub_ism)
         monkeypatch.setattr(routes, "config", config, raising=False)
-        monkeypatch.setattr("potato.routes.get_displayed_text", lambda text: f"rendered::{text}")
+        monkeypatch.setattr("potato.flask_server.get_displayed_text", lambda text: f"rendered::{text}")
 
         _inject_quality_control_item_if_needed("user1", user_state)
 
@@ -1131,10 +1137,16 @@ def test_attention_check_injection_reuses_existing_global_item_without_duplicate
         stub_ism = StubISM()
         user_state = StubUserState()
 
-        monkeypatch.setattr("potato.routes.get_quality_control_manager", lambda: qc_manager)
-        monkeypatch.setattr("potato.routes.get_item_state_manager", lambda: stub_ism)
+        # Patch the managers where they LIVE, not where routes imported them.
+        # The injector moved to server_utils.quality_control_injection so
+        # /pocket/api/batch could call it (a blueprint cannot import routes at
+        # request time -- the @app.route decorators re-run and Flask refuses).
+        # Patching potato.routes measured the import site rather than the
+        # behaviour, so it went green while the shared function ran unpatched.
+        monkeypatch.setattr("potato.quality_control.get_quality_control_manager", lambda: qc_manager)
+        monkeypatch.setattr("potato.item_state_management.get_item_state_manager", lambda: stub_ism)
         monkeypatch.setattr(routes, "config", config, raising=False)
-        monkeypatch.setattr("potato.routes.get_displayed_text", lambda text: f"rendered::{text}")
+        monkeypatch.setattr("potato.flask_server.get_displayed_text", lambda text: f"rendered::{text}")
 
         _inject_quality_control_item_if_needed("user1", user_state)
 
@@ -1217,10 +1229,16 @@ def test_attention_check_is_not_reinjected_for_same_user(monkeypatch):
         stub_ism = StubISM()
         user_state = StubUserState()
 
-        monkeypatch.setattr("potato.routes.get_quality_control_manager", lambda: qc_manager)
-        monkeypatch.setattr("potato.routes.get_item_state_manager", lambda: stub_ism)
+        # Patch the managers where they LIVE, not where routes imported them.
+        # The injector moved to server_utils.quality_control_injection so
+        # /pocket/api/batch could call it (a blueprint cannot import routes at
+        # request time -- the @app.route decorators re-run and Flask refuses).
+        # Patching potato.routes measured the import site rather than the
+        # behaviour, so it went green while the shared function ran unpatched.
+        monkeypatch.setattr("potato.quality_control.get_quality_control_manager", lambda: qc_manager)
+        monkeypatch.setattr("potato.item_state_management.get_item_state_manager", lambda: stub_ism)
         monkeypatch.setattr(routes, "config", config, raising=False)
-        monkeypatch.setattr("potato.routes.get_displayed_text", lambda text: f"rendered::{text}")
+        monkeypatch.setattr("potato.flask_server.get_displayed_text", lambda text: f"rendered::{text}")
 
         before = list(user_state.instance_id_ordering)
         _inject_quality_control_item_if_needed("user1", user_state)

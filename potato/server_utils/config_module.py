@@ -2465,6 +2465,59 @@ def validate_annotation_schemes(config_data: Dict[str, Any]) -> None:
         _validate_turn_level_bindings(config_data, all_schemes)
         _validate_session_level_schemes(config_data, all_schemes)
         _validate_rooms_block(config_data)
+        _validate_pocket_block(config_data)
+
+
+def _validate_pocket_block(config_data: Dict[str, Any]) -> None:
+    """Cross-check `pocket` against the schemes it would have to render.
+
+    A scheme pocket cannot show turns the whole phone surface off: /pocket
+    explains itself instead of degrading, which is the right behaviour, but it
+    only says so in the boot log and on a phone. The config validated clean and
+    the author found out from a device.
+    """
+    pocket = config_data.get('pocket') or {}
+    if not isinstance(pocket, dict) or not pocket.get('enabled'):
+        return
+
+    # The capability rule pocket itself applies, imported rather than restated.
+    from potato.pocket.config import pocket_capability
+
+    capable, incompatible = pocket_capability(config_data)
+    if not capable:
+        logger.warning(
+            "pocket.enabled is true but %s cannot be shown on a phone, so "
+            "/pocket will explain rather than degrade and nobody will annotate "
+            "on a device. Remove the scheme, or set pocket.enabled: false.",
+            ", ".join(repr(n) for n in incompatible),
+        )
+        return
+
+    # Quality control now reaches the phone, and the batch is capped so the
+    # configured frequency holds there. Say so, because it costs offline depth
+    # and the author chose `batch_size` for a reason.
+    qc_frequencies = [
+        (name, (config_data.get(name) or {}).get('frequency'))
+        for name in ('attention_checks', 'gold_standards')
+        if isinstance(config_data.get(name), dict)
+        and config_data[name].get('enabled')
+        and (config_data[name] or {}).get('frequency')
+    ]
+    batch_size = pocket.get('batch_size', 25)
+    tightest = min((f for _n, f in qc_frequencies), default=None)
+    try:
+        binds = tightest is not None and int(tightest) < int(batch_size)
+    except (TypeError, ValueError):
+        binds = False
+    if binds:
+        logger.warning(
+            "pocket.batch_size is %s but %s, so /pocket will serve at most %s "
+            "item(s) per request to keep that frequency on the phone. Offline "
+            "runs will be shorter than batch_size suggests.",
+            batch_size,
+            " and ".join(f"{n}.frequency is {f}" for n, f in qc_frequencies),
+            tightest,
+        )
 
 
 def _validate_rooms_block(config_data: Dict[str, Any]) -> None:

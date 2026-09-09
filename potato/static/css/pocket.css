@@ -12,6 +12,12 @@
     --pk-good-bg: #dcf5e2;
     --pk-warn: #b45309;
     --pk-warn-bg: #fff1e4;
+    /* The sync chip is already warn-coloured while it is trying, so a
+       queue the server is REFUSING needs its own step up -- same
+       component, different state, and the fix is an action the
+       annotator has to take. */
+    --pk-stop: #9f1239;
+    --pk-stop-bg: #ffe4ec;
     --pk-paper: #faf9ff;
 }
 
@@ -392,3 +398,46 @@ body {
     padding: 6px 0 6px 10px; /* keep a finger-sized hit area */
 }
 .pk-desktop-link:active { color: #fff; }
+
+/* Sync chip: refused is not the same state as "still trying". A queue the
+   server is rejecting needs a different colour and a link, because the fix is
+   an action the annotator has to take. */
+.pk-sync.pk-blocked {
+    background: var(--pk-stop-bg);
+    color: var(--pk-stop);
+    border-color: #f5b8ca;
+}
+
+.pk-sync.pk-blocked a {
+    color: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+}
+
+/* End-of-batch screen with saves still queued. Not "all caught up": the tick
+   is a check mark and this is not one. */
+.pk-done-pending .pk-done-mark {
+    background: var(--pk-warn-bg);
+    color: var(--pk-warn);
+    animation: none;
+}
+
+.pk-retry {
+    margin-top: 18px;
+    min-height: 48px;
+    padding: 12px 28px;
+    border: 1.5px solid var(--pk-line);
+    border-radius: 13px;
+    background: #fff;
+    color: var(--pk-ink);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.pk-retry:active { transform: scale(0.98); }
+
+.pk-retry:focus-visible {
+    outline: 2px solid var(--pk-accent);
+    outline-offset: 2px;
+}

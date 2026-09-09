@@ -133,6 +133,14 @@ def _scheme_spec(scheme: Dict[str, Any]) -> Dict[str, Any]:
         "min": scheme.get("min", scheme.get("min_value")),
         "max": scheme.get("max", scheme.get("max_value")),
         "size": scheme.get("size"),
+        # The two ends of a size-based likert. Potato *requires* both strings
+        # at validate, so the author has written them and the desktop page
+        # renders them; leaving them out here meant the phone showed five bare
+        # numbered buttons. An unlabeled 1-5 means a different thing to each
+        # annotator, and the same scheme meant two different things on the two
+        # surfaces of one study.
+        "min_label": scheme.get("min_label", ""),
+        "max_label": scheme.get("max_label", ""),
     }
 
 
@@ -218,6 +226,74 @@ def task():
     })
 
 
+def _inject_quality_control(username, user_state):
+    """Put an attention check or gold item into this annotator's ordering.
+
+    `_inject_quality_control_item_if_needed` had exactly one caller, inside
+    `/annotate`. This route served the ordering as it found it, so an annotator
+    working through the phone received no attention checks and no gold items,
+    ever -- while `pocket.auto_redirect` defaults to true, which means phones
+    opening /annotate are SENT to the unchecked surface. It was the default
+    path, not a mistake anyone made.
+
+    The accounting already crossed the surface: `items_since_attention` counts
+    every save wherever it came from, so quality control knew a phone annotator
+    was overdue and simply never delivered. Only the delivery was
+    desktop-shaped.
+
+    Never allowed to break the batch: an annotator who cannot be served a check
+    should still be served their work.
+    """
+    try:
+        from potato.server_utils.quality_control_injection import (
+            inject_quality_control_item_if_needed,
+        )
+
+        # NOT `potato.routes`: importing it here re-runs its `@app.route`
+        # decorators on a live server and Flask raises "View function mapping
+        # is overwriting an existing endpoint function", which the except below
+        # turns into a feature that is silently inert. Every unit test still
+        # passed, because in a test process nothing has registered the app yet.
+        inject_quality_control_item_if_needed(username, user_state, _app_config)
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning("pocket: could not inject a quality-control item: %s", e)
+
+
+def _bound_batch_to_qc_frequency(username, requested):
+    """How many items this batch may carry before a check is due.
+
+    The injector adds ONE item and resets the counter, and the phone then works
+    through its whole prefetch before asking the server again. With the default
+    `batch_size: 25` and `frequency: 3` that is one check per 25 items instead
+    of about eight -- checks delivered, but not at the rate the config asks for,
+    and nothing saying so.
+
+    So a batch is capped at the number of items that can be answered before the
+    next check is due. This costs offline depth: a study with quality control
+    prefetches fewer items, because a phone cannot both hold 25 items for the
+    train and take a server-decided check every 3. `batch_size` is still the
+    author's knob; the cap only binds when a frequency is actually configured.
+    """
+    from potato.quality_control import get_quality_control_manager
+
+    qc = get_quality_control_manager()
+    if qc is None:
+        return requested
+
+    due = []
+    cfg = qc.qc_config
+    if cfg.attention_checks_enabled and cfg.attention_frequency:
+        seen = qc.user_items_since_attention.get(username, 0)
+        due.append(max(1, int(cfg.attention_frequency) - int(seen)))
+    if (cfg.gold_standards_enabled and cfg.gold_frequency
+            and cfg.gold_mode != "training"):
+        seen = qc.user_items_since_gold.get(username, 0)
+        due.append(max(1, int(cfg.gold_frequency) - int(seen)))
+    if not due:
+        return requested
+    return max(1, min(requested, min(due)))
+
+
 @pocket_bp.route("/api/batch", methods=["GET"])
 @pocket_required
 @api_login_required
@@ -238,6 +314,11 @@ def batch():
     # /annotate's assignment step — assign now or the card stack is empty.
     if not user_state.has_assignments():
         ism.assign_instances_to_user(user_state)
+
+    # Quality control, which used to happen only on /annotate.
+    _inject_quality_control(username, user_state)
+    n = _bound_batch_to_qc_frequency(username, n)
+
     text_key = (_app_config.get("item_properties") or {}).get("text_key", "text")
 
     items = []

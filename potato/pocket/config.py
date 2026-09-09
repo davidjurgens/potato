@@ -9,6 +9,11 @@ logger = logging.getLogger(__name__)
 # Schema types that translate well to a phone-sized touch UI. Everything else
 # (spans, bounding boxes, video timelines, rating matrices, ...) is a desktop
 # task and is reported as incompatible rather than degraded onto touch.
+# `textbox` was in this set and is not one of the registry's 61 annotation
+# types -- the free-text type is `text`, which is also here. Harmless while
+# nobody reads the set as the list of what works, which is the only thing it is
+# for. `tests/unit/test_audit34_pocket.py` asserts every name against the
+# registry so the next dead entry fails a test instead of shipping.
 POCKET_CAPABLE_TYPES = {
     "radio",
     "multiselect",
@@ -16,7 +21,6 @@ POCKET_CAPABLE_TYPES = {
     "slider",
     "number",
     "text",
-    "textbox",
     "pure_display",
 }
 

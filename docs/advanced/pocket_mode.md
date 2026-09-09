@@ -92,7 +92,7 @@ The mobile interface serves schema types that work well under a thumb:
 
 | Touch-capable (served on mobile) | Desktop-only |
 |---|---|
-| `radio`, `multiselect`, `likert`, `slider`, `number`, `text`/`textbox`, `pure_display` | `span`, image/bounding-box, video, audio, `multirate`, and everything else |
+| `radio`, `multiselect`, `likert`, `slider`, `number`, `text`, `pure_display` | `span`, image/bounding-box, video, audio, `multirate`, and everything else |
 
 A task is touch-capable only if **all** of its schemes are in the left
 column. A task mixing in even one desktop-only scheme is not degraded onto
@@ -111,23 +111,37 @@ it — a single-radio task is the ideal case (one tap = one labeled item).
   honored.
 - **Scheme rendering** — single radio/likert tasks auto-advance on tap;
   multi-scheme cards show every control plus an explicit **Save & next**.
-  Likert schemes with explicit `labels` render as labeled buttons;
-  size-based likert renders numbered segments (stored as `scale_<n>`).
+  Likert schemes with explicit `labels` render as labeled buttons; a
+  size-based likert renders numbered segments with `min_label` and
+  `max_label` beneath them, and stores the scale point under the same label
+  name the desktop page uses.
 - **Progress** — the header shows done/total and a progress bar, matching
   the desktop count.
 - **Offline annotation** — the current batch is prefetched and mirrored to
-  localStorage. If the connection drops, annotating continues; a chip shows
-  *"Offline — N saves queued"* and the queue flushes automatically on
-  reconnect and after every successful save. A service worker caches the app
-  shell after the first visit, so the page loads with no connection.
-  Field-research note: prefetch a batch on wifi, annotate anywhere, sync when
-  back in coverage.
+  localStorage. If the connection drops, annotating continues and a chip
+  shows *"Offline — N saves queued"*. The queue flushes on reconnect, after
+  every successful save, when the tab becomes visible again, and on a
+  30-second timer. A phone that keeps its network and loses the server never
+  fires the browser's `online` event, so those last two are how it recovers
+  from a restart or a deploy. A server that refuses the save rather than
+  failing to answer is a different case: the chip turns red and says to sign
+  in again, because retrying a 401 will not fix it. Nothing is discarded
+  either way. A service worker caches the app shell after the first visit, so
+  the page loads with no connection. Field-research note: prefetch a batch on
+  wifi, annotate anywhere, sync when back in coverage.
 - **Install as an app** — the page ships a web manifest; "Add to Home
   Screen" gives a standalone app with its own icon.
 
 Saves use the **same `/updateinstance` endpoint and payload as the desktop
 page** — Pocket Mode adds no new write path, so all downstream machinery
 (exports, IAA, admin dashboard, quality control) sees ordinary annotations.
+
+Attention checks and gold items are injected into the phone's batch the same
+way they are on `/annotate`. Because the phone prefetches, a batch is capped
+at the number of items that can be answered before the next check is due, so
+the configured `frequency` still holds. With `batch_size: 25` and
+`frequency: 3` the phone is served 3 items at a time, not 25. Quality control
+costs offline depth, and the cap only applies when a frequency is set.
 
 ## Admin: who is annotating from what
 

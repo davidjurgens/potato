@@ -65,6 +65,21 @@
         });
     }
 
+    /**
+     * "The server cannot be reached" and "the server refused this" used to be
+     * the same event: every non-2xx became one Error and the record stayed
+     * queued forever. A restart of a default config is enough to produce it --
+     * no secret_key, no persist_sessions, so the Flask session does not
+     * survive and /updateinstance answers 401. The chip then read "Syncing 2
+     * saves…" indefinitely while the annotator was never told the one thing
+     * that fixes it, which is to sign in again.
+     */
+    function authError(status) {
+        var e = new Error('HTTP ' + status);
+        e.needsLogin = true;
+        return e;
+    }
+
     /** Same payload shape annotation.js sends. */
     function postSave(record) {
         return fetch('/updateinstance', {
@@ -73,9 +88,17 @@
             body: JSON.stringify({
                 instance_id: record.instance_id,
                 annotations: record.annotations,
-                span_annotations: []
+                span_annotations: [],
+                // How long the card was on screen. Read by the attention-check
+                // path, which is where `min_response_time` lives; without it
+                // a check served to a phone could not fail on time, which
+                // would show on the admin page as a check that PASSED.
+                // Measured on the client, so a record that waited an hour in
+                // the offline queue still reports an honest reading time.
+                response_time_seconds: record.response_time_seconds
             })
         }).then(function (r) {
+            if (r.status === 401 || r.status === 403) throw authError(r.status);
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
         }).then(function (data) {
@@ -84,19 +107,49 @@
         });
     }
 
+    /** Set when the server has refused us; cleared by a successful save. */
+    var signedOut = false;
+
     function flushQueue() {
         var queue = loadQueue();
         if (!queue.length || !navigator.onLine) { renderSyncChip(); return; }
         var record = queue[0];
         postSave(record).then(function () {
+            signedOut = false;
             var rest = loadQueue().filter(function (q) {
                 return !(q.instance_id === record.instance_id && q.ts === record.ts);
             });
             saveQueue(rest);
-            if (rest.length) flushQueue(); else renderSyncChip(true);
-        }).catch(function () {
-            renderSyncChip(); // stays queued; retried on next flush
+            if (rest.length) {
+                flushQueue();
+            } else {
+                renderSyncChip(true);
+                // The end-of-batch screen says how many answers are still to
+                // send, so it goes stale the moment the last one goes. Found
+                // by the node harness: the queue emptied and the page kept
+                // saying "2 answers still to send".
+                if (showingPendingDone) renderDone();
+            }
+        }).catch(function (err) {
+            // A refusal is not a lost connection. Retrying it is not going to
+            // work and saying "syncing" while it happens is a lie, so stop and
+            // say what would fix it. Nothing is discarded: the records stay in
+            // the queue and drain on the next flush after signing in.
+            var was = signedOut;
+            signedOut = !!(err && err.needsLogin);
+            renderSyncChip();
+            // The end-of-batch screen explains what will happen to the queued
+            // answers, and "as soon as the server answers" stops being true
+            // the moment the server refuses. Found in Chrome: the chip flipped
+            // and the screen behind it did not.
+            if (showingPendingDone && was !== signedOut) renderDone();
         });
+    }
+
+    /** Retry now, whatever stopped us last time. */
+    function retryQueue() {
+        signedOut = false;
+        flushQueue();
     }
 
     // ---------------------------------------------------------------- sync --
@@ -106,9 +159,18 @@
         if (queue.length) {
             chip.hidden = false;
             chip.classList.remove('pk-ok');
-            chip.textContent = navigator.onLine
-                ? 'Syncing ' + queue.length + ' save' + (queue.length === 1 ? '' : 's') + '…'
-                : 'Offline — ' + queue.length + ' save' + (queue.length === 1 ? '' : 's') + ' queued';
+            chip.classList.toggle('pk-blocked', signedOut);
+            var n = queue.length + ' save' + (queue.length === 1 ? '' : 's');
+            if (signedOut) {
+                // The one thing that fixes it, said where the annotator is
+                // looking. The saves are safe; they are not going anywhere
+                // until this is dealt with.
+                chip.innerHTML = n + ' waiting — <a href="/login">sign in again</a> to send them';
+            } else {
+                chip.textContent = navigator.onLine
+                    ? 'Syncing ' + n + '…'
+                    : 'Offline — ' + n + ' queued';
+            }
         } else if (justSynced) {
             chip.hidden = false;
             chip.classList.add('pk-ok');
@@ -161,7 +223,8 @@
         var record = {
             instance_id: item.instance_id,
             annotations: flatAnnotations(),
-            ts: Date.now()
+            ts: Date.now(),
+            response_time_seconds: shownForSeconds()
         };
         var queue = loadQueue();
         queue.push(record);
@@ -202,8 +265,37 @@
         main.innerHTML = '<div class="pk-message">' + html + '</div>';
     }
 
+    /** True while the end-of-batch screen is counting unsent saves. */
+    var showingPendingDone = false;
+
     function renderDone() {
         renderProgress();
+        var queue = loadQueue();
+        showingPendingDone = queue.length > 0;
+        if (queue.length) {
+            // "Every item in your queue is annotated" is the sentence someone
+            // reads before closing the tab, and it was shown with unsent saves
+            // sitting in localStorage -- with the header still reading "4 of
+            // 6", because a batch smaller than the study is the ordinary case.
+            // Claiming completion over a non-empty queue is the part that was
+            // wrong; the batch itself is fine.
+            var n = queue.length + ' answer' + (queue.length === 1 ? '' : 's');
+            main.innerHTML =
+                '<div class="pk-done pk-done-pending">' +
+                '  <div class="pk-done-mark">&#8635;</div>' +
+                '  <div class="pk-done-title">' + n + ' still to send</div>' +
+                '  <div class="pk-done-sub">Saved on this device. ' +
+                (signedOut
+                    ? 'Sign in again and they will go up.'
+                    : 'They will go up as soon as the server answers.') +
+                '<br>Leave this page open, or come back to it later — nothing is lost.</div>' +
+                '  <button type="button" class="pk-retry" id="pk-retry">Try now</button>' +
+                '</div>';
+            var retry = document.getElementById('pk-retry');
+            if (retry) retry.addEventListener('click', retryQueue);
+            flushQueue();
+            return;
+        }
         main.innerHTML =
             '<div class="pk-done">' +
             '  <div class="pk-done-mark">&#10003;</div>' +
@@ -211,8 +303,13 @@
             '  <div class="pk-done-sub">Every item in your queue is annotated.<br>' +
             '  Pull down to refresh, or come back when new items arrive.</div>' +
             '</div>';
-        var queue = loadQueue();
-        if (queue.length) flushQueue();
+    }
+
+    /** What a scale point is called out loud: bare numbers say nothing. */
+    function ariaForPoint(scheme, n, size) {
+        if (n === 1 && scheme.min_label) return n + ' — ' + scheme.min_label;
+        if (n === size && scheme.max_label) return n + ' — ' + scheme.max_label;
+        return String(n);
     }
 
     function schemeControls(scheme) {
@@ -243,7 +340,11 @@
                     });
                     btn.classList.add('selected');
                     var labels = {};
-                    labels[label] = label;
+                    // "on" is what a checked radio posts, and so what the
+                    // annotation page stores. The label is already carried by
+                    // the key; writing it in the value too left the same
+                    // answer spelled two ways in one exported column.
+                    labels[label] = 'on';
                     setAnswer(labels, true);
                     haptic();
                     maybeAutoCommit();
@@ -252,8 +353,10 @@
             });
             host.appendChild(wrap);
         } else if (type === 'likert') {
-            // size-based likert: numbered segments
+            // size-based likert: numbered segments between the two anchors.
             var size = parseInt(scheme.size, 10) || 5;
+            var scale = document.createElement('div');
+            scale.className = 'pk-likert-scale';
             var row = document.createElement('div');
             row.className = 'pk-likert';
             for (var i = 1; i <= size; i++) {
@@ -262,21 +365,47 @@
                     btn.type = 'button';
                     btn.className = 'pk-opt';
                     btn.textContent = n;
+                    btn.setAttribute('aria-label', ariaForPoint(scheme, n, size));
                     btn.addEventListener('click', function () {
                         row.querySelectorAll('.pk-opt').forEach(function (b) {
                             b.classList.remove('selected');
+                            b.setAttribute('aria-pressed', 'false');
                         });
                         btn.classList.add('selected');
+                        btn.setAttribute('aria-pressed', 'true');
                         var labels = {};
-                        labels['scale_' + n] = String(n);
+                        // The scale point IS the label name, which is what
+                        // likert.py writes on the desktop page. This used to
+                        // send `scale_3`, so the same answer from two
+                        // annotators on two surfaces was two different labels
+                        // and they read as having answered different questions.
+                        labels[String(n)] = String(n);
                         setAnswer(labels, true);
                         haptic();
                         maybeAutoCommit();
                     });
+                    btn.setAttribute('aria-pressed', 'false');
                     row.appendChild(btn);
                 })(i);
             }
-            host.appendChild(row);
+            // Potato requires min_label and max_label on every likert, so if
+            // they are missing the config never validated and the anchors are
+            // simply absent rather than empty.
+            if (scheme.min_label || scheme.max_label) {
+                // `.pk-likert-legend` was already in pocket.css, styled for
+                // exactly this and emitted by nothing -- the anchors were
+                // designed in and then never rendered.
+                var legend = document.createElement('div');
+                legend.className = 'pk-likert-legend';
+                legend.innerHTML =
+                    '<span>' + esc(scheme.min_label || '') + '</span>' +
+                    '<span>' + esc(scheme.max_label || '') + '</span>';
+                scale.appendChild(row);
+                scale.appendChild(legend);
+                host.appendChild(scale);
+            } else {
+                host.appendChild(row);
+            }
         } else if (type === 'multiselect') {
             var grid = document.createElement('div');
             grid.className = 'pk-options' + (scheme.labels.length > 4 ? ' pk-grid-2' : '');
@@ -291,7 +420,7 @@
                         delete selected[label];
                         btn.classList.remove('selected');
                     } else {
-                        selected[label] = 'true';
+                        selected[label] = 'on';   // as a ticked checkbox posts
                         btn.classList.add('selected');
                     }
                     setAnswer(Object.assign({}, selected));
@@ -358,10 +487,25 @@
         if (next) next.disabled = !answersComplete();
     }
 
+    /**
+     * When the current card went on screen. `attention_checks.min_response_time`
+     * is measured from this to the save, so it has to be stamped where the card
+     * is drawn and nowhere else -- deriving it from the save time would measure
+     * network latency, which is the mistake the annotation page already made
+     * once.
+     */
+    var shownAt = null;
+
+    function shownForSeconds() {
+        return shownAt == null ? null : (Date.now() - shownAt) / 1000;
+    }
+
     function renderCard() {
         var item = currentItem();
         if (!item) { renderDone(); return; }
         renderProgress();
+        showingPendingDone = false;
+        shownAt = Date.now();
 
         var card = document.createElement('div');
         card.className = 'pk-card';
@@ -442,8 +586,29 @@
         renderSyncChip();
     }
 
-    window.addEventListener('online', flushQueue);
+    window.addEventListener('online', retryQueue);
     window.addEventListener('offline', function () { renderSyncChip(); });
+
+    // A phone that keeps its network and loses the SERVER -- a restart, a
+    // deploy, a proxy blip -- never fires `online`. With a successful save the
+    // only other trigger, an annotator who has reached the end of their batch
+    // has nothing left to piggyback on either, so the queue had no way back
+    // without a reload. Two more triggers, both cheap:
+    //
+    //   visibilitychange, because coming back to the tab is exactly when
+    //   someone expects it to catch up; and a slow timer, because the outage
+    //   may heal while the tab is in front of them.
+    //
+    // Neither retries a refusal: `flushQueue` leaves `signedOut` set and the
+    // chip keeps saying so until the annotator signs in.
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') flushQueue();
+    });
+
+    var FLUSH_INTERVAL_MS = 30000;
+    setInterval(function () {
+        if (loadQueue().length && navigator.onLine && !signedOut) flushQueue();
+    }, FLUSH_INTERVAL_MS);
 
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/pocket/sw.js').catch(function () {

@@ -278,3 +278,55 @@ def test_the_documented_keys_are_quiet():
         "block_message": "You have been blocked.",
     }})
     assert not _failure_warnings(report), report.other_warnings
+
+
+# ----------------------------------------------------------------------
+# 4. The route does not throw the answer away before grading sees it
+# ----------------------------------------------------------------------
+
+def _all_annotations_from(payload):
+    """Rebuild what `/updateinstance` hands to quality control.
+
+    Kept as a separate function on purpose: the unit tests above call
+    `validate_attention_response` with the payload the CLIENT sends, and passed
+    while the live server failed every check, because the route collapsed
+    `{"sarcasm:Sincere": "on"}` to `{"sarcasm": "on"}` first -- discarding the
+    only copy of the answer. Found by driving a real server; this pins it.
+    """
+    out = {}
+    for key, value in payload.items():
+        if ":" in key:
+            schema_name, _label = key.split(":", 1)
+            out[schema_name] = value
+            out[key] = value
+        else:
+            out[key] = value
+    return out
+
+
+def test_the_route_shape_still_grades_correctly():
+    """The end-to-end shape: what the browser posts, through the route's
+    flattening, into the comparator."""
+    manager = make_manager("route_shape")
+    posted = {"sarcasm:Sarcastic": "on"}
+    result = manager.validate_attention_response(
+        "ann", CHECK_ID, _all_annotations_from(posted), 12.0)
+    assert result["passed"] is True, (
+        "a correct answer in the form's own shape failed after the route "
+        "flattened it")
+
+
+def test_the_route_shape_still_fails_a_wrong_answer():
+    manager = make_manager("route_shape_wrong")
+    posted = {"sarcasm:Sincere": "on"}
+    result = manager.validate_attention_response(
+        "ann", CHECK_ID, _all_annotations_from(posted), 12.0)
+    assert result["passed"] is False
+
+
+def test_the_route_keeps_both_keys():
+    """The bare `schema` key is what the webhook payload and auto-promotion
+    have always carried, so it stays; the labelled one is added beside it."""
+    out = _all_annotations_from({"sarcasm:Sarcastic": "on"})
+    assert out["sarcasm"] == "on"
+    assert out["sarcasm:Sarcastic"] == "on"
