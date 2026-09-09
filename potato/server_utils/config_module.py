@@ -714,7 +714,60 @@ def normalize_config_before_validation(
         config_data['task_dir'] = task_dir
         logger.debug(f"Resolved task_dir to: {task_dir}")
 
+    _apply_require_fully_annotated(config_data)
+
     return config_data
+
+
+def _scheme_is_required_for_test(scheme: Dict[str, Any]) -> bool:
+    """Mirror of `flask_server._scheme_is_required`, importable without booting.
+
+    Re-exported so the wiring test can assert the stamped key is the one the
+    gate reads, rather than asserting the stamp exists and calling it done.
+    """
+    from potato.flask_server import _scheme_is_required
+
+    return _scheme_is_required(scheme)
+
+
+def _apply_require_fully_annotated(config_data: Dict[str, Any]) -> None:
+    """Turn the top-level flag into the per-scheme key everything already reads.
+
+    `require_fully_annotated` was documented, accepted, type-validated,
+    published in the JSON schema and set to `true` in Potato's own
+    full-study-skeleton -- and read by nothing at top level. An annotator could
+    skip every question on every item while the config said they could not.
+    (The same name inside the `adjudication` block is a different, working
+    feature: "only queue items every expected annotator has finished".)
+
+    Wired here rather than at the gate so the browser gets it too. The gate
+    reads `_scheme_is_required`, but the `required` attribute on the rendered
+    input comes from `label_requirement`, so wiring only the gate would have
+    produced a server refusal on a page that never told the annotator which
+    question was missing.
+
+    Applied in `normalize_config_before_validation` so `potato validate` and
+    the running server agree about what the config means.
+
+    An explicit per-scheme `label_requirement` always wins, in both directions:
+    the flag cannot un-require a scheme, and a scheme that opts out with
+    `required: false` stays optional.
+    """
+    if config_data.get("require_fully_annotated") is not True:
+        return
+
+    stamped = 0
+    for scheme in _collect_all_annotation_schemes(config_data):
+        if not isinstance(scheme, dict):
+            continue
+        if "label_requirement" in scheme or "required" in scheme:
+            continue
+        scheme["label_requirement"] = {"required": True}
+        stamped += 1
+
+    if stamped:
+        logger.debug(
+            "require_fully_annotated: made %d scheme(s) required", stamped)
 
 
 def deprecated_key_warnings(config_data: Dict[str, Any]) -> List[str]:
@@ -2651,19 +2704,28 @@ def _collect_all_annotation_schemes(config_data: Dict[str, Any]) -> List[Dict[st
     """
     schemes = []
 
+    # Called from normalization, which runs BEFORE validation, so every
+    # container here may still be whatever the author typed. `annotation_schemes:`
+    # with nothing under it is a half-finished edit, not something to crash on.
+    def add(value):
+        if isinstance(value, list):
+            schemes.extend(value)
+
+    if not isinstance(config_data, dict):
+        return schemes
+
     if 'annotation_schemes' in config_data:
-        schemes.extend(config_data['annotation_schemes'])
+        add(config_data['annotation_schemes'])
     elif 'phases' in config_data:
         phases = config_data['phases']
         if isinstance(phases, list):
             for phase in phases:
-                if 'annotation_schemes' in phase:
-                    schemes.extend(phase['annotation_schemes'])
+                if isinstance(phase, dict):
+                    add(phase.get('annotation_schemes'))
         elif isinstance(phases, dict):
             for phase_name, phase in phases.items():
                 if phase_name != 'order' and isinstance(phase, dict):
-                    if 'annotation_schemes' in phase:
-                        schemes.extend(phase['annotation_schemes'])
+                    add(phase.get('annotation_schemes'))
 
     return schemes
 
