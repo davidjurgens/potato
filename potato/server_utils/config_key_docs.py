@@ -471,9 +471,11 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         type="number", category=QC,
     ),
     "attention_checks.failure_handling": _D(
-        "What to do when an annotator fails a check. A bare action name, or a "
-        "mapping with warn/block thresholds and messages",
-        type="string|object", category=QC,
+        # Declared `string|object` and the validator refuses a string outright.
+        # There is nothing a bare action name could mean that omitting the
+        # block does not already do, so the registry is what changes.
+        "Warn and block thresholds, and the messages shown at each",
+        type="object", category=QC,
     ),
     "attention_checks.geometry_iou_tolerance": _D(
         "Overlap a drawn answer must reach to count as correct, as a fraction",

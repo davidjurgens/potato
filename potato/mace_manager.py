@@ -50,6 +50,84 @@ class MACEConfig:
         return cls(**{k: v for k, v in d.items() if k in known})
 
 
+#: Below this, a per-annotator reliability score is not a basis for a decision
+#: about a person. `min_items` defaults to 5, which lets the fit RUN -- raising
+#: it would silently stop MACE working on studies that rely on it today -- so
+#: the number is reported rather than enforced.
+_DEFENSIBLE_ITEMS = 30
+
+#: Share of all answers held by the most common label, above which MACE cannot
+#: reliably separate "answered correctly" from "always said the common thing".
+_SKEW_LIMIT = 0.75
+
+
+def _assess_reliability(matrix, annotators, idx_to_value, min_items,
+                        schema_name, option_name=None):
+    """What the fit was computed on, and the reasons not to trust it.
+
+    Two of the three checks here need no model at all. A constant-response
+    annotator is found by looking at their answers; the label skew is a count.
+    Both are cheap, and both describe exactly the regime where the competence
+    numbers are most confidently wrong -- so they belong next to the numbers,
+    not in a separate tool nobody runs.
+    """
+    import numpy as _np
+
+    answered = matrix[matrix >= 0]
+    total = int(answered.size)
+    counts = {}
+    for idx, count in zip(*_np.unique(answered, return_counts=True)):
+        counts[str(idx_to_value.get(int(idx), int(idx)))] = int(count)
+
+    top_share = (max(counts.values()) / total) if total else 0.0
+    num_items = int(matrix.shape[0])
+
+    constant = []
+    for j, user_id in enumerate(annotators):
+        column = matrix[:, j]
+        given = column[column >= 0]
+        if given.size >= 2 and _np.unique(given).size == 1:
+            constant.append({
+                "user_id": user_id,
+                "answer": str(idx_to_value.get(int(given[0]), int(given[0]))),
+                "items": int(given.size),
+            })
+
+    warnings = []
+    if num_items < _DEFENSIBLE_ITEMS:
+        warnings.append(
+            f"fitted on {num_items} item(s); a per-annotator competence score "
+            f"below about {_DEFENSIBLE_ITEMS} items is too noisy to act on")
+    if top_share >= _SKEW_LIMIT:
+        warnings.append(
+            f"the most common label holds {top_share:.0%} of all answers; at "
+            f"this skew MACE cannot reliably separate a competent annotator "
+            f"from one who always answers the majority class, and more data "
+            f"does not fix it")
+    for entry in constant:
+        warnings.append(
+            f"{entry['user_id']} gave the same answer ({entry['answer']}) to "
+            f"all {entry['items']} of their items; this is visible without a "
+            f"model and their competence score should not be read as evidence "
+            f"either way")
+
+    if warnings:
+        label = schema_name + (f"[{option_name}]" if option_name else "")
+        for message in warnings:
+            logger.warning("MACE %s: %s", label, message)
+
+    return {
+        "num_items": num_items,
+        "num_answers": total,
+        "label_counts": counts,
+        "majority_label_share": round(top_share, 4),
+        "constant_annotators": constant,
+        "min_items_configured": int(min_items),
+        "trustworthy": not warnings,
+        "warnings": warnings,
+    }
+
+
 @dataclass
 class MACEResult:
     """Result of a single MACE run for one schema (or schema+option for multiselect)."""
@@ -64,9 +142,21 @@ class MACEResult:
     timestamp: str
     log_likelihood: float
     option_name: Optional[str] = None  # For multiselect per-option
+    #: What the fit was computed on, and whether it can be trusted. MACE
+    #: explains an answer as "trying" or "spamming from a fixed strategy"; a
+    #: spammer whose fixed strategy IS the majority class is nearly
+    #: unidentifiable by construction, so on a skewed corpus the competence
+    #: numbers can rank a constant annotator top. Measured on synthetic sweeps:
+    #: at a 50/50 prior the spammer ranks last 95-100% of the time, at 67/33
+    #: more data fixes it, and at 80/20 it ranks last only 10% of the time at
+    #: 300 items -- WORSE than at 30. Rare-event schemes (toxicity, hate
+    #: speech, misinformation) live in that regime, so this ships beside the
+    #: scores rather than in a doc nobody reads.
+    reliability: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self):
         return {
+            "reliability": self.reliability,
             "schema_name": self.schema_name,
             "competence_scores": self.competence_scores,
             "predicted_labels": self.predicted_labels,
@@ -322,6 +412,9 @@ class MACEManager:
         }
 
         return MACEResult(
+            reliability=_assess_reliability(
+                matrix, sorted_annotators, idx_to_value,
+                self.mace_config.min_items, schema_name, binary_option),
             schema_name=schema_name,
             competence_scores=competence_scores,
             predicted_labels=predicted_labels,
@@ -425,6 +518,10 @@ class MACEManager:
             for key, result in self.results.items():
                 schemas.append({
                     "key": key,
+                    # Beside the scores, not in a separate call: the numbers
+                    # look equally authoritative in every regime, and the
+                    # regime is what decides whether to believe them.
+                    "reliability": result.reliability,
                     "schema_name": result.schema_name,
                     "option_name": result.option_name,
                     "num_annotators": result.num_annotators,
@@ -449,11 +546,27 @@ class MACEManager:
                     "average": sum(scores) / len(scores) if scores else 0.0,
                 }
 
+            # An annotator flagged on ANY schema is flagged in the summary:
+            # the competence average hides it otherwise.
+            flagged = {}
+            for key, result in self.results.items():
+                for entry in result.reliability.get("constant_annotators", []):
+                    flagged.setdefault(entry["user_id"], []).append(
+                        {"schema": key, **entry})
+            for uid, entries in flagged.items():
+                if uid in annotator_competence:
+                    annotator_competence[uid]["constant_response"] = entries
+
             return {
                 "enabled": self.mace_config.enabled,
                 "has_results": True,
                 "schemas": schemas,
                 "annotator_competence": annotator_competence,
+                "reliability_warnings": [
+                    {"schema": key, "warning": w}
+                    for key, result in self.results.items()
+                    for w in result.reliability.get("warnings", [])
+                ],
                 "config": {
                     "trigger_every_n": self.mace_config.trigger_every_n,
                     "min_annotations_per_item": self.mace_config.min_annotations_per_item,

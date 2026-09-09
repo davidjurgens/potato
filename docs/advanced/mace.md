@@ -120,16 +120,45 @@ curl http://localhost:8000/admin/api/mace/overview \
 {
   "enabled": true,
   "has_results": true,
-  "schemas": ["sentiment"],
+  "schemas": [
+    {
+      "key": "sentiment",
+      "schema_name": "sentiment",
+      "option_name": null,
+      "num_annotators": 3,
+      "num_instances": 120,
+      "log_likelihood": -184.2,
+      "timestamp": "2026-01-14T09:31:07",
+      "label_mapping": {"0": "negative", "1": "positive"},
+      "reliability": {
+        "num_items": 120,
+        "num_answers": 360,
+        "label_counts": {"negative": 108, "positive": 252},
+        "majority_label_share": 0.7,
+        "constant_annotators": [],
+        "min_items_configured": 5,
+        "trustworthy": true,
+        "warnings": []
+      }
+    }
+  ],
   "annotator_competence": {
-    "user_1": {"average": 0.92, "per_schema": {"sentiment": 0.92}},
-    "user_2": {"average": 0.85, "per_schema": {"sentiment": 0.85}},
-    "user_3": {"average": 0.45, "per_schema": {"sentiment": 0.45}}
+    "user_1": {"average": 0.92, "scores": {"sentiment": 0.92}},
+    "user_2": {"average": 0.85, "scores": {"sentiment": 0.85}},
+    "user_3": {"average": 0.45, "scores": {"sentiment": 0.45}}
   },
+  "reliability_warnings": [],
   "total_annotations": 30,
   "annotations_until_next_run": 0
 }
 ```
+
+An annotator who gave the same answer to every item on any schema also carries
+`constant_response` in `annotator_competence`, listing the schema, the answer
+and how many items. `reliability_warnings` collects every schema's warnings in
+one place, so a caller can check one field rather than walking the schema list.
+Read [Reliability and label skew](#reliability-and-label-skew) before acting on
+a competence score.
 
 ### GET /admin/api/mace/predictions
 
@@ -221,6 +250,27 @@ mace:
 - **0.7 - 0.9**: Good annotator. Occasional disagreements but generally reliable.
 - **0.5 - 0.7**: Moderate annotator. May benefit from additional training or guideline clarification.
 - **Below 0.5**: Potential spammer or confused annotator. Review their annotations and consider retraining.
+
+### Reliability and label skew
+
+MACE explains an answer as either the annotator trying or the annotator spamming from a fixed strategy. An annotator whose fixed strategy is the majority class is nearly indistinguishable from a competent one, because both explanations predict the same answers. On a corpus where one label holds most of the answers, the scores can rank a constant-response annotator at the top.
+
+Measured on synthetic data, 40 trials per cell, with one annotator always giving the majority-class answer:
+
+| label prior | items | spammer ranked last |
+|---|---|---|
+| 50/50 | 30 | 95% |
+| 50/50 | 300 | 100% |
+| 67/33 | 30 | 75% |
+| 67/33 | 300 | 100% |
+| 80/20 | 30 | 32% |
+| 80/20 | 300 | 10% |
+
+At 2:1 more data fixes it. At 4:1 it does not, and the ranking gets worse as items are added, because the model grows more confident in the wrong explanation. Rare-event schemes such as toxicity, hate speech and misinformation usually sit at that skew or beyond.
+
+`/admin/api/mace/overview` reports this beside the scores. Each schema carries a `reliability` block with the item count, the label distribution, any annotator who gave the same answer to every item, and a `trustworthy` flag with the reasons. Neither of the last two checks needs a model: a constant answer is visible by looking, and skew is a count.
+
+`min_items` defaults to 5, which is enough to run a fit and not enough to publish a per-annotator score. Around 30 items on balanced data is where the estimates start tracking true accuracy. Potato reports the item count rather than refusing below it, so a study that relies on MACE today keeps working.
 
 ### Label Entropy
 

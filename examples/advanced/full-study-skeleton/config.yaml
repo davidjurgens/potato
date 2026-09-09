@@ -76,7 +76,14 @@ attention_checks:
   frequency: 4
   items_file: data/attention.json
   min_response_time: 5
-  failure_handling: {action: warn}
+  # These four keys are the whole of `failure_handling`. It used to read
+  # `{action: warn}` here, which is not one of them -- so it was dropped and
+  # the thresholds silently fell back to these same defaults.
+  failure_handling:
+    warn_threshold: 2
+    warn_message: "Please read each item carefully before answering."
+    block_threshold: 5
+    block_message: "Too many attention checks were missed."
 
 agreement_metrics: {enabled: true}
 
