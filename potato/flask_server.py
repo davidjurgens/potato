@@ -3479,6 +3479,15 @@ def render_page_with_annotations(username: str):
 
     instance_id = item.get_id()
 
+    # Stamp when the SERVER handed this item over. `min_response_time` used to
+    # be checked against a number the annotator's own client reported, which is
+    # the one number in the exchange the party being measured has a motive to
+    # change. Recorded here because this is the moment the item reaches them.
+    if is_annotation_page:
+        _qc = get_quality_control_manager()
+        if _qc is not None:
+            _qc.record_item_served(username, instance_id)
+
     # Extract pre-annotation data if quality control is enabled
     pre_annotation_data = None
     qc_manager = get_quality_control_manager()

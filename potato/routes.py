@@ -6223,13 +6223,42 @@ def update_instance():
             # the moment the request was *sent* -- so the subtraction measured
             # network latency, not reading time, and nothing on this path sent
             # the field at all, which left `min_response_time` unreachable.
-            response_time = None
-            raw_response_time = request.json.get("response_time_seconds")
-            if raw_response_time is not None:
+            # Measured by the SERVER, from when it served the item. It used
+            # to be `response_time_seconds` out of this request body -- a
+            # number reported by the annotator's own client. Two annotators
+            # answering identically, milliseconds apart in a scripted loop,
+            # got opposite outcomes purely from what they claimed: 0.4s was
+            # blocked, 600s passed, and only the honest one appeared in the
+            # log. `min_response_time` exists to catch someone clicking
+            # through without reading, so asking them how long they took is
+            # the one thing it cannot do.
+            response_time = qc_manager.measured_response_time(
+                username, instance_id)
+
+            claimed = request.json.get("response_time_seconds")
+            if response_time is None:
+                # Not served by this process -- a restart between serve and
+                # save. It used to fail open in silence; an unmeasurable check
+                # is not a passed one, so it says so.
+                logger.warning(
+                    "No server-side serve time for %s on %s, so "
+                    "min_response_time cannot be checked for this answer.",
+                    username, instance_id)
+            elif claimed is not None:
                 try:
-                    response_time = float(raw_response_time)
+                    claimed_seconds = float(claimed)
                 except (TypeError, ValueError):
-                    logger.warning(f"Invalid response_time_seconds: {raw_response_time!r}")
+                    claimed_seconds = None
+                # A large gap is not proof of anything, but it is the only
+                # signal that the two clocks disagree, and it costs a
+                # comparison.
+                if (claimed_seconds is not None
+                        and abs(claimed_seconds - response_time) > 30):
+                    logger.warning(
+                        "%s reported %.1fs on %s; the server measured %.1fs. "
+                        "The server measurement is what min_response_time "
+                        "uses.", username, claimed_seconds, instance_id,
+                        response_time)
 
             # Check if this is an attention check
             attention_result = qc_manager.validate_attention_response(

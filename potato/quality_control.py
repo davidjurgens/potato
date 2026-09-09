@@ -15,10 +15,11 @@ import logging
 import random
 import threading
 from datetime import datetime
+import time
 from typing import Dict, List, Optional, Any, Tuple, Set
 from dataclasses import dataclass, field
 from pathlib import Path
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 from potato.server_utils.annotation_keys import (
     canonical_wire_answer,
@@ -135,6 +136,11 @@ class QualityControlManager:
         self.attention_results: Dict[str, List[AttentionCheckResult]] = defaultdict(list)  # user_id -> results
         self.user_items_since_attention: Dict[str, int] = defaultdict(int)  # user_id -> count
         self.user_items_since_gold: Dict[str, int] = defaultdict(int)  # user_id -> count
+        #: (user_id, instance_id) -> monotonic clock reading when the SERVER
+        #: handed the item over. `min_response_time` used to be checked against
+        #: `response_time_seconds` out of the request body, which is a number
+        #: supplied by the party being measured -- see `record_item_served`.
+        self._served_at: "OrderedDict[Tuple[str, str], float]" = OrderedDict()
 
         # Gold standard data
         self.gold_items: List[Dict] = []
@@ -357,6 +363,53 @@ class QualityControlManager:
             explanation=record.get("explanation"),
             timestamp=self._parse_timestamp(record.get("timestamp")),
         )
+
+    #: How many serve stamps to keep. One per (annotator, item) currently on
+    #: screen is all that is ever needed; the bound is only so a long-running
+    #: server does not accumulate one per item ever served.
+    _SERVED_AT_LIMIT = 4096
+
+    def record_item_served(self, user_id: str, instance_id: str) -> None:
+        """Stamp the moment the server handed this item to this annotator.
+
+        `min_response_time` exists to catch someone clicking through without
+        reading. It was checked against `response_time_seconds` from the
+        request body -- a number supplied by the annotator's own client, which
+        is to say by the only party with a motive to change it. Two annotators
+        answering identically, milliseconds apart in a scripted loop, got
+        opposite outcomes purely from the number they reported: the one
+        claiming 0.4s was blocked, the one claiming 600s passed.
+
+        It also failed open. A client that sent nothing left the value None,
+        and the check requires non-None, so it silently did not run at all.
+
+        The server serves the item and receives the save, so it has both ends
+        and never has to ask. Monotonic rather than wall-clock: a clock
+        adjustment mid-annotation must not read as a fast answer.
+        """
+        with self._lock:
+            key = (user_id, instance_id)
+            self._served_at.pop(key, None)
+            self._served_at[key] = time.monotonic()
+            while len(self._served_at) > self._SERVED_AT_LIMIT:
+                self._served_at.popitem(last=False)
+
+    def measured_response_time(self, user_id: str,
+                               instance_id: str) -> Optional[float]:
+        """Seconds since the server served the item, or None if it cannot say.
+
+        None means the item was not served by this process -- a restart between
+        serve and save. The caller says so rather than treating it as a pass;
+        an unmeasurable check is not a passed one.
+
+        The stamp is NOT cleared on read. The annotation page saves twice for
+        one click, and both saves have to resolve against the same serve.
+        """
+        with self._lock:
+            served = self._served_at.get((user_id, instance_id))
+        if served is None:
+            return None
+        return max(0.0, time.monotonic() - served)
 
     def _parse_config(self, config: Dict[str, Any]) -> QualityControlConfig:
         """Parse quality control configuration from the main config."""
