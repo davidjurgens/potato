@@ -303,14 +303,14 @@ def get_image_dimensions(item: dict, default_width: int = 0,
         return derived
 
     if width <= 0 or height <= 0:
-        _warn_unmeasurable(item)
+        _warn_unmeasurable(item, config)
     return (width, height)
 
 
 _UNMEASURABLE_SEEN: set = set()
 
 
-def _warn_unmeasurable(item: dict) -> None:
+def _warn_unmeasurable(item: dict, config: Any = None) -> None:
     """Say once, per image, that its size could not be established.
 
     Zero is not a neutral fallback here: the client stores normalized
@@ -320,7 +320,7 @@ def _warn_unmeasurable(item: dict) -> None:
     at the origin, which is indistinguishable from an annotator who drew
     nothing.
     """
-    name = get_image_filename(item) or item.get("id") or "<unnamed item>"
+    name = get_image_filename(item, config) or item.get("id") or "<unnamed item>"
     if name in _UNMEASURABLE_SEEN:
         return
     _UNMEASURABLE_SEEN.add(name)
@@ -364,7 +364,7 @@ def _dimensions_from_file(config: Any, item: dict) -> Optional[Tuple[int, int]]:
     file, Pillow absent. An export must not die because one image cannot be
     measured; the caller keeps its zeros and YOLO keeps refusing.
     """
-    filename = get_image_filename(item)
+    filename = get_image_filename(item, config)
     if not filename or "://" in str(filename):
         return None
     try:
@@ -476,20 +476,65 @@ def _svg_dimensions(path: str) -> Optional[Tuple[int, int]]:
     return (int(round(width)), int(round(height)))
 
 
-def get_image_filename(item: dict) -> Optional[str]:
+def get_image_filename(item: dict, config: Any = None) -> Optional[str]:
     """
     Extract image filename from item data.
 
+    `source_field` is the scheme key whose only job is to say which field holds
+    the media, and the display layer honours it. It was not among the six names
+    guessed here, so a study whose field is called anything else exported
+    `file_name: "<instance id>"` -- and with no filename there is no file, with
+    no file there are no dimensions, and the client stores normalized
+    coordinates, so every box multiplied by zero and landed at the origin.
+
+    Measured on one image, one box, one field rename:
+
+        source_field: pic         file_name "img1"              [0, 0, 0, 0]
+        source_field: image_url   file_name "/media/scene.png"  [40, 40, 120, 120]
+
+    The page rendered the image correctly in both. This is the fourth time a
+    media field has been known to the display layer and not to a consumer, so
+    the configured answer is asked for first and the guesses are the fallback.
+
     Args:
         item: Item data dict
+        config: Project config, used to read `source_field` off the schemes
 
     Returns:
         Image filename/path string or None
     """
+    for key in _configured_media_keys(config):
+        if key in item and item[key]:
+            return str(item[key])
     for key in ("image", "image_path", "image_url", "file_name", "filename", "img"):
         if key in item and item[key]:
             return str(item[key])
     return None
+
+
+#: Scheme types whose `source_field` names a media file the exporters care
+#: about. A `source_field` on, say, an extractive_qa scheme names a passage.
+_MEDIA_SCHEME_TYPES = frozenset({
+    "image_annotation", "video_annotation", "spatial_annotation",
+    "tiered_annotation", "episode_annotation", "audio_annotation",
+})
+
+
+def _configured_media_keys(config: Any) -> List[str]:
+    """Every `source_field` a media scheme declares, in config order."""
+    if not isinstance(config, dict):
+        return []
+    keys, seen = [], set()
+    for scheme in (config.get("annotation_schemes") or []):
+        if not isinstance(scheme, dict):
+            continue
+        if scheme.get("annotation_type") not in _MEDIA_SCHEME_TYPES:
+            continue
+        field = scheme.get("source_field")
+        if isinstance(field, str) and field and field not in seen:
+            seen.add(field)
+            keys.append(field)
+    return keys
 
 
 # ---------------------------------------------------------------------------

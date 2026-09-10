@@ -87,7 +87,7 @@ class DarwinExporter(BaseExporter):
             width, height = get_image_dimensions(
                 item, config=context.config, annotation=ann)
             file_name = os.path.basename(
-                get_image_filename(item) or instance_id)
+                get_image_filename(item, context.config) or instance_id)
 
             annotations = []
             for obj in objects:

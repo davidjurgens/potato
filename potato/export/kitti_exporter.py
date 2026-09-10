@@ -78,7 +78,7 @@ class KITTIExporter(BaseExporter):
             item = context.items.get(instance_id, {})
             width, height = get_image_dimensions(
                 item, config=context.config, annotation=ann)
-            file_name = get_image_filename(item) or instance_id
+            file_name = get_image_filename(item, context.config) or instance_id
             stem = os.path.splitext(os.path.basename(file_name))[0] or instance_id
 
             lines = []

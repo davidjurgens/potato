@@ -85,7 +85,7 @@ class YOLOExporter(BaseExporter):
                 warnings.append(f"Skipping {instance_id}: no image dimensions")
                 continue
 
-            file_name = get_image_filename(item) or instance_id
+            file_name = get_image_filename(item, context.config) or instance_id
             raw_stem = os.path.splitext(os.path.basename(file_name))[0]
             stem = "".join(c if c.isalnum() or c in "-_." else "_" for c in raw_stem)
 

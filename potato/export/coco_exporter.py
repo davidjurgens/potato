@@ -92,7 +92,7 @@ class COCOExporter(BaseExporter):
                 image_id_counter += 1
                 image_id_map[instance_id] = image_id
 
-                file_name = get_image_filename(item) or instance_id
+                file_name = get_image_filename(item, context.config) or instance_id
 
                 # A zero here is not a missing field, it is a broken export:
                 # the client stores normalized coordinates, so every object on
