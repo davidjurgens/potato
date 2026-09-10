@@ -153,6 +153,12 @@ export as COCO compressed RLE with `iscrowd: 1` unless the annotation carries an
 explicit `iscrowd: 0`. Landmarks are skipped with a warning — COCO keypoints are
 not yet emitted.
 
+**Provenance** travels onto each annotation object: `source` (`human`, `ai` or
+`import`), and alongside it `ai_model`, `confidence`, `edited`, `carried_over`
+and `import_format` where they are known. COCO has no field of its own for
+this, and a shape whose origin is unknown carries nothing rather than a guess.
+See [Where a shape came from](../annotation-types/multimedia/image_annotation.md#where-a-shape-came-from).
+
 **Image dimensions** come from `image_width`/`image_height` (or
 `width`/`height`) on the data item when it declares them. A data file usually
 names an image rather than measuring one, so when those fields are absent
@@ -467,6 +473,18 @@ not answer, so a schema only some annotators reached is still in the file.
 | `end` | int | Character offset where the span ends |
 | `label` | string | The span's label |
 | `text` | string | The text content of the span |
+| `target_field` | string | Which display field the span was drawn in, `""` on a single-field page |
+| `title` | string | The label's display title |
+| `span_id` | string | The stored span's id, `schema_label_start_end` |
+| `format_coords` | string | JSON: page and box for a PDF span, row and column for a spreadsheet one |
+| `additional_parts` | string | JSON: the other ranges of a discontinuous span |
+| `kb_id`, `kb_source`, `kb_label` | string | The entity a linked span points at |
+
+`target_field` matters more than its size suggests. One span schema records in
+every span-target field on the page, so the field varies *within* a scheme, and
+nothing else in the file recovers it: `span_id` is the schema, label and
+offsets, so the same words marked in two fields produce otherwise identical
+rows. Read it whenever a study has more than one span target.
 
 `text` is derived from the offsets at export time rather than stored, so it can
 never disagree with them. Offsets on a `dialogue` field index that field's

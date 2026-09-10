@@ -401,6 +401,17 @@ cd potato
 pip install -r requirements.txt
 ```
 
+### Checking the install
+
+```bash
+potato --version
+```
+
+It prints the version, and the commit as well when Potato is running out of a
+git checkout. That is the line to quote in a bug report. See
+[Debugging](tools/debugging_guide.md#checking-what-you-installed) for what it
+says when two installs are visible at once.
+
 ## Creating Your First Annotation Task
 
 ### 1. Create a Task Directory
@@ -14163,6 +14174,56 @@ Notes:
 To convert to and from these shapes in Python, use
 `normalize_annotation_object()` and `to_client_object()` from
 `potato.export.cv_utils` rather than reading the fields directly.
+
+### Where a shape came from
+
+Every shape and mask records who put it there. An accepted detection and a
+hand-drawn box are otherwise identical once stored, so a project that
+pre-labels with a model cannot report its own acceptance rate from its own
+data.
+
+```json
+{
+  "type": "bbox",
+  "label": "person",
+  "color": "#FF6B6B",
+  "coordinates": {"x": 0.125, "y": 0.104, "width": 0.3125, "height": 0.625},
+  "source": "ai",
+  "ai_model": "yolov8n",
+  "confidence": 0.82,
+  "edited": true
+}
+```
+
+| Key | Meaning |
+|-----|---------|
+| `source` | `human` (drawn in the browser), `ai` (a model proposed it and the annotator accepted it), `import` (it arrived with the data) |
+| `ai_model` | Which model, when the endpoint reports one |
+| `confidence` | The detector's own score for this shape |
+| `edited` | The annotator has since moved, resized or relabeled a shape that was not theirs |
+| `carried_over` | Copied forward from the previous image rather than made on this one |
+| `import_format` | The file format an imported shape arrived in, e.g. `coco` |
+
+`edited` is what separates accepting a box as-is from accepting it and then
+correcting it. Only the first is agreement with the model.
+
+A shape with no `source` is one whose origin is unknown, which is what
+annotations made before this field existed are. Nothing rewrites them.
+
+Shapes read in by `potato import` are stamped `source: import` unless the file
+already says otherwise, so a COCO file Potato itself exported keeps its
+human/model split across a round trip. A COCO results file carries the
+detector's own score as `score`, and that arrives as `confidence`. So does
+KITTI's sixteenth column, Open Images' `Confidence` and MOT's `conf`: one
+quantity, one column, whatever the source format calls it. The importer
+refuses to write a project in which any shape has no `source`, so a new import
+path cannot quietly produce shapes that export as though a person drew them.
+
+The COCO exporter writes these keys onto each annotation object; COCO has no
+field of its own for them.
+
+Tracked video shapes use the same two keys. A keyframe filled in by the
+propagation model carries `source: "ai"` and `ai_model: "sam2"`.
 
 ## Segmentation Masks
 
@@ -40636,8 +40697,44 @@ withheld from whoever is collecting the data. The payload carries
 
 With `persist_votes: true` (the default), each member's **final** vote on a
 revealed item is written into their regular annotation state when the host
-advances — room work counts as real annotations and flows into every
-existing export path.
+advances, so room work counts as real annotations and flows into every existing
+export path.
+
+Each of those answers records the room it came from. A room answer is not an
+independent one: the member saw everyone else's label at the reveal and may
+have changed their own afterwards, so agreement computed across two members of
+one room measures the discussion rather than the annotators. Room work and solo
+work are otherwise identical on disk, so the room is stamped at the point the
+answer is written.
+
+The record sits under `instance_id_to_room_provenance` in `user_state.json`,
+keyed by instance and then by scheme:
+
+```json
+{
+  "r1": {
+    "sarcasm": {
+      "room_id": "MKT4QP",
+      "room_type": "norming",
+      "role": "member",
+      "vote": "Sarcastic",
+      "initial_vote": "Sincere",
+      "changed_after_reveal": true,
+      "n_voters": 3,
+      "recorded_at": 1789000000.0
+    }
+  }
+}
+```
+
+`vote` is what landed in the annotation store. `initial_vote` is the blind one,
+cast before the member saw anyone else, and is what an analysis that needs
+independent judgments should read. The two differ exactly when someone changed
+their mind after the reveal.
+
+CSV and TSV exports carry two columns per scheme: `<scheme>._room_id` for
+grouping, and `<scheme>._room` with the whole record as JSON. JSON exports
+carry it under `_room`.
 
 ## API summary
 
@@ -45487,6 +45584,12 @@ export as COCO compressed RLE with `iscrowd: 1` unless the annotation carries an
 explicit `iscrowd: 0`. Landmarks are skipped with a warning — COCO keypoints are
 not yet emitted.
 
+**Provenance** travels onto each annotation object: `source` (`human`, `ai` or
+`import`), and alongside it `ai_model`, `confidence`, `edited`, `carried_over`
+and `import_format` where they are known. COCO has no field of its own for
+this, and a shape whose origin is unknown carries nothing rather than a guess.
+See [Where a shape came from](../annotation-types/multimedia/image_annotation.md#where-a-shape-came-from).
+
 **Image dimensions** come from `image_width`/`image_height` (or
 `width`/`height`) on the data item when it declares them. A data file usually
 names an image rather than measuring one, so when those fields are absent
@@ -45801,6 +45904,18 @@ not answer, so a schema only some annotators reached is still in the file.
 | `end` | int | Character offset where the span ends |
 | `label` | string | The span's label |
 | `text` | string | The text content of the span |
+| `target_field` | string | Which display field the span was drawn in, `""` on a single-field page |
+| `title` | string | The label's display title |
+| `span_id` | string | The stored span's id, `schema_label_start_end` |
+| `format_coords` | string | JSON: page and box for a PDF span, row and column for a spreadsheet one |
+| `additional_parts` | string | JSON: the other ranges of a discontinuous span |
+| `kb_id`, `kb_source`, `kb_label` | string | The entity a linked span points at |
+
+`target_field` matters more than its size suggests. One span schema records in
+every span-target field on the page, so the field varies *within* a scheme, and
+nothing else in the file recovers it: `span_id` is the schema, label and
+offsets, so the same words marked in two fields produce otherwise identical
+rows. Read it whenever a study has more than one span target.
 
 `text` is derived from the offsets at export time rather than stored, so it can
 never disagree with them. Offsets on a `dialogue` field index that field's
@@ -47643,9 +47758,27 @@ Also writes the imported annotations as `NAME`'s saved work. This
 **fabricates an annotator** and exists so import→export can be verified without
 a human opening every item. Off by default for exactly that reason.
 
+The seeded annotator is assigned every item it holds work for, so progress and
+assignment read the project as annotated rather than as untouched.
+
 ### `--config-only`
 
 Regenerate `config.yaml` without touching an existing data file.
+
+## Provenance
+
+Every imported shape is stamped `source: import`, along with the format it came
+in as `import_format`. A file that already records where a shape came from
+keeps what it says, so a COCO file Potato itself exported survives the round
+trip with its human/model split intact. A detector's own score arrives as
+`confidence` whatever the source format calls it: `score` in COCO, the
+sixteenth column in KITTI, `Confidence` in Open Images, `conf` in MOT.
+
+The importer refuses to write a project in which any shape has no `source`. An
+imported box and a hand-drawn one are otherwise identical once stored, so
+without this the export reports every imported shape as annotation effort.
+
+See [Where a shape came from](../annotation-types/multimedia/image_annotation.md#where-a-shape-came-from).
 
 ## What gets written
 
@@ -48900,6 +49033,49 @@ URL: https://potatoannotator.readthedocs.io/en/latest/tools/debugging_guide/
 # Debugging Guide
 
 Potato has several command-line flags and config options for debugging and testing an annotation project.
+
+## Checking what you installed
+
+```bash
+potato --version
+```
+
+```
+potato 2.8.2 (editable install, commit 3ace5a49, branch master)
+```
+
+The commit matters more than the number when you are reporting a bug: one
+release covers hundreds of commits, and the commit is printed whenever Potato
+is running out of a git checkout. `potato version` and `potato -V` do the same
+thing.
+
+Two version numbers exist and they can disagree. `potato.__version__` is what
+the source says; the installed distribution's metadata is only rewritten when
+you install, so an editable checkout that has moved on since `pip install -e .`
+reports the older number. When they differ, both are printed and the source is
+the one that is running. The report does not say which of the two is stale,
+because it cannot tell: checking out an older commit leaves the metadata ahead
+instead.
+
+Two other states get their own line, and both are worth knowing about because
+neither announces itself any other way.
+
+If more than one copy of `potato-annotation` is visible at once, which happens
+when a checkout sits in front of a released wheel, all of them are listed with
+their locations. The answer to "what version is this" then depends on which
+directory you asked from.
+
+If a directory called `potato` with no `__init__.py` is earlier on the path,
+usually left behind by an older non-editable install, Python resolves `potato`
+as a namespace package. `potato.__version__` stops existing while every
+submodule still imports correctly, so it reads as a broken package rather than
+a stray directory. The report names the directories responsible and leaves
+removing them to you.
+
+Everything the report cannot establish, it says it cannot establish. A metadata
+directory it fails to read does not print as "nothing installed", and a `git`
+that will not answer does not print as a clean tree. Both of those are definite
+claims that would tell you to stop looking.
 
 ## Server Configuration
 

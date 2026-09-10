@@ -36,22 +36,39 @@ def _stage1_tokens():
     )
     assert main_fn is not None, "flask_server.main() not found"
 
+    def _is_argv1(node):
+        return (isinstance(node, ast.Subscript)
+                and isinstance(node.value, ast.Attribute)
+                and node.value.attr == "argv")
+
     tokens = set()
     for node in ast.walk(main_fn):
         if not isinstance(node, ast.Compare):
             continue
-        if not (len(node.ops) == 1 and isinstance(node.ops[0], ast.Eq)):
+        if len(node.ops) != 1 or not _is_argv1(node.left):
             continue
-        left, right = node.left, node.comparators[0]
-        if not isinstance(right, ast.Constant) or not isinstance(right.value, str):
-            continue
+        op, right = node.ops[0], node.comparators[0]
+
         # sys.argv[1] == "<token>"
-        if (
-            isinstance(left, ast.Subscript)
-            and isinstance(left.value, ast.Attribute)
-            and left.value.attr == "argv"
-        ):
-            tokens.add(right.value)
+        if isinstance(op, ast.Eq):
+            if isinstance(right, ast.Constant) and isinstance(right.value, str):
+                tokens.add(right.value)
+            continue
+
+        # sys.argv[1] in ("<token>", ...)
+        #
+        # This shape was invisible to the extractor, which matched only `==`.
+        # It did not fail -- it reported a smaller set, so the two guards below
+        # kept passing over a dispatch they no longer covered. Flags are
+        # skipped: `--version` and `-V` are dispatched here but are not
+        # commands, and STAGE1_COMMANDS is what `--help` lists under "other
+        # commands".
+        if isinstance(op, ast.In) and isinstance(right, (ast.Tuple, ast.List, ast.Set)):
+            for element in right.elts:
+                if (isinstance(element, ast.Constant)
+                        and isinstance(element.value, str)
+                        and not element.value.startswith("-")):
+                    tokens.add(element.value)
     return tokens
 
 
@@ -97,6 +114,9 @@ class TestDispatchStagesAreDisjoint:
         assert "deploy" in tokens
         assert "validate" in tokens
         assert "preview" in tokens
+        # Dispatched by an `in (...)` membership test rather than `==`. Named
+        # here so that shape cannot go back to being invisible.
+        assert "version" in tokens
 
     def test_no_token_is_registered_in_both_stages(self):
         overlap = _stage1_tokens() & _stage2_choices()

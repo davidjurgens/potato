@@ -2,6 +2,49 @@
 
 Potato has several command-line flags and config options for debugging and testing an annotation project.
 
+## Checking what you installed
+
+```bash
+potato --version
+```
+
+```
+potato 2.8.2 (editable install, commit 3ace5a49, branch master)
+```
+
+The commit matters more than the number when you are reporting a bug: one
+release covers hundreds of commits, and the commit is printed whenever Potato
+is running out of a git checkout. `potato version` and `potato -V` do the same
+thing.
+
+Two version numbers exist and they can disagree. `potato.__version__` is what
+the source says; the installed distribution's metadata is only rewritten when
+you install, so an editable checkout that has moved on since `pip install -e .`
+reports the older number. When they differ, both are printed and the source is
+the one that is running. The report does not say which of the two is stale,
+because it cannot tell: checking out an older commit leaves the metadata ahead
+instead.
+
+Two other states get their own line, and both are worth knowing about because
+neither announces itself any other way.
+
+If more than one copy of `potato-annotation` is visible at once, which happens
+when a checkout sits in front of a released wheel, all of them are listed with
+their locations. The answer to "what version is this" then depends on which
+directory you asked from.
+
+If a directory called `potato` with no `__init__.py` is earlier on the path,
+usually left behind by an older non-editable install, Python resolves `potato`
+as a namespace package. `potato.__version__` stops existing while every
+submodule still imports correctly, so it reads as a broken package rather than
+a stray directory. The report names the directories responsible and leaves
+removing them to you.
+
+Everything the report cannot establish, it says it cannot establish. A metadata
+directory it fails to read does not print as "nothing installed", and a `git`
+that will not answer does not print as a clean tree. Both of those are definite
+claims that would tell you to stop looking.
+
 ## Server Configuration
 
 You can configure server settings directly in your YAML config file instead of using CLI flags:

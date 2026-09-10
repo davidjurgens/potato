@@ -730,7 +730,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=34"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=37"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.
@@ -821,7 +821,7 @@
          projects finding objects with nowhere to show them. -->
     {% if (ai_enabled or frontend_assets.text_prompt | default(false))
           and ((frontend_assets.image_annotation | default(false)) or (frontend_assets.video_annotation | default(false))) %}
-    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=7"></script>
+    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=8"></script>
     {% endif %}
 
     <!-- Option highlighting dims the less-likely *discrete options* of a radio,
@@ -898,7 +898,7 @@
     <!-- Video tracking interpolation and UI -->
     {% if frontend_assets.tracking | default(false) %}
     <script src="{{ url_for('static', filename='tracking-interpolation.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=11"></script>
+    <script src="{{ url_for('static', filename='tracking-ui.js') }}?v=12"></script>
     {% endif %}
 
     <!-- Triage annotation manager -->

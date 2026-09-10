@@ -107,6 +107,15 @@ def _flatten_annotation(ann: dict, single_select: Optional[set] = None,
     for schema_name, spans in _spans_with_text(ann, context).items():
         row[f"{schema_name}._spans"] = json.dumps(spans)
 
+    # Which room produced the answer, when one did. The id gets its own column
+    # because grouping by it is the whole point -- a reader who has to parse
+    # JSON to find out which rows are non-independent will not do it.
+    for schema_name, prov in (ann.get("_room") or {}).items():
+        if not isinstance(prov, dict) or not prov:
+            continue
+        row[f"{schema_name}._room_id"] = prov.get("room_id", "")
+        row[f"{schema_name}._room"] = json.dumps(prov)
+
     return row
 
 

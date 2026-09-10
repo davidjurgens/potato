@@ -53,6 +53,40 @@ class ImportResult:
     def num_objects(self) -> int:
         return sum(len(img.objects) for img in self.images)
 
+    def stamp_import_provenance(self, import_format: str = "") -> int:
+        """Mark every object as having arrived with the data, not been drawn.
+
+        An imported box and a hand-drawn one are byte-identical once stored, so
+        a project seeded from an existing dataset exports as though a person
+        drew all of it -- which is the number a paper would then report as
+        annotation effort. Objects that already declare a ``source`` keep it:
+        an importer reading a file Potato itself wrote is carrying real
+        provenance forward, and overwriting it would lose the distinction this
+        exists to make.
+
+        Args:
+            import_format: The importer's registry name (``coco``, ``cvat``…),
+                recorded as ``ai_model`` would be for a model: the specific
+                thing, beside the coarse one.
+
+        Returns:
+            How many objects were stamped.
+
+        The writer asserts afterwards that no object was left without a
+        ``source``, so this cannot be skipped quietly by a new import path --
+        see ``_write_project`` in ``potato/importers/cli.py``.
+        """
+        stamped = 0
+        for image in self.images:
+            for obj in image.objects:
+                if not isinstance(obj, dict) or obj.get("source"):
+                    continue
+                obj["source"] = "import"
+                if import_format:
+                    obj["import_format"] = import_format
+                stamped += 1
+        return stamped
+
     def summarize(self, **extra: Any) -> Dict[str, Any]:
         """
         Fill :attr:`stats` with the keys the CLI prints, plus any extras.

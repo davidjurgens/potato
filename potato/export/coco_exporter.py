@@ -13,6 +13,7 @@ from typing import List, Optional, Tuple
 from .base import BaseExporter, ExportContext, ExportResult
 from .cv_utils import (
     build_coco_category_map,
+    carry_provenance,
     coco_rle_to_rle,
     decode_rle,
     flatten_polygon,
@@ -203,6 +204,16 @@ class COCOExporter(BaseExporter):
                         "bbox": canon["bbox"],
                         "area": canon["area"],
                     }
+                    # Where the shape came from -- a person, a model, an
+                    # imported file. COCO has no field for it, and an extra key
+                    # on an annotation is what every other tool does with the
+                    # same problem (CVAT calls it `attributes`), so the
+                    # alternative is not "cleaner COCO" but "the fact is gone".
+                    # Only written when it is known: a file where every
+                    # annotation says `source` and one where none does are both
+                    # honest, and a default would make the second look like the
+                    # first.
+                    carry_provenance(coco_ann, canon)
                     annotation_id_counter += 1
 
                     if obj_type == "bbox":

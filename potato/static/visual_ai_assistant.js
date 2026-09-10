@@ -468,6 +468,10 @@ class VisualAIAssistantManager {
     _handleSuggestionResponse(assistantType, data) {
         console.log('[VisualAI] _handleSuggestionResponse:', assistantType, data);
 
+        // Which model produced this batch, so an accepted detection can name it
+        // rather than exporting as an anonymous "a model did this".
+        this.lastModel = data.model || '';
+
         // Handle hints differently
         if (assistantType === 'hint' && (data.hint || data.suggestive_choice)) {
             this._showHint(data);
@@ -859,7 +863,16 @@ class VisualAIAssistantManager {
                 y: detection.bbox.y,
                 width: detection.bbox.width,
                 height: detection.bbox.height
-            }
+            },
+            // Provenance travels with the shape. Without it an accepted
+            // detection and a hand-drawn box export identically, so a study
+            // that pre-labels with a detector cannot report its own acceptance
+            // rate from its own data.
+            source: 'ai',
+            ai_model: this.lastModel || '',
+            confidence: (detection.confidence !== undefined
+                         && detection.confidence !== null)
+                ? detection.confidence : undefined
         });
 
         if (!added) {

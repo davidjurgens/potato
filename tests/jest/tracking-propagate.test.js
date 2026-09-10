@@ -231,7 +231,10 @@ describe('turning results into keyframes', () => {
         respondWith({ frames: trackedFrames(1), occluded: 0 });
         const m = manager();
         await m.propagateForward();
-        expect(m.tracks.track_1.keyframes[1].source).toBe('sam2');
+        // Same two keys an image shape carries: the coarse origin, and the
+        // model that produced it.
+        expect(m.tracks.track_1.keyframes[1].source).toBe('ai');
+        expect(m.tracks.track_1.keyframes[1].ai_model).toBe('sam2');
     });
 
     test('an occluded frame is skipped rather than filled with a guess', async () => {

@@ -22,6 +22,27 @@ from potato.server_utils.schemas.keybinding_allocator import allocate_keybinding
 
 logger = logging.getLogger(__name__)
 
+
+def bundled_template_dir() -> str:
+    """The `templates/` directory shipped with this package.
+
+    Derived from THIS module's `__file__`, deliberately, rather than from
+    `potato.__path__` or `importlib.resources.files("potato")`. A leftover
+    directory called `potato` with no `__init__.py` earlier on the path makes
+    the top-level name resolve to a namespace package: `potato.__path__` then
+    points at the leftover while every submodule still loads from the real
+    checkout through the editable finder. On the machine this was written on
+    that leftover contains a `templates/` directory two months older than the
+    code that would read it, and nothing would say so -- the pages would just
+    be wrong.
+
+    One definition because the path was written out twice and the two must not
+    drift. tests/unit/test_template_dir_not_from_namespace_path.py pins it.
+    """
+    return os.path.normpath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "templates"))
+
+
 from potato.server_utils.generated_templates import (  # noqa: E402
     resolve_generated_templates_dir, site_name_prefix)
 
@@ -377,9 +398,9 @@ def generate_annotation_html_template(config: dict) -> str:
     #
 
     # Use hardcoded template paths - no longer configurable
-    cur_program_dir = os.path.dirname(os.path.abspath(__file__))
-    html_template_file = os.path.join(cur_program_dir, '..', 'templates', 'base_template_v2.html')
-    header_file = os.path.join(cur_program_dir, '..', 'templates', 'header.html')
+    template_dir = bundled_template_dir()
+    html_template_file = os.path.join(template_dir, 'base_template_v2.html')
+    header_file = os.path.join(template_dir, 'header.html')
 
     logger.debug(f"Reading html annotation template: {html_template_file}")
 
@@ -607,9 +628,9 @@ def generate_html_from_schematic(annotation_schemas: list[dict],
     #
 
     # Use hardcoded template paths - no longer configurable
-    cur_program_dir = os.path.dirname(os.path.abspath(__file__))
-    html_template_filename = os.path.join(cur_program_dir, '..', 'templates', 'base_template_v2.html')
-    html_header_filename = os.path.join(cur_program_dir, '..', 'templates', 'header.html')
+    template_dir = bundled_template_dir()
+    html_template_filename = os.path.join(template_dir, 'base_template_v2.html')
+    html_header_filename = os.path.join(template_dir, 'header.html')
 
     # Load the core template that has all the UI controls and non-task layout.
     logger.debug("Reading html annotation template %s" % html_template_filename)

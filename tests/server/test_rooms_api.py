@@ -182,6 +182,68 @@ class TestRoomsAPI:
         assert "Sarcastic" in text, (
             f"cara's final vote for r1 missing from annotations: {payload}")
 
+    def test_02a_room_provenance_is_recorded_on_the_annotation(self, flask_server):
+        """The stored answer says which room produced it, and whether the
+        member changed their mind after seeing the room.
+
+        Without this the export cannot tell a room answer from an independent
+        one, so any agreement statistic computed across two members of the same
+        room silently measures the discussion instead of the annotators.
+        """
+        state_path = None
+        for root, _dirs, files in os.walk(flask_server.test_dir):
+            if "user_state.json" in files and root.endswith("member_cara"):
+                state_path = os.path.join(root, "user_state.json")
+                break
+        assert state_path, "member_cara's user_state.json not found on disk"
+        with open(state_path) as f:
+            user_state = json.load(f)
+
+        provenance = user_state.get("instance_id_to_room_provenance", {})
+        assert "r1" in provenance, (
+            "no room recorded against r1; the vote was persisted as an "
+            f"ordinary annotation. keys: {sorted(provenance)}")
+        record = provenance["r1"]["sarcasm"]
+        assert record["room_id"] == flask_server._rooms_test_room_id
+        assert record["room_type"] == "norming"
+        assert record["role"] == "member"
+        # cara voted Sincere blind, then moved to Sarcastic after the reveal.
+        assert record["vote"] == "Sarcastic"
+        assert record["initial_vote"] == "Sincere"
+        assert record["changed_after_reveal"] is True
+        assert record["n_voters"] == 3
+
+        # The unanimous item: same room, no change of mind.
+        second = provenance["r2"]["sarcasm"]
+        assert second["room_id"] == flask_server._rooms_test_room_id
+        assert second["initial_vote"] == "Sincere"
+        assert second["changed_after_reveal"] is False
+
+    def test_02b_room_provenance_reaches_the_export(self, flask_server):
+        """A researcher reading the export can group by room without knowing
+        rooms exist as a subsystem."""
+        from potato.export.cli import load_annotations_from_output_dir
+        from potato.export.tabular_exporter import _flatten_annotation
+
+        output_dir = None
+        for root, dirs, _files in os.walk(flask_server.test_dir):
+            if "member_cara" in dirs:
+                output_dir = root
+                break
+        assert output_dir, "annotation output directory not found"
+
+        records = load_annotations_from_output_dir(output_dir, [])
+        mine = [r for r in records
+                if r["user_id"] == "member_cara" and r["instance_id"] == "r1"]
+        assert mine, "cara's r1 annotation missing from the export"
+        room = mine[0]["_room"]["sarcasm"]
+        assert room["room_id"] == flask_server._rooms_test_room_id
+        assert room["changed_after_reveal"] is True
+
+        row = _flatten_annotation(mine[0])
+        assert row["sarcasm._room_id"] == flask_server._rooms_test_room_id
+        assert json.loads(row["sarcasm._room"])["initial_vote"] == "Sincere"
+
     def test_03_jsonl_event_log_on_disk(self, flask_server):
         room_id = flask_server._rooms_test_room_id
         rooms_dir = None

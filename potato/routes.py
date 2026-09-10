@@ -1,6 +1,18 @@
 """
 Flask Routes Module
 
+IMPORT ORDER MATTERS. The handlers below are registered with module-level
+``@app.route`` decorators against ``potato.flask_server.app``, and
+``create_app()`` rebinds that global to the app it builds. So importing this
+module after such an app has served its first request raises Flask's
+
+    AssertionError: The setup method 'route' can no longer be called on the
+    application. It has already handled its first request.
+
+which names nothing about Potato and reads as a Flask problem. Import
+``potato.routes`` before anything serves. See the note at the ``global app``
+line in ``create_app`` and ``tests/unit/test_routes_import_order.py``.
+
 All the route handlers for the Flask server, covering:
 - User authentication and session management
 - Navigation between annotation phases
@@ -7654,6 +7666,15 @@ def track_interactions():
         if hasattr(user_state, "get_presentation_order") else {}
     if shown_orders and hasattr(bd, "presentation_order"):
         bd.presentation_order = dict(shown_orders)
+
+    # Same mirror, same reason, for the room an answer was produced in. A
+    # member who opens a room item in the ordinary annotation UI afterwards
+    # gets a behavioural bucket created here, after the room already wrote its
+    # provenance; without this the bucket would say nothing about the room.
+    room_prov = user_state.get_room_provenance(instance_id) \
+        if hasattr(user_state, "get_room_provenance") else {}
+    if room_prov and hasattr(bd, "room_provenance"):
+        bd.room_provenance = dict(room_prov)
 
     # Record server timestamp for each event
     server_timestamp = time_module.time()

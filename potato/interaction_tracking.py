@@ -317,6 +317,11 @@ class BehavioralData:
     chat_history: List[ChatMessage] = field(default_factory=list)
     typing_summaries: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     annotation_telemetry: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    #: schema -> the multiplayer room this answer was produced in, mirrored
+    #: from user_state.instance_id_to_room_provenance so that every consumer
+    #: reading behavioural data gets it without knowing about a second store.
+    #: A room answer is a group answer; nothing else in the record says so.
+    room_provenance: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -349,6 +354,7 @@ class BehavioralData:
             ],
             'typing_summaries': self.typing_summaries,
             'annotation_telemetry': self.annotation_telemetry,
+            'room_provenance': dict(self.room_provenance),
         }
 
     @classmethod
@@ -404,6 +410,7 @@ class BehavioralData:
         # deserialize unchanged.
         bd.typing_summaries = data.get('typing_summaries', {})
         bd.annotation_telemetry = data.get('annotation_telemetry', {})
+        bd.room_provenance = data.get('room_provenance', {}) or {}
 
         return bd
 

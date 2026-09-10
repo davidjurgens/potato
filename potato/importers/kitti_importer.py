@@ -215,7 +215,14 @@ class KITTIImporter(BaseAnnotationImporter):
                 pass
         if len(fields) >= 16:
             try:
-                attributes["score"] = float(fields[15])
+                # KITTI's 16th column is a detector score, which is the same
+                # quantity COCO calls `score` and Open Images calls
+                # `Confidence`. It goes to the top-level `confidence` with the
+                # rest of them rather than into `attributes` under a third
+                # spelling -- that is the key the client round-trips and the
+                # COCO exporter writes, and nothing reads it back out of
+                # `attributes` (the KITTI exporter never emits a score column).
+                obj["confidence"] = float(fields[15])
             except ValueError:
                 pass
 

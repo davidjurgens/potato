@@ -99,7 +99,8 @@ class ParquetExporter(BaseExporter):
 
             # 2. Write spans.parquet
             if include_spans:
-                span_rows = self._build_span_rows(context.annotations, context)
+                span_rows = self._build_span_rows(
+                    context.annotations, context, warnings)
                 if span_rows:
                     span_path = os.path.join(output_path, "spans.parquet")
                     span_table = pa.Table.from_pylist(span_rows)
@@ -425,16 +426,73 @@ class ParquetExporter(BaseExporter):
             rows.append(row)
         return rows
 
+    #: Stored span key -> the column it is written to, where the two differ.
+    #: Renames and aliases both, because to the completeness check they are the
+    #: same thing: the key reaches the file under another name.
+    #:
+    #: `id` becomes `span_id` so it does not read as a generic row id beside
+    #: `instance_id` and `user_id`. `name`/`label`/`title` are the three
+    #: spellings the label has been written under and all feed the `label`
+    #: column; `value`/`text` likewise feed `text`.
+    #:
+    #: `label` and `value` are read by `_build_span_rows` as fallbacks but are
+    #: NOT produced by `SpanAnnotation.to_dict()` today. They were in the drop
+    #: list, which was wrong twice over: they are not dropped, and an entry in
+    #: a drop list with no subject is a standing exemption that activates on
+    #: the day something starts writing that key. Declared here instead, and
+    #: `test_parquet_span_columns.py` drives each one to prove the fallback is
+    #: real rather than remembered.
+    SPAN_KEY_COLUMNS = {
+        "id": "span_id",
+        "name": "label",
+        "label": "label",
+        "title": "title",
+        "value": "text",
+        "text": "text",
+    }
+
+    #: The only key a stored span carries that deliberately gets no column:
+    #: `schema` is the dict key the span is filed under, so it is already the
+    #: `schema_name` column on every row.
+    SPAN_KEYS_NOT_COLUMNS = frozenset({"schema"})
+
+    @classmethod
+    def _span_key_is_placed(cls, key: str, row: dict) -> bool:
+        """Whether a stored span key reaches the exported row."""
+        if key in cls.SPAN_KEYS_NOT_COLUMNS:
+            return True
+        return cls.SPAN_KEY_COLUMNS.get(key, key) in row
+
     def _build_span_rows(self, annotations: List[dict],
-                         context: Optional["ExportContext"] = None) -> List[dict]:
+                         context: Optional["ExportContext"] = None,
+                         warnings: Optional[List[str]] = None) -> List[dict]:
         """Build flat row dicts for the spans table.
 
         Both content columns were empty on every row: `label` read a `label`
         key the stored span does not have -- it is `name` -- and `text` read a
         key nothing ever writes. So a reader could not even tell which label
         had been applied without going back to the csv.
+
+        The row used to be seven fixed keys, and everything else a stored span
+        carries was dropped without a word. `target_field` is the one that
+        breaks the file: it says which display field the drag was in, it varies
+        WITHIN a scheme (a scheme records in every span-target field on the
+        page), and nothing else recovers it -- the span id is
+        schema+label+offsets, so two spans over the same words in two fields
+        produce byte-identical rows. A multi-field span study handed over as
+        parquet had silently lost which field every span was drawn in.
+
+        `additional_parts` and `format_coords` are the same failure with more
+        of the annotation missing: a discontinuous span exported as its first
+        range alone, and a PDF span lost its page and box.
+
+        An empty column looks like a bug and an absent column looks like a
+        decision, which is why this went unnoticed through a previous pass over
+        this same builder. `tests/unit/test_parquet_span_columns.py` now fails
+        when the stored shape grows a key this does not place.
         """
         rows = []
+        unplaced = set()
         for ann in annotations:
             instance_id = ann.get("instance_id", "")
             user_id = ann.get("user_id", "")
@@ -449,7 +507,7 @@ class ParquetExporter(BaseExporter):
                     text = span.get("text") or span.get("value")
                     if not isinstance(text, str) and context is not None:
                         text = context.covered_text(instance_id, span)
-                    rows.append({
+                    row = {
                         "instance_id": instance_id,
                         "user_id": user_id,
                         "schema_name": schema_name,
@@ -460,7 +518,34 @@ class ParquetExporter(BaseExporter):
                                   or span.get("label")
                                   or span.get("title") or ""),
                         "text": text if isinstance(text, str) else "",
-                    })
+                        # Which display field the drag was in. Varies within a
+                        # scheme, and unrecoverable from anything else in the file.
+                        "target_field": span.get("target_field") or "",
+                        "title": span.get("title") or "",
+                        "span_id": span.get("id") or "",
+                    }
+                    # Structured extras as JSON, so the column is readable
+                    # without inventing a nested parquet schema per format.
+                    for key in ("format_coords", "additional_parts"):
+                        value = span.get(key)
+                        row[key] = _json_dumps(value) if value else ""
+                    for key in ("kb_id", "kb_source", "kb_label"):
+                        row[key] = span.get(key) or ""
+
+                    unplaced.update(
+                        key for key in span
+                        if not self._span_key_is_placed(key, row))
+                    rows.append(row)
+
+        # Said out loud rather than dropped. The whole defect above was a row
+        # builder quietly narrower than the thing it was building rows from.
+        if unplaced and warnings is not None:
+            warnings.append(
+                f"spans.parquet has no column for {sorted(unplaced)}; those "
+                f"keys are on the stored spans and are not in the exported "
+                f"file. Read the csv or jsonl export for them.")
+
+        self._align_columns(rows)
         return rows
 
     def _build_item_rows(self, items: Dict[str, dict]) -> List[dict]:

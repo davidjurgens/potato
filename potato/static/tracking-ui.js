@@ -286,8 +286,12 @@
                     bboxNorm: result.bbox || null,
                     // Marked so the annotator can tell a model's answer from
                     // their own, and so a later pass can count how many were
-                    // accepted unchanged.
-                    source: 'sam2'
+                    // accepted unchanged. Same two keys image shapes use --
+                    // the coarse origin and the model that produced it -- so
+                    // one query answers "what did a model draw here" across
+                    // both.
+                    source: 'ai',
+                    ai_model: 'sam2'
                 };
                 added += 1;
             }, this);

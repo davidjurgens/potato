@@ -18,6 +18,17 @@ cd potato
 pip install -r requirements.txt
 ```
 
+### Checking the install
+
+```bash
+potato --version
+```
+
+It prints the version, and the commit as well when Potato is running out of a
+git checkout. That is the line to quote in a bug report. See
+[Debugging](tools/debugging_guide.md#checking-what-you-installed) for what it
+says when two installs are visible at once.
+
 ## Creating Your First Annotation Task
 
 ### 1. Create a Task Directory

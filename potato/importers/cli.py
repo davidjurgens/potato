@@ -536,7 +536,8 @@ def _run_hub_import(parsed, options) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     return _write_project(parsed, result, source=parsed.hf_dataset,
-                          stem=parsed.hf_dataset.replace("/", "_"))
+                          stem=parsed.hf_dataset.replace("/", "_"),
+                          import_format="huggingface")
 
 
 def main(args=None) -> int:
@@ -655,11 +656,13 @@ def main(args=None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    return _write_project(parsed, result, source=parsed.input)
+    return _write_project(parsed, result, source=parsed.input,
+                          import_format=fmt)
 
 
 def _write_project(parsed, result, source: str,
-                   stem: Optional[str] = None) -> int:
+                   stem: Optional[str] = None,
+                   import_format: str = "") -> int:
     """
     Turn an ImportResult into a runnable project on disk.
 
@@ -667,6 +670,29 @@ def _write_project(parsed, result, source: str,
     input file at all, produces a byte-identical project rather than a second
     copy of this logic that drifts.
     """
+    # Both writes below -- the data file's `predictions` and --seed-user's
+    # saved work -- read `image.objects`, so the stamp goes on once, here,
+    # ahead of both. An imported box that says nothing about where it came from
+    # exports as though a person drew it.
+    stamped = result.stamp_import_provenance(import_format)
+    if stamped:
+        logger.info("Marked %d imported annotation(s) as source='import'%s",
+                    stamped,
+                    f" ({import_format})" if import_format else "")
+
+    # Structural, not a convention. Before this the invariant read "anything
+    # that builds an ImportResult and writes it must remember to stamp", and a
+    # future writer that forgot would produce shapes with no origin and nothing
+    # would fail. Checked after stamping, so it can only fire on an object the
+    # stamper could not reach.
+    unstamped = [obj for image in result.images for obj in image.objects
+                 if isinstance(obj, dict) and not obj.get("source")]
+    if unstamped:
+        raise AssertionError(
+            f"{len(unstamped)} imported annotation(s) have no `source` after "
+            f"stamping, so they would export as though a person drew them. "
+            f"First: {unstamped[0]}")
+
     os.makedirs(parsed.output_dir, exist_ok=True)
     data_dir = os.path.join(parsed.output_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
@@ -754,9 +780,22 @@ def _write_seed_user(output_dir: str, username: str, schema_name: str,
              json.dumps(image.objects)]
         ]
 
+    # The keys a real user_state.json carries, not only the two this function
+    # cares about. The loader now defaults what is missing, but a seeded
+    # annotator that owns no assignments is not the annotator this flag claims
+    # to have fabricated: the items would be recorded as answered by someone
+    # they were never given to, and progress and assignment would both read
+    # zero for a project that is fully annotated.
+    ordering = list(label_to_value)
     state = {
         "user_id": username,
+        "max_assignments": -1,
+        "instance_id_ordering": ordering,
+        "current_instance_index": 0,
         "instance_id_to_label_to_value": label_to_value,
+        "instance_id_to_span_to_value": {},
+        "phase_to_page_to_label_to_value": {},
+        "phase_to_page_to_span_to_value": {},
     }
     with open(os.path.join(user_dir, "user_state.json"), "w") as f:
         json.dump(state, f, indent=2)

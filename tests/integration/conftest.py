@@ -210,6 +210,15 @@ def pytest_generate_tests(metafunc):
     """
     if "config_file" in metafunc.fixturenames:
         configs = get_example_configs()
+        # Raised at collection rather than parametrizing over nothing. An empty
+        # list here does not fail any test -- pytest emits one skipped
+        # placeholder per test, which reads as "not applicable here" rather
+        # than "the examples directory is gone".
+        if not configs:
+            raise RuntimeError(
+                f"no example configs found under {PROJECT_ROOT / 'examples'}; "
+                f"every test taking the `config_file` fixture would skip "
+                f"rather than fail")
         ids = [c.stem for c in configs]
         metafunc.parametrize("config_file", configs, ids=ids)
 

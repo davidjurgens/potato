@@ -96,8 +96,44 @@ withheld from whoever is collecting the data. The payload carries
 
 With `persist_votes: true` (the default), each member's **final** vote on a
 revealed item is written into their regular annotation state when the host
-advances — room work counts as real annotations and flows into every
-existing export path.
+advances, so room work counts as real annotations and flows into every existing
+export path.
+
+Each of those answers records the room it came from. A room answer is not an
+independent one: the member saw everyone else's label at the reveal and may
+have changed their own afterwards, so agreement computed across two members of
+one room measures the discussion rather than the annotators. Room work and solo
+work are otherwise identical on disk, so the room is stamped at the point the
+answer is written.
+
+The record sits under `instance_id_to_room_provenance` in `user_state.json`,
+keyed by instance and then by scheme:
+
+```json
+{
+  "r1": {
+    "sarcasm": {
+      "room_id": "MKT4QP",
+      "room_type": "norming",
+      "role": "member",
+      "vote": "Sarcastic",
+      "initial_vote": "Sincere",
+      "changed_after_reveal": true,
+      "n_voters": 3,
+      "recorded_at": 1789000000.0
+    }
+  }
+}
+```
+
+`vote` is what landed in the annotation store. `initial_vote` is the blind one,
+cast before the member saw anyone else, and is what an analysis that needs
+independent judgments should read. The two differ exactly when someone changed
+their mind after the reveal.
+
+CSV and TSV exports carry two columns per scheme: `<scheme>._room_id` for
+grouping, and `<scheme>._room` with the whole record as JSON. JSON exports
+carry it under `_room`.
 
 ## API summary
 

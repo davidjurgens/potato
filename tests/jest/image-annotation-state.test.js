@@ -63,7 +63,14 @@ function makeManager(masks, objects) {
     // Rendering and the DOM are not what these tests are about.
     m._renderAllMasks = jest.fn();
     m._showMaskCanvas = jest.fn();
+    m._syncMaskCanvasForTool = jest.fn();
     m._updateMaskData = jest.fn();
+    // `_syncCanvasHeightToWrapper` reads the real canvas element to find its
+    // `.canvas-wrapper`. Returning an element with no such ancestor is the
+    // honest stand-in here: these tests are about state, and the height sync
+    // has nothing to sync to. Without it every resize test threw
+    // `this.canvas.getElement is not a function` before reaching its assertion.
+    m.canvas.getElement = () => ({ closest: () => null });
     return m;
 }
 
@@ -74,10 +81,14 @@ describe('clearAnnotations', () => {
         m.clearAnnotations();
 
         expect(Object.keys(m.masks)).toHaveLength(0);
-        // The overlay must be repainted and hidden, or the cleared pixels stay
-        // on screen over the next image.
+        // The overlay must be repainted, or the cleared pixels stay on screen
+        // over the next image. Whether it is then SHOWN is the armed tool's
+        // call, not this method's: clearAnnotations used to hide it
+        // unconditionally, which left a brush-only study unable to paint at
+        // all. This manager has the brush armed, so it stays up.
         expect(m._renderAllMasks).toHaveBeenCalled();
-        expect(m._showMaskCanvas).toHaveBeenCalledWith(false);
+        expect(m._syncMaskCanvasForTool).toHaveBeenCalled();
+        expect(m._showMaskCanvas).not.toHaveBeenCalledWith(false);
     });
 
     test('leaves nothing for the serializer to re-emit', () => {
@@ -990,6 +1001,8 @@ describe('_handleFreeformPath', () => {
         // was drawn and then dropped on save.
         expect(path.annotationData).toEqual({
             type: 'freeform', label: 'road', color: '#ff0000',
+            // Drawn here, by a person. See tests/jest/shape-provenance.test.js.
+            source: 'human',
         });
         expect(m._updateAnnotationData).toHaveBeenCalled();
     });

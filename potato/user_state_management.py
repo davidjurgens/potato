@@ -1541,6 +1541,11 @@ class UserState:
         # potato/server_utils/presentation_order.py.
         d['instance_id_to_presentation_order'] = self.instance_id_to_presentation_order
 
+        # Which room produced each answer, if any. See
+        # instance_id_to_room_provenance in __init__.
+        d['instance_id_to_room_provenance'] = getattr(
+            self, 'instance_id_to_room_provenance', {})
+
         # Save crowdsourcing platform metadata (provider, study/session IDs)
         d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
 
@@ -1600,11 +1605,20 @@ class UserState:
         def to_phase_and_page(t: tuple[str,str]) -> tuple[UserPhase,str]:
             return (UserPhase.fromstr(t[0]), t[1])
 
-        user_state = InMemoryUserState(j['user_id'], j['max_assignments'])
+        # Read with .get() and the constructor's own defaults. These were
+        # indexed directly, so a state file missing any one of them killed the
+        # server at boot with a bare KeyError naming a dict key -- and the
+        # writers are not all this class. `potato import --seed-user NAME`
+        # writes only `user_id` and `instance_id_to_label_to_value`, so the
+        # project it produces printed "Run it:" and then would not start;
+        # state files written by older Potatoes are the same shape of problem.
+        # An absent key means the user has done nothing yet, which is exactly
+        # what a fresh UserState represents.
+        user_state = InMemoryUserState(j['user_id'], j.get('max_assignments', -1))
 
-        user_state.instance_id_ordering = j['instance_id_ordering']
-        user_state.assigned_instance_ids = set(j['instance_id_ordering'])
-        user_state.current_instance_index = j['current_instance_index']
+        user_state.instance_id_ordering = j.get('instance_id_ordering', [])
+        user_state.assigned_instance_ids = set(user_state.instance_id_ordering)
+        user_state.current_instance_index = j.get('current_instance_index', 0)
 
         # Restore behavioral data (used for interaction tracking)
         from potato.interaction_tracking import BehavioralData
@@ -1615,13 +1629,13 @@ class UserState:
             else:
                 user_state.instance_id_to_behavioral_data[instance_id] = bd_dict
 
-        for iid, l2v in j['instance_id_to_label_to_value'].items():
+        for iid, l2v in j.get('instance_id_to_label_to_value', {}).items():
             user_state.instance_id_to_label_to_value[iid] = {to_label(k): v for k, v in l2v}
 
-        for iid, s2v in j['instance_id_to_span_to_value'].items():
+        for iid, s2v in j.get('instance_id_to_span_to_value', {}).items():
             user_state.instance_id_to_span_to_value[iid] = {to_span(k): v for k, v in s2v}
 
-        for phase, p2l2lv in j['phase_to_page_to_label_to_value'].items():
+        for phase, p2l2lv in j.get('phase_to_page_to_label_to_value', {}).items():
             phase = UserPhase.fromstr(phase)
             for page, lv_list in p2l2lv.items():
                 for lv in lv_list:
@@ -1630,7 +1644,7 @@ class UserState:
                     value = lv[1]
                     user_state.phase_to_page_to_label_to_value[phase][page][label] = value
 
-        for phase, p2s2v in j['phase_to_page_to_span_to_value'].items():
+        for phase, p2s2v in j.get('phase_to_page_to_span_to_value', {}).items():
             phase = UserPhase.fromstr(phase)
             for page, sv_list in p2s2v.items():
                 for sv in sv_list:
@@ -1639,11 +1653,16 @@ class UserState:
                     value = sv[1]
                     user_state.phase_to_page_to_span_to_value[phase][page][span] = value
 
-        # These require converting the dictionaries back to the original types
-        user_state.current_phase_and_page = to_phase_and_page(j['current_phase_and_page'])
-        user_state.completed_phase_and_pages = [
-            to_phase_and_page(pp) for pp in j['completed_phase_and_pages']
-        ]
+        # These require converting the dictionaries back to the original types.
+        # Assigned only when present, so the constructor's own starting phase
+        # stays authoritative for a state file that never recorded one.
+        if 'current_phase_and_page' in j:
+            user_state.current_phase_and_page = to_phase_and_page(
+                j['current_phase_and_page'])
+        if 'completed_phase_and_pages' in j:
+            user_state.completed_phase_and_pages = [
+                to_phase_and_page(pp) for pp in j['completed_phase_and_pages']
+            ]
 
         # Restore training state if present
         if 'training_state' in j:
@@ -1660,6 +1679,8 @@ class UserState:
             user_state.instance_id_to_keyword_highlight_state = j['instance_id_to_keyword_highlight_state']
         if 'instance_id_to_presentation_order' in j:
             user_state.instance_id_to_presentation_order = j['instance_id_to_presentation_order']
+        if 'instance_id_to_room_provenance' in j:
+            user_state.instance_id_to_room_provenance = j['instance_id_to_room_provenance']
 
         # Restore span link annotations if present
         if 'instance_id_to_link_to_value' in j:
@@ -2050,6 +2071,19 @@ class InMemoryUserState(UserState):
         # the behavioural record on save by the same code path.
         self.instance_id_to_presentation_order: Dict[str, Dict[str, list]] = {}
 
+        # Which multiplayer room an answer was produced in, per instance.
+        # Maps instance_id -> {scheme_name: {room_id, room_type, role, vote,
+        # initial_vote, changed_after_reveal, n_voters, recorded_at}}.
+        #
+        # A room vote is written straight into the annotation store by
+        # rooms/manager.py, so once exported it is indistinguishable from an
+        # independent judgement -- which is the one fact that decides whether
+        # the agreement number computed over it means anything. Kept here
+        # rather than only on behavioural data for the same reason
+        # instance_id_to_presentation_order is: `update_annotation_state`
+        # replaces instance_id_to_behavioral_data wholesale on every save.
+        self.instance_id_to_room_provenance: Dict[str, Dict[str, Any]] = {}
+
         # Span link annotations - stores relationships between spans
         # Maps instance_id -> {link_id -> SpanLink}
         self.instance_id_to_link_to_value: Dict[str, Dict[str, SpanLink]] = defaultdict(dict)
@@ -2112,6 +2146,24 @@ class InMemoryUserState(UserState):
         stored = self.instance_id_to_presentation_order.setdefault(instance_id, {})
         for scheme_name, order in orders.items():
             stored.setdefault(scheme_name, list(order))
+
+    def get_room_provenance(self, instance_id: str) -> Dict[str, Any]:
+        """Which room, if any, produced this user's answers on this instance."""
+        return self.instance_id_to_room_provenance.get(instance_id, {})
+
+    def record_room_provenance(self, instance_id: str, scheme_name: str,
+                               record: Dict[str, Any]) -> None:
+        """Note that a room session produced this user's answer.
+
+        The latest record for a scheme wins. A room can revisit an item and a
+        member can change their vote after the reveal, and the answer that ends
+        up in the export is the last one written, so the provenance beside it
+        has to be the last one too.
+        """
+        if not scheme_name or not record:
+            return
+        stored = self.instance_id_to_room_provenance.setdefault(instance_id, {})
+        stored[scheme_name] = dict(record)
 
     def add_new_assigned_data(self, new_assigned_data):
         """
@@ -3071,6 +3123,11 @@ class InMemoryUserState(UserState):
         # potato/server_utils/presentation_order.py.
         d['instance_id_to_presentation_order'] = self.instance_id_to_presentation_order
 
+        # Which room produced each answer, if any. See
+        # instance_id_to_room_provenance in __init__.
+        d['instance_id_to_room_provenance'] = getattr(
+            self, 'instance_id_to_room_provenance', {})
+
         # Save span link annotations
         d['instance_id_to_link_to_value'] = {}
         for instance_id, links in self.instance_id_to_link_to_value.items():
@@ -3144,14 +3201,23 @@ class InMemoryUserState(UserState):
         def to_phase_and_page(t: tuple[str,str]) -> tuple[UserPhase,str]:
             return (UserPhase.fromstr(t[0]), t[1])
 
-        user_state = InMemoryUserState(j['user_id'], j['max_assignments'])
+        # Read with .get() and the constructor's own defaults. These were
+        # indexed directly, so a state file missing any one of them killed the
+        # server at boot with a bare KeyError naming a dict key -- and the
+        # writers are not all this class. `potato import --seed-user NAME`
+        # writes only `user_id` and `instance_id_to_label_to_value`, so the
+        # project it produces printed "Run it:" and then would not start;
+        # state files written by older Potatoes are the same shape of problem.
+        # An absent key means the user has done nothing yet, which is exactly
+        # what a fresh UserState represents.
+        user_state = InMemoryUserState(j['user_id'], j.get('max_assignments', -1))
 
-        user_state.instance_id_ordering = j['instance_id_ordering']
-        user_state.assigned_instance_ids = set(j['instance_id_ordering'])
+        user_state.instance_id_ordering = j.get('instance_id_ordering', [])
+        user_state.assigned_instance_ids = set(user_state.instance_id_ordering)
         user_state.instance_id_to_order = user_state.generate_id_order_mapping(
             user_state.instance_id_ordering
         )
-        user_state.current_instance_index = j['current_instance_index']
+        user_state.current_instance_index = j.get('current_instance_index', 0)
 
         # Restore behavioral data (used for interaction tracking)
         from potato.interaction_tracking import BehavioralData
@@ -3162,13 +3228,13 @@ class InMemoryUserState(UserState):
             else:
                 user_state.instance_id_to_behavioral_data[instance_id] = bd_dict
 
-        for iid, l2v in j['instance_id_to_label_to_value'].items():
+        for iid, l2v in j.get('instance_id_to_label_to_value', {}).items():
             user_state.instance_id_to_label_to_value[iid] = {to_label(k): v for k, v in l2v}
 
-        for iid, s2v in j['instance_id_to_span_to_value'].items():
+        for iid, s2v in j.get('instance_id_to_span_to_value', {}).items():
             user_state.instance_id_to_span_to_value[iid] = {to_span(k): v for k, v in s2v}
 
-        for phase, p2l2lv in j['phase_to_page_to_label_to_value'].items():
+        for phase, p2l2lv in j.get('phase_to_page_to_label_to_value', {}).items():
             phase = UserPhase.fromstr(phase)
             for page, lv_list in p2l2lv.items():
                 for lv in lv_list:
@@ -3177,7 +3243,7 @@ class InMemoryUserState(UserState):
                     value = lv[1]
                     user_state.phase_to_page_to_label_to_value[phase][page][label] = value
 
-        for phase, p2s2v in j['phase_to_page_to_span_to_value'].items():
+        for phase, p2s2v in j.get('phase_to_page_to_span_to_value', {}).items():
             phase = UserPhase.fromstr(phase)
             for page, sv_list in p2s2v.items():
                 for sv in sv_list:
@@ -3186,11 +3252,16 @@ class InMemoryUserState(UserState):
                     value = sv[1]
                     user_state.phase_to_page_to_span_to_value[phase][page][span] = value
 
-        # These require converting the dictionaries back to the original types
-        user_state.current_phase_and_page = to_phase_and_page(j['current_phase_and_page'])
-        user_state.completed_phase_and_pages = [
-            to_phase_and_page(pp) for pp in j['completed_phase_and_pages']
-        ]
+        # These require converting the dictionaries back to the original types.
+        # Assigned only when present, so the constructor's own starting phase
+        # stays authoritative for a state file that never recorded one.
+        if 'current_phase_and_page' in j:
+            user_state.current_phase_and_page = to_phase_and_page(
+                j['current_phase_and_page'])
+        if 'completed_phase_and_pages' in j:
+            user_state.completed_phase_and_pages = [
+                to_phase_and_page(pp) for pp in j['completed_phase_and_pages']
+            ]
 
         # Restore training state if present
         if 'training_state' in j:
@@ -3207,6 +3278,8 @@ class InMemoryUserState(UserState):
             user_state.instance_id_to_keyword_highlight_state = j['instance_id_to_keyword_highlight_state']
         if 'instance_id_to_presentation_order' in j:
             user_state.instance_id_to_presentation_order = j['instance_id_to_presentation_order']
+        if 'instance_id_to_room_provenance' in j:
+            user_state.instance_id_to_room_provenance = j['instance_id_to_room_provenance']
 
         # Restore span link annotations if present
         if 'instance_id_to_link_to_value' in j:

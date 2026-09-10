@@ -1087,6 +1087,13 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
 
         # Query the visual endpoint
         result = endpoint.get_visual_ai(data, output_format)
+        # Name the model on the way out. An accepted detection is stored beside
+        # hand-drawn shapes and is indistinguishable from one; recording that it
+        # came from a model is only half the fact, because which model it came
+        # from is what a later comparison needs and is not recoverable from the
+        # annotation afterwards.
+        if isinstance(result, dict) and not result.get("model"):
+            result["model"] = getattr(endpoint, "model", "") or ""
         return result
 
     def generate_video_annotation(self, instance_id, annotation_id: int, ai_assistant: str) -> Dict:
@@ -1153,6 +1160,13 @@ Respond in JSON format: {{"label_keywords": [{{"label": "<option>", "keywords": 
 
         # Query the visual endpoint
         result = endpoint.get_visual_ai(data, output_format)
+        # Name the model on the way out. An accepted detection is stored beside
+        # hand-drawn shapes and is indistinguishable from one; recording that it
+        # came from a model is only half the fact, because which model it came
+        # from is what a later comparison needs and is not recoverable from the
+        # annotation afterwards.
+        if isinstance(result, dict) and not result.get("model"):
+            result["model"] = getattr(endpoint, "model", "") or ""
         return result
 
     def _get_visual_endpoint(self):

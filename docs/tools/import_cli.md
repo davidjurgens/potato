@@ -152,9 +152,27 @@ Also writes the imported annotations as `NAME`'s saved work. This
 **fabricates an annotator** and exists so import→export can be verified without
 a human opening every item. Off by default for exactly that reason.
 
+The seeded annotator is assigned every item it holds work for, so progress and
+assignment read the project as annotated rather than as untouched.
+
 ### `--config-only`
 
 Regenerate `config.yaml` without touching an existing data file.
+
+## Provenance
+
+Every imported shape is stamped `source: import`, along with the format it came
+in as `import_format`. A file that already records where a shape came from
+keeps what it says, so a COCO file Potato itself exported survives the round
+trip with its human/model split intact. A detector's own score arrives as
+`confidence` whatever the source format calls it: `score` in COCO, the
+sixteenth column in KITTI, `Confidence` in Open Images, `conf` in MOT.
+
+The importer refuses to write a project in which any shape has no `source`. An
+imported box and a hand-drawn one are otherwise identical once stored, so
+without this the export reports every imported shape as annotation effort.
+
+See [Where a shape came from](../annotation-types/multimedia/image_annotation.md#where-a-shape-came-from).
 
 ## What gets written
 

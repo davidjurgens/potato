@@ -40,6 +40,27 @@ from .base import BaseAnnotationImporter, ImportedImage, ImportResult
 
 logger = logging.getLogger(__name__)
 
+
+def _provenance(ann: dict) -> dict:
+    """Provenance keys for one COCO annotation, in Potato's spelling.
+
+    COCO calls a detector's own score ``score``, and it appears on results
+    files -- exactly the seeded-from-a-detector case ``source: ai`` exists to
+    describe. Without this mapping a file that knows the model was 40% sure
+    imported as a shape saying only that it was imported.
+
+    Everything else passes through under its own name, so a COCO file Potato
+    wrote keeps the ``source``/``ai_model``/``edited`` it left there.
+    """
+    record = dict(ann)
+    if "confidence" not in record and record.get("score") is not None:
+        try:
+            record["confidence"] = float(record["score"])
+        except (TypeError, ValueError):
+            pass
+    return record
+
+
 #: Distinct, reasonably separable colors for generated label configs.
 DEFAULT_PALETTE = [
     "#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4",
@@ -283,6 +304,12 @@ class COCOImporter(BaseAnnotationImporter):
                     obj = to_client_object(
                         "polygon", label, color, img_w=width, img_h=height,
                         points=points, iscrowd=1 if is_crowd else 0,
+                        # A COCO file Potato itself wrote says who drew each
+                        # shape. Dropping it here and stamping the whole import
+                        # as `source: import` would lose the person/model split
+                        # on every round trip -- which is the one thing this
+                        # field exists to survive.
+                        provenance=_provenance(ann),
                     )
                     if obj:
                         objects.append(obj)
@@ -338,6 +365,7 @@ class COCOImporter(BaseAnnotationImporter):
                 obj = to_client_object(
                     "mask", label, color, img_w=width, img_h=height, rle=rle,
                     instance=instance, iscrowd=1 if is_crowd else 0,
+                    provenance=_provenance(ann),
                 )
                 if obj:
                     objects.append(obj)
@@ -351,6 +379,7 @@ class COCOImporter(BaseAnnotationImporter):
                 "bbox", label, color, img_w=width, img_h=height,
                 bbox=[float(b) for b in bbox[:4]],
                 iscrowd=1 if is_crowd else 0,
+                provenance=_provenance(ann),
             )
             if obj:
                 objects.append(obj)
@@ -396,6 +425,7 @@ class COCOImporter(BaseAnnotationImporter):
             # Names live on the schema's skeleton definition rather than being
             # baked into each annotation; record which one applies.
             skeleton=self._skeleton_name(label, keypoint_names),
+            provenance=_provenance(ann),
         )
         if not obj:
             return []

@@ -5391,6 +5391,24 @@ def create_app(config_file=None):
     Returns:
         The configured Flask application instance
     """
+    # REBINDS the module global. `potato/routes.py` registers 159 handlers with
+    # module-level `@app.route` decorators against this name, so which app they
+    # land on depends on when routes is first imported.
+    #
+    # The invariant that follows: **`potato.routes` must be imported before any
+    # app returned by create_app() handles its first request.** Flask refuses a
+    # `route` call on an app that has already served, and the message it raises
+    # names nothing about Potato:
+    #
+    #     AssertionError: The setup method 'route' can no longer be called on
+    #     the application. It has already handled its first request.
+    #
+    # The normal path satisfies this below, where `from routes import
+    # configure_routes` runs before anything serves. Anything that imports
+    # potato.routes lazily -- a plugin, a test that builds an app first -- can
+    # violate it, and `pytest tests/unit/test_proxy_prefix_static_urls.py
+    # tests/unit/test_qa_bugfix_regressions.py` is a two-file reproduction.
+    # tests/unit/test_routes_import_order.py pins the normal path.
     global app
 
     # If a config file was provided, perform full initialization first.
@@ -6335,6 +6353,17 @@ def main():
 
     This function initializes the application, loads data, and runs the server.
     """
+    # ``--version`` has to answer BEFORE the parser runs. `mode` and
+    # `config_file` are both required positionals, so `potato --version` used to
+    # exit 2 with a usage block -- which reads as a broken install rather than a
+    # missing flag, and made `potato --version || pip install potato-annotation`
+    # always take the install branch and drop a wheel on a working checkout.
+    # `version` is accepted as a bare word too, because people type both.
+    if len(sys.argv) > 1 and sys.argv[1] in ('--version', '-V', 'version'):
+        from potato.version_info import version_report
+        print(version_report())
+        sys.exit(0)
+
     # ``transcripts`` is dispatched before the server's own argument parsing.
     # It takes input paths rather than a config file and has its own flags, so
     # routing it through the server parser would mean bending both.

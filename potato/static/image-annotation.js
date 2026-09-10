@@ -14,6 +14,48 @@
  * on page load rather than as a bare ReferenceError from inside a brush stroke
  * — which is what an annotator would hit, mid-gesture, halfway through a task.
  */
+/**
+ * Provenance keys carried on every shape and mask, from the moment it is made
+ * to the moment it is exported.
+ *
+ * `source` answers the only question that cannot be reconstructed afterwards:
+ * did a person put this shape here, or did a model? An accepted detection and
+ * a hand-drawn box are byte-identical once stored, so a study that pre-labels
+ * with a detector cannot report its own acceptance rate from its own data --
+ * and that rate is the number such a study exists to produce.
+ *
+ * Values: 'human' (drawn here), 'ai' (a model proposed it and it was
+ * accepted), 'import' (it arrived with the data). `ai_model` names the model
+ * when one is known, `confidence` is the detector's own score, and `edited`
+ * marks a non-human shape whose geometry or label the annotator has since
+ * changed -- accepted-as-is and accepted-then-corrected are different events
+ * and only the first is agreement with the model.
+ *
+ * The same vocabulary as process_reward's `source`/`ai_reward` and the
+ * tracking overlay's per-keyframe `source`; deliberately not a second spelling.
+ */
+const PROVENANCE_KEYS = ['source', 'ai_model', 'confidence', 'edited',
+                         'carried_over', 'import_format'];
+
+/**
+ * Copy whichever provenance keys `src` declares onto `target`, and nothing
+ * else. Absent means unknown, which is what pre-provenance data honestly is;
+ * it must not be silently rewritten to 'human'.
+ */
+function carryProvenance(target, src) {
+    if (!target || !src) return target;
+    PROVENANCE_KEYS.forEach(function (key) {
+        // NOT `if (!value)`. That short form is the natural way to write
+        // this and it eats `confidence: 0`, `edited: false` and
+        // `carried_over: false`, all of which are real answers. Strict
+        // comparison against '' catches only genuinely empty strings.
+        const value = src[key];
+        if (value === undefined || value === null || value === '') return;
+        target[key] = value;
+    });
+    return target;
+}
+
 const MaskBuffer = (function () {
     const scope = (typeof globalThis !== 'undefined') ? globalThis
         : (typeof window !== 'undefined' ? window : null);
@@ -427,6 +469,13 @@ class ImageAnnotationManager {
         this.canvas.on('object:modified', (opt) => {
             const data = opt && opt.target && opt.target.annotationData;
             if (data) this._telemetry('shape_edit', { shape: data.type });
+            // A model's box that the annotator moved is not the model's box any
+            // more. Accepted-as-is and accepted-then-corrected are different
+            // events, and only the first is agreement with the model; without
+            // this they export identically.
+            if (data && data.source && data.source !== 'human') {
+                data.edited = true;
+            }
             this._saveState();
             this._updateAnnotationData();
         });
@@ -1286,6 +1335,7 @@ class ImageAnnotationManager {
                 label: this.currentLabel,
                 color: this.currentColor,
                 buffer: new MaskBuffer(this.maskImgWidth, this.maskImgHeight),
+                source: 'human',
             };
             if (this.config.maskMode === 'instance') {
                 this.masks[maskKey].instance = this.activeInstance;
@@ -2168,6 +2218,7 @@ class ImageAnnotationManager {
                 type: 'bbox',
                 label: this.currentLabel,
                 color: this.currentColor,
+                source: 'human',
             };
             this._saveState();
             this._updateAnnotationData();
@@ -2268,6 +2319,7 @@ class ImageAnnotationManager {
             type: isPolyline ? 'polyline' : 'polygon',
             label: this.currentLabel,
             color: this.currentColor,
+            source: 'human',
         };
 
         this.canvas.add(shape);
@@ -2412,6 +2464,7 @@ class ImageAnnotationManager {
             type: 'keypoint_set',
             label: this.currentLabel,
             color: this.currentColor,
+            source: 'human',
             skeleton: skeletonName,
             // The point list is carried on the object because a fabric Group
             // cannot be reduced back to ordered keypoints: it holds lines and
@@ -2511,6 +2564,7 @@ class ImageAnnotationManager {
             type: 'cuboid_2d',
             label: this.currentLabel,
             color: this.currentColor,
+            source: 'human',
             front: front.map(p => ({ x: p.x, y: p.y })),
             back: back.map(p => ({ x: p.x, y: p.y })),
         };
@@ -2580,6 +2634,7 @@ class ImageAnnotationManager {
                 type: 'ellipse',
                 label: this.currentLabel,
                 color: this.currentColor,
+                source: 'human',
             };
             this._saveState();
             this._updateAnnotationData();
@@ -2612,6 +2667,7 @@ class ImageAnnotationManager {
             type: 'landmark',
             label: this.currentLabel,
             color: this.currentColor,
+            source: 'human',
         };
 
         // Add label text
@@ -2665,6 +2721,7 @@ class ImageAnnotationManager {
             type: 'freeform',
             label: this.currentLabel,
             color: this.currentColor,
+            source: 'human',
         };
 
         path.set({
@@ -2700,6 +2757,17 @@ class ImageAnnotationManager {
         if (!obj || !obj.type) {
             console.warn('[image-annotation] addAnnotation: missing object or type');
             return false;
+        }
+        // Nothing that arrives here was drawn on this canvas, so an object with
+        // no `source` produces a shape whose origin cannot be recovered later.
+        // Said once rather than per shape: a carry-over of twenty legacy boxes
+        // is one fact, not twenty.
+        if (obj.source === undefined && !this._warnedMissingSource) {
+            this._warnedMissingSource = true;
+            console.warn(
+                '[image-annotation] addAnnotation: no `source` on a ' +
+                'programmatically added annotation; it will export with an ' +
+                "unknown origin. Pass source: 'ai' | 'import' | 'human'.");
         }
         if (!this.image) {
             console.warn('[image-annotation] addAnnotation: no image loaded yet');
@@ -2819,7 +2887,13 @@ class ImageAnnotationManager {
         objects.forEach(obj => {
             // Copied masks would collide with any mask of the same label
             // already painted here, so replace only when asked.
-            if (this.addAnnotation(obj)) added++; else skipped++;
+            // Carried over, not redrawn. The shape keeps whoever originated
+            // it -- a person's box copied forward is still a person's box --
+            // and gains the fact that this frame was not annotated from
+            // scratch, which twenty nudged boxes otherwise report as twenty
+            // fresh ones.
+            if (this.addAnnotation({...obj, carried_over: true})) added++;
+            else skipped++;
         });
 
         this._announce(added
@@ -3473,6 +3547,9 @@ class ImageAnnotationManager {
                 if (obj.annotationData.type === 'polyline') {
                     ann.closed = false;
                 }
+                // Who put this shape here. Written for every shape that knows,
+                // omitted for annotations made before provenance existed.
+                carryProvenance(ann, obj.annotationData);
                 annotations.push(ann);
             }
         });
@@ -3521,6 +3598,7 @@ class ImageAnnotationManager {
             if (mask.iscrowd !== undefined && mask.iscrowd !== null) {
                 entry.iscrowd = mask.iscrowd;
             }
+            carryProvenance(entry, mask);
             annotations.push(entry);
         }
 
@@ -3601,11 +3679,11 @@ class ImageAnnotationManager {
             ? `${ann.label}#${ann.instance}`
             : ann.label;
 
-        this.masks[key] = {
+        this.masks[key] = carryProvenance({
             label: ann.label,
             color: ann.color,
             buffer: buffer,
-        };
+        }, ann);
         if (ann.instance !== undefined && ann.instance !== null) {
             this.masks[key].instance = ann.instance;
         }
@@ -3837,13 +3915,13 @@ class ImageAnnotationManager {
                 });
                 // Carried through so the serializer can rebuild the ordered
                 // list; the Group itself cannot supply it.
-                obj.annotationData = {
+                obj.annotationData = carryProvenance({
                     type: 'keypoint_set',
                     label: ann.label,
                     color: ann.color,
                     skeleton: ann.skeleton || '',
                     keypoints: kps,
-                };
+                }, ann);
                 this.canvas.add(obj);
                 return;
             }
@@ -3872,10 +3950,10 @@ class ImageAnnotationManager {
                 obj = new fabric.Group(parts, {
                     selectable: true, hasControls: true,
                 });
-                obj.annotationData = {
+                obj.annotationData = carryProvenance({
                     type: 'cuboid_2d', label: ann.label, color: ann.color,
                     front: front, back: back,
-                };
+                }, ann);
                 this.canvas.add(obj);
                 return;
             }
@@ -3946,11 +4024,11 @@ class ImageAnnotationManager {
         }
 
         if (obj) {
-            obj.annotationData = {
+            obj.annotationData = carryProvenance({
                 type: ann.type,
                 label: ann.label,
                 color: ann.color,
-            };
+            }, ann);
             this.canvas.add(obj);
         }
     }
@@ -4479,6 +4557,9 @@ class ImageAnnotationManager {
 // Export for use in modules if needed
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = ImageAnnotationManager;
+    // The declared provenance vocabulary, so a test can ask this file what it
+    // claims to carry rather than restating the list and agreeing with itself.
+    module.exports.PROVENANCE_KEYS = PROVENANCE_KEYS;
 }
 
 // Make available in browser environments

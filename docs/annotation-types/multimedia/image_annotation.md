@@ -267,6 +267,56 @@ To convert to and from these shapes in Python, use
 `normalize_annotation_object()` and `to_client_object()` from
 `potato.export.cv_utils` rather than reading the fields directly.
 
+### Where a shape came from
+
+Every shape and mask records who put it there. An accepted detection and a
+hand-drawn box are otherwise identical once stored, so a project that
+pre-labels with a model cannot report its own acceptance rate from its own
+data.
+
+```json
+{
+  "type": "bbox",
+  "label": "person",
+  "color": "#FF6B6B",
+  "coordinates": {"x": 0.125, "y": 0.104, "width": 0.3125, "height": 0.625},
+  "source": "ai",
+  "ai_model": "yolov8n",
+  "confidence": 0.82,
+  "edited": true
+}
+```
+
+| Key | Meaning |
+|-----|---------|
+| `source` | `human` (drawn in the browser), `ai` (a model proposed it and the annotator accepted it), `import` (it arrived with the data) |
+| `ai_model` | Which model, when the endpoint reports one |
+| `confidence` | The detector's own score for this shape |
+| `edited` | The annotator has since moved, resized or relabeled a shape that was not theirs |
+| `carried_over` | Copied forward from the previous image rather than made on this one |
+| `import_format` | The file format an imported shape arrived in, e.g. `coco` |
+
+`edited` is what separates accepting a box as-is from accepting it and then
+correcting it. Only the first is agreement with the model.
+
+A shape with no `source` is one whose origin is unknown, which is what
+annotations made before this field existed are. Nothing rewrites them.
+
+Shapes read in by `potato import` are stamped `source: import` unless the file
+already says otherwise, so a COCO file Potato itself exported keeps its
+human/model split across a round trip. A COCO results file carries the
+detector's own score as `score`, and that arrives as `confidence`. So does
+KITTI's sixteenth column, Open Images' `Confidence` and MOT's `conf`: one
+quantity, one column, whatever the source format calls it. The importer
+refuses to write a project in which any shape has no `source`, so a new import
+path cannot quietly produce shapes that export as though a person drew them.
+
+The COCO exporter writes these keys onto each annotation object; COCO has no
+field of its own for them.
+
+Tracked video shapes use the same two keys. A keyframe filled in by the
+propagation model carries `source: "ai"` and `ai_model: "sam2"`.
+
 ## Segmentation Masks
 
 For pixel-level semantic segmentation tasks, use the brush, eraser, and fill tools. These create mask overlays that are stored as RLE (Run-Length Encoding) for efficiency.

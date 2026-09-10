@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import threading
+import time
 from collections import deque
 from typing import Any, Dict, Hashable, List, Optional
 
@@ -375,10 +376,56 @@ class RoomsManager:
                 annotations[Label(room.schema, label)] = "on"
                 if username not in ism.instance_annotators[instance_id]:
                     ism.register_annotator(instance_id, username)
+                self._record_provenance(room, item_state, user_state,
+                                        username, label)
                 usm.save_user_state(user_state)
         except Exception as e:
             logger.error("rooms: could not persist votes for room %s: %s",
                          room.room_id, e)
+
+    def _record_provenance(self, room: Room, item_state, user_state,
+                           username: str, label: str) -> None:
+        """Stamp the room onto the answer it just wrote.
+
+        Without this the export says the user answered the item and nothing
+        else. A room answer is not an independent one: the member saw their
+        peers' labels at the reveal and may have changed their own afterwards,
+        so any agreement statistic computed across two members of the same room
+        is measuring the discussion rather than the annotators. That is not a
+        defect the numbers show -- room work and solo work export identically
+        -- so it has to be recorded at the point the answer is written.
+
+        ``initial_vote`` is the blind one and is the value an analysis that
+        wants independent judgements should use; ``vote`` is what actually
+        landed in the annotation store. They differ exactly when the member
+        changed their mind after seeing the room.
+        """
+        initial = item_state.initial_votes.get(username)
+        record = {
+            "room_id": room.room_id,
+            "room_type": room.room_type,
+            "role": room.members[username].role,
+            "vote": label,
+            "initial_vote": initial,
+            "changed_after_reveal": initial is not None and initial != label,
+            "n_voters": len(item_state.current_votes),
+            "recorded_at": time.time(),
+        }
+        instance_id = item_state.instance_id
+        if hasattr(user_state, "record_room_provenance"):
+            user_state.record_room_provenance(instance_id, room.schema, record)
+        # Mirror onto the behavioural record when one already exists, so
+        # consumers that read behavioural data see it without knowing about the
+        # store above. Never created here: a bucket that exists only to hold
+        # this would report a zero-second session the annotator never had.
+        buckets = getattr(user_state, "instance_id_to_behavioral_data", None)
+        bd = buckets.get(instance_id) if buckets else None
+        if bd is None:
+            return
+        if hasattr(bd, "room_provenance"):
+            bd.room_provenance[room.schema] = dict(record)
+        elif isinstance(bd, dict):
+            bd.setdefault("room_provenance", {})[room.schema] = dict(record)
 
     # ------------------------------------------------------------------
     # Export

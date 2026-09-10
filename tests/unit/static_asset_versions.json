@@ -188,8 +188,8 @@
     "version": "15"
   },
   "image-annotation.js": {
-    "sha256": "4988d1d245b0d632",
-    "version": "34"
+    "sha256": "e13a52c51c6c45c2",
+    "version": "37"
   },
   "instance-display.js": {
     "sha256": "44f86cac34ef4ab1",
@@ -396,8 +396,8 @@
     "version": "2"
   },
   "tracking-ui.js": {
-    "sha256": "0206d81480029d19",
-    "version": "11"
+    "sha256": "56a590e424d35011",
+    "version": "12"
   },
   "triage.js": {
     "sha256": "c2b0c1c31603b8ca",
@@ -424,8 +424,8 @@
     "version": "22"
   },
   "visual_ai_assistant.js": {
-    "sha256": "1d29967b81c0c0cb",
-    "version": "7"
+    "sha256": "b9629c814af17e38",
+    "version": "8"
   },
   "web-agent-overlays.js": {
     "sha256": "ba2cd17c89c458af",

@@ -120,6 +120,25 @@ SKIP_CONFIGS = [
 ]
 CONFIG_FILES = [f for f in CONFIG_FILES if not any(skip in f for skip in SKIP_CONFIGS)]
 
+
+def test_the_config_sweep_found_something_to_check():
+    """A parametrized test over an empty collection does not fail. It SKIPS.
+
+    `CONFIG_FILES` comes from a glob, so moving or renaming `tests/configs/`
+    empties it -- and pytest then reports one skipped placeholder rather than a
+    failure, which reads as "not applicable here" rather than "the subject is
+    gone". Every config below would stop being validated and the suite would
+    stay green.
+
+    Asserted here rather than inside the parametrized test, because a check
+    that lives inside the loop body does not run when the loop is empty.
+    """
+    assert len(CONFIG_FILES) >= 5, (
+        f"only {len(CONFIG_FILES)} config files found in {CONFIG_DIR}; the "
+        f"glob is looking in the wrong place and every config validation "
+        f"below would silently skip")
+
+
 @pytest.mark.parametrize('config_path', CONFIG_FILES)
 def test_config_file_validates(config_path):
     with open(config_path, 'r') as f:

@@ -28,7 +28,11 @@ from potato.importers import base as importer_base
 from potato.importers.base import REQUIRED_STATS, ImportResult
 from potato.importers.registry import import_registry
 
-IMPORTER_DIR = Path("potato/importers")
+# Absolute, not relative to the working directory. A relative path empties the
+# glob below whenever pytest runs from anywhere but the repo root, and a
+# parametrized test over an empty collection does not fail -- it reports one
+# skipped placeholder, which reads as "not applicable here".
+IMPORTER_DIR = (Path(__file__).resolve().parents[2] / "potato" / "importers")
 
 #: Formats whose `parse` takes a marker dict this package builds, so they can
 #: only be driven through `parse_directory`. They are exercised by their own
@@ -39,6 +43,17 @@ DIRECTORY_ONLY = {"yolo", "kitti", "mot", "davis", "openimages", "webdataset",
 
 def source_files():
     return sorted(p for p in IMPORTER_DIR.glob("*_importer.py"))
+
+
+def test_the_importer_sweep_found_something_to_check():
+    """Every parametrized check below runs once per importer, and pytest skips
+    rather than fails when that collection is empty. Asserted here rather than
+    inside those tests, because a check in the loop body does not run when the
+    loop is empty."""
+    found = source_files()
+    assert len(found) >= 10, (
+        f"only {len(found)} importer sources found in {IMPORTER_DIR}; the "
+        f"contract checks below would silently skip")
 
 
 class TestStatsContract:

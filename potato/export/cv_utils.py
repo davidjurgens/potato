@@ -1143,6 +1143,43 @@ def _freeform_points(coords: dict, img_w: float, img_h: float) -> List[List[floa
     return points
 
 
+#: Provenance keys carried on a stored shape or mask, written by the client
+#: (see PROVENANCE_KEYS in potato/static/image-annotation.js) and preserved by
+#: every conversion in this module.
+#:
+#: ``source`` is the one fact that cannot be reconstructed after the event: an
+#: accepted detection and a hand-drawn box are byte-identical once stored, so a
+#: study that pre-labels with a model cannot report its own acceptance rate
+#: from its own data unless the shape says where it came from. Values are
+#: ``human``, ``ai`` and ``import``; ``ai_model`` names the model,
+#: ``confidence`` is its own score, ``edited`` marks a non-human shape the
+#: annotator has since changed, ``carried_over`` marks one copied forward from
+#: the previous item rather than made here, and ``import_format`` names the
+#: file format an imported one arrived in.
+PROVENANCE_KEYS = ("source", "ai_model", "confidence", "edited",
+                   "carried_over", "import_format")
+
+
+def carry_provenance(target: dict, src: dict) -> dict:
+    """Copy whichever provenance keys ``src`` declares onto ``target``.
+
+    Absent means unknown, which is what a shape stored before provenance
+    existed honestly is. It must not be rewritten to ``human`` on the way past.
+    """
+    if not isinstance(src, dict) or not isinstance(target, dict):
+        return target
+    for key in PROVENANCE_KEYS:
+        value = src.get(key)
+        # NOT `if not value`. That short form is the natural way to write this
+        # and it eats `confidence: 0.0`, `edited: False` and
+        # `carried_over: False`, all of which are real answers. `0 == ""` is
+        # False in Python, so this test catches only genuinely empty strings.
+        if value is None or value == "":
+            continue
+        target[key] = value
+    return target
+
+
 def normalize_annotation_object(obj: dict, img_w: float,
                                 img_h: float) -> Optional[dict]:
     """
@@ -1191,6 +1228,7 @@ def normalize_annotation_object(obj: dict, img_w: float,
         "iscrowd": int(obj.get("iscrowd", 0) or 0),
         "warnings": warnings,
     }
+    carry_provenance(result, obj)
 
     # Masks carry no `coordinates`; the RLE is already resolution-absolute.
     if obj_type == "mask":
@@ -1389,7 +1427,8 @@ def to_client_object(obj_type: str, label: str, color: str = "", *,
                      skeleton: str = "",
                      cuboid: Optional[dict] = None,
                      instance: Optional[int] = None,
-                     iscrowd: int = 0) -> Optional[dict]:
+                     iscrowd: int = 0,
+                     provenance: Optional[dict] = None) -> Optional[dict]:
     """
     Build one annotation object in the shape the browser expects.
 
@@ -1409,11 +1448,14 @@ def to_client_object(obj_type: str, label: str, color: str = "", *,
         ellipse: {cx, cy, rx, ry, angle} absolute pixels (ellipse type)
         instance: Optional instance index, used to key per-instance masks
         iscrowd: COCO crowd flag, preserved for round-tripping
+        provenance: Optional dict carrying any of PROVENANCE_KEYS, saying where
+            this annotation came from (a person, a model, an imported file)
 
     Returns:
         Client-shaped dict, or None if the inputs are unusable.
     """
     obj: Dict[str, Any] = {"type": obj_type, "label": label, "color": color}
+    carry_provenance(obj, provenance or {})
     if instance is not None:
         obj["instance"] = instance
     if iscrowd:

@@ -265,7 +265,12 @@ class MOTImporter(BaseAnnotationImporter):
         if is_ignore:
             attributes["ignore"] = True
         elif conf != 1.0:
-            attributes["confidence"] = conf
+            # Top level, not `attributes`. A detector's score means the same
+            # thing whatever format it arrived in, and it is the key the client
+            # round-trips and the COCO exporter writes -- so a second copy under
+            # `attributes` would be the one that goes stale. Nothing read it:
+            # the MOT exporter sets its own conf column from `ignore` alone.
+            obj["confidence"] = conf
         if visibility is not None:
             attributes["visibility"] = visibility
         if attributes:

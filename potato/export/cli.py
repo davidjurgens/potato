@@ -43,6 +43,23 @@ def _typing_summaries(user_state: dict, instance_id: str) -> dict:
     return bd.get("typing_summaries") or {}
 
 
+def _room_provenance(user_state: dict, instance_id: str) -> dict:
+    """Which multiplayer room produced each of this instance's answers.
+
+    The authoritative copy is ``instance_id_to_room_provenance``, written by
+    rooms/manager.py when it persists the votes. The behavioural mirror is read
+    as a fallback so a state file written by a server that only had the mirror
+    still exports the room.
+    """
+    stored = (user_state.get("instance_id_to_room_provenance") or {}).get(instance_id)
+    if isinstance(stored, dict) and stored:
+        return stored
+    bd = (user_state.get("instance_id_to_behavioral_data") or {}).get(instance_id)
+    if isinstance(bd, dict):
+        return bd.get("room_provenance") or {}
+    return {}
+
+
 def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
     """
     Load user annotations from the Potato output directory.
@@ -120,6 +137,12 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
                 # kept out of the flattened columns, written to its own sidecar
                 # file by the tabular exporters.
                 "_typing": _typing_summaries(user_state, instance_id),
+                # Which room, if any, produced each schema's answer. A room
+                # answer is a group answer -- the member saw their peers'
+                # labels at the reveal -- and nothing else in the record says
+                # so, which is what makes an agreement statistic over two
+                # members of one room a measure of the discussion.
+                "_room": _room_provenance(user_state, instance_id),
             }
 
             # Process span data.

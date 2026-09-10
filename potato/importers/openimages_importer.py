@@ -245,7 +245,10 @@ class OpenImagesImporter(BaseAnnotationImporter):
             obj["iscrowd"] = 1
         if row.get("Confidence") not in (None, ""):
             try:
-                attributes["confidence"] = float(row["Confidence"])
+                # Top level rather than `attributes`, so there is one home for
+                # a detector's score across every format. See
+                # PROVENANCE_KEYS in potato/export/cv_utils.py.
+                obj["confidence"] = float(row["Confidence"])
             except (TypeError, ValueError):
                 pass
         if attributes:
