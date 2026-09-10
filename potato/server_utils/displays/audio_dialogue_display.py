@@ -39,6 +39,7 @@ Client behavior (transport, per-turn play, auto-scroll, speaker assignment
 persistence) lives in ``potato/static/audio-dialogue.js`` / ``audio-dialogue.css``.
 """
 
+import logging
 import html
 import json
 from typing import Any, Dict, List, Optional, Tuple
@@ -48,6 +49,28 @@ from .multi_agent_discussion_display import agent_color, readable_text_on
 
 # Neutral swatch for an unassigned (undiarized) turn before the annotator picks.
 UNASSIGNED_COLOR = "#9ca3af"
+
+
+logger = logging.getLogger(__name__)
+
+
+def _segment_audio_sources(data: Any, options: Dict[str, Any]) -> list:
+    """Every distinct audio file the raw turns name.
+
+    Read from the raw payload rather than the normalized turns, because
+    normalization has already collapsed the media source to one value -- which
+    is the collapse this is checking for.
+    """
+    from potato.server_utils.transcripts import audio_sources_from_segments
+
+    turns_key = options.get("turns_key", "turns")
+    if isinstance(data, dict):
+        segments = data.get(turns_key)
+    else:
+        segments = data
+    if not isinstance(segments, list):
+        return []
+    return audio_sources_from_segments(segments)
 
 
 class AudioDialogueDisplay(BaseDisplay):
@@ -135,13 +158,45 @@ class AudioDialogueDisplay(BaseDisplay):
             "unassigned_color": UNASSIGNED_COLOR,
         }), quote=True)
 
-        audio_bar = self._render_audio_bar(esc_field, audio, options)
+        # One recording per utterance has no shared timeline for the
+        # timestamps to index. The player used to load the FIRST file and the
+        # per-turn buttons seeked global offsets into it -- on a four-turn call
+        # with a file per turn, two turns landed past the end of a five-second
+        # recording that was not theirs, and the other files were never loaded.
+        # Nothing said so: all turns rendered, `--strict` passed, the log was
+        # silent.
+        #
+        # The turns still render, because reading them is useful. What goes is
+        # the transport bar and the per-turn buttons, which is the part that
+        # was lying.
+        per_turn_notice = ""
+        if len(_segment_audio_sources(data, options)) > 1:
+            logger.warning(
+                "audio_dialogue field %r: the turns name %d different audio "
+                "files, so there is no shared timeline for their timestamps. "
+                "Playback is disabled for this item. Use `speech_transcript` "
+                "for one recording per utterance, or give each turn its own "
+                "audio field.",
+                field_key, len(_segment_audio_sources(data, options)))
+            audio_bar = ""
+            audio = None
+            per_turn_notice = (
+                '<p class="ad-per-turn-notice" role="status">'
+                'These turns each name a different recording, so there is no '
+                'shared timeline to play against and playback is turned off. '
+                'The transcript below is unchanged. For one recording per '
+                'utterance use the <code>speech_transcript</code> display.'
+                '</p>'
+            )
+        else:
+            audio_bar = self._render_audio_bar(esc_field, audio, options)
         legend = self._render_legend(roster)
 
         bubbles = [
             self._render_turn(
                 turn, i, esc_field, roster, is_span_target,
                 turn_schemes, field_key, show_timestamps, allow_assignment,
+                playable=not per_turn_notice,
             )
             for i, turn in enumerate(turns)
         ]
@@ -177,6 +232,7 @@ class AudioDialogueDisplay(BaseDisplay):
         <div class="audio-dialogue" data-field-key="{esc_field}"
              data-ad-config="{config_json}" data-ad-roster="{roster_json}">
             {audio_bar}
+            {per_turn_notice}
             {speaker_input}
             {speaker_menu}
             {legend}
@@ -241,6 +297,7 @@ class AudioDialogueDisplay(BaseDisplay):
         field_key: str,
         show_timestamps: bool,
         allow_assignment: bool,
+        playable: bool = True,
     ) -> str:
         from ..turn_annotations import turn_id_for
 
@@ -308,14 +365,21 @@ class AudioDialogueDisplay(BaseDisplay):
         else:
             speaker_control = f'{avatar_html}{name_html}'
 
+        # No shared timeline means the offsets this button seeks to are
+        # meaningless, so the control goes rather than misleading.
+        play_button = (
+            f'<button type="button" class="ad-play" data-start="{start:.3f}" '
+            f'data-end="{end:.3f}" data-field-key="{esc_field}" '
+            f'aria-label="{html.escape(play_aria, quote=True)}"></button>'
+        ) if playable else ""
+
         return f'''
         <div class="{' '.join(classes)}" data-turn-id="{esc_tid}" data-turn-index="{index}"
              data-speaker="{html.escape(str(speaker) if assigned else '', quote=True)}"
              data-assigned="{'true' if assigned else 'false'}"
              style="--ad-color:{color}; --ad-on:{on_color};">
             <div class="ad-turn-header">
-                <button type="button" class="ad-play" data-start="{start:.3f}" data-end="{end:.3f}"
-                        data-field-key="{esc_field}" aria-label="{html.escape(play_aria, quote=True)}"></button>
+                {play_button}
                 {speaker_control}
                 <span class="ad-time" data-time="{html.escape(time_label, quote=True)}" aria-hidden="true"></span>
             </div>

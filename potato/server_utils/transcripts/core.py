@@ -30,6 +30,7 @@ __all__ = [
     "first_present",
     "coerce_audio",
     "audio_from_segments",
+    "audio_sources_from_segments",
     "resolve_speaker",
     "group_words_into_turns",
     "ARROW_RE",
@@ -103,20 +104,52 @@ def coerce_audio(value: Any) -> Optional[str]:
     return None
 
 
-def audio_from_segments(segments: List[Dict[str, Any]]) -> Optional[str]:
-    """Derive a media source from the segments themselves.
+#: Keys a segment may use to name its own audio.
+_SEGMENT_AUDIO_KEYS = ("mp3_url", "mp3url", "audio_url", "audio", "url",
+                       "media_url")
 
-    Some sources repeat the media URL on every row (SPoRC's ``mp3_url``) rather
-    than carrying it on a container object.
+
+def audio_sources_from_segments(segments: List[Dict[str, Any]]) -> List[str]:
+    """Every distinct media source the segments name, in first-seen order.
+
+    `audio_from_segments` returns the first and stops, which is right for the
+    case it was written for -- some sources repeat one media URL on every row
+    (SPoRC's ``mp3_url``). Nothing checked that the rows agreed.
+
+    They disagree when there is ONE RECORDING PER UTTERANCE, which is how
+    telephony pipelines, turn-based TTS evaluations and most conversational
+    agent logs store audio. Measured on a four-turn call with a file per turn:
+    the shared player loaded turn 1's file, and the per-turn buttons seeked to
+    3.4s, 6.3s and 9.1s inside a 5-second recording that was not theirs. Half
+    the turns played silence past the end of the wrong file, and the other
+    turns' files were never loaded at all.
     """
+    sources: List[str] = []
+    seen = set()
     for seg in segments:
         if not isinstance(seg, dict):
             continue
-        for key in ("mp3_url", "mp3url", "audio_url", "audio", "url", "media_url"):
+        for key in _SEGMENT_AUDIO_KEYS:
             val = seg.get(key)
             if isinstance(val, str) and val.strip():
-                return val.strip()
-    return None
+                url = val.strip()
+                if url not in seen:
+                    seen.add(url)
+                    sources.append(url)
+                break
+    return sources
+
+
+def audio_from_segments(segments: List[Dict[str, Any]]) -> Optional[str]:
+    """Derive a single media source from the segments themselves.
+
+    Returns the first. Callers that render a shared timeline should ask
+    `audio_sources_from_segments` whether the segments agree first -- a
+    per-utterance corpus has one file per turn and no shared timeline for the
+    timestamps to index.
+    """
+    sources = audio_sources_from_segments(segments)
+    return sources[0] if sources else None
 
 
 # ---------------------------------------------------------------------------

@@ -116,6 +116,23 @@
 }
 
 /* ---- Speaker legend --------------------------------------------------- */
+/* Shown instead of the transport bar when the turns each name a different
+   recording, so there is no shared timeline for their timestamps to index.
+   Uses the same tokens as the rest of the file so it follows the theme. */
+.ad-per-turn-notice {
+    margin: 0 0 10px 0;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--ad-radius, 8px);
+    background: var(--muted);
+    /* --foreground, not --muted-foreground: muted grey on the muted
+       background measures about 4.4:1, and this is a message the annotator
+       has to read to understand why the player is missing. */
+    color: var(--foreground);
+    font-size: 0.9em;
+    line-height: 1.45;
+}
+
 .ad-legend {
     display: flex;
     flex-wrap: wrap;

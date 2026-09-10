@@ -109,6 +109,7 @@ from .asr import (
 from .core import (
     TranscriptError,
     audio_from_segments,
+    audio_sources_from_segments,
     coerce_audio,
     normalize_segment,
 )
@@ -147,6 +148,7 @@ from .diarize import (
 )
 
 __all__ = [
+    "audio_sources_from_segments",
     "normalize_transcript",
     "TranscriptError",
     "resolve_transcript_source",
