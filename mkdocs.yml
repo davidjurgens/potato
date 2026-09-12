@@ -157,6 +157,7 @@ nav:
         - Near-Duplicate Detection: advanced/near_duplicates.md
         - Behavioral Tracking: advanced/behavioral_tracking.md
         - Keystroke Logging: advanced/keystroke_logging.md
+        - Text as Image: advanced/text_as_image.md
         - Writing-Process Detection: advanced/writing_process_detection.md
         - Keystroke Logging Ethics: advanced/keystroke_logging_ethics.md
         - Annotation Telemetry: advanced/annotation_telemetry.md

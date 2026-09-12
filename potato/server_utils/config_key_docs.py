@@ -163,6 +163,24 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Extra per-item fields to carry through to the display layer",
         type="object", category=CORE,
     ),
+    "text_as_image": _D(
+        "Render each item's text to a PNG so annotators cannot copy or paste it",
+        type="boolean|object", default=False, category=QC,
+        example=True,
+        see_also=("item_properties.text_key",),
+    ),
+    "text_as_image.enabled": _D(
+        "Turn the picture on, when text_as_image is written as a mapping",
+        type="boolean", default=True, category=QC,
+    ),
+    "text_as_image.font_size": _D(
+        "Point size of the text in the picture",
+        type="integer", default=18, category=QC, example=20,
+    ),
+    "text_as_image.max_width": _D(
+        "Width of the picture in CSS pixels",
+        type="integer", default=900, category=QC, example=800,
+    ),
     "task_description": _D(
         "Short description of the task, shown to annotators",
         type="string", category=CORE,
