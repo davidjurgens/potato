@@ -70,7 +70,7 @@ base_html_dir = os.path.join(cur_program_dir,'base_htmls') #get the dir where th
 #insert the current program dir into sys path
 sys.path.insert(0, cur_program_dir)
 
-from potato.item_state_management import ItemStateManager, Item, Label, SpanAnnotation
+from potato.item_state_management import ItemStateManager, Item, Label, SpanAnnotation, TemplateItem
 from potato.item_state_management import get_item_state_manager, init_item_state_manager
 from potato.user_state_management import UserStateManager, UserState, get_user_state_manager, init_user_state_manager
 from potato.authentication import UserAuthenticator
@@ -3839,7 +3839,10 @@ def render_page_with_annotations(username: str):
         instance=text,
         # Original plain text without span HTML (for data-original-text attribute)
         instance_plain_text=original_plain_text,
-        instance_obj=item,
+        # Wrapped so that a data column named after an Item attribute — a
+        # "labels" column feeding {{instance_obj.labels[0]}} — still reaches
+        # the template. See TemplateItem.
+        instance_obj=TemplateItem(item),
         # Full record dict so schemas like process_reward / trajectory_eval
         # can bind to structured fields (e.g. structured_turns) via the
         # [data-instance-json] element. Transcript-consuming schemes also get a
