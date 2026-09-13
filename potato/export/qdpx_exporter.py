@@ -83,7 +83,9 @@ class QDPXExporter(BaseExporter):
     def export(self, context: ExportContext, output_path: str,
                options: Optional[dict] = None) -> ExportResult:
         options = options or {}
-        flatten = bool(options.get("flatten_subcodes", False))
+        # `--option key=value` delivers strings, and bool("false") is True.
+        flatten = str(options.get("flatten_subcodes", False)).strip().lower() in (
+            "1", "true", "yes", "on")
         warnings: List[str] = []
 
         os.makedirs(output_path, exist_ok=True)

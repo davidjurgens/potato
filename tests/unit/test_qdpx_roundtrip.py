@@ -278,6 +278,21 @@ class TestCodebook:
         assert not any("ATLAS.ti" in w for w in result.warnings)
         assert result.stats["flattened"] is True
 
+    @pytest.mark.parametrize("value, flattened", [
+        ("false", False), ("0", False), ("no", False),
+        ("true", True), ("1", True),
+    ])
+    def test_flatten_subcodes_reads_the_string_the_cli_passes(
+            self, tmp_path, value, flattened):
+        """`--option flatten_subcodes=false` arrives as the string "false".
+
+        bool("false") is True, so the CLI's only way to say no turned
+        flattening on.
+        """
+        _path, result = export(tmp_path, make_context(schemas=NESTED, spans=[]),
+                               {"flatten_subcodes": value})
+        assert result.stats["flattened"] is flattened
+
     def test_descriptions_and_colours_survive(self, tmp_path):
         schemas = [{
             "annotation_type": "span", "name": "codes", "description": "d",
