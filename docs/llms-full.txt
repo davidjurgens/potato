@@ -55805,6 +55805,511 @@ route. See [Testing](../guides/testing.md) for the drift tests that enforce this
 
 ---
 
+<!-- source: docs/releasenotes/v2.9.0.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.9.0/
+
+# Release Notes: v2.9.0 — Importers, Local Transcription and Provenance
+
+Potato can now import projects from brat, doccano, Prodigy, CoNLL and REFI-QDA,
+and transcribe and diarize audio locally. Exports record whether an image shape
+was drawn by a person, proposed by a model or imported, and which room a vote
+was cast in.
+
+Most of the release is bug fixes, listed in full below. Several change what a
+config or request that worked under 2.8.2 does, so read **Upgrading** before you
+install.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+## Thanks
+
+- **Aldo Costa ([@Eyecatch3r](https://github.com/Eyecatch3r))** sent two pull
+  requests.
+  [#168](https://github.com/davidjurgens/potato/pull/168) lets Potato run below
+  a path prefix behind a reverse proxy. It covers static files, client-side
+  fetch and media URLs, and every standalone page: admin, dashboards, session
+  review and the legacy v1 pages.
+  [#171](https://github.com/davidjurgens/potato/pull/171) fixed the
+  dynamic-labels example reported in #170.
+- **[@ruthenian8](https://github.com/ruthenian8)** reported
+  [#170](https://github.com/davidjurgens/potato/issues/170): every checkbox in
+  the `check-box-dynamic-labels` example rendered blank. The report traced it to
+  the item's `labels` field colliding with `Item.labels` and proposed the fix.
+
+## Upgrading
+
+Run `potato validate --strict` on each config before upgrading. These changes
+can make a working 2.8.2 study refuse to start or behave differently:
+
+- **Duplicate scheme names in one phase are refused**, including two different
+  types sharing a name. They used to share a single stored answer. The same name
+  in different phases is still allowed.
+- **`min_annotators_per_instance` is now an alias for the per-item cap.** Set on
+  its own, items retire at that number. Set alongside a different
+  `num_annotators_per_item` or `max_annotations_per_item`, the config is
+  refused. `icl_labeling.example_selection.min_annotators_per_instance` is
+  unaffected.
+- **`require_fully_annotated: true` is enforced.** It was ignored. Schemes with
+  `required: false` stay optional.
+- **`/updateinstance` returns 400 when no key in the payload can be read**, such
+  as the nested `{"schema": {"label": ...}}` shape, which stored nothing and
+  answered 200. Any refused save now returns an HTTP error instead of 200.
+- **A phase that fails to load aborts the boot** instead of being dropped.
+- **CLI defaults no longer overwrite YAML.** `persist_sessions`, `customjs`,
+  `customjs_hostname`, `verbose` and `very_verbose` from the config now take
+  effect, and `persist_sessions: true` without a `secret_key` is refused.
+- **The codebook force-locks for every `crowdsourcing.provider` except
+  `expert`**, including unrecognised names and an empty value, and
+  `search.annotator_claim` is refused alongside it.
+- **Also refused now:**
+  - `number` with min greater than max
+  - a `constant_sum` minimum that cannot be met
+  - `bws` without `bws_config`
+  - `category_assignment: {dynamic: true}`
+  - YAML booleans in a label list (`[Yes, No]`)
+  - unknown `display_options` keys
+  - an `event_annotation` label missing from its span schema
+  - a malformed `ai_budget.prices`
+  - an unbuildable `classifier` name
+  - malformed automation rules
+- **`--strict` also fails on:**
+  - a second annotation phase, which is never served
+  - undefined phase names
+  - empty data directories
+  - unreadable label colours
+  - unknown `failure_handling` keys
+  - gold `mode: training`
+  - rooms or Pocket Mode misconfiguration
+  - assignment keys that do nothing
+  - top-level `llm_labeling`
+- **Defaults that changed:**
+  - Solo mode `timeout` now uses each endpoint's own default (30, 60 or 120
+    seconds) instead of 60.
+  - Sessions expire after 8 idle hours (`session_timeout_minutes`).
+  - The Anthropic and Gemini default models are now `claude-haiku-4-5-20251001`
+    and `gemini-2.5-flash`.
+  - `select`, `range_slider` and `ranking` start unanswered.
+  - Markdown in `annotation_instructions` is rendered and sanitized.
+- **Recorded data that changed:**
+  - `min_response_time` is measured on the server.
+  - Pocket Mode likert answers store `3`, not `scale_3`.
+  - Span offsets are code points, not UTF-16 units. This matters only for text
+    with emoji or other characters outside the Basic Multilingual Plane.
+  - Agreement values for set-valued, order-valued, matrix and labelled ordinal
+    schemes change and should be recomputed.
+  - Registrations are stored, salted and hashed. A username that owns
+    annotations but is not in the roster is refused.
+
+## New features
+
+**Import and export**
+
+- Importers for brat, doccano, Prodigy, CoNLL-2003/CoNLL-U and REFI-QDA
+  `.qdpx`, and a `.qdpx` exporter. Offsets follow the QDPX spec's inclusive-end
+  convention, and `flatten_subcodes` handles ATLAS.ti's single subcode level.
+- Provenance in exports:
+  - **Rooms:** votes cast in a multiplayer room carry the room, role, initial
+    vote, whether it changed after the reveal and the voter count, as `_room` in
+    JSON and `{schema}._room_id` / `{schema}._room` in tabular exports.
+  - **Image shapes:** each shape records whether a person drew it or a model
+    proposed it (`source`, `ai_model`, `confidence`, `edited`, `carried_over`,
+    `import_format`).
+  - **Confidence:** COCO, MOT, OpenImages and KITTI confidence all land on one
+    top-level `confidence` key.
+- Span exports:
+  - csv, jsonl and parquet include the covered text.
+  - `spans.parquet` adds `target_field`, `title`, `span_id`, `format_coords`,
+    `additional_parts` and three `kb_*` columns, and warns about any stored key
+    with no column.
+- `potato export --format adjudication`, and an "adopt an answer" adjudication
+  control for every schema type (only radio and likert had one).
+
+**Audio, video and transcripts**
+
+- Local transcription and speaker diarization with faster-whisper and
+  sherpa-onnx, no PyTorch and no Hugging Face token. Install
+  `potato-annotation[transcribe]`, then run
+  `potato transcripts <dir> --transcribe --diarize --num-speakers N -o out.json`.
+  `--asr-no-vad` turns off voice-activity detection, which can drop quiet
+  speech.
+- Per-segment questions for audio and video: `segment_schemes` renders any
+  annotation type inside a segment (it was accepted and ignored). See
+  `examples/audio/segment-questions/`.
+
+**Agreement, quality and assignment**
+
+- Agreement over time, joined against codebook revisions, with a re-calibration
+  trigger on `/admin/iaa`.
+- Option order is shuffled from a fixed seed, so a reload no longer reshuffles
+  it, and presentation order is recorded whether or not randomisation is on.
+- A model-output review mode that includes the empty-prediction slice, so
+  recall can be computed.
+- Near-duplicate detection for consecutive video frames.
+- `/admin/api/mace/overview` returns a `reliability` block per schema, warning
+  about too few items, label skew and constant-response annotators.
+- Expertise scores persist to `expertise_scores.json`, and
+  `GET /admin/api/expertise` shows the counts behind each score.
+- `/admin/api/overview` reports items that collected more annotations than
+  their cap.
+- The page an annotator sees when there is no work names the cause (no data,
+  zero quota, not in a batch group, no qualifying category, or the study is
+  full) and tells them what to report.
+
+**AI and model assistance**
+
+- Cost estimates and a spend cap (`ai_budget.cap_usd`) that refuses to start a
+  run instead of stopping it halfway.
+- `ai_budget.prices` sets per-model rates in the config, so a new model can be
+  priced without waiting for a release.
+- `pre_annotation.predictions_file` works, taking an `{id: predictions}`
+  mapping or a list of records.
+- `ai_support` records `final_annotation`, what the annotator actually saved,
+  and `pre_annotation_seeds` records what the model answered first, so
+  acceptance rates can be measured from your own data.
+- `ai_support.image_key` / `item_properties.image_key` send an item's image
+  together with its text to a vision endpoint, and vision requests report
+  `image_attached`.
+- Judge calibration results at `/judge_calibration/results`, and position-swap
+  consistency on the judge eval card.
+- AI rationales render markdown.
+
+**Annotation interface**
+
+- `card_sort` works without a mouse: pick up a card with Enter or a tap, drop it
+  on a focused group, or press a number key. Moves are announced to screen
+  readers.
+- `tree_annotation` renders any annotation type inside a node.
+- `gallery` plays video.
+- `spreadsheet` accepts `header_row: true` for list-of-lists data.
+- `resizable`, `max_height` and `min_height` work on every display type, and
+  lengths accept `400`, `"400px"`, `"50vh"` or `calc()`.
+- `text.collapsed_by_default` and `dialogue.max_height` are implemented.
+- Markdown renders in `annotation_instructions`, and codebook markdown supports
+  images.
+- With `codebook: true`, each label's `color` and `description` seed its code,
+  and the annotation-page tray shows each code's definition.
+- `keyword_highlights_file` reads CSV/TSV with a header, one-per-line, JSON,
+  JSONL and YAML.
+- `live_coding_agent` accepts `task_field` to seed its task box from an item
+  field.
+- Training questions accept `category`, `categories` or the configured
+  `category_key`.
+
+**Deployment and tooling**
+
+- Reverse-proxy and path-prefix support on every page (#168, Aldo Costa).
+- `potato --version` reports the source and installed versions separately,
+  names an editable install, and flags a directory shadowing the package.
+- The README points Claude Code, Codex and Cursor users at the
+  [potato-skill](https://github.com/davidjurgens/potato-skill) plugin.
+
+## Bug fixes
+
+**Saving and annotation widgets**
+
+- A `select` preselected its first label, so walking past an item stored it,
+  and `required` on a select could never fail.
+- Chrome carried a select's choice over to the next item and saved it there.
+- Returning to a ranked item replaced the saved ranking with the config order,
+  and an unranked item showed the previous item's order.
+- `constant_sum` let annotators advance under the total, and `soft_label` could
+  store 160/100 when `min_per_label` blocked redistribution.
+- `range_slider` drew a default range it never stored.
+- An answered required slider blocked Next after navigating back.
+- Survey pages did not restore slider or ranking answers, so resubmitting could
+  overwrite the stored answer with the default.
+- `triage` buttons sat off the card and could not be clicked.
+- `tree_annotation` stored nothing under any configuration.
+- `conjoint`:
+  - with `profiles_field` and no `attributes`, it drew three blank cards
+  - it padded short profile sets with a selectable blank option and dropped
+    extra profiles
+- `pairwise` showed no candidates from `items_key` or a `{left, right}` pair,
+  hid the question text with `items_key`, and wrapped cells onto two lines.
+- `event_annotation` arcs were invisible under `instance_display`, and every
+  trigger showed as "?".
+- One click satisfied `required` on `agent_scorecard`, `failure_attribution`,
+  `consensus_tracking` and `context_attribution`. The message now names what is
+  missing.
+- `handoff_review` stored an unrated handoff as `quality: 0` on a 1–5 scale.
+- `tool_contention` asked about an agent overlapping with itself.
+- A save the server refused returned 200, so the page treated it as saved, and
+  the session-timeout check never ran.
+- `/updateinstance` kept only the schema half of a `schema:label` key, losing
+  answers posted as `{"s:Yes": "on"}`.
+- The error panel's Retry rebuilt the form from the original render, blanking
+  saved answers.
+- `option_randomization` and `dynamic_options` did nothing on multiselect.
+- Option order reshuffled on every server restart.
+- Fourteen schema types ignored their `layout:` block, and `layout.breakpoints`
+  had no effect on `layout.groups`.
+- The progress counter:
+  - read N/N for every annotator after the first
+  - went past its total when QC items were injected
+  - showed on the post-study page
+- A data column named `labels`, `span_annotations`, `metadata` or `item_data`
+  rendered blank in templates (#170, reported by @ruthenian8, fixed by Aldo
+  Costa in #171).
+- Accessibility:
+  - navbar status pills failed contrast
+  - bold terms in `<legend>` text were invisible
+  - the taxonomy tree's expand control was unreachable by keyboard
+  - memo and codebook panels opened over the Next button
+
+**Spans and keyword highlights**
+
+- Span offsets were sent as UTF-16 units, so one emoji shifted every later span
+  in the export.
+- A selection starting at the end of an existing span, or ending at the start
+  of one, was refused, so partly overlapping spans could not be made.
+- A span on the last paragraph of a `document` field was not recorded, and
+  restored spans came back shifted.
+- With several span schemes, spans were saved under the wrong scheme.
+- Spans on a `dialogue` field exported with empty text, and exported shifted
+  when `show_turn_numbers` was written directly on the field. Written that way,
+  `show_turn_numbers` also did nothing.
+- Inline label `color` never reached the browser, and `rgb(...)` colours
+  rendered as `rgbrgb(...)`.
+- Coreference mentions could not be selected and chains were never saved. When
+  saved, chains took the first entity type rather than the mentions' label.
+- `span_link`'s Link Builder showed another task's labels.
+- `pre_annotation` ignored span schemes, and a categorical prelabel carrying a
+  confidence value crashed the annotation page.
+- Keyword highlights never drew on `instance_display` pages, scanned only
+  `text_key`, and a hex colour in the first CSV column made the row read as a
+  comment.
+
+**Agreement**
+
+- `/admin/api/agreement` never produced a number. It also compared stored
+  values instead of label names, so every categorical schema showed perfect
+  agreement.
+- Multiselect agreement crashed when annotators ticked different numbers of
+  boxes, and one multiselect annotator counted as two.
+- Set- and order-valued types reported agreement of 1.0 whatever was chosen.
+- Ordinal measures ranked word labels alphabetically, so a labelled likert's
+  ordinal alpha was really nominal.
+- `mean_jaccard` paired annotators by position, so a skipped item misaligned
+  everything after it.
+- Matrix types reported `n_annotators: 0`, and `constant_sum` and `soft_label`
+  scored only their first option.
+- Two empty geometry answers scored as perfect agreement.
+- Detection AP scored an exact match as 0.0.
+- Annotators who had finished failed to load at the next boot, emptying
+  agreement, the adjudication queue and the per-item cap.
+- Annotations written over MCP never counted toward agreement, progress or the
+  cap.
+
+**Assignment**
+
+- The second annotator on a two-per-item study was sent to the done page, and
+  every answer they then gave was lost.
+- The disagreement score was always 0, so `max_diversity` never prioritised
+  anything and `adaptive_boost` never fired.
+- A watched data directory gave annotators a completion code while unassigned
+  items waited.
+- Expertise routing compared form markers instead of labels, so every
+  annotator agreed.
+- Uncertainty sampling (and Badge, BALD and hybrid) threw on every run and
+  scored everything 0.5, and `classifier: {name: logistic}` trained the
+  fallback.
+- `category_assignment: {dynamic: true}` crashed the server at boot, and
+  training questions written with `categories` were uncategorized.
+- New warnings for settings that do nothing: a `per_annotator_quota.default`
+  that makes `max_annotations_per_user` unreachable, batch groups outside
+  `assignment_strategy: batch`, and `category_based` with no training block.
+
+**Quality control and training**
+
+- `min_response_time` trusted the time the client reported, and could never
+  fire because it measured network latency. It is now measured on the server.
+- The save on Next erased `min_response_time` violations.
+- Attention checks failed every answer posted as `{"schema:Label": "on"}`.
+  Labels were split on the first colon, so `schema:::label` answers failed too.
+- Two annotators giving opposite answers could promote an item to gold as
+  "unanimous".
+- Gold feedback was never shown, `accuracy.min_threshold` was checked only when
+  feedback was on, and changing an answer on a gold item counted as extra gold
+  items.
+- QC results were lost on restart, so annotators blocked for failing QC were
+  let back in.
+- An undefined phase at the start of `phases.order` made every request fail.
+- `failure_action: move_to_done` told a failed annotator they had completed the
+  task and gave them the completion code, and training results were never saved
+  after grading.
+- Pocket Mode never received attention checks or gold items.
+
+**Pocket Mode**
+
+- A size-based likert stored `scale_3` instead of `3`, and `min_label` and
+  `max_label` were not shown.
+- Saves carried no response time, a refused save retried forever, and the done
+  screen said "all caught up" with saves still queued.
+- Text schemes were treated as desktop-only.
+
+**Export and import**
+
+- COCO dropped images an annotator reviewed and left empty (confirmed negative
+  examples).
+- `--seed-user` imports skipped items with no annotations.
+- CV exports:
+  - ignored `source_field`, putting every box at the origin
+  - wrote `width: 0, height: 0` in COCO and ten other exporters
+  - exported EXIF-rotated JPEGs on swapped axes
+  - did not report items missing from the output
+- Parquet:
+  - exported a labelled likert as an all-null column
+  - exported textboxes as a Python dict
+  - aborted on a mixed numeric/text scale
+  - ignored `export_include_phase_data`
+  - dropped any column missing from the first row
+- `quotation_report` exported empty columns, codebook export missed codes added
+  at `/codebook`, and arena preferences could not become DPO pairs.
+- `coding_eval` said "Export successful!" over an empty directory.
+- The adjudication exporter could read another project's decisions.
+- The transcription cache ignored model settings and duplicated items, and an
+  empty diarization options dict skipped diarization.
+
+**AI and model assistance**
+
+- A truncated reply was reported only for OpenAI. On other providers a cut-off
+  structured reply showed "No rationales available", the same as a dead
+  endpoint.
+- A vision request with no image attached ran as text-only without a warning.
+- A model's refusal or negation highlighted the "No" label as a suggestion, and
+  suggestions that match no label are now dropped.
+- AI suggestions were about the wrong item under every assignment strategy
+  except `fixed_order`.
+- The LLM judge was sent the item id instead of its text.
+- Model hint text was inserted unescaped in text, image and video studies.
+- The spend table charged a whole projected batch when a run stopped early,
+  blocking later runs.
+- The price table was checked against vendor pages on 2026-09-05. Opus was
+  priced three times too high, `gpt-4.1-nano` at twenty times its rate, and the
+  Anthropic and Gemini default models were unpriced, so `cap_usd` did not bind
+  them. A price taken from a model-family row now says so.
+- `image_key` pointing at local media was refused, and vision prompts left out
+  the item's text.
+- A judge eval card with no data said "trustworthy".
+- An agent reply with a string `action` killed the agent thread, and
+  `live_agent` did not seed its starting URL from the item.
+
+**Security and access**
+
+- `crowdsourcing.provider`, the documented spelling, did not lock the codebook,
+  so crowd workers could edit it. An empty provider value also left it open.
+  `login.type: url_direct` with an open codebook now warns.
+- Sign-ups were never saved under the default in-memory config, so after a
+  restart anyone could claim an existing username with any password.
+- `document` display fields ran raw HTML from the corpus.
+- `show_annotator_names: false` still sent annotator emails through the API.
+- A room's export revealed other members' votes during the blind phase.
+- `annotation_instructions` are sanitized, and `javascript:` URLs in codebook
+  images are refused.
+- A request with a wrong admin key created the admin key file.
+- A task name containing `/` crashed the boot and could write outside the
+  generated-templates directory.
+
+**Images and media**
+
+- The image canvas was about 104px taller than its box, so the bottom of every
+  image was unreachable, and Fit always returned 100%.
+- With `tools: [brush]` alone, the brush could not paint.
+- `source_field` did nothing without an `instance_display` block for audio,
+  image and video.
+- `image_annotation` did not find images in `instance_display` fields.
+- `gui_trajectory` with `coord_space: pixels` drew no marker.
+- `audio_dialogue` played the wrong recording when each utterance had its own
+  file. The shared player is now removed in that case.
+- `.m4a` and `.flac` were served with types Chrome rejects, and `Accept-Ranges`
+  was never sent.
+- `gallery` entries written as `{url: ...}` and `web_agent_trace` screenshots
+  ignored `media_directory`.
+- Waveforms for `/media/...` URLs always fell back to browser decoding.
+
+**Displays**
+
+- Dicts and lists showed as Python syntax in 17 of 24 displays.
+- Trace displays dropped `{role, content}` turns and showed tool output as the
+  final answer. `process_reward` printed raw JSON, and `cot_segmentation`
+  labelled every step "Observation".
+- `spreadsheet` dropped columns that first appear after row 0.
+- `max_height: "220px"` became `220pxpx`.
+- The default PDF display showed an empty box, and Plotly loaded from a CDN, so
+  the admin plot failed on an air-gapped install. It is now vendored.
+- A null or numeric text crashed the boot.
+- The display registry hid 44 working options, including `speaker_key`.
+- `failure_attribution` and `agent_scorecard` left out agents seen in the data.
+- Demographics instruments used a nonexistent type and could not load.
+
+**Data loading and ingestion**
+
+- The directory watcher could not parse pretty-printed JSON arrays, and search
+  was not reindexed after startup.
+- A `data_directory` with nothing loadable booted an empty study without a
+  warning.
+- Automation rules never ran on the loaded corpus.
+- `trace_ingestion` rejected its documented `X-API-Key`.
+
+**Codebook**
+
+- "Paste markdown" threw away the pasted text when the target section was
+  empty.
+- The tray showed stale definitions and collapsed the code list to one row.
+- `/admin/catalog/api/search` ignored `k`.
+
+**Adjudication**
+
+- `require_notes_on_override` and `require_confidence` were never enforced, and
+  confidence defaulted to "medium".
+- Composite schemes all scored 1.0 agreement and never reached the adjudicator.
+- Types other than radio and likert showed "Form not available".
+
+**Multiplayer rooms**
+
+- `rooms.enabled: true` with no votable scheme validated, then `/rooms` returned
+  404.
+
+**Solo mode**
+
+- `timeout: 60` could not be set; writing it gave the endpoint's default.
+- An empty low-confidence pool absorbed `low_confidence_weight` without a
+  warning.
+- `InstanceSelector.configure()` turned off the `llm_predicted` pool.
+
+**Reverse proxy**
+
+- The login form, `/done`, `/logout`, `/pocket`, the password-reset forms and
+  admin redirects ignored the path prefix, and media `poster`, `srcset` and
+  `track` URLs were not prefixed.
+
+**MCP and coding agent**
+
+- `submit_annotation` stored the widget type as the label and wrote into
+  consent pages.
+- The audit log recorded attempts rather than outcomes, and live tools
+  published no argument schemas.
+- Coding-agent containers leaked on Stop and on SIGTERM, and the SIGTERM
+  handler never installed on a live server.
+- `agent_proxy` with `enabled: false` still loaded, and it ignored `ai_config`.
+
+**Config validation**
+
+- `labels: [Yes, No]`, which YAML reads as booleans, passed `--strict`.
+- A phase that failed to build was dropped without a message, and `validate`
+  did not check instrument questions.
+- An empty `annotation_schemes:` crashed validation.
+- `ui_language: en` failed `--strict`, and `potato validate` now runs the
+  server's path checks.
+- The packaged config schema lagged behind the one in `docs/`.
+
+See the [changelog](https://github.com/davidjurgens/potato/blob/master/CHANGELOG.md) for earlier releases.
+
+
+---
+
 <!-- source: docs/releasenotes/v2.8.2.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.8.2/
 
