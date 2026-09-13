@@ -1,5 +1,12 @@
 from flask import render_template_string, url_for
 
+# These tests send requests to apps from create_app(). potato.routes registers
+# its handlers with module-level @app.route, and Flask refuses that on an app
+# that has already served, so a later test that first imports routes fails
+# with "The setup method 'route' can no longer be called". Importing it here,
+# before any app serves, keeps the invariant documented in create_app().
+import potato.routes  # noqa: F401,E402
+
 
 def test_proxy_fix_uses_forwarded_prefix_for_static_urls(monkeypatch):
     monkeypatch.setenv("POTATO_PROXY_FIX", "1")

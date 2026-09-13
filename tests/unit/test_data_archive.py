@@ -18,6 +18,12 @@ import tarfile
 
 import pytest
 
+# Some tests here send requests to an app from create_app(). potato.routes has
+# to be imported before any such app serves (see the invariant in create_app()),
+# or a later test that imports it first fails with "The setup method 'route'
+# can no longer be called".
+import potato.routes  # noqa: F401
+
 from potato.deploy.providers.base import ProviderError
 from potato.deploy.pull import _safe_extract, verify_pull
 from potato.server_utils.data_archive import (
