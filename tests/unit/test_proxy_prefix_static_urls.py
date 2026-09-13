@@ -140,11 +140,36 @@ def test_pages_with_root_relative_fetch_include_the_prefix_helper():
     import pathlib
     import re
 
-    templates = pathlib.Path("potato/templates")
-    root_relative = re.compile(r"""(?:fetch\(|location\.href\s*=\s*|location\.replace\()['"]/""")
+    # Anchored to this file, not the working directory: a relative path makes
+    # the glob empty -- and the assertion vacuously true -- whenever pytest is
+    # invoked from anywhere but the repository root.
+    templates = pathlib.Path(__file__).resolve().parents[2] / "potato" / "templates"
+    # test_*.html are gitignored local scratch pages (see .gitignore) and
+    # generated/ holds per-task templates the server writes at startup, so
+    # neither ships. glob("*.html") already excludes the latter.
+    pages = [p for p in sorted(templates.glob("*.html")) if not p.name.startswith("test_")]
+    assert pages, f"no templates found under {templates}"
+
+    # Every browser API that takes a URL the client builds itself. fetch and
+    # location were the original two; sendBeacon carries the autosave on unload,
+    # EventSource carries the live-agent stream, and XMLHttpRequest.open still
+    # backs a few older pages. All four go through window.potatoUrl.
+    root_relative = re.compile(
+        r"""(?:
+              fetch\(
+            | location\.href\s*=\s*
+            | location\.replace\(
+            | new\s+EventSource\(
+            | sendBeacon\(
+            | \.open\(\s*['"][A-Za-z]+['"]\s*,\s*
+        )
+        ['"]/(?!/)
+        """,
+        re.VERBOSE,
+    )
 
     missing = []
-    for path in sorted(templates.glob("*.html")):
+    for path in pages:
         text = path.read_text(encoding="utf-8", errors="replace")
         if root_relative.search(text) and "_url_prefix.js" not in text:
             missing.append(path.name)

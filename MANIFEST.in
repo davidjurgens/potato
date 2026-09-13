@@ -4,6 +4,10 @@ graft potato/templates
 # does not read .gitignore, so without this a release cut from a working tree
 # would ship thousands of the maintainer's own task templates.
 prune potato/templates/generated
+# Same reasoning for local scratch pages: .gitignore carries
+# potato/templates/test_*.html, so a release cut from a working tree would
+# otherwise ship whatever debug page the maintainer last left there.
+exclude potato/templates/test_*.html
 include potato/schemas/*.json
 recursive-include potato/static/ *
 recursive-include potato/i18n/ *.yaml
