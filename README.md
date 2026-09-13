@@ -35,6 +35,18 @@ python potato/flask_server.py start examples/classification/single-choice/config
 
 Open [http://localhost:8000](http://localhost:8000) and start annotating. Browse the [`examples/`](examples/) directory for ready-to-use templates.
 
+**Using Claude Code, Codex, or Cursor?** Install the
+[Potato skill](https://github.com/davidjurgens/potato-skill) first. It shows the
+agent how to design a task, build and run it, check the interface, and export
+the annotations.
+
+```
+/plugin marketplace add davidjurgens/potato-skill
+/plugin install potato-skill@potato
+```
+
+For Codex or Cursor: `npx skills add davidjurgens/potato-skill --agent codex cursor`
+
 ---
 
 ## What Can You Annotate?
@@ -281,9 +293,12 @@ Potato has two complementary doc sites: **[potatoannotator.com/docs](https://www
 
 ### For coding agents
 
-If you point Claude Code, Codex, or Cursor at Potato, give it these generated,
-machine-checkable specs rather than prose — they are built from the running code,
-so they cannot drift from it.
+Install the [Potato skill](https://github.com/davidjurgens/potato-skill) first.
+[Agent Instructions](docs/tools/authoring-agents.md) has the install commands
+for each agent.
+
+Without the skill, an agent can still work from these specs. They are generated
+from the code, so they match what the server accepts:
 
 | Artifact | What it gives you |
 |----------|-------------------|

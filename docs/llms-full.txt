@@ -48436,11 +48436,23 @@ In Claude Code:
 
 ```
 /plugin marketplace add davidjurgens/potato-skill
-/plugin install potato-tasks@potato
+/plugin install potato-skill@potato
 ```
 
-Codex and Cursor read `AGENTS.md`, which is at the root of that repository. Copy
-it into the project you are working in.
+For Codex, Cursor and other agents, the
+[`skills`](https://github.com/vercel-labs/skills) CLI installs it:
+
+```bash
+npx skills add davidjurgens/potato-skill --agent codex cursor
+```
+
+`codex` and `cursor` put the skill in `.agents/skills/potato-skill/`;
+`claude-code` puts it in `.claude/skills/potato-skill/`. If your agent reads
+`AGENTS.md` and nothing else, copy `AGENTS.md` from the root of that repository
+into your project.
+
+Potato has to be installed where the agent runs commands, because the skill's
+helper scripts import it and call the `potato` CLI.
 
 ## The references
 
