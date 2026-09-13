@@ -86,6 +86,7 @@ class OpenRouterEndpoint(BaseAIEndpoint):
                 raise AIEndpointRequestError(f"OpenRouter error {r.status_code}: {r.text}")
             
             data = r.json()
+            self._warn_if_truncated(data["choices"][0].get("finish_reason"))
             if self.supports_structured_output():
                 return self.parseStringToJson(data["choices"][0]["message"]["content"])
             return data["choices"][0]["message"]["content"]

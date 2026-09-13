@@ -110,6 +110,7 @@ Please respond with valid JSON matching this schema:
                 messages=[{"role": "user", "content": json_prompt}],
             )
 
+            self._warn_if_truncated(response.stop_reason)
             content = response.content[0].text
             return self.parseStringToJson(content)
 
@@ -164,6 +165,7 @@ Only return the JSON object, no other text."""
                 messages=[{"role": "user", "content": content}],
             )
 
+            self._warn_if_truncated(response.stop_reason, where="image response")
             response_content = response.content[0].text
             logger.debug(f"Anthropic vision response: {response_content[:500] if response_content else 'empty'}")
 
@@ -218,6 +220,7 @@ Only return the JSON object, no other text."""
                 kwargs["system"] = system
 
             response = self.client.messages.create(**kwargs)
+            self._warn_if_truncated(response.stop_reason, where="chat reply")
             return response.content[0].text
 
         except Exception as e:

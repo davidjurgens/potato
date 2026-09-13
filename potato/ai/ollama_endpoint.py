@@ -89,6 +89,8 @@ class OllamaEndpoint(BaseAIEndpoint):
             logger.debug(f"[Ollama] Response type: {type(response)}")
             logger.debug(f"[Ollama] Full response: {response}")
 
+            self._warn_if_truncated(self._stop_reason(response, 'done_reason'))
+
             # Get the message object - handle both dict and object access
             message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)
             if message is None:
@@ -146,6 +148,9 @@ class OllamaEndpoint(BaseAIEndpoint):
                 options=options,
                 think=think,
             )
+
+            self._warn_if_truncated(self._stop_reason(response, 'done_reason'),
+                                    where="chat reply")
 
             message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)
             if message is None:

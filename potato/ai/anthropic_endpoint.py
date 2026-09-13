@@ -92,6 +92,7 @@ class AnthropicEndpoint(BaseAIEndpoint):
                 temperature=self.temperature,
                 messages=[{"role": "user", "content": prompt}]
             )
+            self._warn_if_truncated(response.stop_reason)
             return response.content[0].text
         except Exception as e:
             raise AIEndpointRequestError(f"Anthropic request failed: {e}")
@@ -118,6 +119,7 @@ class AnthropicEndpoint(BaseAIEndpoint):
                 kwargs["system"] = system_text
 
             response = self.client.messages.create(**kwargs)
+            self._warn_if_truncated(response.stop_reason, where="chat reply")
             return response.content[0].text
         except Exception as e:
             raise AIEndpointRequestError(f"Anthropic chat request failed: {e}")

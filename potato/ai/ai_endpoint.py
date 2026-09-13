@@ -331,6 +331,55 @@ class BaseAIEndpoint(ABC):
         except Exception as e:
             raise AIEndpointRequestError(f"Chat query failed: {e}")
 
+    #: Every spelling a provider uses for "I stopped because I ran out of
+    #: budget". Compared case-insensitively against the last dotted segment, so
+    #: a Gemini `FinishReason.MAX_TOKENS` enum matches as readily as OpenAI's
+    #: bare `"length"`. Checking only `"length"` meant Anthropic, Gemini and
+    #: Ollama could truncate a reply in total silence.
+    TRUNCATION_REASONS = frozenset({
+        "length",            # openai, vllm, openrouter, huggingface, ollama
+        "max_tokens",        # anthropic
+        "maxtokens",         # anthropic, defensive
+        "max_output_tokens",  # gemini, older SDKs
+        "model_length",      # vllm, when the context rather than max_tokens ran out
+    })
+
+    @classmethod
+    def _is_truncation_reason(cls, finish_reason) -> bool:
+        """Whether a provider's stop reason means "ran out of budget".
+
+        Accepts a string, an enum, or None. Enums are compared by their last
+        dotted segment because `str(FinishReason.MAX_TOKENS)` renders as
+        `"FinishReason.MAX_TOKENS"` on some SDK versions and `"MAX_TOKENS"` on
+        others, and the caller should not have to know which.
+        """
+        if finish_reason is None:
+            return False
+        token = getattr(finish_reason, "name", None) or str(finish_reason)
+        return token.rsplit(".", 1)[-1].strip().lower() in cls.TRUNCATION_REASONS
+
+    @staticmethod
+    def _stop_reason(response, *names):
+        """Read the first of ``names`` off a response that may be dict or object.
+
+        The Ollama client returns something that answers to both, and Gemini
+        buries its reason one level down on ``candidates[0]``. Callers should
+        not have to branch on that to ask a yes/no question.
+        """
+        for name in names:
+            if hasattr(response, "get"):
+                try:
+                    value = response.get(name)
+                except Exception:  # pragma: no cover - exotic mapping
+                    value = None
+            else:
+                value = None
+            if value is None:
+                value = getattr(response, name, None)
+            if value is not None:
+                return value
+        return None
+
     def _warn_if_truncated(self, finish_reason, where="response"):
         """
         Say so when the model ran out of budget mid-answer.
@@ -343,10 +392,12 @@ class BaseAIEndpoint(ABC):
         finish reason was in the response all along.
 
         Args:
-            finish_reason: The API's finish_reason for the choice
+            finish_reason: The API's stop/finish reason for the choice. May be a
+                string, an enum, or None; `None` is treated as "not truncated",
+                since a provider that reports nothing is not evidence either way.
             where: What was being generated, for the message
         """
-        if finish_reason != "length":
+        if not self._is_truncation_reason(finish_reason):
             return
         logger.warning(
             "The model hit max_tokens (%s) before finishing this %s, so the "

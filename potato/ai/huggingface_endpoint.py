@@ -57,6 +57,8 @@ class HuggingfaceEndpoint(BaseAIEndpoint):
                     }
                 }
             )
+            self._warn_if_truncated(
+                self._stop_reason(response.choices[0], "finish_reason"))
             return response.choices[0].message.content
         except Exception as e:
             raise AIEndpointRequestError(f"Hugging Face request failed: {e}")

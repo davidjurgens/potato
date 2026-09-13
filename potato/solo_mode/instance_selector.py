@@ -162,6 +162,7 @@ class InstanceSelector:
             self._llm_predicted_pool = []
 
             # Build low confidence pool
+            observed_confidences = []
             if llm_predictions:
                 for instance_id in available_list:
                     if instance_id in llm_predictions:
@@ -169,9 +170,29 @@ class InstanceSelector:
                         # Check if any prediction is below threshold
                         for pred in preds.values():
                             confidence = pred.get('confidence_score', 1.0)
+                            observed_confidences.append(confidence)
                             if confidence < confidence_threshold:
                                 self._low_confidence_pool.append(instance_id)
                                 break
+
+            # An empty pool is dropped by _select_weighted_pool and its weight
+            # is renormalised onto the others, so the largest of the five
+            # weights can route nothing at all and never say so. The default
+            # `direct_confidence` estimator self-reports in the 0.95-1.0 band,
+            # well above the 0.5 default threshold, so on an unmodified config
+            # this arm is inert rather than merely quiet. Say which way the
+            # threshold missed -- the number to change depends on it.
+            if observed_confidences and not self._low_confidence_pool:
+                lowest = min(observed_confidences)
+                logger.warning(
+                    "low_confidence_weight is %.2f and the low-confidence pool "
+                    "is empty: %d prediction(s) scored no lower than %.2f, and "
+                    "the threshold is %.2f. That weight is being renormalised "
+                    "onto the other pools. Raise solo_mode.confidence_threshold "
+                    "above %.2f, or use an uncertainty estimator whose range "
+                    "reaches it -- a self-reported confidence rarely goes low.",
+                    self.weights.low_confidence, len(observed_confidences),
+                    lowest, confidence_threshold, lowest)
 
             # Build LLM-predicted pool: instances with predictions that aren't
             # already in the low_confidence pool (those are more valuable there).

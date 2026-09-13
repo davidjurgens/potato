@@ -99,6 +99,8 @@ class OpenAIEndpoint(BaseAIEndpoint):
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
             )
+            self._warn_if_truncated(response.choices[0].finish_reason,
+                                    where="chat reply")
             return response.choices[0].message.content
         except Exception as e:
             raise AIEndpointRequestError(f"OpenAI chat request failed: {e}")

@@ -56,6 +56,10 @@ class GeminiEndpoint(BaseAIEndpoint):
                     'response_schema': prompt_format.model_json_schema(),
                 }
             )
+            candidates = getattr(response, "candidates", None) or []
+            if candidates:
+                self._warn_if_truncated(
+                    self._stop_reason(candidates[0], "finish_reason", "finishReason"))
             return response.text
         except Exception as e:
             raise AIEndpointRequestError(f"Gemini request failed: {e}")

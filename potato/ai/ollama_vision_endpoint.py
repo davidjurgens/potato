@@ -135,6 +135,8 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
                 think=False,
             )
 
+            self._warn_if_truncated(self._stop_reason(response, 'done_reason'))
+
             message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)
             if message is None:
                 raise AIEndpointRequestError("No message in Ollama response")
@@ -204,6 +206,9 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
             logger.debug(f"Ollama vision response type: {type(response)}")
 
             # Extract content from response
+            self._warn_if_truncated(self._stop_reason(response, 'done_reason'),
+                                    where="image response")
+
             message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)
             if message is None:
                 raise AIEndpointRequestError("No message in Ollama vision response")

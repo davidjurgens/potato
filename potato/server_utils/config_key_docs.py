@@ -587,7 +587,11 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Sampling temperature, 0 to 2", type="number", default=0.1, category=AI,
     ),
     "ai_support.ai_config.timeout": _D(
-        "Seconds to wait for the model", type="integer", default=30, category=AI,
+        "Seconds to wait for the model. Left out, each endpoint applies its "
+        "own: 30 for openai, anthropic, gemini, huggingface and vllm, 60 for "
+        "ollama and the openai/anthropic vision endpoints, 120 for "
+        "ollama_vision. There is no single default to quote here",
+        type="integer", category=AI, example=120,
     ),
     "ai_support.ai_config.include": _D(
         "Which schemes get assistants. Off by default: without it every "

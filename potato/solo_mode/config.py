@@ -22,7 +22,13 @@ class ModelConfig:
     max_tokens: int = 1000
     temperature: float = 0.1
     think: Optional[bool] = None  # None = use endpoint default, True/False = override
-    timeout: int = 60  # Request timeout in seconds (increase for thinking models)
+    # None means "let the endpoint apply its own default", which is 30s for
+    # openai/anthropic/gemini/huggingface/vllm, 60s for ollama and the
+    # openai/anthropic vision endpoints, and 120s for ollama_vision. The
+    # sentinel has to be outside the valid range: this was `int = 60` with a
+    # `!= 60` guard below, so writing the documented default was the one way
+    # to NOT set it -- `timeout: 61` gave you 61 and `timeout: 60` gave you 30.
+    timeout: Optional[int] = None  # Request timeout in seconds (raise for thinking models)
 
     def to_endpoint_config(self, temperature_override: Optional[float] = None) -> Dict[str, Any]:
         """Build the full endpoint config dict for AIEndpointFactory.
@@ -48,7 +54,7 @@ class ModelConfig:
             ai_config['base_url'] = self.base_url
         if self.think is not None:
             ai_config['think'] = self.think
-        if self.timeout != 60:
+        if self.timeout is not None:
             ai_config['timeout'] = self.timeout
         return {
             'ai_support': {
@@ -343,7 +349,7 @@ def _parse_model_config(model_data: Dict[str, Any]) -> ModelConfig:
         max_tokens=model_data.get('max_tokens', 1000),
         temperature=model_data.get('temperature', 0.1),
         think=model_data.get('think'),  # None = endpoint default, True/False = override
-        timeout=model_data.get('timeout', 60),
+        timeout=model_data.get('timeout'),  # absent = endpoint default, see ModelConfig
     )
 
 

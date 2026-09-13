@@ -212,6 +212,8 @@ class VLLMEndpoint(BaseAIEndpoint):
                 )
 
             result = response.json()
+            self._warn_if_truncated(result["choices"][0].get("finish_reason"),
+                                    where="chat reply")
             content = result["choices"][0]["message"].get("content") or ""
             return content
 
