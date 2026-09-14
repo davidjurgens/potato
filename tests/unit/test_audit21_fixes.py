@@ -83,9 +83,16 @@ class TestTerminationHandlerInstallSite:
         prior = signal.getsignal(signal.SIGTERM)
         try:
             app = flask.Flask(__name__)
+            # The sandbox settings live under live_coding_agent. A top-level
+            # `sandbox_mode: none` was never read (and "none" is not a mode),
+            # so this booted the default container sandbox and failed on any
+            # host without a running Docker daemon. `trusted` needs no daemon.
             flask_server._register_web_agent_blueprints_if_needed(app, {
                 "task_dir": ".",
-                "sandbox_mode": "none",
+                "live_coding_agent": {
+                    "sandbox_mode": "trusted",
+                    "acknowledge_untrusted_code_execution": True,
+                },
                 "annotation_schemes": [],
                 "site_dir": ".",
                 "instance_display": {"fields": [

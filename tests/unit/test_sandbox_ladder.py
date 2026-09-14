@@ -279,7 +279,14 @@ class TestContainerBackend:
     """The default rung, exercised against a real daemon when there is one."""
 
     @pytest.fixture
-    def container(self, workspace):
+    def settings(self):
+        """Container settings, or a skip when there is nothing to run them on.
+
+        The class-level skipif only asks whether the docker binary exists. An
+        installed Docker Desktop that is not running passes it, so every test
+        that creates a container has to come through here or fail with
+        "daemon not reachable" instead of skipping.
+        """
         from potato.server_utils.container_utils import container_cli_available
         if not container_cli_available("docker"):
             pytest.skip("docker daemon not reachable")
@@ -289,6 +296,10 @@ class TestContainerBackend:
                            capture_output=True, check=True)
         except subprocess.CalledProcessError:
             pytest.skip("sandbox image %s not pulled" % settings.sandbox_image)
+        return settings
+
+    @pytest.fixture
+    def container(self, workspace, settings):
         backend = create_backend(workspace, settings)
         backend.create("pytest-ctr-01")
         yield backend
@@ -326,8 +337,7 @@ class TestContainerBackend:
                                "content": "x"}, container)
         assert not os.path.exists(os.path.join(workspace, "sandbox-only.txt"))
 
-    def test_cleanup_removes_the_container(self, workspace):
-        settings = SandboxSettings.from_config({"sandbox_mode": "container"})
+    def test_cleanup_removes_the_container(self, workspace, settings):
         backend = create_backend(workspace, settings)
         backend.create("pytest-ctr-02")
         name = "potato-agent-pytest-ctr-0"
@@ -339,8 +349,8 @@ class TestContainerBackend:
         ).stdout
         assert "pytest-ctr-02" not in listed
 
-    def test_cleanup_does_not_touch_the_configured_directory(self, workspace):
-        settings = SandboxSettings.from_config({"sandbox_mode": "container"})
+    def test_cleanup_does_not_touch_the_configured_directory(self, workspace,
+                                                              settings):
         backend = create_backend(workspace, settings)
         backend.create("pytest-ctr-03")
         backend.cleanup()
