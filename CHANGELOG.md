@@ -2,6 +2,34 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [2.9.1] - Chat and Gemini Fixes
+
+Chat works again on six endpoint types, Gemini requests go through, and
+OpenRouter requests can no longer hang.
+
+### Upgrading
+
+OpenRouter requests now time out after 30 seconds. A model that takes longer
+used to succeed eventually; set `ai_config.timeout` for it.
+
+### Bug fixes
+
+- **Chat failed on six endpoint types.** `huggingface`, `gemini`,
+  `openrouter`, `openai_vision`, `anthropic_vision` and `ollama_vision` had no
+  chat method of their own. The shared fallback called their `query()` without
+  the output format it requires, so every message failed before a request was
+  sent and the annotator saw "Sorry, I encountered an error." Through
+  `chat_support` this hit the first three; the coding-agent proxy and the
+  simulator hit all six. It dates from the chat sidebar's first commit
+  (81d252bf, 2026-03-09). Each endpoint now sends the conversation natively as
+  plain text, with the system prompt where the provider expects it.
+- **Every Gemini request failed.** `query()` passed `generation_config=` to
+  google-genai's `generate_content`, which has no such parameter. It now
+  passes `config=`, with the response schema as `response_json_schema`.
+- **OpenRouter requests had no timeout**, so a stalled provider held the
+  request open indefinitely. They now use `ai_config.timeout`, default 30
+  seconds, as the other endpoints do.
+
 ## [2.9.0] - Importers, Local Transcription and Provenance
 
 Potato can now import projects from brat, doccano, Prodigy, CoNLL and REFI-QDA,
