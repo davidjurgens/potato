@@ -2,6 +2,15 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **`chat_support.endpoint_type` accepts `openai_vision`, `anthropic_vision`
+  and `ollama_vision`**, so chat can share a server and model with
+  `ai_support` on an image task. The chat is still sent the instance text
+  only, never the image.
+
 ## [2.9.1] - Chat and Gemini Fixes
 
 Chat works again on six endpoint types, Gemini requests go through, and

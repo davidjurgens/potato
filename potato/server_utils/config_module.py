@@ -7417,8 +7417,12 @@ def validate_chat_support_config(config_data: Dict[str, Any]) -> None:
         )
 
     endpoint_type = chat_config["endpoint_type"]
+    # Every type here must answer chat_query itself; the base class's
+    # flattening fallback cannot call a query() that requires an output format.
+    # tests/unit/test_chat_query_every_endpoint.py holds this list to that.
     valid_endpoint_types = [
         "openai", "anthropic", "huggingface", "ollama", "gemini", "vllm", "openrouter",
+        "openai_vision", "anthropic_vision", "ollama_vision",
     ]
     if endpoint_type not in valid_endpoint_types:
         raise ConfigValidationError(

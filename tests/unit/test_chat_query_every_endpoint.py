@@ -77,6 +77,44 @@ class TestEveryChatModelOverridesTheFlatteningFallback:
             f"query(prompt) with no output format")
 
 
+class TestChatSupportAcceptsOnlyTypesThatCanChat:
+
+    def test_every_accepted_type_answers_chat_query_itself(self):
+        """Validation must not let a config through to a chat that cannot answer.
+
+        Reads the accepted list by asking the validator about every registered
+        type, rather than from a copy of the list.
+        """
+        from potato.server_utils.config_module import (
+            ConfigValidationError, validate_chat_support_config)
+        accepted = []
+        for endpoint_type in sorted(set(AIEndpointFactory._lazy_endpoints)
+                                    | set(AIEndpointFactory._endpoints)):
+            try:
+                validate_chat_support_config({"chat_support": {
+                    "enabled": True, "endpoint_type": endpoint_type}})
+            except ConfigValidationError:
+                continue
+            accepted.append(endpoint_type)
+            try:
+                cls = AIEndpointFactory._resolve_endpoint_class(endpoint_type)
+            except Exception:
+                continue  # optional SDK not installed here
+            assert cls.chat_query is not BaseAIEndpoint.chat_query, (
+                f"chat_support accepts {endpoint_type!r}, which has no "
+                f"chat_query of its own")
+        assert {"openai_vision", "anthropic_vision", "ollama_vision"} <= set(
+            accepted), f"vision endpoints refused; accepted {accepted}"
+
+    @pytest.mark.parametrize("endpoint_type", sorted(NOT_CHAT_MODELS))
+    def test_detectors_and_segmenters_are_refused(self, endpoint_type):
+        from potato.server_utils.config_module import (
+            ConfigValidationError, validate_chat_support_config)
+        with pytest.raises(ConfigValidationError):
+            validate_chat_support_config({"chat_support": {
+                "enabled": True, "endpoint_type": endpoint_type}})
+
+
 class TestHuggingface:
 
     def test_the_conversation_reaches_chat_completion_as_free_text(self):

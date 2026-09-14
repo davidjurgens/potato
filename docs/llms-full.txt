@@ -31917,10 +31917,14 @@ chat_support:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | bool | `false` | Enable/disable chat support |
-| `endpoint_type` | string | required | LLM provider: `openai`, `anthropic`, `ollama`, `huggingface`, `gemini`, `vllm`, `openrouter` |
+| `endpoint_type` | string | required | LLM provider: `openai`, `anthropic`, `ollama`, `huggingface`, `gemini`, `vllm`, `openrouter`, `openai_vision`, `anthropic_vision`, `ollama_vision` |
 | `ai_config` | dict | `{}` | Provider-specific configuration |
 | `system_prompt` | dict | `{}` | System prompt customization |
 | `ui` | dict | `{}` | UI appearance settings |
+
+The vision types let chat share a server and model with `ai_support` on an
+image task. The chat itself is sent the instance text only, never the image,
+on every endpoint type.
 
 ### `chat_support.ai_config`
 
