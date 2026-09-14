@@ -200,6 +200,27 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
         except Exception as e:
             raise AIEndpointRequestError(f"OpenAI query failed: {e}")
 
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """Send a multi-turn text chat.
+
+        Calls the client directly rather than going through `_create`, whose
+        JSON modes would force a conversational reply into a JSON object. The
+        base class's fallback called query(prompt) without an output_format
+        and failed on every message.
+        """
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+            )
+            self._warn_if_truncated(response.choices[0].finish_reason,
+                                    where="chat reply")
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            raise AIEndpointRequestError(f"OpenAI vision chat request failed: {e}")
+
     def query_with_image(
         self,
         prompt: str,

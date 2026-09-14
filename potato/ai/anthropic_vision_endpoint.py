@@ -117,6 +117,37 @@ Please respond with valid JSON matching this schema:
         except Exception as e:
             raise AIEndpointRequestError(f"Anthropic query failed: {e}")
 
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """Send a multi-turn text chat, with the system prompt passed natively.
+
+        The base class's fallback called query(prompt) without an
+        output_format and failed on every message.
+        """
+        try:
+            system_parts = []
+            api_messages = []
+            for msg in messages:
+                if msg["role"] == "system":
+                    system_parts.append(msg["content"])
+                else:
+                    api_messages.append({"role": msg["role"],
+                                         "content": msg["content"]})
+
+            kwargs = {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "messages": api_messages,
+            }
+            if system_parts:
+                kwargs["system"] = "\n\n".join(system_parts)
+
+            response = self.client.messages.create(**kwargs)
+            self._warn_if_truncated(response.stop_reason, where="chat reply")
+            return response.content[0].text
+        except Exception as e:
+            raise AIEndpointRequestError(f"Anthropic vision chat request failed: {e}")
+
     def query_with_image(
         self,
         prompt: str,

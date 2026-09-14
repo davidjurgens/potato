@@ -4,6 +4,8 @@ Google Gemini AI endpoint implementation.
 Integration with Google's Gemini API for LLM inference.
 """
 
+from typing import Dict, List
+
 from google import genai
 from .ai_endpoint import BaseAIEndpoint, AIEndpointRequestError
 
@@ -47,14 +49,22 @@ class GeminiEndpoint(BaseAIEndpoint):
             AIEndpointRequestError: If the request fails
         """
         try:
+            # `config=`, not `generation_config=`: google-genai's
+            # generate_content has no generation_config parameter, so every
+            # call raised TypeError before a request was sent. A raw JSON
+            # schema goes in response_json_schema, which needs the JSON mime
+            # type alongside it.
+            config = {
+                'max_output_tokens': self.max_tokens,
+                'temperature': self.temperature,
+            }
+            if prompt_format is not None and hasattr(prompt_format, "model_json_schema"):
+                config['response_mime_type'] = 'application/json'
+                config['response_json_schema'] = prompt_format.model_json_schema()
             response = self.client.models.generate_content(
                 model=self.model,
                 contents=prompt,
-                generation_config={
-                    'max_output_tokens': self.max_tokens,
-                    'temperature': self.temperature,
-                    'response_schema': prompt_format.model_json_schema(),
-                }
+                config=config,
             )
             candidates = getattr(response, "candidates", None) or []
             if candidates:
@@ -63,3 +73,41 @@ class GeminiEndpoint(BaseAIEndpoint):
             return response.text
         except Exception as e:
             raise AIEndpointRequestError(f"Gemini request failed: {e}")
+
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """Send a multi-turn chat to Gemini as free text.
+
+        Gemini calls the assistant role "model" and takes the system prompt as
+        a config field rather than a turn. The base class's fallback called
+        query(prompt) without a prompt_format and failed on every message.
+        """
+        try:
+            system_parts = []
+            contents = []
+            for msg in messages:
+                if msg["role"] == "system":
+                    system_parts.append(msg["content"])
+                    continue
+                role = "model" if msg["role"] == "assistant" else "user"
+                contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+
+            config = {
+                'max_output_tokens': self.max_tokens,
+                'temperature': self.temperature,
+            }
+            if system_parts:
+                config['system_instruction'] = "\n\n".join(system_parts)
+
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=contents,
+                config=config,
+            )
+            candidates = getattr(response, "candidates", None) or []
+            if candidates:
+                self._warn_if_truncated(
+                    self._stop_reason(candidates[0], "finish_reason", "finishReason"),
+                    where="chat reply")
+            return response.text or ""
+        except Exception as e:
+            raise AIEndpointRequestError(f"Gemini chat request failed: {e}")

@@ -154,6 +154,35 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
         except Exception as e:
             raise AIEndpointRequestError(f"Ollama query failed: {e}")
 
+    def chat_query(self, messages: List[Dict[str, str]]) -> str:
+        """Send a multi-turn text chat as free text, without a format schema.
+
+        The base class's fallback called query(prompt) without an
+        output_format and failed on every message.
+        """
+        try:
+            response = self.client.chat(
+                model=self.model,
+                messages=messages,
+                options={
+                    'temperature': self.temperature,
+                    'num_predict': self.max_tokens,
+                },
+                think=self.ai_config.get('think', False),
+            )
+
+            self._warn_if_truncated(self._stop_reason(response, 'done_reason'),
+                                    where="chat reply")
+
+            message = response.get('message') if hasattr(response, 'get') else getattr(response, 'message', None)
+            if message is None:
+                raise AIEndpointRequestError("No message in Ollama chat response")
+
+            content = message.get('content') if hasattr(message, 'get') else getattr(message, 'content', None)
+            return content or ""
+        except Exception as e:
+            raise AIEndpointRequestError(f"Ollama vision chat request failed: {e}")
+
     def query_with_image(
         self,
         prompt: str,
