@@ -17,12 +17,23 @@ piece can be read (or handed to a collaborator) for what it actually is:
                                 or resolved after disagreement) — this is
                                 the main-annotation process, distinct from
                                 the validation sample above
+    codebook_versions.csv    — one row per codebook revision a
+                                codebook-driven relabel sweep has run
+                                against, with the agreement rate and
+                                sample size measured under it — see
+                                manager.codebook_version_history
+    codebook_snapshots.json  — the full codebook (every code's fields) as
+                                it read at each of those revisions, keyed
+                                by revision — codebook_versions.csv's
+                                numbers without this are numbers about an
+                                unrecorded codebook
 
-All four are bundled into one ZIP by ``build_zip()``.
+All six are bundled into one ZIP by ``build_zip()``.
 """
 
 import csv
 import io
+import json
 import zipfile
 from typing import Any, Dict, List
 
@@ -145,8 +156,45 @@ def build_cooperative_rows(manager: Any) -> List[Dict[str, Any]]:
     return rows
 
 
+def build_codebook_version_rows(manager: Any) -> List[Dict[str, Any]]:
+    """One row per codebook revision codebook_version_history has an
+    entry for, oldest first. A small sample_size is flagged in its own
+    column rather than silently folded into the agreement number, since
+    a 100% rate over 3 examples and a 100% rate over 80 mean very
+    different things."""
+    rows: List[Dict[str, Any]] = []
+    for revision, entry in sorted(manager.codebook_version_history.items()):
+        agreement_rate = entry.get('agreement_rate')
+        sample_size = entry.get('sample_size') or 0
+        rows.append({
+            'revision': revision,
+            'agreement_rate': (
+                round(agreement_rate * 100, 1)
+                if agreement_rate is not None else ''),
+            'sample_size': sample_size,
+            'small_sample': 'yes' if 0 < sample_size < 10 else '',
+            'started_at': entry.get('started_at') or '',
+            'completed_at': entry.get('completed_at') or '',
+        })
+    return rows
+
+
+def build_codebook_snapshots(manager: Any) -> str:
+    """The full codebook as it read at each revision in
+    codebook_version_history, as pretty-printed JSON keyed by revision —
+    what codebook_versions.csv's agreement numbers actually describe."""
+    return json.dumps(
+        {
+            str(revision): entry.get('snapshot', [])
+            for revision, entry in sorted(
+                manager.codebook_version_history.items())
+        },
+        indent=2, default=str,
+    )
+
+
 def build_zip(manager: Any) -> bytes:
-    """Bundle all four files into one ZIP for a single download."""
+    """Bundle all files into one ZIP for a single download."""
     files = {
         'metadata_behavioral.csv': _rows_to_csv(
             build_behavioral_rows(manager),
@@ -167,6 +215,12 @@ def build_zip(manager: Any) -> bytes:
             ['instance_id', 'text', 'human_label', 'llm_label', 'outcome',
              'final_label'],
         ),
+        'codebook_versions.csv': _rows_to_csv(
+            build_codebook_version_rows(manager),
+            ['revision', 'agreement_rate', 'sample_size', 'small_sample',
+             'started_at', 'completed_at'],
+        ),
+        'codebook_snapshots.json': build_codebook_snapshots(manager),
     }
 
     buf = io.BytesIO()

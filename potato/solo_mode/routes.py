@@ -639,8 +639,19 @@ def annotate():
         # the codebook-review queue and reroutes it to /disagreements
         # instead — the review item never becomes reachable at all, and
         # from the user's side that reads as "Go does nothing".
-        if not reviewing_stale_item and manager.get_pending_disagreements():
-            return redirect(url_for('solo_mode.disagreements'))
+        if not reviewing_stale_item:
+            # Re-evaluate the end-of-annotation gate live (it otherwise
+            # only updates via the dashboard's readiness poll) so landing
+            # on /annotate directly reflects it too. Takes priority over
+            # the plain disagreements gate below: once nothing's left for
+            # a human and agreement is still short, there's nothing more
+            # for the human to do here except choose how to proceed — see
+            # manager._check_final_gate().
+            manager._check_final_gate()
+            if manager.needs_final_override_choice:
+                return redirect(url_for('solo_mode.final_override'))
+            if manager.get_pending_disagreements():
+                return redirect(url_for('solo_mode.disagreements'))
 
     # Reaching the annotate screen means parallel annotation has begun.
     # Two ways in leave the phase behind PARALLEL_ANNOTATION: coming
@@ -723,6 +734,7 @@ def annotate():
             stats=manager.get_annotation_stats(user_id),
             nav=nav,
             relabel=manager.get_relabel_progress(),
+            codebook_relabel=manager.get_codebook_relabel_progress(),
             existing_label=None,
             autonomous_blockers=readiness.get('blockers') or [],
         )
@@ -748,6 +760,7 @@ def annotate():
             nav=nav,
             existing_label=None,
             relabel=manager.get_relabel_progress(),
+            codebook_relabel=manager.get_codebook_relabel_progress(),
         )
     except KeyError as e:
         logger.error(f"Instance {instance_id} not found in ItemStateManager: {e}")
@@ -761,6 +774,7 @@ def annotate():
             nav=nav,
             existing_label=None,
             relabel=manager.get_relabel_progress(),
+            codebook_relabel=manager.get_codebook_relabel_progress(),
         )
 
     # Was this instance already labeled by this human? (true when Back/Next
@@ -779,6 +793,7 @@ def annotate():
         nav=nav,
         existing_label=existing_label,
         relabel=manager.get_relabel_progress(),
+        codebook_relabel=manager.get_codebook_relabel_progress(),
     )
 
 
@@ -1034,6 +1049,69 @@ def disagreements():
         phase=manager.get_current_phase().name.lower(),
         suggest_edge_cases=suggest_edge_cases,
         agreement_rate=metrics.agreement_rate,
+    )
+
+
+@solo_mode_bp.route('/final-override', methods=['GET', 'POST'])
+@login_required
+@solo_mode_required
+def final_override():
+    """
+    Reached when there's nothing left for a human to label and agreement
+    is still below threshold (manager._check_final_gate() sets
+    needs_final_override_choice). Offers two ways forward: proceed to
+    autonomous labeling anyway with the current codebook, or roll back
+    to whichever past codebook version had the best recorded agreement
+    and re-verify it with a fresh relabel sweep before proceeding.
+
+    GET: Show current agreement plus the version history to pick from.
+    POST: Apply the chosen action.
+    """
+    manager = get_solo_mode_manager()
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        username = session.get('username', 'anonymous')
+
+        if action == 'proceed_anyway':
+            manager.clear_final_gate_flags()
+            manager.phase_controller.transition_to(
+                SoloPhase.AUTONOMOUS_LABELING,
+                reason=f'Manual override by {username} below agreement threshold',
+            )
+            return redirect(url_for('solo_mode.status'))
+
+        if action == 'use_version':
+            try:
+                revision = int(request.form.get('revision', ''))
+            except (TypeError, ValueError):
+                revision = None
+            if revision is not None:
+                manager.restore_codebook_version(revision, actor=username)
+            return redirect(url_for('solo_mode.final_override'))
+
+        return redirect(url_for('solo_mode.final_override'))
+
+    metrics = manager.get_agreement_metrics()
+    threshold = manager.config.thresholds.end_human_annotation_agreement
+    history = sorted(
+        (
+            {'revision': rev, **entry}
+            for rev, entry in manager.codebook_version_history.items()
+            if entry.get('agreement_rate') is not None
+        ),
+        key=lambda e: e['agreement_rate'], reverse=True,
+    )
+    relabel_progress = manager.get_codebook_relabel_progress()
+
+    return render_template(
+        'solo/final_override.html',
+        agreement_rate=metrics.agreement_rate,
+        threshold=threshold,
+        sample_size=metrics.total_compared,
+        history=history,
+        relabel_progress=relabel_progress,
+        phase=manager.get_current_phase().name.lower(),
     )
 
 
@@ -1304,6 +1382,7 @@ def api_status():
         'llm_stats': manager.get_llm_labeling_stats(),
         'validation_progress': manager.get_validation_progress(),
         'should_end_human_annotation': manager.should_end_human_annotation(),
+        'codebook_relabel_progress': manager.get_codebook_relabel_progress(),
     })
 
 

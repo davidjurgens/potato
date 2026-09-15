@@ -203,6 +203,28 @@ class SoloModeManager:
         # versions. Populated by _flag_relabel_after_prompt_change().
         self.pending_relabel_ids: Set[str] = set()
         self.relabel_wave_size: int = 0  # denominator for the progress bar
+
+        # Codebook-driven relabel (annotation phase only): unlike the
+        # prompt-version wave above, this doesn't ask the human to
+        # re-answer — it re-runs the LLM side only, in the background,
+        # and recomputes agreement against the human label already on
+        # file, so agreement stays accurate to the current codebook
+        # without demanding manual rework for every edit. See
+        # _on_codebook_change / _run_codebook_agreement_relabel.
+        self.pending_codebook_relabel_ids: Set[str] = set()
+        self.codebook_relabel_wave_size: int = 0
+        self._codebook_relabel_running: bool = False
+        # revision -> {snapshot, agreement_rate, sample_size, compared,
+        # agreements, started_at, completed_at}. One entry per codebook
+        # revision a relabel sweep has run against — the version history
+        # the end-of-annotation gate and the data export both read from.
+        self.codebook_version_history: Dict[int, Dict[str, Any]] = {}
+        # Set once agreement is still below threshold with nothing left
+        # for a human to label under normal selection — the annotate()
+        # route checks this to gate into the "proceed anyway / use a
+        # better past codebook version" choice screen instead of
+        # silently stalling. See _check_final_gate().
+        self.needs_final_override_choice: bool = False
         self._last_notes_suggest_run: float = 0.0
         self._notes_suggest_since: float = 0.0
         self._NOTES_SUGGEST_MIN_INTERVAL = 300.0  # 5 min between auto passes
@@ -348,6 +370,28 @@ class SoloModeManager:
                 target=self._run_codebook_review,
                 args=(task_dir, project, affected),
                 name="CodebookReviewThread", daemon=True).start()
+
+            # Separate concern from the review-flag sweep above: while
+            # actually annotating, a codebook edit invalidates every
+            # already-human-labeled instance's LLM side of the agreement
+            # comparison. Re-run the LLM (only) on all of them in the
+            # background and recompute agreement against the human label
+            # already on file — no human action required, unlike the
+            # review-flag worklist above. Not during Edge Cases/Contrast
+            # Set Review/Prompt Validation: those phases auto-apply
+            # codebook edits by design and are verified via the Prompt
+            # Validation screen instead (see contrast_sets.py).
+            phase = self.phase_controller.get_current_phase()
+            in_annotation_phase = (
+                SoloPhase.PARALLEL_ANNOTATION.value
+                <= phase.value < SoloPhase.AUTONOMOUS_LABELING.value
+            )
+            if in_annotation_phase:
+                threading.Thread(
+                    target=self._run_codebook_agreement_relabel,
+                    args=(task_dir, project, cur),
+                    name="CodebookAgreementRelabelThread",
+                    daemon=True).start()
         except Exception:
             logger.debug("codebook change review skipped", exc_info=True)
 
@@ -480,6 +524,178 @@ class SoloModeManager:
                     }])
                 summary["flagged"] += len(flags)
         return summary
+
+    # === Codebook-driven agreement relabel (annotation phase) ===
+
+    def _snapshot_codebook(
+        self, task_dir: str, project: str
+    ) -> List[Dict[str, Any]]:
+        """Full, self-contained copy of every code's rich fields, for
+        codebook_version_history — independent of the live codebook, so
+        looking at a past version later doesn't depend on nothing having
+        since renamed/deleted a code it referenced."""
+        from potato.codebook.codebook import Codebook
+        from potato.codebook.store import RICH_FIELDS
+        cb = Codebook.load(task_dir, project)
+        snapshot = []
+        for code in cb.details_in_order():
+            entry = {"id": code.get("id"), "name": code.get("name")}
+            for rich_field in RICH_FIELDS:
+                if rich_field in code:
+                    entry[rich_field] = code[rich_field]
+            snapshot.append(entry)
+        return snapshot
+
+    def _run_codebook_agreement_relabel(
+        self, task_dir: str, project: str, revision: int
+    ) -> None:
+        """Background sweep: fresh LLM prediction for every already
+        human-labeled instance, compared against the human label already
+        on file (never re-asks the human), so agreement_metrics stays
+        accurate to the current codebook without demanding manual rework
+        for every edit. One codebook_version_history entry per revision
+        this has run against, for the end-of-annotation gate and export.
+        Best-effort; a failure here must never break annotation."""
+        with self._lock:
+            if self._codebook_relabel_running:
+                # A sweep is already in flight (e.g. two rapid edits) —
+                # let it finish; the next edit's trigger will pick up
+                # whatever revision is current at that point rather than
+                # running two sweeps in parallel.
+                return
+            self._codebook_relabel_running = True
+            targets = list(self.human_labeled_ids)
+            self.pending_codebook_relabel_ids = set(targets)
+            self.codebook_relabel_wave_size = len(targets)
+            self.codebook_version_history[revision] = {
+                "snapshot": self._snapshot_codebook(task_dir, project),
+                "agreement_rate": None,
+                "sample_size": 0,
+                "compared": 0,
+                "agreements": 0,
+                "started_at": time.time(),
+                "completed_at": None,
+            }
+            self._save_state()
+
+        try:
+            endpoint = self.llm_labeling_thread._get_endpoint()
+        except Exception:
+            endpoint = None
+        if endpoint is None:
+            logger.info(
+                "Codebook agreement relabel: no labeling endpoint; skipping")
+            with self._lock:
+                self._codebook_relabel_running = False
+                self.pending_codebook_relabel_ids = set()
+            return
+
+        schemes = self.app_config.get('annotation_schemes', [])
+        schema_name = schemes[0].get('name', 'default') if schemes else 'default'
+        compared = 0
+        agreements = 0
+
+        for instance_id in targets:
+            try:
+                with self._lock:
+                    prediction = self.get_llm_prediction(instance_id, schema_name)
+                    human_label = prediction.human_label if prediction else None
+                if human_label is None:
+                    continue
+                text = self._get_instance_text(instance_id)
+                if not text:
+                    continue
+                new = self.llm_labeling_thread._label_instance(
+                    instance_id, text, schema_name, endpoint=endpoint)
+                if new is None or new.error:
+                    continue
+                with self._lock:
+                    self._apply_codebook_relabel(
+                        instance_id, schema_name, new, human_label)
+                    compared += 1
+                    if self._check_agreement(new.label, human_label, schema_name):
+                        agreements += 1
+            except Exception:
+                logger.debug(
+                    "codebook agreement relabel failed for %s", instance_id,
+                    exc_info=True)
+            finally:
+                with self._lock:
+                    self.pending_codebook_relabel_ids.discard(instance_id)
+
+        with self._lock:
+            entry = self.codebook_version_history.get(revision)
+            if entry is not None:
+                entry["sample_size"] = compared
+                entry["compared"] = compared
+                entry["agreements"] = agreements
+                entry["agreement_rate"] = (
+                    (agreements / compared) if compared else None)
+                entry["completed_at"] = time.time()
+            self._codebook_relabel_running = False
+            self._save_state()
+        logger.info(
+            "[Codebook Relabel] revision %d: %d/%d agree (%s)",
+            revision, agreements, compared,
+            f"{agreements/compared:.1%}" if compared else "n/a")
+
+    def _apply_codebook_relabel(
+        self, instance_id: str, schema_name: str, new_result, human_label: Any,
+    ) -> None:
+        """Overwrite the LLM side of one prediction with a fresh result and
+        recompute agreement against the human label already on file —
+        the codebook-relabel analog of record_human_label()'s
+        already-compared replace-not-add bookkeeping, but never touching
+        the human's own answer. Caller holds self._lock."""
+        prediction = self.get_llm_prediction(instance_id, schema_name)
+        if prediction is None:
+            return
+        already_compared = prediction.human_label is not None
+        previous_agreement = prediction.agrees_with_human
+
+        prediction.predicted_label = new_result.label
+        prediction.confidence_score = new_result.confidence
+        prediction.reasoning = getattr(
+            new_result, 'reasoning', prediction.reasoning)
+        agrees = self._check_agreement(new_result.label, human_label, schema_name)
+        prediction.agrees_with_human = agrees
+
+        if already_compared:
+            if previous_agreement:
+                self.agreement_metrics.agreements -= 1
+            else:
+                self.agreement_metrics.disagreements -= 1
+        else:
+            self.agreement_metrics.total_compared += 1
+
+        if agrees:
+            self.agreement_metrics.agreements += 1
+            self.disagreement_ids.discard(instance_id)
+        else:
+            self.agreement_metrics.disagreements += 1
+            self.disagreement_ids.add(instance_id)
+        self.agreement_metrics.update_rate()
+        # A codebook-driven relabel supersedes whatever disagreement
+        # state existed before it — if this now disagrees, it's a fresh
+        # disagreement under the current codebook, not a leftover one a
+        # human already explained under an older version.
+        prediction.disagreement_resolved = False
+
+    def get_codebook_relabel_progress(self) -> Dict[str, Any]:
+        """Progress of the current codebook-driven relabel sweep, for the
+        sidebar progress bar. total=0 when nothing is running/pending."""
+        with self._lock:
+            pending = len(self.pending_codebook_relabel_ids)
+            total = self.codebook_relabel_wave_size
+            done = max(total - pending, 0)
+            return {
+                'running': self._codebook_relabel_running,
+                'pending': pending,
+                'total': total,
+                'done': done,
+                'percent_complete': (
+                    round((done / total * 100), 1) if total else 100.0),
+            }
 
     # === Component Properties ===
 
@@ -3113,9 +3329,11 @@ class SoloModeManager:
                 })
 
             if blockers:
+                self._check_final_gate()
                 return {
                     'phase': phase.to_str(), 'applicable': True,
                     'ready': False, 'advanced': False, 'blockers': blockers,
+                    'final_override_required': self.needs_final_override_choice,
                 }
 
         advanced = self.check_and_advance_to_autonomous()
@@ -3124,7 +3342,105 @@ class SoloModeManager:
         return {
             'phase': new_phase.to_str(), 'applicable': True,
             'ready': True, 'advanced': advanced, 'blockers': [],
+            'final_override_required': False,
         }
+
+    def _check_final_gate(self) -> None:
+        """Called whenever agreement is still below threshold with
+        nothing left for a human to label under normal selection —
+        routes the workflow straight into the override-choice gate
+        (proceed anyway, or roll back to a better-performing past
+        codebook version) instead of silently stalling forever.
+        Idempotent; safe to call from every readiness poll.
+
+        While a codebook-driven relabel sweep is in flight, wait —
+        agreement may recover on its own once it finishes, without ever
+        needing to gate at all.
+        """
+        with self._lock:
+            phase = self.phase_controller.get_current_phase()
+            if phase not in (SoloPhase.PARALLEL_ANNOTATION,
+                              SoloPhase.ACTIVE_ANNOTATION):
+                return
+            if self._codebook_relabel_running:
+                return
+
+            metrics = self.agreement_metrics
+            threshold = self.config.thresholds.end_human_annotation_agreement
+            min_sample = self.config.thresholds.minimum_validation_sample
+            if (metrics.total_compared >= min_sample
+                    and metrics.agreement_rate >= threshold):
+                self.needs_final_override_choice = False
+                return
+
+            stats = self.get_annotation_stats()
+            if stats['remaining'] > 0:
+                # Still instances left for a normal human pass — not "the
+                # end" yet, so don't gate.
+                return
+
+            self.needs_final_override_choice = True
+
+    def clear_final_gate_flags(self) -> None:
+        """Explicitly dismiss the override gate — used by the "proceed
+        anyway" override action."""
+        with self._lock:
+            self.needs_final_override_choice = False
+
+    def restore_codebook_version(
+        self, revision: int, actor: str = "human",
+    ) -> Dict[str, Any]:
+        """Roll the live codebook back to a past snapshot from
+        codebook_version_history, then kick off a fresh codebook
+        agreement relabel to re-verify that revision's recorded
+        agreement still holds (the instance set, or the codebook itself
+        since then, may have changed). Only one revision bump (and thus
+        one relabel sweep) for the whole restore: every field but the
+        last is written with bump_revision=False so intermediate writes
+        don't each trigger their own sweep against a half-restored
+        codebook. Returns {'ok': bool, 'reason'?: str}.
+        """
+        with self._lock:
+            entry = self.codebook_version_history.get(revision)
+            if entry is None:
+                return {'ok': False, 'reason': f'no snapshot for revision {revision}'}
+            snapshot = entry.get('snapshot') or []
+            if not snapshot:
+                return {'ok': False, 'reason': 'snapshot is empty'}
+            task_dir, project = self._codebook_ids()
+
+        from potato.codebook import update_code_fields
+        from potato.codebook.revision import current_revision
+        for i, code in enumerate(snapshot):
+            code_id = code.get('id')
+            if not code_id:
+                continue
+            details = {k: v for k, v in code.items() if k not in ('id', 'name')}
+            try:
+                update_code_fields(
+                    task_dir, code_id, details=details, project=project,
+                    actor=actor, actor_kind='human',
+                    bump_revision=(i == len(snapshot) - 1),
+                )
+            except Exception:
+                logger.warning(
+                    "restore_codebook_version: failed to restore code %s",
+                    code_id, exc_info=True)
+
+        with self._lock:
+            self.needs_final_override_choice = False
+
+        # Authoritative, explicit re-verify sweep — not solely relying on
+        # the listener chain, since a churn-guard no-op on the last code
+        # (nothing textually changed) would mean no revision bump and
+        # thus no listener-triggered sweep at all, even though the
+        # earlier bump_revision=False writes still need verifying.
+        cur = current_revision(task_dir, project)
+        threading.Thread(
+            target=self._run_codebook_agreement_relabel,
+            args=(task_dir, project, cur),
+            name="CodebookVersionRestoreRelabelThread", daemon=True).start()
+        return {'ok': True, 'revision': cur}
 
     def _select_stratified_validation_sample(
         self, candidate_ids: List[str], sample_size: int
@@ -3721,6 +4037,12 @@ class SoloModeManager:
                     'validated_instance_ids': list(self.validated_instance_ids),
                     'pending_relabel_ids': list(self.pending_relabel_ids),
                     'relabel_wave_size': self.relabel_wave_size,
+                    'pending_codebook_relabel_ids': list(
+                        self.pending_codebook_relabel_ids),
+                    'codebook_relabel_wave_size': self.codebook_relabel_wave_size,
+                    'codebook_version_history': self.codebook_version_history,
+                    'needs_final_override_choice':
+                        self.needs_final_override_choice,
                     'edge_case_ids': list(self.edge_case_ids),
                     'edge_case_labels': self.edge_case_labels,
                     'agreement_metrics': self.agreement_metrics.to_dict(),
@@ -3821,6 +4143,21 @@ class SoloModeManager:
                 self.validated_instance_ids = set(state.get('validated_instance_ids', []))
                 self.pending_relabel_ids = set(state.get('pending_relabel_ids', []))
                 self.relabel_wave_size = state.get('relabel_wave_size', 0)
+                # Deliberately NOT restoring a "running" flag for the
+                # codebook relabel sweep — a restart kills the thread, so
+                # any instances still pending just wait for the next
+                # codebook edit to retrigger a fresh sweep rather than
+                # claiming to be mid-run forever.
+                self.pending_codebook_relabel_ids = set(
+                    state.get('pending_codebook_relabel_ids', []))
+                self.codebook_relabel_wave_size = state.get(
+                    'codebook_relabel_wave_size', 0)
+                self.codebook_version_history = {
+                    int(k): v for k, v in
+                    state.get('codebook_version_history', {}).items()
+                }
+                self.needs_final_override_choice = state.get(
+                    'needs_final_override_choice', False)
                 self.edge_case_ids = set(state.get('edge_case_ids', []))
                 self.edge_case_labels = state.get('edge_case_labels', {})
 

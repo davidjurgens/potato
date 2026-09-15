@@ -1,50 +1,57 @@
 {
-  "current_phase": "parallel-annotation",
+  "current_phase": "autonomous-labeling",
   "transition_history": [
     {
       "from_phase": "setup",
       "to_phase": "prompt-review",
-      "timestamp": "2026-09-15T00:41:23.179328",
+      "timestamp": "2026-09-15T14:49:06.061157",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "prompt-review",
       "to_phase": "edge-case-synthesis",
-      "timestamp": "2026-09-15T00:41:25.390926",
+      "timestamp": "2026-09-15T14:49:32.744932",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "edge-case-synthesis",
       "to_phase": "edge-case-labeling",
-      "timestamp": "2026-09-15T00:41:51.840681",
+      "timestamp": "2026-09-15T14:51:04.435177",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "edge-case-labeling",
       "to_phase": "contrast-set-review",
-      "timestamp": "2026-09-15T00:43:13.345237",
+      "timestamp": "2026-09-15T14:51:08.407606",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "contrast-set-review",
       "to_phase": "prompt-validation",
-      "timestamp": "2026-09-15T00:56:56.298894",
+      "timestamp": "2026-09-15T14:51:08.409407",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "prompt-validation",
       "to_phase": "parallel-annotation",
-      "timestamp": "2026-09-15T00:57:49.303893",
+      "timestamp": "2026-09-15T14:51:08.410587",
       "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "parallel-annotation",
+      "to_phase": "autonomous-labeling",
+      "timestamp": "2026-09-15T14:53:13.003409",
+      "reason": "Manual override by lina2 below agreement threshold",
       "metadata": {}
     }
   ],
   "phase_data": {},
-  "started_at": "2026-09-15T00:41:23.179340",
+  "started_at": "2026-09-15T14:49:06.061209",
   "completed_at": null
 }

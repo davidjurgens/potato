@@ -1,0 +1,197 @@
+{% extends "solo/base_solo.html" %}
+
+{% block title %}Agreement Below Threshold - Solo Mode{% endblock %}
+
+{% block extra_head %}
+<style>
+    .override-summary {
+        display: flex;
+        gap: 20px;
+        margin: 20px 0;
+        flex-wrap: wrap;
+    }
+
+    .override-stat {
+        flex: 1;
+        min-width: 160px;
+        padding: 16px;
+        border-radius: 8px;
+        background: var(--card, #f8f9fa);
+        border: 1px solid var(--border, #e5e7eb);
+        text-align: center;
+    }
+
+    .override-stat .value {
+        font-size: 28px;
+        font-weight: bold;
+    }
+
+    .override-stat .label {
+        font-size: 13px;
+        color: #666;
+        margin-top: 4px;
+    }
+
+    .override-actions {
+        display: flex;
+        gap: 15px;
+        margin: 24px 0;
+        flex-wrap: wrap;
+    }
+
+    .override-card {
+        flex: 1;
+        min-width: 260px;
+        padding: 20px;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+    }
+
+    .override-card h4 {
+        margin: 0 0 8px 0;
+    }
+
+    .override-card p {
+        margin: 0 0 12px 0;
+        font-size: 14px;
+        color: #666;
+    }
+
+    .version-history-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0 20px 0;
+    }
+
+    .version-history-table th,
+    .version-history-table td {
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border, #e5e7eb);
+        font-size: 13px;
+    }
+
+    .version-history-table tr.best-version {
+        background: color-mix(in oklab, #16a34a 8%, transparent);
+    }
+
+    .small-sample-flag {
+        color: #b45309;
+        font-size: 12px;
+    }
+
+    .relabel-progress-note {
+        margin: 12px 0;
+        padding: 12px;
+        background: color-mix(in oklab, #2563eb 8%, var(--card, white));
+        border: 1px solid color-mix(in oklab, #2563eb 30%, transparent);
+        border-radius: var(--radius, 0.5rem);
+        font-size: 13px;
+    }
+</style>
+{% endblock %}
+
+{% block flow_guidance %}
+<div class="flow-guidance" role="note">
+    <span class="flow-guidance-icon" aria-hidden="true">&rarr;</span>
+    <span>
+        Nothing is left to label and agreement is still below threshold.
+        Proceed anyway with the current codebook, or roll back to
+        whichever past version performed best.
+    </span>
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Agreement Below Threshold</h1>
+
+<div class="override-summary">
+    <div class="override-stat">
+        <div class="value">{{ (agreement_rate * 100)|round(1) if agreement_rate is not none else '—' }}%</div>
+        <div class="label">Current agreement ({{ sample_size }} compared)</div>
+    </div>
+    <div class="override-stat">
+        <div class="value">{{ (threshold * 100)|int }}%</div>
+        <div class="label">Required to proceed automatically</div>
+    </div>
+</div>
+
+{% if relabel_progress.running %}
+<div class="relabel-progress-note" role="status">
+    <p>
+        <strong>Re-verifying a restored codebook version&hellip;</strong>
+        {{ relabel_progress.done }} / {{ relabel_progress.total }} relabeled
+        ({{ relabel_progress.percent_complete }}%). Refresh this page once
+        it finishes.
+    </p>
+</div>
+{% endif %}
+
+<div class="override-actions">
+    <div class="override-card">
+        <h4>Proceed Anyway</h4>
+        <p>
+            Hand the rest of the dataset to the LLM using the current
+            codebook, even though agreement is below threshold.
+        </p>
+        <form method="POST" action="{{ url_for('solo_mode.final_override') }}">
+            <input type="hidden" name="action" value="proceed_anyway">
+            <button type="submit" class="btn btn-primary">Proceed to Autonomous Labeling &rarr;</button>
+        </form>
+    </div>
+
+    <div class="override-card">
+        <h4>Use a Past Codebook Version</h4>
+        <p>
+            Roll back to a codebook version that measured higher
+            agreement, then re-verify it with a fresh relabel before
+            proceeding. Pick a version from the table below.
+        </p>
+    </div>
+</div>
+
+<h3>Codebook Version History</h3>
+{% if history %}
+<table class="version-history-table">
+    <thead>
+        <tr>
+            <th>Revision</th>
+            <th>Agreement</th>
+            <th>Sample size</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for entry in history %}
+        <tr class="{{ 'best-version' if loop.first else '' }}">
+            <td>#{{ entry.revision }}</td>
+            <td>{{ (entry.agreement_rate * 100)|round(1) }}%</td>
+            <td>
+                {{ entry.sample_size }}
+                {% if entry.sample_size < 10 %}
+                <span class="small-sample-flag">(small sample &mdash; treat with caution)</span>
+                {% endif %}
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('solo_mode.final_override') }}" style="margin: 0;">
+                    <input type="hidden" name="action" value="use_version">
+                    <input type="hidden" name="revision" value="{{ entry.revision }}">
+                    <button type="submit" class="btn btn-secondary">Use this version</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No completed codebook-version history recorded yet.</p>
+{% endif %}
+{% endblock %}
+
+{% block stats %}
+{{ super() }}
+<div class="stat-item">
+    <span class="stat-label">Agreement</span>
+    <span class="stat-value">{{ (agreement_rate * 100)|round(1) if agreement_rate is not none else '—' }}%</span>
+</div>
+{% endblock %}

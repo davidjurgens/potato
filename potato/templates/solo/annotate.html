@@ -598,6 +598,21 @@
     resurfaced for a fresh pass before the agreement rate updates.
 </p>
 {% endif %}
+<div id="sidebar-codebook-relabel-wrap"
+     {{ "hidden" if not (codebook_relabel and codebook_relabel.running) }}>
+    <div class="stat-item relabel-stat" id="sidebar-codebook-relabel-note">
+        <span class="stat-label" style="color: #2563eb;">Re-checking codebook</span>
+        <span class="stat-value" style="color: #2563eb;" id="sidebar-codebook-relabel-value">{{ codebook_relabel.done }} / {{ codebook_relabel.total }}</span>
+    </div>
+    <div class="sidebar-relabel-track">
+        <div class="sidebar-relabel-fill" id="sidebar-codebook-relabel-fill" style="width: {{ codebook_relabel.percent_complete }}%; background: #2563eb;"></div>
+    </div>
+    <p class="sidebar-relabel-hint">
+        The codebook changed, so the LLM is relabeling every previously-labeled
+        instance in the background to keep the agreement rate accurate. You
+        don't need to do anything — labels you've already given aren't touched.
+    </p>
+</div>
 {% else %}
 {{ super() }}
 {% endif %}

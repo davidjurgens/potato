@@ -24,6 +24,7 @@ from potato.solo_mode.manager import (
     clear_solo_mode_manager,
 )
 from potato.solo_mode.config import SoloModeConfig, parse_solo_mode_config
+from potato.solo_mode.phase_controller import SoloPhase
 
 
 def _make_solo_config(**overrides):
@@ -579,6 +580,256 @@ class TestSoloModeManagerDisagreements:
         assert result['instance_id'] == "i1"
         assert result['human_label'] == "negative"
         assert result['llm_label'] == "positive"
+
+
+# === Codebook-driven Agreement Relabel ===
+
+
+class TestCodebookAgreementRelabel:
+    """Tests for the background codebook-driven relabel sweep — refreshes
+    the LLM side of already-compared instances and recomputes agreement
+    against the human label already on file, without asking the human
+    to redo anything."""
+
+    @pytest.fixture
+    def manager(self):
+        mgr = _make_manager()
+        mgr.create_prompt_version("test", "user")
+        pred = _make_prediction("i1", "sentiment", "positive")
+        mgr.set_llm_prediction("i1", "sentiment", pred)
+        mgr.record_human_label("i1", "sentiment", "negative", "user1")
+        return mgr
+
+    def _fake_result(self, label, confidence=0.8):
+        from potato.solo_mode.llm_labeler import LabelingResult
+        return LabelingResult(
+            instance_id="i1", schema_name="sentiment", label=label,
+            confidence=confidence, uncertainty=1 - confidence,
+            reasoning="fresh reasoning", prompt_version=1,
+            model_name="test-model",
+        )
+
+    def test_sweep_recomputes_agreement_without_touching_human_label(
+            self, manager):
+        # Started out disagreeing (positive vs human's negative); the
+        # fresh relabel now agrees.
+        assert manager.agreement_metrics.disagreements == 1
+        with patch.object(manager.llm_labeling_thread, '_get_endpoint',
+                           return_value=MagicMock()), \
+             patch.object(manager.llm_labeling_thread, '_label_instance',
+                           return_value=self._fake_result("negative")), \
+             patch.object(manager, '_get_instance_text', return_value="text"), \
+             patch.object(manager, '_snapshot_codebook', return_value=[{'id': 'c1'}]):
+            manager._run_codebook_agreement_relabel("task_dir", "P", revision=5)
+
+        pred = manager.get_llm_prediction("i1", "sentiment")
+        assert pred.predicted_label == "negative"
+        assert pred.human_label == "negative"  # untouched
+        assert pred.agrees_with_human is True
+        assert manager.agreement_metrics.agreements == 1
+        assert manager.agreement_metrics.disagreements == 0
+        assert manager.agreement_metrics.total_compared == 1
+
+    def test_sweep_records_version_history_entry(self, manager):
+        with patch.object(manager.llm_labeling_thread, '_get_endpoint',
+                           return_value=MagicMock()), \
+             patch.object(manager.llm_labeling_thread, '_label_instance',
+                           return_value=self._fake_result("negative")), \
+             patch.object(manager, '_get_instance_text', return_value="text"), \
+             patch.object(manager, '_snapshot_codebook',
+                           return_value=[{'id': 'c1', 'name': 'positive'}]):
+            manager._run_codebook_agreement_relabel("task_dir", "P", revision=5)
+
+        entry = manager.codebook_version_history[5]
+        assert entry['snapshot'] == [{'id': 'c1', 'name': 'positive'}]
+        assert entry['sample_size'] == 1
+        assert entry['agreements'] == 1
+        assert entry['agreement_rate'] == 1.0
+        assert entry['completed_at'] is not None
+
+    def test_sweep_progress_reaches_100_percent_when_done(self, manager):
+        with patch.object(manager.llm_labeling_thread, '_get_endpoint',
+                           return_value=MagicMock()), \
+             patch.object(manager.llm_labeling_thread, '_label_instance',
+                           return_value=self._fake_result("negative")), \
+             patch.object(manager, '_get_instance_text', return_value="text"), \
+             patch.object(manager, '_snapshot_codebook', return_value=[]):
+            manager._run_codebook_agreement_relabel("task_dir", "P", revision=5)
+
+        progress = manager.get_codebook_relabel_progress()
+        assert progress['running'] is False
+        assert progress['pending'] == 0
+        assert progress['percent_complete'] == 100.0
+
+    def test_sweep_skips_when_no_endpoint(self, manager):
+        with patch.object(manager, '_snapshot_codebook', return_value=[]), \
+             patch.object(manager.llm_labeling_thread, '_get_endpoint',
+                           return_value=None):
+            manager._run_codebook_agreement_relabel("task_dir", "P", revision=5)
+        # A started-but-incomplete entry records the attempt; nothing
+        # about agreement itself changed since no instance was relabeled.
+        entry = manager.codebook_version_history[5]
+        assert entry['completed_at'] is None
+        assert entry['agreement_rate'] is None
+        assert manager.agreement_metrics.disagreements == 1
+        assert not manager._codebook_relabel_running
+
+    def test_sweep_still_disagreeing_stays_unresolved(self, manager):
+        # Fresh relabel still says "positive" — still disagrees, and that
+        # disagreement must surface (not silently inherit a stale
+        # disagreement_resolved flag from before).
+        with patch.object(manager.llm_labeling_thread, '_get_endpoint',
+                           return_value=MagicMock()), \
+             patch.object(manager.llm_labeling_thread, '_label_instance',
+                           return_value=self._fake_result("positive")), \
+             patch.object(manager, '_get_instance_text', return_value="text"), \
+             patch.object(manager, '_snapshot_codebook', return_value=[]):
+            manager._run_codebook_agreement_relabel("task_dir", "P", revision=5)
+
+        pred = manager.get_llm_prediction("i1", "sentiment")
+        assert pred.agrees_with_human is False
+        assert pred.disagreement_resolved is False
+        assert "i1" in manager.get_pending_disagreements()
+
+
+class TestFinalAnnotationGate:
+    """Tests for _check_final_gate(): what happens when agreement is
+    still below threshold with nothing left for a human to label."""
+
+    @pytest.fixture
+    def manager(self):
+        # minimum_validation_sample=1 so a single comparison is enough
+        # to evaluate the threshold in these tests; the real default
+        # (50) would just require more fixture setup for no extra signal.
+        mgr = _make_manager(solo_config=_make_solo_config(
+            thresholds={'minimum_validation_sample': 1,
+                        'end_human_annotation_agreement': 0.9}))
+        mgr.phase_controller.transition_to(SoloPhase.PROMPT_REVIEW)
+        mgr.phase_controller.transition_to(SoloPhase.EDGE_CASE_SYNTHESIS)
+        mgr.phase_controller.transition_to(SoloPhase.EDGE_CASE_LABELING)
+        mgr.phase_controller.transition_to(SoloPhase.CONTRAST_SET_REVIEW)
+        mgr.phase_controller.transition_to(SoloPhase.PROMPT_VALIDATION)
+        mgr.phase_controller.transition_to(SoloPhase.PARALLEL_ANNOTATION)
+        mgr.create_prompt_version("test", "user")
+        pred = _make_prediction("i1", "sentiment", "positive")
+        mgr.set_llm_prediction("i1", "sentiment", pred)
+        mgr.record_human_label("i1", "sentiment", "negative", "user1")
+        # No item_state_manager in this test process -> total instance
+        # count is 0 -> remaining is always <= 0, i.e. "nothing left".
+        return mgr
+
+    def test_does_nothing_outside_annotation_phase(self, manager):
+        manager.phase_controller.transition_to(SoloPhase.SETUP, force=True)
+        manager._check_final_gate()
+        assert manager.needs_final_override_choice is False
+
+    def test_does_nothing_while_relabel_in_flight(self, manager):
+        manager._codebook_relabel_running = True
+        manager._check_final_gate()
+        assert manager.needs_final_override_choice is False
+
+    def test_clears_flag_once_threshold_met(self, manager):
+        manager.needs_final_override_choice = True
+        # Agreement itself only moves via record_human_label/relabel, so
+        # simulate having actually reached threshold.
+        manager.agreement_metrics.agreements = 1
+        manager.agreement_metrics.disagreements = 0
+        manager.agreement_metrics.update_rate()
+        manager._check_final_gate()
+        assert manager.needs_final_override_choice is False
+
+    def test_agreement_below_threshold_with_nothing_left_triggers_override_choice(
+            self, manager):
+        # Straight to the override choice — no separate mandatory
+        # explanation step, regardless of whether disagreements are
+        # still open.
+        assert "i1" in manager.get_pending_disagreements()
+        manager._check_final_gate()
+        assert manager.needs_final_override_choice is True
+
+    def test_resolving_the_disagreement_still_triggers_override_choice(
+            self, manager):
+        manager.resolve_disagreement("i1", "sentiment", "negative", "human")
+        assert manager.get_pending_disagreements() == []
+        manager._check_final_gate()
+        assert manager.needs_final_override_choice is True
+
+
+class TestRestoreCodebookVersion:
+    """Tests for rolling the live codebook back to a stored snapshot and
+    re-verifying it with a fresh relabel sweep."""
+
+    @pytest.fixture
+    def manager(self):
+        mgr = _make_manager()
+        mgr.create_prompt_version("test", "user")
+        mgr.needs_final_override_choice = True
+        return mgr
+
+    def test_unknown_revision_fails_cleanly(self, manager):
+        result = manager.restore_codebook_version(999)
+        assert result == {'ok': False, 'reason': 'no snapshot for revision 999'}
+
+    def test_empty_snapshot_fails_cleanly(self, manager):
+        manager.codebook_version_history[3] = {'snapshot': []}
+        result = manager.restore_codebook_version(3)
+        assert result['ok'] is False
+
+    def test_restores_fields_and_triggers_reverify(self, manager):
+        manager.codebook_version_history[3] = {
+            'snapshot': [
+                {'id': 'c1', 'name': 'positive',
+                 'negative_clarification': 'restored text'},
+            ],
+        }
+        captured = {}
+
+        def fake_update_code_fields(task_dir, code_id, *, details, project,
+                                     actor, actor_kind, bump_revision):
+            captured['code_id'] = code_id
+            captured['details'] = details
+            captured['bump_revision'] = bump_revision
+            return {}
+
+        with patch('potato.codebook.update_code_fields',
+                    side_effect=fake_update_code_fields), \
+             patch('potato.codebook.revision.current_revision', return_value=7), \
+             patch.object(manager, '_run_codebook_agreement_relabel') as mock_sweep:
+            result = manager.restore_codebook_version(3, actor="tester")
+            import time as _t
+            _t.sleep(0.2)  # let the spawned thread reach the mocked sweep
+
+        assert result == {'ok': True, 'revision': 7}
+        assert captured['code_id'] == 'c1'
+        assert captured['details'] == {'negative_clarification': 'restored text'}
+        assert captured['bump_revision'] is True  # only code, so it's "last"
+        assert manager.needs_final_override_choice is False
+        mock_sweep.assert_called_once()
+        assert mock_sweep.call_args.args[2] == 7
+
+    def test_only_last_code_bumps_revision(self, manager):
+        manager.codebook_version_history[3] = {
+            'snapshot': [
+                {'id': 'c1', 'name': 'a', 'negative_clarification': 'x'},
+                {'id': 'c2', 'name': 'b', 'negative_clarification': 'y'},
+            ],
+        }
+        calls = []
+
+        def fake_update_code_fields(task_dir, code_id, *, details, project,
+                                     actor, actor_kind, bump_revision):
+            calls.append((code_id, bump_revision))
+            return {}
+
+        with patch('potato.codebook.update_code_fields',
+                    side_effect=fake_update_code_fields), \
+             patch('potato.codebook.revision.current_revision', return_value=8), \
+             patch.object(manager, '_run_codebook_agreement_relabel'):
+            manager.restore_codebook_version(3)
+            import time as _t
+            _t.sleep(0.2)
+
+        assert calls == [('c1', False), ('c2', True)]
 
 
 # === Agreement Thresholds ===

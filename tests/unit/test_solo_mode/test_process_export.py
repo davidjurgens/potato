@@ -1,17 +1,20 @@
 """
 Tests for the organized process-data export (potato/solo_mode/process_export.py).
 
-Covers each of the four files independently — behavioral metadata,
-validation (human and LLM kept separate), and cooperative annotation —
-plus the ZIP bundling.
+Covers each file independently — behavioral metadata, validation (human
+and LLM kept separate), cooperative annotation, and codebook version
+history — plus the ZIP bundling.
 """
 
+import json
 import zipfile
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 from potato.solo_mode.process_export import (
     build_behavioral_rows,
+    build_codebook_snapshots,
+    build_codebook_version_rows,
     build_cooperative_rows,
     build_validation_human_rows,
     build_validation_llm_rows,
@@ -33,12 +36,14 @@ def _prediction(predicted_label="a", confidence_score=0.8, human_label=None,
 
 
 def _manager(schema="sentiment", predictions=None, validation_sample_ids=None,
-             validated_instance_ids=None, texts=None):
+             validated_instance_ids=None, texts=None,
+             codebook_version_history=None):
     m = MagicMock()
     m.app_config = {'annotation_schemes': [{'name': schema}]}
     m.predictions = predictions or {}
     m.validation_sample_ids = set(validation_sample_ids or [])
     m.validated_instance_ids = set(validated_instance_ids or [])
+    m.codebook_version_history = codebook_version_history or {}
     texts = texts or {}
     m._get_instance_text.side_effect = lambda iid: texts.get(iid, "")
     return m
@@ -188,10 +193,73 @@ class TestBehavioralRows:
             assert build_behavioral_rows(MagicMock()) == []
 
 
+class TestCodebookVersionRows:
+    """Tests for the codebook-version-history export — agreement rate
+    and sample size per revision a relabel sweep has run against."""
+
+    def test_empty_history_produces_no_rows(self):
+        m = _manager(codebook_version_history={})
+        assert build_codebook_version_rows(m) == []
+
+    def test_one_completed_version(self):
+        m = _manager(codebook_version_history={
+            5: {'snapshot': [{'id': 'c1'}], 'agreement_rate': 0.8,
+                'sample_size': 20, 'started_at': 100.0,
+                'completed_at': 105.0},
+        })
+        rows = build_codebook_version_rows(m)
+        assert rows == [{
+            'revision': 5, 'agreement_rate': 80.0, 'sample_size': 20,
+            'small_sample': '', 'started_at': 100.0, 'completed_at': 105.0,
+        }]
+
+    def test_small_sample_is_flagged(self):
+        m = _manager(codebook_version_history={
+            5: {'snapshot': [], 'agreement_rate': 1.0, 'sample_size': 3,
+                'started_at': 100.0, 'completed_at': 101.0},
+        })
+        rows = build_codebook_version_rows(m)
+        assert rows[0]['small_sample'] == 'yes'
+
+    def test_incomplete_sweep_has_blank_agreement(self):
+        m = _manager(codebook_version_history={
+            5: {'snapshot': [], 'agreement_rate': None, 'sample_size': 0,
+                'started_at': 100.0, 'completed_at': None},
+        })
+        rows = build_codebook_version_rows(m)
+        assert rows[0]['agreement_rate'] == ''
+        assert rows[0]['completed_at'] == ''
+
+    def test_sorted_by_revision(self):
+        m = _manager(codebook_version_history={
+            9: {'snapshot': [], 'agreement_rate': 0.5, 'sample_size': 1,
+                'started_at': 1, 'completed_at': 2},
+            3: {'snapshot': [], 'agreement_rate': 0.5, 'sample_size': 1,
+                'started_at': 1, 'completed_at': 2},
+        })
+        rows = build_codebook_version_rows(m)
+        assert [r['revision'] for r in rows] == [3, 9]
+
+
+class TestCodebookSnapshots:
+    """Tests for the full-codebook-per-version JSON export."""
+
+    def test_keys_snapshots_by_revision_string(self):
+        m = _manager(codebook_version_history={
+            5: {'snapshot': [{'id': 'c1', 'name': 'positive'}]},
+        })
+        data = json.loads(build_codebook_snapshots(m))
+        assert data == {'5': [{'id': 'c1', 'name': 'positive'}]}
+
+    def test_empty_history_produces_empty_object(self):
+        m = _manager(codebook_version_history={})
+        assert json.loads(build_codebook_snapshots(m)) == {}
+
+
 class TestBuildZip:
     """Tests for the ZIP bundling — file names and that it's a valid zip."""
 
-    def test_zip_contains_all_four_files(self):
+    def test_zip_contains_all_files(self):
         m = _manager()
         zip_bytes = build_zip(m)
 
@@ -201,6 +269,7 @@ class TestBuildZip:
         assert names == {
             'metadata_behavioral.csv', 'validation_human.csv',
             'validation_llm.csv', 'cooperative.csv',
+            'codebook_versions.csv', 'codebook_snapshots.json',
         }
 
     def test_zip_files_have_headers_even_when_empty(self):
