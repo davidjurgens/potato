@@ -569,11 +569,11 @@
 </div>
 <div class="stat-item">
     <span class="stat-label">Remaining</span>
-    <span class="stat-value">{{ stats.remaining }}</span>
+    <span class="stat-value" id="sidebar-remaining-value">{{ stats.remaining }}</span>
 </div>
 <div class="stat-item">
     <span class="stat-label">LLM labeled</span>
-    <span class="stat-value">{{ stats.llm_labeled }}</span>
+    <span class="stat-value" id="sidebar-llm-labeled-value">{{ stats.llm_labeled }}</span>
 </div>
 <div class="stat-item">
     <span class="stat-label">Agreement</span>
@@ -901,6 +901,36 @@
                     btn.disabled = false;
                 });
         });
+    })();
+
+    // ── Sidebar LLM-labeled / Remaining live counters ──────────────
+    // These are server-rendered once at page load, so a human sitting on
+    // this screen while the background labeling thread works never sees
+    // them move — they only update on the next full page render (e.g.
+    // after submitting an annotation), which reads as "stuck at 0" even
+    // though labeling is progressing the whole time. Poll the existing
+    // status API instead so the numbers move on their own.
+    (function () {
+        const llmEl = document.getElementById('sidebar-llm-labeled-value');
+        const remainingEl = document.getElementById('sidebar-remaining-value');
+        if (!llmEl && !remainingEl) return;
+        const statusUrl = "{{ url_for('solo_mode.api_status') }}";
+
+        function poll() {
+            fetch(statusUrl)
+                .then(r => r.ok ? r.json() : Promise.reject(r.status))
+                .then(d => {
+                    const stats = d.annotation_stats || {};
+                    if (llmEl && stats.llm_labeled !== undefined) {
+                        llmEl.textContent = stats.llm_labeled;
+                    }
+                    if (remainingEl && stats.remaining !== undefined) {
+                        remainingEl.textContent = stats.remaining;
+                    }
+                })
+                .catch(() => {});
+        }
+        setInterval(poll, 12000);
     })();
 </script>
 {% endblock %}

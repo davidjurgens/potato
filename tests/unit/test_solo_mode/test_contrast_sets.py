@@ -282,9 +282,15 @@ class TestProposeRulesFromContrastPairs:
 
         with patch('potato.codebook.codebook.Codebook.load',
                     return_value=fake_cb), \
-             patch('potato.codebook.changelog.propose_change') as mock_propose:
+             patch('potato.codebook.changelog.propose_change') as mock_propose, \
+             patch('potato.codebook.update_code_fields') as mock_update, \
+             patch('potato.codebook.changelog.log_change',
+                   return_value='change-id') as mock_log, \
+             patch('potato.codebook.changelog.set_proposal_status') as mock_set_status, \
+             patch('potato.codebook.revision.current_revision', return_value=1):
             mock_propose.side_effect = (
-                lambda *a, **kw: {'id': 'prop', 'payload': kw['payload']})
+                lambda *a, **kw: {'id': f"prop-{kw['payload']['code_id']}",
+                                   'payload': kw['payload']})
             created = propose_rules_from_contrast_pairs(
                 "task_dir", "project", [pair], endpoint=endpoint,
                 actor="contrast_set_llm")
@@ -308,6 +314,21 @@ class TestProposeRulesFromContrastPairs:
             if c.kwargs['payload']['code_id'] == 'code-access')
         assert access_call.kwargs['payload']['negative_clarification'] == (
             "not cost if distance is the issue")
+
+        # Auto-applied immediately, not left pending in the Codebook tray:
+        # each proposal is written via update_code_fields() and marked
+        # 'confirmed' right away (see module docstring for why this phase
+        # skips the human-confirm gate that notes_feedback.py still uses).
+        assert mock_update.call_count == 2
+        for call in mock_update.call_args_list:
+            assert call.kwargs['project'] == 'project'
+            assert call.kwargs['actor'] == 'contrast_set_llm'
+            assert call.kwargs['actor_kind'] == 'model'
+        assert mock_set_status.call_count == 2
+        for call in mock_set_status.call_args_list:
+            assert call.kwargs['status'] == 'confirmed'
+            assert call.kwargs['decided_by'] == 'contrast_set_llm'
+            assert call.kwargs['change_id'] == 'change-id'
 
     def test_should_propose_false_creates_nothing(self):
         pair = self._make_pair()

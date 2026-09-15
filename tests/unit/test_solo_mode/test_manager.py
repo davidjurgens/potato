@@ -537,6 +537,35 @@ class TestSoloModeManagerDisagreements:
         pending = manager.get_pending_disagreements()
         assert "i1" not in pending
 
+    def test_reconfirming_resolved_label_does_not_reopen_disagreement(self, manager):
+        """Regression: revisiting an already-resolved instance through an
+        unrelated path (e.g. the codebook-review stale-worklist re-serving
+        it right after resolution) must not bounce the user straight back
+        to /disagreements for the same decision they just made."""
+        manager.resolve_disagreement("i1", "sentiment", "negative", "human")
+        assert "i1" not in manager.get_pending_disagreements()
+
+        # Re-served through the normal annotate path with the SAME label.
+        manager.record_human_label("i1", "sentiment", "negative", "user1")
+
+        pred = manager.get_llm_prediction("i1", "sentiment")
+        assert pred.disagreement_resolved is True
+        assert "i1" not in manager.get_pending_disagreements()
+        assert manager.check_for_disagreement("i1", "negative") is False
+
+    def test_relabeling_with_a_different_label_reopens_disagreement(self, manager):
+        """A genuinely new decision (different label than what was
+        resolved) must still surface as a fresh disagreement — only exact
+        reconfirmation of the prior resolution is suppressed."""
+        manager.resolve_disagreement("i1", "sentiment", "negative", "human")
+        assert "i1" not in manager.get_pending_disagreements()
+
+        manager.record_human_label("i1", "sentiment", "neutral", "user1")
+
+        pred = manager.get_llm_prediction("i1", "sentiment")
+        assert pred.disagreement_resolved is False
+        assert "i1" in manager.get_pending_disagreements()
+
     def test_check_for_disagreement(self, manager):
         assert manager.check_for_disagreement("i1", "negative") is True
 

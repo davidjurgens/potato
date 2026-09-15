@@ -1,5 +1,5 @@
 {
-  "current_phase": "contrast-set-review",
+  "current_phase": "parallel-annotation",
   "transition_history": [
     {
       "from_phase": "setup",
@@ -26,6 +26,20 @@
       "from_phase": "edge-case-labeling",
       "to_phase": "contrast-set-review",
       "timestamp": "2026-09-15T00:43:13.345237",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "contrast-set-review",
+      "to_phase": "prompt-validation",
+      "timestamp": "2026-09-15T00:56:56.298894",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "prompt-validation",
+      "to_phase": "parallel-annotation",
+      "timestamp": "2026-09-15T00:57:49.303893",
       "reason": "",
       "metadata": {}
     }

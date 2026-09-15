@@ -44,9 +44,9 @@
         "{{ current_pair.label_a }}". Your own sense of the boundary is
         what teaches the codebook, not a model's guess at it.
         {% else %}
-        Once every pair is written, the model proposes codebook rules
-        from the pattern &mdash; nothing changes until you confirm them
-        in the Codebook tray.
+        Once every pair is written, the model applies codebook rules
+        from the pattern directly &mdash; you'll review the resulting
+        prompt next, on the Verify Prompt screen.
         {% endif %}
     </span>
 </div>
@@ -95,10 +95,11 @@
 <div class="alert alert-success">
     {% if has_pairs %}
         {% if proposals_created %}
-        <p><strong>{{ proposals_created }} codebook rule{{ "s" if proposals_created != 1 else "" }} proposed</strong>
+        <p><strong>{{ proposals_created }} codebook rule{{ "s" if proposals_created != 1 else "" }} applied</strong>
            from these contrast pairs.</p>
-        <p>Review and confirm them in the Codebook tray before continuing
-           &mdash; nothing changes until you confirm.</p>
+        <p>Review the resulting prompt on the next screen (Verify Prompt)
+           &mdash; that's where you check the model's paraphrase actually
+           says what you meant.</p>
         {% else %}
         <p>All contrast pairs written. The model didn't find a clear
            enough pattern to propose a codebook rule this round.</p>

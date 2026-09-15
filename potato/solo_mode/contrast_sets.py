@@ -20,10 +20,17 @@ Once a batch of pairs for a given label pair has been written,
 codebook's own vocabulary (``negative_clarification``), exactly what
 distinguishes the two labels — grounded in the human's own edits, but
 written as a general, paraphrased rule rather than a quote of any one
-excerpt. The result is staged via the existing LLM-propose/human-confirm
-pipeline (``potato.codebook.changelog.propose_change``), the same one
-``notes_feedback.py`` uses: nothing is written to the codebook until a
-human confirms it in the Codebook tray.
+excerpt. The result is staged via the same proposal record
+(``potato.codebook.changelog.propose_change``) ``notes_feedback.py``
+uses, but — unlike that module — auto-confirmed immediately: the human
+already vetted the underlying edit themselves when they wrote it, and
+this phase is followed directly by Prompt Validation ("Verify Prompt"),
+whose whole purpose is to let the human review the resulting prompt
+before any annotation happens. Requiring a *second*, separate confirm
+click in the Codebook tray here would just duplicate that review. The
+human-confirm gate stays required for ``notes_feedback.py``, since that
+one fires mid-annotation, where an unreviewed prompt change could land
+on already-in-progress labeling.
 """
 
 import inspect
@@ -392,12 +399,13 @@ def propose_rules_from_contrast_pairs(
     actor: str = "contrast_set_llm",
 ) -> List[Dict[str, Any]]:
     """Group written contrast pairs by label pair, ask the LLM to propose a
-    distinguishing rule for each, and stage the result via the existing
-    LLM-propose/human-confirm pipeline. Returns the created proposal
-    records. Best-effort per group: one group's failure doesn't stop the
-    others.
+    distinguishing rule for each, and apply it immediately (see module
+    docstring for why this phase skips the Codebook-tray confirm step
+    that ``notes_feedback.py`` still requires). Returns the created,
+    already-applied proposal records. Best-effort per group: one group's
+    failure doesn't stop the others.
     """
-    from potato.codebook import changelog
+    from potato.codebook import changelog, update_code_fields
     from potato.codebook.codebook import Codebook
 
     written = [p for p in pairs if p.human_verdict is not None]
@@ -447,6 +455,31 @@ def propose_rules_from_contrast_pairs(
                 prop = changelog.propose_change(
                     task_dir, project=project, op='update_fields',
                     payload=payload, actor=actor, actor_kind='model')
+
+                # Auto-apply: the human already vetted this via their own
+                # contrast edit, and Prompt Validation right after this
+                # phase is where they review the resulting prompt — see
+                # module docstring. update_code_fields() itself no-ops
+                # (and logs nothing) if the value didn't actually change.
+                try:
+                    from potato.codebook.revision import current_revision
+                    update_code_fields(
+                        task_dir, code['id'], details=payload,
+                        project=project, actor=actor, actor_kind='model')
+                    cid = changelog.log_change(
+                        task_dir, project=project, op='llm_confirmed',
+                        old_value='update_fields', new_value=code['id'],
+                        actor=actor, actor_kind='model',
+                        revision=current_revision(task_dir, project))
+                    changelog.set_proposal_status(
+                        task_dir, prop['id'], status='confirmed',
+                        decided_by=actor, change_id=cid)
+                except Exception:
+                    logger.warning(
+                        "auto-apply failed for contrast-set proposal %r; "
+                        "leaving it pending in the Codebook tray",
+                        prop.get('id'), exc_info=True)
+
                 created.append(prop)
         except Exception:
             logger.warning(

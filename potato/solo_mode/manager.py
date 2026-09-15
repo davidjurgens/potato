@@ -2512,7 +2512,22 @@ class SoloModeManager:
             # for a decision that was never actually looked at — the
             # workflow never routes the human to it, and the resulting
             # disagreement effectively vanishes.
-            prediction.disagreement_resolved = False
+            #
+            # Exception: re-confirming the EXACT SAME resolution isn't a
+            # fresh decision at all — it's the same instance surfacing
+            # again through an unrelated path (most commonly the
+            # codebook-review stale-worklist re-serving it right after it
+            # was just resolved). Unconditionally resetting here would
+            # immediately re-flag it as a brand-new pending disagreement
+            # and bounce the human straight back to /disagreements for
+            # something they just decided a moment ago.
+            reconfirms_same_resolution = (
+                prediction.disagreement_resolved
+                and prediction.resolution_label is not None
+                and str(prediction.resolution_label) == str(label)
+            )
+            if not reconfirms_same_resolution:
+                prediction.disagreement_resolved = False
 
             if already_compared:
                 if previous_agreement:
