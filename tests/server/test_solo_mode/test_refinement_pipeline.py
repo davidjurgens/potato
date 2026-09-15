@@ -9,7 +9,7 @@ with deliberately vague prompts to force disagreements and verify that:
 4. Re-annotation with improved prompt changes labels
 5. Agreement rate improves after refinement
 
-Uses the vLLM server at burger.si.umich.edu:8001 (Qwen/Qwen3.5-4B).
+Uses the vLLM server at burger.si.umich.edu:8001 (google/gemma-4-12B-it-qat-w4a16-ct).
 Skip all tests if the server is unreachable.
 
 Run with:
@@ -72,7 +72,7 @@ def create_solo_config(
             "enabled": True,
             "labeling_models": [{
                 "endpoint_type": "vllm",
-                "model": "Qwen/Qwen3.5-4B",
+                "model": "google/gemma-4-12B-it-qat-w4a16-ct",
                 "base_url": VLLM_URL,
                 "max_tokens": 200,
                 "temperature": 0.1,
@@ -80,12 +80,12 @@ def create_solo_config(
             }],
             "revision_models": [{
                 "endpoint_type": "vllm",
-                "model": "Qwen/Qwen3.5-4B",
+                "model": "google/gemma-4-12B-it-qat-w4a16-ct",
                 "base_url": VLLM_URL,
                 "max_tokens": 7000,
                 "temperature": 0.3,
                 "think": True,
-                "timeout": 180,
+                "timeout": 600,
             }],
             "uncertainty": {
                 "strategy": uncertainty_strategy,
@@ -375,7 +375,7 @@ class TestGuidelineGeneration:
                 "enabled": True,
                 "labeling_models": [{
                     "endpoint_type": "vllm",
-                    "model": "Qwen/Qwen3.5-4B",
+                    "model": "google/gemma-4-12B-it-qat-w4a16-ct",
                     "base_url": VLLM_URL,
                     "max_tokens": 200,
                     "temperature": 0.1,
@@ -383,12 +383,12 @@ class TestGuidelineGeneration:
                 }],
                 "revision_models": [{
                     "endpoint_type": "vllm",
-                    "model": "Qwen/Qwen3.5-4B",
+                    "model": "google/gemma-4-12B-it-qat-w4a16-ct",
                     "base_url": VLLM_URL,
                     "max_tokens": 7000,
                     "temperature": 0.3,
                     "think": True,
-                    "timeout": 180,
+                    "timeout": 600,
                 }],
             },
             "annotation_schemes": [{

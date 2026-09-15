@@ -18,7 +18,7 @@ Use them manually to validate:
 
 | File | Purpose |
 |---|---|
-| `sst2-hybrid-ollama-revision.yaml` | SST-2 config with labeler=vLLM Qwen3.5-4B, revision=ollama gpt-oss:20b, hybrid_dual_track strategy, port 8511. |
+| `sst2-hybrid-ollama-revision.yaml` | SST-2 config with labeler=vLLM gemma-4-12B, revision=ollama gpt-oss:20b, hybrid_dual_track strategy, port 8511. |
 | `run_sst2_hybrid_sim.py` | Simulator runner for a vLLM-only SST-2 run on port 8510 (uses `tests/configs/sst2-hybrid-test.yaml`). |
 | `run_sst2_ollama_sim.py` | Simulator runner for the ollama-revision config above on port 8511. Slower per cycle but produces higher-quality candidates. |
 

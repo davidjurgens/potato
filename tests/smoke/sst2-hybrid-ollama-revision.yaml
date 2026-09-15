@@ -34,7 +34,7 @@ solo_mode:
   - base_url: http://burger.si.umich.edu:8001
     endpoint_type: vllm
     max_tokens: 200
-    model: Qwen/Qwen3.5-4B
+    model: google/gemma-4-12B-it-qat-w4a16-ct
     temperature: 0.1
     think: false
   refinement_loop:
