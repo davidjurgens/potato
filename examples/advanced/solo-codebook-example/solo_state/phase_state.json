@@ -1,15 +1,50 @@
 {
-  "current_phase": "prompt-review",
+  "current_phase": "parallel-annotation",
   "transition_history": [
     {
       "from_phase": "setup",
       "to_phase": "prompt-review",
-      "timestamp": "2026-08-19T15:55:14.405070",
+      "timestamp": "2026-09-01T14:47:43.003736",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "prompt-review",
+      "to_phase": "edge-case-synthesis",
+      "timestamp": "2026-09-01T14:47:46.034224",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "edge-case-synthesis",
+      "to_phase": "edge-case-labeling",
+      "timestamp": "2026-09-01T14:48:06.228972",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "edge-case-labeling",
+      "to_phase": "contrast-set-review",
+      "timestamp": "2026-09-01T14:49:18.798101",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "contrast-set-review",
+      "to_phase": "prompt-validation",
+      "timestamp": "2026-09-01T14:54:30.683128",
+      "reason": "",
+      "metadata": {}
+    },
+    {
+      "from_phase": "prompt-validation",
+      "to_phase": "parallel-annotation",
+      "timestamp": "2026-09-01T14:54:53.599329",
       "reason": "",
       "metadata": {}
     }
   ],
   "phase_data": {},
-  "started_at": "2026-08-19T15:55:14.405080",
+  "started_at": "2026-09-01T14:47:43.003751",
   "completed_at": null
 }

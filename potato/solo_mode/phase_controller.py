@@ -5,9 +5,9 @@ This module defines the Solo Mode workflow phases and state machine.
 
 Phase State Machine:
     SETUP → PROMPT_REVIEW → EDGE_CASE_SYNTHESIS → EDGE_CASE_LABELING
-        → PROMPT_VALIDATION → PARALLEL_ANNOTATION ⟷ DISAGREEMENT_RESOLUTION
-        → ACTIVE_ANNOTATION ⟷ PERIODIC_REVIEW → AUTONOMOUS_LABELING
-        → FINAL_VALIDATION → COMPLETED
+        → CONTRAST_SET_REVIEW → PROMPT_VALIDATION → PARALLEL_ANNOTATION
+        ⟷ DISAGREEMENT_RESOLUTION → ACTIVE_ANNOTATION ⟷ PERIODIC_REVIEW
+        → AUTONOMOUS_LABELING → FINAL_VALIDATION → COMPLETED
 """
 
 from dataclasses import dataclass, field
@@ -36,6 +36,7 @@ class SoloPhase(Enum):
     # Edge case refinement
     EDGE_CASE_SYNTHESIS = auto()        # LLM generates boundary examples
     EDGE_CASE_LABELING = auto()         # Human labels edge cases
+    CONTRAST_SET_REVIEW = auto()        # Human reviews label-flipping edits
     PROMPT_VALIDATION = auto()          # Verify prompt matches human labels
 
     # Parallel annotation
@@ -68,7 +69,12 @@ PHASE_TRANSITIONS: Dict[SoloPhase, Set[SoloPhase]] = {
     SoloPhase.SETUP: {SoloPhase.PROMPT_REVIEW},
     SoloPhase.PROMPT_REVIEW: {SoloPhase.EDGE_CASE_SYNTHESIS, SoloPhase.PARALLEL_ANNOTATION},
     SoloPhase.EDGE_CASE_SYNTHESIS: {SoloPhase.EDGE_CASE_LABELING},
-    SoloPhase.EDGE_CASE_LABELING: {SoloPhase.PROMPT_VALIDATION, SoloPhase.PROMPT_REVIEW},
+    SoloPhase.EDGE_CASE_LABELING: {
+        SoloPhase.CONTRAST_SET_REVIEW, SoloPhase.PROMPT_REVIEW,
+    },
+    SoloPhase.CONTRAST_SET_REVIEW: {
+        SoloPhase.PROMPT_VALIDATION, SoloPhase.PROMPT_REVIEW,
+    },
     SoloPhase.PROMPT_VALIDATION: {SoloPhase.PARALLEL_ANNOTATION, SoloPhase.PROMPT_REVIEW},
     SoloPhase.PARALLEL_ANNOTATION: {
         SoloPhase.DISAGREEMENT_RESOLUTION,

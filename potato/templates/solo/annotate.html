@@ -104,39 +104,6 @@
         color: var(--foreground, #09090b);
     }
 
-    .llm-suggestion-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-md, 1rem);
-        margin-bottom: var(--space-md, 1rem);
-        flex-wrap: wrap;
-    }
-
-    .llm-suggestion-row .suggestion-label {
-        font-size: var(--text-sm, 0.8125rem);
-        color: var(--muted-foreground, #71717a);
-    }
-
-    .llm-suggestion-row .suggested-badge {
-        font-weight: 600;
-        color: var(--primary, #6e56cf);
-        padding: 0 var(--space-xs, 0.25rem);
-    }
-
-    .confidence-label {
-        font-size: var(--text-xs, 0.75rem);
-        color: var(--muted-foreground, #71717a);
-        margin-top: 2px;
-    }
-
-    .confidence-label .qualifier {
-        font-weight: 600;
-        color: var(--foreground, #09090b);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        margin-right: var(--space-xs, 0.25rem);
-    }
 
     .completion-card {
         text-align: center;
@@ -428,57 +395,13 @@
             {{ instance.text }}
         </div>
 
-        {% if llm_prediction %}
-        {% set conf = (llm_prediction.confidence * 100)|int %}
-        {% set qualifier = 'Low confidence' if llm_prediction.confidence < 0.5
-                           else ('Moderate confidence' if llm_prediction.confidence < 0.8 else 'High confidence') %}
-        <div class="llm-suggestion-row">
-            <div>
-                <div class="suggestion-label">
-                    The LLM suggests
-                    <span class="suggested-badge">{{ llm_prediction.label }}</span>
-                </div>
-                <div class="confidence-label">
-                    <span class="qualifier">{{ qualifier }}</span>· {{ conf }}%
-                </div>
-            </div>
-            <button type="button"
-                    class="btn btn-secondary"
-                    id="accept-llm-btn"
-                    data-llm-label="{{ llm_prediction.label }}"
-                    aria-keyshortcuts="A">
-                Accept (A)
-            </button>
-        </div>
-
-        <div class="llm-reasoning">
-            <div class="llm-reasoning-header" aria-expanded="false">
-                <strong>Reasoning</strong>
-                <span class="disclosure-icon" aria-hidden="true"></span>
-            </div>
-            <div class="llm-reasoning-content" hidden>
-                {% if llm_prediction.reasoning %}
-                <p style="margin: 0 0 var(--space-sm, 0.5rem);">{{ llm_prediction.reasoning }}</p>
-                {% endif %}
-                <div class="confidence-bar" role="progressbar"
-                     aria-label="LLM confidence"
-                     aria-valuenow="{{ conf }}" aria-valuemin="0" aria-valuemax="100">
-                    {% set conf_class = 'confidence-low' if llm_prediction.confidence < 0.5
-                                        else ('confidence-mid' if llm_prediction.confidence < 0.8 else 'confidence-high') %}
-                    <div class="confidence-fill {{ conf_class }}"
-                         style="width: {{ conf }}%"></div>
-                </div>
-            </div>
-        </div>
-        {% else %}
-        {# No background prediction yet — label this instance on demand so the
-           human always sees the LLM's take. JS fills this in. #}
-        <div class="llm-suggestion-row" id="llm-async" aria-live="polite">
-            <div class="suggestion-label" id="llm-async-status">
-                <span class="llm-thinking">The LLM is labeling this&hellip;</span>
-            </div>
-        </div>
-        {% endif %}
+        {# The LLM's guess for this instance is never shown here — labeling
+           independently, without seeing it, is what makes the human/LLM
+           agreement rate meaningful (a visible suggestion just gets
+           rubber-stamped). It still labels this instance in the
+           background/on-demand (see the trigger in extra_js below) so
+           the "LLM labeled" progress count keeps moving; only the actual
+           label is withheld from this screen. #}
 
         <fieldset style="border: none; padding: 0; margin: 0;">
             <legend class="form-help" style="margin-bottom: var(--space-sm, 0.5rem);">
@@ -487,7 +410,7 @@
             <div class="label-buttons" role="group" aria-label="Annotation labels">
                 {% for label in labels %}
                 <button type="button"
-                        class="label-btn{% if llm_prediction and llm_prediction.label == label %} suggested{% endif %}"
+                        class="label-btn"
                         data-label="{{ label }}"
                         aria-pressed="false">
                     {% if loop.index <= 9 %}
@@ -690,12 +613,6 @@
         <span>{{ label }}</span>
     </div>
     {% endfor %}
-    {% if llm_prediction %}
-    <div style="margin-bottom: var(--space-xs, 0.25rem); display: flex; gap: var(--space-sm, 0.5rem); align-items: center;">
-        <kbd>A</kbd>
-        <span>Accept LLM</span>
-    </div>
-    {% endif %}
     <div style="margin-top: var(--space-sm, 0.5rem); display: flex; gap: var(--space-sm, 0.5rem); align-items: center;">
         <kbd>Enter</kbd>
         <span>Submit</span>
@@ -757,15 +674,6 @@
         }
     });
 
-    // One-click accept LLM suggestion
-    const acceptBtn = document.getElementById('accept-llm-btn');
-    if (acceptBtn) {
-        acceptBtn.addEventListener('click', () => {
-            selectLabel(acceptBtn.dataset.llmLabel);
-            form && form.requestSubmit && form.requestSubmit();
-        });
-    }
-
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         // Don't intercept when an input/textarea is focused
@@ -775,8 +683,6 @@
         if (e.key >= '1' && e.key <= '9') {
             const idx = parseInt(e.key, 10) - 1;
             if (idx < labels.length) selectLabel(labels[idx]);
-        } else if ((e.key === 'a' || e.key === 'A') && acceptBtn) {
-            acceptBtn.click();
         } else if (e.key === 'Enter') {
             // Only submit when a label is actually selected, not just because
             // the button became visually enabled.
@@ -947,103 +853,19 @@
         })();
     })();
 
-    // ── On-demand LLM suggestion ─────────────────────────────────────
-    // When the page rendered without a background prediction, fetch one for
-    // this exact instance so the human always sees the LLM labeling
-    // alongside them (with a visible "thinking" state).
+    // ── Background LLM labeling trigger ───────────────────────────────
+    // Makes sure this instance gets an LLM label even if the background
+    // labeling thread hasn't reached it yet, so the "LLM labeled"
+    // progress count (sidebar) keeps moving whether or not the human
+    // happens to be looking at an already-labeled instance. Deliberately
+    // fire-and-forget: the response (the LLM's actual label/confidence/
+    // reasoning) is discarded rather than shown — labeling independently,
+    // without seeing it, is what makes the agreement rate meaningful.
     (function () {
-        const row = document.getElementById('llm-async');
-        if (!row) return;  // server already rendered a suggestion
-        const status = document.getElementById('llm-async-status');
         const instanceId = {{ (instance.id if instance else none)|tojson|safe }};
+        if (!instanceId) return;
         const url = "{{ url_for('solo_mode.llm_suggestion') }}";
-
-        function esc(s) {
-            const d = document.createElement('div');
-            d.textContent = s == null ? '' : String(s);
-            return d.innerHTML;
-        }
-
-        function wireReasoning(scope) {
-            const h = scope.querySelector('.llm-reasoning-header');
-            if (!h) return;
-            h.setAttribute('role', 'button');
-            h.setAttribute('tabindex', '0');
-            const toggle = () => {
-                const open = h.getAttribute('aria-expanded') === 'true';
-                h.setAttribute('aria-expanded', String(!open));
-                const c = h.nextElementSibling;
-                if (c) c.hidden = open;
-            };
-            h.addEventListener('click', toggle);
-            h.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
-            });
-        }
-
-        function render(d) {
-            const conf = Math.round((d.confidence || 0) * 100);
-            const qualifier = d.confidence < 0.5 ? 'Low confidence'
-                : (d.confidence < 0.8 ? 'Moderate confidence' : 'High confidence');
-
-            row.innerHTML =
-                '<div>'
-                + '<div class="suggestion-label">The LLM suggests '
-                + '<span class="suggested-badge">' + esc(d.label) + '</span></div>'
-                + '<div class="confidence-label">'
-                + '<span class="qualifier">' + qualifier + '</span>· ' + conf + '%</div>'
-                + '</div>'
-                + '<button type="button" class="btn btn-secondary" '
-                + 'id="accept-llm-btn-async" aria-keyshortcuts="A">Accept (A)</button>';
-
-            if (d.reasoning) {
-                const r = document.createElement('div');
-                r.className = 'llm-reasoning';
-                r.innerHTML =
-                    '<div class="llm-reasoning-header" aria-expanded="false">'
-                    + '<strong>Reasoning</strong>'
-                    + '<span class="disclosure-icon" aria-hidden="true"></span></div>'
-                    + '<div class="llm-reasoning-content" hidden>'
-                    + '<p style="margin:0">' + esc(d.reasoning) + '</p></div>';
-                row.parentNode.insertBefore(r, row.nextSibling);
-                wireReasoning(r);
-            }
-
-            // Highlight the matching label button, like the server-side path.
-            document.querySelectorAll('.label-btn').forEach(b => {
-                if (b.dataset.label === d.label) b.classList.add('suggested');
-            });
-
-            // Wire Accept (button + the "A" shortcut).
-            const accept = () => {
-                selectLabel(d.label);
-                form && form.requestSubmit && form.requestSubmit();
-            };
-            const btn = document.getElementById('accept-llm-btn-async');
-            if (btn) btn.addEventListener('click', accept);
-            document.addEventListener('keydown', (e) => {
-                const tag = (document.activeElement && document.activeElement.tagName) || '';
-                if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-                if (e.key === 'a' || e.key === 'A') accept();
-            });
-        }
-
-        fetch(url + '?instance_id=' + encodeURIComponent(instanceId))
-            .then(r => r.ok ? r.json() : Promise.reject(r.status))
-            .then(d => {
-                if (!d.available) {
-                    if (status) status.innerHTML =
-                        '<span style="color: var(--muted-foreground, #71717a);">'
-                        + 'No LLM suggestion available for this instance.</span>';
-                    return;
-                }
-                render(d);
-            })
-            .catch(() => {
-                if (status) status.innerHTML =
-                    '<span style="color: var(--muted-foreground, #71717a);">'
-                    + 'Could not get an LLM suggestion.</span>';
-            });
+        fetch(url + '?instance_id=' + encodeURIComponent(instanceId)).catch(() => {});
     })();
 
     // ── Sidebar Agreement refresh ──────────────────────────────────

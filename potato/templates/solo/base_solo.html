@@ -584,24 +584,26 @@
             ('setup', 'Setup'),
             ('prompt_review', 'Prompt'),
             ('edge_case_labeling', 'Edge Cases'),
+            ('contrast_set_review', 'Contrast Sets'),
             ('prompt_validation', 'Verify Prompt'),
             ('parallel_annotation', 'Annotation'),
             ('autonomous_labeling', 'Auto Label'),
             ('final_validation', 'Validation'),
             ('completed', 'Complete')
         ] %}
-        {% set phase_order = ['setup', 'prompt_review', 'edge_case_synthesis', 'edge_case_labeling', 'prompt_validation', 'parallel_annotation', 'active_annotation', 'periodic_review', 'disagreement_resolution', 'autonomous_labeling', 'final_validation', 'completed'] %}
+        {% set phase_order = ['setup', 'prompt_review', 'edge_case_synthesis', 'edge_case_labeling', 'contrast_set_review', 'prompt_validation', 'parallel_annotation', 'active_annotation', 'periodic_review', 'disagreement_resolution', 'autonomous_labeling', 'final_validation', 'completed'] %}
         {% set current_index = phase_order.index(phase) if phase in phase_order else 0 %}
         {# Map raw phase to the visible step the user is "on". #}
         {% set step_for_phase = {
             'setup': 1, 'prompt_review': 2,
             'edge_case_synthesis': 3, 'edge_case_labeling': 3, 'rule_review': 3,
-            'prompt_validation': 4,
-            'parallel_annotation': 5, 'active_annotation': 5,
-            'disagreement_resolution': 5, 'periodic_review': 5,
-            'autonomous_labeling': 6,
-            'final_validation': 7,
-            'completed': 8,
+            'contrast_set_review': 4,
+            'prompt_validation': 5,
+            'parallel_annotation': 6, 'active_annotation': 6,
+            'disagreement_resolution': 6, 'periodic_review': 6,
+            'autonomous_labeling': 7,
+            'final_validation': 8,
+            'completed': 9,
         } %}
         {% set active_step = step_for_phase.get(phase, 1) %}
         <nav class="phase-progress"
@@ -631,6 +633,7 @@
             'prompt_review': 'Review the generated prompt, then continue to edge cases (recommended) or skip straight to annotation.',
             'edge_case_synthesis': 'Generating tricky boundary examples to pressure-test your guidelines&hellip;',
             'edge_case_labeling': 'Label each edge case below. This teaches the prompt exactly where your categories\' boundaries are.',
+            'contrast_set_review': 'Review each minimally-edited variant below and say whether the edit actually flips the label &mdash; this is what lets the model propose precise codebook rules.',
             'prompt_validation': 'Checking the prompt against your edge case labels before annotation begins.',
             'parallel_annotation': 'Pick a label for each instance. The LLM labels alongside you &mdash; when it disagrees, you\'ll be asked to resolve it.',
             'active_annotation': 'Keep labeling &mdash; low-confidence and previously-disagreed instances are prioritized for you.',

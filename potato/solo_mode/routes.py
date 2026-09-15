@@ -22,6 +22,7 @@ from flask import (
     redirect,
     url_for,
     session,
+    Response,
 )
 from functools import wraps
 from typing import Any, Dict, Optional
@@ -413,21 +414,23 @@ def edge_cases():
         notes = request.form.get('notes', '')
 
         if case_id and label:
-            manager.edge_case_synthesizer.record_label(case_id, label, notes)
+            manager.record_edge_case_label(case_id, label, notes)
 
             # Check if all edge cases are labeled
             unlabeled = manager.edge_case_synthesizer.get_unlabeled_edge_cases()
             if not unlabeled:
-                # Advance to prompt validation. A duplicate/near-simultaneous
-                # submit (e.g. a double-click) can race here: both requests
-                # see an empty `unlabeled` list before either has advanced
-                # the phase, so the second call targets a phase we're
-                # already in/past — not a real error, just a lost race.
+                # Advance to contrast-set review — the labels just recorded
+                # are exactly what generate_contrast_pairs() needs. A
+                # duplicate/near-simultaneous submit (e.g. a double-click)
+                # can race here: both requests see an empty `unlabeled`
+                # list before either has advanced the phase, so the second
+                # call targets a phase we're already in/past — not a real
+                # error, just a lost race.
                 try:
-                    manager.advance_to_phase(SoloPhase.PROMPT_VALIDATION)
+                    manager.advance_to_phase(SoloPhase.CONTRAST_SET_REVIEW)
                 except ValueError:
                     pass
-                return redirect(url_for('solo_mode.prompt_editor'))
+                return redirect(url_for('solo_mode.contrast_sets'))
 
             # The form posts normally (no JS/AJAX), so redirect back to render
             # the next unlabeled case instead of dumping raw JSON to the page.
@@ -440,11 +443,19 @@ def edge_cases():
         unlabeled = manager.edge_case_synthesizer.get_unlabeled_edge_cases()
 
         if not unlabeled:
-            # Synthesize new edge cases
+            # Synthesize new edge cases, grounded in a sample of the
+            # project's real instances so cases read as plausible
+            # perturbations of actual data rather than invented scenarios.
+            ism = get_item_state_manager()
+            sample_ids = ism.instance_id_ordering[:5]
+            existing_examples = [
+                manager._get_instance_text(iid) for iid in sample_ids
+            ]
             manager.edge_case_synthesizer.synthesize_edge_cases(
                 task_description=manager.get_task_description() or '',
                 prompt=manager.get_current_prompt_text(),
                 num_cases=5,
+                existing_examples=existing_examples,
             )
             unlabeled = manager.edge_case_synthesizer.get_unlabeled_edge_cases()
 
@@ -473,6 +484,79 @@ def edge_cases():
         current_case=current_case.to_dict() if current_case else None,
         remaining_count=len(unlabeled),
         labels=labels,
+        phase=manager.get_current_phase().name.lower(),
+    )
+
+
+@solo_mode_bp.route('/contrast-sets', methods=['GET', 'POST'])
+@login_required
+@solo_mode_required
+def contrast_sets():
+    """
+    Contrast-set writing page: for each labeled edge case with a genuine
+    second boundary label, the human writes their own minimal edit that
+    should flip it from one to the other.
+
+    GET: Display the next unwritten contrast pair, or a summary once all
+         pairs are written and rules have been proposed.
+    POST: Submit the human's edit for a pair, or continue past the summary.
+    """
+    manager = get_solo_mode_manager()
+
+    if request.method == 'POST':
+        if request.form.get('action') == 'continue':
+            session.pop('contrast_proposals_created', None)
+            try:
+                manager.advance_to_phase(SoloPhase.PROMPT_VALIDATION)
+            except ValueError:
+                pass  # Already past this phase — lost a double-submit race
+            return redirect(url_for('solo_mode.prompt_editor'))
+
+        pair_id = request.form.get('pair_id')
+        edited_text = request.form.get('edited_text')
+        notes = request.form.get('notes', '')
+
+        if pair_id and edited_text:
+            recorded = manager.record_contrast_edit(
+                pair_id, edited_text, notes=notes)
+            if not recorded:
+                # Empty or unchanged from the original — nothing to learn
+                # from it, so don't advance; the form re-renders with the
+                # same pair still pending.
+                return redirect(url_for('solo_mode.contrast_sets'))
+
+            unreviewed = manager.contrast_set_generator.get_unreviewed_pairs()
+            if not unreviewed:
+                # All pairs written — propose rules now so the summary
+                # screen can report what was staged, then wait for the
+                # user to continue rather than auto-advancing the phase.
+                result = manager.propose_rules_from_contrast_pairs()
+                session['contrast_proposals_created'] = result.get(
+                    'proposals_created', 0)
+
+            return redirect(url_for('solo_mode.contrast_sets'))
+
+        return redirect(url_for('solo_mode.contrast_sets'))
+
+    # Prepare contrast pairs if needed
+    if manager.get_current_phase() == SoloPhase.CONTRAST_SET_REVIEW:
+        if not manager.contrast_set_generator.pairs:
+            manager.generate_contrast_pairs()
+
+    unreviewed = manager.contrast_set_generator.get_unreviewed_pairs()
+    current_pair = unreviewed[0] if unreviewed else None
+    current_pair_dict = current_pair.to_dict() if current_pair else None
+
+    proposals_created = session.get('contrast_proposals_created')
+    has_pairs = bool(manager.contrast_set_generator.pairs)
+
+    return render_template(
+        'solo/contrast_sets.html',
+        current_pair=current_pair_dict,
+        remaining_count=len(unreviewed),
+        all_reviewed=(current_pair is None),
+        has_pairs=has_pairs,
+        proposals_created=proposals_created,
         phase=manager.get_current_phase().name.lower(),
     )
 
@@ -563,12 +647,18 @@ def annotate():
     # straight from edge-case validation (PROMPT_VALIDATION), or using
     # edge_cases.html's "Start Annotation" skip link when there were no
     # edge cases to label (leaves the phase at EDGE_CASE_LABELING, since
-    # that phase can't jump directly to PARALLEL_ANNOTATION). Either way,
-    # walk forward through the legitimate transition chain so the phase
-    # stepper reflects where the user actually is instead of getting
-    # stuck showing "Edge Cases"/"Prompt" while the annotate screen is
-    # what's on screen.
+    # that phase can't jump directly to PARALLEL_ANNOTATION — it now
+    # passes through CONTRAST_SET_REVIEW too). Either way, walk forward
+    # through the legitimate transition chain so the phase stepper
+    # reflects where the user actually is instead of getting stuck
+    # showing "Edge Cases"/"Prompt" while the annotate screen is what's
+    # on screen.
     if manager.get_current_phase() == SoloPhase.EDGE_CASE_LABELING:
+        try:
+            manager.advance_to_phase(SoloPhase.CONTRAST_SET_REVIEW)
+        except ValueError:
+            pass
+    if manager.get_current_phase() == SoloPhase.CONTRAST_SET_REVIEW:
         try:
             manager.advance_to_phase(SoloPhase.PROMPT_VALIDATION)
         except ValueError:
@@ -673,9 +763,6 @@ def annotate():
             relabel=manager.get_relabel_progress(),
         )
 
-    # Get LLM prediction if available
-    llm_prediction = manager.get_llm_prediction_for_instance(instance_id)
-
     # Was this instance already labeled by this human? (true when Back/Next
     # nav or the codebook worklist "Go" button lands on a prior instance) —
     # lets the template show "Update label" instead of "Submit" and
@@ -686,7 +773,6 @@ def annotate():
         'solo/annotate.html',
         instance=instance,
         instance_id=instance_id,
-        llm_prediction=llm_prediction,
         labels=labels,
         phase=manager.get_current_phase().name.lower(),
         stats=manager.get_annotation_stats(user_id),
@@ -1029,6 +1115,13 @@ def validation():
             _link_codebook_code(
                 instance_id, human_label, session.get('username', 'anonymous'))
 
+            # Stash the comparison so the next GET can reveal it — the
+            # human just gave an independent judgment without seeing the
+            # LLM's label (see get_validation_samples()), so the reveal
+            # only happens now, after that judgment is locked in.
+            session['last_validation_comparison'] = (
+                manager.get_validation_comparison(instance_id))
+
             # Check if validation is complete
             progress = manager.get_validation_progress()
             if progress['remaining'] == 0:
@@ -1039,9 +1132,15 @@ def validation():
 
         return jsonify({'error': 'Missing validation data'}), 400
 
-    # Get validation samples
+    # Get validation samples — deliberately no llm_label/llm_confidence
+    # here; get_validation_samples() only returns instance_id/text so the
+    # human's judgment is independent, not anchored on the LLM's answer.
     samples = manager.get_validation_samples()
     current_sample = samples[0] if samples else None
+
+    # Reveal the previous instance's comparison once, then clear it —
+    # it should only appear immediately after the submission that produced it.
+    last_comparison = session.pop('last_validation_comparison', None)
 
     # Get progress
     progress = manager.get_validation_progress()
@@ -1052,6 +1151,7 @@ def validation():
     return render_template(
         'solo/validation.html',
         current_sample=current_sample,
+        last_comparison=last_comparison,
         progress=progress,
         labels=labels,
         phase=manager.get_current_phase().name.lower(),
@@ -2044,3 +2144,43 @@ def api_export():
     }
 
     return jsonify(export_data)
+
+
+@solo_mode_bp.route('/export/dataset')
+@login_required
+@solo_mode_required
+def export_dataset():
+    """Download the final dataset: one row per instance with the label to
+    actually use downstream and where it came from (you, the LLM, agreed,
+    or resolved after disagreement). Deliberately excludes calibration
+    data (edge cases, contrast sets) and behavioral/event logs — those
+    answer "did the process work", not "what's the data" — see
+    potato/solo_mode/final_dataset.py."""
+    manager = get_solo_mode_manager()
+    csv_text = manager.get_final_dataset_csv()
+    task_name = manager.app_config.get('annotation_task_name', 'solo-dataset')
+    filename = f"{task_name}-final-dataset.csv"
+    return Response(
+        csv_text,
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
+
+
+@solo_mode_bp.route('/export/process')
+@login_required
+@solo_mode_required
+def export_process():
+    """Download the organized process-data bundle: metadata_behavioral.csv,
+    validation_human.csv, validation_llm.csv, and cooperative.csv, zipped
+    together. See potato/solo_mode/process_export.py for what each file
+    contains and why they're kept separate."""
+    manager = get_solo_mode_manager()
+    zip_bytes = manager.get_process_export_zip()
+    task_name = manager.app_config.get('annotation_task_name', 'solo-dataset')
+    filename = f"{task_name}-process-data.zip"
+    return Response(
+        zip_bytes,
+        mimetype='application/zip',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )

@@ -25,7 +25,8 @@ class TestSoloPhase:
         """Verify all expected phases exist."""
         expected_phases = [
             'SETUP', 'PROMPT_REVIEW', 'EDGE_CASE_SYNTHESIS',
-            'EDGE_CASE_LABELING', 'PROMPT_VALIDATION', 'PARALLEL_ANNOTATION',
+            'EDGE_CASE_LABELING', 'CONTRAST_SET_REVIEW', 'PROMPT_VALIDATION',
+            'PARALLEL_ANNOTATION',
             'DISAGREEMENT_RESOLUTION', 'ACTIVE_ANNOTATION', 'PERIODIC_REVIEW',
             'AUTONOMOUS_LABELING', 'FINAL_VALIDATION', 'COMPLETED'
         ]
@@ -84,6 +85,20 @@ class TestPhaseTransitions:
         """PARALLEL_ANNOTATION and DISAGREEMENT_RESOLUTION should be bidirectional."""
         assert SoloPhase.DISAGREEMENT_RESOLUTION in PHASE_TRANSITIONS[SoloPhase.PARALLEL_ANNOTATION]
         assert SoloPhase.PARALLEL_ANNOTATION in PHASE_TRANSITIONS[SoloPhase.DISAGREEMENT_RESOLUTION]
+
+    def test_edge_case_labeling_leads_to_contrast_set_review(self):
+        """Labeling edge cases should route into contrast-set review, not
+        straight to prompt validation, so the calibration flow can propose
+        codebook rules before annotation begins."""
+        allowed = PHASE_TRANSITIONS[SoloPhase.EDGE_CASE_LABELING]
+        assert SoloPhase.CONTRAST_SET_REVIEW in allowed
+        assert SoloPhase.PROMPT_VALIDATION not in allowed
+
+    def test_contrast_set_review_leads_to_prompt_validation(self):
+        """Reviewing contrast pairs should route on to prompt validation
+        (or back to prompt review for major rework)."""
+        allowed = PHASE_TRANSITIONS[SoloPhase.CONTRAST_SET_REVIEW]
+        assert allowed == {SoloPhase.PROMPT_VALIDATION, SoloPhase.PROMPT_REVIEW}
 
 
 class TestPhaseTransitionDataclass:

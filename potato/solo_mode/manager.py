@@ -231,6 +231,7 @@ class SoloModeManager:
         # Component instances (lazy initialization)
         self._edge_case_synthesizer = None
         self._edge_case_rule_manager = None
+        self._contrast_set_generator = None
         self._prompt_manager = None
         self._instance_selector = None
         self._validation_tracker = None
@@ -502,6 +503,16 @@ class SoloModeManager:
             )
             self._edge_case_rule_manager.load_state()
         return self._edge_case_rule_manager
+
+    @property
+    def contrast_set_generator(self):
+        """Lazy-initialized contrast set generator."""
+        if self._contrast_set_generator is None:
+            from .contrast_sets import ContrastSetGenerator
+            self._contrast_set_generator = ContrastSetGenerator(
+                self.app_config, self.config
+            )
+        return self._contrast_set_generator
 
     @property
     def prompt_manager(self):
@@ -785,6 +796,73 @@ class SoloModeManager:
         proposals = suggest_from_notes(
             task_dir, project, endpoint=endpoint, since=since)
         return {"proposals": proposals}
+
+    def record_edge_case_label(
+        self, case_id: str, label: str, notes: Optional[str] = None
+    ) -> bool:
+        """Record a human label for a synthesized edge case and persist
+        immediately. Without the explicit save here, labels only reach
+        disk whenever some unrelated later action happens to trigger one
+        — so a restart shortly after labeling (exactly the case
+        edge_case_synthesis_data/contrast_set_data persistence exists
+        for) would still lose them in practice."""
+        result = self.edge_case_synthesizer.record_label(case_id, label, notes)
+        if result:
+            self._save_state()
+        return result
+
+    def generate_contrast_pairs(self) -> List[Any]:
+        """Prepare one empty, label-flipping contrast pair per labeled
+        edge case for the human to write (see contrast_sets.py). Returns
+        the prepared pairs; a case whose synthesized boundary has fewer
+        than two distinct labels is skipped since there's no target to
+        aim the edit at."""
+        labeled_cases = self.edge_case_synthesizer.get_labeled_edge_cases()
+        pairs = self.contrast_set_generator.prepare_pairs_for_writing(
+            labeled_cases)
+        self._save_state()
+        return pairs
+
+    def record_contrast_edit(
+        self, pair_id: str, edited_text: str, notes: Optional[str] = None,
+    ) -> bool:
+        """Record the human's own minimal edit for a contrast pair and
+        persist immediately, for the same reason as
+        record_edge_case_label."""
+        result = self.contrast_set_generator.record_human_edit(
+            pair_id, edited_text, notes=notes)
+        if result:
+            self._save_state()
+        return result
+
+    def propose_rules_from_contrast_pairs(self) -> Dict[str, Any]:
+        """Group written contrast pairs by the label pair they contrast,
+        ask the LLM to propose a distinguishing codebook rule for each, and
+        stage the result via the existing propose/human-confirm flow.
+        Returns {"proposals_created": N} — never raises."""
+        from .contrast_sets import propose_rules_from_contrast_pairs as _propose
+
+        reviewed = self.contrast_set_generator.get_reviewed_pairs()
+        if not reviewed:
+            return {"proposals_created": 0}
+
+        # A double-click or resubmitted edit POST for the last unwritten
+        # pair would otherwise reach here twice and stage the same
+        # proposals twice — only the first caller proceeds.
+        if not self.contrast_set_generator.try_claim_rule_proposal():
+            return {"proposals_created": 0}
+
+        endpoint = self.llm_labeling_thread._get_summary_endpoint()
+        if endpoint is None:
+            return {"proposals_created": 0,
+                     "reason": "no revision/labeling model configured"}
+
+        task_dir, project = self._codebook_ids()
+        proposals = _propose(
+            task_dir, project, reviewed, endpoint=endpoint,
+            actor="contrast_set_llm")
+        self._save_state()
+        return {"proposals_created": len(proposals)}
 
     def _maybe_auto_suggest_from_notes(self) -> None:
         """Best-effort: after a rationale note is saved (disagreement
@@ -3033,6 +3111,55 @@ class SoloModeManager:
             'ready': True, 'advanced': advanced, 'blockers': [],
         }
 
+    def _select_stratified_validation_sample(
+        self, candidate_ids: List[str], sample_size: int
+    ) -> List[str]:
+        """Pick a validation sample stratified by the LLM's predicted
+        label — roughly equal numbers from every category, chosen
+        randomly within each — rather than a plain uniform-random draw.
+
+        A pure random sample over-represents whatever label the LLM
+        predicts most often and can end up with zero instances of a rare
+        category, so "validation accuracy" ends up mostly measuring
+        accuracy on the dominant class. Sampling per category instead
+        gives an honest per-category signal, at the cost of slightly
+        over-sampling rare categories relative to their true frequency
+        (an explicit, worthwhile tradeoff for a QA check)."""
+        import random
+
+        if not sample_size or not candidate_ids:
+            return []
+
+        by_label: Dict[str, List[str]] = {}
+        for instance_id in candidate_ids:
+            for prediction in self.predictions.get(instance_id, {}).values():
+                by_label.setdefault(
+                    str(prediction.predicted_label), []).append(instance_id)
+                break  # one schema is enough to bucket by, same as record_validation
+
+        categories = list(by_label.keys())
+        if not categories:
+            return random.sample(
+                candidate_ids, min(sample_size, len(candidate_ids)))
+
+        per_category = max(1, sample_size // len(categories))
+        selected: List[str] = []
+        for label in categories:
+            pool = by_label[label]
+            take = min(per_category, len(pool))
+            selected.extend(random.sample(pool, take))
+
+        # Small/uneven categories can leave the sample short of quota —
+        # top up randomly from whatever's left so the total still lands
+        # on sample_size rather than silently under-shooting it.
+        if len(selected) < sample_size:
+            remaining_pool = [
+                iid for iid in candidate_ids if iid not in selected]
+            top_up = min(sample_size - len(selected), len(remaining_pool))
+            selected.extend(random.sample(remaining_pool, top_up))
+
+        return selected[:sample_size]
+
     def _finish_autonomous_labeling(self) -> None:
         """Called by the background labeling loop once every instance has
         an LLM label and we're in AUTONOMOUS_LABELING — picks a sample of
@@ -3045,8 +3172,6 @@ class SoloModeManager:
         Runs on the background labeling thread itself, right before it
         returns — no separate stop/join needed.
         """
-        import random
-
         with self._lock:
             if self.phase_controller.get_current_phase() != SoloPhase.AUTONOMOUS_LABELING:
                 return  # Already handled (e.g. a concurrent call) or moved on
@@ -3056,9 +3181,8 @@ class SoloModeManager:
                 self.config.thresholds.minimum_validation_sample,
                 len(llm_only),
             )
-            sample = (
-                random.sample(llm_only, sample_size) if sample_size else []
-            )
+            sample = self._select_stratified_validation_sample(
+                llm_only, sample_size)
             self.validation_sample_ids = set(sample)
 
             if sample:
@@ -3299,6 +3423,7 @@ class SoloModeManager:
             # the (now-empty) state on next access.
             self._edge_case_synthesizer = None
             self._edge_case_rule_manager = None
+            self._contrast_set_generator = None
             self._prompt_manager = None
             self._instance_selector = None
             self._validation_tracker = None
@@ -3606,6 +3731,14 @@ class SoloModeManager:
                 if self._edge_case_rule_manager is not None:
                     state['edge_case_rule_data'] = self._edge_case_rule_manager.to_dict()
 
+                # Persist synthesized/labeled edge cases and reviewed
+                # contrast pairs so a restart mid-calibration doesn't lose
+                # the human labels the contrast-set step depends on.
+                if self._edge_case_synthesizer is not None:
+                    state['edge_case_synthesis_data'] = self._edge_case_synthesizer.to_dict()
+                if self._contrast_set_generator is not None:
+                    state['contrast_set_data'] = self._contrast_set_generator.to_dict()
+
                 # Persist ValidationTracker so confusion matrix and comparison
                 # history survive restarts. Without this, /api/confusion-analysis,
                 # /api/disagreement-explorer, and the dashboard's confusion tab
@@ -3729,6 +3862,15 @@ class SoloModeManager:
                 vt_data = state.get('validation_tracker')
                 if vt_data:
                     self.validation_tracker.from_dict(vt_data)
+
+                # Restore synthesized/labeled edge cases and reviewed
+                # contrast pairs
+                ecs_data = state.get('edge_case_synthesis_data')
+                if ecs_data:
+                    self.edge_case_synthesizer.from_dict(ecs_data)
+                cs_data = state.get('contrast_set_data')
+                if cs_data:
+                    self.contrast_set_generator.from_dict(cs_data)
 
             # Load phase state
             self.phase_controller.load_state()
@@ -4014,18 +4156,63 @@ class SoloModeManager:
             # relabeling something for a totally different reason could
             # silently satisfy final validation for that instance without
             # the user ever seeing the validation screen.
-            validated = len(self.validation_sample_ids & self.validated_instance_ids)
+            completed_ids = self.validation_sample_ids & self.validated_instance_ids
+            validated = len(completed_ids)
+
+            # record_validation() -> record_human_label() already sets
+            # agrees_with_human per prediction when the validator's label
+            # is recorded — this just reads that back instead of the
+            # hardcoded 0.0/0 that used to sit here (the sidebar's
+            # "Accuracy" stat has been silently showing 0% regardless of
+            # actual performance).
+            schemes = self.app_config.get('annotation_schemes', [])
+            schema_name = schemes[0].get('name', 'default') if schemes else 'default'
+            agreements = 0
+            compared = 0
+            for instance_id in completed_ids:
+                prediction = self.predictions.get(instance_id, {}).get(schema_name)
+                if prediction is None or prediction.agrees_with_human is None:
+                    continue
+                compared += 1
+                if prediction.agrees_with_human:
+                    agreements += 1
+
             return {
                 'total_samples': total,
                 'validated': validated,
                 'remaining': total - validated,
                 'percent_complete': (validated / total * 100) if total > 0 else 0,
-                'validation_accuracy': 0.0,  # Placeholder
-                'agreements': 0,  # Placeholder
+                'validation_accuracy': (agreements / compared) if compared > 0 else 0.0,
+                'agreements': agreements,
+                'compared': compared,
+            }
+
+    def get_validation_comparison(self, instance_id: str) -> Optional[Dict[str, Any]]:
+        """The LLM-vs-human comparison for one already-validated instance,
+        for the post-submit reveal on the validation screen — this is
+        deliberately not exposed until after the human has already given
+        their own independent label (see get_validation_samples(), which
+        never carries the LLM's label into the pre-submission page)."""
+        schemes = self.app_config.get('annotation_schemes', [])
+        schema_name = schemes[0].get('name', 'default') if schemes else 'default'
+        with self._lock:
+            prediction = self.predictions.get(instance_id, {}).get(schema_name)
+            if prediction is None or prediction.human_label is None:
+                return None
+            return {
+                'llm_label': prediction.predicted_label,
+                'human_label': prediction.human_label,
+                'agreed': bool(prediction.agrees_with_human),
             }
 
     def get_validation_samples(self) -> List[Dict[str, Any]]:
-        """Get validation samples that need to be validated."""
+        """Get validation samples still awaiting a human judgment.
+
+        Deliberately excludes the LLM's label/confidence: this is meant
+        to be an independent, blind judgment, not "does this look right"
+        — the LLM's answer is only surfaced afterward, via
+        get_validation_comparison(), once the human's own label is
+        already locked in."""
         with self._lock:
             samples = []
             for instance_id in self.validation_sample_ids:
@@ -4035,8 +4222,6 @@ class SoloModeManager:
                         samples.append({
                             'instance_id': instance_id,
                             'text': self._get_instance_text(instance_id),
-                            'llm_label': pred['label'],
-                            'llm_confidence': pred['confidence'],
                         })
             return samples
 
@@ -4103,6 +4288,25 @@ class SoloModeManager:
                     for iid, schemas in self.predictions.items()
                 },
             }
+
+    def get_process_export_zip(self) -> bytes:
+        """Organized process data as a ZIP: behavioral metadata, the
+        validation sample split into separate human/LLM files, and the
+        cooperative (main-annotation) agreed/resolved records. Kept
+        separate from get_final_dataset_csv() — see process_export.py."""
+        from .process_export import build_zip
+        with self._lock:
+            return build_zip(self)
+
+    def get_final_dataset_csv(self) -> str:
+        """A lean, readable per-instance export: final label + where it
+        came from (you, the LLM, agreed, or resolved after disagreement).
+        Deliberately excludes calibration data and raw behavioral logs —
+        see final_dataset.py for why."""
+        from .final_dataset import build_rows, to_csv
+        with self._lock:
+            rows = build_rows(self)
+        return to_csv(rows)
 
     def get_next_instance_data(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get full instance data for the next instance to annotate."""

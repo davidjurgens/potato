@@ -10,9 +10,8 @@
 # in the Codebook tray, hit Refresh, and watch the ## Codebook block (and the
 # revision badge) change — that is the codebook driving the prompt live.
 #
-# Needs Ollama running with llama3.2:3b:
-#   ollama serve
-#   ollama pull llama3.2:3b
+# Uses a lab-hosted vLLM server at burger.si.umich.edu:8001 (OpenAI-compatible
+# API, no key required) — no local Ollama install needed to run this example.
 
 annotation_task_name: "solo-codebook-demo"
 task_dir: .
@@ -68,17 +67,22 @@ codebook_mode: open
 solo_mode:
   enabled: true
 
+  # Points at burger.si.umich.edu:8001 — a vLLM server exposing an
+  # OpenAI-compatible API (no API key needed; OpenAIEndpoint accepts a
+  # placeholder for local/lab servers) serving
+  # google/gemma-4-12B-it-qat-w4a16-ct.
   labeling_models:
-    - endpoint_type: "ollama"
-      model: "llama3.2:3b"
-      endpoint_url: "http://localhost:11434"
+    - endpoint_type: "openai"
+      model: "google/gemma-4-12B-it-qat-w4a16-ct"
+      base_url: "http://burger.si.umich.edu:8001/v1"
       max_tokens: 256
       temperature: 0.1
 
+  # Same lab vLLM server for revisions/contrast-set rewrites.
   revision_models:
-    - endpoint_type: "ollama"
-      model: "llama3.2:3b"
-      endpoint_url: "http://localhost:11434"
+    - endpoint_type: "openai"
+      model: "google/gemma-4-12B-it-qat-w4a16-ct"
+      base_url: "http://burger.si.umich.edu:8001/v1"
 
   # sampling_diversity: labels each instance N times at higher temperature
   # and measures how much the label itself changes across runs — real

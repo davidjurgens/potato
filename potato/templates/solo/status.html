@@ -1041,7 +1041,9 @@
         {% elif phase == 'final_validation' %}
             <a href="{{ url_for('solo_mode.validation') }}" class="btn btn-primary">Continue Validation</a>
         {% elif phase == 'completed' %}
-            <a href="{{ url_for('solo_mode.api_export') }}" class="btn btn-success">Export Data</a>
+            <a href="{{ url_for('solo_mode.export_dataset') }}" class="btn btn-success">Export Dataset (CSV)</a>
+            <a href="{{ url_for('solo_mode.export_process') }}" class="btn btn-secondary">Process Data (ZIP)</a>
+            <a href="{{ url_for('solo_mode.api_export') }}" class="btn btn-secondary">Raw Process Data (JSON)</a>
         {% endif %}
         <a href="{{ url_for('solo_mode.api_status') }}" class="btn btn-secondary">API Status</a>
     </div>

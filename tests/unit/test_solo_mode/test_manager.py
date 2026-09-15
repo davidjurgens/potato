@@ -737,6 +737,135 @@ class TestSoloModeManagerValidation:
             s['instance_id'] for s in manager.get_validation_samples()
         ]
 
+    def test_get_validation_samples_never_includes_llm_label(self, manager):
+        """Blind by construction: the LLM's answer must not reach the
+        human before their own judgment is recorded."""
+        manager.select_validation_sample(3)
+        for sample in manager.get_validation_samples():
+            assert 'llm_label' not in sample
+            assert 'llm_confidence' not in sample
+
+    def test_record_validation_computes_real_accuracy(self, manager):
+        """get_validation_progress()'s validation_accuracy/agreements used
+        to be hardcoded placeholders (0.0/0) regardless of actual
+        performance — this is the fix."""
+        manager.predictions['i0'] = {
+            'sentiment': _make_prediction('i0', label='positive'),
+        }
+        manager.predictions['i1'] = {
+            'sentiment': _make_prediction('i1', label='negative'),
+        }
+        manager.validation_sample_ids = {'i0', 'i1'}
+
+        manager.record_validation('i0', 'positive')   # agrees
+        manager.record_validation('i1', 'neutral')    # disagrees
+
+        progress = manager.get_validation_progress()
+        assert progress['compared'] == 2
+        assert progress['agreements'] == 1
+        assert progress['validation_accuracy'] == pytest.approx(0.5)
+
+    def test_get_validation_comparison_reveals_after_recording(self, manager):
+        manager.predictions['i0'] = {
+            'sentiment': _make_prediction('i0', label='positive'),
+        }
+        manager.validation_sample_ids = {'i0'}
+
+        assert manager.get_validation_comparison('i0') is None  # not yet
+
+        manager.record_validation('i0', 'negative')
+        comparison = manager.get_validation_comparison('i0')
+        assert comparison == {
+            'llm_label': 'positive', 'human_label': 'negative',
+            'agreed': False,
+        }
+
+
+class TestStratifiedValidationSample:
+    """Tests for _select_stratified_validation_sample — roughly equal
+    counts per LLM-predicted category, chosen randomly within each,
+    rather than the plain uniform-random draw this replaced (which could
+    starve rare categories of any validation coverage at all)."""
+
+    @pytest.fixture
+    def manager(self):
+        mgr = _make_manager()
+        # 15 "positive", 3 "negative", 2 "neutral" — a skewed distribution
+        # a uniform sample would mostly just re-sample "positive".
+        for i in range(15):
+            iid = f"pos{i}"
+            mgr.predictions[iid] = {
+                'sentiment': _make_prediction(iid, label='positive')}
+        for i in range(3):
+            iid = f"neg{i}"
+            mgr.predictions[iid] = {
+                'sentiment': _make_prediction(iid, label='negative')}
+        for i in range(2):
+            iid = f"neu{i}"
+            mgr.predictions[iid] = {
+                'sentiment': _make_prediction(iid, label='neutral')}
+        return mgr
+
+    def _all_ids(self, manager):
+        return list(manager.predictions.keys())
+
+    def test_samples_every_category(self, manager):
+        candidate_ids = self._all_ids(manager)
+        sample = manager._select_stratified_validation_sample(
+            candidate_ids, sample_size=6)
+
+        labels_in_sample = {
+            manager.predictions[iid]['sentiment'].predicted_label
+            for iid in sample
+        }
+        assert labels_in_sample == {'positive', 'negative', 'neutral'}
+
+    def test_does_not_starve_rare_categories(self, manager):
+        candidate_ids = self._all_ids(manager)
+        sample = manager._select_stratified_validation_sample(
+            candidate_ids, sample_size=6)
+
+        by_label = {'positive': 0, 'negative': 0, 'neutral': 0}
+        for iid in sample:
+            label = manager.predictions[iid]['sentiment'].predicted_label
+            by_label[label] += 1
+
+        # Neither rare category should be zero, and no category should
+        # dominate the sample the way a uniform draw over 15:3:2 would.
+        assert by_label['negative'] > 0
+        assert by_label['neutral'] > 0
+        assert by_label['positive'] <= 3
+
+    def test_respects_sample_size(self, manager):
+        candidate_ids = self._all_ids(manager)
+        sample = manager._select_stratified_validation_sample(
+            candidate_ids, sample_size=6)
+        assert len(sample) == 6
+
+    def test_caps_at_available_candidates(self, manager):
+        candidate_ids = self._all_ids(manager)  # 20 total
+        sample = manager._select_stratified_validation_sample(
+            candidate_ids, sample_size=100)
+        assert len(sample) == 20
+        assert set(sample) == set(candidate_ids)
+
+    def test_empty_input(self, manager):
+        assert manager._select_stratified_validation_sample([], 5) == []
+
+    def test_zero_sample_size(self, manager):
+        candidate_ids = self._all_ids(manager)
+        assert manager._select_stratified_validation_sample(
+            candidate_ids, 0) == []
+
+    def test_no_predictions_falls_back_to_random(self, manager):
+        # Candidates with no LLMPrediction at all (e.g. mismatched schema)
+        # can't be bucketed by label — should still return a sample
+        # rather than silently returning nothing.
+        fresh = _make_manager()
+        sample = fresh._select_stratified_validation_sample(
+            ["a", "b", "c"], 2)
+        assert len(sample) == 2
+
 
 # === State Persistence ===
 

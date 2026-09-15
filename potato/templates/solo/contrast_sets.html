@@ -1,0 +1,155 @@
+{% extends "solo/base_solo.html" %}
+
+{% block title %}Contrast Sets - Solo Mode{% endblock %}
+
+{% block extra_head %}
+<style>
+    .contrast-label {
+        font-size: var(--text-xs, 0.75rem);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted-foreground, #71717a);
+        margin: var(--space-md, 1rem) 0 var(--space-xs, 0.25rem) 0;
+    }
+    .contrast-edit-textarea {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 120px;
+        padding: var(--space-md, 1rem);
+        border: 1px solid var(--border, #e4e4e7);
+        border-radius: var(--radius, 0.5rem);
+        font-size: var(--text-lg, 1.1875rem);
+        line-height: 1.55;
+        font-family: inherit;
+        color: var(--foreground, #09090b);
+        background: var(--card, white);
+        margin: var(--space-md, 1rem) 0;
+    }
+    .contrast-edit-textarea:focus-visible {
+        outline: 2px solid var(--ring, var(--primary, #6e56cf));
+        outline-offset: 1px;
+        border-color: var(--ring, var(--primary, #6e56cf));
+    }
+</style>
+{% endblock %}
+
+{% block flow_guidance %}
+<div class="flow-guidance" role="note">
+    <span class="flow-guidance-icon" aria-hidden="true">&rarr;</span>
+    <span>
+        {% if current_pair %}
+        Edit the excerpt below yourself &mdash; change as little as
+        possible so it reads as "{{ current_pair.label_b }}" instead of
+        "{{ current_pair.label_a }}". Your own sense of the boundary is
+        what teaches the codebook, not a model's guess at it.
+        {% else %}
+        Once every pair is written, the model proposes codebook rules
+        from the pattern &mdash; nothing changes until you confirm them
+        in the Codebook tray.
+        {% endif %}
+    </span>
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Write Contrast Sets</h1>
+
+<p>Each excerpt below is one you already labeled. Make the smallest edit
+   you can think of &mdash; ideally one word or a short phrase &mdash;
+   that would flip it to the other boundary label.</p>
+
+{% if current_pair %}
+<form method="POST" action="{{ url_for('solo_mode.contrast_sets') }}" id="contrast-edit-form">
+    <input type="hidden" name="pair_id" value="{{ current_pair.id }}">
+
+    <div class="contrast-label">Original &mdash; {{ current_pair.label_a }}</div>
+    <div class="instance-text">
+        {{ current_pair.original_text }}
+    </div>
+
+    <div class="contrast-label">Your edit &mdash; make this read as: {{ current_pair.label_b }}</div>
+    <textarea
+        name="edited_text"
+        id="edited-text"
+        class="contrast-edit-textarea"
+        aria-label="Your minimally edited version"
+    >{{ current_pair.original_text }}</textarea>
+
+    <div class="form-group">
+        <label for="notes">What did you change, and why does that flip it? (optional)</label>
+        <textarea
+            id="notes"
+            name="notes"
+            placeholder="e.g. swapped the complaint from cost to distance..."
+            rows="2"
+        ></textarea>
+    </div>
+
+    <div class="solo-nav">
+        <a href="{{ url_for('solo_mode.prompt_editor') }}" class="btn btn-secondary">&larr; Back to Prompt</a>
+        <button type="submit" class="btn btn-primary" id="submit-btn" disabled>Submit</button>
+    </div>
+</form>
+{% elif all_reviewed %}
+<div class="alert alert-success">
+    {% if has_pairs %}
+        {% if proposals_created %}
+        <p><strong>{{ proposals_created }} codebook rule{{ "s" if proposals_created != 1 else "" }} proposed</strong>
+           from these contrast pairs.</p>
+        <p>Review and confirm them in the Codebook tray before continuing
+           &mdash; nothing changes until you confirm.</p>
+        {% else %}
+        <p>All contrast pairs written. The model didn't find a clear
+           enough pattern to propose a codebook rule this round.</p>
+        {% endif %}
+    {% else %}
+    <p>No contrast pairs this round &mdash; none of the labeled edge
+       cases had two distinct boundary labels to contrast.</p>
+    {% endif %}
+</div>
+<form method="POST" action="{{ url_for('solo_mode.contrast_sets') }}">
+    <input type="hidden" name="action" value="continue">
+    <div class="solo-nav">
+        <a href="{{ url_for('solo_mode.prompt_editor') }}" class="btn btn-secondary">&larr; Back to Prompt</a>
+        <button type="submit" class="btn btn-primary">Continue to Prompt Validation &rarr;</button>
+    </div>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block stats %}
+{{ super() }}
+<div class="stat-item">
+    <span class="stat-label">Remaining</span>
+    <span class="stat-value">{{ remaining_count }}</span>
+</div>
+{% endblock %}
+
+{% block sidebar_extra %}
+<h3>Contrast Set Tips</h3>
+<ul style="font-size: 14px; color: #666; padding-left: 20px;">
+    <li>Smaller edits give a sharper signal</li>
+    <li>Keep everything else about the sentence the same</li>
+    <li>A short "why" note helps the model write a sharper rule</li>
+</ul>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const textarea = document.getElementById('edited-text');
+    const submitBtn = document.getElementById('submit-btn');
+    const originalText = {{ (current_pair.original_text if current_pair else "")|tojson|safe }};
+
+    function refreshSubmitState() {
+        if (!textarea || !submitBtn) return;
+        const value = textarea.value.trim();
+        submitBtn.disabled = (value.length === 0 || value === originalText.trim());
+    }
+
+    if (textarea) {
+        textarea.addEventListener('input', refreshSubmitState);
+        refreshSubmitState();
+    }
+</script>
+{% endblock %}

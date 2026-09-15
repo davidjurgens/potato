@@ -5,7 +5,20 @@
 {% block content %}
 <h1>Final Validation</h1>
 
-<p>Validate a sample of LLM-only labeled instances to ensure quality. This is the final step before completion.</p>
+<p>Label a random sample of LLM-only instances yourself, independently —
+   the LLM's label is hidden until after you submit, so this measures
+   real agreement rather than "does this look right."</p>
+
+{% if last_comparison %}
+<div class="alert {{ 'alert-success' if last_comparison.agreed else 'alert-warning' }}">
+    <p>
+        <strong>Last one:</strong>
+        you said "{{ last_comparison.human_label }}" &middot;
+        LLM said "{{ last_comparison.llm_label }}" &middot;
+        {{ 'Agreed' if last_comparison.agreed else 'Disagreed' }}
+    </p>
+</div>
+{% endif %}
 
 {% if current_sample %}
 <form method="POST" action="{{ url_for('solo_mode.validation') }}">
@@ -14,23 +27,6 @@
 
     <div class="instance-text">
         {{ current_sample.text }}
-    </div>
-
-    <div class="llm-reasoning">
-        <div class="llm-reasoning-header">
-            <strong>LLM Label: {{ current_sample.llm_label }}</strong>
-            <span>▼</span>
-        </div>
-        <div class="llm-reasoning-content">
-            <div class="confidence-bar">
-                {% set conf = current_sample.llm_confidence or 0.5 %}
-                {% set conf_class = 'confidence-low' if conf < 0.5 else ('confidence-mid' if conf < 0.8 else 'confidence-high') %}
-                <div class="confidence-fill {{ conf_class }}" style="width: {{ (conf * 100)|int }}%"></div>
-            </div>
-            <p style="font-size: 12px; color: #666;">
-                Confidence: {{ (conf * 100)|int }}%
-            </p>
-        </div>
     </div>
 
     <h3>What is the correct label?</h3>

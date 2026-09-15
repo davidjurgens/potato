@@ -73,7 +73,14 @@ class OpenAIEndpoint(BaseAIEndpoint):
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
-                text_format=output_format.model_json_schema(),
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "output_format",
+                        "schema": output_format.model_json_schema(),
+                        "strict": True,
+                    },
+                },
             )
             return response.choices[0].message.content
         except Exception as e:

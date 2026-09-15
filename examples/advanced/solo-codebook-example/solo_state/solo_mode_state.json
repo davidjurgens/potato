@@ -5,17 +5,263 @@
     {
       "version": 1,
       "prompt_text": "Label the following text according to this task: Classify each patient comment by the single primary theme it expresses about getting healthcare: an access barrier, a cost concern, distrust of a provider, or a complaint about wait times. Pick the theme the comment is mostly about.",
-      "created_at": "2026-08-19T15:55:14.404096",
+      "created_at": "2026-09-01T14:47:43.002693",
       "created_by": "user_setup",
       "source_description": "Initial prompt from task description",
       "parent_version": null,
       "validation_accuracy": null
     }
   ],
-  "predictions": {},
-  "human_labeled_ids": [],
-  "labeled_by_user": {},
-  "llm_labeled_ids": [],
+  "predictions": {
+    "2": {
+      "primary_theme": {
+        "instance_id": "2",
+        "schema_name": "primary_theme",
+        "predicted_label": "cost concerns",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-09-01T14:47:45.328333",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The patient explicitly mentions skipping care due to the inability to afford the $200 visit, which aligns with the definition of monetary price and affordability concerns. It is excluded from 'access barriers' because the barrier is financial, not structural/logistical. It is excluded from 'wait times' because the delay was self-imposed due to money, not a system delay. It is excluded from 'provider trust' as there is no mention of the clinician's credibility or relationship. ",
+        "human_label": "cost concerns",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "3": {
+      "primary_theme": {
+        "instance_id": "3",
+        "schema_name": "primary_theme",
+        "predicted_label": "provider trust",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-09-01T14:48:00.161160",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The patient expresses a lack of confidence in their doctor's ability to listen, leading to a breakdown in the provider-patient relationship and a refusal to follow medical advice. This aligns with the definition of distrusting a clinician's judgment/credibility rather than a logistical issue like cost or wait times.",
+        "human_label": "provider trust",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "4": {
+      "primary_theme": {
+        "instance_id": "4",
+        "schema_name": "primary_theme",
+        "predicted_label": "wait times",
+        "confidence_score": 0.5,
+        "uncertainty_score": 0.5,
+        "prompt_version": 1,
+        "timestamp": "2026-09-01T14:48:05.961692",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The comment describes a long lead time (four months) between seeking care and receiving an appointment, which fits the definition of wait times and is explicitly distinguished from access barriers in the codebook's exclude rules for that category. ",
+        "human_label": "wait times",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "5": {
+      "primary_theme": {
+        "instance_id": "5",
+        "schema_name": "primary_theme",
+        "predicted_label": "access barriers",
+        "confidence_score": 0.5,
+        "uncertainty_score": 0.5,
+        "prompt_version": 1,
+        "timestamp": "2026-09-01T14:48:32.473402",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The patient explicitly mentions a structural obstacle (no specialist within a hundred miles) that prevents them from reaching care, which fits the definition of an access barrier. It is not a cost concern because no price is mentioned, and it is not a wait time because the care is unreachable, not just delayed.  \n    ",
+        "human_label": "access barriers",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "1": {
+      "primary_theme": {
+        "instance_id": "1",
+        "schema_name": "primary_theme",
+        "predicted_label": "access barriers",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-09-01T14:55:16.399163",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The comment describes structural obstacles (distance/transportation) that prevent the patient from reaching the clinic, which fits the definition of an access barrier. It is not a cost concern because no money is mentioned, and it is not a wait time because it refers to the difficulty of getting to the location rather than a delay in the appointment schedule itself.",
+        "human_label": "access barriers",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "6": {
+      "primary_theme": {
+        "instance_id": "6",
+        "schema_name": "primary_theme",
+        "predicted_label": "cost concerns",
+        "confidence_score": 0.5,
+        "uncertainty_score": 0.5,
+        "prompt_version": 1,
+        "timestamp": "2026-09-01T14:55:54.252108",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The patient explicitly mentions bills piling up and a fear of debt, which aligns with the definition of monetary price and fear of debt under 'cost concerns'. It is not an access barrier because the issue is the price of the service, not a structural obstacle to reaching it. It is not provider trust because the focus is on the financial burden, not the provider's integrity. It is not wait times as no delay in care is mentioned. \n    ",
+        "human_label": "cost concerns",
+        "agrees_with_human": true,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "8": {
+      "primary_theme": {
+        "instance_id": "8",
+        "schema_name": "primary_theme",
+        "predicted_label": "wait times",
+        "confidence_score": 0.5,
+        "uncertainty_score": 0.5,
+        "prompt_version": 1,
+        "timestamp": "2026-09-01T14:55:56.482118",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The patient is specifically describing the amount of time spent waiting in the clinic past their scheduled appointment time, which fits the definition of 'wait times'. It is not focused on the provider's demeanor or the cost of the visit.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "7": {
+      "primary_theme": {
+        "instance_id": "7",
+        "schema_name": "primary_theme",
+        "predicted_label": "provider trust",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-09-01T14:56:17.372783",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The patient explicitly mentions feeling heard, trusting the provider's judgment, and the provider explaining things, which aligns with the 'provider trust' definition regarding confidence in a clinician's judgment and feeling heard. It does not focus on cost, access, or wait times. ,I finally feel heard \u2014 my new provider actually explains things and I trust her judgment. (Note: The prompt actually asked to label the specific text provided at the bottom).",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "11": {
+      "primary_theme": {
+        "instance_id": "11",
+        "schema_name": "primary_theme",
+        "predicted_label": "provider trust",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-09-01T14:56:17.684119",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The patient expresses a lack of confidence in the clinician's judgment and feels dismissed/unheard, which aligns with the definition of provider trust rather than a complaint about the duration of the wait or a financial barrier. The 'Exclude' rule for wait times is met because the focus is on the provider's demeanor/attitude rather than just the time spent waiting. The 'Exclude' rule for access barriers and cost concerns are also met as neither money nor structural obstacles are the primary focus. \n    ",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "10": {
+      "primary_theme": {
+        "instance_id": "10",
+        "schema_name": "primary_theme",
+        "predicted_label": "cost concerns",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-09-01T14:57:07.118155",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The patient explicitly mentions not having enough money to cover the pre-payment for a procedure, which aligns with the definition of monetary price and affordability concerns. It is not an access barrier because the issue is the price of the service, not a structural obstacle like distance or transport. It is not a trust issue because the focus is on the financial burden rather than the provider's integrity or demeanor. It is not a wait time issue as the delay is caused by lack of funds, not by a scheduling queue. ",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "9": {
+      "primary_theme": {
+        "instance_id": "9",
+        "schema_name": "primary_theme",
+        "predicted_label": "access barriers",
+        "confidence_score": 0.5,
+        "uncertainty_score": 0.5,
+        "prompt_version": 1,
+        "timestamp": "2026-09-01T14:57:17.313033",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The text describes a structural obstacle (language/paperwork) that prevented the patient from navigating the system and receiving care, which aligns with the definition of access barriers and the inclusion of 'language' and 'paperwork'.-6",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "12": {
+      "primary_theme": {
+        "instance_id": "12",
+        "schema_name": "primary_theme",
+        "predicted_label": "wait times",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-09-01T14:57:26.192924",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The text describes a three-month delay in receiving a callback to schedule a test, which directly aligns with the definition of a delay between seeking care and receiving it (appointment lead time). It does not focus on cost, structural barriers like transport/language, or the provider's integrity/demeanor.418",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    }
+  },
+  "human_labeled_ids": [
+    "2",
+    "8",
+    "9",
+    "5",
+    "6",
+    "7",
+    "11",
+    "4",
+    "1",
+    "10",
+    "12",
+    "3"
+  ],
+  "labeled_by_user": {
+    "lina1": [
+      "2",
+      "8",
+      "9",
+      "5",
+      "6",
+      "7",
+      "11",
+      "4",
+      "1",
+      "10",
+      "12",
+      "3"
+    ]
+  },
+  "llm_labeled_ids": [
+    "2",
+    "8",
+    "9",
+    "5",
+    "6",
+    "7",
+    "11",
+    "4",
+    "1",
+    "10",
+    "12",
+    "3"
+  ],
   "disagreement_ids": [],
   "validation_sample_ids": [],
   "validated_instance_ids": [],
@@ -24,36 +270,365 @@
   "edge_case_ids": [],
   "edge_case_labels": {},
   "agreement_metrics": {
-    "total_compared": 0,
-    "agreements": 0,
+    "total_compared": 7,
+    "agreements": 7,
     "disagreements": 0,
-    "agreement_rate": 0.0
+    "agreement_rate": 1.0
   },
-  "confidence_history": {},
+  "confidence_history": {
+    "2": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "3": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "4": [
+      [
+        1,
+        0.5
+      ]
+    ],
+    "5": [
+      [
+        1,
+        0.5
+      ]
+    ],
+    "1": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "6": [
+      [
+        1,
+        1.0
+      ],
+      [
+        1,
+        0.5
+      ]
+    ],
+    "8": [
+      [
+        1,
+        0.5
+      ],
+      [
+        1,
+        0.5
+      ]
+    ],
+    "7": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "11": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "10": [
+      [
+        1,
+        0.5
+      ],
+      [
+        1,
+        1.0
+      ]
+    ],
+    "9": [
+      [
+        1,
+        0.5
+      ]
+    ],
+    "12": [
+      [
+        1,
+        1.0
+      ]
+    ]
+  },
   "reannotation_counts": {},
-  "per_version_agreement": {},
+  "per_version_agreement": {
+    "1": {
+      "compared": 7,
+      "agreements": 7
+    }
+  },
   "refinement_consecutive_failures": 0,
   "pending_refinements": [],
   "refinement_log": [],
   "icl_library": null,
-  "last_review_revision": null,
+  "last_review_revision": 10,
   "edge_case_rule_data": {
     "rules": {},
     "categories": {}
   },
+  "edge_case_synthesis_data": {
+    "edge_cases": {
+      "edge_0001": {
+        "id": "edge_0001",
+        "text": "I want to see a specialist, but every office I call says they aren't accepting new patients and the ones that are are way too expensive.",
+        "boundary_labels": [
+          "access barriers",
+          "cost concerns"
+        ],
+        "difficulty_reason": "The comment presents two equally weighted barriers: availability (access) and price (cost). The annotator must decide which is the 'primary' theme when both are presented as simultaneous reasons for not seeking care.",
+        "which_aspect": "Primary theme selection for multi-theme content",
+        "synthesized_at": "2026-09-01T14:48:06.228876",
+        "human_label": "cost concerns",
+        "labeler_notes": "",
+        "labeled_at": "2026-09-01T14:48:30.353371"
+      },
+      "edge_0002": {
+        "id": "edge_0002",
+        "text": "I waited in the lobby for three hours, and when I finally saw the doctor, he was so dismissive that I don't think I'll ever go back to that clinic.",
+        "boundary_labels": [
+          "wait times",
+          "provider trust"
+        ],
+        "difficulty_reason": "The text contains a chronological sequence where a wait time leads to a loss of trust. It is unclear if the user is complaining about the delay or the subsequent experience with the provider.",
+        "which_aspect": "Temporal sequence and causality",
+        "synthesized_at": "2026-09-01T14:48:06.228885",
+        "human_label": "wait times",
+        "labeler_notes": "",
+        "labeled_at": "2026-09-01T14:48:52.977969"
+      },
+      "edge_0003": {
+        "id": "edge_0003",
+        "text": "The clinic is in a neighborhood that is unsafe for me to travel to alone, and I don't have a car.",
+        "boundary_labels": [
+          "access barriers",
+          "cost concerns"
+        ],
+        "difficulty_reason": "While this is clearly an access barrier, 'safety' and 'transportation' are distinct from 'distance' or 'availability.' This tests if the annotator interprets 'access' broadly enough to include social/environmental factors.",
+        "which_aspect": "Scope of label definitions",
+        "synthesized_at": "2026-09-01T14:48:06.228889",
+        "human_label": "access barriers",
+        "labeler_notes": "",
+        "labeled_at": "2026-09-01T14:48:59.416516"
+      },
+      "edge_0004": {
+        "id": "edge_0004",
+        "text": "I'm worried that my doctor is just trying to push unnecessary tests on me to bill my insurance company more.",
+        "boundary_labels": [
+          "provider trust",
+          "cost concerns"
+        ],
+        "difficulty_reason": "This blends a lack of trust (the doctor's motives) with a concern about cost (insurance billing). It tests whether 'distrust' refers to clinical competence or perceived financial exploitation.",
+        "which_aspect": "Ambiguous/Mixed signals",
+        "synthesized_at": "2026-09-01T14:48:06.228891",
+        "human_label": "provider trust",
+        "labeler_notes": "",
+        "labeled_at": "2026-09-01T14:49:05.957576"
+      },
+      "edge_0005": {
+        "id": "edge_0005",
+        "text": "I've been on the waiting list for six months, and honestly, at this point, I've lost all faith that I'll ever actually get seen.",
+        "boundary_labels": [
+          "wait times",
+          "provider trust"
+        ],
+        "difficulty_reason": "The 'wait time' is the factual situation, but the 'loss of faith' is the emotional outcome. The annotator must determine if the 'primary theme' is the objective delay or the subjective feeling of hopelessness.",
+        "which_aspect": "Subjective sentiment vs. Objective fact",
+        "synthesized_at": "2026-09-01T14:48:06.228893",
+        "human_label": "wait times",
+        "labeler_notes": "",
+        "labeled_at": "2026-09-01T14:49:18.795595"
+      }
+    },
+    "synthesis_rounds": [
+      {
+        "timestamp": "2026-09-01T14:48:06.228895",
+        "num_requested": 5,
+        "num_generated": 5,
+        "case_ids": [
+          "edge_0001",
+          "edge_0002",
+          "edge_0003",
+          "edge_0004",
+          "edge_0005"
+        ]
+      }
+    ],
+    "tested_aspects": [
+      "Ambiguous/Mixed signals",
+      "Scope of label definitions",
+      "Subjective sentiment vs. Objective fact",
+      "Temporal sequence and causality",
+      "Primary theme selection for multi-theme content"
+    ],
+    "id_counter": 5
+  },
+  "contrast_set_data": {
+    "pairs": {
+      "contrast_0001": {
+        "id": "contrast_0001",
+        "source_case_id": "edge_0001",
+        "label_a": "cost concerns",
+        "label_b": "access barriers",
+        "original_text": "I want to see a specialist, but every office I call says they aren't accepting new patients and the ones that are are way too expensive.",
+        "edited_text": "I want to see a specialist, but every office I call says they aren't accepting new patients and the ones that are don't take my insurance.",
+        "changed_span": "\"are / way / too / expensive.\" -> \"don't / take / my / insurance.\"",
+        "proposed_label": "access barriers",
+        "created_at": "2026-09-01T14:49:18.808842",
+        "human_verdict": "authored",
+        "human_label": "access barriers",
+        "notes": "i changed from way too expensive to don't take my insurance both deal with expenses but this is specifically insurance based which deals with access barriers",
+        "reviewed_at": "2026-09-01T14:50:58.992973"
+      },
+      "contrast_0002": {
+        "id": "contrast_0002",
+        "source_case_id": "edge_0002",
+        "label_a": "wait times",
+        "label_b": "provider trust",
+        "original_text": "I waited in the lobby for three hours, and when I finally saw the doctor, he was so dismissive that I don't think I'll ever go back to that clinic.",
+        "edited_text": "When I saw the doctor, he was so dismissive that I don't think I'll ever go back to that clinic.",
+        "changed_span": "\"I waited in the lobby for three hours, and when / finally\" -> \"When\"",
+        "proposed_label": "provider trust",
+        "created_at": "2026-09-01T14:49:18.808865",
+        "human_verdict": "authored",
+        "human_label": "provider trust",
+        "notes": "I took out the portion about waiting",
+        "reviewed_at": "2026-09-01T14:51:37.488947"
+      },
+      "contrast_0003": {
+        "id": "contrast_0003",
+        "source_case_id": "edge_0003",
+        "label_a": "access barriers",
+        "label_b": "cost concerns",
+        "original_text": "The clinic is in a neighborhood that is unsafe for me to travel to alone, and I don't have a car.",
+        "edited_text": "The only clinic that is affordable for me is n a neighborhood that is unsafe for me to travel to alone.",
+        "changed_span": "\"in / alone, and I don't have a car.\" -> \"only / that / affordable for me is n / alone.\"",
+        "proposed_label": "cost concerns",
+        "created_at": "2026-09-01T14:49:18.808873",
+        "human_verdict": "authored",
+        "human_label": "cost concerns",
+        "notes": "focus on affordable",
+        "reviewed_at": "2026-09-01T14:52:26.958468"
+      },
+      "contrast_0004": {
+        "id": "contrast_0004",
+        "source_case_id": "edge_0004",
+        "label_a": "provider trust",
+        "label_b": "cost concerns",
+        "original_text": "I'm worried that my doctor is just trying to push unnecessary tests on me to bill my insurance company more.",
+        "edited_text": "My doctor keeps pushing numerous tests on me which makes the bill to my insurance company more than I can afford.",
+        "changed_span": "\"I'm worried that my / is / just / trying to push unnecessary / to / more.\" -> \"My / keeps / pushing / numerous / which makes the / to / more than I can afford.\"",
+        "proposed_label": "cost concerns",
+        "created_at": "2026-09-01T14:49:18.808878",
+        "human_verdict": "authored",
+        "human_label": "cost concerns",
+        "notes": "focus on money",
+        "reviewed_at": "2026-09-01T14:53:49.935734"
+      },
+      "contrast_0005": {
+        "id": "contrast_0005",
+        "source_case_id": "edge_0005",
+        "label_a": "wait times",
+        "label_b": "provider trust",
+        "original_text": "I've been on the waiting list for six months, and honestly, at this point, I've lost all faith that I'll ever actually get seen.",
+        "edited_text": "I've been on the waiting list for six months, every time I contact them they say a little more time, and honestly, at this point, I've lost all faith that I'll ever actually get seen.",
+        "changed_span": "\"(nothing removed)\" -> \"every time I contact them they say a little more time,\"",
+        "proposed_label": "provider trust",
+        "created_at": "2026-09-01T14:49:18.808883",
+        "human_verdict": "authored",
+        "human_label": "provider trust",
+        "notes": "contact with the provider needs to happen",
+        "reviewed_at": "2026-09-01T14:54:28.140261"
+      }
+    },
+    "id_counter": 5,
+    "rules_proposed": true
+  },
   "validation_tracker": {
     "metrics": {
-      "total_compared": 0,
-      "agreements": 0,
+      "total_compared": 7,
+      "agreements": 7,
       "disagreements": 0,
-      "agreement_rate": 0.0,
-      "label_agreements": {},
+      "agreement_rate": 1.0,
+      "label_agreements": {
+        "provider trust": 1,
+        "wait times": 1,
+        "access barriers": 2,
+        "cost concerns": 3
+      },
       "label_disagreements": {},
       "confusion_matrix": {},
-      "recent_agreement_rate": 0.0,
+      "recent_agreement_rate": 1.0,
       "trend": "stable"
     },
-    "comparison_history": [],
+    "comparison_history": [
+      {
+        "instance_id": "3",
+        "human_label": "provider trust",
+        "llm_label": "provider trust",
+        "schema_name": "primary_theme",
+        "agrees": true,
+        "timestamp": "2026-09-01T14:55:15.005120"
+      },
+      {
+        "instance_id": "4",
+        "human_label": "wait times",
+        "llm_label": "wait times",
+        "schema_name": "primary_theme",
+        "agrees": true,
+        "timestamp": "2026-09-01T14:55:21.210294"
+      },
+      {
+        "instance_id": "5",
+        "human_label": "access barriers",
+        "llm_label": "access barriers",
+        "schema_name": "primary_theme",
+        "agrees": true,
+        "timestamp": "2026-09-01T14:55:26.091801"
+      },
+      {
+        "instance_id": "1",
+        "human_label": "access barriers",
+        "llm_label": "access barriers",
+        "schema_name": "primary_theme",
+        "agrees": true,
+        "timestamp": "2026-09-01T14:55:29.102443"
+      },
+      {
+        "instance_id": "2",
+        "human_label": "cost concerns",
+        "llm_label": "cost concerns",
+        "schema_name": "primary_theme",
+        "agrees": true,
+        "timestamp": "2026-09-01T14:55:32.951734"
+      },
+      {
+        "instance_id": "6",
+        "human_label": "cost concerns",
+        "llm_label": "cost concerns",
+        "schema_name": "primary_theme",
+        "agrees": true,
+        "timestamp": "2026-09-01T14:55:48.091558"
+      },
+      {
+        "instance_id": "6",
+        "human_label": "cost concerns",
+        "llm_label": "cost concerns",
+        "schema_name": "primary_theme",
+        "agrees": true,
+        "timestamp": "2026-09-01T14:56:00.268754"
+      }
+    ],
     "validation_samples": {},
     "llm_labels_since_review": 0
   }
