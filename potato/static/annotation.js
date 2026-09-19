@@ -40,6 +40,24 @@ let currentAnnotations = {};
 let userState = null;
 let isLoading = false;
 let textSaveTimer = null;
+
+/**
+ * Text and number inputs reach `currentAnnotations` through a 1 s debounce of
+ * their own (see setupInputEventListeners). A save that ran inside that second
+ * sent what the box held before the edit: `syncAnnotationsFromDOM()` copies a
+ * non-empty value across but skips an empty one, so clearing a box and
+ * pressing Next kept the old text on the server. Every save path flushes these
+ * first.
+ */
+const pendingInputChanges = new Map(); // element -> debounce timer
+
+function flushPendingInputChanges() {
+    if (pendingInputChanges.size === 0) return;
+    const elements = [...pendingInputChanges.keys()];
+    pendingInputChanges.forEach(timer => clearTimeout(timer));
+    pendingInputChanges.clear();
+    elements.forEach(element => handleInputChange(element));
+}
 let currentSpanAnnotations = [];
 let debugLastInstanceId = null;
 let debugOverlayCount = 0;
@@ -65,7 +83,8 @@ let aiAssistantManger = new AIAssistantManager();
  * regular fetch() is cancelled by browsers during unload.
  */
 function flushPendingSave() {
-    if (!textSaveTimer || !currentInstance) return;
+    if ((!textSaveTimer && pendingInputChanges.size === 0) || !currentInstance) return;
+    flushPendingInputChanges();
     clearTimeout(textSaveTimer);
     textSaveTimer = null;
 
@@ -1623,6 +1642,37 @@ function generateAnnotationForms() {
  * a null offsetParent. A save the annotator triggered by navigating still
  * blocks, because there the failure is the thing they need to know about.
  */
+/**
+ * Headers for a navigation POST to /annotate.
+ *
+ * `X-Potato-Navigation` asks the server for a short JSON answer. Without it the
+ * server renders the whole next page into the POST response, which this code
+ * then throws away and fetches again with a GET.
+ */
+function navigationHeaders(extra) {
+    return Object.assign({
+        'Content-Type': 'application/json',
+        'X-Potato-Navigation': '1',
+    }, extra || {});
+}
+
+/**
+ * Load the page the server has just moved this annotator to.
+ *
+ * A plain navigation rather than `location.reload()`: a reload makes Firefox
+ * and Safari revalidate every script and stylesheet on the page, and re-POSTs
+ * when the page itself came from a form POST. The fragment is dropped because
+ * navigating to the current URL plus a fragment only scrolls. `instance_id` is
+ * dropped because a GET carrying it moves the annotator back to that item,
+ * undoing the navigation the server has just made.
+ */
+function loadNavigatedPage() {
+    const url = new URL(window.location.href);
+    url.hash = '';
+    url.searchParams.delete('instance_id');
+    window.location.replace(url.toString());
+}
+
 async function saveAnnotations({ background = false } = {}) {
     if (!currentInstance || !currentInstance.id) {
         return;
@@ -1643,6 +1693,13 @@ async function saveAnnotations({ background = false } = {}) {
             headers['X-API-Key'] = window.config.api_key;
         }
 
+        // Apply text edits still inside their debounce. That schedules an
+        // autosave of its own, which this save makes redundant.
+        if (pendingInputChanges.size > 0) {
+            flushPendingInputChanges();
+            clearTimeout(textSaveTimer);
+            textSaveTimer = null;
+        }
         // Sync currentAnnotations from DOM to ensure we have the latest state
         // This handles cases where change events may not have fired (e.g., JS clicks)
         syncAnnotationsFromDOM();
@@ -1873,9 +1930,7 @@ async function navigateToPrevious() {
         // Use the correct endpoint and payload for navigation
         const response = await fetch('/annotate', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: navigationHeaders(),
             body: JSON.stringify({
                 action: 'prev_instance',
                 instance_id: currentInstance?.id
@@ -1894,10 +1949,9 @@ async function navigateToPrevious() {
                 overlayCount: getCurrentOverlayCount()
             });
 
-            // Add a small delay to ensure span manager operations complete before reload
-            setTimeout(() => {
-                window.location.reload();
-            }, 100);
+            // onInstanceChange() above is synchronous for the current id, so
+            // there is nothing to wait for before leaving the page.
+            loadNavigatedPage();
         } else {
             console.error('[DEEP DEBUG NAV] navigateToPrevious - Navigation failed:', response.status);
             setLoading(false);
@@ -2022,9 +2076,7 @@ async function navigateToNext() {
         // Use the correct endpoint and payload for navigation
         const response = await fetch('/annotate', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: navigationHeaders(),
             body: JSON.stringify({
                 action: 'next_instance',
                 instance_id: currentInstance?.id
@@ -2043,10 +2095,9 @@ async function navigateToNext() {
                 overlayCount: getCurrentOverlayCount()
             });
 
-            // Add a small delay to ensure span manager operations complete before reload
-            setTimeout(() => {
-                window.location.reload();
-            }, 100);
+            // onInstanceChange() above is synchronous for the current id, so
+            // there is nothing to wait for before leaving the page.
+            loadNavigatedPage();
         } else {
             handleNavigationResponseError(response);
             setLoading(false);
@@ -2072,6 +2123,7 @@ async function navigateToInstance(instanceIndex) {
         }
     }
 
+    let leavingPage = false;
     try {
         setLoading(true);
 
@@ -2122,9 +2174,7 @@ async function navigateToInstance(instanceIndex) {
             }
         }
 
-        const headers = {
-            'Content-Type': 'application/json',
-        };
+        const headers = navigationHeaders();
         if (window.config.api_key) {
             headers['X-API-Key'] = window.config.api_key;
         }
@@ -2150,8 +2200,11 @@ async function navigateToInstance(instanceIndex) {
             } else {
                 debugLog('🔍 [DEBUG] navigateToInstance() - No span-overlays container found');
             }
-            // Reload the page to get the new instance data from the server
-            window.location.reload();
+            // Load the page the server moved us to. The loading state stays
+            // up until it arrives: clearing it here showed the instance being
+            // left, with Next enabled, for as long as the request took.
+            leavingPage = true;
+            loadNavigatedPage();
         } else {
             await handleNavigationResponseError(response);
         }
@@ -2159,7 +2212,7 @@ async function navigateToInstance(instanceIndex) {
         console.error('Error navigating to instance:', error);
         showError(true, error.message);
     } finally {
-        setLoading(false);
+        if (!leavingPage) setLoading(false);
     }
 }
 
@@ -2597,6 +2650,16 @@ function markSliderSchemeTouched(input) {
         .forEach(sibling => sibling.setAttribute('data-modified', 'true'));
 }
 
+/** Debounced `handleInputChange` for typing; flushed by every save path. */
+function debounceInputChange(event) {
+    const element = event.target;
+    clearTimeout(pendingInputChanges.get(element));
+    pendingInputChanges.set(element, setTimeout(() => {
+        pendingInputChanges.delete(element);
+        handleInputChange(element);
+    }, 1000));
+}
+
 function setupInputEventListeners() {
     // Set up event listeners for all annotation inputs
     const inputs = document.querySelectorAll('.annotation-input');
@@ -2607,13 +2670,7 @@ function setupInputEventListeners() {
 
         if (inputType === 'text' || tagName === 'textarea') {
             // Text inputs and textareas - debounced saving
-            let timer;
-            input.addEventListener('input', function (event) {
-                clearTimeout(timer);
-                timer = setTimeout(() => {
-                    handleInputChange(event.target);
-                }, 1000);
-            });
+            input.addEventListener('input', debounceInputChange);
             debugLog(`Set up event listener for ${tagName} element:`, input.id);
         } else if (inputType === 'radio' || inputType === 'checkbox') {
             // Radio/checkbox inputs - immediate saving
@@ -2641,13 +2698,7 @@ function setupInputEventListeners() {
             });
         } else if (inputType === 'number') {
             // Number inputs - debounced saving
-            let timer;
-            input.addEventListener('input', function (event) {
-                clearTimeout(timer);
-                timer = setTimeout(() => {
-                    handleInputChange(event.target);
-                }, 1000);
-            });
+            input.addEventListener('input', debounceInputChange);
         } else if (inputType === 'hidden') {
             // Hidden inputs (used by triage and other custom schemas) - listen for change events
             input.addEventListener('change', function (event) {
@@ -5051,9 +5102,7 @@ async function jumpToUnannotatedPrev() {
         // Use the correct endpoint and payload for navigation
         const response = await fetch('/annotate', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: navigationHeaders(),
             body: JSON.stringify({
                 action: 'jump_to_unannotated_prev',
                 instance_id: currentInstance?.id
@@ -5073,8 +5122,8 @@ async function jumpToUnannotatedPrev() {
                 }
             }
 
-            debugLog('[NAV] jumpToUnannotatedPrev - Navigation successful, reloading page');
-            window.location.reload();
+            debugLog('[NAV] jumpToUnannotatedPrev - Navigation successful, loading page');
+            loadNavigatedPage();
         } else {
             console.error('[NAV] jumpToUnannotatedPrev - Navigation failed:', response.status);
             setLoading(false);
@@ -5121,9 +5170,7 @@ async function jumpToUnannotated() {
         // Use the correct endpoint and payload for navigation
         const response = await fetch('/annotate', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: navigationHeaders(),
             body: JSON.stringify({
                 action: 'jump_to_unannotated',
                 instance_id: currentInstance?.id
@@ -5143,8 +5190,8 @@ async function jumpToUnannotated() {
                 }
             }
 
-            debugLog('[NAV] jumpToUnannotated - Navigation successful, reloading page');
-            window.location.reload();
+            debugLog('[NAV] jumpToUnannotated - Navigation successful, loading page');
+            loadNavigatedPage();
         } else {
             await handleNavigationResponseError(response);
             setLoading(false);

@@ -670,7 +670,7 @@
          reads is on every annotation page, and the media widgets need it
          whether or not `instance_display` is declared. -->
     <script src="{{ url_for('static', filename='instance-fields.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='span-core.js') }}?v=21"></script>
+    <script src="{{ url_for('static', filename='span-core.js') }}?v=22"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=4"></script>
     <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->
     <script src="{{ url_for('static', filename='display-logic.js') }}?v=4"></script>
@@ -678,7 +678,7 @@
     {% if has_instance_display | default(false) %}
     <script src="{{ url_for('static', filename='instance-display.js') }}?v=3"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='annotation.js') }}?v=44"></script>
+    <script src="{{ url_for('static', filename='annotation.js') }}?v=46"></script>
     <!-- Shared geometry for the bottom-anchored floating widgets below; must
          load before them. Unconditional: tiny, and several may be enabled at
          once (see the combined showcase example). -->
@@ -712,13 +712,21 @@
     <script src="{{ url_for('static', filename='thinkaloud.js') }}?v=2"></script>
     {% endif %}
     <!-- Turn-level annotation module (per-turn schema binding) -->
+    {% if frontend_assets.turn_annotations | default(false) %}
     <script src="{{ url_for('static', filename='turn-annotations.js') }}?v=1"></script>
+    {% endif %}
     <!-- Multi-agent discussion display (agent filtering) -->
+    {% if frontend_assets.multi_agent_discussion | default(false) %}
     <script src="{{ url_for('static', filename='multi-agent-discussion.js') }}?v=1"></script>
+    {% endif %}
     <!-- Audio dialogue display (podcast transport, per-turn play, speaker assignment) -->
+    {% if frontend_assets.audio_dialogue | default(false) %}
     <script src="{{ url_for('static', filename='audio-dialogue.js') }}?v=3"></script>
+    {% endif %}
     <!-- Sub-agent run-tree sidebar (agent_trace display) -->
+    {% if frontend_assets.run_tree | default(false) %}
     <script src="{{ url_for('static', filename='run-tree.js') }}?v=1"></script>
+    {% endif %}
 
     <!-- Fabric.js for image annotation. Vendored, not CDN: image annotation is
          entirely non-functional without it, and several research deployments
@@ -821,7 +829,7 @@
          projects finding objects with nowhere to show them. -->
     {% if (ai_enabled or frontend_assets.text_prompt | default(false))
           and ((frontend_assets.image_annotation | default(false)) or (frontend_assets.video_annotation | default(false))) %}
-    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=8"></script>
+    <script src="{{ url_for('static', filename='visual_ai_assistant.js') }}?v=9"></script>
     {% endif %}
 
     <!-- Option highlighting dims the less-likely *discrete options* of a radio,
@@ -883,7 +891,9 @@
     {% endif %}
 
     <!-- Entity linking for knowledge bases (Wikidata, UMLS) -->
+    {% if frontend_assets.entity_linking | default(false) %}
     <script src="{{ url_for('static', filename='entity-linking.js') }}?v=2"></script>
+    {% endif %}
 
     <!-- Coreference chain manager -->
     {% if frontend_assets.coreference | default(false) %}

@@ -1818,6 +1818,12 @@ def _ibws_check_and_advance(user_state) -> bool:
     return True
 
 
+#: Sent by annotation.js on its navigation POSTs (Next, Previous, go-to,
+#: jump-to-unannotated). Asks /annotate to answer with JSON instead of the page.
+#: Only the value "1" does; "0" or anything else gets the page, as it reads.
+NAVIGATION_REQUEST_HEADER = "X-Potato-Navigation"
+
+
 @app.route("/annotate", methods=["GET", "POST"])
 def annotate():
     """
@@ -2074,15 +2080,20 @@ def annotate():
 
         logger.debug(f"go_to action with value: {go_to_value}")
         if go_to_value is not None:
+            try:
+                target_index = int(go_to_value)
+            except (TypeError, ValueError):
+                # The page only sends numbers; anything else was a 500.
+                return jsonify({"status": "error",
+                                "message": "go_to must be an item number"}), 400
             # Block forward go_to if required annotations aren't met
-            target_index = int(go_to_value)
             if target_index > user_state.current_instance_index:
                 current_id = user_state.get_current_instance_id()
                 block_response = _check_required_or_block(user_state, current_id)
                 if block_response is not None:
                     return block_response
 
-            go_to_id(username, go_to_value)
+            go_to_id(username, target_index)
             acm = get_ai_cache_manager()
             if acm:
                 ordering = user_state.instance_id_ordering
@@ -2167,6 +2178,20 @@ def annotate():
             # Don't change the current instance if the requested one isn't assigned to this user
 
     logger.debug("=== ANNOTATE ROUTE END ===")
+
+    # The annotation page's own navigation buttons load the next page with a
+    # separate GET as soon as this answers, so rendering the whole page here
+    # only for the browser to discard it cost a full render and a larger
+    # response on every Next. They say so with this header; any other client
+    # posting here still gets the page.
+    if request.method == 'POST' and request.headers.get(NAVIGATION_REQUEST_HEADER) == "1":
+        response = jsonify({
+            "status": "ok",
+            "instance_id": user_state.get_current_instance_id(),
+        })
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
     # Render the page with any existing annotations
     # Prevent browser caching so window.location.reload() always gets fresh content
     # (browsers may serve stale cached GET responses after JS-triggered reloads)
@@ -4924,7 +4949,12 @@ def go_to():
 
     if request.method == 'POST':
         logger.debug(f'POST -> GO_TO: {request.form}')
-        go_to_id(username, request.form.get("go_to"))
+        try:
+            target_index = int(request.form.get("go_to"))
+        except (TypeError, ValueError):
+            return jsonify({"status": "error",
+                            "message": "go_to must be an item number"}), 400
+        go_to_id(username, target_index)
 
     # Prevent browser caching so window.location.reload() always gets fresh content
     response = make_response(render_page_with_annotations(username))
@@ -9581,6 +9611,11 @@ def configure_routes(flask_app, app_config):
     # Set up session configuration
     from potato.server_utils.session_config import configure_session
     configure_session(app, config)
+
+    # Content-hashed static URLs + immutable caching for them. Here rather than
+    # in configure_app so the in-process test harness gets it too.
+    from potato.server_utils.static_assets import register_static_asset_caching
+    register_static_asset_caching(app)
 
     # Dataset publishing blueprint. Registered here (not only in configure_app) so
     # it exists on both the live server and the in-process test harness, which build

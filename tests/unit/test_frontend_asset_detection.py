@@ -265,6 +265,31 @@ _GENERATOR_MARKER_EXPECTATIONS = {
         "symbol": "LiveCodingAgentDisplay",
         "markers": ["live-coding-agent-viewer"],
     },
+    "turn_annotations": {
+        "module": "potato.server_utils.turn_annotations",
+        "symbol": "get_turn_level_schemes",
+        "markers": ["turn-anno-hidden", "turn-anno-slot"],
+    },
+    "multi_agent_discussion": {
+        "module": "potato.server_utils.displays.multi_agent_discussion_display",
+        "symbol": "MultiAgentDiscussionDisplay",
+        "markers": ["mad-legend-chip"],
+    },
+    "audio_dialogue": {
+        "module": "potato.server_utils.displays.audio_dialogue_display",
+        "symbol": "AudioDialogueDisplay",
+        "markers": ['class="audio-dialogue"'],
+    },
+    "run_tree": {
+        "module": "potato.server_utils.displays.agent_trace_display",
+        "symbol": "AgentTraceDisplay",
+        "markers": ['class="run-tree"'],
+    },
+    "entity_linking": {
+        "module": "potato.server_utils.schemas.span",
+        "symbol": "generate_span_layout",
+        "markers": ["data-entity-linking"],
+    },
 }
 
 
@@ -370,3 +395,98 @@ class TestTemplateAssetSync:
                 f"FRONTEND_ASSET_MARKERS has key '{key}' but base_template_v2.html "
                 f"never references frontend_assets.{key}. Is the template conditional missing?"
             )
+
+
+# ---------------------------------------------------------------------------
+# The page template must not trip markers by itself
+# ---------------------------------------------------------------------------
+
+class TestTemplateDoesNotSelfTrigger:
+    """The scan reads the generated page template, which contains every gated
+    `<script src=...>` include inside its own `{% if %}` block. Markers that are
+    also file names (`pdf-link-mode`, `web-agent-recorder`,
+    `live-coding-agent-viewer`) matched those includes, and `label-btn` matched
+    a template comment, so four bundles loaded on every page of every task.
+    """
+
+    @pytest.fixture(scope="class")
+    def base_template(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "..", "potato",
+                            "templates", "base_template_v2.html")
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+
+    def test_the_bare_base_template_loads_no_gated_bundle(self, tmp_path, base_template):
+        page = tmp_path / "plain.html"
+        page.write_text(base_template, encoding="utf-8")
+        assets = _detect_frontend_assets_for_page(str(page))
+        on = sorted(k for k, v in assets.items() if v)
+        assert on == [], f"a page with no schemes or displays turned on: {on}"
+
+    def test_a_plain_radio_page_loads_no_gated_bundle(self, tmp_path, base_template):
+        from potato.server_utils.schemas.radio import generate_radio_layout
+        radio_html, _ = generate_radio_layout({
+            "annotation_type": "radio", "name": "sentiment",
+            "description": "Sentiment?", "labels": ["pos", "neg"],
+            "annotation_id": 0})
+        page = tmp_path / "radio.html"
+        page.write_text(base_template.replace("</body>", radio_html + "</body>"),
+                        encoding="utf-8")
+        assets = _detect_frontend_assets_for_page(str(page))
+        assert sorted(k for k, v in assets.items() if v) == []
+
+    def test_markers_still_found_in_real_markup(self, tmp_path, base_template):
+        page = tmp_path / "pdf.html"
+        page.write_text(base_template, encoding="utf-8")
+        display = ('<div class="pdf-display pdf-link-mode pdf-viewer-paginated"></div>'
+                   '<div class="live-coding-agent-viewer" id="lca-viewer-x"></div>'
+                   '<nav class="run-tree" aria-label="Sub-agent run tree"></nav>')
+        assets = _detect_frontend_assets_for_page(str(page), display_html=display)
+        assert assets["pdf_link"] and assets["live_coding_agent"] and assets["run_tree"]
+        assert not assets["web_agent_recorder"]
+
+    def test_a_process_reward_page_does_not_load_the_coding_agent_viewer(self, tmp_path, base_template):
+        # process_reward's inline script looks the viewer up with
+        # querySelector('.live-coding-agent-viewer'); the page has no viewer.
+        from potato.server_utils.schemas.process_reward import generate_process_reward_layout
+        html, _ = generate_process_reward_layout({
+            "annotation_type": "process_reward", "name": "step_rewards",
+            "description": "Rate each step", "mode": "per_step",
+            "annotation_id": 0})
+        assert "live-coding-agent-viewer" in html, "the probe no longer exercises the case"
+        page = tmp_path / "prm.html"
+        page.write_text(base_template.replace("</body>", html + "</body>"), encoding="utf-8")
+        assert not _detect_frontend_assets_for_page(str(page))["live_coding_agent"]
+
+    def test_markers_in_inline_scripts_do_not_count(self, tmp_path):
+        page = tmp_path / "inline.html"
+        page.write_text("<script>\n  container.querySelectorAll('.label-btn');\n"
+                        "  document.querySelector('.live-coding-agent-viewer');\n</script>",
+                        encoding="utf-8")
+        assets = _detect_frontend_assets_for_page(str(page))
+        assert not assets["label_visibility"]
+        assert not assets["live_coding_agent"]
+
+    def test_markup_beside_an_inline_script_still_counts(self, tmp_path):
+        # Only the script element is dropped, including when markup sits
+        # inside a <template> the page clones later.
+        page = tmp_path / "beside.html"
+        page.write_text('<script>var a = 1;</script>'
+                        '<template><button class="label-btn"></button></template>'
+                        '<script>var b = 2;</script>'
+                        '<div class="run-tree"></div>',
+                        encoding="utf-8")
+        assets = _detect_frontend_assets_for_page(str(page))
+        assert assets["label_visibility"]
+        assert assets["run_tree"]
+
+    def test_markers_in_comments_do_not_count(self, tmp_path):
+        page = tmp_path / "comment.html"
+        page.write_text('<!-- a .label-btn toolbar -->{# label-btn #}'
+                        '<link rel="stylesheet" href="/static/pdf-link-mode.css">'
+                        '<script src="/static/web-agent-recorder.js?v=1"></script>',
+                        encoding="utf-8")
+        assets = _detect_frontend_assets_for_page(str(page))
+        assert not assets["label_visibility"]
+        assert not assets["pdf_link"]
+        assert not assets["web_agent_recorder"]

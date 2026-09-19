@@ -8,13 +8,21 @@
 
 // `aiTextToSafeHtml` is defined in ai_assistant_manager.js, which loads
 // first. The fallback keeps this file usable on a page that does not load
-// that one -- an image-only study -- rather than throwing a ReferenceError
-// the moment a hint arrives.
-const aiTextToSafeHtml = window.aiTextToSafeHtml || function (text) {
-    return String(text == null ? '' : text)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-};
+// that one, rather than throwing a ReferenceError the moment a hint arrives.
+//
+// Installed on `window`, not declared. This used to be
+// `const aiTextToSafeHtml = window.aiTextToSafeHtml || ...`, and a top-level
+// `const` naming a global that another classic script already declared is a
+// SyntaxError: the whole file failed to parse on every page that loaded both,
+// which is every image or video project with AI support, and the suggestion
+// panel never existed.
+if (typeof window.aiTextToSafeHtml !== 'function') {
+    window.aiTextToSafeHtml = function (text) {
+        return String(text == null ? '' : text)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    };
+}
 
 
 class VisualAIAssistantManager {
@@ -77,9 +85,20 @@ class VisualAIAssistantManager {
             return;
         }
 
-        // Check if AI toolbar already exists
-        if (container.querySelector('.ai-toolbar')) {
-            this.toolbar = container.querySelector('.ai-toolbar');
+        // The image and video schemes render the toolbar and an empty tooltip
+        // container server-side. Adopt both: every result and error is written
+        // into the tooltip container, so leaving it unset dropped them all.
+        const existingToolbar = container.querySelector('.ai-toolbar');
+        if (existingToolbar) {
+            this.toolbar = existingToolbar;
+            this.tooltipContainer = container.querySelector('.ai-tooltip-container');
+            if (!this.tooltipContainer) {
+                this.tooltipContainer = document.createElement('div');
+                this.tooltipContainer.className = 'ai-tooltip-container';
+                this.tooltipContainer.style.display = 'none';
+                existingToolbar.after(this.tooltipContainer);
+            }
+            this._addStyles();
             return;
         }
 
@@ -127,7 +146,7 @@ class VisualAIAssistantManager {
         this.tooltipContainer = document.createElement('div');
         this.tooltipContainer.className = 'ai-tooltip-container';
         this.tooltipContainer.style.display = 'none';
-        container.appendChild(this.tooltipContainer);
+        this.toolbar.after(this.tooltipContainer);
 
         // Add CSS styles
         this._addStyles();
@@ -249,17 +268,16 @@ class VisualAIAssistantManager {
                 to { transform: rotate(360deg); }
             }
 
+            /* In the flow, directly under the AI toolbar. It was absolutely
+               positioned at the bottom of the annotation container, which put
+               a hint below the image, off screen, under the next question. */
             .ai-tooltip-container {
-                position: absolute;
-                top: 100%;
-                left: 0;
-                right: 0;
+                position: relative;
                 background: #fef3c7;
                 border: 1px solid #f59e0b;
                 border-radius: 0.375rem;
-                padding: 0.75rem 1rem;
-                margin-top: 0.5rem;
-                z-index: 100;
+                padding: 0.75rem 2.25rem 0.75rem 1rem;
+                margin-bottom: 0.5rem;
                 box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             }
 

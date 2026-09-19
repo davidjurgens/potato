@@ -522,6 +522,25 @@ class TestAnnotationPersistence(BaseSeleniumTest):
         assert len(selected_elements) == 0
 ```
 
+## Loading every example (opt-in)
+
+`test_example_pages_load.py` boots each project under `examples/` in debug
+mode, opens its annotation page in headless Chrome, and fails if the loading
+state never clears or the console shows an uncaught `SyntaxError` or
+`ReferenceError`. It skips examples that cannot boot without an outside
+service, such as the live coding agent, which needs a container sandbox.
+
+It takes about two minutes with six workers and is skipped unless asked for:
+
+```bash
+POTATO_EXAMPLE_SWEEP=1 pytest tests/selenium/test_example_pages_load.py -n 6
+```
+
+Run it after changing anything every page loads: `base_template_v2.html`,
+shared JavaScript, the frontend asset markers in `flask_server.py`, or a
+request hook. It found `visual_ai_assistant.js` failing to parse on every
+image or video project with AI support.
+
 ## Future Enhancements
 
 ### Potential Improvements

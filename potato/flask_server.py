@@ -403,7 +403,57 @@ FRONTEND_ASSET_MARKERS: dict[str, tuple[str, ...]] = {
     # convention that image and video annotation already render identically, so
     # any surface adopting that markup gets the feature without new wiring.
     "label_visibility": ("label-btn",),
+    # Per-turn schema binding: the anchor form's hidden input (a scheme, so in
+    # the page template) and the per-turn slots (in the display).
+    "turn_annotations": ("turn-anno-hidden", "turn-anno-slot"),
+    # multi_agent_discussion display: the legend chips are all its script acts on.
+    "multi_agent_discussion": ("mad-legend-chip",),
+    "audio_dialogue": ('class="audio-dialogue"',),
+    # agent_trace display's sub-agent run tree.
+    "run_tree": ('class="run-tree"',),
+    # span schemes configured with entity_linking.
+    "entity_linking": ("data-entity-linking",),
 }
+
+# What the marker scan ignores: comments, script elements, and the tags that
+# load assets. The page template carries every gated `<script src=...>` inside
+# its own `{% if %}` blocks, so a marker that is also a file name
+# (`pdf-link-mode`, `web-agent-recorder`, `live-coding-agent-viewer`) matched
+# its own include and was on for every page; `label-btn` matched a template
+# comment. Four bundles loaded on every page because of it.
+#
+# Inline scripts go too: a marker there is code looking for the element, not
+# the element. process_reward's `querySelector('.live-coding-agent-viewer')`
+# loaded the viewer on every process-reward page, and audio's
+# `querySelectorAll('.label-btn')` loaded label-visibility.js on audio pages
+# that render no label buttons.
+_ASSET_SCAN_NOISE = re.compile(
+    r"\{#.*?#\}"                                   # Jinja comments
+    r"|<!--.*?-->"                                  # HTML comments
+    r"|<script\b[^>]*>.*?</script>"                 # scripts, external and inline
+    r"|<link\b[^>]*>",                             # stylesheets, prefetch hints
+    re.DOTALL | re.IGNORECASE,
+)
+
+_ASSET_SCAN_TEXT_CACHE: dict[str, tuple[str, str]] = {}
+
+
+def _asset_scan_text(html: str) -> str:
+    """``html`` with comments and asset-loading tags removed, for marker scans."""
+    if not html:
+        return ""
+    return _ASSET_SCAN_NOISE.sub(" ", html)
+
+
+def _cached_asset_scan_text(path: str) -> str:
+    """Scan text of a template file, cached against its raw text."""
+    raw = _read_cached_template_text(path)
+    cached = _ASSET_SCAN_TEXT_CACHE.get(path)
+    if cached is not None and cached[0] is raw:
+        return cached[1]
+    stripped = _asset_scan_text(raw)
+    _ASSET_SCAN_TEXT_CACHE[path] = (raw, stripped)
+    return stripped
 
 
 def _detect_frontend_assets_for_page(html_file: str, display_html: str = "") -> dict[str, bool]:
@@ -413,8 +463,8 @@ def _detect_frontend_assets_for_page(html_file: str, display_html: str = "") -> 
     This avoids loading every specialized bundle just because some other phase
     in the overall task config happens to use it.
     """
-    page_html = _read_cached_template_text(_resolve_generated_template_path(html_file))
-    combined_html = f"{page_html}\n{display_html or ''}"
+    page_html = _cached_asset_scan_text(_resolve_generated_template_path(html_file))
+    combined_html = f"{page_html}\n{_asset_scan_text(display_html or '')}"
 
     def has_any(*markers: str) -> bool:
         return any(marker in combined_html for marker in markers)

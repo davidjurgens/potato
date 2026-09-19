@@ -952,6 +952,16 @@ class SpanManager {
         // Discontinuous span support: track active span being extended
         this.discontinuousMode = false;
         this.activeDiscontinuousSpan = null; // Span being extended with additional parts
+
+        // Leaving the page aborts in-flight fetches with "Failed to fetch".
+        // Keyword highlights load in the background, so a quick Next often
+        // lands on one; that is not an error worth logging.
+        this.pageUnloading = false;
+        if (typeof window !== 'undefined' && window.addEventListener) {
+            const markUnloading = () => { this.pageUnloading = true; };
+            window.addEventListener('beforeunload', markUnloading);
+            window.addEventListener('pagehide', markUnloading);
+        }
     }
 
     // ==================== SCHEMA STATE MANAGEMENT ====================
@@ -1264,9 +1274,56 @@ class SpanManager {
         }
     }
 
-    async initialize() {
+    /**
+     * The instance this annotation page was rendered for, or null.
+     *
+     * Read from the server-rendered `#instance_id` rather than asked of
+     * /api/current_instance: that request sat on the path to hiding the
+     * loading state, one round trip before the spans could even be requested.
+     * The DOM is also the better answer -- it names the text on screen, where
+     * the server's current instance may already be another one if a second tab
+     * moved the annotator on. Null off the annotation page (phase pages,
+     * adjudication), which keeps asking the server as before.
+     */
+    renderedInstanceId() {
+        if (!window.config || !window.config.is_annotation_page) return null;
+        const el = document.getElementById('instance_id');
+        return (el && el.value) ? el.value : null;
+    }
+
+    /** Make `instanceId` current, as fetchCurrentInstanceIdFromServer() does. */
+    adoptInstanceId(instanceId) {
+        if (this.currentInstanceId !== instanceId && this.currentInstanceId !== null) {
+            this.clearAllStateAndOverlays();
+        }
+        this.currentInstanceId = instanceId;
+        this.lastKnownInstanceId = instanceId;
+        return instanceId;
+    }
+
+    /**
+     * Initialize once, however many callers ask.
+     *
+     * The 1 s retry at the bottom of this file fires whenever initialization
+     * has not *finished*, and over any real network it has not: it waits on
+     * fonts and four requests. The retry then started a second run alongside
+     * the first, which bound every text-selection listener twice.
+     */
+    initialize() {
+        if (!this._initializing) {
+            this._initializing = this.initializeNow().finally(() => {
+                this._initializing = null;
+            });
+        }
+        return this._initializing;
+    }
+
+    async initializeNow() {
         try {
-            const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
+            const renderedId = this.renderedInstanceId();
+            const serverInstanceId = renderedId
+                ? this.adoptInstanceId(renderedId)
+                : await this.fetchCurrentInstanceIdFromServer();
             if (!serverInstanceId) {
                 // A page with no instance is a page with nothing to span.
                 spanCoreDebugLog('[SpanManager] No current instance; not initialising');
@@ -1566,9 +1623,14 @@ class SpanManager {
 
     async loadAnnotations(instanceId) {
         try {
-            const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
-            if (serverInstanceId !== instanceId) {
-                instanceId = serverInstanceId;
+            const renderedId = this.renderedInstanceId();
+            if (instanceId && instanceId === renderedId) {
+                this.adoptInstanceId(instanceId);
+            } else {
+                const serverInstanceId = await this.fetchCurrentInstanceIdFromServer();
+                if (serverInstanceId !== instanceId) {
+                    instanceId = serverInstanceId;
+                }
             }
 
             // Find the text content element - may be legacy #text-content or instance_display fields
@@ -1628,8 +1690,11 @@ class SpanManager {
 
             this.renderSpans();
 
-            // Load admin keyword highlights after span annotations
-            await this.loadKeywordHighlights(instanceId);
+            // Admin keyword highlights are decoration drawn over the spans. Not
+            // awaited: the page's loading state waits on this method, and the
+            // highlights were one more round trip in front of it. The loader
+            // handles its own errors.
+            this.keywordHighlightsLoaded = this.loadKeywordHighlights(instanceId);
 
         } catch (error) {
             console.error('[SpanManager] Error loading annotations:', error);
@@ -2411,6 +2476,7 @@ class SpanManager {
             this.insertKeywordHighlights(keywords);
 
         } catch (error) {
+            if (this.pageUnloading && error instanceof TypeError) return;
             console.error('[SpanManager] Error loading keyword highlights:', error);
         }
     }

@@ -101,6 +101,59 @@ the right choice for almost every project.
   set plus per-user state. For very large corpora, prefer a machine with more RAM
   over splitting into multiple servers.
 
+## Time between instances
+
+When an annotator presses Next, the page saves the current answer, tells the
+server to move, and loads the next page. The page shows "Loading annotation
+interface" until that page's scripts have run and its saved spans have
+arrived. On the example tasks the server renders a page in 10–30 ms, so most of the
+wait is network round trips, and the number of round trips matters more than
+bandwidth.
+
+What Potato does about it:
+
+- **Scripts and stylesheets are cached.** Each script and stylesheet URL in a page
+  carries a hash of the file's contents (`?v=45&h=3f2a9c…`). A URL whose hash matches the
+  file is served with `Cache-Control: immutable` and a one-year lifetime, so
+  after the first page the browser does not ask for it again. Editing a file
+  changes its hash, and the next page load picks up the new version. Fonts
+  and stylesheets loaded from inside a stylesheet (`@import`, `url()`) are
+  hashed the same way. Nothing needs configuring.
+- **Feature scripts load only where they are used.** A radio-button task does
+  not download the PDF viewer or the audio-dialogue player.
+- **Navigation does not render the page twice.** The Next button's request
+  gets a short JSON reply, and the page is then loaded once.
+
+### Use a server that keeps connections open
+
+`potato start` runs Werkzeug's built-in server, which closes the connection
+after every response. Each request then pays for a new TCP connection, plus a
+TLS handshake when Potato serves HTTPS itself. A first page load of a simple
+radio-button task opens about 45 connections. Caching removes most of them from later pages, but the
+first page of every session still pays in full.
+
+For annotators working over the internet, rather than on the same machine or
+network, run Potato behind something that keeps connections open:
+
+- the [Docker image](docker.md), which runs gunicorn with threaded workers
+  (they keep connections open by default), or
+- a reverse proxy such as nginx or Caddy in front of `potato start`. The
+  browser's connections end at the proxy, which keeps them open. See
+  [Reverse Proxy](reverse-proxy.md).
+
+### Checking a slow deployment
+
+Open the browser's developer tools on the annotation page, go to the Network
+tab, and press Next.
+
+- If each `/static/...` request shows a status of 304 rather than "(disk cache)"
+  or "(memory cache)", the page was served without content hashes. Check that
+  nothing between the browser and Potato rewrites or strips query strings.
+- If most requests show a long "Initial connection" or "SSL" phase, connections
+  are not being reused. Use one of the setups above.
+- If the `/annotate` request itself is slow, the time is on the server. Check
+  server load and the size of the item being rendered.
+
 ## Bulk exports
 
 Exports are written to **files on disk** (CSV/TSV/JSON/Parquet and the
@@ -126,6 +179,7 @@ takes about 750 ms over 20,000 instances with 20 annotators. See
 ## Related
 
 - [Admin Dashboard](../administration/admin_dashboard.md)
+- [Docker](docker.md) and [Reverse Proxy](reverse-proxy.md)
 - [Task Assignment](../advanced/task_assignment.md)
 - [Heterogeneous Coverage](../advanced/heterogeneous_coverage.md)
 - [Data Directory & Watching](../configuration/data_directory.md)

@@ -8,8 +8,8 @@
     "version": "4"
   },
   "annotation.js": {
-    "sha256": "ff2d352ef4b920f0",
-    "version": "44"
+    "sha256": "e01267e2c178c5ff",
+    "version": "46"
   },
   "annotation_critique.js": {
     "sha256": "8c0e8764bdd834f1",
@@ -360,8 +360,8 @@
     "version": "1"
   },
   "span-core.js": {
-    "sha256": "94a25a8f6afa2df3",
-    "version": "21"
+    "sha256": "0566af062a101d13",
+    "version": "22"
   },
   "span-link-manager.js": {
     "sha256": "6461cb278105a953",
@@ -424,8 +424,8 @@
     "version": "22"
   },
   "visual_ai_assistant.js": {
-    "sha256": "b9629c814af17e38",
-    "version": "8"
+    "sha256": "ce04dd2e898178cd",
+    "version": "9"
   },
   "web-agent-overlays.js": {
     "sha256": "ba2cd17c89c458af",

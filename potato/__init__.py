@@ -27,7 +27,7 @@ Usage:
     app.run()
 """
 
-__version__ = "2.9.1"
+__version__ = "2.9.2"
 __author__ = "Potato Annotation Platform Team"
 __description__ = "A flexible, web-based platform for text annotation tasks"
 
