@@ -2,6 +2,29 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [2.9.3] - AI Toolbar Fixes
+
+Fixes two layout problems that 2.9.2 brought into the image and video AI
+toolbar, and two edge cases in stylesheet caching.
+
+### Bug fixes
+
+- **The AI buttons ran off the side of the screen on phones.** 2.9.2 laid the
+  button group out as a single row that could not wrap. At 390px, Review sat
+  outside the card and tapping Hint scrolled the image sideways. The buttons
+  wrap again.
+- **An empty bar sat above the image on text-prompt pages.** That toolbar has
+  no AI buttons, only suggestion controls and a loading indicator that start
+  hidden, and 2.9.2 gave it a background and border. It is now hidden until
+  one of them shows.
+- **A byte range past the end of a stylesheet file was refused.** A stylesheet
+  served with hashed references is longer than the file on disk, so a range
+  starting between the two lengths got 416. It now gets the whole stylesheet
+  with 200, as other ranges on a rewritten stylesheet already did.
+- **A comment left open at the end of a stylesheet** had its `url()`
+  references read as real ones. The comment now runs to the end of the file,
+  as it does in the browser.
+
 ## [2.9.2] - Faster Navigation Between Items
 
 Moving between items is faster: scripts and stylesheets stay cached, and Next

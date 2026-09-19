@@ -150,6 +150,19 @@ class VisualAIAssistantManager {
 
         // Add CSS styles
         this._addStyles();
+        this._syncToolbarVisibility();
+    }
+
+    /**
+     * Without the Detect/Auto/Hint group (text-prompt pages) the toolbar holds
+     * only the suggestion controls and the loading indicator. Hide it while
+     * both are hidden, or it draws as an empty bar above the image.
+     */
+    _syncToolbarVisibility() {
+        if (!this.toolbar || this.toolbar.querySelector('.ai-toolbar-group')) return;
+        const anyShown = Array.from(this.toolbar.children)
+            .some(el => el.style.display !== 'none');
+        this.toolbar.style.display = anyShown ? '' : 'none';
     }
 
     /**
@@ -181,8 +194,10 @@ class VisualAIAssistantManager {
 
             .ai-toolbar-group {
                 display: flex;
+                flex-wrap: wrap;
                 align-items: center;
                 gap: 0.5rem;
+                min-width: 0;
             }
 
             .ai-btn {
@@ -1002,6 +1017,7 @@ class VisualAIAssistantManager {
         } else {
             controls.style.display = 'none';
         }
+        this._syncToolbarVisibility();
     }
 
     /**
@@ -1015,6 +1031,7 @@ class VisualAIAssistantManager {
         const buttons = this.toolbar.querySelectorAll('.ai-btn');
 
         indicator.style.display = show ? 'flex' : 'none';
+        this._syncToolbarVisibility();
         buttons.forEach(btn => {
             if (!btn.closest('.ai-suggestion-controls')) {
                 btn.disabled = show;

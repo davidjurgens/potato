@@ -152,3 +152,54 @@ test('the tooltip is in the flow, not pinned to the bottom of the container', ()
     expect(body).not.toMatch(/position:\s*absolute/);
     expect(body).not.toMatch(/top:\s*100%/);
 });
+
+test('the button group wraps instead of overflowing a phone-width card', () => {
+    // Unstyled, the group was a block and its buttons wrapped. Styled as a
+    // flex row without wrap, five buttons ran 494px wide in a 292px toolbar.
+    const group = document.querySelector('.ai-toolbar-group');
+    expect(getComputedStyle(group).display).toBe('flex');
+    expect(getComputedStyle(group).flexWrap).toBe('wrap');
+});
+
+describe('a toolbar without the assist buttons (text-prompt pages)', () => {
+    let bare;
+
+    beforeEach(() => {
+        document.body.innerHTML = `
+            <div class="image-annotation-container">
+                <div class="image-annotation-toolbar"></div>
+            </div>`;
+        bare = new VisualAIAssistantManager({
+            annotationType: 'image_annotation', annotationId: 0,
+            annotationManager: { container: document.querySelector('.image-annotation-container') },
+            serverAssists: false,
+        });
+    });
+
+    test('is hidden while it has nothing to show', () => {
+        expect(bare.toolbar.querySelector('.ai-toolbar-group')).toBeNull();
+        expect(bare.toolbar.style.display).toBe('none');
+    });
+
+    test('shows while loading and while suggestions wait, then hides again', () => {
+        bare._showLoading(true);
+        expect(bare.toolbar.style.display).toBe('');
+        bare._showLoading(false);
+        expect(bare.toolbar.style.display).toBe('none');
+
+        bare.suggestions = [{ id: 1 }];
+        bare._updateSuggestionControls();
+        expect(bare.toolbar.style.display).toBe('');
+        expect(bare.toolbar.textContent).toContain('1 suggestion');
+        bare.suggestions = [];
+        bare._updateSuggestionControls();
+        expect(bare.toolbar.style.display).toBe('none');
+    });
+});
+
+test('a toolbar with the assist buttons is never hidden', () => {
+    manager._showLoading(true);
+    manager._showLoading(false);
+    manager._updateSuggestionControls();
+    expect(manager.toolbar.style.display).toBe('');
+});

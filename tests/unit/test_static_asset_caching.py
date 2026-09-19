@@ -260,6 +260,34 @@ class TestStylesheetReferences:
         assert ranged.get_data() == full.get_data()
         assert ranged.headers["Content-Length"] == str(len(full.get_data()))
 
+    def test_a_range_past_the_file_on_disk_gets_the_whole_rewritten_body(self, app, static_dir):
+        # The rewritten body is longer than the file, so a range that starts
+        # past the file's end is inside the body served, yet was answered 416.
+        client = app.test_client()
+        url = f"/static/main.css?{HASH_PARAM}={fingerprint(str(static_dir), 'main.css')}"
+        full = client.get(url)
+        on_disk = (static_dir / "main.css").stat().st_size
+        assert len(full.get_data()) > on_disk
+        ranged = client.get(url, headers={"Range": f"bytes={on_disk}-"})
+        assert ranged.status_code == 200
+        assert ranged.get_data() == full.get_data()
+        assert ranged.mimetype == "text/css"
+        assert "Content-Range" not in ranged.headers
+        assert ranged.headers["Cache-Control"] == IMMUTABLE_CACHE_CONTROL
+
+    def test_a_range_past_an_unrewritten_stylesheet_is_still_416(self, app, static_dir):
+        (static_dir / "plain.css").write_text("body { margin: 0; }\n")
+        url = f"/static/plain.css?{HASH_PARAM}={fingerprint(str(static_dir), 'plain.css')}"
+        r = app.test_client().get(url, headers={"Range": "bytes=5000-"})
+        assert r.status_code == 416
+        assert r.headers.get("Cache-Control") != IMMUTABLE_CACHE_CONTROL
+
+    def test_an_unterminated_comment_runs_to_the_end_of_the_file(self, static_dir):
+        (static_dir / "open.css").write_text(".y{} /* unterminated url(app.js)")
+        before = fingerprint(str(static_dir), "open.css")
+        self._touch(static_dir / "app.js", b"console.log('two, longer');")
+        assert fingerprint(str(static_dir), "open.css") == before
+
     def test_a_range_request_on_a_file_that_is_not_rewritten_still_works(self, app, static_dir):
         url = f"/static/app.js?{HASH_PARAM}={fingerprint(str(static_dir), 'app.js')}"
         r = app.test_client().get(url, headers={"Range": "bytes=0-6"})

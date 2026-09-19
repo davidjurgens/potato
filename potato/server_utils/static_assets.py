@@ -58,9 +58,10 @@ _TAG_RE = re.compile(
 # Comments are matched as the first alternative so the reference pattern never
 # runs inside one: prose like "an @import is invisible" in a comment would
 # otherwise read as a reference to a file called `is`. A comment match has
-# group 3 unset.
+# group 3 unset. An unterminated comment runs to the end of the file, as it
+# does for the browser.
 _CSS_REF_RE = re.compile(
-    r"""/\*.*?\*/|(@import\s+(?:url\(\s*)?|url\(\s*)(["']?)([^"')\s]+)\2""",
+    r"""/\*.*?(?:\*/|\Z)|(@import\s+(?:url\(\s*)?|url\(\s*)(["']?)([^"')\s]+)\2""",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -292,7 +293,7 @@ def _should_rewrite(response):
 def _apply_static_cache_headers(app, response):
     from flask import request
 
-    if response.status_code not in (200, 206, 304):
+    if response.status_code not in (200, 206, 304, 416):
         return
     requested = request.args.get(HASH_PARAM)
     if not requested:
@@ -300,8 +301,7 @@ def _apply_static_cache_headers(app, response):
     filename = (request.view_args or {}).get("filename")
     if requested != fingerprint(app.static_folder, filename):
         return
-    response.headers["Cache-Control"] = IMMUTABLE_CACHE_CONTROL
-    if response.status_code in (200, 206) and filename.endswith(".css"):
+    if response.status_code in (200, 206, 416) and filename.endswith(".css"):
         path = safe_join(app.static_folder, filename)
         with open(path, "rb") as f:
             css = f.read().decode("utf-8", errors="replace")
@@ -313,13 +313,18 @@ def _apply_static_cache_headers(app, response):
                 close()
             response.direct_passthrough = False
             # A byte range was computed against the file on disk, which is not
-            # the body served here. Ignoring Range and answering 200 with the
-            # whole body is always allowed.
-            if response.status_code == 206:
+            # the body served here: a range past the file's end got 416 though
+            # the rewritten body is longer. Ignoring Range and answering 200
+            # with the whole body is always allowed.
+            if response.status_code in (206, 416):
                 response.status_code = 200
                 response.headers.pop("Content-Range", None)
+                response.mimetype = "text/css"  # a 416 arrives as an error page
             response.headers.pop("Accept-Ranges", None)
             response.set_data(rewritten)
             # The file's ETag no longer describes this body. Nothing
             # revalidates an immutable response, so drop it rather than lie.
             response.headers.pop("ETag", None)
+    if response.status_code == 416:
+        return  # a genuine out-of-range request; not a cacheable body
+    response.headers["Cache-Control"] = IMMUTABLE_CACHE_CONTROL
