@@ -262,16 +262,23 @@ def _skip_session_cookie_on_static(app):
     URL.
 
     The page request that loads the assets refreshes the cookie anyway, so
-    nothing is lost by not doing it again for each asset. Only Flask's default
-    interface is replaced; a custom one is left as it is.
+    nothing is lost by not doing it again for each asset. Flask's default
+    interface is extended, and so is one Potato installed itself --
+    ``configure_session`` scopes the cookie to the deployment prefix before this
+    runs, and both overrides have to survive. An interface the deployment
+    supplied is left as it is.
     """
     from flask import request
     from flask.sessions import SecureCookieSessionInterface
 
-    if type(app.session_interface) is not SecureCookieSessionInterface:
+    installed = app.session_interface
+    if type(installed) is not SecureCookieSessionInterface and not getattr(
+            installed, "_potato_owned", False):
         return
 
-    class _StaticSkippingSessionInterface(SecureCookieSessionInterface):
+    class _StaticSkippingSessionInterface(type(installed)):
+        _potato_owned = True
+
         def save_session(self, app, session, response):
             if request.endpoint == "static":
                 return None

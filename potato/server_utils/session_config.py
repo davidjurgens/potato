@@ -51,3 +51,58 @@ def configure_session(app, config: dict) -> None:
 
     lifetime_days = config.get("session_lifetime_days", DEFAULT_SESSION_LIFETIME_DAYS)
     app.permanent_session_lifetime = timedelta(days=lifetime_days)
+
+    scope_session_cookie_to_prefix(app)
+
+
+def scope_session_cookie_to_prefix(app) -> None:
+    """Scope the session cookie to the deployment prefix.
+
+    Two studies behind one nginx -- ``/app1`` and ``/app2`` on one host -- each
+    sign the ``session`` cookie with their own key. Flask scopes that cookie to
+    ``SESSION_COOKIE_PATH`` or ``APPLICATION_ROOT``, and both default to ``/``.
+    So the browser keeps one cookie for the whole host, each login overwrites
+    the other study's cookie, and neither process can verify the other's
+    signature. The victim study bounces the annotator back to its login page.
+    One study alone never shows this. Adding the second breaks both.
+
+    The prefix reaches Flask as the WSGI ``SCRIPT_NAME``, which both proxy
+    mechanisms converge on: ``POTATO_URL_PREFIX`` sets it directly and ProxyFix
+    derives it from ``X-Forwarded-Prefix``. ``request.script_root`` surfaces the
+    value, so one read covers both. An explicit ``SESSION_COOKIE_PATH`` still
+    wins, and a deployment without a prefix keeps ``/``.
+    """
+    from flask import has_request_context, request
+    from flask.sessions import SecureCookieSessionInterface
+
+    # Idempotent: ``configure_routes`` can run more than once on one app in the
+    # test harness, and a second wrap would nest the subclass again.
+    if getattr(app, "_potato_prefix_scoped_session", False):
+        return
+
+    # A deployment that installs a session backend of its own (server-side
+    # sessions, for example) owns its own cookie path. So does a stub app that
+    # has no session interface at all, which is what the unit tests for key
+    # resolution pass in.
+    installed = getattr(app, "session_interface", None)
+    if installed is None:
+        return
+    if type(installed) is not SecureCookieSessionInterface and not getattr(
+            installed, "_potato_owned", False):
+        return
+
+    class _PrefixScopedSessionInterface(type(installed)):
+        # Lets Potato's other session override extend this one instead of
+        # mistaking it for an interface the deployment supplied.
+        _potato_owned = True
+
+        def get_cookie_path(self, app):
+            configured = app.config.get("SESSION_COOKIE_PATH")
+            if configured:
+                return configured
+            if has_request_context() and request.script_root:
+                return request.script_root
+            return super().get_cookie_path(app)
+
+    app.session_interface = _PrefixScopedSessionInterface()
+    app._potato_prefix_scoped_session = True
