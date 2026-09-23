@@ -408,7 +408,7 @@ def main():
     output_path = os.path.join(output_dir, "config_reference.md")
 
     content = generate_reference()
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)
 
     print(f"Generated config reference: {output_path}")
