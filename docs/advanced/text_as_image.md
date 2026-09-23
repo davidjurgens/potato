@@ -13,14 +13,17 @@ text_as_image: true
 ## What the feature stops
 
 An annotator who wants a shortcut usually selects the item text, copies it, and
-pastes it into a chatbot. Three routes make that easy:
+pastes it into a chatbot. Four routes make that easy:
 
 - The visible text in the item box.
 - The `data-original-text` attribute, which span annotation reads.
 - The item record, which the page embeds as JSON for dynamic schemas.
+- The JSON endpoints that the page calls: `/api/current_instance`,
+  `/api/instance_data` and `/api/spans/<id>`. An annotator can open one in a
+  new tab.
 
-The server blanks all three and sends a PNG instead. "Select all", "copy" and
-"view source" then return nothing to paste.
+The server blanks all four and sends a PNG instead. "Select all", "copy",
+"view source" and the endpoints then return nothing to paste.
 
 ## What the feature does not stop
 

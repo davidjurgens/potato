@@ -167,6 +167,24 @@ def without_text(record: Any, text_key: str) -> Dict[str, Any]:
     return {k: v for k, v in record.items() if k not in dropped}
 
 
+def hides_text(config: Dict[str, Any]) -> bool:
+    """True when the annotator must not get the item text from any endpoint.
+
+    The page is not the only carrier. ``/api/current_instance``,
+    ``/api/instance_data`` and ``/api/spans/<id>`` return the item as JSON, so
+    an annotator can open one in a new tab and copy the words from there.
+    """
+    return applies(config, config.get("annotation_schemes") or []) is not None
+
+
+def record_for_annotator(config: Dict[str, Any], record: Any) -> Any:
+    """``record`` as an annotator-facing endpoint may return it."""
+    if not hides_text(config):
+        return record
+    text_key = (config.get("item_properties") or {}).get("text_key", "text")
+    return without_text(record, text_key)
+
+
 def to_plain(markup: str) -> str:
     """Strip HTML from the displayed text but keep the paragraph breaks.
 

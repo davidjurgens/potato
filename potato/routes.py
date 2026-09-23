@@ -5506,7 +5506,8 @@ def get_current_instance():
         logger.debug(f"Current instance ID: {instance_id}")
 
         # Include raw data for schemas that need access to media URLs
-        raw_data = current_instance.get_data()
+        from potato.server_utils import text_to_image
+        raw_data = text_to_image.record_for_annotator(config, current_instance.get_data())
 
         return jsonify({
             "instance_id": instance_id,
@@ -5553,7 +5554,8 @@ def get_instance_data():
             return jsonify({"error": "No current instance"}), 404
 
         # Get the raw data from the instance
-        raw_data = current_instance.get_data()
+        from potato.server_utils import text_to_image
+        raw_data = text_to_image.record_for_annotator(config, current_instance.get_data())
         logger.debug(f"Returning instance data with keys: {list(raw_data.keys())}")
 
         return jsonify(raw_data)
@@ -5628,6 +5630,13 @@ def get_span_data(instance_id):
         # 2. Normalize whitespace (multiple spaces/newlines -> single space)
         normalized_text = re_module.sub(r'\s+', ' ', normalized_text).strip()
         logger.debug(f"Normalized text: {normalized_text[:100]}...")
+
+        # text_as_image: the response carries the text twice, as `text` and in
+        # each span's `text` slice. Blank both at the source.
+        from potato.server_utils import text_to_image
+        if text_to_image.hides_text(config):
+            normalized_text = ""
+            item_data = text_to_image.record_for_annotator(config, item_data)
     except Exception as e:
         logger.error(f"Error getting instance text: {e}")
         return jsonify({"error": f"Instance not found: {instance_id}"}), 404
