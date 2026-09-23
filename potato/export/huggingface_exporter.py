@@ -21,6 +21,7 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import BaseExporter, ExportContext, ExportResult
+from .origin_columns import ORIGIN_COLUMN, origin_fields, origin_in_use
 
 logger = logging.getLogger(__name__)
 
@@ -216,11 +217,14 @@ class HuggingFaceExporter(BaseExporter):
                                 schema_map: Dict[str, dict]) -> List[dict]:
         """Build flat row dicts for the annotations dataset."""
         rows = []
+        with_origin = origin_in_use(annotations)
         for ann in annotations:
             row = {
                 "instance_id": ann.get("instance_id", ""),
                 "user_id": ann.get("user_id", ""),
             }
+            if with_origin:
+                row.update(origin_fields(ann))
 
             labels = ann.get("labels", {})
             for schema_name, value in labels.items():
@@ -236,10 +240,12 @@ class HuggingFaceExporter(BaseExporter):
     def _build_span_rows(self, annotations: List[dict]) -> List[dict]:
         """Build flat row dicts for the spans dataset."""
         rows = []
+        with_origin = origin_in_use(annotations)
         for ann in annotations:
             instance_id = ann.get("instance_id", "")
             user_id = ann.get("user_id", "")
             spans = ann.get("spans", {})
+            origin_kind = origin_fields(ann)[ORIGIN_COLUMN]
 
             for schema_name, span_list in spans.items():
                 if not isinstance(span_list, list):
@@ -247,7 +253,7 @@ class HuggingFaceExporter(BaseExporter):
                 for span in span_list:
                     if not isinstance(span, dict):
                         continue
-                    rows.append({
+                    row = {
                         "instance_id": instance_id,
                         "user_id": user_id,
                         "schema_name": schema_name,
@@ -255,7 +261,10 @@ class HuggingFaceExporter(BaseExporter):
                         "end": span.get("end"),
                         "label": span.get("label", ""),
                         "text": span.get("text", ""),
-                    })
+                    }
+                    if with_origin:
+                        row[ORIGIN_COLUMN] = origin_kind
+                    rows.append(row)
         return rows
 
     def _build_item_rows(self, items: Dict[str, dict]) -> List[dict]:

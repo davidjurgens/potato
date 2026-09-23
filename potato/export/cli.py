@@ -17,6 +17,7 @@ import logging
 import glob
 
 import yaml
+from typing import Mapping, Optional
 
 from .base import ExportContext
 from .registry import export_registry
@@ -60,7 +61,8 @@ def _room_provenance(user_state: dict, instance_id: str) -> dict:
     return {}
 
 
-def _annotator_origin(user_state: dict, instance_id: str) -> dict:
+def _annotator_origin(user_state: dict, instance_id: str,
+                      roster: Optional[Mapping] = None) -> dict:
     """Whether this annotator was a person, and if not, which machine.
 
     Reads the raw state dict rather than a UserState object, because this
@@ -68,16 +70,31 @@ def _annotator_origin(user_state: dict, instance_id: str) -> dict:
     ``annotator_origin.origin_of`` on a plain dict would work, but going
     through the attribute path would silently return "human" for every row.
 
-    An absent key means a person, which is what every state file written
-    before the field existed holds. ``instance_id`` is unused: origin is a
-    property of the rater, not of one answer, and is accepted so the call
-    site reads like its ``_room`` sibling.
+    The origin stored on the state wins. A state the server has not yet
+    loaded -- one written by an import script, say -- carries no origin, so
+    the config's ``machine_annotators`` roster is consulted next; without that
+    fallback an offline export would label a declared pipeline as a person.
+    The declaration's ``recorded_at`` is dropped, because it would be the
+    export time rather than when the rater was recorded.
+
+    An absent key with no declaration means a person, which is what every
+    state file written before the field existed holds. ``instance_id`` is
+    unused: origin is a property of the rater, not of one answer, and is
+    accepted so the call site reads like its ``_room`` sibling.
     """
     stored = user_state.get("origin")
-    return stored if isinstance(stored, dict) and stored else {"kind": "human"}
+    if isinstance(stored, dict) and stored:
+        return stored
+    declared = (roster or {}).get(str(user_state.get("user_id", "")))
+    if declared is not None:
+        origin = declared.to_origin()
+        origin.pop("recorded_at", None)
+        return origin
+    return {"kind": "human"}
 
 
-def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
+def load_annotations_from_output_dir(output_dir: str, schemas: list,
+                                     config: Optional[Mapping] = None) -> list:
     """
     Load user annotations from the Potato output directory.
 
@@ -87,6 +104,8 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
     Args:
         output_dir: Path to the annotation output directory
         schemas: List of annotation scheme configs
+        config: The project config. Only its ``machine_annotators`` block is
+            read, to label declared raters whose state carries no origin yet.
 
     Returns:
         List of annotation dicts
@@ -96,6 +115,9 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
     if not os.path.isdir(output_dir):
         logger.warning(f"Output directory not found: {output_dir}")
         return annotations
+
+    from potato.annotator_origin import parse_machine_annotators
+    roster = parse_machine_annotators(config)
 
     for user_dir in sorted(os.listdir(output_dir)):
         user_path = os.path.join(output_dir, user_dir)
@@ -164,7 +186,7 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
                 # with its version. An agreement number computed over a mix of
                 # the two measures neither group, and nothing else in the
                 # record says which this row is.
-                "_origin": _annotator_origin(user_state, instance_id),
+                "_origin": _annotator_origin(user_state, instance_id, roster),
             }
 
             # Process span data.
@@ -478,7 +500,8 @@ def build_export_context(config_path: str) -> ExportContext:
                      "schemas; exporting the config\'s labels", exc_info=True)
 
     items = load_items_from_data_files(config, config_dir)
-    annotations = load_annotations_from_output_dir(output_annotation_dir, schemas)
+    annotations = load_annotations_from_output_dir(output_annotation_dir, schemas,
+                                                   config)
     phase_responses = load_phase_responses_from_output_dir(output_annotation_dir)
 
     return ExportContext(

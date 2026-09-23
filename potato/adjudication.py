@@ -761,6 +761,11 @@ class AdjudicationManager:
         """
         with self._lock:
             instance_id = str(decision.instance_id)
+            # Only in a study with machine raters. Elsewhere every entry would
+            # read "human", and recording it would add a column to every
+            # all-human study's adjudication export for no information.
+            if not decision.source_origins and self._has_machine_raters(instance_id):
+                decision.source_origins = self._source_origins(instance_id, decision)
             self.decisions[instance_id] = decision
 
             # Update queue status
@@ -776,6 +781,80 @@ class AdjudicationManager:
                 f"by {decision.adjudicator_id}"
             )
             return True
+
+    def _has_machine_raters(self, instance_id: str) -> bool:
+        """True when the study declares machine raters or this item has one."""
+        from potato.annotator_origin import parse_machine_annotators
+        queued = self.queue.get(instance_id)
+        return bool(parse_machine_annotators(self.config)
+                    or (queued and queued.annotator_origins))
+
+    def _source_origins(self, instance_id: str,
+                        decision: AdjudicationDecision) -> Dict[str, str]:
+        """What produced each schema's final answer, per schema.
+
+        Two cases. When ``decision.source`` names an annotator -- the
+        adjudicator adopted that person's or tool's answer -- the entry is
+        ``describe()`` of that annotator: "human", or e.g. "pipeline_a 2.1.0 db
+        refdb-2024-03 (tool)". When the adjudicator chose the value
+        themselves, which is what the radio form always records, the entry
+        lists every annotator who had given that same value, joined with
+        "; ". A final label that only two tools sharing a database ever gave
+        is a different finding from one three curators gave, and ``source``
+        alone ("adjudicator") says neither. A value nobody gave, or a merged
+        answer, gets no entry.
+
+        Recorded now, while the declarations that produced it are current.
+        Caller holds the lock.
+        """
+        from potato.annotator_origin import describe
+
+        queued = self.queue.get(instance_id)
+        known = dict(queued.annotator_origins) if queued else {}
+        answers = dict(queued.annotations) if queued else {}
+        usm_box: List[Any] = []
+
+        def origin(author: str) -> Optional[str]:
+            if author in known:
+                return known[author]
+            # Leave it out rather than guess "human" when the author's state
+            # cannot be read (offline tooling, a deleted user):
+            # describe(None) would say human.
+            try:
+                if not usm_box:
+                    from potato.user_state_management import get_user_state_manager
+                    usm_box.append(get_user_state_manager())
+                state = usm_box[0].get_user_state(author)
+            except Exception:
+                return None
+            if state is None:
+                return None
+            known[author] = describe(state)
+            return known[author]
+
+        sources = decision.source if isinstance(decision.source, dict) else {}
+        out: Dict[str, str] = {}
+        for schema, value in (decision.label_decisions or {}).items():
+            author = sources.get(schema)
+            if isinstance(author, str) and author and author not in (
+                    "adjudicator", "merged"):
+                described = origin(author)
+                if described:
+                    out[schema] = described
+                continue
+            if author == "merged":
+                continue
+            chosen = _answer_set(value)
+            if not chosen:
+                continue
+            agreeing = sorted({
+                d for user, ans in answers.items()
+                if isinstance(ans, dict) and _answer_set(ans.get(schema)) == chosen
+                for d in [origin(user)] if d
+            })
+            if agreeing:
+                out[schema] = "; ".join(agreeing)
+        return out
 
     def get_stats(self) -> Dict[str, Any]:
         """Get adjudication progress statistics."""
@@ -1240,6 +1319,8 @@ class AdjudicationManager:
                 result["adjudicator"] = decision.adjudicator_id
                 result["confidence"] = decision.confidence
                 result["provenance"] = decision.source
+                if decision.source_origins:
+                    result["source_origins"] = decision.source_origins
                 results.append(result)
                 continue
 
@@ -1344,7 +1425,26 @@ def clear_adjudication_manager():
 # ---------------------------------------------------------------------------
 
 #: Keys in an AdjudicationItem payload that are keyed by annotator id.
-_ANNOTATOR_KEYED = ("annotations", "span_annotations", "behavioral_data")
+# ``annotator_origins`` is keyed by user id like the rest. Left out of this
+# list, it sent the blinded adjudicator the real id of every declared machine.
+_ANNOTATOR_KEYED = ("annotations", "span_annotations", "behavioral_data",
+                    "annotator_origins")
+
+
+def _answer_set(value: Any) -> frozenset:
+    """A label answer as the set of labels it selects, for comparison.
+
+    Annotators' answers arrive as ``{label: True}``; a decision holds a bare
+    label, a list of labels, or the same dict. Anything else (a number, free
+    text) compares as its string.
+    """
+    if value is None or value == "" or value == [] or value == {}:
+        return frozenset()
+    if isinstance(value, dict):
+        return frozenset(str(k) for k, v in value.items() if v not in (False, None, "", 0))
+    if isinstance(value, (list, tuple, set)):
+        return frozenset(str(v) for v in value)
+    return frozenset([str(value)])
 
 
 def annotator_aliases(instance_id: str, user_ids) -> Dict[str, str]:

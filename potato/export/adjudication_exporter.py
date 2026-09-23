@@ -129,6 +129,9 @@ class AdjudicationExporter(BaseExporter):
                     # "adjudicator" when they answered it themselves, an
                     # annotator id when they adopted that annotator's answer.
                     "source": sources.get(name, ""),
+                    # What that annotator was ("human", or a tool/model and
+                    # its version), as recorded when the decision was made.
+                    "source_origin": (d.get("source_origins") or {}).get(name, ""),
                     "adjudicator_id": d.get("adjudicator_id", ""),
                     "confidence": d.get("confidence", ""),
                     "timestamp": d.get("timestamp", ""),
@@ -149,8 +152,13 @@ class AdjudicationExporter(BaseExporter):
         csv_path = os.path.join(output_path, "adjudicated.csv")
         fieldnames = ["instance_id", "schema", "value", "source",
                       "adjudicator_id", "confidence", "timestamp"]
+        # Only when some decision adopted a recorded author, so a study with no
+        # machine raters -- whose decisions predate source_origins or record
+        # none -- keeps the columns it had.
+        if any(r["source_origin"] for r in rows):
+            fieldnames.insert(fieldnames.index("source") + 1, "source_origin")
         with open(csv_path, "w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
             writer.writeheader()
             writer.writerows(rows)
 

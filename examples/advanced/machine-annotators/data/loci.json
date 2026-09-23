@@ -1,0 +1,62 @@
+[
+  {
+    "id": "TOY_00010",
+    "text": "Locus TOY_00010 (1,236 bp, + strand). Best hit: ABC transporter ATP-binding protein (62% identity). Walker A and Walker B motifs present.",
+    "tool_disagreement": 0.0
+  },
+  {
+    "id": "TOY_00020",
+    "text": "Locus TOY_00020 (462 bp, + strand). Best hit: 50S ribosomal protein L7/L12 (91% identity).",
+    "tool_disagreement": 0.0
+  },
+  {
+    "id": "TOY_00030",
+    "text": "Locus TOY_00030 (1,050 bp, - strand). Best hit: glyceraldehyde-3-phosphate dehydrogenase (78% identity).",
+    "tool_disagreement": 0.0
+  },
+  {
+    "id": "TOY_00040",
+    "text": "Locus TOY_00040 (387 bp, - strand). No hit above threshold. One predicted transmembrane helix.",
+    "tool_disagreement": 0.25
+  },
+  {
+    "id": "TOY_00050",
+    "text": "Locus TOY_00050 (1,488 bp, + strand). Best hit: DNA-binding response regulator (44% identity). Receiver domain and a winged-helix DNA-binding domain.",
+    "tool_disagreement": 0.5
+  },
+  {
+    "id": "TOY_00060",
+    "text": "Locus TOY_00060 (1,317 bp, + strand). Best hit: MFS transporter (38% identity). Twelve predicted transmembrane helices. Second hit: sugar permease (35% identity).",
+    "tool_disagreement": 0.5
+  },
+  {
+    "id": "TOY_00070",
+    "text": "Locus TOY_00070 (693 bp, - strand). Best hit: flagellar motor switch protein FliN (57% identity).",
+    "tool_disagreement": 0.0
+  },
+  {
+    "id": "TOY_00080",
+    "text": "Locus TOY_00080 (921 bp, + strand). Best hit: DUF1287 domain-containing protein (29% identity).",
+    "tool_disagreement": 0.25
+  },
+  {
+    "id": "TOY_00090",
+    "text": "Locus TOY_00090 (1,803 bp, - strand). Best hit: penicillin-binding protein 2 (66% identity).",
+    "tool_disagreement": 0.25
+  },
+  {
+    "id": "TOY_00100",
+    "text": "Locus TOY_00100 (558 bp, + strand). Best hit: GNAT family N-acetyltransferase (33% identity). Acetyl-CoA binding motif present.",
+    "tool_disagreement": 0.25
+  },
+  {
+    "id": "TOY_00110",
+    "text": "Locus TOY_00110 (2,445 bp, + strand). Best hit: DNA gyrase subunit B (84% identity).",
+    "tool_disagreement": 0.0
+  },
+  {
+    "id": "TOY_00120",
+    "text": "Locus TOY_00120 (774 bp, - strand). Best hit: hypothetical protein (41% identity). Weak similarity to an ABC transporter permease.",
+    "tool_disagreement": 0.5
+  }
+]

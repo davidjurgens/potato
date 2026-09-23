@@ -83,6 +83,14 @@
     }
     .ab-row .whisker::before { left: 0; }
     .ab-row .whisker::after { right: 0; }
+    /* The id truncates; the origin pill beside it never does. */
+    .ab-row .name.has-origin { display: flex; justify-content: flex-end; align-items: center; }
+    .ab-row .name .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .ab-row .origin { flex: none; display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 8px;
+                      background: var(--accent-soft); color: var(--accent-deep); font-size: 0.66rem;
+                      font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+                      vertical-align: middle; cursor: help; }
+    .origin-note { border-left: 3px solid var(--warn); padding-left: 10px; }
     .ab-row .nums { width: 200px; color: var(--ink-soft); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 
     /* Confidence bar with sensitivity band */
@@ -168,6 +176,11 @@
             prior for a new annotator, 0 means labels carry no information, negative means
             systematically wrong. Whiskers are &plusmn;1 approximate standard error: judge nobody
             on a wide whisker.</p>
+        <p class="desc origin-note" id="machine-note" hidden><strong>Machine raters are included.</strong>
+            The model assumes raters make mistakes independently. Tools that share a reference
+            database or training data make the same mistakes together, which inflates the
+            ability of whichever group of them is largest. Check which tools share evidence
+            before publishing these estimates.</p>
         <div class="card" id="annotators"></div>
     </section>
 
@@ -266,12 +279,24 @@
         });
         var span = (hi - lo) || 1;
         var x = function (v) { return Math.max(0, Math.min(100, (v - lo) / span * 100)); };
+        // Rows for declared machine raters carry `origin` (e.g.
+        // "pipeline_a 2.1.0 (tool)"); a person's row has none.
+        var note = document.getElementById('machine-note');
+        if (note) note.hidden = !rows.some(function (r) { return r.origin; });
+        function originPill(r) {
+            if (!r.origin) return '';
+            var m = /\(([^()]+)\)\s*$/.exec(r.origin);
+            return '<span class="origin" title="' + esc(r.origin) + '">' +
+                esc(m ? m[1] : 'machine') + '</span>';
+        }
         host.innerHTML = rows.map(function (r) {
             var zero = x(0), t = x(r.theta);
             var barL = Math.min(zero, t), barW = Math.abs(t - zero);
             var wL = x(r.theta - r.se), wW = Math.max(0.5, x(r.theta + r.se) - wL);
             return '<div class="ab-row">' +
-                '<div class="name" title="' + esc(r.annotator) + '">' + esc(r.annotator) + '</div>' +
+                '<div class="name' + (r.origin ? ' has-origin' : '') + '" title="' +
+                    esc(r.origin || r.annotator) + '"><span class="nm">' + esc(r.annotator) +
+                    '</span>' + originPill(r) + '</div>' +
                 '<div class="track">' +
                 '  <div class="zero" style="left:' + zero + '%"></div>' +
                 '  <div class="abar' + (r.theta < 0 ? ' neg' : '') + '" style="left:' + barL + '%;width:' + barW + '%"></div>' +

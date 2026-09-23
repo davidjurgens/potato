@@ -438,6 +438,8 @@ export/
 |--------|------|-------------|
 | `instance_id` | string | The annotated item's ID |
 | `user_id` | string | The annotator's ID |
+| `annotator_origin` | string | `human`, `tool` or `llm`. Present only when a [machine annotator](../advanced/machine_annotators.md) contributed |
+| `annotator_origin_detail` | string | JSON with the machine rater's tool or model and its versions; empty for a person. Same condition |
 | *\<schema_name\>* | varies | One column per annotation schema, type depends on schema |
 
 Schema columns are flattened by annotation type:
@@ -567,6 +569,24 @@ Export annotations as JSON Lines (one JSON object per line). Preserves full anno
 ```bash
 python -m potato.export --config config.yaml --format jsonl --output ./export/
 ```
+
+### Annotator origin
+
+When a study declares [machine annotators](../advanced/machine_annotators.md)
+and at least one of them has annotated, every per-annotator format marks each
+row with who produced it:
+
+| Format | Field |
+|---|---|
+| csv, tsv, parquet, huggingface, publish bundle | `annotator_origin` (`human`, `tool` or `llm`) and `annotator_origin_detail` (the declaration as JSON; empty for a person), right after `user_id` |
+| jsonl | `annotator_origin`: the whole declaration, e.g. `{"kind": "tool", "id": "pipeline_a", "version": "2.1.0", ...}`, or `{"kind": "human"}` |
+| parquet and huggingface span tables | `annotator_origin` |
+
+Filter on it to keep tool output out of a human agreement figure or a training
+set. A study with no machine rater exports without these columns, as before.
+A rater declared in the config but not yet loaded by the server (for example,
+state files written by an import script) is still labelled, from the
+declaration.
 
 ### EAF - ELAN Annotation Format (eaf)
 
@@ -742,7 +762,12 @@ Two files:
 
 The `source` column names an annotator when the adjudicator adopted that
 person's answer verbatim, and reads `adjudicator` when they answered it
-themselves.
+themselves. In a study with [machine annotators](../advanced/machine_annotators.md),
+a `source_origin` column follows it, saying what produced the final answer:
+the adopted annotator (`human`, or a description such as `pipeline_a 2.1.0 db
+refdb-2024-03 (tool)`), or, when the adjudicator chose the value themselves,
+everyone who had given that same value, joined with `; `. It is empty when
+the final value is one no annotator gave.
 
 A composite scheme such as `constant_sum`, `soft_label` or
 `hierarchical_multiselect` resolves to a whole allocation or path list, which

@@ -1089,7 +1089,8 @@ class UserStateManager:
 
         output_dir = self.config["output_annotation_dir"]
         schemas = self.config.get("annotation_schemes", [])
-        annotations = load_annotations_from_output_dir(output_dir, schemas)
+        annotations = load_annotations_from_output_dir(output_dir, schemas,
+                                                       self.config)
 
         if not annotations:
             return

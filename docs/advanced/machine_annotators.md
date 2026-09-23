@@ -132,7 +132,9 @@ truth. Annotator rows carry an `origin` label for machine raters.
     share a reference database do not: they make the same mistake together,
     which inflates the apparent ability of whichever cluster is largest. An
     ability estimate over machine raters needs someone who knows which tools
-    share evidence before it is published.
+    share evidence before it is published. The psychometrics dashboard says so
+    above the ability chart whenever a machine rater is in it, and marks each
+    machine's row.
 
 ### Gold auto-promotion
 
@@ -152,7 +154,12 @@ adjudication:
 ```
 
 Machines stay out of the queue unless `include_machine_annotators` is set,
-which extends the exclusion the queue already applies to adjudicators.
+which extends the exclusion the queue already applies to adjudicators. When
+they are in, each of their answers carries a badge (`TOOL` or `LLM`) on its
+response card and on its chip in the decision form; hovering it shows the tool
+or model and its version. Under `show_annotator_names: false` the badge still
+appears beside the alias, because knowing an answer came from a tool is part
+of judging it.
 
 `min_human_annotations` is a floor on *people*, counted separately from the
 participant total. Zero is allowed: several tools and no human
@@ -160,9 +167,13 @@ annotator is a valid queue, because the adjudicator is the person in that
 design.
 
 Queue items carry `annotator_origins`, so a curator choosing between two labels
-can see that one came from a tool and which version produced it. Decisions
-record `source_origins` at the moment they are made, so a later config edit
-cannot change what a past decision appears to have meant.
+can see that one came from a tool and which version produced it. Each decision
+records `source_origins`: per schema, which raters had given the answer the
+adjudicator settled on, e.g. `pipeline_a 2.1.0 db refdb-2024-03 (tool);
+pipeline_b 1.8.2 db refdb-2024-03 (tool)`. A label only two tools that share a
+database ever gave is a different result from one the curators gave. It is
+recorded when the decision is made, so a later config edit cannot change what
+a past decision appears to have meant.
 
 The final dataset distinguishes who agreed. A study with no machine rater still
 writes `source: "unanimous"`; one with machine raters writes
@@ -171,8 +182,27 @@ tools agreeing is not the same as several people agreeing.
 
 ### Export
 
-Every annotation record carries `_origin`, beside `_room` and `_typing`. Like
-its siblings it is kept out of flattened columns by the tabular exporters.
+Once any machine rater has annotated, the per-annotator export formats mark
+every row with who produced it. csv, tsv, parquet, HuggingFace and the publish
+bundle get an `annotator_origin` column (`human`, `tool` or `llm`) and an
+`annotator_origin_detail` column holding the declaration as JSON; jsonl gets
+the whole declaration under `annotator_origin`. The columns sit next to
+`user_id`:
+
+```
+instance_id,user_id,annotator_origin,annotator_origin_detail,function_category.information_processing,...
+TOY_00030,curator_1,human,,,...
+TOY_00030,pipeline_a,tool,"{""database_version"": ""refdb-2024-03"", ""declared_in"": ""config"", ""id"": ""pipeline_a"", ...}",,...
+```
+
+A study with no machine rater exports without them. An export run before the
+server has loaded a declared rater's state (right after an import, for
+example) still labels it, from the config.
+
+The adjudication outputs record what was adopted: `adjudicated.csv` adds a
+`source_origin` column beside `source`, and the `potato.adjudication_export`
+dataset carries `source_origins` on each adjudicated item. See
+[Export Formats](../data-export/export_formats.md#annotator-origin).
 
 ## Getting machine output in
 
@@ -267,6 +297,24 @@ assignment_strategy: priority
 
 `signal_field` is read as items are added, before any annotation exists, so it
 works for a batch import: the contested items are served first and a human never opens the ones every tool already agreed on.
+
+## Example project
+
+`examples/advanced/machine-annotators/` is a synthetic gene-function curation
+task: three annotation pipelines and one LLM have labelled twelve predicted
+genes, and two curators have labelled eight of them. It shows agreement by
+partition, triage on tool disagreement, adjudication with machine raters, IRT
+over tools, and the export columns. It leaves `require_declaration` and MACE
+off.
+
+```bash
+python examples/advanced/machine-annotators/setup_demo.py
+python potato/flask_server.py start examples/advanced/machine-annotators/config.yaml -p 8000
+```
+
+Log in with any new username to curate (the contested loci come first), as
+`lead_curator` to open `/adjudicate`, and open `/admin/iaa?format=html` with
+the admin key `demo-admin-key` for the agreement report.
 
 ## Related
 

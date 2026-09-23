@@ -216,10 +216,10 @@ Research paper annotation projects are available in the **[Potato Showcase](http
 
 ## Complete Index
 
-All 214 examples, generated from the configs themselves.
+All 215 examples, generated from the configs themselves.
 The `Types` column lists the annotation types each one uses.
 
-### advanced/ (56)
+### advanced/ (57)
 
 | Example | Task | Types |
 |---------|------|-------|
@@ -255,6 +255,7 @@ The `Types` column lists the annotation types each one uses.
 | [`live-database-ingestion/`](advanced/live-database-ingestion/) | live-database-ingestion | `radio`, `text` |
 | [`long-guidelines/`](advanced/long-guidelines/) | Politeness — Long Guidelines | `radio` |
 | [`mace-demo/`](advanced/mace-demo/) | MACE Competence Estimation Demo | `radio` |
+| [`machine-annotators/`](advanced/machine-annotators/) | Gene Function Curation (machine annotators demo) | `radio` |
 | [`memos-example/`](advanced/memos-example/) | Memos Example | `radio` |
 | [`mturk-example/`](advanced/mturk-example/) | MTurk Annotation Task | `radio` |
 | [`multi-document-events/`](advanced/multi-document-events/) | Cross-Document Disaster Events | `multi_document_event` |

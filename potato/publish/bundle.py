@@ -18,6 +18,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from potato.export.origin_columns import origin_in_use
 from potato.export.tabular_exporter import _flatten_annotation
 
 _RESERVED_COLS = {"instance_id", "user_id", "n_annotators"}
@@ -44,8 +45,15 @@ class PublishBundle:
 
 
 def build_annotation_rows(annotations: List[dict]) -> List[dict]:
-    """One flat row per (instance, annotator), matching the tabular exporter."""
-    return [_flatten_annotation(ann) for ann in annotations]
+    """One flat row per (instance, annotator), matching the tabular exporter.
+
+    That includes the ``annotator_origin`` columns when any row is from a
+    declared machine rater: a published dataset is where a reader most needs
+    to tell a tool's labels from a person's.
+    """
+    with_origin = origin_in_use(annotations)
+    return [_flatten_annotation(ann, with_origin=with_origin)
+            for ann in annotations]
 
 
 def build_span_rows(annotations: List[dict]) -> List[dict]:

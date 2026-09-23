@@ -1095,6 +1095,24 @@
     border: 1px solid #fde68a;
 }
 
+/* Declared machine rater (tool / llm) on a response card or chip. */
+.adj-origin-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 8px;
+    border: 1px solid #c7d2fe;
+    background: #eef2ff;
+    color: #3730a3;
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1.5;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    vertical-align: middle;
+    cursor: help;
+}
+
 /* ===== Phase 3: Generic Badges ===== */
 
 .adj-badge {

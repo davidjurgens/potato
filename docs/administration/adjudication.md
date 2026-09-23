@@ -457,6 +457,7 @@ The file contains a JSON object with a `decisions` array and a `last_updated` ti
 - `label_decisions` -- The final labels (keyed by schema name).
 - `span_decisions` -- Any span annotation decisions.
 - `source` -- Per-schema provenance (which annotator's response was adopted, or `"adjudicator"` for a novel decision).
+- `source_origins` -- Recorded only in a study with declared [machine annotators](../advanced/machine_annotators.md). Per schema, what produced the final answer, as it stood when the decision was made: the adopted annotator (`"human"`, or e.g. `"pipeline_a 2.1.0 (tool)"`), or, when the adjudicator chose the value themselves, everyone who had given that value, joined with `"; "`. A value no annotator gave has no entry.
 - `confidence` -- The adjudicator's confidence rating.
 - `notes` -- Free-text notes.
 - `error_taxonomy` -- Selected error classification tags.

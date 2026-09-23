@@ -12,6 +12,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import BaseExporter, ExportContext, ExportResult
+from .origin_columns import origin_fields, origin_in_use, record_origin
 from .single_select import (
     EXEMPT_LABEL_NAMES,
     resolve_final_label,
@@ -60,7 +61,8 @@ def _spans_with_text(ann: dict,
 
 def _flatten_annotation(ann: dict, single_select: Optional[set] = None,
                         ambiguities: Optional[List[str]] = None,
-                        context: Optional[ExportContext] = None) -> dict:
+                        context: Optional[ExportContext] = None,
+                        with_origin: bool = False) -> dict:
     """Flatten a single annotation record into a flat dict for tabular output.
 
     ``single_select`` names the schemas that may hold at most one label. When such a
@@ -68,11 +70,17 @@ def _flatten_annotation(ann: dict, single_select: Optional[set] = None,
     per-label columns are still emitted (nothing is hidden), but an additional
     ``{schema}`` column carries the resolved final answer so a consumer reading the CSV
     is never left guessing. Each collapse is appended to ``ambiguities``.
+
+    ``with_origin`` adds the ``annotator_origin`` columns beside ``user_id``;
+    the caller sets it when any record in the export is from a machine rater
+    (see ``origin_columns``).
     """
     row = {
         "instance_id": ann.get("instance_id", ""),
         "user_id": ann.get("user_id", ""),
     }
+    if with_origin:
+        row.update(origin_fields(ann))
     single_select = single_select or set()
 
     # Flatten labels: schema_name.label_name = value
@@ -188,17 +196,24 @@ class JSONLExporter(BaseExporter):
         os.makedirs(output_path, exist_ok=True)
         out_file = os.path.join(output_path, "annotations.jsonl")
 
+        with_origin = origin_in_use(context.annotations)
         with open(out_file, "w", encoding="utf-8") as f:
             for ann in context.annotations:
                 record = {
                     "instance_id": ann.get("instance_id", ""),
                     "user_id": ann.get("user_id", ""),
+                }
+                if with_origin:
+                    # The whole declaration, not the flattened pair: JSON
+                    # has room for the version fields as they are.
+                    record["annotator_origin"] = record_origin(ann)
+                record.update({
                     "labels": ann.get("labels", {}),
                     # Same slice the csv column gets: a stored span is offsets
                     # and a label, and the words it covers are the point.
                     "spans": _spans_with_text(ann, context),
                     "links": ann.get("links", {}),
-                }
+                })
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
         files_written = [out_file]
@@ -449,7 +464,9 @@ def _write_delimited(context: ExportContext, output_path: str,
     # Flatten all annotations to collect the full set of columns
     single_select = _single_select_names(context)
     ambiguities = []
-    rows = [_flatten_annotation(ann, single_select, ambiguities, context)
+    with_origin = origin_in_use(context.annotations)
+    rows = [_flatten_annotation(ann, single_select, ambiguities, context,
+                                with_origin=with_origin)
             for ann in context.annotations]
 
     if not rows:

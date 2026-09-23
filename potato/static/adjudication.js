@@ -201,6 +201,7 @@
                 if (data.annotator_signals) {
                     renderAnnotatorSignals(data.annotator_signals);
                 }
+                renderAnnotatorOrigins(data.item && data.item.annotator_origins);
 
                 itemStartTime = Date.now();
             })
@@ -978,6 +979,48 @@
 
     function flagLabel(type) {
         return FLAG_LABELS[type] || String(type || '').replace(/_/g, ' ');
+    }
+
+    /**
+     * Mark answers that came from a declared machine rater.
+     *
+     * `origins` maps an annotator (or, under show_annotator_names: false, the
+     * alias the server gave them) to a description such as
+     * "pipeline_a 2.1.0 db refdb-2024-03 (tool)". Only machines are listed;
+     * everyone else is a person. The badge goes on the response card and on
+     * the chip beside each choice, because the chip is where the adjudicator
+     * picks whose answer to adopt.
+     */
+    function renderAnnotatorOrigins(origins) {
+        document.querySelectorAll('.adj-origin-badge').forEach(function (el) {
+            el.remove();
+        });
+        if (!origins) return;
+
+        Object.keys(origins).forEach(function (userId) {
+            var description = String(origins[userId] || '');
+            var match = /\(([^()]+)\)\s*$/.exec(description);
+            var kind = match ? match[1] : 'machine';
+            var selector = '[data-annotator="' + CSS.escape(userId) + '"]';
+
+            function badge() {
+                var el = document.createElement('span');
+                el.className = 'adj-origin-badge';
+                el.textContent = kind;
+                el.title = description;
+                el.setAttribute('aria-label', 'Machine rater: ' + description);
+                return el;
+            }
+
+            document.querySelectorAll('.adj-annotator-card' + selector +
+                ' .adj-annotator-name').forEach(function (name) {
+                name.appendChild(badge());
+            });
+            document.querySelectorAll('.adj-annotator-chip' + selector)
+                .forEach(function (chip) {
+                    chip.appendChild(badge());
+                });
+        });
     }
 
     function renderAnnotatorSignals(signalsData) {
