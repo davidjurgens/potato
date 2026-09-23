@@ -1918,7 +1918,9 @@ def annotate():
                     and not session.get("force_desktop")
                     and pocket_routing_state()["available"]):
                 logger.info(f"Touch device detected for {username}; routing to /pocket")
-                return redirect("/pocket")
+                # script_root, so a phone behind a URL prefix lands on this
+                # study's /pocket and not on the bare host's.
+                return redirect(request.script_root + "/pocket")
         except Exception:
             logger.debug("Device routing check failed", exc_info=True)
 

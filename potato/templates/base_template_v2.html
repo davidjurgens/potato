@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=33">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=34">
 
     <!-- Span Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=1">
@@ -201,7 +201,7 @@
                 {% if header_logo_url %}
                 <img class="header-logo" src="{{ header_logo_url }}" alt="Logo">
                 {% endif %}
-                <span class="task-name">{{annotation_task_name}}</span>
+                <span class="task-name" title="{{annotation_task_name}}">{{annotation_task_name}}</span>
             </div>
 
             <div class="navbar-center">

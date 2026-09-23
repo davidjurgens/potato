@@ -15,7 +15,7 @@ codebook feature is disabled.
 
 from __future__ import annotations
 
-from flask import Blueprint, redirect, render_template, session
+from flask import Blueprint, redirect, render_template, request, session
 
 codebook_page_bp = Blueprint("codebook_page", __name__)
 
@@ -27,7 +27,7 @@ def codebook_document_page():
     if not codebook_enabled(config):
         return ("Codebook is not enabled in this deployment.", 404)
     if not session.get("username"):
-        return redirect("/")
+        return redirect(request.script_root + "/")
     return render_template(
         "codebook_document.html",
         project=config.get("annotation_task_name") or "default",

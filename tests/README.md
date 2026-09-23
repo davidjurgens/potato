@@ -239,6 +239,32 @@ the existing `/test-audio/` and `/test-video/` routes). A `data:` URI cannot be
 used: `sanitize_html` blocks the `data:` scheme as an XSS vector, so the URL is
 stripped out of the rendered instance text and no image ever loads.
 
+#### Phone and tablet layouts
+
+`tests/helpers/mobile.py` opens a page as a real device through Playwright's
+device descriptors, so the viewport, User-Agent, touch input and pixel density
+all match a phone. Resizing a desktop browser gets only the width: the server
+still sees a desktop User-Agent and never routes the phone to `/pocket`, and
+macOS Chrome will not make a window narrower than about 500px.
+
+```python
+from tests.helpers.mobile import PHONES, layout_problems, mobile_page
+
+with mobile_page("iPhone 13", server.base_url) as page:
+    page.goto("/adjudicate")
+    assert not layout_problems(page, reachable=[".logout-btn"])
+```
+
+`layout_problems` fails a page that scrolls sideways or puts a listed control
+off the side of the screen, and names the element responsible. It measures
+against the device width, not `window.innerWidth`: an emulated phone zooms out
+to fit an overflowing page, and `innerWidth` grows to match, so a check against
+it passes the page it should fail. For admin pages, pass
+`extra_headers={"X-API-Key": server.admin_api_key}`.
+`test_mobile_layouts.py` covers adjudication, annotation, the Pocket redirect,
+the psychometrics dashboard and the agreement report on an iPhone 13 and a
+Pixel 7.
+
 ### Unit Tests (Isolated)
 - **Mock Interfaces**: No external dependencies
 - **Fast Execution**: Quick feedback for development

@@ -4151,8 +4151,17 @@ body > .container-fluid {
   gap: 1rem;
 }
 
+/* The brand used to be `flex-shrink: 0`, so a long task name held its full
+   width and pushed the page sideways on a phone (465px of header on a 390px
+   iPhone) and Logout off the edge. It now yields after `.navbar-center`, which
+   has a zero flex basis and so empties first: the name truncates, and the
+   full name is in its title attribute. `.navbar-end` -- Logout -- never
+   shrinks. See tests/selenium/test_mobile_layouts.py. */
 .potato-navbar .navbar-brand {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
 }
 
 .potato-navbar .navbar-brand .task-name {
@@ -4160,6 +4169,14 @@ body > .container-fluid {
   color: var(--light-color);
   font-size: var(--text-xl);
   letter-spacing: -0.015em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.potato-navbar .navbar-end {
+  flex-shrink: 0;
 }
 
 .potato-navbar .navbar-brand .header-logo {
