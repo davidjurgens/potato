@@ -1241,3 +1241,66 @@
     line-height: 1.4;
     overflow-wrap: anywhere;
 }
+
+/* ===== Header and narrow screens ===== */
+
+/* The shared navbar gives the brand `flex-shrink: 0`. This page has no
+   `.navbar-center` to give way, so a long task name held its full width and
+   pushed Logout off the right edge (at 768px the header was 899px wide).
+   Here the name is what yields: it truncates, and the full name is in its
+   title attribute. */
+.potato-navbar .navbar-brand {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.potato-navbar .navbar-brand .task-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.potato-navbar .navbar-end {
+    flex-shrink: 0;
+}
+
+/* Below tablet width a fixed 280px queue beside the item left the item a
+   sliver and scrolled the page sideways. Stack them instead: the queue on
+   top, capped so the item is reachable without scrolling past every entry. */
+@media (max-width: 767px) {
+    .adjudication-container {
+        flex-direction: column;
+        height: auto;
+        overflow: visible;
+    }
+
+    .adj-sidebar {
+        width: 100%;
+        min-width: 0;
+        max-height: 40vh;
+        border-right: none;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .adj-main {
+        overflow: visible;
+    }
+
+    .adj-content {
+        padding: 16px;
+    }
+
+    .potato-navbar {
+        padding: 0 12px;
+    }
+
+    .potato-navbar .navbar-end .adjudicate-btn {
+        font-size: 0;          /* icon only; the label returns above 767px */
+        gap: 0;
+    }
+
+    .potato-navbar .navbar-end .adjudicate-btn i {
+        font-size: 0.85rem;
+    }
+}

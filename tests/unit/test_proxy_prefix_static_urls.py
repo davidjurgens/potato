@@ -175,10 +175,24 @@ def test_pages_with_root_relative_fetch_include_the_prefix_helper():
         re.VERBOSE,
     )
 
+    # A page's own scripts count too. adjudication.html has no inline fetch --
+    # every call is in static/adjudication.js -- so scanning the template alone
+    # passed it while all six of its API calls 404'd behind a prefix.
+    static_dir = templates.parent / "static"
+    script_ref = re.compile(r"""filename=['"]([^'"]+\.js)['"]""")
+
+    def page_and_its_scripts(path):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for name in script_ref.findall(text):
+            script = static_dir / name
+            if script.is_file():
+                text += "\n" + script.read_text(encoding="utf-8", errors="replace")
+        return text
+
     missing = []
     for path in pages:
-        text = path.read_text(encoding="utf-8", errors="replace")
-        if root_relative.search(text) and "_url_prefix.js" not in text:
+        own = path.read_text(encoding="utf-8", errors="replace")
+        if root_relative.search(page_and_its_scripts(path)) and "_url_prefix.js" not in own:
             missing.append(path.name)
 
     assert not missing, (
