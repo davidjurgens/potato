@@ -534,6 +534,21 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Resolve disagreements through an adjudication queue",
         type="object", category=QC,
     ),
+    "adjudication.include_machine_annotators": _D(
+        "Let declared tools and models into the queue as participants, so a "
+        "person resolves what they disagreed about. Off by default, which "
+        "leaves an existing queue unchanged",
+        type="boolean", default=False, category=QC,
+        see_also=("machine_annotators",),
+    ),
+    "adjudication.min_human_annotations": _D(
+        "How many people an item needs before it can be adjudicated, counted "
+        "separately from the participant total. Zero is deliberate: several "
+        "tools and no human annotator is a valid queue, because the "
+        "adjudicator is the person in that design",
+        type="integer", default=0, category=QC,
+        see_also=("machine_annotators", "adjudication"),
+    ),
     "require_fully_annotated": _D(
         "Refuse to advance until every scheme on the page has an answer",
         type="boolean", category=QC,
@@ -1442,6 +1457,16 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "Cost of one judgment, used to price the saved judgments on the dashboard",
         type="number", category=FEATURES,
     ),
+    "psychometrics.include_machine_annotators": _D(
+        "Score declared machine raters alongside people. Off by default so an "
+        "existing study's estimates do not move when a machine annotator is "
+        "declared. On, the model fits an ability per annotation tool and a "
+        "difficulty per item from disagreement alone, with no gold labels -- "
+        "but tools sharing a reference database make correlated errors, which "
+        "inflates the apparent ability of the majority cluster",
+        type="boolean", default=False, category=FEATURES,
+        see_also=("machine_annotators",),
+    ),
     "psychometrics.discrimination_flag_threshold": _D(
         "Items whose ability-versus-correctness correlation falls below this "
         "are flagged as likely codebook bugs",
@@ -2026,6 +2051,32 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
     ),
 
     # ------------------------------------------------- workflow and phases --
+    "machine_annotators": _D(
+        "Declare raters that are tools or models rather than people, so "
+        "agreement, adjudication and the IRT engine can separate them from "
+        "human annotators instead of counting them as people",
+        type="object", category=QC,
+        see_also=("adjudication", "psychometrics", "agreement_metrics"),
+    ),
+    "machine_annotators.enabled": _D(
+        "Read the roster and record declared participants as machines",
+        type="boolean", default=False, category=QC,
+    ),
+    "machine_annotators.require_declaration": _D(
+        "Refuse annotations from an undeclared machine. Off by default, and "
+        "turning it on adds a check to the login routes",
+        type="boolean", default=False, category=QC,
+    ),
+    "machine_annotators.annotators": _D(
+        "One entry per machine rater: `id` (the user id it annotates under), "
+        "`kind` (tool or llm), and optionally `tool`, `model`, "
+        "`endpoint_type`, `version`, `database_version` and `run_date`. The "
+        "version fields are what let a later re-run be told apart from a "
+        "reference database that changed underneath it",
+        type="array", category=QC,
+        example=[{"id": "prokka", "kind": "tool", "version": "1.14.6",
+                  "database_version": "2023-05", "run_date": "2024-11-03"}],
+    ),
     "triage": _D(
         "Rank items by a priority signal so failures, thumbs-down feedback and "
         "low scores get annotated first. Scoring runs as items are added, so it "

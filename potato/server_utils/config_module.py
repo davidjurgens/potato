@@ -235,6 +235,7 @@ KNOWN_CONFIG_KEYS = {
         "show_annotator_names",
         "output_subdir", "require_confidence",
         "show_all_items", "show_timing_data",
+        "include_machine_annotators", "min_human_annotations",
     },
     "annotator_dashboard": {
         "enabled", "show_project_progress", "show_personal_progress",
@@ -413,7 +414,8 @@ KNOWN_CONFIG_KEYS = {
     # Psychometrics: live IRT (labels with error bars) + adaptive routing.
     "psychometrics": {"enabled", "schema", "refit_interval", "min_observations",
                       "min_annotators_per_item", "confidence_threshold",
-                      "cost_per_judgment", "discrimination_flag_threshold"},
+                      "cost_per_judgment", "discrimination_flag_threshold",
+                      "include_machine_annotators"},
     # Multiplayer Rooms: live norming sessions, adjudication huddles, shadowing.
     "rooms": {"enabled", "who_can_create", "persist_votes", "poll_interval_ms",
               "max_members", "schema"},
@@ -425,6 +427,12 @@ KNOWN_CONFIG_KEYS = {
         "enabled", "prompt", "models", "k_samples", "max_items", "fraction",
         "sampling", "human", "schemas", "calibration", "output", "state_dir",
     },
+    # Machine annotators: raters that are tools or models rather than people.
+    # Declaring one is what separates a legitimate machine rater from the
+    # fabricated user the importers refuse to write. Leaf validation of
+    # `annotators` lives in validate_machine_annotators_config(); kept shallow
+    # here for the same reason as judge_calibration above.
+    "machine_annotators": {"enabled", "require_declaration", "annotators"},
     "triage": {"enabled", "order", "default_priority", "show_badge",
                "signal_field", "invert_signal", "rules"},
     # Datasets / Experiments: versioned eval datasets + experiment runs.
@@ -1424,6 +1432,93 @@ def validate_optional_field_types(config_data: Dict[str, Any]) -> None:
             )
 
 
+def validate_machine_annotators_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``machine_annotators`` block when enabled.
+
+    The failure worth catching at load is a declaration that never matches a
+    participant. The study then runs, the machine annotates, and its rows are
+    counted as a person's because the id did not line up -- which is the exact
+    contamination the block exists to prevent, arriving silently.
+
+    An unrecognized ``kind`` is not an error. It still is not human, and
+    ``annotator_origin`` treats it as a machine, which is the reading that
+    cannot corrupt a published agreement number.
+    """
+    block = config_data.get("machine_annotators")
+    if not isinstance(block, dict) or not block.get("enabled"):
+        return
+
+    errors = []
+    declared = block.get("annotators")
+
+    if declared is None:
+        errors.append(
+            "machine_annotators is enabled but declares no 'annotators', so no "
+            "participant would be recorded as a machine"
+        )
+    elif not isinstance(declared, list):
+        errors.append(
+            f"machine_annotators.annotators must be a list, got "
+            f"{type(declared).__name__}"
+        )
+    else:
+        seen = set()
+        for index, entry in enumerate(declared):
+            where = f"machine_annotators.annotators[{index}]"
+            if not isinstance(entry, dict):
+                errors.append(
+                    f"{where} must be a mapping, got {type(entry).__name__}"
+                )
+                continue
+            entry_id = entry.get("id")
+            if entry_id is None or not str(entry_id).strip():
+                errors.append(
+                    f"{where} has no 'id', so no user state can be matched to it"
+                )
+                continue
+            entry_id = str(entry_id).strip()
+            if entry_id in seen:
+                errors.append(
+                    f"{where} repeats id {entry_id!r}; one participant cannot "
+                    f"have two declarations"
+                )
+            seen.add(entry_id)
+
+    # A guard that cannot tell anyone apart is worse than no guard, because it
+    # reads as protection and provides none. `require_declaration` refuses
+    # writes from a participant who is neither a declared machine nor a listed
+    # person, so it needs a list of people to check against. Under open
+    # registration every username that registers becomes a valid account, so
+    # there would be nothing left for it to refuse -- and the study would
+    # believe it was protected.
+    if block.get("require_declaration"):
+        from potato.authentication import _parse_authorized_users
+
+        user_config = config_data.get("user_config") or {}
+        allow_all = user_config.get("allow_all_users", True)
+        listed = _parse_authorized_users(user_config)
+        # A roster can arrive either inline or as a JSONL file. The file is not
+        # read here -- a validator has no business doing I/O -- so this asks
+        # whether one is configured, not how many people it holds.
+        roster_file = (config_data.get("authentication") or {}).get(
+            "user_config_path")
+        if allow_all or not (listed or roster_file):
+            errors.append(
+                "machine_annotators.require_declaration is set, but this study "
+                "accepts any username that registers, so there is no list of "
+                "people to check a participant against and the setting would "
+                "refuse nothing. Set user_config.allow_all_users: false and "
+                "name your annotators in user_config.users or "
+                "authentication.user_config_path, or remove require_declaration"
+            )
+
+    if errors:
+        raise ConfigValidationError(
+            "Invalid machine_annotators configuration:\n  - "
+            + "\n  - ".join(errors)
+        )
+
+
 def validate_judge_calibration_config(config_data: Dict[str, Any]) -> None:
     """Validate the ``judge_calibration`` block when enabled.
 
@@ -2122,6 +2217,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate judge_calibration configuration if present
     validate_judge_calibration_config(config_data)
+
+    # Validate declared machine annotators if present.
+    validate_machine_annotators_config(config_data)
 
     # Validate multi-document event annotation blocks if present
     validate_event_template_config(config_data)

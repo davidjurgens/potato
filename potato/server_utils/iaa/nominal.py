@@ -8,10 +8,12 @@ label lists; for multi-annotator metrics, a list of (annotator_id -> label) dict
 from __future__ import annotations
 
 from collections import Counter
+from itertools import combinations
 from math import isclose
-from typing import Dict, List, Sequence
+from typing import Any, Dict, List, Mapping, Sequence
 
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +129,64 @@ def pairwise_cohen_kappa(annotations_by_user: Dict[str, Sequence]) -> float:
                 kappas.append(cohen_kappa(a[:m], b[:m]))
             except ValueError:
                 continue
+    if not kappas:
+        return float("nan")
+    return sum(kappas) / len(kappas)
+
+
+def mean_pairwise_agreement(items: Sequence[Mapping[str, Any]]) -> float:
+    """
+    Observed agreement over items rated by different subsets of annotators.
+
+    ``items`` holds one ``{annotator: label}`` mapping per item. Each item with
+    two or more annotators contributes the fraction of its annotator pairs that
+    chose the same label, and the result is the mean over those items. That is
+    Fleiss' P-bar, so it sits beside ``fleiss_kappa`` as the raw number the
+    coefficient corrects, and it stays defined where the coefficient is 0/0.
+    """
+    per_item = []
+    for labels in items:
+        values = list(labels.values())
+        if len(values) < 2:
+            continue
+        pairs = list(combinations(values, 2))
+        per_item.append(sum(1 for a, b in pairs if a == b) / len(pairs))
+    if not per_item:
+        return float("nan")
+    return sum(per_item) / len(per_item)
+
+
+def mean_cohen_kappa_over_shared_items(items: Sequence[Mapping[str, Any]]) -> float:
+    """
+    Mean Cohen's kappa across annotator pairs, each on the items that pair shares.
+
+    ``pairwise_cohen_kappa`` takes sequences already aligned across everyone,
+    which means only the items *every* annotator rated. Under heterogeneous
+    coverage that set is often empty, and the coefficient came back NaN for
+    studies where every pair had overlapping items. Here each pair is scored on
+    its own overlap, so full coverage gives the same number as before and
+    partial coverage gives one at all.
+
+    Pairs whose kappa is undefined (no shared item, or one label throughout so
+    chance agreement is 1) are left out of the mean rather than poisoning it.
+    """
+    annotators = sorted({u for labels in items for u in labels})
+    kappas = []
+    for a, b in combinations(annotators, 2):
+        shared = [labels for labels in items if a in labels and b in labels]
+        if not shared:
+            continue
+        try:
+            # sklearn warns on a single-label pair, which is exactly the
+            # undefined case skipped below; unsilenced it fires once per pair.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                value = cohen_kappa([l[a] for l in shared],
+                                    [l[b] for l in shared])
+        except ValueError:
+            continue
+        if value == value:
+            kappas.append(value)
     if not kappas:
         return float("nan")
     return sum(kappas) / len(kappas)

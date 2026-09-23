@@ -148,6 +148,7 @@ nav:
         - AI Costs and Spend Caps: ai-intelligence/ai_costs.md
     - Advanced Features:
         - MACE: advanced/mace.md
+        - Machine Annotators: advanced/machine_annotators.md
         - Embedding Visualization: advanced/embedding_visualization.md
         - Survey Instruments: advanced/survey_instruments.md
         - Category-Based Assignment: advanced/category_assignment.md

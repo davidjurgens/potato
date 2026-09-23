@@ -91,8 +91,7 @@ Examples:
         "--users",
         "-u",
         type=int,
-        default=10,
-        help="Number of simulated users (default: 10)",
+        help="Number of simulated users (default: 10, or the value in --config)",
     )
     parser.add_argument(
         "--competence",
@@ -104,8 +103,7 @@ Examples:
     parser.add_argument(
         "--strategy",
         choices=["random", "biased", "llm", "pattern", "gold_standard"],
-        default="random",
-        help="Annotation strategy (default: random)",
+        help="Annotation strategy (default: random, or the value in --config)",
     )
 
     # LLM configuration
@@ -139,8 +137,7 @@ Examples:
         "--parallel",
         "-p",
         type=int,
-        default=5,
-        help="Maximum concurrent users (default: 5)",
+        help="Maximum concurrent users (default: 5, or the value in --config)",
     )
     parser.add_argument(
         "--max-annotations",
@@ -197,8 +194,8 @@ Examples:
     parser.add_argument(
         "--output-dir",
         "-o",
-        default="simulator_output",
-        help="Output directory for results (default: simulator_output)",
+        help="Output directory for results (default: simulator_output, or the "
+             "value in --config)",
     )
     parser.add_argument(
         "--no-export",
@@ -257,23 +254,38 @@ def build_config_from_args(args: argparse.Namespace) -> SimulatorConfig:
     else:
         config = SimulatorConfig()
 
-    # Override with CLI arguments
-    config.user_count = args.users
-    config.parallel_users = args.parallel
+    # Override with CLI arguments -- but only the ones actually given.
+    #
+    # These were assigned unconditionally from argparse defaults, a few lines
+    # after the config file was parsed, so a --config file could never set
+    # user_count, strategy, parallel_users or output_dir. `--users` defaulted
+    # to 10 and `--strategy` to "random", so a config asking for two LLM
+    # annotators silently ran ten random ones, wrote its results somewhere
+    # else, and reported success. Nothing in the output said an override had
+    # happened, because from the code's point of view none had.
+    #
+    # `--max-annotations` was already written this way, with no default, and
+    # is the pattern the rest now follow.
+    if args.users is not None:
+        config.user_count = args.users
+    if args.parallel is not None:
+        config.parallel_users = args.parallel
+    if args.output_dir is not None:
+        config.output_dir = args.output_dir
     config.simulate_wait = not args.fast_mode
     config.attention_check_fail_rate = args.attention_fail_rate
     config.respond_fast_rate = args.fast_response_rate
-    config.output_dir = args.output_dir
 
     # Parse competence distribution
     if args.competence:
         config.competence_distribution = parse_key_value_pairs(args.competence)
 
     # Parse strategy
-    try:
-        config.strategy = AnnotationStrategyType(args.strategy)
-    except ValueError:
-        config.strategy = AnnotationStrategyType.RANDOM
+    if args.strategy is not None:
+        try:
+            config.strategy = AnnotationStrategyType(args.strategy)
+        except ValueError:
+            config.strategy = AnnotationStrategyType.RANDOM
 
     # LLM configuration
     if args.strategy == "llm" and args.llm_endpoint:

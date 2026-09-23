@@ -75,6 +75,17 @@ class AdjudicationConfig:
     similarity_top_k: int = 5
     similarity_precompute: bool = True
 
+    # Machine raters. Off by default, so an existing study's queue is unchanged.
+    # On, declared tools and models enter the queue as participants and a human
+    # adjudicator resolves what they disagreed about -- which is the whole shape
+    # of the problem when N annotation pipelines disagree and no gold standard
+    # exists. See potato/annotator_origin.py.
+    include_machine_annotators: bool = False
+    # Floor on how many *people* an item needs before it can be adjudicated.
+    # Zero is meaningful and deliberate: four tools and no humans is a valid
+    # queue, because the adjudicator is the human in that design.
+    min_human_annotations: int = 0
+
     # Output
     output_subdir: str = "adjudication"
 
@@ -92,6 +103,10 @@ class AdjudicationItem:
     status: str = "pending"  # pending, in_progress, completed, skipped
     assigned_adjudicator: Optional[str] = None
     mace_predictions: Dict[str, Any] = field(default_factory=dict)  # schema -> predicted label
+    # user_id -> short origin label, for participants that are not people. An
+    # adjudicator choosing between two answers needs to know that one of them
+    # came from a tool, and which version of it.
+    annotator_origins: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary for JSON output."""
@@ -108,6 +123,8 @@ class AdjudicationItem:
         }
         if self.mace_predictions:
             result["mace_predictions"] = self.mace_predictions
+        if self.annotator_origins:
+            result["annotator_origins"] = self.annotator_origins
         return result
 
 
@@ -126,6 +143,10 @@ class AdjudicationDecision:
     guideline_update_flag: bool = False
     guideline_update_notes: str = ""
     time_spent_ms: int = 0
+    # What each adopted answer's author was, captured when the decision was
+    # made. Stored rather than derived, because a later config edit could
+    # otherwise change what a past decision appears to have meant.
+    source_origins: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary for JSON output."""
@@ -142,6 +163,7 @@ class AdjudicationDecision:
             "guideline_update_flag": self.guideline_update_flag,
             "guideline_update_notes": self.guideline_update_notes,
             "time_spent_ms": self.time_spent_ms,
+            "source_origins": self.source_origins,
         }
 
     @classmethod
@@ -160,6 +182,7 @@ class AdjudicationDecision:
             guideline_update_flag=d.get("guideline_update_flag", False),
             guideline_update_notes=d.get("guideline_update_notes", ""),
             time_spent_ms=d.get("time_spent_ms", 0),
+            source_origins=d.get("source_origins", {}) or {},
         )
 
 
@@ -239,6 +262,11 @@ class AdjudicationManager:
             adj.similarity_top_k = sim_config.get("top_k", 5)
             adj.similarity_precompute = sim_config.get("precompute_on_start", True)
 
+        adj.include_machine_annotators = bool(
+            adj_config.get("include_machine_annotators", False))
+        adj.min_human_annotations = int(
+            adj_config.get("min_human_annotations", 0))
+
         adj.output_subdir = adj_config.get("output_subdir", "adjudication")
 
         return adj
@@ -290,7 +318,32 @@ class AdjudicationManager:
                     if u not in self.adj_config.adjudicator_users
                 }
 
+                # Declared machine raters. Excluding adjudicators is the
+                # existing precedent for dropping a class of participant, and
+                # this extends it: a tool is kept out of the queue unless the
+                # study says otherwise, so no existing queue changes shape.
+                from potato.annotator_origin import describe, is_machine
+
+                item_origins = {}
+                humans = set()
+                for u in sorted(annotators):
+                    ustate = usm.get_user_state(u)
+                    if ustate is not None and is_machine(ustate):
+                        item_origins[u] = describe(ustate)
+                    else:
+                        humans.add(u)
+
+                if not self.adj_config.include_machine_annotators:
+                    annotators = humans
+                    item_origins = {}
+
                 if len(annotators) < self.adj_config.min_annotations:
+                    continue
+
+                # A floor on people, separate from the floor on participants.
+                # Default 0: four tools and no humans is a valid queue, because
+                # the adjudicator is the human in that design.
+                if len(humans) < self.adj_config.min_human_annotations:
                     continue
 
                 # Check if we require fully annotated items
@@ -373,6 +426,7 @@ class AdjudicationManager:
                     status=status,
                     assigned_adjudicator=assigned,
                     mace_predictions=mace_preds,
+                    annotator_origins=item_origins,
                 )
 
             self._queue_built = True
@@ -1233,7 +1287,24 @@ class AdjudicationManager:
 
             if is_unanimous and unanimous_labels:
                 result["labels"] = unanimous_labels
-                result["source"] = "unanimous"
+                # Four tools agreeing is not unanimity in the human sense.
+                # Pipelines that share a reference database make the same
+                # mistake together, so their agreement is evidence about their
+                # inputs rather than about the answer. A study with no declared
+                # machine rater keeps the value it has always written, because
+                # renaming it for everyone would break the export contract for
+                # projects this feature does not concern.
+                from potato.annotator_origin import is_machine
+                kinds = {
+                    "machine" if is_machine(usm.get_user_state(u)) else "human"
+                    for u in annotations
+                }
+                if kinds == {"human"}:
+                    result["source"] = "unanimous"
+                elif kinds == {"machine"}:
+                    result["source"] = "unanimous_machine"
+                else:
+                    result["source"] = "unanimous_mixed"
                 result["num_annotators"] = len(annotators)
                 results.append(result)
             else:

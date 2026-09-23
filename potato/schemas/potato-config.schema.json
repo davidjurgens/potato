@@ -163,7 +163,17 @@
         "enabled": {},
         "error_taxonomy": {},
         "fast_decision_warning_ms": {},
+        "include_machine_annotators": {
+          "default": false,
+          "description": "Let declared tools and models into the queue as participants, so a person resolves what they disagreed about. Off by default, which leaves an existing queue unchanged",
+          "type": "boolean"
+        },
         "min_annotations": {},
+        "min_human_annotations": {
+          "default": 0,
+          "description": "How many people an item needs before it can be adjudicated, counted separately from the participant total. Zero is deliberate: several tools and no human annotator is a valid queue, because the adjudicator is the person in that design",
+          "type": "integer"
+        },
         "output_subdir": {},
         "require_confidence": {},
         "require_notes_on_override": {},
@@ -4515,6 +4525,38 @@
       },
       "type": "object"
     },
+    "machine_annotators": {
+      "additionalProperties": true,
+      "description": "Declare raters that are tools or models rather than people, so agreement, adjudication and the IRT engine can separate them from human annotators instead of counting them as people",
+      "properties": {
+        "annotators": {
+          "description": "One entry per machine rater: `id` (the user id it annotates under), `kind` (tool or llm), and optionally `tool`, `model`, `endpoint_type`, `version`, `database_version` and `run_date`. The version fields are what let a later re-run be told apart from a reference database that changed underneath it",
+          "examples": [
+            [
+              {
+                "database_version": "2023-05",
+                "id": "prokka",
+                "kind": "tool",
+                "run_date": "2024-11-03",
+                "version": "1.14.6"
+              }
+            ]
+          ],
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Read the roster and record declared participants as machines",
+          "type": "boolean"
+        },
+        "require_declaration": {
+          "default": false,
+          "description": "Refuse annotations from an undeclared machine. Off by default, and turning it on adds a check to the login routes",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "max_annotations_per_item": {
       "default": -1,
       "description": "Cap on how many annotators may label one item. -1 means unlimited",
@@ -4699,6 +4741,11 @@
         "enabled": {
           "default": false,
           "description": "Fit the model and serve the dashboard. Adaptive routing additionally needs assignment_strategy: psychometric",
+          "type": "boolean"
+        },
+        "include_machine_annotators": {
+          "default": false,
+          "description": "Score declared machine raters alongside people. Off by default so an existing study's estimates do not move when a machine annotator is declared. On, the model fits an ability per annotation tool and a difficulty per item from disagreement alone, with no gold labels -- but tools sharing a reference database make correlated errors, which inflates the apparent ability of the majority cluster",
           "type": "boolean"
         },
         "min_annotators_per_item": {

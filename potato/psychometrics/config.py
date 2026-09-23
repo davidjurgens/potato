@@ -36,6 +36,16 @@ class PsychometricsConfig:
         discrimination_flag_threshold: Items whose ability-vs-correctness
             correlation falls below this are flagged as likely codebook
             bugs (best annotators losing to the crowd).
+        include_machine_annotators: Score declared machine raters alongside
+            people. Off by default, so an existing study's ability estimates
+            do not move because someone ran the LLM simulator against it.
+            Turning it on is how you get a reliability estimate per annotation
+            tool on a corpus with no ground truth: the model fits each rater's
+            ability and each item's difficulty from the disagreement pattern
+            alone. Tools that share reference databases produce correlated
+            errors, which inflates the apparent ability of the majority
+            cluster, so an estimate over machine raters needs someone who
+            knows which tools share evidence before it is published.
     """
 
     enabled: bool = False
@@ -46,6 +56,7 @@ class PsychometricsConfig:
     confidence_threshold: float = 0.95
     cost_per_judgment: Optional[float] = None
     discrimination_flag_threshold: float = -0.2
+    include_machine_annotators: bool = False
 
 
 def parse_psychometrics_config(config: Dict[str, Any]) -> PsychometricsConfig:
@@ -60,6 +71,9 @@ def parse_psychometrics_config(config: Dict[str, Any]) -> PsychometricsConfig:
         confidence_threshold=float(block.get("confidence_threshold", 0.95)),
         discrimination_flag_threshold=float(
             block.get("discrimination_flag_threshold", -0.2)
+        ),
+        include_machine_annotators=bool(
+            block.get("include_machine_annotators", False)
         ),
     )
     if not 0.5 <= ps.confidence_threshold <= 1.0:

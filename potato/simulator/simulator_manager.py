@@ -141,6 +141,27 @@ class SimulatorManager:
             )
 
         logger.info(f"Generated {len(users)} user configurations")
+
+        # A simulated annotator registers, authenticates and saves by the
+        # ordinary route, so its rows reach /admin/iaa, MACE and the IRT engine
+        # exactly like a person's. That is fine for load and workflow testing,
+        # where the labels are noise. It is not fine when the labels come from
+        # a model, because the study then reports human-machine agreement as
+        # inter-human reliability and says nothing about it.
+        #
+        # Nothing here can fix that -- the roster lives in the target server's
+        # config, not in the simulator's. Naming the ids is what lets the
+        # person who can declare them do it.
+        if str(getattr(self.config, "strategy", "")).lower() in ("llm", "agent"):
+            logger.warning(
+                "Strategy %r produces model-generated labels. Declare these "
+                "user ids under machine_annotators in the target study's "
+                "config, or their annotations will be counted as human work "
+                "in every agreement statistic: %s",
+                self.config.strategy,
+                ", ".join(u.user_id for u in users),
+            )
+
         return users
 
     def run_single_user(

@@ -60,6 +60,23 @@ def _room_provenance(user_state: dict, instance_id: str) -> dict:
     return {}
 
 
+def _annotator_origin(user_state: dict, instance_id: str) -> dict:
+    """Whether this annotator was a person, and if not, which machine.
+
+    Reads the raw state dict rather than a UserState object, because this
+    module loads ``user_state.json`` straight off disk -- calling
+    ``annotator_origin.origin_of`` on a plain dict would work, but going
+    through the attribute path would silently return "human" for every row.
+
+    An absent key means a person, which is what every state file written
+    before the field existed holds. ``instance_id`` is unused: origin is a
+    property of the rater, not of one answer, and is accepted so the call
+    site reads like its ``_room`` sibling.
+    """
+    stored = user_state.get("origin")
+    return stored if isinstance(stored, dict) and stored else {"kind": "human"}
+
+
 def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
     """
     Load user annotations from the Potato output directory.
@@ -143,6 +160,11 @@ def load_annotations_from_output_dir(output_dir: str, schemas: list) -> list:
                 # so, which is what makes an agreement statistic over two
                 # members of one room a measure of the discussion.
                 "_room": _room_provenance(user_state, instance_id),
+                # Whether this rater was a person or a declared tool or model,
+                # with its version. An agreement number computed over a mix of
+                # the two measures neither group, and nothing else in the
+                # record says which this row is.
+                "_origin": _annotator_origin(user_state, instance_id),
             }
 
             # Process span data.

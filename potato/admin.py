@@ -1566,7 +1566,22 @@ class AdminDashboard:
             ism = get_item_state_manager()
             usm = get_user_state_manager()
             annotation_schemes = config.get("annotation_schemes", [])
-            users = get_users()
+
+            # Human raters only, matching the /admin/iaa headline. This report
+            # and that one must not disagree about the same study, and a
+            # coefficient over a mixed human/machine matrix estimates neither
+            # group's reliability -- see potato/annotator_origin.py.
+            from potato.annotator_origin import describe, is_machine
+
+            all_users = get_users()
+            users = []
+            excluded_machines = []
+            for username in all_users:
+                state = usm.get_user_state(username)
+                if state is not None and is_machine(state):
+                    excluded_machines.append((username, describe(state)))
+                else:
+                    users.append(username)
 
             metrics = {
                 "enabled": agreement_config.get("enabled", True),
@@ -1574,6 +1589,19 @@ class AdminDashboard:
                 "by_schema": {},
                 "warnings": []
             }
+
+            if excluded_machines:
+                metrics["machine_annotators_excluded"] = [
+                    {"user_id": uid, "origin": label}
+                    for uid, label in excluded_machines
+                ]
+                metrics["warnings"].append(
+                    f"{len(excluded_machines)} declared machine rater(s) are "
+                    f"excluded from these figures: "
+                    f"{', '.join(uid for uid, _ in excluded_machines)}. "
+                    f"See /admin/iaa for the machine-machine and pooled "
+                    f"partitions."
+                )
 
             for scheme in annotation_schemes:
                 schema_name = scheme.get("name", "Unknown")

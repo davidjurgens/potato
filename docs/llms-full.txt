@@ -4272,12 +4272,13 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
-| `adjudication` |  | object |  | Resolve disagreements through an adjudication queue | `adjudicator_users`, `agreement_threshold`, `enabled`, `error_taxonomy`, `fast_decision_warning_ms`, `min_annotations`, `output_subdir`, `require_confidence`, `require_notes_on_override`, `show_agreement_scores`, `show_all_items`, `show_annotator_names`, `show_timing_data`, `similarity` |
+| `adjudication` |  | object |  | Resolve disagreements through an adjudication queue | `adjudicator_users`, `agreement_threshold`, `enabled`, `error_taxonomy`, `fast_decision_warning_ms`, `include_machine_annotators`, `min_annotations`, `min_human_annotations`, `output_subdir`, `require_confidence`, `require_notes_on_override`, `show_agreement_scores`, `show_all_items`, `show_annotator_names`, `show_timing_data`, `similarity` |
 | `agreement_metrics` |  | object |  | Which inter-annotator agreement measures the admin pages compute | `enabled`, `min_overlap`, `refresh_interval` |
 | `attention_checks` |  | object |  | Insert items with a known answer to detect inattentive annotators | `enabled`, `failure_handling`, `frequency`, `geometry_iou_tolerance`, `items_file`, `min_response_time`, `probability` |
 | `calibration` |  | object |  | Agreement drift tracking and the re-calibration prompt on /admin/iaa. Agreement is scored per time window so a fall in recent work is visible, instead of averaging into one whole-project number | `drop_threshold`, `enabled`, `window_by`, `windows` |
 | `gold_standards` |  | object |  | Items with known labels, used to score annotators | `accuracy`, `auto_promote`, `enabled`, `feedback`, `frequency`, `geometry_iou_tolerance`, `items_file`, `mode` |
 | `gold_standards_file` |  | string |  | Gold items file, the flat alternative to the gold_standards block |  |
+| `machine_annotators` |  | object |  | Declare raters that are tools or models rather than people, so agreement, adjudication and the IRT engine can separate them from human annotators instead of counting them as people | `annotators`, `enabled`, `require_declaration` |
 | `quality_control` |  | object |  | Aggregate quality thresholds and actions |  |
 | `require_fully_annotated` |  | boolean |  | Refuse to advance until every scheme on the page has an answer |  |
 
@@ -4322,7 +4323,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `keystroke_logging` |  | object |  | Content-blind typing dynamics on free-text fields -- when someone pauses, revises or pastes, never which keys -- and the composed/transcribed/pasted detection built on them | `classify_paste_source`, `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_session_ms`, `include_schemas`, `pause_thresholds_ms`, `store_events` |
 | `mace` |  | object |  | MACE competence estimation: infers per-annotator reliability and a predicted label per item from the disagreement pattern alone | `enabled`, `min_annotations_per_item`, `min_items`, `num_iters`, `num_restarts`, `trigger_every_n` |
 | `pocket` |  | object |  | Pocket Mode: the phone-sized annotation surface at /pocket, served as a PWA with an offline queue | `auto_redirect`, `batch_size`, `enabled` |
-| `psychometrics` |  | object |  | Live IRT. Fits item difficulty and annotator ability as labels arrive, so labels carry error bars and confident items can stop early | `confidence_threshold`, `cost_per_judgment`, `discrimination_flag_threshold`, `enabled`, `min_annotators_per_item`, `min_observations`, `refit_interval`, `schema` |
+| `psychometrics` |  | object |  | Live IRT. Fits item difficulty and annotator ability as labels arrive, so labels carry error bars and confident items can stop early | `confidence_threshold`, `cost_per_judgment`, `discrimination_flag_threshold`, `enabled`, `include_machine_annotators`, `min_annotators_per_item`, `min_observations`, `refit_interval`, `schema` |
 | `rooms` |  | object |  | Multiplayer rooms at /rooms: live norming sessions, adjudication huddles and shadowing over a shared event log | `enabled`, `max_members`, `persist_votes`, `poll_interval_ms`, `schema`, `who_can_create` |
 | `thinkaloud` |  | object |  | Think-aloud mode: local speech-to-text over spoken rationales, plus rule-based detection of spoken label phrases | `chunk_seconds`, `enabled`, `fillers`, `language`, `model`, `require_spoken_label`, `schema`, `stems`, `stt` |
 | `truth_serum` |  | object |  | Surprisingly-popular scoring. Each annotator also predicts how many others will pick the same label, and an answer that beats its own predicted popularity wins over the majority | `enabled`, `min_annotators`, `question`, `schema` |
@@ -21744,6 +21745,13 @@ Agreement is measured per schema on the resolved label, so two annotators
 giving opposite answers do not promote, and a schema only one of them answered
 is not treated as unanimous.
 
+Raters declared under
+[`machine_annotators`](../advanced/machine_annotators.md) are not counted
+toward promotion. Tools that share a reference database make the same mistakes,
+so counting them would let a few tools write their shared error into the answer
+key before any person had looked at the item. People who agree with the tools
+still promote it.
+
 A promoted item is graded when an annotator meets it in the ordinary stream; it
 is never injected. The headline gold accuracy therefore depends on when an
 annotator arrived: items promoted behind them count, items promoted ahead of
@@ -35097,6 +35105,289 @@ At 2:1 more data fixes it. At 4:1 it does not, and the ranking gets worse as ite
 
 ---
 
+<!-- source: docs/advanced/machine_annotators.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/advanced/machine_annotators/
+
+# Machine Annotators
+
+A machine annotator is a rater that is a program rather than a person: an
+annotation pipeline, a detector, a language model. Declaring one lets Potato
+measure it as a rater — computing agreement between tools, routing their
+conflicts to a human, estimating each one's reliability — without counting it
+as a person in statistics that describe people.
+
+This matters when several automated systems label the same data and no ground
+truth exists to say which is right. Benchmarks of genome annotation pipelines,
+OCR engines, ASR systems and LLM extractors all have that shape: the tools
+disagree, the disagreement is measurable, and the question of who was right on
+any given item goes unanswered.
+
+## Why a declaration is needed
+
+Without a declaration, machine output reaches Potato by one of two paths, and
+neither measures it as a rater.
+
+The importers refuse to write machine output into a user state at all, because
+a fabricated user "would make machine output indistinguishable from human work
+and fabricate agreement between annotators who never touched the item."
+Imported predictions live in item data as pre-annotations, where no agreement,
+adjudication or psychometric code can reach them.
+
+The simulator does the opposite. It registers over HTTP, authenticates and
+saves through the ordinary route, so an LLM-driven annotator gets a real user
+state — and is counted as a person by `/admin/iaa`, MACE and the IRT engine,
+because nothing on the state says it is not one.
+
+A declaration fixes both. The importers' guard is against machine output posing
+as a person, and a declared rater is a machine rater on the record.
+
+## Configuration
+
+```yaml
+machine_annotators:
+  enabled: true
+  annotators:
+    - id: prokka                  # the user id this rater annotates under
+      kind: tool                  # tool | llm
+      tool: prokka
+      version: "1.14.6"
+      database_version: "2023-05"
+      run_date: "2024-11-03"
+
+    - id: gpt4o_judge
+      kind: llm
+      endpoint_type: openai
+      model: gpt-4o
+      version: "2024-08-06"
+```
+
+| Field | Meaning |
+|---|---|
+| `id` | The user id the rater annotates under. This is the join key between the declaration and the state on disk. |
+| `kind` | `tool` or `llm`. Anything else is accepted, logged, and treated as a machine — not being human is what the metrics depend on. |
+| `tool`, `model`, `endpoint_type` | Which program produced the answers. |
+| `version`, `database_version`, `run_date` | Which *version* of it, and when. |
+
+Fill in the version fields. A benchmark of four genome annotation
+tools could not analyse how annotations drifted between releases because the
+prior annotation's date was never recorded: a re-run that finds 139 more
+features cannot be told apart from a reference database that gained them.
+
+### Absent means human
+
+A participant with no declaration is a person. Every user state written before
+this feature existed loads as human, so adding the block changes nothing for
+raters you do not name, and a study with no `machine_annotators` block produces
+the same output it produced before.
+
+Disabling the block stops new stamping. It does not unmake origins already
+written to disk, because a rater that was a tool last week was still a tool.
+
+## Effects on the measurement surfaces
+
+### Agreement
+
+`/admin/iaa` reports three partitions instead of one:
+
+| Partition | What it measures |
+|---|---|
+| `human_human` | Inter-human reliability. This is the headline. |
+| `machine_machine` | Whether the tools agree with each other. |
+| `pooled` | Everyone in one matrix. |
+
+The headline figures cover humans only. The top-level number is read as
+inter-human reliability, so if it pooled everyone, a run of the LLM simulator
+against a live study would change it with nothing on the page to say why.
+
+The pooled figure is still reported, under a name that says what it mixes. A
+coefficient over a mixed human/machine reliability matrix is not an estimate of
+either group's reliability — two groups that are each perfectly self-consistent
+can pool to worse than chance, because the number is then describing the
+distance between them.
+
+The admin page says which raters were excluded and which versions produced
+them, so an admin can see why the annotator count dropped.
+
+`/admin/api/agreement` excludes machine raters for the same reason and lists
+them under `machine_annotators_excluded`.
+
+### MACE
+
+MACE estimates per-annotator competence, and its output is used to decide whose
+labels to trust. Declared machines are excluded with no opt-in: a competence
+score for an annotation pipeline is a different claim from a competence score
+for a person, and mixing them puts a tool's number beside a colleague's.
+
+### Psychometrics (IRT)
+
+The IRT engine is the exception, because modelling a tool's ability is the
+point:
+
+```yaml
+psychometrics:
+  enabled: true
+  schema: sentiment
+  include_machine_annotators: true
+```
+
+Off by default, so an existing study's estimates do not move when a machine
+annotator is declared. On, the model fits an ability per rater and a difficulty
+per item from the disagreement pattern alone, with no gold labels — which is
+how you get a reliability estimate per tool on a corpus that has no ground
+truth. Annotator rows carry an `origin` label for machine raters.
+
+!!! warning "Correlated error"
+
+    GLAD assumes raters err independently given the true label. Tools that
+    share a reference database do not: they make the same mistake together,
+    which inflates the apparent ability of whichever cluster is largest. An
+    ability estimate over machine raters needs someone who knows which tools
+    share evidence before it is published.
+
+### Gold auto-promotion
+
+Machine raters never count toward `gold_standards.auto_promote`, and no setting
+lets them. Gold is what later annotators are graded against, and agreement
+between tools that share evidence is correlated error. Enough people agreeing
+still promotes an item, whatever the tools answered.
+
+### Adjudication
+
+```yaml
+adjudication:
+  enabled: true
+  adjudicator_users: [curator]
+  include_machine_annotators: true
+  min_human_annotations: 0
+```
+
+Machines stay out of the queue unless `include_machine_annotators` is set,
+which extends the exclusion the queue already applies to adjudicators.
+
+`min_human_annotations` is a floor on *people*, counted separately from the
+participant total. Zero is allowed: several tools and no human
+annotator is a valid queue, because the adjudicator is the person in that
+design.
+
+Queue items carry `annotator_origins`, so a curator choosing between two labels
+can see that one came from a tool and which version produced it. Decisions
+record `source_origins` at the moment they are made, so a later config edit
+cannot change what a past decision appears to have meant.
+
+The final dataset distinguishes who agreed. A study with no machine rater still
+writes `source: "unanimous"`; one with machine raters writes
+`unanimous_machine` or `unanimous_mixed` where they apply, because several
+tools agreeing is not the same as several people agreeing.
+
+### Export
+
+Every annotation record carries `_origin`, beside `_room` and `_typing`. Like
+its siblings it is kept out of flattened columns by the tabular exporters.
+
+## Getting machine output in
+
+### From a run you already have
+
+Import the predictions and declare the seeded rater:
+
+```bash
+python -m potato.importers \
+  --input-format coco --input predictions.json \
+  --output-dir myproject \
+  --seed-user prokka --as-machine-annotator tool
+```
+
+The seeded state then carries an origin. Declare the same id under
+`machine_annotators` in the project config so the server keeps the declaration
+when it reloads that state.
+
+Without `--as-machine-annotator`, `--seed-user` still fabricates an
+undeclared annotator and still warns that its rows must be kept out of
+agreement analysis.
+
+### From a model running against the server
+
+The simulator's `llm` and `agent` strategies drive a real endpoint. Declare the
+user ids it will use:
+
+```yaml
+machine_annotators:
+  enabled: true
+  annotators:
+    - {id: sim_user_0000, kind: llm, model: my-model}
+    - {id: sim_user_0001, kind: llm, model: my-model}
+```
+
+The simulator warns at startup when a model-backed strategy is selected,
+naming the ids that should be declared. It cannot fix the problem itself — the
+roster lives in the target server's config, not the simulator's.
+
+## Requiring every participant to be declared
+
+By default an undeclared participant is treated as a person, which is what
+makes the feature safe to add to a running study. A study that wants the
+stronger guarantee can refuse annotations from anyone it does not recognise:
+
+```yaml
+machine_annotators:
+  enabled: true
+  require_declaration: true
+  annotators:
+    - {id: prokka, kind: tool, version: "1.14.6"}
+
+user_config:
+  allow_all_users: false
+  users: [alice, bob]
+```
+
+A write is refused when the participant is neither declared under
+`machine_annotators.annotators` nor on the human roster, and the annotator is
+told to ask the administrator rather than being left with a save that silently
+did nothing.
+
+Two deliberate limits:
+
+**It is checked where annotations are written, not at login, and never from a
+request header.** A header asserting "I am a machine" is supplied by the
+caller, so honouring one would let anybody opt out of the human count — the
+opposite of the guarantee. Only the study's config can declare an origin.
+
+**It requires a roster to compare against, and says so at load.** Under open
+registration every username that registers becomes a valid account, so the
+setting would have nothing to refuse, so the config is rejected at startup unless
+`user_config.allow_all_users` is false and a roster is named — inline under
+`user_config.users`, or as a file at `authentication.user_config_path`.
+
+Consent, instruction and survey pages are exempt. Those are not dataset
+annotations, and a rater that never reaches an item has nothing to contaminate.
+
+## Prioritising what the tools disagree about
+
+Cross-tool disagreement is a per-item number, so it drives the existing triage
+queue with no new machinery. Compute it when the data is built, put it on the
+item, and point `triage` at the field:
+
+```yaml
+triage:
+  enabled: true
+  signal_field: tool_disagreement
+
+assignment_strategy: priority
+```
+
+`signal_field` is read as items are added, before any annotation exists, so it
+works for a batch import: the contested items are served first and a human never opens the ones every tool already agreed on.
+
+## Related
+
+- [Heterogeneous Coverage](heterogeneous_coverage.md) — overlap samples, adaptive boost, and the agreement report
+- [Psychometrics](psychometrics.md) — the IRT model and adaptive routing
+- [MACE](mace.md) — competence estimation over human annotators
+- [Task Assignment](task_assignment.md) — assignment strategies including `priority`
+
+
+---
+
 <!-- source: docs/advanced/embedding_visualization.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/advanced/embedding_visualization/
 
@@ -41055,6 +41346,14 @@ Once overlap-sample items saturate, agreement statistics are available at
 | span (span, error_span, event_annotation, coreference, extractive_qa) | token-level κ (BIO), span F1 (exact + partial), Krippendorff's α<sub>U</sub>, γ (Mathet) |
 | geometry (image_annotation) | mean agreement, mean matched IoU, detection F1, mean object count difference |
 | temporal (audio_annotation, video_annotation) | mean agreement, mean matched IoU (temporal), detection F1, mean segment count difference |
+
+For nominal schemes, percent agreement is the share of annotator pairs that
+chose the same label, averaged over items. Cohen's κ is computed for each pair
+of annotators on the items that pair both answered, then averaged over pairs, so
+it needs no item that every annotator rated. Heterogeneous coverage often has
+none. A pair whose shared items all carry one label has no defined κ and is left
+out of the average. The JSON report carries the same value under
+`pairwise_cohen_kappa` too, for scripts written against that name.
 
 An item is scored only once it reaches its **full** cap, not as soon as it has
 two annotators, because a partly-annotated item's agreement moves as the rest
@@ -55748,7 +56047,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **160 top-level config keys**, **61 annotation types**, and
+It currently covers **161 top-level config keys**, **61 annotation types**, and
 **24 display types**.
 
 ### Editor validation

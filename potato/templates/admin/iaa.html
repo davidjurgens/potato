@@ -294,6 +294,22 @@
         {{ ui_lang.iaa_meta_scored|default('Each schema is scored with the metrics appropriate to its annotation type.') }}
       </p>
 
+      {# A declared machine rater is left out of the figures above. Saying so
+         is the whole point: without this line the annotator count simply drops
+         and nobody can tell whether a rater was excluded or an annotator quit. #}
+      {% if report.annotators and report.annotators.n_machine %}
+      <p class="iaa-meta iaa-machine-note">
+        <strong>{{ ui_lang.iaa_machine_excluded_title|default('Human annotators only.') }}</strong>
+        {{ report.annotators.n_machine }}
+        {{ ui_lang.iaa_machine_rater|default('declared machine rater') }}{{ '' if report.annotators.n_machine == 1 else 's' }}
+        {{ ui_lang.iaa_machine_excluded|default('excluded from the figures above:') }}
+        {% for uid, label in report.annotators.machine_detail.items() %}<code>{{ label }}</code>{{ ', ' if not loop.last }}{% endfor %}.
+        {% if report.pooling and report.pooling.note %}
+        <span class="iaa-scale-note">{{ report.pooling.note }}</span>
+        {% endif %}
+      </p>
+      {% endif %}
+
       {% if not report.schemas %}
         <div class="dashboard-card iaa-schema-card">
           <p class="iaa-empty">{{ ui_lang.iaa_empty_state|default('No overlap-sample items have reached their cap yet. Once the sample items have been annotated by the configured number of annotators, IAA will appear here.') }}</p>

@@ -474,6 +474,13 @@ class UserStateManager:
             config: Configuration dictionary containing user management settings
         """
         self.config = config
+
+        # Declared non-human raters, keyed by the user id they annotate under.
+        # Parsed once: a live config edit does not reach a running study
+        # anyway, and re-parsing per user would put a config walk in add_user.
+        from potato.annotator_origin import parse_machine_annotators
+        self._machine_annotator_roster = parse_machine_annotators(config)
+
         self.user_to_annotation_state = {}
         self.task_assignment = {}
         self.prolific_study = None
@@ -665,6 +672,13 @@ class UserStateManager:
                 user_state = InMemoryUserState(user_id, quota)
 
             self._apply_single_select_schemas(user_state)
+
+            # Stamp a declared machine rater here rather than in /register or
+            # /auth, so a machine that authenticates the ordinary way is still
+            # recorded as one and neither login route needs to change.
+            from potato.annotator_origin import stamp_user_state
+            stamp_user_state(user_state, self._machine_annotator_roster)
+
             self.user_to_annotation_state[user_id] = user_state
             logger.debug(f"User state created and stored: {user_state}")
             logger.debug(f"Users after adding: {list(self.user_to_annotation_state.keys())}")
@@ -1144,6 +1158,12 @@ class UserStateManager:
         user_state.prune_missing_assigned_instances()
         self._apply_single_select_schemas(user_state)
 
+        # Re-stamp on load in case the declaration changed since the state was
+        # written. stamp_user_state keeps the original recorded_at when nothing
+        # else moved, so the timestamp does not drift on every restart.
+        from potato.annotator_origin import stamp_user_state
+        stamp_user_state(user_state, self._machine_annotator_roster)
+
         if user_state.get_user_id() in self.user_to_annotation_state:
             logger.warning(f'User "{user_state.get_user_id()}" already exists in the user state manager, but is being overwritten by load_state()')
 
@@ -1549,6 +1569,11 @@ class UserState:
         # Save crowdsourcing platform metadata (provider, study/session IDs)
         d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
 
+        # Whether this participant is a person, and if not, which machine.
+        # Absent means human, so a state written before this field existed
+        # loads as one. See potato/annotator_origin.py.
+        d['origin'] = getattr(self, 'origin', {})
+
         return d
 
     def save(self, user_dir: str) -> None:
@@ -1700,6 +1725,9 @@ class UserState:
 
         # Restore crowdsourcing platform metadata if present
         user_state.crowd_metadata = j.get('crowd_metadata', {}) or {}
+
+        # Restore the rater's origin if present. An absent key is a person.
+        user_state.origin = j.get('origin', {}) or {}
 
         return user_state
 
@@ -2021,6 +2049,13 @@ class InMemoryUserState(UserState):
         # study/session IDs) so annotation output can be joined with the
         # platform's submission records.
         self.crowd_metadata = {}
+
+        # Whether this participant is a person, and if not, which machine and
+        # which version of it. Empty means human. Stamped from the
+        # machine_annotators roster by UserStateManager rather than by the
+        # login routes, so a machine that authenticates the ordinary way is
+        # still recorded as one. See potato/annotator_origin.py.
+        self.origin = {}
 
         # Caches the ai hints
         self.ai_hints = defaultdict(dict)
@@ -3145,6 +3180,11 @@ class InMemoryUserState(UserState):
         # Save crowdsourcing platform metadata (provider, study/session IDs)
         d['crowd_metadata'] = getattr(self, 'crowd_metadata', {})
 
+        # Whether this participant is a person, and if not, which machine.
+        # Absent means human, so a state written before this field existed
+        # loads as one. See potato/annotator_origin.py.
+        d['origin'] = getattr(self, 'origin', {})
+
         return d
 
     def save(self, user_dir: str) -> None:
@@ -3299,6 +3339,9 @@ class InMemoryUserState(UserState):
 
         # Restore crowdsourcing platform metadata if present
         user_state.crowd_metadata = j.get('crowd_metadata', {}) or {}
+
+        # Restore the rater's origin if present. An absent key is a person.
+        user_state.origin = j.get('origin', {}) or {}
 
         try:
             user_state.prune_missing_assigned_instances()

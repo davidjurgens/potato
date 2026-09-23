@@ -704,8 +704,8 @@ def _text_length_for_item(item) -> int:
 
 def _aggregate_nominal(rows):
     long_rows = []
-    pairwise_kappa = []
     fleiss_inputs = []
+    rated_items = []
     users_seen = set()
     for iid, per_user in rows.items():
         # Collapse multi-value into the first chosen label (single-label schema)
@@ -713,24 +713,28 @@ def _aggregate_nominal(rows):
         if len(flat) < 2:
             continue
         users_seen.update(flat)
+        rated_items.append(flat)
         for u, val in flat.items():
             long_rows.append((u, iid, val))
         fleiss_inputs.append(dict(Counter_(flat.values())))
 
     pair_users = sorted(users_seen)
-    seqs_by_user: Dict[str, list] = {u: [] for u in pair_users}
-    aligned_iids = []
-    for iid, per_user in rows.items():
-        flat = {u: v[0] for u, v in per_user.items() if v}
-        if all(u in flat for u in pair_users):
-            aligned_iids.append(iid)
-            for u in pair_users:
-                seqs_by_user[u].append(flat[u])
+    aligned_iids = [
+        iid for iid, per_user in rows.items()
+        if all(per_user.get(u) for u in pair_users)
+    ]
 
+    # Cohen's kappa is scored per pair on that pair's own overlap. Aligning
+    # everyone first kept only the items EVERY annotator rated, which under
+    # heterogeneous coverage is often none, and the coefficient was NaN.
+    # `pairwise_cohen_kappa` is kept as an alias for scripts that read it.
+    kappa = nominal.mean_cohen_kappa_over_shared_items(rated_items)
     return {
         "alpha_nominal": alpha.krippendorff_alpha(long_rows, level="nominal"),
         "fleiss_kappa": nominal.fleiss_kappa(fleiss_inputs),
-        "pairwise_cohen_kappa": nominal.pairwise_cohen_kappa(seqs_by_user) if seqs_by_user else float("nan"),
+        "percent_agreement": nominal.mean_pairwise_agreement(rated_items),
+        "cohen_kappa": kappa,
+        "pairwise_cohen_kappa": kappa,
         "n_items": len(rows),
         "n_aligned_items": len(aligned_iids),
         "n_annotators": len(pair_users),
@@ -1209,6 +1213,78 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
         if ustate is not None:
             user_states[uid] = ustate
 
+    from potato.annotator_origin import (
+        has_machine_participants, partition, summarize,
+    )
+
+    # Rater kind decides which raters a coefficient is computed over, and the
+    # split happens here rather than inside the gatherers. Every gatherer takes
+    # the same {user_id: user_state} mapping and every aggregator derives
+    # n_annotators from the rows it was handed, so restricting this one dict and
+    # re-running the same per-schema pipeline yields a correct report per
+    # partition with no gatherer or aggregator knowing that origin exists.
+    groups = partition(user_states)
+
+    def _report_for(states: Dict[str, Any]) -> Dict[str, Any]:
+        schemas, items = _schema_reports(
+            overlap_items, states, schemes, item_state_manager)
+        return {"schemas": schemas, "items": items}
+
+    human = _report_for(groups["human"])
+
+    if not has_machine_participants(user_states):
+        # No machine raters, so there is nothing to separate and the report is
+        # byte-identical to the one this function produced before partitioning
+        # existed. Every study that does not declare a machine annotator keeps
+        # exactly the numbers it had.
+        return {
+            "schemas": human["schemas"],
+            "items": human["items"],
+            "n_overlap_items": len(overlap_items),
+            "n_items_below_cap": n_items_below_cap,
+        }
+
+    machine = _report_for(groups["machine"])
+    pooled = _report_for(user_states)
+
+    # The headline stays human-only once any machine rater is present. Leaving
+    # it pooled is the bug: a reader takes the top-level number for inter-human
+    # reliability, and a run of the LLM simulator against a live study would
+    # quietly move it. The pooled figure is still reported, under a name that
+    # says what it mixes.
+    return {
+        "schemas": human["schemas"],
+        "items": human["items"],
+        "n_overlap_items": len(overlap_items),
+        "n_items_below_cap": n_items_below_cap,
+        "partitions": {
+            "human_human": human,
+            "machine_machine": machine,
+            "pooled": pooled,
+        },
+        "annotators": summarize(user_states),
+        "pooling": {
+            "headline": "human_human",
+            "note": (
+                "Machine raters are declared in this study, so the headline "
+                "figures cover human annotators only. Tool-versus-tool "
+                "agreement is under partitions.machine_machine, and the mixed "
+                "figure under partitions.pooled -- a coefficient over a "
+                "mixed human/machine reliability matrix is not an estimate of "
+                "either group's reliability."
+            ),
+        },
+    }
+
+
+def _schema_reports(overlap_items, user_states, schemes, item_state_manager):
+    """Per-schema metrics and the per-item breakdown, for one set of raters.
+
+    Split out of ``compute_overlap_iaa`` so the same pipeline can run once per
+    rater partition. ``item_report`` is built fresh per call rather than shared:
+    the loop writes each schema's per-item annotator count into it, so one
+    shared dict would have each partition overwrite the last one's counts.
+    """
     schema_report: Dict[str, Any] = {}
     item_report: Dict[str, Any] = {iid: {
         "annotators": sorted(item_state_manager.instance_annotators[iid]),
@@ -1287,12 +1363,7 @@ def compute_overlap_iaa(item_state_manager, user_state_manager, config: Dict[str
             item_report.setdefault(iid, {"annotators": [], "cap": -1, "schemas": {}})
             item_report[iid]["schemas"][name] = {"n_annotators": len(rows[iid])}
 
-    return {
-        "schemas": schema_report,
-        "items": item_report,
-        "n_overlap_items": len(overlap_items),
-        "n_items_below_cap": n_items_below_cap,
-    }
+    return schema_report, item_report
 
 
 def json_safe(value: Any) -> Any:

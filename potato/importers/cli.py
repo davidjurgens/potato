@@ -100,7 +100,18 @@ def parse_args(args=None):
               "FABRICATES AN ANNOTATOR and exists so import->export can be "
               "verified without a human opening each item. Without it, imported "
               "annotations are pre-annotations: they show as a starting point "
-              "and are only stored once a real annotator saves."))
+              "and are only stored once a real annotator saves. Pass "
+              "--as-machine-annotator to record NAME as a declared machine "
+              "rater instead of an undeclared person."))
+    parser.add_argument(
+        "--as-machine-annotator", metavar="KIND", nargs="?", const="tool",
+        choices=["tool", "llm"],
+        help=("Record the --seed-user as a declared machine rater of this kind "
+              "(tool or llm; default tool). The seeded state then carries an "
+              "origin, so agreement, adjudication and the IRT engine can tell "
+              "it apart from a person instead of counting it as one. Declare "
+              "the same id under machine_annotators in the project config so "
+              "the server keeps the declaration on later loads."))
     parser.add_argument(
         "--conll-document-unit", choices=["auto", "sentence", "file"],
         default="auto",
@@ -739,7 +750,9 @@ def _write_project(parsed, result, source: str,
 
     if parsed.seed_user:
         _write_seed_user(parsed.output_dir, parsed.seed_user,
-                         parsed.schema_name, result)
+                         parsed.schema_name, result,
+                         machine_kind=getattr(parsed, "as_machine_annotator", None),
+                         source_format=getattr(parsed, "input_format", None))
 
     for warning in result.warnings[:20]:
         logger.warning(warning)
@@ -757,13 +770,20 @@ def _write_project(parsed, result, source: str,
 
 
 def _write_seed_user(output_dir: str, username: str, schema_name: str,
-                     result) -> None:
+                     result, machine_kind: str = None,
+                     source_format: str = None) -> None:
     """
     Write the imported annotations as a user's saved work.
 
-    This fabricates an annotator and exists only so import->export can be
-    verified end to end without a human opening every item. It is off by
-    default for exactly that reason.
+    Without ``machine_kind`` this fabricates an annotator: the rows are
+    indistinguishable from a person's, which is why the flag is off by default
+    and why the warning below says not to use them in agreement analysis.
+
+    With ``machine_kind`` the seeded state carries an origin, so the rows are a
+    declared machine rater's rather than an anonymous human's. That is the
+    difference the importer's own guard was written about -- machines may be
+    raters, but not raters in disguise -- and it is what lets imported
+    predictions reach agreement, adjudication and the IRT engine at all.
     """
     user_dir = os.path.join(output_dir, "annotation_output", username)
     os.makedirs(user_dir, exist_ok=True)
@@ -797,14 +817,40 @@ def _write_seed_user(output_dir: str, username: str, schema_name: str,
         "phase_to_page_to_label_to_value": {},
         "phase_to_page_to_span_to_value": {},
     }
+    if machine_kind:
+        from datetime import datetime, timezone
+
+        state["origin"] = {
+            "kind": machine_kind,
+            "id": username,
+            "declared_in": "import",
+            "recorded_at": datetime.now(timezone.utc)
+                           .replace(microsecond=0).isoformat(),
+        }
+        if source_format:
+            state["origin"]["tool"] = source_format
+
     with open(os.path.join(user_dir, "user_state.json"), "w") as f:
         json.dump(state, f, indent=2)
 
     with_objects = sum(1 for record in label_to_value.values()
                        if json.loads(record[0][1]))
-    logger.warning(
-        "--seed-user wrote %d item(s) as '%s', %d of them carrying objects and "
-        "%d recorded as reviewed with none. This is fabricated annotator "
-        "work; do not include it in agreement or adjudication analysis.",
-        len(label_to_value), username, with_objects,
-        len(label_to_value) - with_objects)
+    if machine_kind:
+        logger.info(
+            "--seed-user wrote %d item(s) as '%s', %d of them carrying objects "
+            "and %d recorded as reviewed with none. Recorded as a declared "
+            "machine rater (%s), so it is excluded from human-human agreement "
+            "rather than counted as a person. Declare '%s' under "
+            "machine_annotators in the project config so the server keeps the "
+            "declaration when it reloads this state.",
+            len(label_to_value), username, with_objects,
+            len(label_to_value) - with_objects, machine_kind, username)
+    else:
+        logger.warning(
+            "--seed-user wrote %d item(s) as '%s', %d of them carrying objects "
+            "and %d recorded as reviewed with none. This is fabricated "
+            "annotator work; do not include it in agreement or adjudication "
+            "analysis. Pass --as-machine-annotator to record it as a declared "
+            "machine rater instead.",
+            len(label_to_value), username, with_objects,
+            len(label_to_value) - with_objects)
