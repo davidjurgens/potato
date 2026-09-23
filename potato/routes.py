@@ -9465,34 +9465,33 @@ def admin_create_reset_token():
 def forgot_password():
     """Self-service forgot password page.
 
+    Potato does not send email, so there is no channel that proves the
+    requester owns the account. The page therefore never creates or shows a
+    reset token: it tells the annotator to ask an administrator, who can issue
+    a link with ``POST /admin/create_reset_token`` or reset the password with
+    ``potato reset-password``.
+
     GET: Show the forgot password form.
-    POST: Generate a reset token and display the reset link.
+    POST: Show the same instructions for any username.
     """
     if request.method == "GET":
         return render_template("forgot_password.html",
                              title=config.get("annotation_task_name", "Annotation Platform"))
 
     username = request.form.get("username", "").strip()
-    # Always show success to prevent user enumeration
     if not username:
         return render_template("forgot_password.html",
                              title=config.get("annotation_task_name", "Annotation Platform"),
                              error="Please enter your username.")
 
-    user_authenticator = UserAuthenticator.get_instance()
-    token = user_authenticator.create_reset_token(username)
-
-    if token:
-        reset_link = f"{request.host_url.rstrip('/')}/reset/{token}"
-        return render_template("forgot_password.html",
-                             title=config.get("annotation_task_name", "Annotation Platform"),
-                             reset_link=reset_link,
-                             success=True)
-    else:
-        # Show same success message to prevent enumeration
-        return render_template("forgot_password.html",
-                             title=config.get("annotation_task_name", "Annotation Platform"),
-                             success=True)
+    # Same response whether or not the user exists, to prevent enumeration.
+    # No token is created here: a link handed to whoever typed the username
+    # would let anyone reset any account.
+    logger.info("Password reset requested via /forgot-password; "
+                "an administrator must issue the reset link")
+    return render_template("forgot_password.html",
+                         title=config.get("annotation_task_name", "Annotation Platform"),
+                         success=True)
 
 
 def reset_password_with_token(token):

@@ -10,7 +10,7 @@ Potato's authentication system supports:
 
 - **Per-user salted password hashing** using PBKDF2-SHA256 with 100,000 iterations
 - **Admin-initiated password reset** via CLI command or REST API
-- **Self-service password reset** via token-based reset links
+- **Token-based reset links** issued by an administrator
 - **Shared user credential files** for multi-server deployments
 - **Database authentication backend** using SQLite or PostgreSQL
 
@@ -75,19 +75,19 @@ curl -X POST http://localhost:8000/admin/reset_password \
 
 This endpoint requires the `admin_api_key` configured in your project (see [Admin Dashboard](../administration/admin_dashboard.md)).
 
-### Self-Service Password Reset
+### Reset Links
 
 Potato includes a token-based password reset flow for annotators who forget their passwords.
 
-#### The self-service reset flow
+#### The reset flow
 
-1. The annotator visits `/forgot-password` and enters their username
-2. The system generates a secure single-use reset token (valid for 24 hours)
-3. The reset link is displayed on screen for the admin to copy and share with the annotator
+1. The annotator visits `/forgot-password`, enters their username, and is told to contact the administrator
+2. The administrator generates a secure single-use reset token (valid for 24 hours) with the API below
+3. The administrator sends the link to the annotator via email or chat
 4. The annotator opens the link (`/reset/<token>`) and sets a new password
 5. The token is consumed (single-use) and the password is updated
 
-> **Note:** Potato does not send emails. The reset link is displayed on the page after submission. In a typical workflow, an administrator generates the token and sends the link to the annotator via email or chat.
+> **Note:** Potato does not send emails, so `/forgot-password` never shows a reset link. Anyone can submit that form, and showing the link there would let them reset any account, including an admin's. Reset links come only from the admin API or the `potato reset-password` CLI.
 
 #### Generating Tokens via API
 
@@ -113,7 +113,7 @@ Optional: set a custom expiry with `"ttl_hours": 48`.
 
 #### Login Page Link
 
-When `require_password: true` is set, a "Forgot Password?" link appears on the login page, directing annotators to the self-service reset form.
+When `require_password: true` is set, a "Forgot Password?" link appears on the login page, directing annotators to a page that tells them to ask the administrator for a reset link.
 
 ## Where accounts are stored
 
