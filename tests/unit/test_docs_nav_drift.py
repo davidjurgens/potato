@@ -92,6 +92,17 @@ class TestNavCoversEveryPage:
         assert len(markdown_pages) > 100
 
 
+def _load_generator():
+    """Import scripts/generate_llms_full.py, which is not an importable package."""
+    spec = pytest.importorskip("importlib.util")
+    loader = spec.spec_from_file_location(
+        "generate_llms_full", REPO_ROOT / "scripts" / "generate_llms_full.py"
+    )
+    module = spec.module_from_spec(loader)
+    loader.loader.exec_module(module)
+    return module
+
+
 class TestGeneratedIndexes:
     """
     `llms.txt` is hand-curated; `llms-full.txt` is generated. Both are the entry
@@ -99,12 +110,7 @@ class TestGeneratedIndexes:
     """
 
     def test_llms_full_is_current(self):
-        spec = pytest.importorskip("importlib.util")
-        loader = spec.spec_from_file_location(
-            "generate_llms_full", REPO_ROOT / "scripts" / "generate_llms_full.py"
-        )
-        module = spec.module_from_spec(loader)
-        loader.loader.exec_module(module)
+        module = _load_generator()
 
         assert LLMS_FULL.exists(), (
             "docs/llms-full.txt is missing. "
@@ -113,6 +119,42 @@ class TestGeneratedIndexes:
         assert LLMS_FULL.read_text(encoding="utf-8") == module.render(), (
             "docs/llms-full.txt is stale. "
             "Regenerate with: python scripts/generate_llms_full.py"
+        )
+
+    def test_no_page_is_emitted_twice_under_windows_separators(self, monkeypatch):
+        r"""
+        The generator deduplicates nav pages against the pages it walks off
+        disk. The nav yields "deployment/reverse-proxy.md" while `os.walk` on
+        Windows yields "deployment\reverse-proxy.md", so the `seen` check
+        never matched there and every nav page was emitted a second time as an
+        off-nav extra. That doubled the file, and neither `--check` nor
+        `test_llms_full_is_current` could pass on Windows.
+
+        CI runs on Linux only, where the separators agree and the bug is
+        invisible, so this test forces the Windows spelling: `os.walk` paths
+        come back with backslashes and `os.sep` reports one.
+        """
+        import os
+
+        module = _load_generator()
+        real_relpath = os.path.relpath
+
+        monkeypatch.setattr(os, "sep", "\\")
+        monkeypatch.setattr(
+            os.path, "relpath",
+            lambda *a, **k: real_relpath(*a, **k).replace("/", "\\"),
+        )
+        ordered, extras = module.ordered_docs()
+
+        pages = ordered + extras
+        repeated = sorted({page for page in pages if pages.count(page) > 1})
+        assert not repeated, f"emitted twice: {repeated[:5]}"
+
+        nav = set(ordered)
+        readmitted = sorted(e for e in extras if e.replace("\\", "/") in nav)
+        assert not readmitted, (
+            "nav pages came back as off-nav extras under Windows separators: "
+            f"{readmitted[:5]}"
         )
 
     def test_llms_txt_links_resolve_to_real_pages(self):

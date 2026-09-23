@@ -76,7 +76,15 @@ def ordered_docs():
         for filename in sorted(filenames):
             if not filename.endswith(".md"):
                 continue
-            rel = os.path.relpath(os.path.join(dirpath, filename), DOCS)
+            # Posix separators, so the dedup below can match the nav paths and
+            # the emitted source markers read the same on every platform.
+            # os.walk gives "deployment\reverse-proxy.md" on Windows while the
+            # nav gives "deployment/reverse-proxy.md", so `rel not in seen` was
+            # always true there and every nav page was emitted a second time as
+            # an extra -- roughly doubling the file and leaving --check unable
+            # to pass.
+            rel = os.path.relpath(
+                os.path.join(dirpath, filename), DOCS).replace(os.sep, "/")
             if rel not in seen and rel not in EXCLUDE:
                 extras.append(rel)
                 seen.add(rel)
