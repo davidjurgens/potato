@@ -33,7 +33,9 @@ and uses it for:
 - the client-side prefix exposed to the browser as `window.config.url_prefix`,
   which wraps `fetch()`, `navigator.sendBeacon()`, `EventSource`, and
   root-relative `href`/`action`/`src`/`poster`/`srcset` attributes (including
-  dynamically inserted media and data elements).
+  dynamically inserted media and data elements), and
+- the `Path` of the `session` cookie. See
+  [Two studies on one host](#two-studies-on-one-host).
 
 The helper lives in `potato/templates/_url_prefix.js`. The annotation page, the
 admin pages and the dashboards all include it. If you add a page that builds a
@@ -124,6 +126,37 @@ location /app1/api/ {
 }
 ```
 
+## Two studies on one host
+
+One host can serve several studies, for example `/app1` and `/app2` from two
+Potato processes behind one nginx. Each process signs the `session` cookie with
+its own key.
+
+Flask scopes that cookie to `SESSION_COOKIE_PATH` or `APPLICATION_ROOT`. Both
+default to `/`. Without a prefix, the browser keeps one cookie for the whole
+host. The second login then overwrites the first study's cookie, and neither
+process can verify the other's signature. The annotator returns to the login
+page of the study that they did not log in to last. One study alone never shows
+this problem. The second study breaks both.
+
+Potato scopes the cookie to the prefix, so `/app1` and `/app2` hold separate
+cookies and the studies do not collide. Both options below give the same
+result, because both set `SCRIPT_NAME`.
+
+Two conditions apply:
+
+- Each service must set its own prefix. If `/app2` has no prefix, its cookie
+  returns to `Path=/` and overwrites the cookie of `/app1` again.
+- Give the two studies different signing keys, or share one deliberately. See
+  `secret_key` and `POTATO_SECRET_KEY` in [Installation & Usage](usage.md).
+
+To set one path for every study on the host, set `SESSION_COOKIE_PATH`. An
+explicit value wins over the prefix.
+
+Annotators do not have to clear their cookies after an upgrade. A browser sends
+the longest matching path first, so the new `Path=/app1` cookie wins over a
+stale `Path=/` cookie.
+
 ## Verifying
 
 1. Load `https://host/app1/` and confirm CSS/JS load (no 404s in DevTools).
@@ -133,6 +166,9 @@ location /app1/api/ {
 5. Follow Logout, and the Finish link on the last item, and confirm neither
    leaves the prefix.
 6. If using live agent eval, confirm the stream connects and updates.
+7. If the host serves more than one study, sign in to each one in one browser.
+   Confirm that each `session` cookie shows its own `Path` in DevTools, and that
+   the first study stays signed in.
 
 Step 2 is worth doing first, and on a browser with no session. Until v2.8.3 the
 login page was the one page the prefix did not reach: its two forms posted to
