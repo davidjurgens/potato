@@ -2,6 +2,95 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [2.9.4] - Password Reset Fix and Phone Usability
+
+A security fix for `/forgot-password`, which anyone could use to take over a
+password account. Upgrade now if your server is reachable by people you do not
+trust. This release also makes the annotate page usable on phones, adds
+declared machine annotators, and fixes several reverse-proxy and deploy bugs.
+
+### Security
+
+- **`/forgot-password` gave a reset link to whoever asked**
+  ([GHSA-43v4-43pw-4rp2](https://github.com/davidjurgens/potato/security/advisories/GHSA-43v4-43pw-4rp2)).
+  The form needed no login. It created a reset token for any username
+  submitted and showed the `/reset/<token>` link on the page, so anyone who
+  could reach the server could take over any password account, admin-role
+  accounts included. The form now creates no token and returns the same page
+  for every username; that page tells the annotator to ask the
+  administrator. Reset links come only from `POST /admin/create_reset_token` (admin key or RBAC
+  admin) and the `potato reset-password` CLI. There is no setting to bring the
+  old behaviour back: Potato sends no email, so it has no safe way to deliver a
+  self-service link. Reported, with a patch, by HDEF (hdef-devteam).
+
+### Phones
+
+A sweep of 20 task types on an iPhone 13 found pages that fit on the screen but
+were hard to use. On phones and other touch screens:
+
+- The task scrolls with the page, not inside a box within it. That box came
+  from the card height limit on image tasks and the 500px dialogue field.
+- The header is two rows instead of three.
+- The "desktop recommended" banner scrolls away instead of sticking, and shows
+  only when a task has a scheme not known to work by touch (span linking still
+  shows it).
+- Radio and checkbox rows, Likert and semantic-differential buttons, ranking
+  arrows, the slider and the image toolbar are at least 44px tall.
+- Multirate becomes a list of labelled rows instead of a table cut off at the
+  right edge.
+- Likert end labels stay inside the card, keyboard-shortcut hints are hidden,
+  and text inputs are at least 16px so iOS does not zoom in on focus.
+- **Span highlighting works by touch.** Long-press to select text, and a
+  "Highlight as" button appears at the bottom of the screen.
+- A long task name no longer pushes the page wider than the screen.
+
+Desktop is unchanged: size rules apply only to touch screens, layout rules only
+to narrow windows. See "Phones without Pocket Mode" in
+[Pocket Mode](docs/advanced/pocket_mode.md).
+
+### Machine annotators
+
+A study can list the raters that are programs (annotation tools, detectors,
+LLMs) under a `machine_annotators` block. Before this they were either
+pre-annotations in the item data, out of reach of agreement and adjudication,
+or simulator users counted as people. With the declaration:
+
+- `/admin/iaa` reports human–human, machine–machine and pooled agreement, with
+  human-only headline figures; `/admin/api/agreement` and MACE leave machines
+  out.
+- Psychometrics can model tool ability, and adjudication can queue machine
+  raters. Machine consensus never promotes gold on its own.
+- csv, tsv, parquet, HuggingFace and publish-bundle exports gain
+  `annotator_origin` and `annotator_origin_detail` columns when any record came
+  from a machine; all-human studies export as before.
+- `require_declaration` refuses writes from anyone neither declared nor on the
+  roster.
+
+See [Machine annotators](docs/advanced/machine_annotators.md) and the example in
+`examples/advanced/machine-annotators/`.
+
+### Bug fixes
+
+- **Two studies on one host shared one session cookie.** Behind a reverse
+  proxy serving `/app1` and `/app2`, logging in to one logged you out of the
+  other. The cookie is now scoped to the URL prefix. Annotators do not need to
+  clear cookies. (#172, Eyecatch3r)
+- **Adjudication did not work behind a URL prefix.** Its API calls went to the
+  bare host. Its header also lost the Logout button to a long task name, and
+  the queue scrolled the page sideways below 768px.
+- The phone-to-Pocket redirect, three redirects in Rooms and one on the
+  codebook page dropped the URL prefix.
+- **Redeploying to an existing HuggingFace Space failed with 402.**
+  HuggingFace bills the create call even when the Space exists; `potato deploy
+  up` now skips it for an existing Space.
+- The nominal IAA report declared `percent_agreement` and `cohen_kappa` but
+  emitted neither. Cohen's kappa is now computed per pair on shared items.
+- The simulator CLI overwrote `user_count`, `strategy`, `parallel_users` and
+  `output_dir` from its defaults, so a config file could not set them.
+- On Windows, `docs/llms-full.txt` came out with every page twice (#173) and
+  the config reference was written in the locale encoding (#174). Both from
+  Eyecatch3r.
+
 ## [2.9.3] - AI Toolbar Fixes
 
 Fixes two layout problems that 2.9.2 brought into the image and video AI
