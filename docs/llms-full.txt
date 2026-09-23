@@ -41655,11 +41655,12 @@ navigation, offline annotation with automatic sync, and home-screen
 installation as a PWA. Desktop users see the normal interface; nothing
 changes for them.
 
-Not every annotation type belongs on a phone — span highlighting and bounding
-boxes are desktop tasks. Potato is explicit about this: touch-capable tasks
-get the mobile interface, tasks that aren't get a clear warning instead of a
-degraded UI, and the admin dashboard shows who is annotating from which kind
-of device either way.
+Pocket Mode hosts the simplest types: one card per item and one tap per
+label. Many more types work on a phone through the regular annotation page,
+which is laid out for phones (see [Phones without Pocket
+Mode](#phones-without-pocket-mode)). Only types that have not been checked by
+touch get a warning recommending a desktop browser. The admin dashboard shows
+who is annotating from which kind of device either way.
 
 ## Quick start
 
@@ -41679,10 +41680,10 @@ python potato/flask_server.py start examples/advanced/pocket-mode/config.yaml -p
 When a logged-in annotator reaches the annotation page, Potato decides where
 to send them:
 
-| Device | Task touch-capable, pocket enabled | Task NOT touch-capable |
-|---|---|---|
-| Desktop | normal interface | normal interface |
-| Phone / tablet | **redirected to the mobile interface** | normal interface + a dismissible warning that a desktop browser is recommended |
+| Device | Pocket-capable task, Pocket enabled | Other task, every type works by touch | Task with a type not checked for touch |
+|---|---|---|---|
+| Desktop | normal interface | normal interface | normal interface |
+| Phone / tablet | **redirected to the mobile interface** | normal interface, laid out for the phone | normal interface + a dismissible warning that a desktop browser is recommended |
 
 Detection happens in two layers:
 
@@ -41698,6 +41699,30 @@ Detection happens in two layers:
 
 Routing only applies to annotators in the annotation phase. Consent,
 instruction, and survey pages are unaffected.
+
+### Phones without Pocket Mode
+
+A phone that is not routed to Pocket gets the regular annotation page, laid
+out for a small screen:
+
+- The header takes two rows and scrolls away with the page. Long task names
+  are shortened, with the full name on hover.
+- The task scrolls with the page. Only PDF and document viewers keep their
+  own scrolling box.
+- Options, Likert-scale points, ranking arrows, slider handles and image
+  toolbar buttons are at least 44px to touch. Multirate grids become a list of
+  items, each with its ratings as rows.
+- Keyboard-shortcut hints are hidden.
+- **Span highlighting:** select text with a long press, then tap the
+  **Highlight as "label"** button that appears at the bottom of the screen.
+  Choose the label first, or the button asks for one.
+
+These types work on the regular page by touch: `radio`, `multiselect`,
+`likert`, `slider`, `number`, `text`, `pure_display`, `select`, `multirate`,
+`pairwise`, `bws`, `ranking`, `semantic_differential`, `span` and
+`image_annotation`. A task with any other type shows phone and tablet users a
+dismissible warning recommending a desktop browser. The warning scrolls away
+with the page.
 
 ### Desktop users can use it too
 
@@ -41801,9 +41826,9 @@ the headline ("3 of 12 users have visited from a phone or tablet"). The tab
 also states the routing situation for this task — auto-routing active, task
 capable but Pocket disabled, or task not mobile friendly.
 
-Why this matters: if your task is *not* touch-capable and the Devices tab
-shows annotators on phones anyway, those annotators saw the warning and kept
-going — worth checking their output or following up. Device data also
+Why this matters: if your task includes a type not checked for touch and the
+Devices tab shows annotators on phones anyway, those annotators saw the
+warning and kept going. Check their output or follow up with them. Device data also
 answers "would enabling Pocket Mode help?" before you turn it on: **visits
 are tracked whether or not Pocket Mode is enabled.**
 

@@ -7271,3 +7271,325 @@ body > .container-fluid {
     border-top: none;
     padding-top: 0;
 }
+
+/* ==========================================================================
+   Phones and touch
+   --------------------------------------------------------------------------
+   From a phone sweep of 20 task types (iPhone 13, 390x664; see
+   plans/mobile-usability.md and tests/playwright/test_mobile_layouts.py).
+   Layout rules key on max-width. Target-size rules key on `pointer: coarse`,
+   so a narrow desktop window keeps its density and a tablet gets the bigger
+   targets. 44px is Apple's minimum touch target; WCAG 2.2 AA asks for 24px.
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  /* The <=768px rule above capped the card at the viewport and let its
+     content scroll inside it -- a scroller within the page, which a thumb
+     cannot tell apart from the page (the image task showed 522px of 1265px).
+     The page scrolls; the card grows. */
+  .shadcn-card,
+  .shadcn-card.media-annotation {
+    max-height: none;
+  }
+
+  /* A text display's user-resizable box is a fixed-height inner scroller:
+     the dialogue task held its 735px of turns in a 500px box, and a swipe on
+     it moved the page 1px. On a phone the text flows at its own height.
+     PDF and document viewers keep their box; they need one. */
+  .display-field-resizable:not(:has(.pdf-display, .document-display)) {
+    height: auto !important;
+    max-height: none;
+    overflow: visible;
+    resize: none;
+  }
+
+  .display-field-resizable:not(:has(.pdf-display, .document-display)) .display-field-content {
+    height: auto;
+    overflow: visible;
+  }
+
+  .display-field-resizable:not(:has(.pdf-display, .document-display))::after {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  /* Header: two rows, not three. The brand used to fill row one alone, so
+     Logout wrapped to a second row and the counters to a third -- 140px of a
+     664px screen, before the banner. The brand and Logout now share row one
+     and the counters take a compact row two. Not sticky here: a header that
+     tall pinned to the top costs a fifth of the screen on every scroll. */
+  .potato-navbar {
+    position: static;
+  }
+
+  .potato-navbar .navbar-brand {
+    flex: 1 1 0;
+  }
+
+  .potato-navbar .navbar-brand .task-name {
+    font-size: var(--text-lg);
+  }
+
+  .potato-navbar .user-pill .username {
+    max-width: 9ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .potato-navbar .navbar-center {
+    justify-content: flex-start;
+    gap: 0.5rem;
+  }
+
+  .potato-navbar .navbar-center .navbar-divider {
+    display: none;
+  }
+
+  .potato-navbar .status-badge,
+  .potato-navbar .progress-section,
+  .potato-navbar .instance-number-section {
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Instance text: body size and ordinary spacing. 1.7 at the large size
+     spread a four-response ranking item over 1100px. Span tasks keep the
+     taller spacing their label chips need (.span-labels-on). */
+  #instance-text:not(.span-labels-on),
+  .instance-text-container:not(.span-labels-on) {
+    font-size: var(--text-base);
+    line-height: 1.55;
+  }
+
+  /* Every answer form spans the card. Forms are flex items of
+     .annotation_schema and shrank to their content: the stacked multirate
+     list used 187px of a 292px card, and option rows were tappable only as
+     far as their text reached. */
+  .annotation_schema > .annotation-form {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  /* fieldset[schema] is width: fit-content on desktop, which kept the
+     stacked multirate list at its widest label's width. */
+  .annotation_schema > .annotation-form > fieldset[schema] {
+    width: 100%;
+  }
+
+  /* Likert: the end labels sat either side of the scale and the right one
+     ran out of the card. Scale on its own row, end labels beneath it. */
+  .shadcn-likert-scale {
+    flex-wrap: wrap;
+    row-gap: 0.25rem;
+  }
+
+  .shadcn-likert-options {
+    order: -1;
+    flex: 1 0 100%;
+  }
+
+  .shadcn-likert-endpoint {
+    flex: 1 1 0;
+    max-width: 50%;
+    padding: 0;
+  }
+
+  .shadcn-likert-endpoint:last-of-type {
+    justify-content: flex-end;
+    text-align: right;
+  }
+
+  /* Multirate: a table with five rating columns does not fit 390px, and it
+     scrolled sideways inside its card with nothing to say two columns were
+     hidden. Each row becomes a block: the item, then its ratings as a list
+     of full-width choices. The rating text is in the label (see
+     schemas/multirate.py); desktop keeps the table and hides it. */
+  .shadcn-multirate-table,
+  .shadcn-multirate-table tbody,
+  .shadcn-multirate-table tr,
+  .shadcn-multirate-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .shadcn-multirate-table thead {
+    display: none;
+  }
+
+  .shadcn-multirate-table tbody tr {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .shadcn-multirate-table tbody td:first-child {
+    min-width: 0;
+    font-weight: 600;
+    padding: 0.25rem 0;
+    text-align: left;
+  }
+
+  .shadcn-multirate-table td.shadcn-radio-cell {
+    padding: 0;
+    border: none;
+    text-align: left;
+  }
+
+  .shadcn-multirate-table td:empty {
+    display: none;
+  }
+
+  .shadcn-multirate-choice {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 44px;
+    cursor: pointer;
+  }
+
+  .shadcn-multirate-choice .shadcn-multirate-choice-text {
+    position: static;
+    width: auto;
+    height: auto;
+    clip: auto;
+    overflow: visible;
+    white-space: normal;
+  }
+}
+
+/* The rating's name inside each multirate cell: read by the stacked phone
+   layout above, visually hidden in the desktop table (the column header says
+   it there, and the input's aria-label already names it). */
+.shadcn-multirate-choice-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (pointer: coarse) {
+  /* Option rows: the whole row is the target, not the text's line box. */
+  .shadcn-radio-option,
+  .shadcn-multiselect-item,
+  .shadcn-span-option {
+    min-height: 44px;
+  }
+
+  .shadcn-radio-option > .shadcn-radio-label,
+  .shadcn-multiselect-item > .shadcn-multiselect-label {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-height: 44px;
+  }
+
+  .shadcn-radio-input,
+  .shadcn-multiselect-checkbox {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex: none;
+  }
+
+  /* Likert-family buttons: a 32px circle with a 44px hit area. The circle
+     shrinks on a 10-point scale so the row still fits a phone. */
+  .shadcn-likert-button,
+  .semantic-differential-button {
+    --touch-dot: clamp(24px, 8.5vw, 32px);
+    width: var(--touch-dot);
+    height: var(--touch-dot);
+    position: relative;
+  }
+
+  .shadcn-likert-button::before,
+  .semantic-differential-button::before {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+  }
+
+  .shadcn-likert-track {
+    top: calc(clamp(24px, 8.5vw, 32px) / 2);
+  }
+
+  .semantic-differential-button.center {
+    width: calc(var(--touch-dot) - 4px);
+    height: calc(var(--touch-dot) - 4px);
+  }
+
+  /* Ranking: the arrows are the touch path -- HTML5 drag-and-drop does not
+     fire from a finger on most phones -- and they were 16x10px. */
+  .ranking-buttons {
+    flex-direction: row;
+    gap: 0.25rem;
+  }
+
+  .ranking-up,
+  .ranking-down {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  /* Slider: the invisible native input is what a finger drags, and it was
+     6px tall. Centre a 44px band on the track; enlarge the visible thumb. */
+  /* `input.` because the global input[type="range"] { height: 6px } outranks
+     a bare class -- it was also beating the base rule's height: 100%. */
+  input.custom-slider-input {
+    height: 44px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .custom-slider-thumb {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* Image annotation toolbar: label, zoom and edit buttons were 31px tall and
+     each label's visibility toggle 18x11px. */
+  .image-annotation-container .label-btn,
+  .image-annotation-container .zoom-btn,
+  .image-annotation-container .edit-btn,
+  .image-annotation-container .tool-btn {
+    min-height: 44px;
+  }
+
+  .image-annotation-container .zoom-btn,
+  .image-annotation-container .edit-btn {
+    min-width: 44px;
+  }
+
+  .image-annotation-container .label-visibility-toggle {
+    min-width: 36px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+  }
+
+  /* iOS zooms the page into any focused field under 16px. */
+  .annotation-form input[type="text"],
+  .annotation-form input[type="number"],
+  .annotation-form input:not([type]),
+  .annotation-form textarea,
+  .annotation-form select {
+    font-size: max(16px, 1em);
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* Keyboard-shortcut hints mean nothing without a keyboard. */
+  .keybinding-badge,
+  .pairwise-tile-shortcut,
+  .bws-tile-shortcut {
+    display: none !important;
+  }
+}

@@ -63,8 +63,10 @@
         var banner = document.createElement("div");
         banner.id = "device-routing-banner";
         banner.setAttribute("role", "status");
+        // In the flow, not sticky: pinned, it kept ~100px of a 664px phone
+        // screen for the whole session after being read once.
         banner.style.cssText =
-            "position:sticky;top:0;z-index:2000;display:flex;align-items:center;" +
+            "position:relative;z-index:2000;display:flex;align-items:center;" +
             "gap:12px;padding:10px 16px;background:#fdf3e2;color:#7a5310;" +
             "border-bottom:1px solid #e2c185;font-size:14px;line-height:1.4;";
         banner.innerHTML = html;
@@ -134,7 +136,11 @@
                     } else {
                         window.location.replace(potatoUrl("/pocket"));
                     }
-                } else if (!routing.capable && !warningDismissed()) {
+                } else if (routing.touch_usable === false && !warningDismissed()) {
+                    // Only for types not known to work by touch
+                    // (pocket/config.py TOUCH_USABLE_TYPES). It used to fire
+                    // whenever Pocket Mode could not host the task, which
+                    // included pairwise and best-worst scaling.
                     showBanner(
                         "Heads up: this task includes annotation types that are " +
                         "not optimized for phones or tablets. A desktop browser " +

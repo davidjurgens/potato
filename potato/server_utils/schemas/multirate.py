@@ -48,6 +48,10 @@ MULTIRATE_TEMPLATE = """
                                 <td {{ item.tooltip|safe }}>{{ item.label }}</td>
                                 {% for rating in ratings %}
                                     <td class="shadcn-radio-cell">
+                                        {#- The label makes the whole choice tappable and carries the
+                                            rating's name for the stacked phone layout; on desktop
+                                            the column header says it and the text is hidden. -#}
+                                        <label class="shadcn-multirate-choice">
                                         <input name="{{ item.name }}"
                                                type="radio"
                                                id="{{ item.id }}.{{ rating }}"
@@ -58,6 +62,8 @@ MULTIRATE_TEMPLATE = """
                                                schema="{{ schema_name }}"
                                                label_name="{{ item.label_name }}"
                                                aria-label="{{ item.label }}: {{ rating }}" />
+                                        <span class="shadcn-multirate-choice-text" aria-hidden="true">{{ rating }}</span>
+                                        </label>
                                     </td>
                                 {% endfor %}
                             {% else %}
@@ -309,13 +315,15 @@ DYNAMIC_MULTIRATE_JS = """
             var safeName = schemaName + ':::' + label.replace(/[^a-zA-Z0-9_]/g, '_');
             html += '<tr schema="multirate"><td>' + escapeHtml(label) + '</td>';
             for (var r = 0; r < ratings.length; r++) {
-                html += '<td class="shadcn-radio-cell"><input name="' + escapeAttr(safeName) +
+                html += '<td class="shadcn-radio-cell"><label class="shadcn-multirate-choice"><input name="' + escapeAttr(safeName) +
                     '" type="radio" id="' + escapeAttr(safeName) + '.' + escapeAttr(ratings[r]) +
                     '" value="' + escapeAttr(ratings[r]) +
                     '" onclick="this.blur();" validation="' + escapeAttr(validation) +
                     '" class="shadcn-multirate-radio annotation-input" schema="' +
                     escapeAttr(schemaName) + '" label_name="' + escapeAttr(label) +
-                    '" aria-label="' + escapeAttr(label + ': ' + ratings[r]) + '" /></td>';
+                    '" aria-label="' + escapeAttr(label + ': ' + ratings[r]) + '" />' +
+                    '<span class="shadcn-multirate-choice-text" aria-hidden="true">' +
+                    escapeHtml(ratings[r]) + '</span></label></td>';
             }
             html += '</tr>';
         }

@@ -132,8 +132,8 @@
     "version": "2"
   },
   "device-routing.js": {
-    "sha256": "f52d7fbb29b8ca21",
-    "version": "2"
+    "sha256": "bb9469cf15c13e06",
+    "version": "3"
   },
   "display-logic.css": {
     "sha256": "e74030575f27db93",
@@ -188,8 +188,8 @@
     "version": "15"
   },
   "image-annotation.js": {
-    "sha256": "e13a52c51c6c45c2",
-    "version": "37"
+    "sha256": "69fb76638a208d28",
+    "version": "38"
   },
   "instance-display.js": {
     "sha256": "44f86cac34ef4ab1",
@@ -372,16 +372,20 @@
     "version": "5"
   },
   "span-styles.css": {
-    "sha256": "f917576d7ae6c929",
-    "version": "1"
+    "sha256": "7663f277e058707c",
+    "version": "2"
+  },
+  "span-touch.js": {
+    "sha256": "c35d731585c1f6b9",
+    "version": "2"
   },
   "spreadsheet-display.css": {
     "sha256": "b09c16ed83007f42",
     "version": "1"
   },
   "styles.css": {
-    "sha256": "98c891ab0eb9d025",
-    "version": "33"
+    "sha256": "356c892c6d8b2ef1",
+    "version": "35"
   },
   "thinkaloud.js": {
     "sha256": "cfad75fe88b69eb4",

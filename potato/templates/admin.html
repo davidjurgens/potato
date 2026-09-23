@@ -791,11 +791,15 @@
         const summary = document.getElementById("devicesSummary");
         const routing = data.routing || {};
         const s = data.summary || {};
+        // Matches device-routing.js: the warning shows only when a type is
+        // outside TOUCH_USABLE_TYPES, not whenever Pocket cannot host the task.
         const routingLine = routing.available
           ? "Touch devices are auto-routed to the mobile interface (/pocket)."
           : routing.capable
-            ? "Task is touch-capable, but Pocket Mode is not enabled — phones get the desktop UI."
-            : "This task includes annotation types that are not mobile friendly; touch visitors see a warning.";
+            ? "Task is Pocket-capable, but Pocket Mode is not enabled — phones get the regular page, which works by touch."
+            : routing.touch_usable === false
+              ? "This task includes annotation types not verified for touch; phone and tablet visitors see a warning recommending a desktop browser."
+              : "Phones get the regular page, which works by touch for every type in this task. Pocket Mode cannot host it.";
         summary.innerHTML = `
           <p><strong>${s.n_touch_users || 0}</strong> of <strong>${s.n_users_seen || 0}</strong>
           users seen so far have visited from a phone or tablet.</p>

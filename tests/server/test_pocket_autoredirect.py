@@ -111,6 +111,7 @@ class TestAutoRedirectCapableTask:
         assert payload == {
             "enabled": True, "capable": True, "auto_redirect": True,
             "available": True, "incompatible_schemes": [],
+            "touch_usable": True, "touch_limited_schemes": [],
         }
 
     def test_device_tracking_and_admin_api(self, flask_server):

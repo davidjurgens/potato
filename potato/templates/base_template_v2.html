@@ -30,10 +30,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/font-awesome-6.7.2/css/all.min.css') }}">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=34">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v=35">
 
     <!-- Span Annotation Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='span-styles.css') }}?v=2">
 
     <!-- Turn-Level Annotation Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='turn-annotations.css') }}?v=1">
@@ -671,6 +671,8 @@
          whether or not `instance_display` is declared. -->
     <script src="{{ url_for('static', filename='instance-fields.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='span-core.js') }}?v=22"></script>
+    <!-- Touch path for span highlighting; no-op on a fine pointer. -->
+    <script src="{{ url_for('static', filename='span-touch.js') }}?v=2"></script>
     <script src="{{ url_for('static', filename='ai_assistant_manager.js') }}?v=4"></script>
     <!-- Display Logic Manager (conditional schema branching) - must load before annotation.js -->
     <script src="{{ url_for('static', filename='display-logic.js') }}?v=4"></script>
@@ -694,7 +696,7 @@
     <!-- Device routing: send phones/tablets to /pocket when the task supports
          it; warn them when it doesn't. Unconditional — the "not mobile
          friendly" warning must work even when Pocket Mode is off. -->
-    <script src="{{ url_for('static', filename='device-routing.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='device-routing.js') }}?v=3"></script>
     <!-- Truth Serum: surprisingly-popular prediction widget (conditional) -->
     {% if truth_serum_enabled | default(false) %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/truth-serum.css') }}?v=1">
@@ -738,7 +740,7 @@
          restore of a saved mask. -->
     <script src="{{ url_for('static', filename='mask-buffer.js') }}?v=1"></script>
     <!-- Image annotation manager -->
-    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=37"></script>
+    <script src="{{ url_for('static', filename='image-annotation.js') }}?v=38"></script>
     {% endif %}
 
     <!-- Deep zoom, for images too large to send to a browser as one file.

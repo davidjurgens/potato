@@ -30,6 +30,7 @@ from potato.pocket.config import (
     PocketConfig,
     parse_pocket_config,
     pocket_capability,
+    touch_usability,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,6 +107,7 @@ def pocket_routing_state() -> Dict[str, Any]:
         except Exception:
             app_config = {}
     capable, incompatible = pocket_capability(app_config or {})
+    touch_usable, touch_limited = touch_usability(app_config or {})
     auto_redirect = bool(_pocket_config.auto_redirect) if enabled else False
     return {
         "enabled": enabled,
@@ -113,6 +115,10 @@ def pocket_routing_state() -> Dict[str, Any]:
         "auto_redirect": auto_redirect,
         "available": enabled and capable and auto_redirect,
         "incompatible_schemes": incompatible,
+        # Whether the regular annotate page works by touch. Drives the
+        # "desktop browser recommended" warning in device-routing.js.
+        "touch_usable": touch_usable,
+        "touch_limited_schemes": touch_limited,
     }
 
 

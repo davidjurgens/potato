@@ -334,3 +334,34 @@
     );
     opacity: 0.5;
 }
+
+/* Touch highlight button (span-touch.js): pinned above the bottom edge while
+   a text selection is live on a phone. */
+.span-touch-highlight {
+    position: fixed;
+    left: 50%;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    z-index: 2100;
+    min-height: 48px;
+    max-width: calc(100vw - 32px);
+    padding: 0 20px;
+    border: none;
+    border-radius: 24px;
+    background: var(--primary, #6e56cf);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.span-touch-highlight:disabled {
+    background: #6b7280;
+}
+
+.span-touch-highlight[hidden] {
+    display: none;
+}
