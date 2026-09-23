@@ -255,6 +255,20 @@ class HuggingFaceProvider(Provider):
                 "--demo only if that is acceptable.") from exc
 
     def _ensure_space(self, api, repo_id: str, *, private: bool) -> None:
+        # Creating a Docker Space needs a paid plan; updating one does not.
+        # HuggingFace bills the create call even with exist_ok=True, so an
+        # existing Space must never reach create_repo -- otherwise `deploy up`
+        # 402s on the redeploy path, which is the very thing the error message
+        # below tells the user is free.
+        try:
+            if api.repo_exists(repo_id, repo_type="space"):
+                self.console(f"Space ready: {repo_id} (existing)")
+                return
+        except Exception:
+            # A probe, not the contract. If it fails, fall through and let
+            # create_repo produce the real error.
+            pass
+
         # Deliberately broad. huggingface_hub raises several exception types for
         # an HTTP error and has changed which, so matching on a class would let
         # the 402 through as a bare traceback -- and a paid-plan requirement is
