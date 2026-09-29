@@ -94,6 +94,23 @@ class ThresholdConfig:
     # labeling so the human can teach the model the boundary it's missing.
     edge_case_suggestion_agreement_rate: float = 0.7
     edge_case_suggestion_min_compared: int = 5
+    # A codebook edit (rename/delete/merge/definition change) during
+    # annotation invalidates the LLM side of the agreement comparison for
+    # the label ("part" of the codebook) it touched. Re-running the LLM
+    # on every single edit is accurate but slow when edits arrive in a
+    # burst (e.g. a human working through several disagreements in a
+    # row). Instead, each label accumulates its own count of qualifying
+    # edits independently and only triggers a relabel sweep of the
+    # instances connected to it (current LLM prediction == that label)
+    # once its own count reaches this threshold — editing "positive"
+    # repeatedly doesn't burn down "negative"'s budget or trigger a sweep
+    # of "negative"'s instances. agreement_metrics.stale_parts tracks
+    # each label's progress toward this; the aggregate
+    # agreement_metrics.stale is set as soon as any label's first
+    # qualifying edit lands, so the displayed rate is honestly flagged as
+    # out of date while changes accumulate. See
+    # SoloModeManager._on_codebook_change.
+    min_codebook_changes_before_relabel: int = 3
 
 
 @dataclass
@@ -370,6 +387,9 @@ class SoloModeConfig:
         if self.thresholds.confidence_low >= self.thresholds.confidence_high:
             errors.append("confidence_low must be less than confidence_high")
 
+        if self.thresholds.min_codebook_changes_before_relabel < 1:
+            errors.append("min_codebook_changes_before_relabel must be at least 1")
+
         # Validate uncertainty strategy
         valid_strategies = [
             'direct_confidence', 'direct_uncertainty',
@@ -474,6 +494,8 @@ def parse_solo_mode_config(config_data: Dict[str, Any]) -> SoloModeConfig:
             'edge_case_suggestion_agreement_rate', 0.7),
         edge_case_suggestion_min_compared=thresh_data.get(
             'edge_case_suggestion_min_compared', 5),
+        min_codebook_changes_before_relabel=thresh_data.get(
+            'min_codebook_changes_before_relabel', 3),
     )
 
     # Parse instance selection config

@@ -7,6 +7,17 @@ verbose: true
 debug: true
 
 annotation_task_name: "sentiment-solo-demo"
+
+# Pre-fills the Solo Mode Setup screen so you don't have to type a task
+# description every run. It's just a default — edit it on the Setup
+# screen and your edit wins. (Leave it out to start from a blank Setup
+# form.)
+task_description: >-
+  Classify the sentiment expressed in each short personal reflection as
+  positive, negative, or neutral. Positive means the text expresses
+  satisfaction or happiness; negative means dissatisfaction or complaints;
+  neutral means it's factual or objective without clear sentiment.
+
 output_annotation_dir: "annotations"
 
 # Without this, auth defaults to in_memory with no configured file, and

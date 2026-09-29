@@ -1,99 +1,36 @@
 {
-  "current_phase": "parallel-annotation",
+  "current_phase": "contrast-set-review",
   "transition_history": [
     {
       "from_phase": "setup",
       "to_phase": "prompt-review",
-      "timestamp": "2026-02-18T18:42:30.348837",
+      "timestamp": "2026-09-22T15:01:33.517166",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "prompt-review",
       "to_phase": "edge-case-synthesis",
-      "timestamp": "2026-02-18T18:42:53.788933",
+      "timestamp": "2026-09-22T15:01:35.479624",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "edge-case-synthesis",
       "to_phase": "edge-case-labeling",
-      "timestamp": "2026-02-18T18:43:07.932953",
+      "timestamp": "2026-09-22T15:01:58.749116",
       "reason": "",
       "metadata": {}
     },
     {
       "from_phase": "edge-case-labeling",
-      "to_phase": "prompt-validation",
-      "timestamp": "2026-02-18T18:44:46.702676",
-      "reason": "",
-      "metadata": {}
-    },
-    {
-      "from_phase": "prompt-validation",
-      "to_phase": "parallel-annotation",
-      "timestamp": "2026-02-18T22:21:50.180787",
-      "reason": "",
-      "metadata": {}
-    },
-    {
-      "from_phase": "parallel-annotation",
-      "to_phase": "edge-case-synthesis",
-      "timestamp": "2026-07-28T12:59:46.043092",
-      "reason": "",
-      "metadata": {}
-    },
-    {
-      "from_phase": "edge-case-synthesis",
-      "to_phase": "edge-case-labeling",
-      "timestamp": "2026-07-28T13:00:02.819530",
-      "reason": "",
-      "metadata": {}
-    },
-    {
-      "from_phase": "edge-case-labeling",
-      "to_phase": "prompt-validation",
-      "timestamp": "2026-08-12T15:25:59.350601",
-      "reason": "",
-      "metadata": {}
-    },
-    {
-      "from_phase": "prompt-validation",
-      "to_phase": "parallel-annotation",
-      "timestamp": "2026-08-12T15:25:59.353373",
-      "reason": "",
-      "metadata": {}
-    },
-    {
-      "from_phase": "parallel-annotation",
-      "to_phase": "edge-case-synthesis",
-      "timestamp": "2026-08-12T15:31:20.142915",
-      "reason": "",
-      "metadata": {}
-    },
-    {
-      "from_phase": "edge-case-synthesis",
-      "to_phase": "edge-case-labeling",
-      "timestamp": "2026-08-12T15:31:54.890586",
-      "reason": "",
-      "metadata": {}
-    },
-    {
-      "from_phase": "edge-case-labeling",
-      "to_phase": "prompt-validation",
-      "timestamp": "2026-08-12T15:37:15.053049",
-      "reason": "",
-      "metadata": {}
-    },
-    {
-      "from_phase": "prompt-validation",
-      "to_phase": "parallel-annotation",
-      "timestamp": "2026-08-12T15:37:15.060634",
+      "to_phase": "contrast-set-review",
+      "timestamp": "2026-09-22T15:07:30.204398",
       "reason": "",
       "metadata": {}
     }
   ],
   "phase_data": {},
-  "started_at": "2026-02-18T18:42:30.348848",
+  "started_at": "2026-09-22T15:01:33.517202",
   "completed_at": null
 }

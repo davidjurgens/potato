@@ -102,6 +102,16 @@ solo_mode:
     minimum_validation_sample: 8
     confidence_low: 0.5
     periodic_review_interval: 25
+    # A codebook edit made while resolving a disagreement invalidates the
+    # LLM side of the comparison for the label it touched. The codebook
+    # is batched per label ("part") — each label waits for this many of
+    # its own qualifying edits (rename/delete/merge/definition change)
+    # before its instances get a relabel sweep, so editing one label
+    # doesn't force a re-check of every other label's instances too.
+    # Until a label's sweep runs, the dashboard marks the agreement rate
+    # stale (a "*", with a tooltip listing the pending label(s)) so it's
+    # never silently shown as current.
+    min_codebook_changes_before_relabel: 3
 
   instance_selection:
     low_confidence_weight: 0.3

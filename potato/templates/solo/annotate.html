@@ -34,6 +34,15 @@
 
     .solo-nav-history:empty { display: none; }
 
+    /* Marks a metric as computed against an out-of-date codebook —
+       accumulated edits are still pending a relabel sweep. */
+    .stale-marker {
+        color: #f59e0b;
+        cursor: help;
+        margin-left: 0.1rem;
+        font-weight: 700;
+    }
+
     /* ── Sidebar Agreement refresh + relabel-pending note ───────── */
     .sidebar-agreement-refresh {
         display: inline-flex;
@@ -578,7 +587,14 @@
 <div class="stat-item">
     <span class="stat-label">Agreement</span>
     <span class="stat-value">
-        <span id="sidebar-agreement-value">{{ (stats.agreement_rate * 100)|int }}%</span>
+        {% set parts_desc = [] %}
+        {% for name, count in (stats.stale_parts or {}).items() %}
+          {% set _ = parts_desc.append(name ~ ' (' ~ count ~ ' pending)') %}
+        {% endfor %}
+        <span id="sidebar-agreement-value">{{ (stats.agreement_rate * 100)|int }}%</span><span
+            id="sidebar-agreement-stale" class="stale-marker"
+            title="{% if parts_desc %}Label(s) changed since re-checked: {{ parts_desc|join(', ') }} — treat this rate as approximate for those labels until their relabel sweep runs.{% else %}Codebook changed since this rate was last verified ({{ stats.pending_codebook_changes or 0 }} change(s) pending re-check) — treat it as approximate until the next relabel sweep.{% endif %}"
+            {% if not stats.agreement_stale %}hidden{% endif %}>*</span>
         <button type="button" id="sidebar-agreement-refresh"
                 class="sidebar-agreement-refresh"
                 title="Refresh agreement rate for the current prompt"
@@ -928,7 +944,8 @@
     (function () {
         const llmEl = document.getElementById('sidebar-llm-labeled-value');
         const remainingEl = document.getElementById('sidebar-remaining-value');
-        if (!llmEl && !remainingEl) return;
+        const staleEl = document.getElementById('sidebar-agreement-stale');
+        if (!llmEl && !remainingEl && !staleEl) return;
         const statusUrl = "{{ url_for('solo_mode.api_status') }}";
 
         function poll() {
@@ -941,6 +958,27 @@
                     }
                     if (remainingEl && stats.remaining !== undefined) {
                         remainingEl.textContent = stats.remaining;
+                    }
+                    const agreement = d.agreement_metrics || {};
+                    if (staleEl) {
+                        staleEl.hidden = !agreement.stale;
+                        if (agreement.stale) {
+                            const parts = agreement.stale_parts || {};
+                            const names = Object.keys(parts);
+                            if (names.length) {
+                                const desc = names.map(
+                                    n => n + ' (' + parts[n] + ' pending)'
+                                ).join(', ');
+                                staleEl.title = 'Label(s) changed since re-checked: '
+                                    + desc + ' — treat this rate as approximate for '
+                                    + 'those labels until their relabel sweep runs.';
+                            } else {
+                                staleEl.title = 'Codebook changed since this rate was '
+                                    + 'last verified (' + (agreement.pending_codebook_changes || 0)
+                                    + ' change(s) pending re-check) — treat it as '
+                                    + 'approximate until the next relabel sweep.';
+                            }
+                        }
                     }
                 })
                 .catch(() => {});

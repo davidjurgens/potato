@@ -131,18 +131,105 @@
         "disagreement_resolved": false,
         "resolution_label": null
       }
+    },
+    "12": {
+      "primary_theme": {
+        "instance_id": "12",
+        "schema_name": "primary_theme",
+        "predicted_label": "wait times",
+        "confidence_score": 0.5,
+        "uncertainty_score": 0.5,
+        "prompt_version": 1,
+        "timestamp": "2026-09-15T14:52:49.682943",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The text describes a long delay (three months) between the initial action of seeking care and the ability to schedule it, which fits the definition of appointment lead time under 'wait times'. It is not an 'access barrier' because the system is reachable, just slow to respond. It is not 'provider trust' as it describes a logistical delay rather than a lack of credibility or being unheard. It is not a 'cost concern' as no monetary issues are mentioned.**",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "9": {
+      "primary_theme": {
+        "instance_id": "9",
+        "schema_name": "primary_theme",
+        "predicted_label": "access barriers",
+        "confidence_score": 0.5,
+        "uncertainty_score": 0.5,
+        "prompt_version": 1,
+        "timestamp": "2026-09-15T14:53:36.139074",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The patient describes a language barrier and the inability to navigate the paperwork as the reason they stopped seeking care. This fits the definition of a structural obstacle (language/paperwork) that blocks getting to or navigating the system, which is explicitly listed under 'access barriers'. It is not a cost concern, a wait time issue, or a trust issue regarding the clinician's expertise/judgment, but rather a system-level barrier to entry. ",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "8": {
+      "primary_theme": {
+        "instance_id": "8",
+        "schema_name": "primary_theme",
+        "predicted_label": "wait times",
+        "confidence_score": 0.5,
+        "uncertainty_score": 0.5,
+        "prompt_version": 1,
+        "timestamp": "2026-09-15T14:53:27.393712",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The patient is describing a delay in being seen after they have already arrived at the clinic and have a scheduled appointment, which matches the definition of 'wait times'. It is not an access barrier because they were able to reach the clinic, and it is not a cost or trust issue.  ,100, ",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "7": {
+      "primary_theme": {
+        "instance_id": "7",
+        "schema_name": "primary_theme",
+        "predicted_label": "provider trust",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-09-15T14:53:07.226127",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The text explicitly mentions feeling 'heard', 'trusting her judgment', and the provider 'explaining things', which aligns directly with the definition of confidence in a clinician's credibility and the relationship with the provider. It is not about logistics, cost, or delays.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
+    },
+    "11": {
+      "primary_theme": {
+        "instance_id": "11",
+        "schema_name": "primary_theme",
+        "predicted_label": "provider trust",
+        "confidence_score": 1.0,
+        "uncertainty_score": 0.0,
+        "prompt_version": 1,
+        "timestamp": "2026-09-15T14:53:43.731752",
+        "model_name": "google/gemma-4-12B-it-qat-w4a16-ct",
+        "reasoning": "The patient expresses a lack of confidence in the clinician's judgment ('I doubt the diagnosis') and describes feeling 'dismissed,' which aligns with the definition of provider trust regarding the relationship and credibility of the provider rather than logistics like cost or wait times.",
+        "human_label": null,
+        "agrees_with_human": null,
+        "disagreement_resolved": false,
+        "resolution_label": null
+      }
     }
   },
   "human_labeled_ids": [
     "7",
     "4",
     "1",
+    "9",
     "3",
     "5",
     "12",
     "11",
     "6",
     "10",
+    "8",
     "2"
   ],
   "labeled_by_user": {
@@ -150,22 +237,29 @@
       "7",
       "4",
       "1",
+      "9",
       "3",
       "5",
       "12",
       "11",
       "6",
       "10",
+      "8",
       "2"
     ]
   },
   "llm_labeled_ids": [
     "4",
+    "9",
     "1",
+    "7",
     "3",
     "5",
+    "12",
+    "11",
     "6",
     "10",
+    "8",
     "2"
   ],
   "disagreement_ids": [
@@ -233,6 +327,44 @@
         1,
         0.5
       ]
+    ],
+    "12": [
+      [
+        1,
+        0.5
+      ]
+    ],
+    "9": [
+      [
+        1,
+        0.5
+      ],
+      [
+        1,
+        0.5
+      ]
+    ],
+    "8": [
+      [
+        1,
+        0.5
+      ],
+      [
+        1,
+        0.5
+      ]
+    ],
+    "7": [
+      [
+        1,
+        1.0
+      ]
+    ],
+    "11": [
+      [
+        1,
+        1.0
+      ]
     ]
   },
   "reannotation_counts": {},
@@ -247,6 +379,10 @@
   "refinement_log": [],
   "icl_library": null,
   "last_review_revision": null,
+  "edge_case_rule_data": {
+    "rules": {},
+    "categories": {}
+  },
   "edge_case_synthesis_data": {
     "edge_cases": {},
     "synthesis_rounds": [],

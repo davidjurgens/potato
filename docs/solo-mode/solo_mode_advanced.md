@@ -418,6 +418,73 @@ solo_mode:
 
 ---
 
+## Codebook-Driven Relabel Batching
+
+While annotating, resolving a disagreement can lead to a codebook edit
+(rename, delete, merge, or a definition/examples change) — and that edit
+invalidates the LLM side of every already-compared human/LLM pair for
+the label it touched, since those predictions were made under the old
+codebook. Solo Mode handles this by re-running the LLM (only, never
+re-asking the human) over the affected instances in the background and
+recomputing agreement against the human label already on file.
+
+Doing that on every single edit is accurate but slow when edits arrive
+in a burst — e.g. a human working through several disagreements in a
+row, each one tweaking the codebook. Instead, qualifying edits are
+batched **per label**: the codebook is treated as one "part" per code,
+and each part accumulates its own count of qualifying edits
+independently. Editing "positive" repeatedly doesn't burn down
+"negative"'s budget, and doesn't trigger a re-check of "negative"'s
+instances. A relabel sweep for a given label only fires once
+`min_codebook_changes_before_relabel` qualifying edits have accumulated
+against *that label*, and it only re-checks the already-human-labeled
+instances "connected" to it — those whose current LLM prediction is
+that label. A rename or merge touches two labels (the old and new
+name), so it counts against both of their budgets.
+
+```yaml
+solo_mode:
+  thresholds:
+    min_codebook_changes_before_relabel: 3
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `min_codebook_changes_before_relabel` | `3` | Number of qualifying codebook edits (rename/delete/merge/definition or examples change) a single label must accumulate before its instances get a relabel sweep |
+
+A qualifying edit that can't be tied to any specific label — not
+expected to happen with the current codebook data model, since every
+prompt-affecting op resolves to at least one code name, but handled as
+a safety net — falls back to a shared bucket that counts against every
+label. Once *that* bucket reaches the threshold, a full sweep runs over
+every human-labeled instance instead of a per-label one.
+
+While edits are pending a sweep, `agreement_metrics.stale` is `true`
+(exposed via `GET /solo/api/status` and the annotation-stats payloads)
+and `agreement_metrics.pending_codebook_changes` reports the total
+number of qualifying edits pending across every label.
+`agreement_metrics.stale_parts` breaks that total down by label name
+(e.g. `{"positive": 2, "negative": 1}`), so you can see exactly which
+labels are awaiting a sweep. The dashboard and annotation sidebar render
+this as a "*" next to the agreement rate, with a tooltip listing the
+pending labels. A label's entry clears once its own sweep finishes with
+no further edits pending against it — other labels' entries are
+unaffected. A per-label sweep never writes a `codebook_version_history`
+entry (that structure holds whole-codebook snapshots for the
+rollback/export flows below); it logs to a bounded internal history
+instead. Only the fallback bucket's full sweep writes a
+`codebook_version_history` entry, exactly as before. Recolor/move/create
+edits don't change what the model is told about an existing code, so
+they don't count toward any label's threshold or trigger a sweep.
+
+An explicit re-verify (e.g. restoring a past codebook version from the
+`/solo/final-override` screen, reached when agreement is still below
+threshold with nothing left for a human to label) always runs a full
+sweep immediately, bypassing every label's batching threshold and
+clearing all of them.
+
+---
+
 ## Instance Selection Weights
 
 The instance selector uses a weighted mixture to choose which instances the human should annotate next. In addition to the core weights documented in the [Solo Mode guide](solo_mode.md#instance-selection), two additional weights are available for advanced features:

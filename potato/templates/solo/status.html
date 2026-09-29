@@ -97,6 +97,15 @@
     .text-warning { color: #f59e0b; }
     .text-danger { color: var(--destructive, #ef4444); }
 
+    /* Marks a metric as computed against an out-of-date codebook —
+       accumulated edits are still pending a relabel sweep. */
+    .stale-marker {
+        color: #f59e0b;
+        cursor: help;
+        margin-left: 0.15rem;
+        font-weight: 700;
+    }
+
     /* ── Progress Bar ───────────────────────────────────────── */
     .progress-track {
         background: var(--muted, #f4f4f5);
@@ -833,8 +842,16 @@
             </div>
             {% if agreement_metrics %}
             {% set rate = agreement_metrics.agreement_rate or 0 %}
+            {% set parts_desc = [] %}
+            {% for name, count in (agreement_metrics.stale_parts or {}).items() %}
+              {% set _ = parts_desc.append(name ~ ' (' ~ count ~ ' pending)') %}
+            {% endfor %}
             <p class="card-value {% if rate >= 0.9 %}text-success{% elif rate >= 0.7 %}text-warning{% else %}text-danger{% endif %}"
-               id="ov-agreement">{{ (rate * 100)|int }}%</p>
+               id="ov-agreement-wrap">
+               <span id="ov-agreement">{{ (rate * 100)|int }}%</span><span
+                id="ov-agreement-stale" class="stale-marker"
+                title="{% if parts_desc %}Label(s) changed since re-checked: {{ parts_desc|join(', ') }} — treat this rate as approximate for those labels until their relabel sweep runs.{% else %}Codebook changed since this rate was last verified ({{ agreement_metrics.pending_codebook_changes }} change(s) pending re-check) — treat it as approximate until the next relabel sweep.{% endif %}"
+                {% if not agreement_metrics.stale %}hidden{% endif %}>*</span></p>
             <div class="metric-row">
                 <span>Comparisons</span>
                 <strong id="ov-comparisons">{{ agreement_metrics.total_compared }}</strong>

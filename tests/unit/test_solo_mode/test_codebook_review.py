@@ -10,10 +10,11 @@ from unittest.mock import MagicMock, patch
 from potato.solo_mode.manager import (
     SoloModeManager, LLMPrediction, clear_solo_mode_manager,
 )
+from potato.solo_mode.phase_controller import SoloPhase
 from potato.solo_mode.config import parse_solo_mode_config
 from potato.codebook import (
     create_code, update_code_fields, review, clear_change_listeners,
-    current_revision, changelog,
+    current_revision, changelog, revision as cb_revision,
 )
 from potato.codebook import store
 from potato.codebook.store import _CODEBOOK_MIGRATION
@@ -47,10 +48,14 @@ def td(tmp_path):
     return str(d)
 
 
-def _manager(td, state_dir=None):
+def _manager(td, state_dir=None, min_codebook_changes_before_relabel=None):
     sm = {"enabled": True, "labeling_models": []}
     if state_dir is not None:
         sm["state_dir"] = state_dir
+    if min_codebook_changes_before_relabel is not None:
+        sm["thresholds"] = {
+            "min_codebook_changes_before_relabel":
+                min_codebook_changes_before_relabel}
     solo_config = parse_solo_mode_config(
         {"solo_mode": sm, "annotation_schemes": SCHEMES})
     app_config = {"task_dir": td, "annotation_task_name": "P",
@@ -130,11 +135,12 @@ class TestOnDemandReview:
 class _SyncThread:
     """Stand-in for threading.Thread that runs the target synchronously on
     start(), so the listener-driven sweep is deterministic in tests."""
-    def __init__(self, target=None, args=(), name=None, daemon=None, **kw):
-        self._target, self._args = target, args
+    def __init__(self, target=None, args=(), kwargs=None, name=None,
+                daemon=None, **kw):
+        self._target, self._args, self._kwargs = target, args, kwargs or {}
 
     def start(self):
-        self._target(*self._args)
+        self._target(*self._args, **self._kwargs)
 
 
 class TestAutomaticListener:
@@ -428,3 +434,201 @@ class TestStructuredFieldReview:
                 if h["op"] == "edit_positive_examples"]
         assert len(hist) == 1
         assert hist[0]["code_id"] == code["id"]
+
+
+class TestCodebookAgreementRelabelBatching:
+    """During annotation, a codebook edit invalidates the agreement
+    comparison for the instances connected to the label it touched, but
+    re-labeling the whole dataset on every single edit is slow — and
+    unnecessary for labels the edit didn't touch. _on_codebook_change
+    batches qualifying edits *per label* ("part"): each label
+    accumulates its own count and only triggers a sweep of the
+    instances connected to it (current LLM prediction == that label)
+    once its own count reaches min_codebook_changes_before_relabel.
+    agreement_metrics.stale (and the per-label stale_parts breakdown)
+    reflects this in the meantime, so the displayed rate is never
+    silently presented as current."""
+
+    def _annotation_manager(self, td, min_changes, state_dir=None):
+        mgr = _manager(td, state_dir=state_dir,
+                       min_codebook_changes_before_relabel=min_changes)
+        for phase in (
+            SoloPhase.PROMPT_REVIEW, SoloPhase.EDGE_CASE_SYNTHESIS,
+            SoloPhase.EDGE_CASE_LABELING, SoloPhase.CONTRAST_SET_REVIEW,
+            SoloPhase.PROMPT_VALIDATION, SoloPhase.PARALLEL_ANNOTATION,
+        ):
+            mgr.phase_controller.transition_to(phase)
+        return mgr
+
+    def test_single_edit_below_threshold_marks_part_stale_without_sweeping(
+            self, td):
+        mgr = self._annotation_manager(td, min_changes=3)
+        _seed_prediction(mgr, "i1", "positive")
+        mgr.record_human_label("i1", "sentiment", "positive", "user1")
+        code = create_code(td, project="P", name="positive",
+                           created_by="u", details={"definition": "old"})
+        # Baseline-establishing first change (create) doesn't count.
+
+        mgr.llm_labeling_thread._get_endpoint = MagicMock(
+            side_effect=AssertionError(
+                "a single edit under threshold must not sweep"))
+        with patch("potato.solo_mode.manager.threading.Thread", _SyncThread):
+            update_code_fields(td, code["id"], project="P",
+                               details={"definition": "a new definition"})
+
+        assert mgr.agreement_metrics.stale is True
+        assert mgr.agreement_metrics.pending_codebook_changes == 1
+        assert mgr.agreement_metrics.stale_parts == {"positive": 1}
+        assert mgr.codebook_version_history == {}
+        assert mgr._codebook_part_relabel_log == []
+
+    def test_threshold_reached_sweeps_only_that_part_not_whole_codebook(
+            self, td):
+        mgr = self._annotation_manager(td, min_changes=2)
+        pos = create_code(td, project="P", name="positive",
+                          created_by="u", details={"definition": "old"})
+        create_code(td, project="P", name="negative",
+                   created_by="u", details={"definition": "old"})
+        _seed_prediction(mgr, "i1", "positive")
+        mgr.record_human_label("i1", "sentiment", "positive", "user1")
+        _seed_prediction(mgr, "i2", "negative")
+        mgr.record_human_label("i2", "sentiment", "negative", "user1")
+
+        relabeled_ids = []
+
+        def _fake_label(instance_id, text, schema_name, endpoint=None):
+            relabeled_ids.append(instance_id)
+            from potato.solo_mode.llm_labeler import LabelingResult
+            return LabelingResult(
+                instance_id=instance_id, schema_name=schema_name,
+                label="positive", confidence=0.8, uncertainty=0.2,
+                reasoning="r", prompt_version=1, model_name="m")
+
+        mgr.llm_labeling_thread._get_endpoint = MagicMock(
+            return_value=_fake_endpoint("positive"))
+        with patch("potato.solo_mode.manager.threading.Thread", _SyncThread), \
+             patch.object(mgr, "_get_instance_text", return_value="text"), \
+             patch.object(mgr.llm_labeling_thread, "_label_instance",
+                          side_effect=_fake_label):
+            update_code_fields(td, pos["id"], project="P",
+                               details={"definition": "definition v2"})
+            assert mgr.agreement_metrics.stale_parts == {"positive": 1}
+
+            # Second qualifying edit to "positive" reaches its threshold.
+            update_code_fields(td, pos["id"], project="P",
+                               details={"definition": "definition v3"})
+
+        # "negative"'s instance (i2) is never touched by an edit scoped
+        # to "positive" — i1 is relabeled (once by the unrelated
+        # review-flag sweep per edit, which fires on every qualifying
+        # edit regardless of batching, plus once by the agreement sweep
+        # itself once threshold is reached). No codebook_version_history
+        # entry was written (that's reserved for whole-codebook sweeps
+        # the rollback/export flows rely on).
+        assert "i2" not in relabeled_ids
+        assert "i1" in relabeled_ids
+        assert mgr.codebook_version_history == {}
+        assert len(mgr._codebook_part_relabel_log) == 1
+        log_entry = mgr._codebook_part_relabel_log[0]
+        assert log_entry["label_names"] == ["positive"]
+        assert log_entry["compared"] == 1
+        assert log_entry["completed_at"] is not None
+        # "positive" caught up; "negative" was never touched by this
+        # edit so it has nothing pending either.
+        assert mgr.agreement_metrics.stale is False
+        assert mgr.agreement_metrics.stale_parts == {}
+        assert mgr.agreement_metrics.pending_codebook_changes == 0
+
+    def test_editing_one_label_does_not_burn_down_anothers_budget(self, td):
+        mgr = self._annotation_manager(td, min_changes=2)
+        pos = create_code(td, project="P", name="positive",
+                          created_by="u", details={"definition": "old"})
+        neg = create_code(td, project="P", name="negative",
+                          created_by="u", details={"definition": "old"})
+        _seed_prediction(mgr, "i1", "positive")
+        mgr.record_human_label("i1", "sentiment", "positive", "user1")
+        _seed_prediction(mgr, "i2", "negative")
+        mgr.record_human_label("i2", "sentiment", "negative", "user1")
+
+        mgr.llm_labeling_thread._get_endpoint = MagicMock(
+            side_effect=AssertionError(
+                "one edit to each of two labels must not sweep either "
+                "(each needs 2 of its own)"))
+        with patch("potato.solo_mode.manager.threading.Thread", _SyncThread):
+            update_code_fields(td, pos["id"], project="P",
+                               details={"definition": "def v2"})
+            update_code_fields(td, neg["id"], project="P",
+                               details={"definition": "def v2"})
+
+        assert mgr.agreement_metrics.stale_parts == {
+            "positive": 1, "negative": 1}
+        assert mgr.agreement_metrics.pending_codebook_changes == 2
+
+    def test_part_counter_and_stale_flag_survive_restart(self, tmp_path):
+        td = str(tmp_path / "proj")
+        import os
+        os.makedirs(td, exist_ok=True)
+        state_dir = str(tmp_path / "state")
+        mgr = self._annotation_manager(td, min_changes=5, state_dir=state_dir)
+        _seed_prediction(mgr, "i1", "positive")
+        mgr.record_human_label("i1", "sentiment", "positive", "user1")
+
+        code = create_code(td, project="P", name="positive",
+                           created_by="u", details={"definition": "old"})
+        mgr.llm_labeling_thread._get_endpoint = MagicMock(
+            side_effect=AssertionError("must not sweep below threshold"))
+        with patch("potato.solo_mode.manager.threading.Thread", _SyncThread):
+            update_code_fields(td, code["id"], project="P",
+                               details={"definition": "v2"})
+        assert mgr.agreement_metrics.stale is True
+        assert mgr.agreement_metrics.stale_parts == {"positive": 1}
+
+        clear_solo_mode_manager()
+        mgr2 = _manager(td, state_dir=state_dir,
+                        min_codebook_changes_before_relabel=5)
+        mgr2.load_state()
+        assert mgr2.agreement_metrics.stale is True
+        assert mgr2.agreement_metrics.pending_codebook_changes == 1
+        assert mgr2.agreement_metrics.stale_parts == {"positive": 1}
+        assert mgr2._codebook_part_pending_changes == {"positive": 1}
+
+    def test_unattributable_change_falls_back_to_all_parts_and_full_sweep(
+            self, td):
+        """Safety net: a qualifying edit that can't be tied to a specific
+        label (shouldn't happen with today's codebook data model — every
+        prompt-affecting op resolves a name via code_id or old/new_value)
+        can't be ruled out as unrelated to any label, so it counts
+        against the fallback bucket instead and, once that reaches
+        threshold, triggers a full (unscoped) sweep."""
+        mgr = self._annotation_manager(td, min_changes=1)
+        _seed_prediction(mgr, "i1", "positive")
+        mgr.record_human_label("i1", "sentiment", "positive", "user1")
+
+        # Establish the baseline the same way a real first edit would.
+        mgr._on_codebook_change(td, "P")
+        baseline = mgr._last_review_revision
+
+        # Craft a changelog row that can't resolve to any code name: an
+        # edit_definition op (doesn't carry old/new_value names) whose
+        # code_id doesn't exist in the live codebook.
+        new_rev = cb_revision.bump_revision(td, "P")
+        changelog.log_change(
+            td, project="P", op="edit_definition", actor="u",
+            code_id="nonexistent-code-id", old_value="old", new_value="new",
+            revision=new_rev)
+        assert new_rev > baseline
+
+        mgr.llm_labeling_thread._get_endpoint = MagicMock(
+            return_value=_fake_endpoint("positive"))
+        with patch("potato.solo_mode.manager.threading.Thread", _SyncThread), \
+             patch.object(mgr, "_get_instance_text", return_value="text"):
+            mgr._on_codebook_change(td, "P")
+
+        # Full sweep ran (codebook_version_history got an entry) rather
+        # than a part-scoped one, since the edit couldn't be attributed
+        # to any specific label.
+        assert len(mgr.codebook_version_history) == 1
+        entry = next(iter(mgr.codebook_version_history.values()))
+        assert entry["compared"] == 1
+        assert mgr.agreement_metrics.stale is False
+        assert mgr._codebook_changes_since_relabel == 0

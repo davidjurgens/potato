@@ -1,5 +1,5 @@
 {
-  "current_phase": "autonomous-labeling",
+  "current_phase": "completed",
   "transition_history": [
     {
       "from_phase": "setup",
@@ -49,9 +49,23 @@
       "timestamp": "2026-09-15T14:53:13.003409",
       "reason": "Manual override by lina2 below agreement threshold",
       "metadata": {}
+    },
+    {
+      "from_phase": "autonomous-labeling",
+      "to_phase": "final-validation",
+      "timestamp": "2026-09-15T14:54:01.699450",
+      "reason": "Autonomous labeling complete; nothing LLM-only to validate",
+      "metadata": {}
+    },
+    {
+      "from_phase": "final-validation",
+      "to_phase": "completed",
+      "timestamp": "2026-09-15T14:54:01.703229",
+      "reason": "No LLM-only labels to validate",
+      "metadata": {}
     }
   ],
   "phase_data": {},
   "started_at": "2026-09-15T14:49:06.061209",
-  "completed_at": null
+  "completed_at": "2026-09-15T14:54:01.703260"
 }

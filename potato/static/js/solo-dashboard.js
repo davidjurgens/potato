@@ -178,13 +178,14 @@ class SoloDashboard {
     // Agreement
     const rate = Math.round((agreement.agreement_rate || 0) * 100);
     this._setText('ov-agreement', rate + '%');
-    const agEl = document.getElementById('ov-agreement');
-    if (agEl) {
-      agEl.className = 'card-value';
-      if (rate >= 90) agEl.classList.add('text-success');
-      else if (rate >= 70) agEl.classList.add('text-warning');
-      else agEl.classList.add('text-danger');
+    const agWrapEl = document.getElementById('ov-agreement-wrap');
+    if (agWrapEl) {
+      agWrapEl.className = 'card-value';
+      if (rate >= 90) agWrapEl.classList.add('text-success');
+      else if (rate >= 70) agWrapEl.classList.add('text-warning');
+      else agWrapEl.classList.add('text-danger');
     }
+    this._renderAgreementStale(agreement);
     this._setText('ov-comparisons', agreement.total_compared || 0);
     this._setText('ov-agreements', agreement.agreements || 0);
     this._setText('ov-disagreements', agreement.disagreements || 0);
@@ -235,6 +236,38 @@ class SoloDashboard {
         });
       }
     }
+  }
+
+  // Toggles the "*" marker next to the Agreement card's rate when a
+  // codebook edit is still awaiting its batched, per-label relabel sweep
+  // (see SoloModeConfig.thresholds.min_codebook_changes_before_relabel).
+  _renderAgreementStale(agreement) {
+    const marker = document.getElementById('ov-agreement-stale');
+    if (!marker) return;
+    if (agreement.stale) {
+      marker.title = SoloDashboard.staleTooltip(agreement);
+      marker.hidden = false;
+    } else {
+      marker.hidden = true;
+    }
+  }
+
+  // Shared tooltip text for the agreement "*" marker — lists which
+  // labels ("parts" of the codebook) are pending a relabel sweep when
+  // known, falling back to a generic count otherwise.
+  static staleTooltip(agreement) {
+    const parts = agreement.stale_parts || {};
+    const names = Object.keys(parts);
+    if (names.length) {
+      const desc = names.map(n => n + ' (' + parts[n] + ' pending)').join(', ');
+      return 'Label(s) changed since re-checked: ' + desc
+        + ' — treat this rate as approximate for those labels until their '
+        + 'relabel sweep runs.';
+    }
+    const pending = agreement.pending_codebook_changes || 0;
+    return 'Codebook changed since this rate was last verified ('
+      + pending + ' change(s) pending re-check) — treat it as approximate '
+      + 'until the next relabel sweep.';
   }
 
   // ── Agreement: relabel-pending banner + manual refresh ──────────
@@ -299,14 +332,14 @@ class SoloDashboard {
       if (resp.ok) {
         const data = await resp.json();
         const rate = data.agreement_rate;
-        const agEl = document.getElementById('ov-agreement');
-        if (agEl) {
-          agEl.textContent = (rate == null ? '—' : Math.round(rate * 100) + '%');
-          agEl.className = 'card-value';
+        this._setText('ov-agreement', rate == null ? '—' : Math.round(rate * 100) + '%');
+        const agWrapEl = document.getElementById('ov-agreement-wrap');
+        if (agWrapEl) {
+          agWrapEl.className = 'card-value';
           if (rate != null) {
-            if (rate >= 0.9) agEl.classList.add('text-success');
-            else if (rate >= 0.7) agEl.classList.add('text-warning');
-            else agEl.classList.add('text-danger');
+            if (rate >= 0.9) agWrapEl.classList.add('text-success');
+            else if (rate >= 0.7) agWrapEl.classList.add('text-warning');
+            else agWrapEl.classList.add('text-danger');
           }
         }
         this._setText('ov-comparisons', data.compared || 0);
