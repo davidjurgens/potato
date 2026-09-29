@@ -1,0 +1,156 @@
+{
+  "variant_id": "v08_specialize_one_label",
+  "overall_accuracy": 0.9375,
+  "per_label_accuracy": {
+    "access barriers": 1.0,
+    "cost concerns": 1.0,
+    "provider trust": 1.0,
+    "wait times": 0.75
+  },
+  "predictions": [
+    {
+      "example_id": "p01",
+      "true_label": "access barriers",
+      "predicted_label": "access barriers",
+      "correct": true,
+      "confidence": 1.0,
+      "reasoning": "The patient mentions that the only clinic that takes their insurance is a two-hour drive, indicating a physical barrier to accessing care.",
+      "error": null
+    },
+    {
+      "example_id": "p02",
+      "true_label": "access barriers",
+      "predicted_label": "access barriers",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient mentions needing translation services and the unavailability of staff who speak their language, indicating a physical barrier to accessing care.",
+      "error": null
+    },
+    {
+      "example_id": "p03",
+      "true_label": "access barriers",
+      "predicted_label": "access barriers",
+      "correct": true,
+      "confidence": 0.8,
+      "reasoning": "The patient mentions 'paperwork' as a barrier to getting care, indicating difficulty with the administrative process of seeking medical attention.",
+      "error": null
+    },
+    {
+      "example_id": "p04",
+      "true_label": "access barriers",
+      "predicted_label": "access barriers",
+      "correct": true,
+      "confidence": 1.0,
+      "reasoning": "The patient mentions that there is no pediatric specialist anywhere near their location, indicating a physical barrier to accessing care.",
+      "error": null
+    },
+    {
+      "example_id": "p05",
+      "true_label": "cost concerns",
+      "predicted_label": "cost concerns",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient mentions their deductible being high, implying that the cost of care is a significant concern for them. This suggests that they are worried about the monetary price of care and its impact on their decision to seek medical attention.",
+      "error": null
+    },
+    {
+      "example_id": "p06",
+      "true_label": "cost concerns",
+      "predicted_label": "cost concerns",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient mentions being unable to afford a full prescription refill, indicating a concern about the monetary price of care.",
+      "error": null
+    },
+    {
+      "example_id": "p07",
+      "true_label": "cost concerns",
+      "predicted_label": "cost concerns",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient mentions owing more than their rent after insurance denied the claim, indicating a financial burden and concern about affordability.",
+      "error": null
+    },
+    {
+      "example_id": "p08",
+      "true_label": "cost concerns",
+      "predicted_label": "cost concerns",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient mentions being 'scared of what it'll cost', indicating a worry about the monetary price of care, which is the definition of cost concerns.",
+      "error": null
+    },
+    {
+      "example_id": "p09",
+      "true_label": "provider trust",
+      "predicted_label": "provider trust",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient expresses distrust of the doctor's diagnosis and judgment, indicating a lack of confidence in their provider's ability to provide accurate care.",
+      "error": null
+    },
+    {
+      "example_id": "p10",
+      "true_label": "provider trust",
+      "predicted_label": "provider trust",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient mentions feeling talked down to, which suggests a lack of respect and confidence in the provider's judgment, indicating distrust of the provider.",
+      "error": null
+    },
+    {
+      "example_id": "p11",
+      "true_label": "provider trust",
+      "predicted_label": "provider trust",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient expresses trust in their new doctor, mentioning that they were listened to and explained things, indicating a positive experience with the provider's bedside manner.",
+      "error": null
+    },
+    {
+      "example_id": "p12",
+      "true_label": "provider trust",
+      "predicted_label": "provider trust",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient expresses distrust of their clinician's attention to detail, implying a lack of confidence in the provider's ability to accurately read and act on their chart.",
+      "error": null
+    },
+    {
+      "example_id": "p13",
+      "true_label": "wait times",
+      "predicted_label": "access barriers",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The patient mentions a specific date in January and the earliest available opening is in June, indicating that there was a scheduling barrier preventing them from getting care sooner.",
+      "error": null
+    },
+    {
+      "example_id": "p14",
+      "true_label": "wait times",
+      "predicted_label": "wait times",
+      "correct": true,
+      "confidence": 1.0,
+      "reasoning": "The patient mentions waiting in the waiting room for almost three hours past their scheduled slot, indicating a delay between seeking care and receiving it.",
+      "error": null
+    },
+    {
+      "example_id": "p15",
+      "true_label": "wait times",
+      "predicted_label": "wait times",
+      "correct": true,
+      "confidence": 0.8,
+      "reasoning": "The comment mentions a delay of six weeks between the referral and its approval, indicating a long lead time for appointments.",
+      "error": null
+    },
+    {
+      "example_id": "p16",
+      "true_label": "wait times",
+      "predicted_label": "wait times",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The comment mentions 'blocking off half a day' for the appointment, implying that the time required for the visit is long and takes up a significant portion of the patient's schedule. This suggests that the wait times are a barrier to accessing care.",
+      "error": null
+    }
+  ]
+}

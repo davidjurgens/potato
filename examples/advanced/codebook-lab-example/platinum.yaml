@@ -1,0 +1,61 @@
+# Starter "must-get-right" platinum set for the codebook_lab example.
+#
+# These are illustrative, hand-written examples meant to unambiguously
+# match exactly one label in seed_codebook.yaml — NOT real vetted data.
+# Replace this file with your own reviewed examples before drawing any
+# real conclusions from a run; a codebook design experiment is only as
+# trustworthy as the platinum set it's scored against.
+#
+# label must exactly match a "name" in seed_codebook.yaml.
+
+- id: "p01"
+  text: "The only clinic that takes my insurance is a two-hour drive and I don't have a car."
+  label: "access barriers"
+- id: "p02"
+  text: "I'd need someone to translate for me at the front desk and there's never anyone available who speaks my language."
+  label: "access barriers"
+- id: "p03"
+  text: "I can't take more time off work to figure out the paperwork for a referral, so I just gave up."
+  label: "access barriers"
+- id: "p04"
+  text: "There's no pediatric specialist anywhere near where I live."
+  label: "access barriers"
+
+- id: "p05"
+  text: "My deductible is so high that going in for anything short of an emergency isn't worth the bill."
+  label: "cost concerns"
+- id: "p06"
+  text: "I split my prescription in half because I can't afford a full refill this month."
+  label: "cost concerns"
+- id: "p07"
+  text: "Insurance denied the claim and now I owe more than my rent."
+  label: "cost concerns"
+- id: "p08"
+  text: "I've been putting off the follow-up scan because I'm scared of what it'll cost."
+  label: "cost concerns"
+
+- id: "p09"
+  text: "The doctor dismissed my symptoms as stress without running a single test, so I don't believe anything he tells me anymore."
+  label: "provider trust"
+- id: "p10"
+  text: "I stopped mentioning my pain because the last three times I brought it up I felt talked down to."
+  label: "provider trust"
+- id: "p11"
+  text: "My new doctor actually listened and explained things, so for the first time I trust the plan we came up with."
+  label: "provider trust"
+- id: "p12"
+  text: "I don't think she's actually reading my chart before appointments, so I double-check everything myself now."
+  label: "provider trust"
+
+- id: "p13"
+  text: "I called in January and the earliest opening they had was in June."
+  label: "wait times"
+- id: "p14"
+  text: "I sat in the waiting room for almost three hours past my scheduled slot."
+  label: "wait times"
+- id: "p15"
+  text: "By the time the referral came through, six weeks had already passed."
+  label: "wait times"
+- id: "p16"
+  text: "Every visit means blocking off half a day just for the actual appointment to happen."
+  label: "wait times"

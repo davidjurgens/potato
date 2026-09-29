@@ -1,0 +1,83 @@
+{
+  "variant_id": "v10_shorten_all",
+  "origin": "llm:shorten_all",
+  "notes": "All definitions, clarifications, and examples were drastically shortened across all labels",
+  "codes": [
+    {
+      "name": "access barriers",
+      "definition": "Structural obstacles that prevent patients from reaching care.",
+      "clarification": "",
+      "negative_clarification": "NOT cost concerns — price itself is \"cost concerns\".",
+      "positive_examples": [
+        {
+          "text": "Nearest clinic is 2 bus transfers away and I can't get there without taking a full day off work.",
+          "why": "Distance and transport physically block reaching care."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "I finally saw the doctor but the copay was more than I could afford.",
+          "why": "Price, not access barrier, is the issue."
+        }
+      ],
+      "exclusion_rules": []
+    },
+    {
+      "name": "cost concerns",
+      "definition": "Worry about the monetary price of care.",
+      "clarification": "",
+      "negative_clarification": "NOT difficulty physically reaching care (that's \"access barriers\").",
+      "positive_examples": [
+        {
+          "text": "I skipped the follow-up because I couldn't afford another $200 visit.",
+          "why": "Care was forgone due to its price."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "I couldn't get an appointment for three months.",
+          "why": "This is a scheduling delay, not related to cost."
+        }
+      ],
+      "exclusion_rules": []
+    },
+    {
+      "name": "provider trust",
+      "definition": "Patient's confidence in or distrust of their clinician or the health system.",
+      "clarification": "",
+      "negative_clarification": "NOT general satisfaction with logistics like cost or wait times; this is about provider relationship and credibility.",
+      "positive_examples": [
+        {
+          "text": "My doctor never listens, so I've started ignoring advice I'm given.",
+          "why": "Expresses distrust in the provider relationship."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "Waiting room was crowded and I sat there for an hour.",
+          "why": "A logistics complaint (wait times), not about trust in provider."
+        }
+      ],
+      "exclusion_rules": []
+    },
+    {
+      "name": "wait times",
+      "definition": "Delay between seeking care and receiving it — appointment lead time or time spent waiting on the day.",
+      "clarification": "",
+      "negative_clarification": "NOT being unable to reach the clinic at all (that's \"access barriers\"); wait times assume care is reachable but slow.",
+      "positive_examples": [
+        {
+          "text": "First available appointment was four months out.",
+          "why": "Direct delay in receiving care."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "There's no specialist within a hundred miles of me.",
+          "why": "Care is unreachable, an access barrier, not merely delayed."
+        }
+      ],
+      "exclusion_rules": []
+    }
+  ]
+}

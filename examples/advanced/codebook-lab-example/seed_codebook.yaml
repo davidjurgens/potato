@@ -1,0 +1,54 @@
+# Seed codebook for the codebook_lab experiment.
+#
+# Same 4 labels as examples/advanced/solo-codebook-example/config.yaml's
+# "primary_theme" scheme, copied here as a flat starting point to mutate.
+# positive_examples/negative_examples use {text, why} — same shape the
+# live codebook stores per label.
+
+- name: "access barriers"
+  definition: "Structural obstacles that prevent a patient from reaching care (distance, transport, scheduling, language, paperwork)."
+  clarification: "Include anything that blocks getting to or booking care: no nearby clinic, no transport, or being unable to navigate the system."
+  negative_clarification: "NOT the price of care itself — that is \"cost concerns\". A long delay once you already have an appointment is \"wait times\"."
+  positive_examples:
+    - text: "The nearest clinic is two bus transfers away and I can't get there without taking a full day off work."
+      why: "Distance and transport physically block reaching care."
+  negative_examples:
+    - text: "I finally saw the doctor but the copay was more than I could afford."
+      why: "The obstacle here is price, which is cost concerns, not access."
+  exclusion_rules: []
+
+- name: "cost concerns"
+  definition: "Worry about the monetary price of care — bills, copays, premiums, or fear of debt."
+  clarification: "Include any mention of affordability, insurance not covering enough, or skipping care because of money."
+  negative_clarification: "NOT difficulty physically reaching care (that is \"access barriers\"), even though both can stop someone from being seen."
+  positive_examples:
+    - text: "I skipped the follow-up because I couldn't afford another $200 visit."
+      why: "Care was forgone specifically because of its price."
+  negative_examples:
+    - text: "I couldn't get an appointment for three months."
+      why: "This is a scheduling delay (wait times), with no mention of money."
+  exclusion_rules: []
+
+- name: "provider trust"
+  definition: "The patient's confidence in, or distrust of, their clinician or the health system."
+  clarification: "Include feeling heard or dismissed, doubting a diagnosis, or relying on a provider's judgment."
+  negative_clarification: "NOT general satisfaction with logistics like cost or wait times; this is about the relationship and credibility of the provider."
+  positive_examples:
+    - text: "My doctor never listens, so I've started ignoring the advice I'm given."
+      why: "Expresses distrust in the provider relationship."
+  negative_examples:
+    - text: "The waiting room was crowded and I sat there for an hour."
+      why: "A logistics complaint (wait times), not about trust in the provider."
+  exclusion_rules: []
+
+- name: "wait times"
+  definition: "Delay between seeking care and receiving it — appointment lead time or time spent waiting on the day."
+  clarification: "Include long lead times for appointments and long in-clinic waits."
+  negative_clarification: "NOT being unable to reach the clinic at all (that is \"access barriers\"); wait times assume care is reachable but slow."
+  positive_examples:
+    - text: "The first available appointment was four months out."
+      why: "A direct delay in receiving care."
+  negative_examples:
+    - text: "There's no specialist within a hundred miles of me."
+      why: "Care is unreachable, an access barrier, not merely delayed."
+  exclusion_rules: []

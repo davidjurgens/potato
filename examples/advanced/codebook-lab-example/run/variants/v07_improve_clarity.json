@@ -1,0 +1,92 @@
+{
+  "variant_id": "v07_improve_clarity",
+  "origin": "llm:improve_clarity",
+  "notes": "Tightened definitions and added exclusion rules to improve clarity between adjacent labels in the codebook.",
+  "codes": [
+    {
+      "name": "access barriers",
+      "definition": "Structural obstacles that prevent a patient from accessing care, such as distance, transport, scheduling, language, or paperwork issues.",
+      "clarification": "Include any obstacle that prevents a patient from reaching the clinic, regardless of whether it's physical or logistical. Examples include no nearby clinic, inadequate public transportation, or complex scheduling procedures.",
+      "negative_clarification": "NOT cost concerns — those are separate issues with financial implications.",
+      "positive_examples": [
+        {
+          "text": "The nearest hospital is 30 miles away and requires a 3-hour bus ride, making it impossible to visit during work hours.",
+          "why": "Distance and transport physically block accessing care."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "I was unable to schedule an appointment due to the complex scheduling system online.",
+          "why": "Transportation issue prevented access to care."
+        }
+      ],
+      "exclusion_rules": [
+        "transportation",
+        "scheduling"
+      ]
+    },
+    {
+      "name": "cost concerns",
+      "definition": "Worry about the monetary price of care, including bills, copays, premiums, or fear of debt.",
+      "clarification": "Include any mention of affordability, insurance not covering enough, or skipping care because of money. Note that cost concerns can be a barrier to access but are separate from physical barriers.",
+      "negative_clarification": "NOT provider trust issues — those involve the relationship between patient and provider.",
+      "positive_examples": [
+        {
+          "text": "I skipped the follow-up visit because I couldn't afford another $200 copay.",
+          "why": "Care was forgone specifically due to financial constraints."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "The waiting room was crowded and I sat there for an hour, but it didn't affect my decision to come in.",
+          "why": "No financial concerns were mentioned."
+        }
+      ],
+      "exclusion_rules": [
+        "provider trust"
+      ]
+    },
+    {
+      "name": "provider trust",
+      "definition": "The patient's confidence in or distrust of their clinician or the health system, including feeling heard or dismissed, doubting a diagnosis, or relying on a provider's judgment.",
+      "clarification": "Include any issue with the provider-client relationship, such as communication, empathy, or competence. Note that this is distinct from general satisfaction with logistics like wait times.",
+      "negative_clarification": "NOT general dissatisfaction with wait times — those are separate issues with systemic implications.",
+      "positive_examples": [
+        {
+          "text": "My doctor never listens to my concerns and always rushes through our appointments.",
+          "why": "Expresses distrust in the provider relationship."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "The waiting room was clean, comfortable, and well-stocked with amenities.",
+          "why": "No issues with the provider or system were mentioned."
+        }
+      ],
+      "exclusion_rules": [
+        "wait times"
+      ]
+    },
+    {
+      "name": "wait times",
+      "definition": "Delay between seeking care and receiving it — appointment lead time or time spent waiting on the day.",
+      "clarification": "Include any delay beyond what is considered standard or reasonable for a given system. Note that this excludes issues with accessibility, such as no nearby clinic.",
+      "negative_clarification": "NOT access barriers — those are structural obstacles preventing care from being accessible in the first place.",
+      "positive_examples": [
+        {
+          "text": "The first available appointment was 12 weeks out, causing me to delay my treatment.",
+          "why": "A direct delay in receiving care."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "There's been a significant delay with my test results, but I'm not sure why yet.",
+          "why": "No clear cause of the delay mentioned."
+        }
+      ],
+      "exclusion_rules": [
+        "access barriers"
+      ]
+    }
+  ]
+}

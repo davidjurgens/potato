@@ -1,0 +1,156 @@
+{
+  "variant_id": "v10_shorten_all",
+  "overall_accuracy": 0.9375,
+  "per_label_accuracy": {
+    "access barriers": 0.75,
+    "cost concerns": 1.0,
+    "provider trust": 1.0,
+    "wait times": 1.0
+  },
+  "predictions": [
+    {
+      "example_id": "p01",
+      "true_label": "access barriers",
+      "predicted_label": "access barriers",
+      "correct": true,
+      "confidence": 1.0,
+      "reasoning": "The patient mentions that the only clinic that takes their insurance is a two-hour drive, indicating a structural obstacle (lack of transportation) that prevents them from reaching care.",
+      "error": null
+    },
+    {
+      "example_id": "p02",
+      "true_label": "access barriers",
+      "predicted_label": "access barriers",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient mentions needing someone to translate for them at the front desk, indicating a structural obstacle (lack of language support) that prevents them from reaching care.",
+      "error": null
+    },
+    {
+      "example_id": "p03",
+      "true_label": "access barriers",
+      "predicted_label": "cost concerns",
+      "correct": false,
+      "confidence": 0.8,
+      "reasoning": "The patient mentions 'paperwork' and giving up, implying that the process of getting a referral is too time-consuming and costly, preventing them from pursuing necessary care.",
+      "error": null
+    },
+    {
+      "example_id": "p04",
+      "true_label": "access barriers",
+      "predicted_label": "access barriers",
+      "correct": true,
+      "confidence": 1.0,
+      "reasoning": "The comment expresses a structural obstacle (lack of pediatric specialists near the patient's location) that prevents them from reaching care.",
+      "error": null
+    },
+    {
+      "example_id": "p05",
+      "true_label": "cost concerns",
+      "predicted_label": "cost concerns",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient mentions their deductible being 'so high' and that going to the clinic for non-emergency care isn't worth the bill, indicating a concern about the monetary cost of care.",
+      "error": null
+    },
+    {
+      "example_id": "p06",
+      "true_label": "cost concerns",
+      "predicted_label": "cost concerns",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient mentions 'can't afford' and splitting their prescription, indicating a financial concern about the cost of care.",
+      "error": null
+    },
+    {
+      "example_id": "p07",
+      "true_label": "cost concerns",
+      "predicted_label": "cost concerns",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient mentions owing more than their rent after insurance denied the claim, indicating a financial burden due to the cost of care.",
+      "error": null
+    },
+    {
+      "example_id": "p08",
+      "true_label": "cost concerns",
+      "predicted_label": "cost concerns",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient mentions being 'scared of what it'll cost', indicating a worry about the monetary price of care, which aligns with the definition of cost concerns.",
+      "error": null
+    },
+    {
+      "example_id": "p09",
+      "true_label": "provider trust",
+      "predicted_label": "provider trust",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient expresses distrust of the doctor's diagnosis and treatment, indicating a lack of confidence in their provider's judgment and credibility.",
+      "error": null
+    },
+    {
+      "example_id": "p10",
+      "true_label": "provider trust",
+      "predicted_label": "provider trust",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient mentions feeling talked down to, which suggests a lack of respect or empathy from the provider, indicating distrust. The comment is not about cost concerns (no mention of price), access barriers (can still reach the clinic), or wait times (the issue is with the interaction, not the timing).",
+      "error": null
+    },
+    {
+      "example_id": "p11",
+      "true_label": "provider trust",
+      "predicted_label": "provider trust",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient expresses trust in their new doctor, indicating confidence in the clinician's ability to provide care and explain things. This suggests a positive experience with provider relationship and credibility.",
+      "error": null
+    },
+    {
+      "example_id": "p12",
+      "true_label": "provider trust",
+      "predicted_label": "provider trust",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The patient expresses distrust in the provider's ability to read their chart before appointments, indicating a lack of confidence in the provider's competence and attention to detail.",
+      "error": null
+    },
+    {
+      "example_id": "p13",
+      "true_label": "wait times",
+      "predicted_label": "wait times",
+      "correct": true,
+      "confidence": 0.8,
+      "reasoning": "The patient mentions a specific time frame (January to June) when they can expect care, indicating a concern about the delay between seeking care and receiving it.",
+      "error": null
+    },
+    {
+      "example_id": "p14",
+      "true_label": "wait times",
+      "predicted_label": "wait times",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The comment mentions waiting in the waiting room for almost three hours past their scheduled slot, indicating a delay between seeking care and receiving it.",
+      "error": null
+    },
+    {
+      "example_id": "p15",
+      "true_label": "wait times",
+      "predicted_label": "wait times",
+      "correct": true,
+      "confidence": 0.8,
+      "reasoning": "The comment mentions a specific time frame (six weeks) and implies that the wait for a referral was prolonged, indicating a delay in receiving care.",
+      "error": null
+    },
+    {
+      "example_id": "p16",
+      "true_label": "wait times",
+      "predicted_label": "wait times",
+      "correct": true,
+      "confidence": 0.9,
+      "reasoning": "The comment mentions 'blocking off half a day' which implies that the patient is waiting for an extended period of time, suggesting that wait times are a significant concern.",
+      "error": null
+    }
+  ]
+}

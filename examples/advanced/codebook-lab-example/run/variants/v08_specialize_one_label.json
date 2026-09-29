@@ -1,0 +1,91 @@
+{
+  "variant_id": "v08_specialize_one_label",
+  "origin": "llm:specialize_one_label",
+  "notes": "I refined the 'access barriers' label by adding precise include and exclude rules, and stronger worked examples to demonstrate its meaning more clearly than the original label.",
+  "codes": [
+    {
+      "name": "access barriers",
+      "definition": "Structural obstacles that prevent a patient from reaching care, including distance, transport, scheduling, language, and paperwork.",
+      "clarification": "Include anything that physically blocks getting to or booking care: no nearby clinic, no transport, or being unable to navigate the system.",
+      "negative_clarification": "NOT the price of care itself — that is \"cost concerns\". A long delay once you already have an appointment is \"wait times\".",
+      "positive_examples": [
+        {
+          "text": "The nearest clinic is two bus transfers away and I can't get there without taking a full day off work.",
+          "why": "Distance, transport, and scheduling physically block reaching care."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "I finally saw the doctor but the copay was more than I could afford.",
+          "why": "The obstacle here is price, which is cost concerns, not access."
+        }
+      ],
+      "exclusion_rules": [
+        "transport"
+      ]
+    },
+    {
+      "name": "cost concerns",
+      "definition": "Worry about the monetary price of care — bills, copays, premiums, or fear of debt.",
+      "clarification": "Include any mention of affordability, insurance not covering enough, or skipping care because of money.",
+      "negative_clarification": "NOT difficulty physically reaching care (that is \"access barriers\"), even though both can stop someone from being seen.",
+      "positive_examples": [
+        {
+          "text": "I skipped the follow-up because I couldn't afford another $200 visit.",
+          "why": "Care was forgone specifically because of its price."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "I couldn't get an appointment for three months due to financial constraints.",
+          "why": "Financial reasons led to a scheduling delay."
+        }
+      ],
+      "exclusion_rules": [
+        "transport",
+        "distance"
+      ]
+    },
+    {
+      "name": "provider trust",
+      "definition": "The patient's confidence in, or distrust of, their clinician or the health system.",
+      "clarification": "Include feeling heard or dismissed, doubting a diagnosis, or relying on a provider's judgment.",
+      "negative_clarification": "NOT general satisfaction with logistics like cost or wait times; this is about the relationship and credibility of the provider.",
+      "positive_examples": [
+        {
+          "text": "My doctor never listens to me, so I've stopped trusting them completely.",
+          "why": "Expresses deep distrust in the provider relationship."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "I waited for an hour before seeing my doctor and felt frustrated but not distrustful.",
+          "why": "A logistics complaint (wait times), not about trust in the provider."
+        }
+      ],
+      "exclusion_rules": []
+    },
+    {
+      "name": "wait times",
+      "definition": "Delay between seeking care and receiving it — appointment lead time or time spent waiting on the day.",
+      "clarification": "Include long lead times for appointments and long in-clinic waits.",
+      "negative_clarification": "NOT being unable to reach the clinic at all (that is \"access barriers\"); wait times assume care is reachable but slow.",
+      "positive_examples": [
+        {
+          "text": "The first available appointment was four months out, and I had to reschedule twice before getting in.",
+          "why": "A direct delay in receiving care."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "There's no specialist within a hundred miles of me, so I have to travel far for an appointment.",
+          "why": "Care is unreachable, an access barrier, not merely delayed."
+        }
+      ],
+      "exclusion_rules": [
+        "transport",
+        "distance"
+      ]
+    }
+  ]
+}

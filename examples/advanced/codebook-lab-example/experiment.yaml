@@ -1,0 +1,46 @@
+# codebook_lab experiment config.
+#
+# Run with:
+#   python -m potato.codebook_lab.cli run examples/advanced/codebook-lab-example/experiment.yaml
+#
+# Requires Ollama running locally with the model below pulled:
+#   ollama serve
+#   ollama pull llama3.2:3b
+#
+# All paths below are relative to this file's own directory.
+
+seed_codebook: seed_codebook.yaml
+platinum_examples: platinum.yaml
+
+task_description: >-
+  Classify each patient comment by the single primary theme it expresses about
+  getting healthcare: an access barrier, a cost concern, distrust of a provider,
+  or a complaint about wait times. Pick the theme the comment is mostly about.
+
+# How many LLM-generated variants of seed_codebook.yaml to produce. Each
+# is guided by a different directive (some improve the whole codebook,
+# some specialize one label at the expense of the others, some introduce
+# a deliberate regression) — see potato/codebook_lab/variant_generator.py
+# for the full list. 12 covers every directive at least twice.
+num_variants: 12
+
+output_dir: run
+
+# Model that writes the variants. Structured-JSON generation benefits
+# from a bit more headroom than labeling does.
+generation_model:
+  endpoint_type: "ollama"
+  model: "llama3.2:3b"
+  base_url: "http://localhost:11434"
+  max_tokens: 1200
+  temperature: 0.7
+
+# Model that scores each variant against the platinum set. Low
+# temperature — this should behave like real labeling, not creative
+# writing. Defaults to generation_model if omitted.
+scoring_model:
+  endpoint_type: "ollama"
+  model: "llama3.2:3b"
+  base_url: "http://localhost:11434"
+  max_tokens: 256
+  temperature: 0.1

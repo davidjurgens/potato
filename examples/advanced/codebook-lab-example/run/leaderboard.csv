@@ -1,0 +1,15 @@
+variant,access barriers,cost concerns,provider trust,wait times,overall
+seed,1.0000,1.0000,1.0000,0.7500,0.9375
+v01_improve_clarity,0.7500,1.0000,1.0000,0.7500,0.8750
+v02_specialize_one_label,0.7500,1.0000,1.0000,1.0000,0.9375
+v03_introduce_regression,1.0000,1.0000,1.0000,0.7500,0.9375
+v04_shorten_all,0.7500,1.0000,1.0000,0.5000,0.8125
+v05_faithful_paraphrase,1.0000,1.0000,1.0000,1.0000,1.0000
+v06_expand_scope_overlap,1.0000,1.0000,1.0000,0.7500,0.9375
+v07_improve_clarity,1.0000,1.0000,1.0000,1.0000,1.0000
+v08_specialize_one_label,1.0000,1.0000,1.0000,0.7500,0.9375
+v09_introduce_regression,1.0000,1.0000,1.0000,0.7500,0.9375
+v10_shorten_all,0.7500,1.0000,1.0000,1.0000,0.9375
+v11_faithful_paraphrase,1.0000,1.0000,1.0000,0.7500,0.9375
+v12_expand_scope_overlap,1.0000,1.0000,1.0000,0.5000,0.8750
+hybrid,1.0000,1.0000,1.0000,1.0000,1.0000

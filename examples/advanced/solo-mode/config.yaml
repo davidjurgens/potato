@@ -37,7 +37,7 @@ authentication:
 solo_mode:
   enabled: true
 
-  # Labeling models - using Ollama with Qwen3-4B
+  # Labeling models - u sing Ollama with Qwen3-4B
   # Make sure Ollama is running: ollama serve
   # Pull the model first: ollama pull qwen3:4b
   labeling_models:

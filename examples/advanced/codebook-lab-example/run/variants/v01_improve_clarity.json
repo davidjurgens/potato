@@ -1,0 +1,79 @@
+{
+  "variant_id": "v01_improve_clarity",
+  "origin": "llm:improve_clarity",
+  "notes": "I refined definitions, added exclusion rules to clarify adjacent labels and reduce ambiguity, sharpened examples for clarity, and maintained the original codebook structure while improving overall precision.",
+  "codes": [
+    {
+      "name": "access barriers",
+      "definition": "Structural obstacles that physically prevent access to care, such as distance, transport, or scheduling limitations.",
+      "clarification": "Include any obstacle that directly hinders a patient's ability to reach care.",
+      "negative_clarification": "NOT cost concerns; separate issues of affordability and financial burden from physical barriers.",
+      "positive_examples": [
+        {
+          "text": "A rural clinic is two hours away, requiring an entire day of work to get there.",
+          "why": "Distance and transport physically block reaching care."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "The waiting room was crowded and I had to wait for three hours.",
+          "why": "A logistical issue (wait times), not about physical barriers."
+        }
+      ],
+      "exclusion_rules": [
+        "Wait times are separate from access barriers; exclude scheduling-related issues"
+      ]
+    },
+    {
+      "name": "cost concerns",
+      "definition": "The worry or fear of the financial cost of care, including bills, copays, premiums, and debt.",
+      "clarification": "Include any mention of affordability, insurance not covering enough, or skipping care due to money concerns.",
+      "negative_clarification": "NOT difficulty physically reaching care; focus on financial burden, not access barriers.",
+      "positive_examples": [],
+      "negative_examples": [],
+      "exclusion_rules": []
+    },
+    {
+      "name": "provider trust",
+      "definition": "The patient's confidence in their clinician's expertise and judgment, as well as the overall credibility of the healthcare system.",
+      "clarification": "Include feeling heard or dismissed, doubting a diagnosis, or relying on a provider's guidance.",
+      "negative_clarification": "NOT general satisfaction with logistics like wait times; this is about the relationship and trust in the provider.",
+      "positive_examples": [
+        {
+          "text": "My doctor never listens to me, so I've started questioning their expertise.",
+          "why": "Expresses distrust in the provider relationship."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "The clinic's website is easy to navigate and provide clear information on wait times.",
+          "why": "A logistics complaint (wait times), not about trust in the provider."
+        }
+      ],
+      "exclusion_rules": [
+        "Wait times are separate from provider trust; exclude scheduling-related issues"
+      ]
+    },
+    {
+      "name": "wait times",
+      "definition": "The delay between seeking care and receiving it, including appointment lead time or time spent waiting on the day.",
+      "clarification": "Include long lead times for appointments and in-clinic waits, but separate from access barriers.",
+      "negative_clarification": "NOT being unable to reach the clinic at all (that is an access barrier); wait times assume care is reachable but slow.",
+      "positive_examples": [
+        {
+          "text": "The first available appointment was four months out, and I had to schedule it three weeks in advance.",
+          "why": "A direct delay in receiving care."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "There's no specialist within a hundred miles of me.",
+          "why": "Care is unreachable, an access barrier, not merely delayed."
+        }
+      ],
+      "exclusion_rules": [
+        "Access barriers are separate from wait times; exclude scheduling-related issues"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "variant_id": "v05_faithful_paraphrase",
+  "origin": "llm:faithful_paraphrase",
+  "notes": "Reworded the original codebook's language while maintaining its structure and level of detail, resulting in a revised version with new phrasing but equivalent meaning and strictness.",
+  "codes": [
+    {
+      "name": "access barriers",
+      "definition": "Structural obstacles that prevent a patient from accessing care, including physical distance, transportation issues, scheduling challenges, language barriers, and paperwork hurdles.",
+      "clarification": "Consider any factor that impedes a patient's ability to reach or book care, such as lack of proximity to a clinic, transportation constraints, or difficulties navigating the system.",
+      "negative_clarification": "Exclude price concerns, which are addressed under \"cost concerns\", even though both can prevent patients from receiving care.",
+      "positive_examples": [
+        {
+          "text": "The nearest clinic is two bus transfers away and I have to take a full day off work to get there.",
+          "why": "Physical distance and transportation issues create a significant barrier to accessing care."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "I saw the doctor, but the copay was more than I could afford, leaving me with a financial burden.",
+          "why": "The obstacle here is the high cost of care, which prevents me from affording it."
+        }
+      ],
+      "exclusion_rules": []
+    },
+    {
+      "name": "cost concerns",
+      "definition": "Worry about the monetary price of care — bills, copays, premiums, or fear of debt that may prevent patients from accessing care.",
+      "clarification": "Include any mention of affordability, insurance not covering enough, or skipping care due to financial constraints.",
+      "negative_clarification": "Exclude physical barriers to care, such as access barriers, which can also prevent patients from receiving care.",
+      "positive_examples": [
+        {
+          "text": "I skipped the follow-up appointment because I couldn't afford another $200 visit, leaving me with a significant financial burden.",
+          "why": "Care was forgone specifically due to its high cost."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "I waited for three months to get an appointment, which was frustrating but not directly related to the cost of care.",
+          "why": "This is a scheduling delay, with no mention of financial constraints."
+        }
+      ],
+      "exclusion_rules": []
+    },
+    {
+      "name": "provider trust",
+      "definition": "The patient's confidence in, or distrust of, their clinician or the health system, which can impact their willingness to seek and receive care.",
+      "clarification": "Consider feelings of being heard or dismissed, doubting a diagnosis, or relying on a provider's judgment.",
+      "negative_clarification": "Exclude general satisfaction with logistics like cost or wait times, as this is about the relationship and credibility of the provider.",
+      "positive_examples": [
+        {
+          "text": "My doctor never listens to me, so I've stopped trusting their advice and have started ignoring it.",
+          "why": "Expresses distrust in the provider relationship due to a lack of communication."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "The waiting room was crowded, but that didn't affect my trust in the provider or the care I received.",
+          "why": "A logistics complaint (wait times), not about trust in the provider."
+        }
+      ],
+      "exclusion_rules": []
+    },
+    {
+      "name": "wait times",
+      "definition": "Delay between seeking care and receiving it — appointment lead time or time spent waiting on the day.",
+      "clarification": "Include long lead times for appointments and long in-clinic waits, assuming care is reachable but slow.",
+      "negative_clarification": "Exclude situations where patients are unable to access care due to physical barriers, such as lack of proximity to a clinic or transportation issues.",
+      "positive_examples": [
+        {
+          "text": "The first available appointment was four months out, which added significant stress to my already busy schedule.",
+          "why": "A direct delay in receiving care caused by an extended wait time."
+        }
+      ],
+      "negative_examples": [
+        {
+          "text": "There's no specialist within a hundred miles of me, making it difficult for me to access the care I need.",
+          "why": "Care is unreachable due to physical distance, not just delayed."
+        }
+      ],
+      "exclusion_rules": []
+    }
+  ]
+}
