@@ -1625,7 +1625,20 @@ def validate_text_as_image_config(config_data: Dict[str, Any]) -> None:
         )
         return
 
-    # The two conflicts are errors and not warnings, for the same reason as
+    # Pocket Mode is a second annotation surface with its own item feed:
+    # /pocket/api/batch sends the text of every item in the batch as plain
+    # JSON, and the Pocket cards show it as words. The picture never reaches
+    # that surface, so the combination would look protected and not be.
+    pocket = config_data.get("pocket") or {}
+    if isinstance(pocket, dict) and pocket.get("enabled"):
+        raise ConfigValidationError(
+            "text_as_image is incompatible with pocket.enabled. Pocket Mode "
+            "shows each item's text as words and returns it from "
+            "/pocket/api/batch, so annotators on Pocket could still copy it. "
+            "Turn off one of the two."
+        )
+
+    # The conflicts below are errors and not warnings, for the same reason as
     # validate_live_ingestion_assignment_compat: each one looks like it worked.
     # The annotator sees a picture, the scheme finds nothing, and the study
     # collects empty annotations. A log line is too easy to miss for a failure

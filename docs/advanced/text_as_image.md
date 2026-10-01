@@ -86,9 +86,22 @@ Point the scheme at a different field, or turn `text_as_image` off. A
 `text_edit` scheme that post-edits a separate `mt_output` field, for example,
 runs beside the feature without trouble.
 
+## Pocket Mode is refused
+
+[Pocket Mode](pocket_mode.md) is a second annotation surface for phones, and it
+does not use the picture. Its cards show each item's text as words, and
+`/pocket/api/batch` returns the text of every item in the batch as JSON. Potato
+refuses to start when `text_as_image` and `pocket.enabled: true` are both set:
+
+```text
+Configuration error: text_as_image is incompatible with pocket.enabled. Pocket
+Mode shows each item's text as words and returns it from /pocket/api/batch, so
+annotators on Pocket could still copy it. Turn off one of the two.
+```
+
 ## Why these are errors
 
-A warning is easy to miss, and both failures are quiet. The annotator sees a
+A warning is easy to miss, and these failures are quiet. The annotator sees a
 picture, the scheme finds nothing, and the study collects empty annotations. It
 looks like it worked. The same reasoning applies to live ingestion with the
 BATCH assignment strategy.
@@ -97,8 +110,9 @@ Potato checks in this order:
 
 1. Does the feature apply at all? A media or `instance_display` project renders
    the item itself, so the feature stays inert and nothing can conflict.
-2. Is a span scheme present? Refuse.
-3. Does a scheme read the blanked field? Refuse.
+2. Is Pocket Mode on? Refuse.
+3. Is a span scheme present? Refuse.
+4. Does a scheme read the blanked field? Refuse.
 
 Step 1 comes first on purpose. An image project sets `text_key` to `image_url`
 and its scheme reads `source_field: image_url`. That looks like a conflict, but

@@ -261,6 +261,46 @@ class TestSpanSchemesAreRefused:
         assert "validate_text_as_image_config(config_data)" in source[start:end]
 
 
+class TestPocketModeIsRefused:
+    """Pocket Mode feeds its cards from /pocket/api/batch, which returns the
+    text of every item in the batch, and the cards show it as words. The
+    picture never reaches that surface."""
+
+    def test_pocket_beside_the_feature_is_refused(self):
+        from potato.server_utils.config_module import (
+            ConfigValidationError, validate_text_as_image_config)
+
+        with pytest.raises(ConfigValidationError) as caught:
+            validate_text_as_image_config({
+                "text_as_image": True,
+                "pocket": {"enabled": True},
+                "annotation_schemes": [{"annotation_type": "radio"}],
+            })
+        assert "pocket" in str(caught.value)
+
+    @pytest.mark.parametrize("pocket", [{"enabled": False}, {}, None])
+    def test_pocket_switched_off_is_fine(self, pocket):
+        from potato.server_utils.config_module import validate_text_as_image_config
+
+        config = {
+            "text_as_image": True,
+            "annotation_schemes": [{"annotation_type": "radio"}],
+        }
+        if pocket is not None:
+            config["pocket"] = pocket
+        validate_text_as_image_config(config)
+
+    def test_pocket_is_fine_where_the_feature_is_inert(self):
+        """A media project shows no picture, so Pocket hides nothing less."""
+        from potato.server_utils.config_module import validate_text_as_image_config
+
+        validate_text_as_image_config({
+            "text_as_image": True,
+            "pocket": {"enabled": True},
+            "annotation_schemes": [{"annotation_type": "image_annotation"}],
+        })
+
+
 class TestSchemesReadingTheRemovedFieldAreRefused:
     """A scheme that reads the blanked data field must not start either.
 
