@@ -316,10 +316,22 @@ class MACEManager:
         annotations_by_item = {}
         all_annotators = set()
 
+        from potato.annotator_origin import is_machine
+
         user_ids = usm.get_user_ids()
         for user_id in user_ids:
             user_state = usm.get_user_state(user_id)
             if not user_state:
+                continue
+
+            # MACE estimates per-annotator competence, and its output is used to
+            # make judgements about people -- whose labels to trust, whose to
+            # discard. A competence score for an annotation pipeline is a
+            # different claim entirely, and mixing the two puts a tool's
+            # spurious "reliability" beside a person's. Declared machines are
+            # left out with no opt-in, unlike the psychometrics engine, where
+            # modelling a tool's ability is the point.
+            if is_machine(user_state):
                 continue
 
             for instance_id, label_dict in user_state.instance_id_to_label_to_value.items():

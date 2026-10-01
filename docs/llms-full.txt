@@ -4272,12 +4272,13 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
-| `adjudication` |  | object |  | Resolve disagreements through an adjudication queue | `adjudicator_users`, `agreement_threshold`, `enabled`, `error_taxonomy`, `fast_decision_warning_ms`, `min_annotations`, `output_subdir`, `require_confidence`, `require_notes_on_override`, `show_agreement_scores`, `show_all_items`, `show_annotator_names`, `show_timing_data`, `similarity` |
+| `adjudication` |  | object |  | Resolve disagreements through an adjudication queue | `adjudicator_users`, `agreement_threshold`, `enabled`, `error_taxonomy`, `fast_decision_warning_ms`, `include_machine_annotators`, `min_annotations`, `min_human_annotations`, `output_subdir`, `require_confidence`, `require_notes_on_override`, `show_agreement_scores`, `show_all_items`, `show_annotator_names`, `show_timing_data`, `similarity` |
 | `agreement_metrics` |  | object |  | Which inter-annotator agreement measures the admin pages compute | `enabled`, `min_overlap`, `refresh_interval` |
 | `attention_checks` |  | object |  | Insert items with a known answer to detect inattentive annotators | `enabled`, `failure_handling`, `frequency`, `geometry_iou_tolerance`, `items_file`, `min_response_time`, `probability` |
 | `calibration` |  | object |  | Agreement drift tracking and the re-calibration prompt on /admin/iaa. Agreement is scored per time window so a fall in recent work is visible, instead of averaging into one whole-project number | `drop_threshold`, `enabled`, `window_by`, `windows` |
 | `gold_standards` |  | object |  | Items with known labels, used to score annotators | `accuracy`, `auto_promote`, `enabled`, `feedback`, `frequency`, `geometry_iou_tolerance`, `items_file`, `mode` |
 | `gold_standards_file` |  | string |  | Gold items file, the flat alternative to the gold_standards block |  |
+| `machine_annotators` |  | object |  | Declare raters that are tools or models rather than people, so agreement, adjudication and the IRT engine can separate them from human annotators instead of counting them as people | `annotators`, `enabled`, `require_declaration` |
 | `quality_control` |  | object |  | Aggregate quality thresholds and actions |  |
 | `require_fully_annotated` |  | boolean |  | Refuse to advance until every scheme on the page has an answer |  |
 | `text_as_image` |  | boolean or object | `False` | Render each item's text to a PNG so annotators cannot copy or paste it | `enabled`, `font_size`, `max_width` |
@@ -4323,7 +4324,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `keystroke_logging` |  | object |  | Content-blind typing dynamics on free-text fields -- when someone pauses, revises or pastes, never which keys -- and the composed/transcribed/pasted detection built on them | `classify_paste_source`, `detection`, `disclose_to_annotators`, `disclosure_text`, `enabled`, `exclude_schemas`, `fidelity`, `flush_interval_ms`, `idle_session_ms`, `include_schemas`, `pause_thresholds_ms`, `store_events` |
 | `mace` |  | object |  | MACE competence estimation: infers per-annotator reliability and a predicted label per item from the disagreement pattern alone | `enabled`, `min_annotations_per_item`, `min_items`, `num_iters`, `num_restarts`, `trigger_every_n` |
 | `pocket` |  | object |  | Pocket Mode: the phone-sized annotation surface at /pocket, served as a PWA with an offline queue | `auto_redirect`, `batch_size`, `enabled` |
-| `psychometrics` |  | object |  | Live IRT. Fits item difficulty and annotator ability as labels arrive, so labels carry error bars and confident items can stop early | `confidence_threshold`, `cost_per_judgment`, `discrimination_flag_threshold`, `enabled`, `min_annotators_per_item`, `min_observations`, `refit_interval`, `schema` |
+| `psychometrics` |  | object |  | Live IRT. Fits item difficulty and annotator ability as labels arrive, so labels carry error bars and confident items can stop early | `confidence_threshold`, `cost_per_judgment`, `discrimination_flag_threshold`, `enabled`, `include_machine_annotators`, `min_annotators_per_item`, `min_observations`, `refit_interval`, `schema` |
 | `rooms` |  | object |  | Multiplayer rooms at /rooms: live norming sessions, adjudication huddles and shadowing over a shared event log | `enabled`, `max_members`, `persist_votes`, `poll_interval_ms`, `schema`, `who_can_create` |
 | `thinkaloud` |  | object |  | Think-aloud mode: local speech-to-text over spoken rationales, plus rule-based detection of spoken label phrases | `chunk_seconds`, `enabled`, `fillers`, `language`, `model`, `require_spoken_label`, `schema`, `stems`, `stt` |
 | `truth_serum` |  | object |  | Surprisingly-popular scoring. Each annotator also predicts how many others will pick the same label, and an answer that beats its own predicted popularity wins over the majority | `enabled`, `min_annotators`, `question`, `schema` |
@@ -21745,6 +21746,13 @@ Agreement is measured per schema on the resolved label, so two annotators
 giving opposite answers do not promote, and a schema only one of them answered
 is not treated as unanimous.
 
+Raters declared under
+[`machine_annotators`](../advanced/machine_annotators.md) are not counted
+toward promotion. Tools that share a reference database make the same mistakes,
+so counting them would let a few tools write their shared error into the answer
+key before any person had looked at the item. People who agree with the tools
+still promote it.
+
 A promoted item is graded when an annotator meets it in the ordinary stream; it
 is never injected. The headline gold accuracy therefore depends on when an
 annotator arrived: items promoted behind them count, items promoted ahead of
@@ -35098,6 +35106,337 @@ At 2:1 more data fixes it. At 4:1 it does not, and the ranking gets worse as ite
 
 ---
 
+<!-- source: docs/advanced/machine_annotators.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/advanced/machine_annotators/
+
+# Machine Annotators
+
+A machine annotator is a rater that is a program rather than a person: an
+annotation pipeline, a detector, a language model. Declaring one lets Potato
+measure it as a rater — computing agreement between tools, routing their
+conflicts to a human, estimating each one's reliability — without counting it
+as a person in statistics that describe people.
+
+This matters when several automated systems label the same data and no ground
+truth exists to say which is right. Benchmarks of genome annotation pipelines,
+OCR engines, ASR systems and LLM extractors all have that shape: the tools
+disagree, the disagreement is measurable, and the question of who was right on
+any given item goes unanswered.
+
+## Why a declaration is needed
+
+Without a declaration, machine output reaches Potato by one of two paths, and
+neither measures it as a rater.
+
+The importers refuse to write machine output into a user state at all, because
+a fabricated user "would make machine output indistinguishable from human work
+and fabricate agreement between annotators who never touched the item."
+Imported predictions live in item data as pre-annotations, where no agreement,
+adjudication or psychometric code can reach them.
+
+The simulator does the opposite. It registers over HTTP, authenticates and
+saves through the ordinary route, so an LLM-driven annotator gets a real user
+state — and is counted as a person by `/admin/iaa`, MACE and the IRT engine,
+because nothing on the state says it is not one.
+
+A declaration fixes both. The importers' guard is against machine output posing
+as a person, and a declared rater is a machine rater on the record.
+
+## Configuration
+
+```yaml
+machine_annotators:
+  enabled: true
+  annotators:
+    - id: prokka                  # the user id this rater annotates under
+      kind: tool                  # tool | llm
+      tool: prokka
+      version: "1.14.6"
+      database_version: "2023-05"
+      run_date: "2024-11-03"
+
+    - id: gpt4o_judge
+      kind: llm
+      endpoint_type: openai
+      model: gpt-4o
+      version: "2024-08-06"
+```
+
+| Field | Meaning |
+|---|---|
+| `id` | The user id the rater annotates under. This is the join key between the declaration and the state on disk. |
+| `kind` | `tool` or `llm`. Anything else is accepted, logged, and treated as a machine — not being human is what the metrics depend on. |
+| `tool`, `model`, `endpoint_type` | Which program produced the answers. |
+| `version`, `database_version`, `run_date` | Which *version* of it, and when. |
+
+Fill in the version fields. A benchmark of four genome annotation
+tools could not analyse how annotations drifted between releases because the
+prior annotation's date was never recorded: a re-run that finds 139 more
+features cannot be told apart from a reference database that gained them.
+
+### Absent means human
+
+A participant with no declaration is a person. Every user state written before
+this feature existed loads as human, so adding the block changes nothing for
+raters you do not name, and a study with no `machine_annotators` block produces
+the same output it produced before.
+
+Disabling the block stops new stamping. It does not unmake origins already
+written to disk, because a rater that was a tool last week was still a tool.
+
+## Effects on the measurement surfaces
+
+### Agreement
+
+`/admin/iaa` reports three partitions instead of one:
+
+| Partition | What it measures |
+|---|---|
+| `human_human` | Inter-human reliability. This is the headline. |
+| `machine_machine` | Whether the tools agree with each other. |
+| `pooled` | Everyone in one matrix. |
+
+The headline figures cover humans only. The top-level number is read as
+inter-human reliability, so if it pooled everyone, a run of the LLM simulator
+against a live study would change it with nothing on the page to say why.
+
+The pooled figure is still reported, under a name that says what it mixes. A
+coefficient over a mixed human/machine reliability matrix is not an estimate of
+either group's reliability — two groups that are each perfectly self-consistent
+can pool to worse than chance, because the number is then describing the
+distance between them.
+
+The admin page says which raters were excluded and which versions produced
+them, so an admin can see why the annotator count dropped.
+
+`/admin/api/agreement` excludes machine raters for the same reason and lists
+them under `machine_annotators_excluded`.
+
+### MACE
+
+MACE estimates per-annotator competence, and its output is used to decide whose
+labels to trust. Declared machines are excluded with no opt-in: a competence
+score for an annotation pipeline is a different claim from a competence score
+for a person, and mixing them puts a tool's number beside a colleague's.
+
+### Psychometrics (IRT)
+
+The IRT engine is the exception, because modelling a tool's ability is the
+point:
+
+```yaml
+psychometrics:
+  enabled: true
+  schema: sentiment
+  include_machine_annotators: true
+```
+
+Off by default, so an existing study's estimates do not move when a machine
+annotator is declared. On, the model fits an ability per rater and a difficulty
+per item from the disagreement pattern alone, with no gold labels — which is
+how you get a reliability estimate per tool on a corpus that has no ground
+truth. Annotator rows carry an `origin` label for machine raters.
+
+!!! warning "Correlated error"
+
+    GLAD assumes raters err independently given the true label. Tools that
+    share a reference database do not: they make the same mistake together,
+    which inflates the apparent ability of whichever cluster is largest. An
+    ability estimate over machine raters needs someone who knows which tools
+    share evidence before it is published. The psychometrics dashboard says so
+    above the ability chart whenever a machine rater is in it, and marks each
+    machine's row.
+
+### Gold auto-promotion
+
+Machine raters never count toward `gold_standards.auto_promote`, and no setting
+lets them. Gold is what later annotators are graded against, and agreement
+between tools that share evidence is correlated error. Enough people agreeing
+still promotes an item, whatever the tools answered.
+
+### Adjudication
+
+```yaml
+adjudication:
+  enabled: true
+  adjudicator_users: [curator]
+  include_machine_annotators: true
+  min_human_annotations: 0
+```
+
+Machines stay out of the queue unless `include_machine_annotators` is set,
+which extends the exclusion the queue already applies to adjudicators. When
+they are in, each of their answers carries a badge (`TOOL` or `LLM`) on its
+response card and on its chip in the decision form; hovering it shows the tool
+or model and its version. Under `show_annotator_names: false` the badge still
+appears beside the alias, because knowing an answer came from a tool is part
+of judging it.
+
+`min_human_annotations` is a floor on *people*, counted separately from the
+participant total. Zero is allowed: several tools and no human
+annotator is a valid queue, because the adjudicator is the person in that
+design.
+
+Queue items carry `annotator_origins`, so a curator choosing between two labels
+can see that one came from a tool and which version produced it. Each decision
+records `source_origins`: per schema, which raters had given the answer the
+adjudicator settled on, e.g. `pipeline_a 2.1.0 db refdb-2024-03 (tool);
+pipeline_b 1.8.2 db refdb-2024-03 (tool)`. A label only two tools that share a
+database ever gave is a different result from one the curators gave. It is
+recorded when the decision is made, so a later config edit cannot change what
+a past decision appears to have meant.
+
+The final dataset distinguishes who agreed. A study with no machine rater still
+writes `source: "unanimous"`; one with machine raters writes
+`unanimous_machine` or `unanimous_mixed` where they apply, because several
+tools agreeing is not the same as several people agreeing.
+
+### Export
+
+Once any machine rater has annotated, the per-annotator export formats mark
+every row with who produced it. csv, tsv, parquet, HuggingFace and the publish
+bundle get an `annotator_origin` column (`human`, `tool` or `llm`) and an
+`annotator_origin_detail` column holding the declaration as JSON; jsonl gets
+the whole declaration under `annotator_origin`. The columns sit next to
+`user_id`:
+
+```
+instance_id,user_id,annotator_origin,annotator_origin_detail,function_category.information_processing,...
+TOY_00030,curator_1,human,,,...
+TOY_00030,pipeline_a,tool,"{""database_version"": ""refdb-2024-03"", ""declared_in"": ""config"", ""id"": ""pipeline_a"", ...}",,...
+```
+
+A study with no machine rater exports without them. An export run before the
+server has loaded a declared rater's state (right after an import, for
+example) still labels it, from the config.
+
+The adjudication outputs record what was adopted: `adjudicated.csv` adds a
+`source_origin` column beside `source`, and the `potato.adjudication_export`
+dataset carries `source_origins` on each adjudicated item. See
+[Export Formats](../data-export/export_formats.md#annotator-origin).
+
+## Getting machine output in
+
+### From a run you already have
+
+Import the predictions and declare the seeded rater:
+
+```bash
+python -m potato.importers \
+  --input-format coco --input predictions.json \
+  --output-dir myproject \
+  --seed-user prokka --as-machine-annotator tool
+```
+
+The seeded state then carries an origin. Declare the same id under
+`machine_annotators` in the project config so the server keeps the declaration
+when it reloads that state.
+
+Without `--as-machine-annotator`, `--seed-user` still fabricates an
+undeclared annotator and still warns that its rows must be kept out of
+agreement analysis.
+
+### From a model running against the server
+
+The simulator's `llm` and `agent` strategies drive a real endpoint. Declare the
+user ids it will use:
+
+```yaml
+machine_annotators:
+  enabled: true
+  annotators:
+    - {id: sim_user_0000, kind: llm, model: my-model}
+    - {id: sim_user_0001, kind: llm, model: my-model}
+```
+
+The simulator warns at startup when a model-backed strategy is selected,
+naming the ids that should be declared. It cannot fix the problem itself — the
+roster lives in the target server's config, not the simulator's.
+
+## Requiring every participant to be declared
+
+By default an undeclared participant is treated as a person, which is what
+makes the feature safe to add to a running study. A study that wants the
+stronger guarantee can refuse annotations from anyone it does not recognise:
+
+```yaml
+machine_annotators:
+  enabled: true
+  require_declaration: true
+  annotators:
+    - {id: prokka, kind: tool, version: "1.14.6"}
+
+user_config:
+  allow_all_users: false
+  users: [alice, bob]
+```
+
+A write is refused when the participant is neither declared under
+`machine_annotators.annotators` nor on the human roster, and the annotator is
+told to ask the administrator rather than being left with a save that silently
+did nothing.
+
+Two deliberate limits:
+
+**It is checked where annotations are written, not at login, and never from a
+request header.** A header asserting "I am a machine" is supplied by the
+caller, so honouring one would let anybody opt out of the human count — the
+opposite of the guarantee. Only the study's config can declare an origin.
+
+**It requires a roster to compare against, and says so at load.** Under open
+registration every username that registers becomes a valid account, so the
+setting would have nothing to refuse, so the config is rejected at startup unless
+`user_config.allow_all_users` is false and a roster is named — inline under
+`user_config.users`, or as a file at `authentication.user_config_path`.
+
+Consent, instruction and survey pages are exempt. Those are not dataset
+annotations, and a rater that never reaches an item has nothing to contaminate.
+
+## Prioritising what the tools disagree about
+
+Cross-tool disagreement is a per-item number, so it drives the existing triage
+queue with no new machinery. Compute it when the data is built, put it on the
+item, and point `triage` at the field:
+
+```yaml
+triage:
+  enabled: true
+  signal_field: tool_disagreement
+
+assignment_strategy: priority
+```
+
+`signal_field` is read as items are added, before any annotation exists, so it
+works for a batch import: the contested items are served first and a human never opens the ones every tool already agreed on.
+
+## Example project
+
+`examples/advanced/machine-annotators/` is a synthetic gene-function curation
+task: three annotation pipelines and one LLM have labelled twelve predicted
+genes, and two curators have labelled eight of them. It shows agreement by
+partition, triage on tool disagreement, adjudication with machine raters, IRT
+over tools, and the export columns. It leaves `require_declaration` and MACE
+off.
+
+```bash
+python examples/advanced/machine-annotators/setup_demo.py
+python potato/flask_server.py start examples/advanced/machine-annotators/config.yaml -p 8000
+```
+
+Log in with any new username to curate (the contested loci come first), as
+`lead_curator` to open `/adjudicate`, and open `/admin/iaa?format=html` with
+the admin key `demo-admin-key` for the agreement report.
+
+## Related
+
+- [Heterogeneous Coverage](heterogeneous_coverage.md) — overlap samples, adaptive boost, and the agreement report
+- [Psychometrics](psychometrics.md) — the IRT model and adaptive routing
+- [MACE](mace.md) — competence estimation over human annotators
+- [Task Assignment](task_assignment.md) — assignment strategies including `priority`
+
+
+---
+
 <!-- source: docs/advanced/embedding_visualization.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/advanced/embedding_visualization/
 
@@ -41240,6 +41579,14 @@ Once overlap-sample items saturate, agreement statistics are available at
 | geometry (image_annotation) | mean agreement, mean matched IoU, detection F1, mean object count difference |
 | temporal (audio_annotation, video_annotation) | mean agreement, mean matched IoU (temporal), detection F1, mean segment count difference |
 
+For nominal schemes, percent agreement is the share of annotator pairs that
+chose the same label, averaged over items. Cohen's κ is computed for each pair
+of annotators on the items that pair both answered, then averaged over pairs, so
+it needs no item that every annotator rated. Heterogeneous coverage often has
+none. A pair whose shared items all carry one label has no defined κ and is left
+out of the average. The JSON report carries the same value under
+`pairwise_cohen_kappa` too, for scripts written against that name.
+
 An item is scored only once it reaches its **full** cap, not as soon as it has
 two annotators, because a partly-annotated item's agreement moves as the rest
 arrive. With `num_annotators_per_item: 3` and two annotators finished, every
@@ -41492,11 +41839,12 @@ navigation, offline annotation with automatic sync, and home-screen
 installation as a PWA. Desktop users see the normal interface; nothing
 changes for them.
 
-Not every annotation type belongs on a phone — span highlighting and bounding
-boxes are desktop tasks. Potato is explicit about this: touch-capable tasks
-get the mobile interface, tasks that aren't get a clear warning instead of a
-degraded UI, and the admin dashboard shows who is annotating from which kind
-of device either way.
+Pocket Mode hosts the simplest types: one card per item and one tap per
+label. Many more types work on a phone through the regular annotation page,
+which is laid out for phones (see [Phones without Pocket
+Mode](#phones-without-pocket-mode)). Only types that have not been checked by
+touch get a warning recommending a desktop browser. The admin dashboard shows
+who is annotating from which kind of device either way.
 
 ## Quick start
 
@@ -41516,10 +41864,10 @@ python potato/flask_server.py start examples/advanced/pocket-mode/config.yaml -p
 When a logged-in annotator reaches the annotation page, Potato decides where
 to send them:
 
-| Device | Task touch-capable, pocket enabled | Task NOT touch-capable |
-|---|---|---|
-| Desktop | normal interface | normal interface |
-| Phone / tablet | **redirected to the mobile interface** | normal interface + a dismissible warning that a desktop browser is recommended |
+| Device | Pocket-capable task, Pocket enabled | Other task, every type works by touch | Task with a type not checked for touch |
+|---|---|---|---|
+| Desktop | normal interface | normal interface | normal interface |
+| Phone / tablet | **redirected to the mobile interface** | normal interface, laid out for the phone | normal interface + a dismissible warning that a desktop browser is recommended |
 
 Detection happens in two layers:
 
@@ -41535,6 +41883,30 @@ Detection happens in two layers:
 
 Routing only applies to annotators in the annotation phase. Consent,
 instruction, and survey pages are unaffected.
+
+### Phones without Pocket Mode
+
+A phone that is not routed to Pocket gets the regular annotation page, laid
+out for a small screen:
+
+- The header takes two rows and scrolls away with the page. Long task names
+  are shortened, with the full name on hover.
+- The task scrolls with the page. Only PDF and document viewers keep their
+  own scrolling box.
+- Options, Likert-scale points, ranking arrows, slider handles and image
+  toolbar buttons are at least 44px to touch. Multirate grids become a list of
+  items, each with its ratings as rows.
+- Keyboard-shortcut hints are hidden.
+- **Span highlighting:** select text with a long press, then tap the
+  **Highlight as "label"** button that appears at the bottom of the screen.
+  Choose the label first, or the button asks for one.
+
+These types work on the regular page by touch: `radio`, `multiselect`,
+`likert`, `slider`, `number`, `text`, `pure_display`, `select`, `multirate`,
+`pairwise`, `bws`, `ranking`, `semantic_differential`, `span` and
+`image_annotation`. A task with any other type shows phone and tablet users a
+dismissible warning recommending a desktop browser. The warning scrolls away
+with the page.
 
 ### Desktop users can use it too
 
@@ -41638,9 +42010,9 @@ the headline ("3 of 12 users have visited from a phone or tablet"). The tab
 also states the routing situation for this task — auto-routing active, task
 capable but Pocket disabled, or task not mobile friendly.
 
-Why this matters: if your task is *not* touch-capable and the Devices tab
-shows annotators on phones anyway, those annotators saw the warning and kept
-going — worth checking their output or following up. Device data also
+Why this matters: if your task includes a type not checked for touch and the
+Devices tab shows annotators on phones anyway, those annotators saw the
+warning and kept going. Check their output or follow up with them. Device data also
 answers "would enabling Pocket Mode help?" before you turn it on: **visits
 are tracked whether or not Pocket Mode is enabled.**
 
@@ -42272,7 +42644,7 @@ Potato's authentication system supports:
 
 - **Per-user salted password hashing** using PBKDF2-SHA256 with 100,000 iterations
 - **Admin-initiated password reset** via CLI command or REST API
-- **Self-service password reset** via token-based reset links
+- **Token-based reset links** issued by an administrator
 - **Shared user credential files** for multi-server deployments
 - **Database authentication backend** using SQLite or PostgreSQL
 
@@ -42337,19 +42709,19 @@ curl -X POST http://localhost:8000/admin/reset_password \
 
 This endpoint requires the `admin_api_key` configured in your project (see [Admin Dashboard](../administration/admin_dashboard.md)).
 
-### Self-Service Password Reset
+### Reset Links
 
 Potato includes a token-based password reset flow for annotators who forget their passwords.
 
-#### The self-service reset flow
+#### The reset flow
 
-1. The annotator visits `/forgot-password` and enters their username
-2. The system generates a secure single-use reset token (valid for 24 hours)
-3. The reset link is displayed on screen for the admin to copy and share with the annotator
+1. The annotator visits `/forgot-password`, enters their username, and is told to contact the administrator
+2. The administrator generates a secure single-use reset token (valid for 24 hours) with the API below
+3. The administrator sends the link to the annotator via email or chat
 4. The annotator opens the link (`/reset/<token>`) and sets a new password
 5. The token is consumed (single-use) and the password is updated
 
-> **Note:** Potato does not send emails. The reset link is displayed on the page after submission. In a typical workflow, an administrator generates the token and sends the link to the annotator via email or chat.
+> **Note:** Potato does not send emails, so `/forgot-password` never shows a reset link. Anyone can submit that form, and showing the link there would let them reset any account, including an admin's. Reset links come only from the admin API or the `potato reset-password` CLI.
 
 #### Generating Tokens via API
 
@@ -42375,7 +42747,7 @@ Optional: set a custom expiry with `"ttl_hours": 48`.
 
 #### Login Page Link
 
-When `require_password: true` is set, a "Forgot Password?" link appears on the login page, directing annotators to the self-service reset form.
+When `require_password: true` is set, a "Forgot Password?" link appears on the login page, directing annotators to a page that tells them to ask the administrator for a reset link.
 
 ## Where accounts are stored
 
@@ -44670,6 +45042,7 @@ The file contains a JSON object with a `decisions` array and a `last_updated` ti
 - `label_decisions` -- The final labels (keyed by schema name).
 - `span_decisions` -- Any span annotation decisions.
 - `source` -- Per-schema provenance (which annotator's response was adopted, or `"adjudicator"` for a novel decision).
+- `source_origins` -- Recorded only in a study with declared [machine annotators](../advanced/machine_annotators.md). Per schema, what produced the final answer, as it stood when the decision was made: the adopted annotator (`"human"`, or e.g. `"pipeline_a 2.1.0 (tool)"`), or, when the adjudicator chose the value themselves, everyone who had given that value, joined with `"; "`. A value no annotator gave has no entry.
 - `confidence` -- The adjudicator's confidence rating.
 - `notes` -- Free-text notes.
 - `error_taxonomy` -- Selected error classification tags.
@@ -46057,6 +46430,8 @@ export/
 |--------|------|-------------|
 | `instance_id` | string | The annotated item's ID |
 | `user_id` | string | The annotator's ID |
+| `annotator_origin` | string | `human`, `tool` or `llm`. Present only when a [machine annotator](../advanced/machine_annotators.md) contributed |
+| `annotator_origin_detail` | string | JSON with the machine rater's tool or model and its versions; empty for a person. Same condition |
 | *\<schema_name\>* | varies | One column per annotation schema, type depends on schema |
 
 Schema columns are flattened by annotation type:
@@ -46186,6 +46561,24 @@ Export annotations as JSON Lines (one JSON object per line). Preserves full anno
 ```bash
 python -m potato.export --config config.yaml --format jsonl --output ./export/
 ```
+
+### Annotator origin
+
+When a study declares [machine annotators](../advanced/machine_annotators.md)
+and at least one of them has annotated, every per-annotator format marks each
+row with who produced it:
+
+| Format | Field |
+|---|---|
+| csv, tsv, parquet, huggingface, publish bundle | `annotator_origin` (`human`, `tool` or `llm`) and `annotator_origin_detail` (the declaration as JSON; empty for a person), right after `user_id` |
+| jsonl | `annotator_origin`: the whole declaration, e.g. `{"kind": "tool", "id": "pipeline_a", "version": "2.1.0", ...}`, or `{"kind": "human"}` |
+| parquet and huggingface span tables | `annotator_origin` |
+
+Filter on it to keep tool output out of a human agreement figure or a training
+set. A study with no machine rater exports without these columns, as before.
+A rater declared in the config but not yet loaded by the server (for example,
+state files written by an import script) is still labelled, from the
+declaration.
 
 ### EAF - ELAN Annotation Format (eaf)
 
@@ -46361,7 +46754,12 @@ Two files:
 
 The `source` column names an annotator when the adjudicator adopted that
 person's answer verbatim, and reads `adjudicator` when they answered it
-themselves.
+themselves. In a study with [machine annotators](../advanced/machine_annotators.md),
+a `source_origin` column follows it, saying what produced the final answer:
+the adopted annotator (`human`, or a description such as `pipeline_a 2.1.0 db
+refdb-2024-03 (tool)`), or, when the adjudicator chose the value themselves,
+everyone who had given that same value, joined with `; `. It is empty when
+the final value is one no annotator gave.
 
 A composite scheme such as `constant_sum`, `soft_label` or
 `hierarchical_multiselect` resolves to a whole allocation or path list, which
@@ -56027,7 +56425,7 @@ Most endpoints are session-authenticated: `POST /auth` with `username` and
 
 ## Examples catalog
 
-A derived index of the **214 example projects** in the repository, across 15
+A derived index of the **215 example projects** in the repository, across 15
 categories. Each entry records the annotation types and display types the config
 uses, the subsystems it switches on, whether it ships data and a README, and the
 command that runs it.
@@ -56079,6 +56477,107 @@ python scripts/generate_llms_full.py --check
 
 Run them after adding an annotation type, a display type, a config key, or a
 route. See [Testing](../guides/testing.md) for the drift tests that enforce this.
+
+
+---
+
+<!-- source: docs/releasenotes/v2.9.4.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.9.4/
+
+# Release Notes: v2.9.4 — Password Reset Fix and Phone Usability
+
+A security fix for `/forgot-password`, which anyone could use to take over a
+password account. Upgrade now if your server is reachable by people you do not
+trust. This release also makes the annotate page usable on phones, adds
+declared machine annotators, and fixes several reverse-proxy and deploy bugs.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+## Security
+
+- **`/forgot-password` gave a reset link to whoever asked**
+  ([GHSA-43v4-43pw-4rp2](https://github.com/davidjurgens/potato/security/advisories/GHSA-43v4-43pw-4rp2)).
+  The form needed no login. It created a reset token for any username
+  submitted and showed the `/reset/<token>` link on the page, so anyone who
+  could reach the server could take over any password account, admin-role
+  accounts included. The form now creates no token and returns the same page
+  for every username; that page tells the annotator to ask the
+  administrator. Reset links come only from `POST /admin/create_reset_token` (admin key or RBAC
+  admin) and the `potato reset-password` CLI. There is no setting to bring the
+  old behaviour back: Potato sends no email, so it has no safe way to deliver a
+  self-service link. Reported, with a patch, by HDEF (hdef-devteam).
+
+## Phones
+
+A sweep of 20 task types on an iPhone 13 found pages that fit on the screen but
+were hard to use. On phones and other touch screens:
+
+- The task scrolls with the page, not inside a box within it. That box came
+  from the card height limit on image tasks and the 500px dialogue field.
+- The header is two rows instead of three.
+- The "desktop recommended" banner scrolls away instead of sticking, and shows
+  only when a task has a scheme not known to work by touch (span linking still
+  shows it).
+- Radio and checkbox rows, Likert and semantic-differential buttons, ranking
+  arrows, the slider and the image toolbar are at least 44px tall.
+- Multirate becomes a list of labelled rows instead of a table cut off at the
+  right edge.
+- Likert end labels stay inside the card, keyboard-shortcut hints are hidden,
+  and text inputs are at least 16px so iOS does not zoom in on focus.
+- **Span highlighting works by touch.** Long-press to select text, and a
+  "Highlight as" button appears at the bottom of the screen.
+- A long task name no longer pushes the page wider than the screen.
+
+Desktop is unchanged: size rules apply only to touch screens, layout rules only
+to narrow windows. See "Phones without Pocket Mode" in
+[Pocket Mode](../advanced/pocket_mode.md).
+
+## Machine annotators
+
+A study can list the raters that are programs (annotation tools, detectors,
+LLMs) under a `machine_annotators` block. Before this they were either
+pre-annotations in the item data, out of reach of agreement and adjudication,
+or simulator users counted as people. With the declaration:
+
+- `/admin/iaa` reports human–human, machine–machine and pooled agreement, with
+  human-only headline figures; `/admin/api/agreement` and MACE leave machines
+  out.
+- Psychometrics can model tool ability, and adjudication can queue machine
+  raters. Machine consensus never promotes gold on its own.
+- csv, tsv, parquet, HuggingFace and publish-bundle exports gain
+  `annotator_origin` and `annotator_origin_detail` columns when any record came
+  from a machine; all-human studies export as before.
+- `require_declaration` refuses writes from anyone neither declared nor on the
+  roster.
+
+See [Machine annotators](../advanced/machine_annotators.md) and the example in
+`examples/advanced/machine-annotators/`.
+
+## Bug fixes
+
+- **Two studies on one host shared one session cookie.** Behind a reverse
+  proxy serving `/app1` and `/app2`, logging in to one logged you out of the
+  other. The cookie is now scoped to the URL prefix. Annotators do not need to
+  clear cookies. (#172, Eyecatch3r)
+- **Adjudication did not work behind a URL prefix.** Its API calls went to the
+  bare host. Its header also lost the Logout button to a long task name, and
+  the queue scrolled the page sideways below 768px.
+- The phone-to-Pocket redirect, three redirects in Rooms and one on the
+  codebook page dropped the URL prefix.
+- **Redeploying to an existing HuggingFace Space failed with 402.**
+  HuggingFace bills the create call even when the Space exists; `potato deploy
+  up` now skips it for an existing Space.
+- The nominal IAA report declared `percent_agreement` and `cohen_kappa` but
+  emitted neither. Cohen's kappa is now computed per pair on shared items.
+- The simulator CLI overwrote `user_count`, `strategy`, `parallel_users` and
+  `output_dir` from its defaults, so a config file could not set them.
+- On Windows, `docs/llms-full.txt` came out with every page twice (#173) and
+  the config reference was written in the locale encoding (#174). Both from
+  Eyecatch3r.
+
+See the [changelog](https://github.com/davidjurgens/potato/blob/master/CHANGELOG.md) for earlier releases.
 
 
 ---

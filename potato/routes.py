@@ -1918,7 +1918,9 @@ def annotate():
                     and not session.get("force_desktop")
                     and pocket_routing_state()["available"]):
                 logger.info(f"Touch device detected for {username}; routing to /pocket")
-                return redirect("/pocket")
+                # script_root, so a phone behind a URL prefix lands on this
+                # study's /pocket and not on the bare host's.
+                return redirect(request.script_root + "/pocket")
         except Exception:
             logger.debug("Device routing check failed", exc_info=True)
 
@@ -5815,6 +5817,50 @@ def update_instance():
         # They should be routed by the current user phase instead of assignment checks.
         is_phase_page_update = instance_id == "__phase_page__"
 
+        # machine_annotators.require_declaration: refuse dataset writes from a
+        # participant who is neither a declared machine nor a listed person.
+        #
+        # Enforced here rather than at login, and never from a request header.
+        # A header saying "I am a machine" is asserted by the caller, so
+        # honouring it would let anyone opt out of being counted as human --
+        # the opposite of the guarantee. Origin is declared by the study or it
+        # is not declared at all.
+        #
+        # Phase-page saves are exempt: consent and survey answers are not
+        # dataset annotations, and a rater that never reaches an item has
+        # nothing to contaminate.
+        if not is_phase_page_update:
+            _ma = config.get("machine_annotators") or {}
+            if _ma.get("enabled") and _ma.get("require_declaration"):
+                from potato.annotator_origin import (
+                    parse_machine_annotators, undeclared_participant,
+                )
+                from potato.authentication import (
+                    UserAuthenticator, _parse_authorized_users,
+                )
+
+                try:
+                    _listed = list(UserAuthenticator.get_instance().authorized_users)
+                except (ValueError, AttributeError):
+                    _listed = _parse_authorized_users(config.get("user_config") or {})
+
+                if undeclared_participant(
+                        username, parse_machine_annotators(config), _listed):
+                    logger.warning(
+                        "Refused an annotation from '%s': machine_annotators."
+                        "require_declaration is on and this participant is "
+                        "neither a declared machine rater nor a listed person. "
+                        "Declare it under machine_annotators.annotators, or add "
+                        "it to the human roster.", username)
+                    return jsonify({
+                        "status": "error",
+                        "message": (
+                            "This account is not declared for this study. Ask "
+                            "the administrator to add it to the annotator "
+                            "roster, or to declare it as a machine annotator."
+                        ),
+                    }), 403
+
         # Guard: reject updates for instances not assigned to this user.
         # Skip this for synthetic phase-page updates so non-annotation page autosaves
         # do not get treated like dataset item writes.
@@ -6420,7 +6466,8 @@ def update_instance():
 
                 # Track for gold standard auto-promotion
                 promotion_result = qc_manager.record_item_annotation(
-                    instance_id, username, all_annotations
+                    instance_id, username, all_annotations,
+                    origin=getattr(user_state, "origin", None),
                 )
                 if promotion_result and promotion_result.get("promoted"):
                     logger.info(f"Item {instance_id} auto-promoted to gold standard")
@@ -9474,34 +9521,33 @@ def admin_create_reset_token():
 def forgot_password():
     """Self-service forgot password page.
 
+    Potato does not send email, so there is no channel that proves the
+    requester owns the account. The page therefore never creates or shows a
+    reset token: it tells the annotator to ask an administrator, who can issue
+    a link with ``POST /admin/create_reset_token`` or reset the password with
+    ``potato reset-password``.
+
     GET: Show the forgot password form.
-    POST: Generate a reset token and display the reset link.
+    POST: Show the same instructions for any username.
     """
     if request.method == "GET":
         return render_template("forgot_password.html",
                              title=config.get("annotation_task_name", "Annotation Platform"))
 
     username = request.form.get("username", "").strip()
-    # Always show success to prevent user enumeration
     if not username:
         return render_template("forgot_password.html",
                              title=config.get("annotation_task_name", "Annotation Platform"),
                              error="Please enter your username.")
 
-    user_authenticator = UserAuthenticator.get_instance()
-    token = user_authenticator.create_reset_token(username)
-
-    if token:
-        reset_link = f"{request.host_url.rstrip('/')}/reset/{token}"
-        return render_template("forgot_password.html",
-                             title=config.get("annotation_task_name", "Annotation Platform"),
-                             reset_link=reset_link,
-                             success=True)
-    else:
-        # Show same success message to prevent enumeration
-        return render_template("forgot_password.html",
-                             title=config.get("annotation_task_name", "Annotation Platform"),
-                             success=True)
+    # Same response whether or not the user exists, to prevent enumeration.
+    # No token is created here: a link handed to whoever typed the username
+    # would let anyone reset any account.
+    logger.info("Password reset requested via /forgot-password; "
+                "an administrator must issue the reset link")
+    return render_template("forgot_password.html",
+                         title=config.get("annotation_task_name", "Annotation Platform"),
+                         success=True)
 
 
 def reset_password_with_token(token):

@@ -193,6 +193,92 @@ class TestCreate:
         assert "PRO" in message
         assert "--provider render" in message or "potato share" in message
 
+    def test_an_existing_space_is_never_sent_to_create_repo(self, provider, spec,
+                                                            tmp_path, monkeypatch):
+        """Redeploying to a Space you already own must not cost a paid plan.
+
+        HuggingFace bills the create call for a Docker Space even when
+        `exist_ok=True` and the repo is already there, so an unconditional
+        create_repo 402s on every redeploy. That contradicts the provider's own
+        error text, which tells the user restarting an existing Space is free,
+        and it strands the Space that is already live.
+        """
+        from potato.deploy.state import DeploymentStore
+
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        (bundle_dir / "config.yaml").write_text("task_dir: .\n")
+
+        class FakeRuntime:
+            stage = "RUNNING"
+            raw = {}
+
+        class FakeApi:
+            def whoami(self):
+                return {"name": "alice"}
+
+            def repo_exists(self, repo_id, repo_type=None):
+                return repo_type == "space"
+
+            def create_repo(self, *a, **k):
+                raise AssertionError(
+                    "create_repo was called for a Space that already exists")
+
+            def add_space_secret(self, **k):
+                return None
+
+            def upload_folder(self, **k):
+                return None
+
+            def get_space_runtime(self, repo_id):
+                return FakeRuntime()
+
+        monkeypatch.setattr("potato.deploy.providers.huggingface._hf_api",
+                            lambda token: FakeApi())
+        spec.demo = True
+        provider.create(spec, FakeBundle(str(bundle_dir)), None,
+                        DeploymentStore(spec.config_path))
+
+    def test_a_missing_space_is_still_created(self, provider, spec, tmp_path,
+                                              monkeypatch):
+        """The existence probe must not turn into a refusal to create anything."""
+        from potato.deploy.state import DeploymentStore
+
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        (bundle_dir / "config.yaml").write_text("task_dir: .\n")
+        created = []
+
+        class FakeRuntime:
+            stage = "RUNNING"
+            raw = {}
+
+        class FakeApi:
+            def whoami(self):
+                return {"name": "alice"}
+
+            def repo_exists(self, repo_id, repo_type=None):
+                return False
+
+            def create_repo(self, repo_id, repo_type=None, **kwargs):
+                created.append((repo_id, repo_type))
+
+            def add_space_secret(self, **k):
+                return None
+
+            def upload_folder(self, **k):
+                return None
+
+            def get_space_runtime(self, repo_id):
+                return FakeRuntime()
+
+        monkeypatch.setattr("potato.deploy.providers.huggingface._hf_api",
+                            lambda token: FakeApi())
+        spec.demo = True
+        provider.create(spec, FakeBundle(str(bundle_dir)), None,
+                        DeploymentStore(spec.config_path))
+        assert created == [("alice/pilot", "space")]
+
     def test_repo_id_is_persisted_before_the_build_wait(self, provider, spec,
                                                         tmp_path, monkeypatch):
         from potato.deploy.state import DeploymentStore

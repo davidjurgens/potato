@@ -144,6 +144,13 @@ def metric_scale(name: str) -> str:
 #: Only these may carry a strong/weak band. See ``metric_scale``.
 BANDABLE = ("kappa", "correlation", "raw", "span")
 
+#: Raw measures whose chance level is set by the label distribution, so the
+#: kappa thresholds say nothing about them. Two annotators guessing at random on
+#: a balanced binary scheme agree half the time; 0.667 there is a third of the
+#: way from chance to perfect, and a "strong" badge on it sat beside a kappa of
+#: 0.33 for the same data. The chance-corrected rows carry the verdict.
+_UNBANDED_RAW = frozenset({"percent_agreement"})
+
 #: Keys that describe the sweep rather than being metrics of their own.
 #: :func:`sweep_table` reads them; :func:`flatten` must not emit them as rows.
 _SWEEP_KEYS = frozenset({"sweep", "sweep_parameter", "sweep_parameter_label"})
@@ -157,11 +164,19 @@ def band_for(name: str, value: Any) -> str:
         return ""
     if metric_scale(name) not in BANDABLE:
         return ""
+    if str(name).rsplit(".", 1)[-1] in _UNBANDED_RAW:
+        return ""
     if value >= 0.6:
         return "strong"
     if value < 0.2:
         return "weak"
     return ""
+
+
+#: Names kept in the JSON report for scripts that already read them, but equal
+#: to another key in the same block. Rendering both prints one number twice
+#: under two names, which reads as two measures that happen to agree.
+_JSON_ALIASES = {"pairwise_cohen_kappa"}
 
 
 def flatten(metrics: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -179,7 +194,7 @@ def flatten(metrics: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     rows: List[Dict[str, Any]] = []
     for key, value in metrics.items():
-        if key in _SWEEP_KEYS:
+        if key in _SWEEP_KEYS or key in _JSON_ALIASES:
             continue
         if isinstance(value, dict):
             rows.extend(_group_rows(key, value))

@@ -154,6 +154,11 @@ class ImageAnnotationManager {
      */
     _maybeShowKeybindingNotice() {
         if ((this.config.keybindingProfile || 'v7') !== 'v7') return;
+        // About keyboard shortcuts, so nothing to say to someone without a
+        // keyboard -- and on a phone it pushed the image a screen down.
+        try {
+            if (window.matchMedia('(hover: none) and (pointer: coarse)').matches) return;
+        } catch (e) { /* no matchMedia: fall through and show it */ }
 
         const flag = `potato.kbNotice.${this.config.schemaName}`;
         try {

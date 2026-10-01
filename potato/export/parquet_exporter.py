@@ -16,6 +16,7 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import BaseExporter, ExportContext, ExportResult
+from .origin_columns import ORIGIN_COLUMN, origin_fields, origin_in_use
 
 logger = logging.getLogger(__name__)
 
@@ -171,11 +172,14 @@ class ParquetExporter(BaseExporter):
                                 schema_map: Dict[str, dict]) -> List[dict]:
         """Build flat row dicts for the annotations table."""
         rows = []
+        with_origin = origin_in_use(annotations)
         for ann in annotations:
             row = {
                 "instance_id": ann.get("instance_id", ""),
                 "user_id": ann.get("user_id", ""),
             }
+            if with_origin:
+                row.update(origin_fields(ann))
 
             labels = ann.get("labels", {})
             for schema_name, value in labels.items():
@@ -493,10 +497,12 @@ class ParquetExporter(BaseExporter):
         """
         rows = []
         unplaced = set()
+        with_origin = origin_in_use(annotations)
         for ann in annotations:
             instance_id = ann.get("instance_id", "")
             user_id = ann.get("user_id", "")
             spans = ann.get("spans", {})
+            origin_kind = origin_fields(ann)[ORIGIN_COLUMN]
 
             for schema_name, span_list in spans.items():
                 if not isinstance(span_list, list):
@@ -531,6 +537,8 @@ class ParquetExporter(BaseExporter):
                         row[key] = _json_dumps(value) if value else ""
                     for key in ("kb_id", "kb_source", "kb_label"):
                         row[key] = span.get(key) or ""
+                    if with_origin:
+                        row[ORIGIN_COLUMN] = origin_kind
 
                     unplaced.update(
                         key for key in span

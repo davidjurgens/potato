@@ -2661,9 +2661,23 @@ class ItemStateManager:
 
         return len(to_assign)
 
-    def _calculate_disagreement_score(self, instance_id: str) -> float:
+    def _calculate_disagreement_score(self, instance_id: str,
+                                      kinds: str = "all") -> float:
         """
         Calculate a disagreement score in [0, 1] for an instance.
+
+        ``kinds`` selects which raters are counted: ``"all"`` (every
+        participant), ``"human"``, or ``"machine"``. Both existing callers use
+        the default, so no study's scores move.
+
+        The separation matters when a project declares machine raters. Tools
+        that share a reference database disagree with people far more than they
+        disagree with each other, so a score over everyone measures the
+        distance between the two groups rather than how contested the item is
+        within either. Which of the three a project should route on is a
+        judgement about that project -- whether tool-versus-tool conflict
+        should pull in another human is not something this function can decide
+        -- so the choice is exposed and nothing here picks for you.
 
         Walks every user who has annotated this instance and, per schema,
         computes the ratio of distinct labels (or distinct span-set
@@ -2707,9 +2721,16 @@ class ItemStateManager:
         from potato.server_utils import annotation_values
 
         schema_to_user_value: Dict[str, Dict[str, tuple]] = defaultdict(dict)
+        if kinds != "all":
+            from potato.annotator_origin import is_machine
+
         for uid in annotators:
             ustate = usm.get_user_state(uid) if hasattr(usm, "get_user_state") else None
             if ustate is None:
+                continue
+            if kinds == "human" and is_machine(ustate):
+                continue
+            if kinds == "machine" and not is_machine(ustate):
                 continue
             grouped = annotation_values.group_by_schema(
                 ustate.get_label_annotations(instance_id) or {})

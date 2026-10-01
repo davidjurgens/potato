@@ -562,6 +562,29 @@ class UserAuthenticator:
                     user_config = config.get("user_config", {}) or {}
                     allow_all_users = user_config.get("allow_all_users", True)
                     authorized_users = _parse_authorized_users(user_config)
+
+                    # A declared machine annotator is expected by the study just
+                    # as a listed person is, so closed enrolment must admit it.
+                    # Without this a study that sets
+                    # machine_annotators.require_declaration -- which demands
+                    # allow_all_users: false -- would lock out the very raters
+                    # it declared: they are not on the human roster, so
+                    # add_user() would refuse them and they could never log in.
+                    #
+                    # Merged here rather than in add_user() because the
+                    # constructor loads the roster file under this policy, and
+                    # because both enrolment and the login check read
+                    # authorized_users; folding it in once covers both.
+                    try:
+                        from potato.annotator_origin import parse_machine_annotators
+
+                        for declared_id in parse_machine_annotators(config):
+                            if declared_id not in authorized_users:
+                                authorized_users.append(declared_id)
+                    except Exception:
+                        logger.debug(
+                            "machine_annotators roster unavailable while "
+                            "building the authorized-user list", exc_info=True)
                     if not allow_all_users and not authorized_users:
                         logger.warning(
                             "user_config.allow_all_users is false but no roster was "

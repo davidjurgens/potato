@@ -1049,7 +1049,8 @@ class QualityControlManager:
         self,
         item_id: str,
         user_id: str,
-        response: Dict[str, Any]
+        response: Dict[str, Any],
+        origin: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Record an annotation for potential gold standard auto-promotion.
@@ -1057,15 +1058,29 @@ class QualityControlManager:
         When enough annotators agree on a label, the item is automatically
         promoted to the gold standard pool.
 
+        A declared machine rater's answer is not recorded. Gold is what later
+        annotators are graded against, and tools that share a reference
+        database make the same mistake together, so their agreement is
+        correlated error rather than evidence. Counting them would let three
+        pipelines promote their shared error to the answer key with no person
+        involved. People who agree with the tools still promote the item on
+        their own.
+
         Args:
             item_id: The item ID
             user_id: The user ID
             response: The user's annotation response
+            origin: The participant's origin (``user_state.origin``). None or
+                empty means a person, as everywhere else.
 
         Returns:
             Dict with promotion info if item was promoted, None otherwise
         """
         if not self.qc_config.gold_auto_promote_enabled:
+            return None
+
+        from potato.annotator_origin import is_machine
+        if is_machine(origin):
             return None
 
         # Don't track items that are already gold standards

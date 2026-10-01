@@ -1,6 +1,6 @@
 {
   "categories": {
-    "advanced": 56,
+    "advanced": 57,
     "agent-testing": 3,
     "agent-traces": 56,
     "ai-assisted": 6,
@@ -16,7 +16,7 @@
     "testing": 2,
     "video": 8
   },
-  "count": 214,
+  "count": 215,
   "description": "Catalog of Potato example projects, generated from the configs themselves by scripts/generate_examples_manifest.py.",
   "examples": [
     {
@@ -740,6 +740,29 @@
       "path": "examples/advanced/mace-demo/config.yaml",
       "run": "potato start examples/advanced/mace-demo/config.yaml -p 8000",
       "task_name": "MACE Competence Estimation Demo"
+    },
+    {
+      "annotation_types": [
+        "radio"
+      ],
+      "category": "advanced",
+      "config_keys": [
+        "adjudication",
+        "psychometrics"
+      ],
+      "data_files": [
+        "data/loci.json"
+      ],
+      "description": "",
+      "dir": "examples/advanced/machine-annotators",
+      "display_types": [],
+      "has_data_dir": true,
+      "has_modeline": true,
+      "has_readme": false,
+      "name": "machine-annotators",
+      "path": "examples/advanced/machine-annotators/config.yaml",
+      "run": "potato start examples/advanced/machine-annotators/config.yaml -p 8000",
+      "task_name": "Gene Function Curation (machine annotators demo)"
     },
     {
       "annotation_types": [

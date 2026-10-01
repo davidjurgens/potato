@@ -168,6 +168,14 @@ Once overlap-sample items saturate, agreement statistics are available at
 | geometry (image_annotation) | mean agreement, mean matched IoU, detection F1, mean object count difference |
 | temporal (audio_annotation, video_annotation) | mean agreement, mean matched IoU (temporal), detection F1, mean segment count difference |
 
+For nominal schemes, percent agreement is the share of annotator pairs that
+chose the same label, averaged over items. Cohen's κ is computed for each pair
+of annotators on the items that pair both answered, then averaged over pairs, so
+it needs no item that every annotator rated. Heterogeneous coverage often has
+none. A pair whose shared items all carry one label has no defined κ and is left
+out of the average. The JSON report carries the same value under
+`pairwise_cohen_kappa` too, for scripts written against that name.
+
 An item is scored only once it reaches its **full** cap, not as soon as it has
 two annotators, because a partly-annotated item's agreement moves as the rest
 arrive. With `num_annotators_per_item: 3` and two annotators finished, every

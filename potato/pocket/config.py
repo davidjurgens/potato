@@ -24,6 +24,25 @@ POCKET_CAPABLE_TYPES = {
     "pure_display",
 }
 
+#: Types that work on the regular annotate page from a phone, checked by
+#: driving them with touch input in tests/playwright/test_mobile_layouts.py.
+#: A superset of POCKET_CAPABLE_TYPES: Pocket is one card per item with one
+#: tap per label, which is a narrower thing than "usable by touch". The
+#: "use a desktop browser" warning is shown only for types outside this set,
+#: where it used to fire for every task Pocket could not host -- including
+#: pairwise and best-worst scaling, which are big-button tasks. Add a type
+#: here only with a test that drives it by touch.
+TOUCH_USABLE_TYPES = POCKET_CAPABLE_TYPES | {
+    "select",
+    "multirate",
+    "pairwise",
+    "bws",
+    "ranking",
+    "semantic_differential",
+    "span",
+    "image_annotation",
+}
+
 
 @dataclass
 class PocketConfig:
@@ -54,6 +73,14 @@ def parse_pocket_config(config: Dict[str, Any]) -> PocketConfig:
         logger.warning("pocket.batch_size must be 1-200; using 25")
         pc.batch_size = 25
     return pc
+
+
+def touch_usability(config: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    """(usable_by_touch, scheme_names_that_are_not) for the configured task."""
+    limited = [scheme.get("name", "?")
+               for scheme in config.get("annotation_schemes", []) or []
+               if scheme.get("annotation_type") not in TOUCH_USABLE_TYPES]
+    return (len(limited) == 0, limited)
 
 
 def pocket_capability(config: Dict[str, Any]) -> Tuple[bool, List[str]]:

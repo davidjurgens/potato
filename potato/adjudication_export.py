@@ -131,6 +131,9 @@ def main():
                 flat["confidence"] = item["confidence"]
             if "num_annotators" in item:
                 flat["num_annotators"] = item["num_annotators"]
+            if item.get("source_origins"):
+                flat["source_origins"] = json.dumps(item["source_origins"],
+                                                    sort_keys=True)
 
             fieldnames.update(flat.keys())
             flat_results.append(flat)

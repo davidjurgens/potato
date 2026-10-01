@@ -155,7 +155,7 @@ def _generate_binary_mode(annotation_scheme: Dict[str, Any]) -> Tuple[str, List[
         schematic += f"""
             <div class="pairwise-extra-options">
                 <button type="button" class="pairwise-tie-btn" data-value="tie" data-schema="{escaped_schema}" aria-pressed="false" {data_key_tie}>
-                    {escaped_tie_label} {shortcut_tie}
+                    {escaped_tie_label} <span class="pairwise-tile-shortcut">{shortcut_tie}</span>
                 </button>
             </div>
         """

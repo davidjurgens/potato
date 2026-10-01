@@ -1095,6 +1095,24 @@
     border: 1px solid #fde68a;
 }
 
+/* Declared machine rater (tool / llm) on a response card or chip. */
+.adj-origin-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 8px;
+    border: 1px solid #c7d2fe;
+    background: #eef2ff;
+    color: #3730a3;
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1.5;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    vertical-align: middle;
+    cursor: help;
+}
+
 /* ===== Phase 3: Generic Badges ===== */
 
 .adj-badge {
@@ -1222,4 +1240,46 @@
     font-size: 0.85rem;
     line-height: 1.4;
     overflow-wrap: anywhere;
+}
+
+/* ===== Header and narrow screens ===== */
+
+/* Below tablet width a fixed 280px queue beside the item left the item a
+   sliver and scrolled the page sideways. Stack them instead: the queue on
+   top, capped so the item is reachable without scrolling past every entry. */
+@media (max-width: 767px) {
+    .adjudication-container {
+        flex-direction: column;
+        height: auto;
+        overflow: visible;
+    }
+
+    .adj-sidebar {
+        width: 100%;
+        min-width: 0;
+        max-height: 40vh;
+        border-right: none;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .adj-main {
+        overflow: visible;
+    }
+
+    .adj-content {
+        padding: 16px;
+    }
+
+    .potato-navbar {
+        padding: 0 12px;
+    }
+
+    .potato-navbar .navbar-end .adjudicate-btn {
+        font-size: 0;          /* icon only; the label returns above 767px */
+        gap: 0;
+    }
+
+    .potato-navbar .navbar-end .adjudicate-btn i {
+        font-size: 0.85rem;
+    }
 }

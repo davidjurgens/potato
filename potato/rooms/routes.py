@@ -238,7 +238,7 @@ def lobby():
     if get_rooms_manager() is None:
         return "Rooms are not enabled for this task", 404
     if "username" not in session:
-        return redirect("/")
+        return redirect(request.script_root + "/")
     manager = get_rooms_manager()
     return render_template(
         "rooms_lobby.html",
@@ -254,11 +254,11 @@ def room_page(room_id):
     if get_rooms_manager() is None:
         return "Rooms are not enabled for this task", 404
     if "username" not in session:
-        return redirect("/")
+        return redirect(request.script_root + "/")
     manager = get_rooms_manager()
     room = manager.get_room(room_id)
     if room is None:
-        return redirect("/rooms")
+        return redirect(request.script_root + "/rooms")
     return render_template(
         "room.html",
         room_id=room.room_id,

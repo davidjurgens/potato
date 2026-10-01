@@ -1,0 +1,115 @@
+# yaml-language-server: $schema=https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json
+# Machine Annotators Example
+#
+# Three annotation pipelines and one LLM have each assigned a broad function
+# category to twelve predicted genes. There is no ground truth. Declaring them
+# under `machine_annotators` lets Potato measure them as raters -- agreement
+# between tools, a reliability estimate per tool, adjudication of their
+# conflicts -- without counting them as people.
+#
+# The loci, labels and pipeline names are synthetic.
+#
+# Set up the pre-loaded annotations, then run from the repository root:
+#   python examples/advanced/machine-annotators/setup_demo.py
+#   python potato/flask_server.py start examples/advanced/machine-annotators/config.yaml -p 8000
+#
+# Then:
+#   - log in as any new username to curate; contested loci are served first
+#   - log in as "lead_curator" and open /adjudicate to resolve conflicts
+#   - open /admin/iaa?format=html with the admin key below for agreement by partition
+#
+# See docs/advanced/machine_annotators.md.
+
+annotation_task_name: "Gene Function Curation (machine annotators demo)"
+
+data_files:
+  - "data/loci.json"
+
+item_properties:
+  id_key: "id"
+  text_key: "text"
+
+task_dir: "."
+output_annotation_dir: "annotation_output"
+
+require_password: false
+admin_api_key: "demo-admin-key"
+
+# Four machine raters plus two curators. Agreement is scored on items that
+# have reached this cap, so the eight loci setup_demo.py gives both curators
+# are scored at once; the other four, labelled only by the machines, are what
+# a new curator is served.
+max_annotations_per_item: 6
+
+annotation_schemes:
+  - annotation_type: "radio"
+    name: "function_category"
+    description: "Which broad functional category does this gene belong to?"
+    labels:
+      - "metabolism"
+      - "information_processing"
+      - "cellular_processes"
+      - "transport"
+      - "hypothetical"
+
+# The raters that are programs. Each `id` is the user id its annotations are
+# stored under in annotation_output/.
+machine_annotators:
+  enabled: true
+  annotators:
+    - id: pipeline_a
+      kind: tool
+      tool: pipeline_a
+      version: "2.1.0"
+      database_version: "refdb-2024-03"
+      run_date: "2024-11-03"
+    - id: pipeline_b
+      kind: tool
+      tool: pipeline_b
+      version: "1.8.2"
+      database_version: "refdb-2024-03"   # same database as pipeline_a
+      run_date: "2024-11-03"
+    - id: pipeline_c
+      kind: tool
+      tool: pipeline_c
+      version: "5.0.1"
+      database_version: "otherdb-2024-01"
+      run_date: "2024-11-04"
+    - id: llm_reviewer
+      kind: llm
+      endpoint_type: openai
+      model: example-model
+      version: "2024-08-06"
+
+# Serve the loci the tools disagree about first. setup_demo.py computes
+# tool_disagreement from the machine labels when it writes the data file.
+triage:
+  enabled: true
+  signal_field: tool_disagreement
+assignment_strategy: priority
+
+# Machine raters join the adjudication queue. Zero is allowed for
+# min_human_annotations: a locus the tools disagree on can reach the
+# adjudicator before any curator has labelled it.
+adjudication:
+  enabled: true
+  adjudicator_users:
+    - "lead_curator"
+  include_machine_annotators: true
+  min_human_annotations: 0
+  min_annotations: 2
+  agreement_threshold: 0.75
+  show_annotator_names: true
+  show_agreement_scores: true
+  output_subdir: "adjudication"
+
+# Fit an ability per rater (tools included) and a difficulty per locus from
+# the disagreement pattern alone. pipeline_a and pipeline_b share a reference
+# database, so treat their estimates with care: shared evidence means shared
+# mistakes.
+psychometrics:
+  enabled: true
+  schema: function_category
+  include_machine_annotators: true
+  min_observations: 20
+  min_annotators_per_item: 2

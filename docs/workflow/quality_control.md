@@ -183,6 +183,13 @@ Agreement is measured per schema on the resolved label, so two annotators
 giving opposite answers do not promote, and a schema only one of them answered
 is not treated as unanimous.
 
+Raters declared under
+[`machine_annotators`](../advanced/machine_annotators.md) are not counted
+toward promotion. Tools that share a reference database make the same mistakes,
+so counting them would let a few tools write their shared error into the answer
+key before any person had looked at the item. People who agree with the tools
+still promote it.
+
 A promoted item is graded when an annotator meets it in the ordinary stream; it
 is never injected. The headline gold accuracy therefore depends on when an
 annotator arrived: items promoted behind them count, items promoted ahead of

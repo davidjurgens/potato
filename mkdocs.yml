@@ -148,6 +148,7 @@ nav:
         - AI Costs and Spend Caps: ai-intelligence/ai_costs.md
     - Advanced Features:
         - MACE: advanced/mace.md
+        - Machine Annotators: advanced/machine_annotators.md
         - Embedding Visualization: advanced/embedding_visualization.md
         - Survey Instruments: advanced/survey_instruments.md
         - Category-Based Assignment: advanced/category_assignment.md
@@ -238,6 +239,7 @@ nav:
         - API Reference: api-reference/api_reference.md
         - Machine-Readable Specs: api-reference/machine_readable.md
     - Release Notes:
+        - v2.9.4: releasenotes/v2.9.4.md
         - v2.9.3: releasenotes/v2.9.3.md
         - v2.9.2: releasenotes/v2.9.2.md
         - v2.9.1: releasenotes/v2.9.1.md

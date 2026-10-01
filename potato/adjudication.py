@@ -75,6 +75,17 @@ class AdjudicationConfig:
     similarity_top_k: int = 5
     similarity_precompute: bool = True
 
+    # Machine raters. Off by default, so an existing study's queue is unchanged.
+    # On, declared tools and models enter the queue as participants and a human
+    # adjudicator resolves what they disagreed about -- which is the whole shape
+    # of the problem when N annotation pipelines disagree and no gold standard
+    # exists. See potato/annotator_origin.py.
+    include_machine_annotators: bool = False
+    # Floor on how many *people* an item needs before it can be adjudicated.
+    # Zero is meaningful and deliberate: four tools and no humans is a valid
+    # queue, because the adjudicator is the human in that design.
+    min_human_annotations: int = 0
+
     # Output
     output_subdir: str = "adjudication"
 
@@ -92,6 +103,10 @@ class AdjudicationItem:
     status: str = "pending"  # pending, in_progress, completed, skipped
     assigned_adjudicator: Optional[str] = None
     mace_predictions: Dict[str, Any] = field(default_factory=dict)  # schema -> predicted label
+    # user_id -> short origin label, for participants that are not people. An
+    # adjudicator choosing between two answers needs to know that one of them
+    # came from a tool, and which version of it.
+    annotator_origins: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary for JSON output."""
@@ -108,6 +123,8 @@ class AdjudicationItem:
         }
         if self.mace_predictions:
             result["mace_predictions"] = self.mace_predictions
+        if self.annotator_origins:
+            result["annotator_origins"] = self.annotator_origins
         return result
 
 
@@ -126,6 +143,10 @@ class AdjudicationDecision:
     guideline_update_flag: bool = False
     guideline_update_notes: str = ""
     time_spent_ms: int = 0
+    # What each adopted answer's author was, captured when the decision was
+    # made. Stored rather than derived, because a later config edit could
+    # otherwise change what a past decision appears to have meant.
+    source_origins: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary for JSON output."""
@@ -142,6 +163,7 @@ class AdjudicationDecision:
             "guideline_update_flag": self.guideline_update_flag,
             "guideline_update_notes": self.guideline_update_notes,
             "time_spent_ms": self.time_spent_ms,
+            "source_origins": self.source_origins,
         }
 
     @classmethod
@@ -160,6 +182,7 @@ class AdjudicationDecision:
             guideline_update_flag=d.get("guideline_update_flag", False),
             guideline_update_notes=d.get("guideline_update_notes", ""),
             time_spent_ms=d.get("time_spent_ms", 0),
+            source_origins=d.get("source_origins", {}) or {},
         )
 
 
@@ -239,6 +262,11 @@ class AdjudicationManager:
             adj.similarity_top_k = sim_config.get("top_k", 5)
             adj.similarity_precompute = sim_config.get("precompute_on_start", True)
 
+        adj.include_machine_annotators = bool(
+            adj_config.get("include_machine_annotators", False))
+        adj.min_human_annotations = int(
+            adj_config.get("min_human_annotations", 0))
+
         adj.output_subdir = adj_config.get("output_subdir", "adjudication")
 
         return adj
@@ -290,7 +318,32 @@ class AdjudicationManager:
                     if u not in self.adj_config.adjudicator_users
                 }
 
+                # Declared machine raters. Excluding adjudicators is the
+                # existing precedent for dropping a class of participant, and
+                # this extends it: a tool is kept out of the queue unless the
+                # study says otherwise, so no existing queue changes shape.
+                from potato.annotator_origin import describe, is_machine
+
+                item_origins = {}
+                humans = set()
+                for u in sorted(annotators):
+                    ustate = usm.get_user_state(u)
+                    if ustate is not None and is_machine(ustate):
+                        item_origins[u] = describe(ustate)
+                    else:
+                        humans.add(u)
+
+                if not self.adj_config.include_machine_annotators:
+                    annotators = humans
+                    item_origins = {}
+
                 if len(annotators) < self.adj_config.min_annotations:
+                    continue
+
+                # A floor on people, separate from the floor on participants.
+                # Default 0: four tools and no humans is a valid queue, because
+                # the adjudicator is the human in that design.
+                if len(humans) < self.adj_config.min_human_annotations:
                     continue
 
                 # Check if we require fully annotated items
@@ -373,6 +426,7 @@ class AdjudicationManager:
                     status=status,
                     assigned_adjudicator=assigned,
                     mace_predictions=mace_preds,
+                    annotator_origins=item_origins,
                 )
 
             self._queue_built = True
@@ -707,6 +761,11 @@ class AdjudicationManager:
         """
         with self._lock:
             instance_id = str(decision.instance_id)
+            # Only in a study with machine raters. Elsewhere every entry would
+            # read "human", and recording it would add a column to every
+            # all-human study's adjudication export for no information.
+            if not decision.source_origins and self._has_machine_raters(instance_id):
+                decision.source_origins = self._source_origins(instance_id, decision)
             self.decisions[instance_id] = decision
 
             # Update queue status
@@ -722,6 +781,80 @@ class AdjudicationManager:
                 f"by {decision.adjudicator_id}"
             )
             return True
+
+    def _has_machine_raters(self, instance_id: str) -> bool:
+        """True when the study declares machine raters or this item has one."""
+        from potato.annotator_origin import parse_machine_annotators
+        queued = self.queue.get(instance_id)
+        return bool(parse_machine_annotators(self.config)
+                    or (queued and queued.annotator_origins))
+
+    def _source_origins(self, instance_id: str,
+                        decision: AdjudicationDecision) -> Dict[str, str]:
+        """What produced each schema's final answer, per schema.
+
+        Two cases. When ``decision.source`` names an annotator -- the
+        adjudicator adopted that person's or tool's answer -- the entry is
+        ``describe()`` of that annotator: "human", or e.g. "pipeline_a 2.1.0 db
+        refdb-2024-03 (tool)". When the adjudicator chose the value
+        themselves, which is what the radio form always records, the entry
+        lists every annotator who had given that same value, joined with
+        "; ". A final label that only two tools sharing a database ever gave
+        is a different finding from one three curators gave, and ``source``
+        alone ("adjudicator") says neither. A value nobody gave, or a merged
+        answer, gets no entry.
+
+        Recorded now, while the declarations that produced it are current.
+        Caller holds the lock.
+        """
+        from potato.annotator_origin import describe
+
+        queued = self.queue.get(instance_id)
+        known = dict(queued.annotator_origins) if queued else {}
+        answers = dict(queued.annotations) if queued else {}
+        usm_box: List[Any] = []
+
+        def origin(author: str) -> Optional[str]:
+            if author in known:
+                return known[author]
+            # Leave it out rather than guess "human" when the author's state
+            # cannot be read (offline tooling, a deleted user):
+            # describe(None) would say human.
+            try:
+                if not usm_box:
+                    from potato.user_state_management import get_user_state_manager
+                    usm_box.append(get_user_state_manager())
+                state = usm_box[0].get_user_state(author)
+            except Exception:
+                return None
+            if state is None:
+                return None
+            known[author] = describe(state)
+            return known[author]
+
+        sources = decision.source if isinstance(decision.source, dict) else {}
+        out: Dict[str, str] = {}
+        for schema, value in (decision.label_decisions or {}).items():
+            author = sources.get(schema)
+            if isinstance(author, str) and author and author not in (
+                    "adjudicator", "merged"):
+                described = origin(author)
+                if described:
+                    out[schema] = described
+                continue
+            if author == "merged":
+                continue
+            chosen = _answer_set(value)
+            if not chosen:
+                continue
+            agreeing = sorted({
+                d for user, ans in answers.items()
+                if isinstance(ans, dict) and _answer_set(ans.get(schema)) == chosen
+                for d in [origin(user)] if d
+            })
+            if agreeing:
+                out[schema] = "; ".join(agreeing)
+        return out
 
     def get_stats(self) -> Dict[str, Any]:
         """Get adjudication progress statistics."""
@@ -1186,6 +1319,8 @@ class AdjudicationManager:
                 result["adjudicator"] = decision.adjudicator_id
                 result["confidence"] = decision.confidence
                 result["provenance"] = decision.source
+                if decision.source_origins:
+                    result["source_origins"] = decision.source_origins
                 results.append(result)
                 continue
 
@@ -1233,7 +1368,24 @@ class AdjudicationManager:
 
             if is_unanimous and unanimous_labels:
                 result["labels"] = unanimous_labels
-                result["source"] = "unanimous"
+                # Four tools agreeing is not unanimity in the human sense.
+                # Pipelines that share a reference database make the same
+                # mistake together, so their agreement is evidence about their
+                # inputs rather than about the answer. A study with no declared
+                # machine rater keeps the value it has always written, because
+                # renaming it for everyone would break the export contract for
+                # projects this feature does not concern.
+                from potato.annotator_origin import is_machine
+                kinds = {
+                    "machine" if is_machine(usm.get_user_state(u)) else "human"
+                    for u in annotations
+                }
+                if kinds == {"human"}:
+                    result["source"] = "unanimous"
+                elif kinds == {"machine"}:
+                    result["source"] = "unanimous_machine"
+                else:
+                    result["source"] = "unanimous_mixed"
                 result["num_annotators"] = len(annotators)
                 results.append(result)
             else:
@@ -1273,7 +1425,26 @@ def clear_adjudication_manager():
 # ---------------------------------------------------------------------------
 
 #: Keys in an AdjudicationItem payload that are keyed by annotator id.
-_ANNOTATOR_KEYED = ("annotations", "span_annotations", "behavioral_data")
+# ``annotator_origins`` is keyed by user id like the rest. Left out of this
+# list, it sent the blinded adjudicator the real id of every declared machine.
+_ANNOTATOR_KEYED = ("annotations", "span_annotations", "behavioral_data",
+                    "annotator_origins")
+
+
+def _answer_set(value: Any) -> frozenset:
+    """A label answer as the set of labels it selects, for comparison.
+
+    Annotators' answers arrive as ``{label: True}``; a decision holds a bare
+    label, a list of labels, or the same dict. Anything else (a number, free
+    text) compares as its string.
+    """
+    if value is None or value == "" or value == [] or value == {}:
+        return frozenset()
+    if isinstance(value, dict):
+        return frozenset(str(k) for k, v in value.items() if v not in (False, None, "", 0))
+    if isinstance(value, (list, tuple, set)):
+        return frozenset(str(v) for v in value)
+    return frozenset([str(value)])
 
 
 def annotator_aliases(instance_id: str, user_ids) -> Dict[str, str]:

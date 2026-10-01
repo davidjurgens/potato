@@ -58,9 +58,23 @@ class PsychometricsManager:
         from potato.user_state_management import get_user_state_manager
 
         observations: List[Tuple[str, str, str]] = []
+        # Machine raters are excluded by default so an existing study's ability
+        # estimates do not move because someone ran the LLM simulator against
+        # it. Turning the flag on is the interesting case rather than the
+        # dangerous one: GLAD estimates each rater's ability and each item's
+        # difficulty from the disagreement pattern alone, with no gold labels,
+        # which is how you get a reliability estimate per annotation tool on a
+        # corpus that has no ground truth.
+        from potato.annotator_origin import is_machine
+
+        include_machines = getattr(
+            self.ps_config, "include_machine_annotators", False)
+
         for user_state in get_user_state_manager().get_all_users():
             user_id = getattr(user_state, "user_id", None)
             if not user_id:
+                continue
+            if not include_machines and is_machine(user_state):
                 continue
             for instance_id, annotations in user_state.get_all_annotations().items():
                 names = [
@@ -175,6 +189,25 @@ class PsychometricsManager:
         except Exception:  # alpha is contextual; never break stats over it
             return None
 
+    def _origin_label(self, annotator_id: Any) -> Optional[str]:
+        """Short origin label for a rater, or None when it is a person.
+
+        An ability estimate for `prokka 1.14.6 db 2023-05 (tool)` and one for a
+        colleague are different claims, and a column of bare user ids does not
+        say which is which. Returns None for people so the common case adds
+        nothing to the payload.
+        """
+        try:
+            from potato.annotator_origin import describe, is_machine
+            from potato.user_state_management import get_user_state_manager
+
+            state = get_user_state_manager().get_user_state(str(annotator_id))
+        except Exception:
+            return None
+        if state is None or not is_machine(state):
+            return None
+        return describe(state)
+
     def get_stats(self) -> Dict[str, Any]:
         """Dashboard payload: abilities, item estimates, flags, savings."""
         observations = self.collect_observations()
@@ -206,6 +239,9 @@ class PsychometricsManager:
                 "theta": round(est.theta, 3),
                 "se": round(est.se, 3),
                 "n_labels": est.n_labels,
+                # Present only for machine raters, so a reader can tell an
+                # ability estimated for a tool from one estimated for a person.
+                "origin": self._origin_label(ann_id),
             }
             for ann_id, est in model.abilities().items()
         ]
@@ -302,6 +338,7 @@ class PsychometricsManager:
                     "ability": est.theta,
                     "ability_se": est.se,
                     "n_labels": est.n_labels,
+                    "origin": self._origin_label(ann_id),
                 }
             )
         return record
