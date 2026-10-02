@@ -112,6 +112,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | `machine_annotators` |  | object |  | Declare raters that are tools or models rather than people, so agreement, adjudication and the IRT engine can separate them from human annotators instead of counting them as people | `annotators`, `enabled`, `require_declaration` |
 | `quality_control` |  | object |  | Aggregate quality thresholds and actions |  |
 | `require_fully_annotated` |  | boolean |  | Refuse to advance until every scheme on the page has an answer |  |
+| `text_as_image` |  | boolean or object | `False` | Render each item's text to a PNG so annotators cannot copy or paste it | `enabled`, `font_size`, `max_width` |
 
 ## AI Support
 
