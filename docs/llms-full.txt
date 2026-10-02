@@ -38664,8 +38664,8 @@ renders the item some other way:
 - A project with an `instance_display` block.
 - A project with a `video_annotation`, `audio_annotation` or `image_annotation`
   scheme.
-- A project with a `tiered_annotation` scheme whose `media_type` is `video` or
-  `audio`.
+- A project with a `tiered_annotation` scheme. Its `media_type` is `audio` or
+  `video`, and it defaults to `audio`.
 
 On these projects the text box is normally a hidden fallback, not the thing the
 annotator reads. Potato writes a warning at startup and changes nothing.

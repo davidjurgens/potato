@@ -90,6 +90,15 @@ MEDIA_SCHEME_TYPES = frozenset({
 })
 
 
+def _tiered_plays_media(scheme: Dict[str, Any]) -> bool:
+    """Whether a tiered_annotation scheme drives a media player.
+
+    Read ``media_type`` the way the schema does: it defaults to ``audio`` and is
+    case-insensitive. Leaving it out still gives an audio player.
+    """
+    return str(scheme.get("media_type") or "audio").lower() in {"audio", "video"}
+
+
 def applies(config: Dict[str, Any],
             annotation_schemes: Any) -> Optional[Dict[str, int]]:
     """Return the options when the picture replaces the text here, else None.
@@ -108,7 +117,7 @@ def applies(config: Dict[str, Any],
         kind = scheme.get("annotation_type")
         if kind in MEDIA_SCHEME_TYPES:
             return None
-        if kind == "tiered_annotation" and scheme.get("media_type") in {"video", "audio"}:
+        if kind == "tiered_annotation" and _tiered_plays_media(scheme):
             return None
     return options
 
@@ -136,7 +145,7 @@ def media_showing_text(config: Dict[str, Any],
         if not isinstance(scheme, dict):
             continue
         kind = scheme.get("annotation_type")
-        if kind == "tiered_annotation" and scheme.get("media_type") in {"video", "audio"}:
+        if kind == "tiered_annotation" and _tiered_plays_media(scheme):
             media_field = scheme.get("source_field") or "audio_url"
         elif kind in {"audio_annotation", "video_annotation"}:
             media_field = (scheme.get("source_field") or scheme.get("video_key")

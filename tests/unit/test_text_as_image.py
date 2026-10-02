@@ -73,6 +73,10 @@ class TestApplicability:
         {"annotation_type": "audio_annotation"},
         {"annotation_type": "image_annotation"},
         {"annotation_type": "tiered_annotation", "media_type": "video"},
+        # media_type defaults to audio and is read case-insensitively by the
+        # schema, so both of these still drive a player.
+        {"annotation_type": "tiered_annotation"},
+        {"annotation_type": "tiered_annotation", "media_type": "Video"},
     ])
     def test_a_media_project_is_left_alone(self, scheme):
         """These displays own the page. The text box is a hidden fallback."""
@@ -403,6 +407,19 @@ class TestMediaShowingTextIsRefused:
             "annotation_schemes": [{"annotation_type": "tiered_annotation",
                                     "name": "tiers", "media_type": "audio"}],
         })
+
+    def test_tiered_without_a_media_type_is_still_refused(self):
+        """The schema defaults media_type to audio, so leaving it out still
+        puts the text box beside a player."""
+        from potato.server_utils.config_module import ConfigValidationError
+
+        with pytest.raises(ConfigValidationError, match="tiers"):
+            self._validate({
+                "text_as_image": True,
+                "item_properties": {"text_key": "text"},
+                "annotation_schemes": [{"annotation_type": "tiered_annotation",
+                                        "name": "tiers"}],
+            })
 
     @pytest.mark.parametrize("kind", ["audio_annotation", "video_annotation"])
     def test_no_media_field_means_the_text_is_the_path(self, kind):
