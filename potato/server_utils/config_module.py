@@ -1713,6 +1713,21 @@ def validate_text_as_image_config(config_data: Dict[str, Any]) -> None:
     # project: those set text_key to image_url, and their scheme reads
     # source_field: image_url, which the check below reads as a collision.
     if text_to_image.applies(config_data, schemes) is None:
+        # One exception to "nothing can conflict": an audio or video scheme
+        # beside a text_key that is not its media field. The page shows that
+        # text in a box next to the player, and the feature leaves it alone, so
+        # the setting would look on and hide nothing.
+        exposed = text_to_image.media_showing_text(config_data, schemes)
+        if exposed:
+            raise ConfigValidationError(
+                "text_as_image is incompatible with these annotation schemes: "
+                + ", ".join(exposed)
+                + ". An audio_annotation, video_annotation or tiered_annotation "
+                "scheme shows the item text in a box beside the player, and "
+                "text_as_image does not replace that box, so annotators could "
+                "still copy the text. Point item_properties.text_key at the "
+                "media field, or turn off text_as_image."
+            )
         logger.warning(
             "text_as_image is on, but this project uses instance_display or a "
             "media annotation scheme, which render the item themselves. The "
@@ -1731,6 +1746,17 @@ def validate_text_as_image_config(config_data: Dict[str, Any]) -> None:
             "shows each item's text as words and returns it from "
             "/pocket/api/batch, so annotators on Pocket could still copy it. "
             "Turn off one of the two."
+        )
+
+    # Rooms is the same case: /rooms/api/disagreements and the room state
+    # endpoint return the item text, and the room page shows it as words.
+    rooms = config_data.get("rooms") or {}
+    if isinstance(rooms, dict) and rooms.get("enabled"):
+        raise ConfigValidationError(
+            "text_as_image is incompatible with rooms.enabled. Rooms show each "
+            "item's text as words and return it from /rooms/api/disagreements "
+            "and /rooms/api/<room_id>/state, so annotators in a room could "
+            "still copy it. Turn off one of the two."
         )
 
     # The conflicts below are errors and not warnings, for the same reason as

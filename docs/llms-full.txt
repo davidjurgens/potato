@@ -38596,6 +38596,19 @@ Mode shows each item's text as words and returns it from /pocket/api/batch, so
 annotators on Pocket could still copy it. Turn off one of the two.
 ```
 
+## Rooms is refused
+
+[Rooms](multiplayer_rooms.md) show each item's text as words. `/rooms/api/disagreements`
+and `/rooms/api/<room_id>/state` return it as JSON. Potato refuses to start when
+`text_as_image` and `rooms.enabled: true` are both set:
+
+```text
+Configuration error: text_as_image is incompatible with rooms.enabled. Rooms
+show each item's text as words and return it from /rooms/api/disagreements and
+/rooms/api/<room_id>/state, so annotators in a room could still copy it. Turn
+off one of the two.
+```
+
 ## Why these are errors
 
 A warning is easy to miss, and these failures are quiet. The annotator sees a
@@ -38606,10 +38619,13 @@ BATCH assignment strategy.
 Potato checks in this order:
 
 1. Does the feature apply at all? A media or `instance_display` project renders
-   the item itself, so the feature stays inert and nothing can conflict.
+   the item itself, so the feature stays inert and nothing can conflict. One
+   case is the exception: an audio or video scheme that shows the item text.
+   Refuse it (see above).
 2. Is Pocket Mode on? Refuse.
-3. Is a span scheme present? Refuse.
-4. Does a scheme read the blanked field? Refuse.
+3. Is Rooms on? Refuse.
+4. Is a span scheme present? Refuse.
+5. Does a scheme read the blanked field? Refuse.
 
 Step 1 comes first on purpose. An image project sets `text_key` to `image_url`
 and its scheme reads `source_field: image_url`. That looks like a conflict, but
@@ -38651,8 +38667,31 @@ renders the item some other way:
 - A project with a `tiered_annotation` scheme whose `media_type` is `video` or
   `audio`.
 
-On these projects the text box is a hidden fallback, not the thing the annotator
-reads. Potato writes a warning at startup and changes nothing.
+On these projects the text box is normally a hidden fallback, not the thing the
+annotator reads. Potato writes a warning at startup and changes nothing.
+
+An audio, video or tiered scheme is the exception when it names a media field
+and `item_properties.text_key` names a different field. The schemes are
+`audio_annotation`, `video_annotation` and `tiered_annotation` with `audio` or
+`video` media. The media field comes from `source_field`, or from `video_key` or
+`audio_key`. A tiered scheme defaults to `audio_url`. In this case the page shows
+the `text_key` field in a box beside the player, and the feature does not replace
+the box. Potato refuses to start:
+
+```text
+Configuration error: text_as_image is incompatible with these annotation
+schemes: linguistic_tiers. An audio_annotation, video_annotation or
+tiered_annotation scheme shows the item text in a box beside the player, and
+text_as_image does not replace that box, so annotators could still copy the
+text. Point item_properties.text_key at the media field, or turn off
+text_as_image.
+```
+
+The box is hidden when the item text is the media path. Potato leaves the
+feature inert in two cases that follow from this: `text_key` is the media field,
+or an `audio_annotation` or `video_annotation` scheme names no media field, so
+the player reads the path from the item text. `image_annotation` always hides
+the box.
 
 Practice questions in the [training phase](../guides/getting-started.md) get the
 same treatment as items.

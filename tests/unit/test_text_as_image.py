@@ -301,6 +301,143 @@ class TestPocketModeIsRefused:
         })
 
 
+class TestRoomsIsRefused:
+    """/rooms/api/disagreements and /rooms/api/<room_id>/state return the item
+    text, and the room page shows it as words. The picture never reaches it."""
+
+    def test_rooms_beside_the_feature_is_refused(self):
+        from potato.server_utils.config_module import (
+            ConfigValidationError, validate_text_as_image_config)
+
+        with pytest.raises(ConfigValidationError) as caught:
+            validate_text_as_image_config({
+                "text_as_image": True,
+                "rooms": {"enabled": True},
+                "annotation_schemes": [{"annotation_type": "radio"}],
+            })
+        assert "rooms" in str(caught.value)
+
+    @pytest.mark.parametrize("rooms", [{"enabled": False}, {}, None])
+    def test_rooms_switched_off_is_fine(self, rooms):
+        from potato.server_utils.config_module import validate_text_as_image_config
+
+        config = {
+            "text_as_image": True,
+            "annotation_schemes": [{"annotation_type": "radio"}],
+        }
+        if rooms is not None:
+            config["rooms"] = rooms
+        validate_text_as_image_config(config)
+
+    def test_rooms_is_fine_where_the_feature_is_inert(self):
+        from potato.server_utils.config_module import validate_text_as_image_config
+
+        validate_text_as_image_config({
+            "text_as_image": True,
+            "rooms": {"enabled": True},
+            "annotation_schemes": [{"annotation_type": "image_annotation"}],
+        })
+
+
+class TestMediaShowingTextIsRefused:
+    """An audio or video scheme shows the item text in a box beside the player
+    unless that text is the media path. The feature does not replace the box."""
+
+    TIERED = {"annotation_type": "tiered_annotation", "name": "tiers",
+              "media_type": "audio", "source_field": "audio_url"}
+    AUDIO = {"annotation_type": "audio_annotation", "name": "sound",
+             "source_field": "audio_url"}
+    VIDEO = {"annotation_type": "video_annotation", "name": "clip",
+             "source_field": "video_url"}
+
+    def _validate(self, config):
+        from potato.server_utils.config_module import validate_text_as_image_config
+
+        validate_text_as_image_config(config)
+
+    @pytest.mark.parametrize("scheme", [TIERED, AUDIO, VIDEO])
+    def test_text_beside_the_player_is_refused(self, scheme):
+        from potato.server_utils.config_module import ConfigValidationError
+
+        with pytest.raises(ConfigValidationError) as caught:
+            self._validate({
+                "text_as_image": True,
+                "item_properties": {"text_key": "text"},
+                "annotation_schemes": [scheme],
+            })
+        assert scheme["name"] in str(caught.value)
+
+    def test_the_default_text_key_counts_as_text(self):
+        from potato.server_utils.config_module import ConfigValidationError
+
+        with pytest.raises(ConfigValidationError):
+            self._validate({"text_as_image": True,
+                            "annotation_schemes": [self.AUDIO]})
+
+    def test_a_legacy_media_key_counts_as_the_media_field(self):
+        from potato.server_utils.config_module import ConfigValidationError
+
+        with pytest.raises(ConfigValidationError):
+            self._validate({
+                "text_as_image": True,
+                "annotation_schemes": [{"annotation_type": "video_annotation",
+                                        "name": "clip", "video_key": "video_url"}],
+            })
+
+    @pytest.mark.parametrize("scheme,text_key", [
+        (TIERED, "audio_url"),
+        (AUDIO, "audio_url"),
+        (VIDEO, "video_url"),
+    ])
+    def test_text_key_on_the_media_field_is_inert_and_fine(self, scheme, text_key):
+        self._validate({
+            "text_as_image": True,
+            "item_properties": {"text_key": text_key},
+            "annotation_schemes": [scheme],
+        })
+
+    def test_tiered_defaults_its_media_field_to_audio_url(self):
+        self._validate({
+            "text_as_image": True,
+            "item_properties": {"text_key": "audio_url"},
+            "annotation_schemes": [{"annotation_type": "tiered_annotation",
+                                    "name": "tiers", "media_type": "audio"}],
+        })
+
+    @pytest.mark.parametrize("kind", ["audio_annotation", "video_annotation"])
+    def test_no_media_field_means_the_text_is_the_path(self, kind):
+        """The player reads the media path from the item text, so the box is
+        hidden and nothing is exposed."""
+        self._validate({
+            "text_as_image": True,
+            "item_properties": {"text_key": "text"},
+            "annotation_schemes": [{"annotation_type": kind, "name": "media"}],
+        })
+
+    @pytest.mark.parametrize("scheme", [TIERED, AUDIO, VIDEO])
+    def test_instance_display_owns_the_page_and_is_fine(self, scheme):
+        self._validate({
+            "text_as_image": True,
+            "instance_display": {},
+            "item_properties": {"text_key": "text"},
+            "annotation_schemes": [scheme],
+        })
+
+    def test_the_feature_switched_off_is_fine(self):
+        self._validate({
+            "item_properties": {"text_key": "text"},
+            "annotation_schemes": [self.TIERED, self.AUDIO, self.VIDEO],
+        })
+
+    def test_image_annotation_hides_the_box_and_is_fine(self):
+        self._validate({
+            "text_as_image": True,
+            "item_properties": {"text_key": "text"},
+            "annotation_schemes": [{"annotation_type": "image_annotation",
+                                    "source_field": "image_url"}],
+        })
+
+
 class TestSchemesReadingTheRemovedFieldAreRefused:
     """A scheme that reads the blanked data field must not start either.
 

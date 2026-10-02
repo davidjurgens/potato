@@ -113,6 +113,41 @@ def applies(config: Dict[str, Any],
     return options
 
 
+def media_showing_text(config: Dict[str, Any],
+                       annotation_schemes: Any) -> List[str]:
+    """Audio and video schemes whose page still shows the item text in a box.
+
+    ``applies`` leaves these projects alone, on the premise that the text box is
+    a hidden fallback. It is hidden only when the item text is the media path.
+    When the scheme names a media field and ``text_key`` is some other field,
+    the page shows that field next to the player, so a project that turned the
+    feature on would still hand out every word. An ``instance_display`` block
+    owns the page and hides the box.
+
+    A scheme that names no media field is skipped: the player then reads the
+    media path from the item text, so the text is the path and the box is
+    hidden. ``tiered_annotation`` is the one scheme with a default field.
+    """
+    if "instance_display" in config:
+        return []
+    text_key = (config.get("item_properties") or {}).get("text_key", "text")
+    exposed = []
+    for scheme in annotation_schemes or ():
+        if not isinstance(scheme, dict):
+            continue
+        kind = scheme.get("annotation_type")
+        if kind == "tiered_annotation" and scheme.get("media_type") in {"video", "audio"}:
+            media_field = scheme.get("source_field") or "audio_url"
+        elif kind in {"audio_annotation", "video_annotation"}:
+            media_field = (scheme.get("source_field") or scheme.get("video_key")
+                           or scheme.get("audio_key"))
+        else:
+            continue
+        if media_field and media_field != text_key:
+            exposed.append(scheme.get("name") or kind)
+    return sorted(exposed)
+
+
 def span_schemes(annotation_schemes: Any) -> List[str]:
     """Configured scheme types that need the plain text in the DOM."""
     return sorted({
