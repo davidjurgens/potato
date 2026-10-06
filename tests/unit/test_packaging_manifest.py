@@ -36,6 +36,11 @@ GENERATED = TEMPLATES / "generated"
 CANARY = GENERATED / "Packaging-Canary-base_template_v2.html-cohortz"
 
 
+class _Manifest(set):
+    """SOURCES.txt as a set, plus the top-level packages egg_info found."""
+    top_level: set
+
+
 @pytest.fixture(scope="module")
 def manifest(tmp_path_factory):
     """The file list setuptools derives from MANIFEST.in, one line per path."""
@@ -59,7 +64,10 @@ def manifest(tmp_path_factory):
 
         sources = list(egg_base.glob("*.egg-info/SOURCES.txt"))
         assert sources, f"egg_info wrote no SOURCES.txt into {egg_base}"
-        yield set(sources[0].read_text().splitlines())
+        files = _Manifest(sources[0].read_text().splitlines())
+        files.top_level = set(
+            (sources[0].parent / "top_level.txt").read_text().split())
+        yield files
     finally:
         CANARY.unlink(missing_ok=True)
         if created_dir:
@@ -124,3 +132,43 @@ class TestOtherPackageDataSurvived:
     def test_still_packaged(self, manifest, path):
         assert (REPO_ROOT / path).is_file(), f"{path} moved; update this test"
         assert path in manifest
+
+
+# Tracked under potato/ but deliberately not shipped: design notes, and a
+# sample user_config.json the server never reads from the package (it reads the
+# task directory's).
+_NOT_SHIPPED = {"potato/user_config.json"}
+
+
+class TestEveryTrackedFileShips:
+    """Every wheel from 2.7.0 to 2.10.1 lacked potato/ai/prompt/ and the survey
+    instruments: data directories with no __init__.py, which neither
+    find_packages() nor MANIFEST.in named. ai_support and every survey
+    instrument failed at startup from a pip install, and the suite, which runs
+    from the checkout, never saw it. A list of known directories would miss the
+    next one, so this checks the whole tracked tree."""
+
+    def test_nothing_tracked_under_potato_is_left_out(self, manifest):
+        tracked = [p for p in _tracked("potato/**") + _tracked("potato_trace/**")
+                   if not p.endswith(".md") and p not in _NOT_SHIPPED]
+        assert len(tracked) > 500, "the glob is wrong, not the manifest"
+        missing = sorted(set(tracked) - manifest)
+        assert not missing, (
+            f"{len(missing)} tracked file(s) would not ship in the wheel, "
+            f"starting with: {missing[:8]}")
+
+    @pytest.mark.parametrize("path", [
+        "potato/ai/prompt/radio.json",
+        "potato/ai/prompt/models_module.py",
+        "potato/survey_instruments/registry.json",
+        "potato/survey_instruments/instruments/tipi.json",
+    ])
+    def test_the_files_that_were_missing(self, manifest, path):
+        assert (REPO_ROOT / path).is_file(), f"{path} moved; update this test"
+        assert path in manifest
+
+    def test_only_the_published_packages_install_at_top_level(self, manifest):
+        """find_packages() also picked up the repo's tests/, which installed
+        into site-packages as a top-level `tests` package. potato_trace is a
+        deliberate top-level SDK (docs/integrations/tracing_sdk.md)."""
+        assert manifest.top_level == {"potato", "potato_trace"}, manifest.top_level

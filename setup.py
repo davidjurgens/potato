@@ -153,7 +153,9 @@ setup(
         "Website": "https://www.potatoannotator.com",
     },
     license="GPL-3.0-or-later",
-    packages=find_packages(),
+    # The repo's own tests/ is a package too; without the exclude it installs
+    # into site-packages as a top-level `tests` (1,020 files in 2.10.1).
+    packages=find_packages(exclude=["tests", "tests.*"]),
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",

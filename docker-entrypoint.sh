@@ -155,9 +155,20 @@ echo "  config:  ${CONFIG_FILE}"
 echo "  port:    ${PORT}"
 echo "  workers: ${WORKERS} (threads: ${THREADS})"
 
+# gunicorn 26 opens a control socket under $HOME/.gunicorn/. A container run
+# with a host uid that is not in /etc/passwd (`potato deploy` with the local
+# provider, Heroku) has HOME=/, so every boot logged "Control server error:
+# Permission denied: '/.gunicorn'". Potato never uses the socket. Older gunicorn
+# has no such flag and would refuse it, hence the check.
+control_socket=""
+if gunicorn --help 2>/dev/null | grep -q -- "--no-control-socket"; then
+    control_socket="--no-control-socket"
+fi
+
 # create_app is the WSGI factory; it loads config and builds state before the
 # first request, so a 200 from /health means the server is genuinely ready.
-exec gunicorn \
+# ${control_socket} is unquoted on purpose: empty means no argument at all.
+exec gunicorn ${control_socket} \
     --bind "0.0.0.0:${PORT}" \
     --workers "${WORKERS}" \
     --threads "${THREADS}" \

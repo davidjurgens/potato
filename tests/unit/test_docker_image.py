@@ -544,3 +544,37 @@ class TestHealthEndpoint:
         import potato.flask_server as flask_server
         source = open(flask_server.__file__).read()
         assert "'/health'" in source
+
+
+class TestGunicornControlSocket:
+    """gunicorn 26 opens a control socket under $HOME/.gunicorn/. Run with a
+    host uid that has no passwd entry, HOME is / and every boot logged
+    "Control server error: Permission denied: '/.gunicorn'"."""
+
+    def _fake_gunicorn(self, tmp_path, help_text):
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        record = tmp_path / "argv"
+        script = bin_dir / "gunicorn"
+        script.write_text(
+            "#!/bin/sh\n"
+            f'if [ "$1" = "--help" ]; then echo "{help_text}"; exit 0; fi\n'
+            f'echo "$@" > "{record}"\n')
+        script.chmod(0o755)
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "config.yaml").write_text("task_dir: .\n")
+        result = run_entrypoint(env={"PATH": f"{bin_dir}:/usr/bin:/bin"},
+                                cwd=str(project))
+        assert result.returncode == 0, result.stderr
+        return record.read_text().split()
+
+    def test_disabled_when_gunicorn_supports_it(self, tmp_path):
+        argv = self._fake_gunicorn(tmp_path, "  --no-control-socket   Disable control socket.")
+        assert argv[0] == "--no-control-socket"
+
+    def test_not_passed_to_a_gunicorn_without_the_flag(self, tmp_path):
+        """gunicorn before 26 refuses an unknown flag and would not start."""
+        argv = self._fake_gunicorn(tmp_path, "  --bind ADDRESS")
+        assert "--no-control-socket" not in argv
+        assert argv[0] == "--bind"

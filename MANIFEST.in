@@ -12,3 +12,11 @@ include potato/schemas/*.json
 recursive-include potato/static/ *
 recursive-include potato/i18n/ *.yaml
 global-exclude .DS_Store
+# Data directories with no __init__.py. find_packages() never sees them and
+# include_package_data ships only what this file names, so until 2.10.2 every
+# wheel lacked them: ai_support failed at startup ("Default annotation
+# directory does not exist") and every survey instrument with FileNotFoundError
+# on registry.json. tests/unit/test_packaging_manifest.py checks the whole tree.
+recursive-include potato/ai/prompt *.json *.py
+include potato/survey_instruments/registry.json
+recursive-include potato/survey_instruments/instruments *.json
