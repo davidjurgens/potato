@@ -57494,6 +57494,121 @@ route. See [Testing](../guides/testing.md) for the drift tests that enforce this
 
 ---
 
+<!-- source: docs/releasenotes/v2.10.0.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.10.0/
+
+# Release Notes: v2.10.0 — Eight Hosting Platforms, Backups and Text as Image
+
+`potato deploy` gains eight hosting platforms: AWS (three ways), Heroku, Fly,
+Railway, Hetzner, Vultr, Linode and OpenStack, including Jetstream2. Data on
+hosts whose disk does not last is now backed up to a HuggingFace dataset or an
+S3 bucket and restored when the server starts. A new install guide covers
+running Potato on your own machine and in the cloud. Separately,
+`text_as_image` shows each item's text as a picture, so annotators cannot copy
+it into a chatbot.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+## Installing and deploying
+
+[Installing and running Potato](../deployment/installation.md) is the new
+starting point. It covers pip, source and Docker on your own machine, then
+suggests a host for each situation:
+
+| Situation | Command |
+|---|---|
+| Trying it out | `potato start config.yaml`, then `potato share` |
+| You have an AWS account | `potato deploy up config.yaml --provider aws` (Lightsail, $12/month) |
+| US researcher with an ACCESS allocation | `--provider openstack --cloud jetstream2` (no charge) |
+| Cheapest VM | `--provider hetzner` |
+| No server to look after | `--provider fly` or `--provider railway` |
+
+### New targets
+
+- **AWS, three ways.** `--provider aws` creates a Lightsail instance: flat
+  price, IPv4 included, and only `lightsail:*` permissions. `aws-ec2` is for
+  accounts where Lightsail is turned off. `aws-ecs` runs the container on ECS
+  Express Mode behind an AWS-managed HTTPS address. It costs more, requires a
+  backup, and Potato makes deploys stop the old task before starting the new
+  one, so two tasks do not write the same study. Credentials come from the
+  usual AWS chain, SSO included.
+  See [AWS](../deployment/deploy-aws.md).
+- **Heroku.** One Basic dyno on the container stack. Heroku wipes the disk
+  daily, so Potato refuses to deploy without `--backup` or `--demo`. See
+  [Heroku](../deployment/deploy-heroku.md).
+- **Fly** and **Railway**, each with a persistent volume. See
+  [Fly](../deployment/deploy-fly.md) and [Railway](../deployment/deploy-railway.md).
+- **Hetzner, Vultr and Linode.** VMs with a Let's Encrypt certificate for the
+  IP address, as on DigitalOcean. See [VM providers](../deployment/deploy-vps.md).
+- **OpenStack**, with a Jetstream2 preset. Jetstream2 gives the instance a DNS
+  name, so it gets an ordinary certificate. Campus clouds and EGI work too.
+  See [Jetstream2 and OpenStack](../deployment/deploy-openstack.md).
+
+New extras: `deploy-aws` and `deploy-openstack`. The VM targets now share one
+base, so DigitalOcean, Lightsail, EC2, Hetzner, Vultr, Linode and OpenStack
+provision, update, pull and report logs the same way.
+
+### Deploy buttons
+
+`potato deploy button config.yaml --target heroku|render|aws|railway` writes
+the files for a "Deploy to Heroku", "Deploy to Render" or AWS "Launch Stack"
+button into your repository and prints the README badge. Other people can then
+run your task in their own accounts. No secrets are written. See
+[Deploy buttons](../deployment/deploy-buttons.md).
+
+## Backup and restore
+
+A new `backup:` block mirrors the annotation output and snapshots of the
+SQLite stores to a HuggingFace dataset, an S3-compatible bucket (S3, R2, B2),
+or both. When the server starts with an empty task directory and the backup
+holds data, it restores before loading anything, so annotators continue where
+they left off after a restart. Pass `--backup hf`, `--backup s3` or
+`--backup hf,s3` to `potato deploy up`. The old `huggingface_backup:` block is
+read as a `backup:` block with one sink. See
+[Backups](../deployment/deploy-backups.md).
+
+## Text as image
+
+`text_as_image: true` renders each item's text to a PNG on the server and
+removes the words from the page, the embedded item record and the JSON
+endpoints, so an annotator has nothing to select, copy or paste. It raises the
+cost of the shortcut but does not remove it: an annotator can still retype the
+text or run OCR on a screenshot. Potato refuses to start when the feature is
+combined with a span scheme, Pocket Mode, Rooms, or audio and video text. See
+[Text as Image](../advanced/text_as_image.md). (#169, Eyecatch3r)
+
+## Bug fixes
+
+- **Render deploys started without the project.** The service ran the bare
+  image, which exited with "config file not found". The container now
+  downloads the project at start, checks its sha256, and never overwrites
+  collected data.
+- **The HuggingFace backup only worked on HuggingFace Spaces.** On Render and
+  DigitalOcean, `--hf-token` set a variable that nothing read.
+- **The backup did nothing in the published image**, which did not include
+  `huggingface_hub`. The image now installs the new `hosting` extra
+  (`huggingface_hub`, `boto3`).
+- **A restart on a host without a persistent disk lost earlier work.** The
+  server started empty, and a returning annotator's new state overwrote the
+  backed-up copy. Restore on start fixes this.
+- **DigitalOcean with `--volume-gb` kept annotations on the root disk**, not
+  on the volume. The output and the SQLite stores now live on `/data`.
+- The Let's Encrypt contact email could not be set. Use `--acme-email`.
+- The container can start as root and drops to the `potato` user, so hosts
+  that mount root-owned volumes work.
+
+## Compatibility
+
+- Python 3.9 or later is now declared. A core dependency already required it,
+  so 3.7 and 3.8 could not install; pip now says so before installing.
+
+See the [changelog](https://github.com/davidjurgens/potato/blob/master/CHANGELOG.md) for earlier releases.
+
+
+---
+
 <!-- source: docs/releasenotes/v2.9.4.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.9.4/
 
