@@ -2,6 +2,39 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [2.10.2] - AI Support and Surveys from pip and Docker
+
+Two features did not work from a pip install or the published Docker image:
+AI label suggestions (`ai_support`) and survey instruments. Both have been
+broken this way since at least 2.7.0. Running from a git checkout was not affected.
+Upgrade if you install Potato with pip or deploy it with `potato deploy`.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+### Bug fixes
+
+- **`ai_support` failed at startup.** The wheel left out `potato/ai/prompt/`,
+  so the server stopped with "Default annotation directory does not exist".
+- **Survey instruments stopped the server.** The wheel left out
+  `potato/survey_instruments/`, so a study with an instrument such as `tipi`
+  in a pre- or post-study phase failed with "Failed to load phase", even
+  though `potato validate` passed it.
+- **pip installed a top-level `tests` package.** Potato's own test suite went
+  into site-packages beside `potato`, where `import tests` in your project
+  could pick it up.
+- **Every Docker boot logged a gunicorn error.** gunicorn 26 opens a control
+  socket under `$HOME/.gunicorn/`. A container run as a user with no home
+  directory, as the local provider and Heroku do, logged "Control server
+  error: Permission denied: '/.gunicorn'". Potato does not use the socket and
+  now turns it off. The server worked either way.
+
+The Docker image is built from the same package, so the first two fixes also
+apply to every `potato deploy` target that runs `ghcr.io/davidjurgens/potato`.
+A test now checks that every tracked file under `potato/`, apart from design
+notes, ships in the package.
+
 ## [2.10.1] - Deploy Dry Runs and Price Fixes
 
 Fixes in `potato deploy` found after 2.10.0: dry runs that passed for deploys
