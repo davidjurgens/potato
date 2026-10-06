@@ -3142,6 +3142,32 @@
       },
       "type": "object"
     },
+    "backup": {
+      "additionalProperties": true,
+      "description": "Mirror collected data off the host and restore it into an empty task at boot. `sinks` lists `{type: huggingface, repo_id}` and/or `{type: s3, bucket, prefix, region, endpoint_url}`; credentials come from the sink (env substitution applied), HF_TOKEN, or POTATO_S3_ACCESS_KEY_ID / POTATO_S3_SECRET_ACCESS_KEY. Copies the annotation directory and `.backup` snapshots of project.sqlite and datasets.sqlite. Supersedes `huggingface_backup`",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Set false to keep the block but turn the backup off",
+          "type": "boolean"
+        },
+        "restore_on_boot": {
+          "default": true,
+          "description": "When the output directory is empty at start, download the latest backup into it before any annotator state loads. Never overwrites local data",
+          "type": "boolean"
+        },
+        "schedule_minutes": {
+          "default": 5,
+          "description": "Minutes between backup cycles",
+          "type": "number"
+        },
+        "sinks": {
+          "description": "Where to send the backup. Each entry has a `type` of `huggingface` or `s3`; with several, restore reads the first that holds data",
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "base_css": {
       "description": "Extra stylesheet to load",
       "type": "string"

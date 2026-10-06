@@ -1,12 +1,18 @@
 # Deploying to Render
 
-The free path. No credit card, no CLI, no git repository — one API call deploys
+The free path. No credit card, no CLI, no git repository: one API call deploys
 the published Potato image and Render gives it HTTPS.
 
 ```bash
 export RENDER_API_KEY=rnd_...
-potato deploy up myproject/config.yaml --provider render --hf-token hf_...
+potato deploy up myproject/config.yaml --provider render --backup hf --hf-token hf_...
 ```
+
+Render runs the image and has no way to upload files to it, so your project is
+put in the backup's storage and the container downloads it when it starts.
+Every Render deployment therefore needs `--backup hf` or `--backup s3`, even on
+a paid plan with a disk. HuggingFace is the better choice here, because its
+download link does not expire; see [Backups](deploy-backups.md#getting-the-project-onto-the-host).
 
 ## Read this before using the free tier
 
@@ -18,15 +24,18 @@ So `potato deploy` will not create a free service unless you have said what
 happens to the data. Three ways to answer:
 
 ```bash
-# 1. Mirror annotations to a HuggingFace Dataset as they arrive
-potato deploy up config.yaml --provider render --hf-token hf_...
+# 1. Back up to a HuggingFace Dataset, and restore from it on every start
+potato deploy up config.yaml --provider render --backup hf --hf-token hf_...
 
 # 2. Pay for a disk
 potato deploy up config.yaml --provider render --plan starter --volume-gb 1
 
-# 3. Say the data is disposable
-potato deploy up config.yaml --provider render --demo
+# 3. Say the data is disposable (the project still goes to the backup storage)
+potato deploy up config.yaml --provider render --demo --backup hf --hf-token hf_...
 ```
+
+With a backup, an instance that stopped while idle restores the annotations
+when it starts again, so annotators continue where they left off.
 
 The backup is the usual answer for a pilot: it costs nothing, needs only a
 HuggingFace account, and the annotations end up somewhere you can share and
@@ -62,10 +71,11 @@ of 8 serves the dozens of simultaneous annotators a typical study has.
 
 ## Getting the data back
 
-`potato deploy pull` does not work here: there is no SSH into a Render service.
-Two routes instead.
+`potato deploy pull` works here over HTTPS, through the admin archive endpoint;
+there is no SSH into a Render service. If the service is down, the backup holds
+the same data.
 
-**The HuggingFace backup**, if you deployed with `--hf-token`. Annotations are
+**The HuggingFace backup.** Annotations and the project databases are
 committed to a private Dataset every five minutes:
 
 ```bash
@@ -89,8 +99,8 @@ potato deploy up myproject/config.yaml --provider render   # push changes
 potato deploy destroy myproject/config.yaml
 ```
 
-Running `up` again triggers a redeploy of the existing service rather than
-creating a second one.
+Running `up` again uploads the new project, updates the service's environment,
+and redeploys the existing service rather than creating a second one.
 
 `potato deploy logs` is not supported: Render's log API needs a paid plan and a
 websocket. Read them in the dashboard.

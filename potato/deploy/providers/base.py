@@ -110,8 +110,10 @@ class Provider(ABC):
     """Base class for every deploy target."""
 
     name: str = "base"
-    #: pip extras that must be installed before this provider can run.
+    #: Modules that must be importable before this provider can run.
     requires: tuple = ()
+    #: The pip extra that provides them.
+    install_extra: str = "deploy"
     #: True when the host loses its filesystem on restart.
     ephemeral_fs: bool = False
     #: True when the target is reachable from the public internet.
@@ -236,4 +238,6 @@ def _load_builtin_providers() -> None:
         return
     _BUILTINS_LOADED = True
     from potato.deploy.providers import (  # noqa: F401
-        digitalocean, huggingface, local, render, tunnel)
+        digitalocean, fly, heroku, hetzner, huggingface, linode, local,
+        openstack, railway, render, tunnel, vultr)
+    from potato.deploy.providers.aws import ec2, ecs, lightsail  # noqa: F401

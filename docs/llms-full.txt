@@ -49,6 +49,7 @@ Role-based guides that walk you through Potato for your specific use case:
 ## Getting Started
 
 - [Quick Start](quick-start.md) - Get running in 5 minutes
+- [Installing and Running Potato](deployment/installation.md) - Local install, or deploy to AWS, Jetstream2, Hetzner, Fly, Railway, Render, Heroku and more
 - [Installation & Usage](deployment/usage.md) - Detailed setup guide
 - [Reverse Proxy / URL Prefix](deployment/reverse-proxy.md) - Run behind a path-prefix proxy (`/app1/`)
 - [Configuration Reference](configuration/configuration.md) - Complete config options
@@ -400,6 +401,9 @@ git clone https://github.com/davidjurgens/potato.git
 cd potato
 pip install -r requirements.txt
 ```
+
+To run Potato in Docker instead, or to put a task online, see
+[Installing and running Potato](deployment/installation.md).
 
 ### Checking the install
 
@@ -4382,6 +4386,7 @@ For a tutorial-style guide, see [Configuration Guide](configuration.md).
 | Key | Required | Type | Default | Description | Sub-keys |
 |-----|----------|------|---------|-------------|----------|
 | `agent_proxy` |  | object |  | Run an agent as the subject of annotation. This block only configures the backend -- to put the chat on the page, add an `instance_display` field of `type: interactive_chat`, which renders the panel the annotator talks to. Connection settings (api_key, base_url, model) may be written directly in the block or under `ai_config` inside it, as the other model-backed blocks take them; a `base_url` pointing at an OpenAI-compatible server needs no key. Set `enabled: false` to turn it off without deleting the block |  |
+| `backup` |  | object |  | Mirror collected data off the host and restore it into an empty task at boot. `sinks` lists `{type: huggingface, repo_id}` and/or `{type: s3, bucket, prefix, region, endpoint_url}`; credentials come from the sink (env substitution applied), HF_TOKEN, or POTATO_S3_ACCESS_KEY_ID / POTATO_S3_SECRET_ACCESS_KEY. Copies the annotation directory and `.backup` snapshots of project.sqlite and datasets.sqlite. Supersedes `huggingface_backup` | `enabled`, `restore_on_boot`, `schedule_minutes`, `sinks` |
 | `crowdsourcing` |  | object |  | Crowd platform integration (Prolific, MTurk and others) |  |
 | `database` |  | object |  | Database connection for item or user storage | `connection_string`, `database`, `host`, `password`, `pool_size`, `pool_timeout`, `port`, `type`, `username` |
 | `huggingface_backup` |  | object |  | Mirror the annotation directory to a Hugging Face dataset repo on a schedule. Needs `enabled` and `repo_id`; the token comes from `token` (env substitution is applied) or HF_TOKEN, and `schedule_minutes` sets the cadence. A misconfiguration logs an error and lets the server run |  |
@@ -50645,7 +50650,7 @@ Three steps: install Potato, set up the project data, then start the server.
 Potato has a Python-based server architecture that can be run locally or
 hosted on any device. To install it:
 
-- Make sure you have Python version 3.8+ installed
+- Make sure you have Python 3.9 or newer installed
 - Follow the quickstart instructions in our [Quick Start Guide](../quick-start.md)
 
 ## Set up the project data
@@ -52742,6 +52747,140 @@ By default, MTurk only allows one assignment per worker per HIT. To allow multip
 
 ---
 
+<!-- source: docs/deployment/installation.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/installation/
+
+# Installing and Running Potato
+
+You can run Potato on your own machine, on a server you rent, or on a hosting
+platform. This page helps you pick one, and then sends you to the page for that
+option.
+
+## Choosing a target
+
+| Situation | Use | Cost |
+|---|---|---|
+| Trying Potato, building a task | [Install it locally](#on-your-own-machine) | free |
+| Showing a pilot to a few people for an afternoon | [`potato share`](deploy-share.md) | free |
+| A study, and you have an AWS account | [`--provider aws`](deploy-aws.md) (Lightsail) | $12/month |
+| A study, US academic with no budget | [`--provider openstack --cloud jetstream2`](deploy-openstack.md) | free with an ACCESS allocation |
+| A study, as cheaply as possible | [`--provider hetzner`](deploy-vps.md) | about €6/month |
+| A study, and you would rather not run a server | [`--provider fly`](deploy-fly.md) or [`--provider railway`](deploy-railway.md) | $7–20/month |
+| Annotators deploy their own copy from a link | [A deploy button](deploy-buttons.md) | depends on the host |
+| Your institution gives you a server | [Docker](docker.md) and a [reverse proxy](reverse-proxy.md) | — |
+
+On AWS, use Lightsail (`--provider aws`): it has a flat monthly price that
+includes the IPv4 address and the disk, and the only permissions it needs are
+`lightsail:*`. New AWS accounts get $100–200 of credit, which covers several
+months of it. [The AWS page](deploy-aws.md) also covers EC2 and ECS, and when
+you might want them instead.
+
+## On your own machine
+
+Potato needs Python 3.9 or newer. The published image uses 3.11.
+
+```bash
+pip install potato-annotation
+potato --version
+```
+
+To use the latest code instead of the latest release:
+
+```bash
+git clone https://github.com/davidjurgens/potato.git
+cd potato
+pip install -e .
+```
+
+Or skip Python entirely and use the published image, which has everything
+installed:
+
+```bash
+docker run -p 8000:7860 -v "$PWD/myproject:/app" ghcr.io/davidjurgens/potato:latest
+```
+
+Then follow the [Quick Start](../quick-start.md) to build a task, and start it
+with:
+
+```bash
+potato start myproject/config.yaml -p 8000
+```
+
+The task is at <http://localhost:8000>. Nobody else can reach it. To let other
+people in for a short session, run `potato share myproject/config.yaml`, which
+gives you a public HTTPS link until you press Ctrl-C. For anything longer, put
+the task in the cloud.
+
+## In the cloud
+
+### With one command
+
+`potato deploy` takes the config you already have and does the rest: it
+creates the server, gets an HTTPS certificate, uploads the project, starts the
+task, and gives you a URL.
+
+```bash
+pip install 'potato-annotation[deploy]'          # most targets
+pip install 'potato-annotation[deploy-aws]'      # AWS
+pip install 'potato-annotation[deploy-openstack]' # Jetstream2 and other OpenStack clouds
+
+potato deploy up myproject/config.yaml --provider aws --dry-run   # see the plan and the cost
+potato deploy up myproject/config.yaml --provider aws             # do it
+```
+
+`--dry-run` needs no account. It prints every resource that would be created,
+the cost per month, and anything in your config that is risky on a public
+server. Before any provider creates anything, it shows you the same plan and
+waits for you to confirm.
+
+When the study is finished:
+
+```bash
+potato deploy pull myproject/config.yaml      # download the annotations
+potato deploy destroy myproject/config.yaml   # stop paying
+```
+
+[Deploying a task](one-command-deploy.md) covers the whole lifecycle.
+
+### With a button
+
+A deploy button sets up a copy of your task from its git repository in one
+click. Use one when other people should be able to run the task in their own
+accounts. [Deploy buttons](deploy-buttons.md) explains how to generate the files
+for Heroku, Render, AWS and Railway.
+
+### On a server you already have
+
+Run the [Docker image](docker.md) behind any HTTPS reverse proxy. Use one
+worker process: Potato keeps its state in memory, and two processes would each
+hand out the same items. [Reverse proxy](reverse-proxy.md) has nginx and Caddy
+examples.
+
+## Targets that are not supported
+
+These platforms were considered and left out on purpose:
+
+| Platform | Why not |
+|---|---|
+| Google Cloud Run | Its storage options (Cloud Storage FUSE, NFS) cannot hold a SQLite database safely, and keeping one instance running costs about $50/month. |
+| Azure Container Apps | Its persistent storage is Azure Files over SMB, where SQLite is known to report "database is locked". If you have Azure student credit, use an Azure VM with [Docker](docker.md). |
+| AWS App Runner | Closed to new customers since 30 April 2026. |
+| Lightsail container services | No persistent storage. |
+| Koyeb | The plan with persistent storage starts at $29/month, and the platform has changed direction since it was acquired in 2026. |
+| Porter | Runs Kubernetes in your own cloud account; the minimum cost is about $225/month. |
+| Oracle Cloud Always Free | Its Arm VMs work with [Docker](docker.md), but Oracle reclaims instances it considers idle, and an annotation server between sessions looks idle. |
+| Coolify, Dokploy, CapRover | These add a platform layer on top of a VM. For a single container, `--provider hetzner` gets you the same VM without it. |
+
+## Related
+
+- [Quick Start](../quick-start.md): build your first task
+- [Deploying a task](one-command-deploy.md): the `potato deploy` lifecycle
+- [Backups](deploy-backups.md): keeping data safe on hosts whose disk does not last
+- [Getting annotations back](deploy-pull.md)
+
+
+---
+
 <!-- source: docs/deployment/one-command-deploy.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/deployment/one-command-deploy/
 
@@ -52761,45 +52900,58 @@ Several minutes later you have an HTTPS URL to send to annotators, and
 
 ## Choosing a target
 
-| Target | Cost | Lives until | Use it for |
+[Installing and running Potato](installation.md) has the short version. In
+full:
+
+| Target | Cost | Disk survives a restart | Use it for |
 |---|---|---|---|
-| [`local`](deploy-local.md) | free | you stop it | seeing what will deploy, before it costs anything |
-| [`potato share`](deploy-share.md) | free | you press Ctrl-C | a pilot, a lab meeting, a link for twenty minutes |
-| [`render`](deploy-render.md) | free, or $7/mo | you delete it | a study with no budget and no institutional account |
-| [`digitalocean`](deploy-digitalocean.md) | from $18/mo | you delete it | a real study: persistent, SSH, full lifecycle |
-| [`huggingface`](deploy-huggingface.md) | needs PRO, $9/mo | you delete it | a public demo, and anyone who already lives on the Hub |
+| [`local`](deploy-local.md) | free | yes | seeing what will deploy, before it costs anything |
+| [`potato share`](deploy-share.md) | free | — | a pilot, a lab meeting, a link for twenty minutes |
+| [`aws`](deploy-aws.md) (Lightsail) | $12/mo | yes | **a study on AWS**: flat price, `lightsail:*` permissions |
+| [`aws-ec2`](deploy-aws.md#ec2-provider-aws-ec2) | ~$16/mo | yes | AWS accounts that require EC2 |
+| [`aws-ecs`](deploy-aws.md#ecs-express-mode-provider-aws-ecs) | ~$45–70/mo | no, `--backup` | AWS with no server to manage |
+| [`openstack`](deploy-openstack.md) | free with an allocation | yes | Jetstream2 (US academics), campus clouds |
+| [`hetzner`](deploy-vps.md) | ~€6/mo | yes | the cheapest durable VM |
+| [`vultr`](deploy-vps.md), [`linode`](deploy-vps.md) | $10–12/mo | yes | US-billed VMs |
+| [`digitalocean`](deploy-digitalocean.md) | from $18/mo | yes | a VM with the longest history in Potato |
+| [`fly`](deploy-fly.md) | ~$7/mo | yes (volume) | a managed container with a volume |
+| [`railway`](deploy-railway.md) | ~$10–20/mo, usage | yes (volume) | a managed container with a volume |
+| [`render`](deploy-render.md) | free, or $7/mo | paid only; `--backup` | a study with no budget |
+| [`heroku`](deploy-heroku.md) | from $7/mo | no, `--backup` | labs that already use Heroku |
+| [`huggingface`](deploy-huggingface.md) | needs PRO, $9/mo | no, backup built in | a public demo, and anyone already on the Hub |
 
 `local` is the default, and it is the right first command whatever you plan to
 use afterwards: same bundle, same image, same config rewriting, no account.
 
-**If you have $18/month, use DigitalOcean.** It is the only target with a
-persistent disk, log streaming and SSH, which is to say the only one where
-everything in this documentation works.
+**With a budget, use a VM**: Lightsail on AWS, Hetzner for the lowest price,
+Jetstream2 if you have an allocation. VMs are the targets with a persistent
+disk, log streaming and SSH, so everything in this documentation works on them.
 
-**If you do not, use Render**, and read
+**Without one, use Render or Jetstream2.** Read
 [the free tier warning](deploy-render.md#read-this-before-using-the-free-tier)
-first: a free instance has no disk and stops fifteen minutes after your last
-annotator leaves. Potato will not create one until you have said where the data
-goes.
+before using Render: a free instance has no disk and stops fifteen minutes
+after your last annotator leaves. Potato will not create one until you have
+said where the data goes.
 
 ## What each target supports
 
-| | `local` | `share` | `render` | `digitalocean` | `huggingface` |
-|---|---|---|---|---|---|
-| Public URL | no | yes | yes | yes | yes |
-| HTTPS | — | yes | yes | yes | yes |
-| Survives a restart | yes | — | paid only | yes | no |
-| `deploy logs` | yes | — | no | yes | no |
-| `deploy pull` | yes | — | yes | yes | yes |
+| | `local` | VMs¹ | `fly` | `railway` | `render` | `heroku` | `aws-ecs` | `huggingface` |
+|---|---|---|---|---|---|---|---|---|
+| Public HTTPS URL | no | yes | yes | yes | yes | yes | yes | yes |
+| Survives a restart | yes | yes | yes | yes | paid / backup | backup | backup | backup |
+| `deploy logs` | yes | yes | no | yes | no | yes | yes | no |
+| `deploy pull` | yes | yes | yes | yes | yes | yes | yes | yes |
+
+¹ `aws`, `aws-ec2`, `digitalocean`, `hetzner`, `vultr`, `linode`, `openstack`.
 
 An unsupported operation raises an error naming the alternative rather than
 quietly doing nothing, because a pull that silently returns zero files is
 indistinguishable from a study nobody annotated.
 
-Where the filesystem does not survive (Render's free tier, every HuggingFace
-Space), pass `--hf-token` and annotations are mirrored to a private
-HuggingFace Dataset every five minutes. That backup is available on **every** provider, not
-only HuggingFace.
+Where the filesystem does not survive, pass `--backup hf` or `--backup s3`.
+Annotations and the project databases are copied off the host every five
+minutes and restored into the new server when it starts. The backup works on
+every provider. See [Backups](deploy-backups.md).
 
 ## The lifecycle
 
@@ -52887,8 +53039,11 @@ to run on a deployment that has never been pulled. See
 
 - [Running it on your own machine](deploy-local.md)
 - [Sharing a task on a temporary URL](deploy-share.md)
-- [DigitalOcean](deploy-digitalocean.md) · [Render](deploy-render.md) ·
-  [HuggingFace Spaces](deploy-huggingface.md)
+- [AWS](deploy-aws.md) · [Jetstream2 and OpenStack](deploy-openstack.md) ·
+  [Hetzner, Vultr, Linode](deploy-vps.md) · [DigitalOcean](deploy-digitalocean.md)
+- [Fly.io](deploy-fly.md) · [Railway](deploy-railway.md) · [Render](deploy-render.md) ·
+  [Heroku](deploy-heroku.md) · [HuggingFace Spaces](deploy-huggingface.md)
+- [Backups](deploy-backups.md) · [Deploy buttons](deploy-buttons.md)
 - [Getting annotations back](deploy-pull.md)
 - [Docker](docker.md) — the image every target runs
 - [Scaling](scaling.md) — how many annotators one host serves
@@ -53255,8 +53410,8 @@ same bytes every time. `potato deploy` uses it for that reason.
 
 | Tag | Contents | Size |
 |---|---|---|
-| `latest`, `2.8.0` | Core dependencies | ~840 MB |
-| `latest-all`, `2.8.0-all` | Plus AI SDKs, document formats, export and OAuth | ~1.5 GB |
+| `latest`, `<version>` | Core dependencies, plus the backup clients (`huggingface_hub`, `boto3`) | ~900 MB |
+| `latest-all`, `<version>-all` | Plus AI SDKs, document formats, export and OAuth | ~1.5 GB |
 | `sha-<short>` | A specific commit | — |
 
 Both are built for `linux/amd64` and `linux/arm64`, so they run natively on
@@ -53280,6 +53435,27 @@ ONNX Runtime Web is vendored in the image already.
 | `POTATO_SECRET_KEY` | generated | Flask session signing key |
 | `POTATO_ADMIN_API_KEY` | generated | Admin API authentication |
 | `POTATO_GENERATED_TEMPLATES_DIR` | auto | Where baked task templates go |
+| `POTATO_BUNDLE_URL` | unset | Download the project from this URL at start (see below) |
+| `POTATO_BUNDLE_SHA256` | unset | Refuse a downloaded project whose checksum differs |
+| `POTATO_BUNDLE_TOKEN` | unset | Sent as `Authorization: Bearer` when downloading |
+| `POTATO_RUN_AS_ROOT` | unset | Set to `1` to keep running as root when started as root |
+
+### Downloading the project at start
+
+Hosts that only run an image (Render, Fly, Railway, ECS) have nowhere to mount a
+project. With `POTATO_BUNDLE_URL` set, the entrypoint downloads a `.tar.gz` of
+the project, checks it against `POTATO_BUNDLE_SHA256`, and unpacks it into
+`/app` before starting. It writes the checksum to `/app/.potato-bundle-sha`, so
+on a persistent disk a restart does not download it again. Collected data (the
+output directory and the SQLite databases) is never replaced by a new version
+of the project. `potato deploy up` sets all three variables for you.
+
+### Started as root
+
+Some hosts start the container as root whatever the image says. Railway does
+when its volume needs it. The entrypoint then gives `/app` to the image's
+`potato` user (uid 1000) and continues as that user, so the server never runs as
+root.
 
 Set `POTATO_SECRET_KEY` on anything that outlives a single run. Without it the
 key is random per process, so every restart logs all annotators out.
@@ -53414,6 +53590,344 @@ failing partway through boot.
 
 - [Reverse proxy](reverse-proxy.md) — TLS and path prefixes
 - [Scaling](scaling.md) — how many annotators one instance serves
+
+
+---
+
+<!-- source: docs/deployment/deploy-aws.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-aws/
+
+# Deploying to AWS
+
+Potato can run on AWS in three ways. For most studies, use the first one.
+
+| | `--provider aws` (Lightsail) | `--provider aws-ec2` | `--provider aws-ecs` (Express Mode) |
+|---|---|---|---|
+| What you get | one VM | one VM | a managed container |
+| Cost | **$12/month**, flat | about $16/month | about $45–70/month |
+| Disk | survives restarts | survives restarts | wiped when the task is replaced; needs `--backup` |
+| HTTPS | Let's Encrypt certificate for the IP | Let's Encrypt certificate for the IP | AWS certificate on `*.ecs.<region>.on.aws` |
+| Permissions | `lightsail:*` | EC2, plus `ssm:GetParameter` | ECS, IAM, SSM, CloudWatch Logs |
+| `deploy logs` / SSH | yes | yes | logs only |
+
+**Use Lightsail unless you have a reason not to.** Its price includes the IPv4
+address, a 60 GB SSD and 3 TB of transfer, it needs no VPC, security group or
+IAM role, and new AWS accounts get $100–200 of credit that covers several months
+of it.
+
+Use EC2 if your institution's AWS account has Lightsail turned off or requires
+EC2. Use ECS Express only if you specifically want AWS to run the container for
+you and you are prepared for the cost and the backup requirement.
+
+App Runner closed to new customers on 30 April 2026, and Lightsail's container
+service has no persistent storage, so neither is offered.
+
+## Credentials
+
+The AWS providers use the same credentials as the `aws` command line tool,
+looked up the same way: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, then
+`AWS_PROFILE`, then `~/.aws/credentials` and `~/.aws/config`. Single sign-on
+works:
+
+```bash
+pip install 'potato-annotation[deploy-aws]'
+aws sso login --profile lab                       # or: aws configure
+potato deploy providers --verify                  # prints who AWS thinks you are
+potato deploy up config.yaml --provider aws --aws-profile lab
+```
+
+Potato never writes AWS credentials anywhere. The profile name, if you gave
+one, is recorded so that `status`, `pull` and `destroy` use the same account.
+
+## Lightsail (`--provider aws`)
+
+```bash
+potato deploy up myproject/config.yaml --provider aws --dry-run
+potato deploy up myproject/config.yaml --provider aws
+```
+
+This creates one instance running Ubuntu 24.04, gives it a static IP, and opens
+ports 22, 80 and 443. Port 8000, where Potato itself listens, is never opened;
+Caddy forwards to it over the loopback interface. The deploy key is generated
+for this deployment only and stored in `.potato/secrets.json`. Your own SSH
+keys are not used.
+
+| Flag | Default | |
+|---|---|---|
+| `--region` | `us-east-1` | Any Lightsail region; the instance goes in zone `a`. |
+| `--size` | `small_3_0` | 2 GB, $12/month. `medium_3_0` is 4 GB at $24/month. Smaller bundles are allowed but swap. |
+| `--volume-gb` | none | Adds a Lightsail disk ($0.10/GB) and keeps the task on it. |
+
+Without `--volume-gb`, annotations are stored on the instance's own SSD. They
+survive restarts and reboots, but not `destroy`, so run `potato deploy pull`
+first. The static IP is released on `destroy`, because Lightsail bills for one
+that is not attached to an instance.
+
+The certificate is issued for the static IP and lasts about six days, renewing
+automatically. `potato deploy status` reports a renewal that fails. To use your
+own domain, point an A record at the IP and pass `--domain`.
+
+## EC2 (`--provider aws-ec2`)
+
+```bash
+potato deploy up myproject/config.yaml --provider aws-ec2
+```
+
+This launches a `t4g.small` (2 vCPU, 2 GB, Graviton) running Ubuntu 24.04 arm64
+in the region's default VPC, with a security group allowing 22/80/443 and an
+Elastic IP. The AMI is looked up from Canonical's public SSM parameter, so it is
+always the current image. The instance requires IMDSv2.
+
+If the region has no default VPC, pass a public subnet with `--subnet
+subnet-…`. Use `--size t3.small` for an x86 instance.
+
+`--volume-gb` adds a gp3 EBS volume. The volume is found by its NVMe id, not by
+a device name, because on Nitro instances the name the volume is attached as
+(`/dev/sdf`) is not the name Linux gives it.
+
+## ECS Express Mode (`--provider aws-ecs`)
+
+```bash
+potato deploy up myproject/config.yaml --provider aws-ecs --backup hf --hf-token hf_...
+```
+
+This creates an ECS Express service: one 0.5 vCPU / 1 GB Fargate task behind a
+load balancer that AWS creates and manages, at an `*.ecs.<region>.on.aws`
+address with an AWS certificate. There is no server for you to maintain.
+
+Before choosing it, know these three things:
+
+- **The disk does not last.** The Express API has no setting for a volume, so
+  the task's files are lost whenever the task is replaced. Potato refuses to
+  deploy without `--backup`, and the backup is restored into each new task
+  before the server starts. See [Backups](deploy-backups.md).
+- **Deploys are changed to stop-then-start.** By default Express starts the new
+  task before stopping the old one. That would leave two tasks, each restoring
+  and backing up the same study, and the later write would overwrite the
+  earlier one. After creating the service, Potato changes it to stop the old
+  task first (`maximumPercent` 100) and reads the setting back. Every later
+  `up` checks it again and refuses if it has changed. A redeploy therefore
+  takes the task offline for a minute or two.
+- **It is the most expensive option here,** mainly because of the load balancer
+  and its public IPv4 addresses.
+
+Secrets are stored in SSM Parameter Store as SecureStrings under
+`/potato/<name>/` and passed to the container as ECS secrets, not as plain
+environment variables. Logs go to the CloudWatch log group `/potato/<name>`
+(30-day retention), which `potato deploy logs` reads.
+
+Potato creates two IAM roles on first use, `potato-ecs-task-execution` and
+`potato-ecs-express-infrastructure`. They are shared by all your ECS
+deployments, and `destroy` leaves them in place.
+
+## Permissions
+
+If your IAM user or role is restricted, these are the actions each provider
+calls. Every provider also calls `sts:GetCallerIdentity`, which needs no
+permission.
+
+**Lightsail:**
+
+```json
+{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Resource": "*", "Action": [
+  "lightsail:GetBundles", "lightsail:CreateInstances", "lightsail:GetInstance",
+  "lightsail:DeleteInstance", "lightsail:AllocateStaticIp", "lightsail:AttachStaticIp",
+  "lightsail:GetStaticIp", "lightsail:ReleaseStaticIp",
+  "lightsail:PutInstancePublicPorts", "lightsail:CreateDisk", "lightsail:GetDisk",
+  "lightsail:AttachDisk", "lightsail:DeleteDisk", "lightsail:TagResource"]}]}
+```
+
+**EC2:**
+
+```json
+{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Resource": "*", "Action": [
+  "ssm:GetParameter", "ec2:DescribeVpcs", "ec2:DescribeSubnets",
+  "ec2:CreateSecurityGroup", "ec2:AuthorizeSecurityGroupIngress",
+  "ec2:DeleteSecurityGroup", "ec2:RunInstances", "ec2:DescribeInstances",
+  "ec2:TerminateInstances", "ec2:AllocateAddress", "ec2:AssociateAddress",
+  "ec2:ReleaseAddress", "ec2:CreateVolume", "ec2:AttachVolume",
+  "ec2:DescribeVolumes", "ec2:DeleteVolume", "ec2:CreateTags"]}]}
+```
+
+**ECS Express:**
+
+```json
+{"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Resource": "*", "Action": [
+  "ecs:CreateExpressGatewayService", "ecs:UpdateExpressGatewayService",
+  "ecs:DescribeExpressGatewayService", "ecs:DeleteExpressGatewayService",
+  "ecs:UpdateService", "ecs:DescribeServices",
+  "iam:GetRole", "iam:CreateRole", "iam:AttachRolePolicy", "iam:PutRolePolicy",
+  "iam:PassRole", "iam:TagRole",
+  "ssm:PutParameter", "ssm:GetParameter", "ssm:DeleteParameters",
+  "logs:CreateLogGroup", "logs:PutRetentionPolicy", "logs:FilterLogEvents",
+  "logs:DeleteLogGroup"]}]}
+```
+
+## Troubleshooting
+
+**"AWS rejected the credentials"**: the SSO session has expired, or
+`AWS_PROFILE` names a profile that does not exist. Run `aws sso login` and try
+again.
+
+**"Lightsail does not sell bundle …"**: bundle names change when prices do. The
+error lists the bundles that are currently sold; pass one with `--size`.
+
+**"This region has no default VPC"** (EC2): pass `--subnet` with a subnet that
+has a route to an internet gateway.
+
+**"This ECS service would start a new task before stopping the old one"**:
+Express changed the deployment setting back. Rather than risk two tasks writing
+the same study, Potato will not redeploy it. Run `destroy` and `up` (pull
+first), or move the task to Lightsail.
+
+**HTTPS does not work for the first few minutes** (Lightsail, EC2): the
+certificate is requested once the instance is reachable. `potato deploy status`
+reports TLS errors separately from the server being down.
+
+## Related
+
+- [Installing and running Potato](installation.md): choosing where to run
+- [Deploying a task](one-command-deploy.md): the full lifecycle
+- [Backups](deploy-backups.md)
+- [Deploy buttons](deploy-buttons.md): a CloudFormation "Launch Stack" button for Lightsail
+
+
+---
+
+<!-- source: docs/deployment/deploy-openstack.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-openstack/
+
+# Deploying to Jetstream2 and other OpenStack clouds
+
+```bash
+pip install 'potato-annotation[deploy-openstack]'
+potato deploy up myproject/config.yaml --provider openstack --cloud jetstream2
+```
+
+[Jetstream2](https://jetstream-cloud.org) is an NSF-funded research cloud. With
+an ACCESS allocation it costs you nothing, and every instance gets a DNS name,
+so the task is served at `https://potato-<name>.<allocation>.projects.jetstream-cloud.org`
+with an ordinary 90-day Let's Encrypt certificate.
+
+The same provider works on campus OpenStack clouds and on EGI's federated cloud.
+On those, the task is served at the floating IP address with an IP certificate,
+as on the other [VM providers](deploy-vps.md).
+
+## Getting access to Jetstream2
+
+1. Request an ACCESS **Explore** allocation (<https://allocations.access-ci.org>)
+   and ask for Jetstream2 CPU time. Explore allocations are usually approved
+   within days.
+2. In Horizon (<https://js2.jetstream-cloud.org>), create an **application
+   credential** and download its `clouds.yaml`.
+3. Put the file in `~/.config/openstack/clouds.yaml`. The entry name is what
+   you pass to `--cloud`; name it `jetstream2` to get the defaults below.
+
+`potato deploy providers --verify` confirms that the credential works.
+
+## What it creates
+
+| | Jetstream2 default | Flag |
+|---|---|---|
+| Flavor | `m3.small` (2 vCPU, 6 GB) | `--size` |
+| Image | `Featured-Ubuntu24` | `--os-image` |
+| Network | the project's auto-allocated network | `--network` |
+| Floating IP | from the `public` network | |
+| Security group | inbound 22/80/443 only | |
+| Volume | with `--volume-gb` | |
+
+Images on different clouds log in as different users (`ubuntu`, `exouser`,
+`cloud-user`), so cloud-init creates a `potato-deploy` user with the deploy key
+and passwordless sudo, and Potato connects as that user.
+
+An `m3.small` uses 2 SUs (service units, the allocation's currency) per hour.
+Left running for a year, that is about 17,500 SUs, so destroy the instance when
+the study ends.
+
+## Managing the instance
+
+```bash
+potato deploy status config.yaml
+potato deploy logs config.yaml -f
+potato deploy pull config.yaml
+potato deploy destroy config.yaml
+```
+
+## Troubleshooting
+
+**"No --network given and this project has no auto-allocated network"**: create
+a network and router in Horizon or Exosphere and pass `--network <name>`.
+
+**The certificate takes a few minutes**: Jetstream2 publishes the instance's
+DNS name a minute or two after the floating IP is attached. Potato waits for it
+before configuring Caddy, and the certificate is issued once the name resolves.
+
+## Related
+
+- [Installing and running Potato](installation.md)
+- [VM providers](deploy-vps.md)
+
+
+---
+
+<!-- source: docs/deployment/deploy-vps.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-vps/
+
+# Deploying to Hetzner, Vultr or Linode
+
+These three providers rent ordinary virtual machines. Potato sets each one up
+the same way it does [DigitalOcean](deploy-digitalocean.md): a deploy key
+generated for that deployment, a firewall that allows only 22/80/443, Docker,
+Caddy with a Let's Encrypt certificate for the machine's IP address, and Potato
+running as a systemd service. `deploy logs`, `deploy pull` over SSH and
+`--volume-gb` work on all three.
+
+| | `--provider hetzner` | `--provider vultr` | `--provider linode` |
+|---|---|---|---|
+| Default size | `cx23`: 2 vCPU, 4 GB | `vc2-1c-2gb`: 1 vCPU, 2 GB | `g6-standard-1`: 1 vCPU, 2 GB |
+| Monthly | about €6 (€5.49 plus €0.50 for IPv4) | $10 | $12 |
+| Default region | `nbg1` (Nuremberg) | `ewr` (New Jersey) | `us-east` (Newark) |
+| Token variable | `HCLOUD_TOKEN` | `VULTR_API_KEY` | `LINODE_TOKEN` |
+| Billed | in euros | in dollars | in dollars |
+
+```bash
+export HCLOUD_TOKEN=...
+potato deploy up myproject/config.yaml --provider hetzner
+```
+
+## Hetzner
+
+The cheapest of the three, even after Hetzner's two price rises in 2026, and it
+has the most memory for the price. It bills in euros, from a company based in
+Germany, and some institutions' purchasing rules don't allow that.
+
+The `cx` server types are sold only in the European locations. In the US
+locations (`ash`, `hil`), pass a `cpx` type with `--size`; if you don't, Potato
+stops before creating anything and lists the locations that sell the type you
+asked for.
+
+Create the token in the Hetzner Cloud console, under the project's Security
+section, with read and write permission.
+
+## Vultr
+
+The API key needs your machine's IP address added to its access-control list in
+the Vultr dashboard, or every request returns 401. Block storage is attached
+after the instance starts, and the setup waits for the device to appear before
+it formats and mounts it.
+
+## Linode
+
+Linode requires a root password when a machine is created, even when SSH keys
+are supplied. Potato generates one, stores it in `.potato/secrets.json`, and
+turns off password login over SSH, so the password cannot be used to log in.
+The token needs read and write access to Linodes, Firewalls and Volumes.
+
+## Related
+
+- [DigitalOcean](deploy-digitalocean.md): the same setup, documented in full
+- [Installing and running Potato](installation.md)
+- [Getting annotations back](deploy-pull.md)
 
 
 ---
@@ -53587,8 +54101,15 @@ Use `--volume-gb` for anything longer than a pilot:
 potato deploy up myproject/config.yaml --provider digitalocean --volume-gb 25
 ```
 
-Annotations then live on the volume rather than the droplet's own disk, so
-resizing or rebuilding the droplet does not lose them.
+The task directory, with its annotations and databases, then lives on the
+volume (`/opt/potato/data/app`) rather than the droplet's own disk, so
+resizing or rebuilding the droplet does not lose them. The volume is formatted
+and mounted over SSH after it is attached, not at first boot, and a volume that
+already holds data is never reformatted.
+
+Deployments created before this change kept the task on the droplet's disk
+even with a volume, and continue to use that layout on later `up`s. To move
+one onto its volume, pull, destroy and deploy again.
 
 ## Access control
 
@@ -53689,18 +54210,156 @@ console to reach it.
 
 ---
 
+<!-- source: docs/deployment/deploy-fly.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-fly/
+
+# Deploying to Fly.io
+
+```bash
+export FLY_API_TOKEN=...             # `fly tokens create org`, or a personal token
+potato deploy up myproject/config.yaml --provider fly
+```
+
+This creates a Fly app with one Machine (shared CPU, 1 GB) and a 1 GB volume
+holding the task. It is served at `https://<app>.fly.dev` using a shared IPv4
+address, which is free. The cost is about $7 a month. Fly has no free tier, and
+a new organization needs a card on file.
+
+A Fly volume belongs to one Machine, which is what Potato needs: all the
+annotators' state is in one process, and there is never a second copy that
+could disagree with it.
+
+## Options
+
+| Flag | Default | |
+|---|---|---|
+| `--region` | `iad` | Any Fly region. |
+| `--size` | `1024` | Machine memory in MB: 512, 1024, 2048 or 4096. |
+| `--volume-gb` | `1` | Volume size. $0.15/GB per month. |
+| `--owner` | `personal` | The Fly organization. |
+
+The Machine is always running (`autostop` is off). A Machine that has stopped
+takes several seconds to answer its first request, and an annotator would see
+that as the page hanging.
+
+## Getting the project onto the Machine
+
+The Machine runs the published image, and the project arrives when it starts.
+A project under 512 KB, which covers most configs and text datasets, is sent
+inside the Machine's configuration. A larger one is uploaded to your backup
+storage, so it needs `--backup hf` or `--backup s3`. See
+[Backups](deploy-backups.md#getting-the-project-onto-the-host). Either way, the
+project is downloaded once per deploy, not on every restart, because the volume
+remembers which version it holds.
+
+Secrets are stored with Fly's secrets mechanism, not in the Machine's
+environment.
+
+## Managing the app
+
+```bash
+potato deploy status config.yaml
+potato deploy pull config.yaml       # over the admin API
+potato deploy destroy config.yaml    # deletes the app and its volume
+```
+
+Running `up` again replaces the Machine's configuration in place: Fly stops the
+Machine, applies the new configuration and starts it again, so there is never a
+second Machine on the volume.
+
+`potato deploy logs` is not available. Fly does not serve logs over its REST
+API, so use `fly logs -a <app>`.
+
+`destroy` deletes the volume along with the app, and `--keep-data` cannot keep
+it. Pull first.
+
+## Related
+
+- [Installing and running Potato](installation.md)
+- [Backups](deploy-backups.md)
+- [Railway](deploy-railway.md), the other managed target with a volume
+
+
+---
+
+<!-- source: docs/deployment/deploy-railway.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-railway/
+
+# Deploying to Railway
+
+```bash
+export RAILWAY_API_TOKEN=...         # https://railway.com/account/tokens
+potato deploy up myproject/config.yaml --provider railway --backup hf --hf-token hf_...
+```
+
+This creates a Railway project with one service running the published Potato
+image, a volume mounted as the task directory, and a `*.up.railway.app` domain.
+Railway bills for the RAM, CPU and volume you use, by the minute. The $5 Hobby
+plan includes $5 of usage, and a small task that is always on usually costs
+$10–20 a month.
+
+## Options
+
+The service is set to one replica that never sleeps, with no overlap between
+an old deployment and its replacement. With overlap, two containers would use
+the same volume at once: two copies of the item pool, and whichever saved last
+would win.
+
+Railway mounts volumes as root, so the service runs with `RAILWAY_RUN_UID=0`.
+The image hands the task directory to its own user and switches to that user
+before the server starts, so Potato itself never runs as root.
+
+## Getting the project onto the service
+
+Railway has no way to upload files, so the project is put in your backup
+storage and downloaded when the container starts. A deploy therefore needs
+`--backup hf` or `--backup s3`. With the volume, the project is downloaded once
+per deploy. See [Backups](deploy-backups.md#getting-the-project-onto-the-host).
+
+## Managing the service
+
+```bash
+potato deploy status config.yaml
+potato deploy logs config.yaml       # the latest deployment's logs
+potato deploy pull config.yaml       # over the admin API
+potato deploy destroy config.yaml    # deletes the project, volume included
+```
+
+Running `up` again updates the service's variables and redeploys it.
+
+## A Railway button
+
+Railway publishes templates from its dashboard, not from a file in your
+repository. `potato deploy button config.yaml --target railway` prints the
+steps. See [Deploy buttons](deploy-buttons.md).
+
+## Related
+
+- [Installing and running Potato](installation.md)
+- [Fly.io](deploy-fly.md)
+- [Backups](deploy-backups.md)
+
+
+---
+
 <!-- source: docs/deployment/deploy-render.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-render/
 
 # Deploying to Render
 
-The free path. No credit card, no CLI, no git repository — one API call deploys
+The free path. No credit card, no CLI, no git repository: one API call deploys
 the published Potato image and Render gives it HTTPS.
 
 ```bash
 export RENDER_API_KEY=rnd_...
-potato deploy up myproject/config.yaml --provider render --hf-token hf_...
+potato deploy up myproject/config.yaml --provider render --backup hf --hf-token hf_...
 ```
+
+Render runs the image and has no way to upload files to it, so your project is
+put in the backup's storage and the container downloads it when it starts.
+Every Render deployment therefore needs `--backup hf` or `--backup s3`, even on
+a paid plan with a disk. HuggingFace is the better choice here, because its
+download link does not expire; see [Backups](deploy-backups.md#getting-the-project-onto-the-host).
 
 ## Read this before using the free tier
 
@@ -53712,15 +54371,18 @@ So `potato deploy` will not create a free service unless you have said what
 happens to the data. Three ways to answer:
 
 ```bash
-# 1. Mirror annotations to a HuggingFace Dataset as they arrive
-potato deploy up config.yaml --provider render --hf-token hf_...
+# 1. Back up to a HuggingFace Dataset, and restore from it on every start
+potato deploy up config.yaml --provider render --backup hf --hf-token hf_...
 
 # 2. Pay for a disk
 potato deploy up config.yaml --provider render --plan starter --volume-gb 1
 
-# 3. Say the data is disposable
-potato deploy up config.yaml --provider render --demo
+# 3. Say the data is disposable (the project still goes to the backup storage)
+potato deploy up config.yaml --provider render --demo --backup hf --hf-token hf_...
 ```
+
+With a backup, an instance that stopped while idle restores the annotations
+when it starts again, so annotators continue where they left off.
 
 The backup is the usual answer for a pilot: it costs nothing, needs only a
 HuggingFace account, and the annotations end up somewhere you can share and
@@ -53756,10 +54418,11 @@ of 8 serves the dozens of simultaneous annotators a typical study has.
 
 ## Getting the data back
 
-`potato deploy pull` does not work here: there is no SSH into a Render service.
-Two routes instead.
+`potato deploy pull` works here over HTTPS, through the admin archive endpoint;
+there is no SSH into a Render service. If the service is down, the backup holds
+the same data.
 
-**The HuggingFace backup**, if you deployed with `--hf-token`. Annotations are
+**The HuggingFace backup.** Annotations and the project databases are
 committed to a private Dataset every five minutes:
 
 ```bash
@@ -53783,8 +54446,8 @@ potato deploy up myproject/config.yaml --provider render   # push changes
 potato deploy destroy myproject/config.yaml
 ```
 
-Running `up` again triggers a redeploy of the existing service rather than
-creating a second one.
+Running `up` again uploads the new project, updates the service's environment,
+and redeploys the existing service rather than creating a second one.
 
 `potato deploy logs` is not supported: Render's log API needs a paid plan and a
 websocket. Read them in the dashboard.
@@ -53814,6 +54477,87 @@ tier limit. The dashboard has the reason.
 - [DigitalOcean](deploy-digitalocean.md) — a persistent VM, from $18/month
 - [HuggingFace Spaces](deploy-huggingface.md) — an ephemeral host with the same
   backup story
+
+
+---
+
+<!-- source: docs/deployment/deploy-heroku.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-heroku/
+
+# Deploying to Heroku
+
+```bash
+export HEROKU_API_KEY=...            # or log in with `heroku login`
+potato deploy up myproject/config.yaml --provider heroku --backup hf --hf-token hf_...
+```
+
+This creates a Heroku app on the container stack, builds an image from the
+published Potato image plus your project, and runs one Basic dyno ($7/month).
+The task is served at the app's `*.herokuapp.com` address over HTTPS.
+
+Heroku has been in sustaining-engineering mode since February 2026: accounts
+that pay by card keep working, but the platform gets no new features. Use it if
+your lab already has an account. Otherwise, [Fly](deploy-fly.md),
+[Railway](deploy-railway.md) or [Lightsail](deploy-aws.md) are better choices.
+
+## Backup (required)
+
+A dyno's filesystem is wiped every time the dyno restarts, and Heroku restarts
+every dyno at least once a day. Potato will not create the app until you choose
+where the data goes:
+
+```bash
+--backup hf --hf-token hf_...        # a private HuggingFace dataset
+--backup s3 --s3-bucket my-bucket    # an S3 (or R2, B2) bucket
+--demo                               # the annotations are disposable
+```
+
+The backup is restored into the new dyno each time it starts, before the server
+loads anything, so annotators continue where they left off. See
+[Backups](deploy-backups.md).
+
+## Dyno sizes
+
+| `--size` | RAM | Monthly | |
+|---|---|---|---|
+| `eco` | 512 MB | $5 (shared pool) | Sleeps after 30 minutes idle; each wake restores from the backup |
+| `basic` | 512 MB | $7 | The default |
+| `standard-1x` | 512 MB | $25 | |
+| `standard-2x` | 1 GB | $50 | For large datasets or many annotators at once |
+
+Potato uses about 140 MB when idle. If the logs show `R14 (Memory quota
+exceeded)`, use `--size standard-2x`.
+
+## How the image is built
+
+Heroku runs containers as an arbitrary non-root user rather than the image's
+own, so Potato makes the task directory writable by any user when it builds the
+image. The project, a Dockerfile and `heroku.yml` are uploaded through the
+Platform API, and Heroku builds the image itself. You don't need Docker
+installed.
+
+If the build fails on that route, `--heroku-registry` builds the image locally
+with Docker instead, for `linux/amd64`, and pushes it to Heroku's registry.
+
+Secrets (the session key, the admin key, backup credentials) are set as config
+vars. They are not built into the image.
+
+## Managing the app
+
+```bash
+potato deploy status config.yaml
+potato deploy logs config.yaml -f
+potato deploy pull config.yaml          # over the admin API, or use the backup
+potato deploy destroy config.yaml       # deletes the app; the backup is kept
+```
+
+Running `up` again uploads the new project and rebuilds the same app.
+
+## Related
+
+- [Backups](deploy-backups.md)
+- [Deploy buttons](deploy-buttons.md): a "Deploy to Heroku" button for your repository
+- [Installing and running Potato](installation.md)
 
 
 ---
@@ -53848,11 +54592,13 @@ If you want a free host, use [Render](deploy-render.md) or
 every restart, and free Spaces sleep after 48 hours idle. Annotations written to
 it are temporary by construction.
 
-That second fact shapes the whole provider. It creates a private Dataset repo
-`<you>/<name>-annotations` and mirrors the annotation output into it every five
-minutes, and the Space's README says so. **The Dataset, not the Space, is where
-your data lives.** `--demo` skips it for a throwaway, and says plainly in the
-plan that anything collected will be lost.
+Because of that, the provider creates a private Dataset repo
+`<you>/<name>-annotations`, copies the annotation output and the project
+databases into it every five minutes, and copies them back into the Space each
+time it starts. Annotators keep their work across rebuilds and restarts.
+**The Dataset, not the Space, is where your data lives.** `--demo` skips it for
+a throwaway, and the plan says that anything collected will be lost. See
+[Backups](deploy-backups.md).
 
 ## Getting the data
 
@@ -53913,21 +54659,10 @@ a private Space repo is readable by everyone who has access to it.
 
 ## Backing up from any provider
 
-The `huggingface_backup` block is not specific to Spaces. Any deployment on any
-provider can mirror its annotations to a Dataset, which is the answer to an
-ephemeral filesystem wherever you meet one:
-
-```yaml
-huggingface_backup:
-  enabled: true
-  repo_id: "your-name/study-annotations"
-  token: "${HF_TOKEN}"
-  repo_type: dataset
-  schedule_minutes: 5
-  private: true
-```
-
-Passing `--hf-token` to `potato deploy up` configures this for you.
+The backup is not specific to Spaces. Pass `--backup hf --hf-token …` (or
+`--backup s3 …`) to `potato deploy up` on any provider. [Backups](deploy-backups.md)
+covers the `backup:` config block and how restoring at startup works. The older
+`huggingface_backup:` block still works, without the restore.
 
 ## Troubleshooting
 
@@ -53944,9 +54679,10 @@ then restart this one from its settings page or with
 **Logs are not streamed** — HuggingFace's log endpoints are undocumented and
 JWT-gated, so Potato links to the UI rather than pretending to stream them.
 
-**Annotations are missing after a rebuild** — expected, and the reason the
-backup exists. Check the Dataset repo. If this was a `--demo` deployment, they are
-gone.
+**Annotations are missing after a rebuild**: the Space restores from the
+Dataset when it starts, and the log says `RESTORED … from the HuggingFace dataset`.
+If that line is missing, check the `HF_TOKEN` Space secret. If this was a
+`--demo` deployment, the annotations are gone.
 
 ## The demo catalog
 
@@ -53959,6 +54695,241 @@ catalog built from `deployment/huggingface-spaces/spaces_manifest.yaml`, not by
 - [Render](deploy-render.md) — free, no paid plan needed
 - [DigitalOcean](deploy-digitalocean.md) — a persistent VM
 - [Docker](docker.md) — the image a Space derives from
+
+
+---
+
+<!-- source: docs/deployment/deploy-backups.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-backups/
+
+# Backups
+
+On some hosts, the disk does not outlast the process. Heroku dynos, Render's
+free tier, ECS Express tasks and HuggingFace Spaces all start from an empty
+filesystem after a restart, and they restart at least once a day. The backup
+copies everything Potato has collected to storage you own while the study runs,
+and copies it back when the server starts.
+
+```bash
+potato deploy up config.yaml --provider heroku --backup hf --hf-token hf_...
+potato deploy up config.yaml --provider heroku --backup s3 --s3-bucket my-bucket
+potato deploy up config.yaml --provider heroku --backup hf,s3 --hf-token hf_... --s3-bucket my-bucket
+```
+
+The backup works on every provider. On a VM it costs nothing extra and adds a
+second copy of the data.
+
+## What it copies
+
+- **The annotation output directory**, file by file: every annotator's state,
+  plus the account list in `user_config.json`.
+- **`project.sqlite` and `datasets.sqlite`**, which hold memos, the codebook,
+  cases and the review workflow. They are copied with SQLite's `.backup`, never
+  as raw files: the live database runs in WAL mode while the server writes to
+  it, and a copy of the file could be missing recent work or be corrupt.
+
+A copy is made every `--backup-minutes` (default 5). Only files that changed
+since the last copy are uploaded.
+
+## Restoring at startup
+
+When the server starts and finds no annotator data on its disk (no
+`user_state.json` anywhere in the output directory), it downloads the latest
+backup before it loads anything. That includes the account list, so annotators
+log in with the same passwords and continue where they left off.
+
+The restore never overwrites existing data. If the disk already holds
+annotations, it is treated as the authoritative copy and left alone. The log
+says which happened:
+
+```
+RESTORED 214 file(s) from the s3://my-bucket/potato/pilot backup into an empty task.
+```
+
+Without the restore, a backup only goes one way: after a restart the server
+starts empty, an annotator who returns gets a new `user_state.json`, and the
+next backup overwrites the copy that held their earlier work.
+
+## HuggingFace
+
+```bash
+potato deploy up config.yaml --provider render --backup hf --hf-token hf_...
+```
+
+The backup goes to a **private** dataset, `<your account>/<name>-annotations`
+by default (use `--hf-backup-repo owner/name` to pick another). The token needs
+write access. It is given to the server as the `HF_TOKEN` secret and is never
+written into the config or the bundle.
+
+Image-only hosts (Render, Fly, Railway, ECS) also fetch the project from this
+dataset when they start; see [Getting the project onto the host](#getting-the-project-onto-the-host).
+
+To download the backup yourself:
+
+```bash
+huggingface-cli download --repo-type dataset you/pilot-annotations --local-dir ./backup
+```
+
+## S3 and compatible stores
+
+```bash
+export POTATO_S3_ACCESS_KEY_ID=...
+export POTATO_S3_SECRET_ACCESS_KEY=...
+potato deploy up config.yaml --provider heroku --backup s3 --s3-bucket my-bucket
+```
+
+The bucket must already exist. `--s3-endpoint` sends the backup to any service
+with an S3-compatible API: Cloudflare R2, Backblaze B2, MinIO, or a university
+object store.
+
+```bash
+potato deploy up config.yaml --provider fly --backup s3 \
+    --s3-bucket my-bucket --s3-endpoint https://<account>.r2.cloudflarestorage.com
+```
+
+Use an access key that can reach only this bucket. It is stored in the
+server's environment, where anyone with shell access to the server can read
+it. Objects go under `potato/<name>/` (change this with `--s3-prefix`):
+`annotations/…` for the output directory, `_databases/…` for the snapshots.
+
+## Configuring it by hand
+
+`potato deploy` writes this block into the bundled config. Outside deploy,
+for example on your own server, add it to the config yourself:
+
+```yaml
+backup:
+  schedule_minutes: 5
+  restore_on_boot: true
+  sinks:
+    - type: huggingface
+      repo_id: lab/pilot-annotations
+    - type: s3
+      bucket: my-bucket
+      prefix: potato/pilot
+      region: us-east-1
+      endpoint_url: https://s3.example.edu      # optional
+```
+
+Credentials come from the environment (`HF_TOKEN`, `POTATO_S3_ACCESS_KEY_ID`,
+`POTATO_S3_SECRET_ACCESS_KEY`) or from the sink entry itself, where `${VAR}`
+references are expanded. The older `huggingface_backup:` block still works. It
+is read as one HuggingFace sink with `restore_on_boot` turned off, so an
+existing deployment behaves exactly as before.
+
+## Getting the project onto the host
+
+Render, Fly, Railway and ECS Express run the published image and have no way to
+upload files to it. When the container starts, it downloads the project as a
+tarball from `POTATO_BUNDLE_URL` and checks it against `POTATO_BUNDLE_SHA256`.
+`potato deploy up` puts the tarball in the backup's own storage, so you don't
+need a separate account:
+
+- HuggingFace: `_bundle/<sha>.tar.gz` in the backup dataset, downloaded with
+  the token. The link does not expire.
+- S3: a presigned link, valid for at most seven days. On a host with a disk,
+  the project is downloaded once per deploy. On a host without one it is
+  downloaded on every restart, so after a week a restart fails until you run
+  `up` again. The plan warns about this; use the HuggingFace backup on those
+  hosts.
+
+On Fly, a project smaller than 512 KB is sent inside the machine's
+configuration and needs no storage at all.
+
+Files in the output directory and the databases are never replaced by a new
+version of the project.
+
+## Related
+
+- [Deploying a task](one-command-deploy.md)
+- [Getting annotations back](deploy-pull.md)
+- [HuggingFace Spaces](deploy-huggingface.md), where the backup is always on
+
+
+---
+
+<!-- source: docs/deployment/deploy-buttons.md -->
+URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-buttons/
+
+# Deploy Buttons
+
+A deploy button sets up a copy of a task from its git repository in one click.
+Use one when other people (collaborators, students, another lab) should be able
+to run your task in their own accounts. `potato deploy button` writes the files
+each host reads into your repository and prints the badge to put in your
+README:
+
+```bash
+potato deploy button studies/pilot/config.yaml --target heroku \
+    --backup hf --hf-backup-repo lab/pilot-annotations
+git add app.json heroku.yml Dockerfile.potato .dockerignore studies/pilot/potato.deploy.yaml
+git commit -m "Add a Deploy to Heroku button" && git push
+```
+
+Your own `config.yaml` is never changed. The command writes a copy beside it,
+`potato.deploy.yaml`, with deployment settings applied (debug off, sessions
+persisted) and the backup configured, and the generated files point at the
+copy.
+
+No secrets are written. Heroku and Render generate the session key and the
+admin key when someone deploys. The AWS template generates them on the
+instance. Backup credentials are asked for at deploy time.
+
+## Targets
+
+| `--target` | Files | What the person clicking needs |
+|---|---|---|
+| `heroku` | `app.json`, `heroku.yml`, `Dockerfile.potato` | a Heroku account and a backup token |
+| `render` | `render.yaml`, `Dockerfile.potato` | a Render account and a backup token |
+| `aws` | `potato-lightsail.cfn.yaml` | an AWS account; the repository must be public |
+| `railway` | none (the command prints the steps) | a Railway account |
+
+The Heroku and Render buttons deploy onto disks that do not last, and nobody
+pulls from an AWS button's instance, so all three require `--backup`. The
+person clicking supplies the token or key; `--hf-backup-repo` names the dataset
+the backup goes to.
+
+### AWS: "Launch Stack"
+
+CloudFormation reads templates only from S3, so there is one more step:
+
+```bash
+potato deploy button config.yaml --target aws --backup hf --hf-backup-repo lab/r
+aws s3 cp potato-lightsail.cfn.yaml s3://my-bucket/ --acl public-read
+potato deploy button config.yaml --target aws --backup hf --hf-backup-repo lab/r \
+    --template-url https://my-bucket.s3.amazonaws.com/potato-lightsail.cfn.yaml --force
+```
+
+The stack creates a Lightsail instance ($12/month) and a static IP. The
+instance clones your public repository, generates its secrets, waits for the
+static IP to stop changing, and starts Potato with a certificate for that IP.
+The stack's `URL` output is the address to give annotators. It is ready a few
+minutes after the stack completes. The admin key is on the instance; read it
+from Lightsail's browser SSH with `sudo grep ADMIN /opt/potato/potato.env`.
+
+## Before you push
+
+The command checks two things and prints a warning for each problem it finds:
+
+- **`.dockerignore`.** Heroku and Render build an image from your repository,
+  and `.potato/` (the admin key and deploy secrets), `annotation_output/` and
+  the SQLite databases must not be built into it. If the repository has no
+  `.dockerignore`, the command writes one. If one exists but is missing
+  entries, the command lists them for you to add.
+- **`.gitignore`.** A button deploys from your pushed repository, so the same
+  files must not be committed. Any that `git check-ignore` does not report as
+  ignored are listed.
+
+## Options
+
+`--dry-run` prints the files without writing them. Existing files are not
+replaced unless you pass `--force`. `--image` pins a specific Potato image tag.
+
+## Related
+
+- [Backups](deploy-backups.md)
+- [Heroku](deploy-heroku.md), [Render](deploy-render.md), [AWS](deploy-aws.md),
+  [Railway](deploy-railway.md)
 
 
 ---
@@ -54028,10 +54999,13 @@ Potato picks the best available transport for the provider.
 
 | Provider | Transport |
 |---|---|
-| `digitalocean` | SFTP over the deploy key, falling back to HTTPS |
+| `digitalocean`, `aws`, `aws-ec2`, `hetzner`, `vultr`, `linode`, `openstack` | SFTP over the deploy key, falling back to HTTPS |
 | `huggingface` | The backup Dataset; the Space itself for a `--demo` deployment |
-| `render` | HTTPS |
+| `render`, `heroku`, `fly`, `railway`, `aws-ecs` | HTTPS |
 | `local` | `docker cp` |
+
+On the hosts with a disk that does not last, the [backup](deploy-backups.md)
+holds the same data and can be downloaded even when the server is down.
 
 The HTTPS route uses `GET /admin/api/data/archive`, authenticated with the admin
 API key that `potato deploy` generated and stored in `.potato/secrets.json`. It
@@ -56146,7 +57120,7 @@ Validates a task `config.yaml` before you ever start the server. It is generated
 from the same registries the server validates against, so a newly registered
 annotation type appears in the schema immediately.
 
-It currently covers **161 top-level config keys**, **61 annotation types**, and
+It currently covers **162 top-level config keys**, **61 annotation types**, and
 **24 display types**.
 
 ### Editor validation

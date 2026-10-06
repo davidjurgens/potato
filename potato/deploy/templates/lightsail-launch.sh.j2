@@ -1,0 +1,73 @@
+#!/bin/bash
+# Launch script for a Potato task on Lightsail, created by a CloudFormation
+# "Launch Stack" button (potato deploy button --target aws).
+#
+# Everything `potato deploy up` does over SSH happens here instead, because a
+# button has no CLI on the other end: clone the project, generate the secrets
+# on the machine (they never pass through CloudFormation), find the static IP
+# once it is attached, and start Potato behind Caddy.
+set -euo pipefail
+exec > >(tee -a /var/log/potato-launch.log) 2>&1
+
+APP_DIR={{ app_dir }}
+DATA_DIR={{ data_dir }}
+ENV_FILE={{ env_file }}
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -q
+apt-get install -y -q ca-certificates curl git sqlite3 ufw openssl
+command -v docker >/dev/null 2>&1 || (curl -fsSL https://get.docker.com | sh)
+systemctl enable --now docker
+
+mkdir -p "$DATA_DIR/caddy" /etc/caddy /var/log/caddy
+rm -rf /tmp/potato-src
+git clone --depth 1 "{{ '${ProjectRepo}' }}" /tmp/potato-src
+mkdir -p "$APP_DIR"
+cp -r "/tmp/potato-src/{{ '${ProjectPath}' }}/." "$APP_DIR/"
+chown -R 1000:1000 "$APP_DIR" "$DATA_DIR"
+
+umask 077
+cat > "$ENV_FILE" <<ENVEOF
+POTATO_CONFIG={{ config_rel }}
+GUNICORN_WORKERS=1
+GUNICORN_THREADS=8
+POTATO_NONINTERACTIVE=1
+POTATO_SECRET_KEY=$(openssl rand -hex 32)
+POTATO_ADMIN_API_KEY=$(openssl rand -hex 24)
+HF_TOKEN={{ '${HfToken}' }}
+POTATO_S3_ACCESS_KEY_ID={{ '${S3AccessKeyId}' }}
+POTATO_S3_SECRET_ACCESS_KEY={{ '${S3SecretAccessKey}' }}
+ENVEOF
+umask 022
+
+cat > /etc/systemd/system/potato.service <<'UNITEOF'
+{{ potato_service }}
+UNITEOF
+
+cat > /etc/systemd/system/caddy-potato.service <<'UNITEOF'
+{{ caddy_service }}
+UNITEOF
+
+# The static IP attaches after the instance starts, which changes the public
+# address. Wait until it has been stable for a minute before issuing the
+# certificate for it.
+last=""; stable=0
+for attempt in $(seq 1 60); do
+  ip=$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]' || true)
+  if [ -n "$ip" ] && [ "$ip" = "$last" ]; then stable=$((stable + 1)); else stable=0; fi
+  last="$ip"
+  [ "$stable" -ge 4 ] && [ "$attempt" -ge 8 ] && break
+  sleep 15
+done
+
+cat > /etc/caddy/Caddyfile <<CADDYEOF
+{{ caddyfile }}
+CADDYEOF
+sed -i "s/{{ ip_placeholder }}/$last/" /etc/caddy/Caddyfile
+
+ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw --force enable
+docker pull {{ image }}
+docker pull {{ caddy_image }}
+systemctl daemon-reload
+systemctl enable --now potato.service caddy-potato.service
+echo "Potato is starting at https://$last"

@@ -60,10 +60,13 @@ Potato picks the best available transport for the provider.
 
 | Provider | Transport |
 |---|---|
-| `digitalocean` | SFTP over the deploy key, falling back to HTTPS |
+| `digitalocean`, `aws`, `aws-ec2`, `hetzner`, `vultr`, `linode`, `openstack` | SFTP over the deploy key, falling back to HTTPS |
 | `huggingface` | The backup Dataset; the Space itself for a `--demo` deployment |
-| `render` | HTTPS |
+| `render`, `heroku`, `fly`, `railway`, `aws-ecs` | HTTPS |
 | `local` | `docker cp` |
+
+On the hosts with a disk that does not last, the [backup](deploy-backups.md)
+holds the same data and can be downloaded even when the server is down.
 
 The HTTPS route uses `GET /admin/api/data/archive`, authenticated with the admin
 API key that `potato deploy` generated and stored in `.potato/secrets.json`. It

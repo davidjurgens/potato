@@ -25,11 +25,13 @@ If you want a free host, use [Render](deploy-render.md) or
 every restart, and free Spaces sleep after 48 hours idle. Annotations written to
 it are temporary by construction.
 
-That second fact shapes the whole provider. It creates a private Dataset repo
-`<you>/<name>-annotations` and mirrors the annotation output into it every five
-minutes, and the Space's README says so. **The Dataset, not the Space, is where
-your data lives.** `--demo` skips it for a throwaway, and says plainly in the
-plan that anything collected will be lost.
+Because of that, the provider creates a private Dataset repo
+`<you>/<name>-annotations`, copies the annotation output and the project
+databases into it every five minutes, and copies them back into the Space each
+time it starts. Annotators keep their work across rebuilds and restarts.
+**The Dataset, not the Space, is where your data lives.** `--demo` skips it for
+a throwaway, and the plan says that anything collected will be lost. See
+[Backups](deploy-backups.md).
 
 ## Getting the data
 
@@ -90,21 +92,10 @@ a private Space repo is readable by everyone who has access to it.
 
 ## Backing up from any provider
 
-The `huggingface_backup` block is not specific to Spaces. Any deployment on any
-provider can mirror its annotations to a Dataset, which is the answer to an
-ephemeral filesystem wherever you meet one:
-
-```yaml
-huggingface_backup:
-  enabled: true
-  repo_id: "your-name/study-annotations"
-  token: "${HF_TOKEN}"
-  repo_type: dataset
-  schedule_minutes: 5
-  private: true
-```
-
-Passing `--hf-token` to `potato deploy up` configures this for you.
+The backup is not specific to Spaces. Pass `--backup hf --hf-token …` (or
+`--backup s3 …`) to `potato deploy up` on any provider. [Backups](deploy-backups.md)
+covers the `backup:` config block and how restoring at startup works. The older
+`huggingface_backup:` block still works, without the restore.
 
 ## Troubleshooting
 
@@ -121,9 +112,10 @@ then restart this one from its settings page or with
 **Logs are not streamed** — HuggingFace's log endpoints are undocumented and
 JWT-gated, so Potato links to the UI rather than pretending to stream them.
 
-**Annotations are missing after a rebuild** — expected, and the reason the
-backup exists. Check the Dataset repo. If this was a `--demo` deployment, they are
-gone.
+**Annotations are missing after a rebuild**: the Space restores from the
+Dataset when it starts, and the log says `RESTORED … from the HuggingFace dataset`.
+If that line is missing, check the `HF_TOKEN` Space secret. If this was a
+`--demo` deployment, the annotations are gone.
 
 ## The demo catalog
 

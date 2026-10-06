@@ -18,6 +18,9 @@ cd potato
 pip install -r requirements.txt
 ```
 
+To run Potato in Docker instead, or to put a task online, see
+[Installing and running Potato](deployment/installation.md).
+
 ### Checking the install
 
 ```bash

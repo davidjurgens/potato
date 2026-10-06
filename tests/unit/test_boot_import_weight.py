@@ -29,13 +29,15 @@ import pytest
 FORBIDDEN_AT_BOOT = [
     "sentence_transformers", "transformers", "torch",
     "ollama", "openai", "anthropic", "google.genai", "huggingface_hub",
+    # The backup's S3 client and the deploy-side cloud SDKs.
+    "boto3", "botocore", "openstack", "paramiko",
 ]
 
 # Optional packages a core-only `pip install potato-annotation` does NOT have.
 OPTIONAL_PACKAGES = [
     "ollama", "openai", "anthropic", "google", "huggingface_hub",
     "umap", "pyarrow", "authlib", "pdfplumber", "docx", "mammoth",
-    "mistune", "openpyxl", "langchain_core",
+    "mistune", "openpyxl", "langchain_core", "boto3",
 ]
 
 

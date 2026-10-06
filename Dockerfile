@@ -40,12 +40,16 @@ WORKDIR /src
 COPY setup.py MANIFEST.in README.md ./
 COPY potato/ ./potato/
 
+# `hosting` is always installed: it is the backup and restore client
+# (huggingface_hub, boto3), and on a host without a persistent disk the image
+# must be able to carry the data off. The core image once lacked it, so every
+# HuggingFace Space backup logged "not installed" and kept nothing.
 RUN if [ -n "$POTATO_EXTRAS" ]; then \
-        pip install ".[${POTATO_EXTRAS}]" gunicorn; \
+        pip install ".[hosting,${POTATO_EXTRAS}]" gunicorn; \
     else \
-        pip install . gunicorn; \
+        pip install ".[hosting]" gunicorn; \
     fi && \
-    python -c "import potato, flask, gunicorn; print('installed', potato.__file__)"
+    python -c "import potato, flask, gunicorn, huggingface_hub, boto3; print('installed', potato.__file__)"
 
 # ---------------------------------------------------------------- runtime ----
 FROM python:3.11-slim AS runtime

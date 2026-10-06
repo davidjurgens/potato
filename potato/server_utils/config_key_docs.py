@@ -2395,6 +2395,35 @@ CONFIG_KEY_DOCS: Dict[str, ConfigKeyDoc] = {
         "cadence. A misconfiguration logs an error and lets the server run",
         type="object", category=INTEG, see_also=("output_annotation_dir",),
     ),
+    "backup": _D(
+        "Mirror collected data off the host and restore it into an empty task "
+        "at boot. `sinks` lists `{type: huggingface, repo_id}` and/or "
+        "`{type: s3, bucket, prefix, region, endpoint_url}`; credentials come "
+        "from the sink (env substitution applied), HF_TOKEN, or "
+        "POTATO_S3_ACCESS_KEY_ID / POTATO_S3_SECRET_ACCESS_KEY. Copies the "
+        "annotation directory and `.backup` snapshots of project.sqlite and "
+        "datasets.sqlite. Supersedes `huggingface_backup`",
+        type="object", category=INTEG,
+        see_also=("huggingface_backup", "output_annotation_dir"),
+    ),
+    "backup.sinks": _D(
+        "Where to send the backup. Each entry has a `type` of `huggingface` or "
+        "`s3`; with several, restore reads the first that holds data",
+        type="array", category=INTEG,
+    ),
+    "backup.schedule_minutes": _D(
+        "Minutes between backup cycles", type="number", default=5, category=INTEG,
+    ),
+    "backup.restore_on_boot": _D(
+        "When the output directory is empty at start, download the latest "
+        "backup into it before any annotator state loads. Never overwrites "
+        "local data",
+        type="boolean", default=True, category=INTEG,
+    ),
+    "backup.enabled": _D(
+        "Set false to keep the block but turn the backup off",
+        type="boolean", default=True, category=INTEG,
+    ),
     "webhooks": _D(
         "Post task events to external URLs as they happen",
         type="object", category=INTEG,

@@ -1778,6 +1778,19 @@ def _init_automation_manager_early(config: dict) -> None:
                        "before loading data: %s", e)
 
 
+def _restore_backup_before_state_loads(config: dict) -> None:
+    """Bring backed-up data back into an empty task, on both startup paths.
+
+    Before the authenticator, which reads the registered accounts from
+    user_config.json at init, and before load_all_data, which reads every
+    user_state.json. On a host whose disk did not survive the restart this is
+    the only way the annotations collected so far come back. A no-op unless a
+    backup is configured and no annotator state exists locally.
+    """
+    from potato.server_utils.backup import restore_on_boot
+    restore_on_boot(config)
+
+
 def load_all_data(config: dict):
     '''Loads instance and annotation data from the files specified in the config.'''
     load_annotation_schematic_data(config)
@@ -5101,12 +5114,12 @@ def configure_app(flask_app):
     global app
     app = flask_app
 
-    # Continuous backup to a HuggingFace Dataset, when configured. Started here
+    # Continuous off-host backup (HuggingFace Dataset, S3), when configured. Started here
     # rather than in run_server() so it runs on the WSGI factory path too --
     # which is every container, and precisely where an ephemeral filesystem
     # makes it the only copy of the data.
-    from potato.server_utils.hf_backup import init_backup
-    init_backup(config)
+    from potato.server_utils.backup import start_backups
+    start_backups(config)
 
     # Set application configuration
     from potato.server_utils.session_config import configure_session
@@ -5695,6 +5708,8 @@ def _initialize_from_config(config_file):
     if not os.path.exists(output_annotation_dir):
         os.makedirs(output_annotation_dir)
 
+    _restore_backup_before_state_loads(config)
+
     # Initialize authenticator
     UserAuthenticator.init_from_config(config)
 
@@ -5988,6 +6003,8 @@ def run_server(args):
     output_annotation_dir = config["output_annotation_dir"]
     if not os.path.exists(output_annotation_dir):
         os.makedirs(output_annotation_dir)
+
+    _restore_backup_before_state_loads(config)
 
     # Initialize authenticator
     UserAuthenticator.init_from_config(config)

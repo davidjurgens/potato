@@ -7,7 +7,7 @@ Three steps: install Potato, set up the project data, then start the server.
 Potato has a Python-based server architecture that can be run locally or
 hosted on any device. To install it:
 
-- Make sure you have Python version 3.8+ installed
+- Make sure you have Python 3.9 or newer installed
 - Follow the quickstart instructions in our [Quick Start Guide](../quick-start.md)
 
 ## Set up the project data

@@ -12,9 +12,12 @@ backup, or ``--demo`` to say out loud that the annotations are disposable. A
 paid instance with a disk has neither problem.
 
 The bundle travels differently here than on a droplet. Render pulls an image and
-runs it; there is no SSH and nothing to upload to. So the project is fetched at
-container start from a URL, or baked into a derived image. Fetch-at-start is the
-default because it needs no registry account.
+runs it; there is no SSH and nothing to upload to. So the project is published
+to the backup's own storage (see ``potato/deploy/bundle_store.py``) and the
+container's entrypoint fetches it at start. That needs no registry account. An
+earlier version set ``POTATO_BUNDLE_URL`` only when something passed a URL in,
+nothing ever did, and nothing in the image read it: every service booted the
+bare image and exited at the config check.
 """
 
 from __future__ import annotations
@@ -129,6 +132,10 @@ class RenderAPI:
             if "404" not in str(exc):
                 raise
 
+    def update_env_vars(self, service_id: str, env_vars: List[Dict[str, str]]) -> Any:
+        """Replace the service's environment (PUT replaces the whole set)."""
+        return self.request("PUT", f"/services/{service_id}/env-vars", json=env_vars)
+
     def trigger_deploy(self, service_id: str) -> Dict[str, Any]:
         return self.request("POST", f"/services/{service_id}/deploys", json={})
 
@@ -149,18 +156,21 @@ def _error_message(response) -> str:
     return str(body)[:400]
 
 
-def service_payload(spec: DeploySpec, *, owner_id: str, env: Dict[str, str],
-                    bundle_url: Optional[str] = None) -> Dict[str, Any]:
+def env_var_list(env: Dict[str, str]) -> List[Dict[str, str]]:
+    return [{"key": key, "value": str(value)} for key, value in sorted(env.items())]
+
+
+def service_payload(spec: DeploySpec, *, owner_id: str,
+                    env: Dict[str, str]) -> Dict[str, Any]:
     """The POST /v1/services body.
 
-    Pure, so a test can assert exactly what would be created.
+    Pure, so a test can assert exactly what would be created. ``env`` carries
+    the bundle location (POTATO_BUNDLE_*) alongside the runtime environment.
     """
     plan = spec.extra.get("plan") or DEFAULT_PLAN
     image = spec.image or DEFAULT_IMAGE
 
-    env_vars = [{"key": key, "value": str(value)} for key, value in sorted(env.items())]
-    if bundle_url:
-        env_vars.append({"key": "POTATO_BUNDLE_URL", "value": bundle_url})
+    env_vars = env_var_list(env)
 
     payload: Dict[str, Any] = {
         "type": "web_service",
@@ -226,8 +236,13 @@ class RenderProvider(Provider):
         result = DeployPlan(
             result_url_pattern=f"https://potato-{spec.name}.onrender.com",
             estimated_cost_usd_month=_estimate_cost(plan_name, spec.volume_gb))
+        bundle_store = _bundle_store(spec)
         result.actions = [
             Action("render.owners", "verify the API key with GET /v1/owners"),
+            Action("bundle.publish",
+                   f"upload the project tarball to "
+                   f"{bundle_store.describe() if bundle_store else '(nowhere configured)'}"
+                   "; the container fetches it at start"),
             Action("render.service",
                    f"create a {plan_name} web service from "
                    f"{spec.image or DEFAULT_IMAGE}", payload),
@@ -237,7 +252,15 @@ class RenderProvider(Provider):
             Action("wait.http", "poll the service URL until it answers"),
         ]
 
-        has_backup = bool(spec.extra.get("huggingface_backup"))
+        has_backup = bool(spec.extra.get("backup_kinds"))
+        if bundle_store is None:
+            result.warnings.append(_NO_BUNDLE_STORE)
+        elif bundle_store.kind == "s3" and not spec.volume_gb:
+            result.warnings.append(
+                "The project is fetched from a presigned S3 URL, valid seven "
+                "days. With no disk every restart fetches again, so after a "
+                "week a restart fails until `potato deploy up` is run again. "
+                "Add --backup hf, or a disk, to avoid that.")
         if plan_name == "free":
             if not spec.volume_gb:
                 result.warnings.append(
@@ -247,7 +270,7 @@ class RenderProvider(Provider):
             if not has_backup and not spec.demo:
                 result.warnings.append(
                     "Nothing is configured to carry the data off the instance. "
-                    "Supply --hf-token for a HuggingFace Dataset backup, choose "
+                    "Supply --backup hf|s3 for an off-host backup, choose "
                     "--plan starter --volume-gb 1, or pass --demo if the "
                     "annotations are genuinely disposable.")
         if spec.volume_gb and plan_name == "free":
@@ -262,7 +285,7 @@ class RenderProvider(Provider):
 
     def create(self, spec: DeploySpec, bundle, existing, store) -> DeploymentRecord:
         plan_name = spec.extra.get("plan") or DEFAULT_PLAN
-        has_backup = bool(spec.extra.get("huggingface_backup"))
+        has_backup = bool(spec.extra.get("backup_kinds"))
 
         # The refusal is the point of this provider's create(). A free instance
         # with no backup loses the study's data the first time it goes idle, and
@@ -274,9 +297,14 @@ class RenderProvider(Provider):
                 f"A free instance has no disk and stops after {FREE_IDLE_MINUTES} "
                 "minutes idle; when it stops, everything on its filesystem is gone.\n"
                 "Pick one:\n"
-                "  --hf-token <token>          back up to a HuggingFace Dataset\n"
+                "  --backup hf --hf-token <t>  back up to a HuggingFace Dataset\n"
+                "  --backup s3 --s3-bucket <b> back up to an S3 bucket\n"
                 "  --plan starter --volume-gb 1  a paid instance with a real disk\n"
                 "  --demo                      the annotations are disposable")
+
+        bundle_store = _bundle_store(spec)
+        if bundle_store is None:
+            raise ProviderError(_NO_BUNDLE_STORE)
 
         api = RenderAPI(self.token)
         owners = api.verify_token()
@@ -290,19 +318,17 @@ class RenderProvider(Provider):
         record.spec.update({"config_path": os.path.abspath(spec.config_path),
                             "plan": plan_name})
 
+        env = self._service_env(spec, bundle, bundle_store)
+
         if record.provider_ref.get("service_id"):
-            return self._redeploy(api, record, store)
+            return self._redeploy(api, record, store, env)
 
         record.status = "creating"
         store.upsert(record)
 
-        env = self.runtime_env(spec, spec.extra.get("generated"))
-        env.update(_backup_env(spec))
-
         try:
             service = api.create_service(service_payload(
-                spec, owner_id=owner_id, env=env,
-                bundle_url=spec.extra.get("bundle_url")))
+                spec, owner_id=owner_id, env=env))
         except ProviderError:
             record.status = "failed"
             store.upsert(record)
@@ -330,9 +356,29 @@ class RenderProvider(Provider):
         self.console(f"Live at {record.url}")
         return record
 
-    def _redeploy(self, api, record, store) -> DeploymentRecord:
+    def _service_env(self, spec, bundle, bundle_store) -> Dict[str, str]:
+        """Runtime environment plus where to fetch the freshly published bundle."""
+        if bundle is None:
+            raise ProviderError("No bundle was built; nothing to deploy.")
+        from potato.deploy.bundle_store import publish
+
+        self.console(f"Publishing the project to {bundle_store.describe()}...")
+        location = publish(bundle, bundle_store,
+                           spec.extra.get("bundle_workdir")
+                           or os.path.join(bundle.bundle_dir + ".dist"))
+        env = self.runtime_env(spec, spec.extra.get("generated"))
+        env.update(location.env())
+        return env
+
+    def _redeploy(self, api, record, store, env: Dict[str, str]) -> DeploymentRecord:
+        """Push the new environment (and so the new bundle), then deploy.
+
+        Triggering a deploy alone restarted the old bundle with the old
+        settings: the documented way to push a change changed nothing.
+        """
         record.status = "updating"
         store.upsert(record)
+        api.update_env_vars(record.provider_ref["service_id"], env_var_list(env))
         api.trigger_deploy(record.provider_ref["service_id"])
         self.console("Triggered a redeploy; waiting for it to go live...")
         record.status = "running" if self._wait_for_live(api, record) else "unhealthy"
@@ -452,10 +498,19 @@ def _admin_key(record) -> Optional[str]:
     return SecretStore(config_path).get(record.name, "admin_api_key")
 
 
-def _backup_env(spec: DeploySpec) -> Dict[str, str]:
-    """HF token for the in-process Dataset backup, when one is configured."""
-    token = spec.extra.get("hf_token")
-    return {"HF_TOKEN": token} if token else {}
+_NO_BUNDLE_STORE = (
+    "Render runs the published image and fetches your project into it at start, "
+    "so the project has to be uploaded somewhere first. It goes to the backup's "
+    "storage: pass --backup hf --hf-token <token> (recommended: the link never "
+    "expires) or --backup s3 --s3-bucket <bucket>. With --demo the backup still "
+    "provides that storage.")
+
+
+def _bundle_store(spec: DeploySpec):
+    from potato.deploy.bundle_store import store_for
+
+    options = spec.extra.get("backup")
+    return store_for(options) if options is not None else None
 
 
 def _estimate_cost(plan_name: str, disk_gb: Optional[int]) -> float:

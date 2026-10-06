@@ -446,6 +446,8 @@ KNOWN_CONFIG_KEYS = {
     # Trace cost/latency analytics: optional per-model pricing + alert thresholds.
     "analytics": {"pricing", "thresholds"},
     "huggingface_backup": None,
+    # Off-host backup to HuggingFace and/or S3, with restore on boot.
+    "backup": {"enabled", "sinks", "schedule_minutes", "restore_on_boot"},
 
     # === Debug / logging ===
     "debug": None,
@@ -6559,6 +6561,17 @@ def _substitute_llm_block_env_vars(config_data: Dict[str, Any]) -> Dict[str, Any
     backup_block = config_data.get("huggingface_backup")
     if isinstance(backup_block, dict) and isinstance(backup_block.get("token"), str):
         backup_block["token"] = _substitute_env_typed(backup_block["token"], "token")
+
+    # backup.sinks[*] credentials take the same `${VAR}` form.
+    backup_settings = config_data.get("backup")
+    if isinstance(backup_settings, dict):
+        for sink in backup_settings.get("sinks") or []:
+            if not isinstance(sink, dict):
+                continue
+            for key in ("token", "access_key_id", "secret_access_key",
+                        "bucket", "endpoint_url"):
+                if isinstance(sink.get(key), str):
+                    sink[key] = _substitute_env_typed(sink[key], key)
 
     # OAuth client secrets, which live per-provider under authentication.providers.
     auth_block = config_data.get("authentication")

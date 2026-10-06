@@ -187,6 +187,56 @@ jobs:
 
           docker rm -f potato-smoke
 
+          # Image-only hosts (Render, Fly, Railway, ECS) mount nothing: the
+          # project arrives as a tarball the entrypoint fetches. Serve one
+          # from the runner and boot an empty container from it.
+          bundle_dir=/tmp/potato-smoke-bundle
+          rm -rf "$bundle_dir"; mkdir -p "$bundle_dir"
+          tar -czf "$bundle_dir/bundle.tar.gz" -C examples/classification/single-choice \
+              --exclude=annotation_output --exclude='*.sqlite*' .
+          sha=$(sha256sum "$bundle_dir/bundle.tar.gz" | cut -d' ' -f1)
+          (cd "$bundle_dir" && python3 -m http.server 8765 >/dev/null 2>&1 &)
+          docker run -d --name potato-fetch --add-host=host.docker.internal:host-gateway \
+            -p 8001:7860 \
+            -e POTATO_BUNDLE_URL=http://host.docker.internal:8765/bundle.tar.gz \
+            -e POTATO_BUNDLE_SHA256="$sha" "$tag"
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8001/health >/dev/null 2>&1; then
+              echo "bundle fetch: healthy after ${i}s"; break
+            fi
+            if [ "$i" -eq 60 ]; then
+              docker logs potato-fetch >&2; exit 1
+            fi
+            sleep 1
+          done
+          docker rm -f potato-fetch
+
+          # Railway and some hosts start the container as root on a root-owned
+          # volume. The entrypoint must hand /app over and drop to uid 1000.
+          root_project=/tmp/potato-smoke-root
+          rm -rf "$root_project"
+          cp -r examples/classification/single-choice "$root_project"
+          sudo chown -R 0:0 "$root_project"
+          docker run -d --name potato-root --user 0:0 -p 8002:7860 \
+            -v "$root_project:/app" "$tag"
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8002/health >/dev/null 2>&1; then
+              echo "root start: healthy after ${i}s"; break
+            fi
+            if [ "$i" -eq 60 ]; then
+              docker logs potato-root >&2; exit 1
+            fi
+            sleep 1
+          done
+          uid=$(docker exec potato-root sh -c 'cat /proc/1/status' | awk '/^Uid:/ {print $2}')
+          if [ "$uid" != "1000" ]; then
+            echo "server runs as uid $uid after a root start, not 1000" >&2; exit 1
+          fi
+          docker rm -f potato-root
+
+          # The backup and restore client ships in every image.
+          docker run --rm --entrypoint python "$tag" -c "import huggingface_hub, boto3"
+
       # Only now, with the image proven to boot, serve and refuse correctly.
       # amd64 comes from the cache the test build populated; arm64 is compiled
       # here. A pull request stops short of this and pushes nothing.

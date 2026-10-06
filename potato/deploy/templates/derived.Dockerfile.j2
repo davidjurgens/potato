@@ -1,0 +1,23 @@
+# A Potato task baked into the published image.
+#
+# Used where the host builds or pulls one image and runs it with no way to put
+# files beside it: Heroku, a Render blueprint, a Fly registry push. The image
+# already contains the server; this layer only adds the project.
+FROM {{ image }}
+
+USER root
+COPY {{ source_dir | default(".") }} /app
+
+# Heroku runs the container as an arbitrary non-root uid rather than the
+# image's uid 1000, so the task directory has to be writable by whoever runs
+# it. HOME moves to /tmp for the same reason: gunicorn keeps its control socket
+# there.
+RUN chown -R potato:potato /app && chmod -R a+rwX /app
+USER potato
+WORKDIR /app
+
+ENV POTATO_CONFIG={{ config_rel }} \
+    HOME=/tmp \
+    GUNICORN_WORKERS=1 \
+    GUNICORN_THREADS={{ threads }} \
+    POTATO_NONINTERACTIVE=1

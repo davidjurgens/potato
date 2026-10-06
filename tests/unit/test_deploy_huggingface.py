@@ -94,29 +94,53 @@ class TestSpaceFiles:
         assert FakeGenerated.admin_api_key not in blob
 
 
+def _hf_sink(config):
+    """The huggingface sink the server will start from this config."""
+    from potato.server_utils.backup import resolve_settings
+    settings = resolve_settings(config)
+    return settings, next(s for s in settings.sinks if s["type"] == "huggingface")
+
+
 class TestBackupConfigInjection:
     def test_enables_the_backup_in_the_bundled_config(self, tmp_path):
         path = tmp_path / "config.yaml"
         path.write_text(yaml.safe_dump({"task_dir": ".", "annotation_schemes": []}))
         _inject_backup_config(str(path), "alice/pilot-annotations", 5)
-        config = yaml.safe_load(path.read_text())
-        assert config["huggingface_backup"]["enabled"] is True
-        assert config["huggingface_backup"]["repo_id"] == "alice/pilot-annotations"
+        settings, sink = _hf_sink(yaml.safe_load(path.read_text()))
+        assert settings.enabled
+        assert sink["repo_id"] == "alice/pilot-annotations"
+
+    def test_restores_after_a_space_restart(self, tmp_path):
+        """A Space loses its disk on every rebuild; without restore the next
+        sync overwrote annotators' earlier work."""
+        path = tmp_path / "config.yaml"
+        path.write_text(yaml.safe_dump({"task_dir": "."}))
+        _inject_backup_config(str(path), "alice/x-annotations", 5)
+        settings, _sink = _hf_sink(yaml.safe_load(path.read_text()))
+        assert settings.restore_on_boot is True
+
+    def test_keeps_an_s3_sink_the_cli_added(self, tmp_path):
+        path = tmp_path / "config.yaml"
+        path.write_text(yaml.safe_dump({"task_dir": ".", "backup": {
+            "sinks": [{"type": "s3", "bucket": "b"}]}}))
+        _inject_backup_config(str(path), "alice/x-annotations", 5)
+        settings, _sink = _hf_sink(yaml.safe_load(path.read_text()))
+        assert sorted(s["type"] for s in settings.sinks) == ["huggingface", "s3"]
 
     def test_targets_a_dataset_repo(self, tmp_path):
         """CommitScheduler defaults to a model repo, which is not what is wanted."""
         path = tmp_path / "config.yaml"
         path.write_text(yaml.safe_dump({"task_dir": "."}))
         _inject_backup_config(str(path), "alice/x-annotations", 5)
-        assert yaml.safe_load(path.read_text())["huggingface_backup"]["repo_type"] \
-            == "dataset"
+        assert _hf_sink(yaml.safe_load(path.read_text()))[1]["repo_type"] == "dataset"
 
     def test_never_writes_the_token_into_the_config(self, tmp_path):
         """The config is committed to the Space repo; the token is a secret."""
         path = tmp_path / "config.yaml"
         path.write_text(yaml.safe_dump({"task_dir": "."}))
         _inject_backup_config(str(path), "alice/x-annotations", 5)
-        assert "token" not in yaml.safe_load(path.read_text())["huggingface_backup"]
+        assert "hf_" not in path.read_text()
+        assert "token" not in _hf_sink(yaml.safe_load(path.read_text()))[1]
 
     def test_keeps_the_rest_of_the_config(self, tmp_path):
         path = tmp_path / "config.yaml"
@@ -393,9 +417,9 @@ class TestCreate:
                             lambda token: FakeApi())
         provider.create(spec, FakeBundle(str(bundle_dir)), None,
                         DeploymentStore(spec.config_path))
-        backup = uploaded["config"]["huggingface_backup"]
-        assert backup["enabled"] is True
-        assert backup["repo_id"] == "alice/pilot-annotations"
+        settings, sink = _hf_sink(uploaded["config"])
+        assert settings.enabled
+        assert sink["repo_id"] == "alice/pilot-annotations"
 
 
 class TestPull:
@@ -403,7 +427,7 @@ class TestPull:
         """Whatever is on the Space right now is at best a partial copy."""
         called = {}
 
-        def fake_download(repo_id, repo_type, token, local_dir):
+        def fake_download(repo_id, repo_type, token, local_dir, **kwargs):
             called["repo_id"] = repo_id
             called["repo_type"] = repo_type
             os.makedirs(local_dir, exist_ok=True)

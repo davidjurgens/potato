@@ -1,12 +1,37 @@
 #cloud-config
-# First-boot provisioning for a Potato droplet.
+# First-boot provisioning for a Potato VM (DigitalOcean, Lightsail, EC2,
+# Hetzner, Vultr, Linode, OpenStack).
 #
 # This only prepares the machine. The bundle arrives over SFTP afterwards,
-# because DigitalOcean caps user_data at 64 KB and a project with data files
-# passes that immediately.
+# because user_data is capped (16 KB on Lightsail, 64 KB on DigitalOcean) and a
+# project with data files passes that immediately.
 #
 # Keep this idempotent and quiet on failure paths: everything here runs before
 # anyone can watch it, and the only forensics are /var/log/cloud-init-output.log.
+
+{% if ssh_authorized_key and deploy_user %}
+# A login of our own, for images whose default user varies by cloud (OpenStack
+# images ship as ubuntu, exouser, cloud-user...). Passwordless sudo, key only.
+users:
+  - default
+  - name: {{ deploy_user }}
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true
+    ssh_authorized_keys:
+      - {{ ssh_authorized_key }}
+
+{% elif ssh_authorized_key %}
+# The per-deployment deploy key, for the image's default login (root, ubuntu).
+# Delivered here rather than through each provider's key-pair API, which differ
+# in which key types they accept.
+ssh_authorized_keys:
+  - {{ ssh_authorized_key }}
+
+{% endif %}
+# Key-only SSH. Some providers set a root password at creation (Linode requires
+# one; Hetzner emails one when no key is registered); it must not open a login.
+ssh_pwauth: false
 
 package_update: true
 package_upgrade: false
@@ -42,24 +67,20 @@ runcmd:
   - [ systemctl, enable, --now, docker ]
 
   - [ mkdir, -p, "{{ data_dir }}" ]
+  # An attached volume is prepared over SSH after the provider reports it
+  # attached (see vm_base.prepare_volume_script). Doing it here raced the
+  # attach: first boot often ran before the disk existed, the mount failed
+  # quietly under `nofail`, and the task was written to the root disk.
   - [ mkdir, -p, "{{ app_dir }}" ]
-{% if volume_device %}
-  # Format only if the volume is blank; a re-attached volume carries the study's
-  # data and must never be reformatted.
-  - [ sh, -c, "blkid {{ volume_device }} >/dev/null 2>&1 || mkfs.ext4 -F {{ volume_device }}" ]
-  - [ sh, -c, "grep -q '{{ data_dir }}' /etc/fstab || echo '{{ volume_device }} {{ data_dir }} ext4 defaults,nofail,discard 0 2' >> /etc/fstab" ]
-  - [ mount, -a ]
-  - [ mkdir, -p, "{{ data_dir }}/caddy" ]
-{% endif %}
 
   # Both directories are bind-mounted into a container that runs as uid 1000.
   # Created by root they are unwritable by the server, which then dies during
-  # boot on its first log write. This has to come after `mount -a`, because
-  # mounting the volume replaces the directory that was just chowned.
+  # boot on its first log write. A volume mounted later replaces the directory,
+  # so the volume script chowns again after its mount.
   - [ chown, -R, "1000:1000", "{{ app_dir }}" ]
   - [ chown, -R, "1000:1000", "{{ data_dir }}" ]
 
-  # The firewall is belt-and-braces: DigitalOcean's own firewall already blocks
+  # The firewall is belt-and-braces: the provider's own firewall already blocks
   # everything else, but a cloud firewall deleted by hand in the console should
   # not silently expose port {{ app_port }}.
   - [ ufw, allow, "22/tcp" ]

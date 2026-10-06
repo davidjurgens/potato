@@ -19,6 +19,13 @@ import sys
 from typing import List, Optional
 
 from potato.deploy import credentials as creds
+from potato.deploy.backup_options import (
+    BackupOptions,
+    BackupOptionsError,
+    apply_to_config as apply_backup_to_config,
+    default_hf_repo,
+    from_args as backup_from_args,
+)
 from potato.deploy.bundle import build_bundle
 from potato.deploy.preflight import harden_config, render_report, run_preflight
 from potato.deploy.providers.base import (
@@ -133,7 +140,40 @@ def build_parser() -> argparse.ArgumentParser:
                          "provider. Falls back to HF_TOKEN.")
     up.add_argument("--backup-minutes", type=int, default=None,
                     dest="backup_minutes",
-                    help="how often to mirror annotations to the backup Dataset")
+                    help="how often to mirror annotations to the backup")
+    up.add_argument("--backup", default=None, metavar="hf|s3|hf,s3",
+                    help="where to back collected data up to; restored "
+                         "automatically into an empty task at boot")
+    up.add_argument("--hf-backup-repo", default=None, dest="hf_backup_repo",
+                    help="dataset repo for the HF backup "
+                         "(default <account>/<name>-annotations)")
+    up.add_argument("--s3-bucket", default=None, dest="s3_bucket",
+                    help="bucket for an S3 backup (also R2, B2, MinIO)")
+    up.add_argument("--s3-prefix", default=None, dest="s3_prefix",
+                    help="key prefix inside the bucket (default potato/<name>)")
+    up.add_argument("--s3-region", default=None, dest="s3_region")
+    up.add_argument("--s3-endpoint", default=None, dest="s3_endpoint",
+                    help="S3-compatible endpoint URL, for R2/B2/MinIO")
+    up.add_argument("--aws-profile", default=None, dest="aws_profile",
+                    help="AWS named profile (aws, aws-ec2, aws-ecs); default "
+                         "is boto3's own chain, including AWS_PROFILE")
+    up.add_argument("--subnet", default=None,
+                    help="aws-ec2: a public subnet id, when the region has no "
+                         "default VPC")
+    up.add_argument("--cloud", default=None,
+                    help="openstack: clouds.yaml entry (e.g. jetstream2); "
+                         "default $OS_CLOUD")
+    up.add_argument("--network", default=None,
+                    help="openstack: network name (default: auto-allocated)")
+    up.add_argument("--os-image", default=None, dest="os_image",
+                    help="openstack: image name (default Featured-Ubuntu24 on "
+                         "Jetstream2)")
+    up.add_argument("--heroku-registry", action="store_true", dest="heroku_registry",
+                    help="heroku: build with local Docker and push to "
+                         "registry.heroku.com instead of building on Heroku")
+    up.add_argument("--acme-email", default=None, dest="acme_email",
+                    help="contact address for the Let's Encrypt certificate "
+                         "(default: git config user.email)")
     up.add_argument("--dry-run", action="store_true", dest="dry_run")
     up.add_argument("--yes", "-y", action="store_true",
                     help="skip the confirmation prompt")
@@ -166,6 +206,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     listing = sub.add_parser("list", help="list deployments recorded for a config")
     listing.add_argument("config_file")
+
+    button = sub.add_parser("button", help="write one-click deploy button files "
+                            "into the project's repository")
+    button.add_argument("config_file")
+    button.add_argument("--target", required=True,
+                        choices=("heroku", "render", "aws", "railway"))
+    button.add_argument("--name", default=None)
+    button.add_argument("--image", default=None)
+    button.add_argument("--backup", default=None, metavar="hf|s3|hf,s3")
+    button.add_argument("--hf-token", default=None, dest="hf_token")
+    button.add_argument("--hf-backup-repo", default=None, dest="hf_backup_repo")
+    button.add_argument("--s3-bucket", default=None, dest="s3_bucket")
+    button.add_argument("--s3-prefix", default=None, dest="s3_prefix")
+    button.add_argument("--s3-region", default=None, dest="s3_region")
+    button.add_argument("--s3-endpoint", default=None, dest="s3_endpoint")
+    button.add_argument("--backup-minutes", type=int, default=None, dest="backup_minutes")
+    button.add_argument("--template-url", default=None, dest="template_url",
+                        help="aws: the S3 URL of the uploaded template")
+    button.add_argument("--region", default="us-east-1")
+    button.add_argument("--force", action="store_true",
+                        help="replace files that already exist")
+    button.add_argument("--dry-run", action="store_true", dest="dry_run",
+                        help="print what would be written")
 
     providers = sub.add_parser("providers", help="show targets and credential status")
     providers.add_argument("--verify", action="store_true",
@@ -230,8 +293,16 @@ def cmd_up(args) -> int:
 
     provider = get_provider(provider_name, token=token, console=_echo)
 
+    try:
+        backup = _resolve_backup(args, name, provider_name)
+    except BackupOptionsError as exc:
+        _echo(f"Backup: {exc}")
+        return EXIT_ERROR
+
     report = run_preflight(args.config_file, provider=provider_name, public=public,
-                           ephemeral_fs=provider.ephemeral_fs, workers=args.workers)
+                           ephemeral_fs=provider.ephemeral_fs, workers=args.workers,
+                           backup_configured=backup.enabled or (
+                               provider_name == "huggingface" and not args.demo))
     _echo(render_report(report))
     _echo("")
 
@@ -248,18 +319,22 @@ def cmd_up(args) -> int:
 
     out_dir = _bundle_dir(args.config_file, provider_name, name)
     manifest = build_bundle(args.config_file, out_dir,
-                            patch=lambda cfg: harden_config(
+                            patch=lambda cfg: apply_backup_to_config(harden_config(
                                 cfg, provider=provider_name, workers=args.workers),
+                                backup),
                             preserve_collected_data=provider.mounts_bundle)
     _echo(f"Bundle: {manifest.file_count} files, {manifest.human_size()}")
     for warning in manifest.warnings:
         _echo(f"  WARNING {warning}")
+    if backup.enabled:
+        _echo(f"Backup: {backup.describe()}, every {backup.minutes} min, "
+              "restored into an empty task at boot")
     _echo("")
 
-    # A HuggingFace token enables continuous Dataset backup on *every* provider,
-    # not only HuggingFace. It is the answer to an ephemeral filesystem wherever
-    # one is found.
     hf_token = args.hf_token or os.environ.get("HF_TOKEN")
+    secrets = _parse_key_values(args.secret, "--secret")
+    for key, value in backup.secrets().items():
+        secrets.setdefault(key, value)
 
     spec = DeploySpec(
         name=name, config_path=args.config_file, region=args.region, size=args.size,
@@ -267,7 +342,7 @@ def cmd_up(args) -> int:
         threads=args.threads, volume_gb=args.volume_gb, private=args.private,
         demo=args.demo,
         env=_parse_key_values(args.env, "--env"),
-        secrets=_parse_key_values(args.secret, "--secret"),
+        secrets=secrets,
         extra={"port": args.port, "generated": report.generated,
                "config_rel": manifest.config_rel_path,
                # `pull` needs this to know which directory holds the
@@ -278,8 +353,19 @@ def cmd_up(args) -> int:
                "plan": args.plan,
                "owner": args.owner,
                "hf_token": hf_token,
-               "huggingface_backup": bool(hf_token),
+               "huggingface_backup": "hf" in backup.kinds,
+               "backup": backup,
+               "backup_kinds": list(backup.kinds),
                "backup_minutes": args.backup_minutes or 5,
+               # Image-only hosts upload the tarball here before fetching it.
+               "bundle_workdir": out_dir + ".dist",
+               "acme_email": args.acme_email or _git_email(),
+               "aws_profile": args.aws_profile,
+               "heroku_registry": args.heroku_registry,
+               "subnet": args.subnet,
+               "cloud": args.cloud,
+               "network": args.network,
+               "os_image": args.os_image,
                "title": _load_config(args.config_file).get("annotation_task_name"),
                },
     )
@@ -311,6 +397,37 @@ def cmd_up(args) -> int:
     _echo(f"Deployed: {record.url or '(no URL recorded)'}")
     _echo(f"Admin key stored in {SecretStore(args.config_file).path}")
     return EXIT_OK
+
+
+def _resolve_backup(args, name: str, provider_name: str) -> BackupOptions:
+    """Backup options from the flags, with the HF repo filled in.
+
+    The huggingface provider creates and wires its own backup dataset, so an
+    HF backup is left to it here; an S3 backup alongside still applies.
+    """
+    backup = backup_from_args(args, name)
+    if provider_name == "huggingface" and "hf" in backup.kinds:
+        backup.kinds.remove("hf")
+    if "hf" in backup.kinds and not backup.hf_repo:
+        if args.dry_run:
+            backup.hf_repo = f"<hf-account>/{name}-annotations"
+        else:
+            try:
+                backup.hf_repo = default_hf_repo(backup.hf_token, name)
+            except Exception as exc:
+                raise BackupOptionsError(
+                    f"could not ask HuggingFace who the token belongs to: {exc}")
+    return backup
+
+
+def _git_email() -> Optional[str]:
+    import subprocess
+    try:
+        result = subprocess.run(["git", "config", "user.email"],
+                                capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout.strip() or None
 
 
 def _confirm(plan, provider_name: str) -> bool:
@@ -480,7 +597,7 @@ def cmd_providers(args) -> int:
         # here rather than after they have chosen a target and typed a token.
         missing = provider.check_requirements()
         if missing:
-            traits.append(f"needs `pip install 'potato-annotation[deploy]'` "
+            traits.append(f"needs `pip install 'potato-annotation[{provider.install_extra}]'` "
                           f"({', '.join(missing)} missing)")
         _echo(f"  {name:14s} {provider.summary or ', '.join(traits) or 'durable, public'}")
     _echo("")
@@ -498,7 +615,7 @@ def cmd_providers(args) -> int:
                 # "no token configured" would read as a problem.
                 continue
             token, _source = creds.resolve_token(name)
-            if not token:
+            if not token and not creds.is_ambient(name):
                 _echo(f"  {name:14s} skipped, no token configured")
                 continue
             try:
@@ -516,10 +633,54 @@ def cmd_providers(args) -> int:
     return EXIT_OK
 
 
+def cmd_button(args) -> int:
+    from potato.deploy import button as buttons
+
+    name = args.name or slugify(_load_task_name(args.config_file))
+    try:
+        # The token is supplied by whoever clicks the button; generation needs
+        # only the repo name, from --hf-backup-repo or a token's owner.
+        backup = backup_from_args(args, name, require_credentials=False)
+        if "hf" in backup.kinds and not backup.hf_repo:
+            if not backup.hf_token:
+                raise BackupOptionsError(
+                    "name the backup dataset with --hf-backup-repo <owner>/<name> "
+                    "(or pass --hf-token so its owner can be looked up)")
+            backup.hf_repo = default_hf_repo(backup.hf_token, name)
+        result = buttons.generate(args.config_file, args.target, backup, name=name,
+                                  image=args.image, template_url=args.template_url,
+                                  region=args.region)
+    except (BackupOptionsError, buttons.ButtonError) as exc:
+        _echo(f"Button: {exc}")
+        return EXIT_ERROR
+
+    config_dir = os.path.dirname(os.path.abspath(args.config_file))
+    root = buttons.git_root(config_dir) or config_dir
+    if args.dry_run:
+        for path, content in result.files.items():
+            _echo(f"--- {path}")
+            _echo(content)
+    else:
+        try:
+            written = buttons.write(result, root, force=args.force)
+        except buttons.ButtonError as exc:
+            _echo(f"Button: {exc}")
+            return EXIT_ERROR
+        for path in written:
+            _echo(f"wrote {path}")
+    for note in result.notes:
+        _echo(note)
+    if result.badge:
+        _echo("")
+        _echo("Add this to your README, commit, and push:")
+        _echo(f"  {result.badge}")
+    return EXIT_OK
+
+
 COMMANDS = {
     "check": cmd_check, "build": cmd_build, "up": cmd_up, "status": cmd_status,
     "logs": cmd_logs, "pull": cmd_pull, "destroy": cmd_destroy,
-    "list": cmd_list, "providers": cmd_providers,
+    "list": cmd_list, "providers": cmd_providers, "button": cmd_button,
 }
 
 

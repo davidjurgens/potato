@@ -225,6 +225,16 @@ Potato supports six authentication methods:
 
 Passwords are hashed with per-user PBKDF2-SHA256 salts. Admins can reset passwords via CLI (`potato reset-password`) or REST API. Self-service token-based reset is also available.
 
+To put a task online, `potato deploy up config.yaml --provider <target>` creates
+the server, gets an HTTPS certificate and starts the task. The targets are AWS
+(Lightsail, EC2, ECS Express), Jetstream2 and other OpenStack clouds, Hetzner,
+Vultr, Linode, DigitalOcean, Fly.io, Railway, Render, Heroku and HuggingFace
+Spaces. Where the host's disk does not survive a restart, `--backup hf|s3` keeps
+the annotations in a dataset or bucket and restores them when the server
+starts. `potato deploy button` writes Deploy to Heroku, Deploy to Render and
+AWS Launch Stack buttons for a task's repository. Start with
+[Installing and running Potato](docs/deployment/installation.md).
+
 ---
 
 ## Example Projects
@@ -288,6 +298,7 @@ Potato has two complementary doc sites: **[potatoannotator.com/docs](https://www
 | SSO & OAuth | [docs/auth-users/sso_authentication.md](docs/auth-users/sso_authentication.md) |
 | Admin Dashboard | [docs/administration/admin_dashboard.md](docs/administration/admin_dashboard.md) |
 | Crowdsourcing | [docs/deployment/crowdsourcing.md](docs/deployment/crowdsourcing.md) |
+| Installing and Deploying | [docs/deployment/installation.md](docs/deployment/installation.md) |
 | Export Formats | [docs/data-export/export_formats.md](docs/data-export/export_formats.md) |
 | Full Documentation Index | [docs/index.md](docs/index.md) |
 
@@ -304,7 +315,7 @@ from the code, so they match what the server accepts:
 |----------|-------------------|
 | [`llms.txt`](https://potatoannotator.readthedocs.io/en/latest/llms.txt) | Curated index of the docs ([llms.txt standard](https://llmstxt.org)) |
 | [`llms-full.txt`](https://potatoannotator.readthedocs.io/en/latest/llms-full.txt) | Every documentation page in one file |
-| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 161 config keys, 61 annotation types, 24 display types — validates a `config.yaml` before the server runs |
+| [Config JSON Schema](https://potatoannotator.readthedocs.io/en/latest/schemas/potato-config.schema.json) | All 162 config keys, 61 annotation types, 24 display types — validates a `config.yaml` before the server runs |
 | [OpenAPI 3.1 spec](https://potatoannotator.readthedocs.io/en/latest/api-reference/openapi.json) | All 419 HTTP paths, with per-operation auth and config gating |
 
 Every config in `examples/` carries a `# yaml-language-server: $schema=…`

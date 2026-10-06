@@ -37,7 +37,7 @@ from potato.deploy.providers.base import (
     PullResult,
     register_provider,
 )
-from potato.deploy.providers.digitalocean import render_template
+from potato.deploy.providers.vm_base import render_template
 from potato.deploy.state import DeploymentRecord
 
 DEFAULT_IMAGE = "ghcr.io/davidjurgens/potato:latest"
@@ -427,8 +427,10 @@ class HuggingFaceProvider(Provider):
 
         os.makedirs(dest, exist_ok=True)
         self.console(f"Downloading {backup}...")
+        # Deploy bundles share the dataset (see bundle_store); they are not data.
         snapshot_download(repo_id=backup, repo_type="dataset", token=self.token,
-                          local_dir=dest)
+                          local_dir=dest, ignore_patterns=["_bundle/*"])
+        _lift_database_snapshots(dest)
 
         result = PullResult(dest=dest)
         for dirpath, dirnames, filenames in os.walk(dest):
@@ -466,12 +468,31 @@ class HuggingFaceProvider(Provider):
             f"  https://huggingface.co/datasets/{backup}/settings")
 
 
-def _inject_backup_config(config_path: str, repo_id: str, minutes: int) -> None:
-    """Turn on the in-process backup in the bundled config.
+def _lift_database_snapshots(dest: str) -> None:
+    """Move backed-up ``_databases/*.sqlite`` to the top of a pulled directory.
 
-    The token is not written here. It arrives as the HF_TOKEN Space secret, and
-    `huggingface_backup.token` is left unset so the server reads it from the
-    environment.
+    That is where a local server and every other provider's pull put them.
+    """
+    import shutil
+
+    staging = os.path.join(dest, "_databases")
+    if not os.path.isdir(staging):
+        return
+    for name in os.listdir(staging):
+        if name.endswith(".sqlite"):
+            shutil.move(os.path.join(staging, name), os.path.join(dest, name))
+    shutil.rmtree(staging, ignore_errors=True)
+
+
+def _inject_backup_config(config_path: str, repo_id: str, minutes: int) -> None:
+    """Turn on the in-process backup in the bundled config, with restore.
+
+    A Space loses its filesystem on every rebuild and restart, so the backup
+    also restores into the empty task at boot; without that, the next sync
+    after a restart overwrote annotators' earlier work. Any sink the CLI
+    already wrote (an S3 bucket alongside) is kept.
+
+    The token is not written here. It arrives as the HF_TOKEN Space secret.
     """
     import yaml
 
@@ -480,13 +501,18 @@ def _inject_backup_config(config_path: str, repo_id: str, minutes: int) -> None:
             f"The bundled config is not where it was expected: {config_path}")
     with open(config_path, "r", encoding="utf-8") as handle:
         config = yaml.safe_load(handle) or {}
-    config["huggingface_backup"] = {
+    block = config.get("backup") if isinstance(config.get("backup"), dict) else {}
+    sinks = [s for s in (block.get("sinks") or [])
+             if isinstance(s, dict) and s.get("type") not in ("huggingface", "hf")]
+    sinks.insert(0, {"type": "huggingface", "repo_id": repo_id,
+                     "repo_type": "dataset", "private": True})
+    config["backup"] = {
         "enabled": True,
-        "repo_id": repo_id,
-        "repo_type": "dataset",
-        "private": True,
-        "schedule_minutes": minutes,
+        "schedule_minutes": block.get("schedule_minutes", minutes),
+        "restore_on_boot": True,
+        "sinks": sinks,
     }
+    config.pop("huggingface_backup", None)
     with open(config_path, "w", encoding="utf-8") as handle:
         yaml.safe_dump(config, handle, sort_keys=False, allow_unicode=True)
 

@@ -188,6 +188,129 @@ class TestEntrypointWriteProbe:
         assert ": > " not in source
 
 
+class TestEntrypointBundleFetch:
+    """Image-only hosts receive the project as a tarball fetched at start.
+
+    Render shipped without this: the provider set POTATO_BUNDLE_URL and nothing
+    read it, so the service booted the bare image and exited at the config
+    check. These run the real entrypoint against a file:// URL.
+    """
+
+    # sha256sum is /sbin on macOS and /usr/bin on Debian; gunicorn is absent,
+    # so a successful fetch ends in exec failing rather than a running server.
+    PATH = {"PATH": "/usr/bin:/bin:/sbin:/usr/sbin"}
+
+    @staticmethod
+    def _bundle(tmp_path, files, keep=("annotation_output", "project.sqlite")):
+        import hashlib
+        import tarfile
+        src = tmp_path / "src"
+        src.mkdir()
+        for name, body in files.items():
+            target = src / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(body)
+        (src / ".potato-keep").write_text("\n".join(keep) + "\n")
+        archive = tmp_path / "bundle.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            for entry in sorted(src.iterdir()):
+                tar.add(entry, arcname=entry.name)
+        sha = hashlib.sha256(archive.read_bytes()).hexdigest()
+        return f"file://{archive}", sha
+
+    def _run(self, app, url, sha=None, **extra):
+        env = dict(self.PATH, POTATO_BUNDLE_URL=url, **extra)
+        if sha:
+            env["POTATO_BUNDLE_SHA256"] = sha
+        return run_entrypoint(env=env, cwd=str(app))
+
+    def test_fetched_config_gets_past_the_config_check(self, tmp_path):
+        url, sha = self._bundle(tmp_path, {"config.yaml": "task_dir: .\n"})
+        app = tmp_path / "app"
+        app.mkdir()
+        result = self._run(app, url, sha)
+        assert "config file not found" not in result.stderr
+        assert (app / "config.yaml").read_text() == "task_dir: .\n"
+        assert (app / ".potato-bundle-sha").read_text().strip() == sha
+        assert not (app / ".potato-staging").exists()
+
+    def test_checksum_mismatch_refuses_and_writes_nothing(self, tmp_path):
+        url, _sha = self._bundle(tmp_path, {"config.yaml": "task_dir: .\n"})
+        app = tmp_path / "app"
+        app.mkdir()
+        result = self._run(app, url, "0" * 64)
+        assert result.returncode == 1
+        assert "checksum mismatch" in result.stderr
+        assert not (app / "config.yaml").exists()
+
+    def test_unreachable_url_says_so(self, tmp_path):
+        app = tmp_path / "app"
+        app.mkdir()
+        result = self._run(app, f"file://{tmp_path}/missing.tar.gz")
+        assert result.returncode == 1
+        assert "could not download" in result.stderr
+
+    def test_an_update_never_replaces_collected_data(self, tmp_path):
+        url, sha = self._bundle(tmp_path, {
+            "config.yaml": "task_dir: .\n# v2\n",
+            "annotation_output/.gitkeep": "",
+            "project.sqlite": "empty from the bundle",
+        })
+        app = tmp_path / "app"
+        (app / "annotation_output" / "alice").mkdir(parents=True)
+        (app / "annotation_output" / "alice" / "user_state.json").write_text("{}")
+        (app / "project.sqlite").write_text("real data")
+        (app / "config.yaml").write_text("task_dir: .\n# v1\n")
+        self._run(app, url, sha)
+        assert "# v2" in (app / "config.yaml").read_text()
+        assert (app / "annotation_output" / "alice" / "user_state.json").exists()
+        assert (app / "project.sqlite").read_text() == "real data"
+
+    def test_a_matching_marker_skips_the_download(self, tmp_path):
+        app = tmp_path / "app"
+        app.mkdir()
+        (app / "config.yaml").write_text("task_dir: .\n")
+        (app / ".potato-bundle-sha").write_text("abc\n")
+        # The URL does not exist; reaching it would fail the start.
+        result = self._run(app, f"file://{tmp_path}/missing.tar.gz", "abc")
+        assert "already in place" in result.stdout
+        assert "could not download" not in result.stderr
+
+    def test_bundle_token_is_sent_as_a_bearer_header(self, tmp_path):
+        """A private HF Dataset serves the bundle only with the token."""
+        import http.server
+        import threading
+
+        _url, _sha = self._bundle(tmp_path, {"config.yaml": "task_dir: .\n"})
+        payload = (tmp_path / "bundle.tar.gz").read_bytes()
+        seen = {}
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen["auth"] = self.headers.get("Authorization")
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.handle_request, daemon=True)
+        thread.start()
+        app = tmp_path / "app"
+        app.mkdir()
+        try:
+            self._run(app, f"http://127.0.0.1:{server.server_port}/b.tar.gz",
+                      POTATO_BUNDLE_TOKEN="hf_secret")
+        finally:
+            thread.join(timeout=10)
+            server.server_close()
+        assert seen.get("auth") == "Bearer hf_secret"
+        assert (app / "config.yaml").exists()
+
+
 class TestEntrypointCommandOverride:
     def test_arguments_replace_the_server(self, tmp_path):
         result = run_entrypoint(["echo", "hello"], cwd=str(tmp_path))

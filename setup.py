@@ -129,6 +129,14 @@ _DEPLOY_DEPS = [
     "paramiko>=3.0.0",
 ]
 
+# What a hosted server needs to back its data up off the host and restore it
+# (potato/server_utils/backup). Installed into the published image by default:
+# on an ephemeral host a backup that cannot import its client is no backup.
+_HOSTING_DEPS = [
+    "huggingface_hub>=0.20.0",
+    "boto3>=1.26.0",
+]
+
 setup(
     name="potato-annotation",
     version='2.9.4',
@@ -152,15 +160,15 @@ setup(
         "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "Topic :: Text Processing :: Linguistic",
     ],
-    python_requires=">=3.7",
+    # pydantic>=2.11 (a core dependency) requires 3.9, so 3.7 and 3.8 could
+    # never install; saying so here gives pip a clear error instead.
+    python_requires=">=3.9",
     install_requires=_CORE_DEPS,
     extras_require={
         "ai": _AI_DEPS,
@@ -180,11 +188,17 @@ setup(
         "langchain": _LANGCHAIN_DEPS,
         "db": _DB_DEPS,
         "deploy": _DEPLOY_DEPS,
+        "hosting": _HOSTING_DEPS,
+        # boto3 for the AWS targets (Lightsail, EC2, ECS) and the S3 bundle
+        # store; paramiko because the VM targets are reached over SSH.
+        "deploy-aws": _DEPLOY_DEPS + ["boto3>=1.26.0"],
+        # OpenStack clouds: Jetstream2, campus clouds, EGI.
+        "deploy-openstack": _DEPLOY_DEPS + ["openstacksdk>=3.0.0"],
         "vision": _VISION_DEPS,
         "transcribe": _TRANSCRIBE_DEPS,
         # `all` deliberately excludes `vision`: torch is a multi-gigabyte
         # install, and nothing in the default experience needs it.
-        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _DEPLOY_DEPS + _PREVIEW_DEPS + _MCP_DEPS + _TRANSCRIBE_DEPS,
+        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _DEPLOY_DEPS + _HOSTING_DEPS + _PREVIEW_DEPS + _MCP_DEPS + _TRANSCRIBE_DEPS,
     },
     include_package_data=True,
     entry_points={

@@ -7,9 +7,13 @@ hold in place is the refusal — `create` must not produce a free service with n
 route for the annotations to leave it.
 """
 
+import json
+
 import pytest
 import responses
 
+from potato.deploy.backup_options import BackupOptions
+from potato.deploy.bundle_store import BundleLocation
 from potato.deploy.providers.base import DeploySpec, ProviderError, get_provider
 from potato.deploy.providers.render import (
     DEFAULT_IMAGE,
@@ -56,6 +60,38 @@ def provider():
     return get_provider("render", token="rnd_test")
 
 
+BUNDLE_URL = ("https://huggingface.co/datasets/alice/pilot-annotations/"
+              "resolve/main/_bundle/dd.tar.gz")
+
+
+@pytest.fixture(autouse=True)
+def published(monkeypatch):
+    """Record bundle uploads instead of reaching HuggingFace or S3."""
+    calls = []
+
+    def fake_publish(manifest, store, workdir):
+        calls.append(store)
+        return BundleLocation(url=BUNDLE_URL, sha256="d" * 64,
+                              token=getattr(store, "token", None))
+
+    monkeypatch.setattr("potato.deploy.bundle_store.publish", fake_publish)
+    return calls
+
+
+def with_hf_backup(spec):
+    spec.extra["backup"] = BackupOptions(kinds=["hf"], hf_token="hf_test",
+                                         hf_repo="alice/pilot-annotations")
+    spec.extra["backup_kinds"] = ["hf"]
+    return spec
+
+
+def with_s3_backup(spec):
+    spec.extra["backup"] = BackupOptions(kinds=["s3"], s3_bucket="b",
+                                         s3_prefix="potato/pilot")
+    spec.extra["backup_kinds"] = ["s3"]
+    return spec
+
+
 class TestServicePayload:
     def test_deploys_a_prebuilt_image_not_a_repo(self, spec):
         """No git repository is involved, which is the whole appeal."""
@@ -99,7 +135,7 @@ class TestPlan:
                    for w in provider.plan(spec, FakeBundle()).warnings)
 
     def test_backup_silences_the_durability_warning(self, provider, spec):
-        spec.extra["huggingface_backup"] = True
+        with_hf_backup(spec)
         assert not any("carry the data off" in w
                        for w in provider.plan(spec, FakeBundle()).warnings)
 
@@ -111,6 +147,23 @@ class TestPlan:
     def test_warns_that_free_instances_take_no_disk(self, provider, spec):
         spec.volume_gb = 5
         assert any("free instances" in w
+                   for w in provider.plan(spec, FakeBundle()).warnings)
+
+    def test_plan_names_where_the_project_will_be_fetched_from(self, provider,
+                                                               spec):
+        with_hf_backup(spec)
+        plan = provider.plan(spec, FakeBundle())
+        publish = next(a for a in plan.actions if a.kind == "bundle.publish")
+        assert "alice/pilot-annotations" in publish.description
+
+    def test_plan_warns_when_there_is_nowhere_to_fetch_from(self, provider, spec):
+        assert any("fetches your project" in w
+                   for w in provider.plan(spec, FakeBundle()).warnings)
+
+    def test_plan_warns_a_presigned_url_expires_without_a_disk(self, provider,
+                                                               spec):
+        with_s3_backup(spec)
+        assert any("seven days" in w
                    for w in provider.plan(spec, FakeBundle()).warnings)
 
     def test_free_is_reported_as_free(self, provider, spec):
@@ -157,7 +210,7 @@ class TestFreeTierRefusal:
 
     @responses.activate
     def test_a_backup_is_enough_to_proceed(self, provider, spec, project):
-        spec.extra["huggingface_backup"] = True
+        with_hf_backup(spec)
         _stub_successful_create()
         record = provider.create(spec, FakeBundle(), None, DeploymentStore(project))
         assert record.status == "running"
@@ -165,13 +218,24 @@ class TestFreeTierRefusal:
     @responses.activate
     def test_demo_is_enough_to_proceed(self, provider, spec, project):
         spec.demo = True
+        with_hf_backup(spec)
         _stub_successful_create()
         assert provider.create(spec, FakeBundle(), None,
                                DeploymentStore(project)).status == "running"
 
     @responses.activate
+    def test_demo_still_needs_somewhere_to_fetch_the_project(self, provider, spec,
+                                                            project):
+        """The image has no project in it; without a store it cannot boot."""
+        spec.demo = True
+        with pytest.raises(ProviderError, match="fetches your project"):
+            provider.create(spec, FakeBundle(), None, DeploymentStore(project))
+        assert not responses.calls
+
+    @responses.activate
     def test_a_paid_plan_does_not_need_either(self, provider, spec, project):
         spec.extra["plan"] = "starter"
+        with_s3_backup(spec)
         _stub_successful_create()
         assert provider.create(spec, FakeBundle(), None,
                                DeploymentStore(project)).status == "running"
@@ -182,6 +246,7 @@ class TestCreate:
     def test_service_id_is_persisted_before_the_wait(self, provider, spec, project):
         """A service that exists but was never recorded cannot be destroyed."""
         spec.demo = True
+        with_hf_backup(spec)
         responses.add(responses.GET, f"{API}/owners",
                       json=[{"owner": {"id": "own-1"}}])
         responses.add(responses.POST, f"{API}/services",
@@ -199,6 +264,7 @@ class TestCreate:
     @responses.activate
     def test_a_key_with_no_owner_fails_clearly(self, provider, spec, project):
         spec.demo = True
+        with_hf_backup(spec)
         responses.add(responses.GET, f"{API}/owners", json=[])
         with pytest.raises(ProviderError, match="attached to no owner"):
             provider.create(spec, FakeBundle(), None, DeploymentStore(project))
@@ -207,8 +273,10 @@ class TestCreate:
     def test_a_second_up_redeploys_rather_than_duplicating(self, provider, spec,
                                                            project):
         spec.demo = True
+        with_hf_backup(spec)
         responses.add(responses.GET, f"{API}/owners",
                       json=[{"owner": {"id": "own-1"}}])
+        responses.add(responses.PUT, f"{API}/services/srv-1/env-vars", json=[])
         responses.add(responses.POST, f"{API}/services/srv-1/deploys", json={})
         responses.add(responses.GET, f"{API}/services/srv-1/deploys?limit=1",
                       json=[{"deploy": {"status": "live"}}])
@@ -218,6 +286,45 @@ class TestCreate:
         provider.create(spec, FakeBundle(), existing, DeploymentStore(project))
         assert not any(c.request.url.endswith("/services")
                        for c in responses.calls), "it created a second service"
+
+    @responses.activate
+    def test_a_redeploy_pushes_the_new_bundle_before_deploying(self, provider, spec,
+                                                               project):
+        """Triggering a deploy alone restarted the old bundle unchanged."""
+        with_hf_backup(spec)
+        responses.add(responses.GET, f"{API}/owners",
+                      json=[{"owner": {"id": "own-1"}}])
+        responses.add(responses.PUT, f"{API}/services/srv-1/env-vars", json=[])
+        responses.add(responses.POST, f"{API}/services/srv-1/deploys", json={})
+        responses.add(responses.GET, f"{API}/services/srv-1/deploys?limit=1",
+                      json=[{"deploy": {"status": "live"}}])
+        existing = DeploymentRecord(name="pilot", provider="render",
+                                    provider_ref={"service_id": "srv-1"})
+        provider.create(spec, FakeBundle(), existing, DeploymentStore(project))
+        urls = [c.request.url for c in responses.calls]
+        put = urls.index(f"{API}/services/srv-1/env-vars")
+        deploy = urls.index(f"{API}/services/srv-1/deploys")
+        assert put < deploy
+        sent = {v["key"]: v["value"] for v in
+                json.loads(responses.calls[put].request.body)}
+        assert sent["POTATO_BUNDLE_SHA256"] == "d" * 64
+
+    @responses.activate
+    def test_the_service_is_told_where_to_fetch_the_project(self, provider, spec,
+                                                            project, published):
+        """The regression: nothing set POTATO_BUNDLE_URL, so every service
+        booted the bare image and exited at the config check."""
+        with_hf_backup(spec)
+        _stub_successful_create()
+        provider.create(spec, FakeBundle(), None, DeploymentStore(project))
+        create = next(c for c in responses.calls
+                      if c.request.url == f"{API}/services")
+        env = {v["key"]: v["value"] for v in
+               json.loads(create.request.body)["envVars"]}
+        assert env["POTATO_BUNDLE_URL"] == BUNDLE_URL
+        assert env["POTATO_BUNDLE_SHA256"] == "d" * 64
+        assert env["POTATO_BUNDLE_TOKEN"] == "hf_test"
+        assert len(published) == 1
 
 
 class TestTransport:

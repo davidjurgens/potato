@@ -19,6 +19,7 @@ import io
 import logging
 import os
 import posixpath
+import shlex
 import stat
 import tarfile
 import tempfile
@@ -209,9 +210,21 @@ class SSHSession:
 
     # -- commands ------------------------------------------------------
 
+    @property
+    def needs_sudo(self) -> bool:
+        """Ubuntu images on Lightsail, EC2 and OpenStack log in as `ubuntu`."""
+        return self.username != "root"
+
+    def _privileged(self, command: str) -> str:
+        """Run as root whatever the login. ``-n``: fail rather than prompt."""
+        if not self.needs_sudo:
+            return command
+        return f"sudo -n sh -c {shlex.quote(command)}"
+
     def run(self, command: str, *, timeout: int = 300,
             check: bool = False) -> CommandResult:
         client = self.connect()
+        command = self._privileged(command)
         try:
             _stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
             out = stdout.read().decode("utf-8", "replace")
@@ -228,7 +241,8 @@ class SSHSession:
 
     def stream(self, command: str) -> Iterator[str]:
         client = self.connect()
-        _stdin, stdout, _stderr = client.exec_command(command, get_pty=True)
+        _stdin, stdout, _stderr = client.exec_command(self._privileged(command),
+                                                      get_pty=True)
         for line in iter(stdout.readline, ""):
             yield line.rstrip("\n")
 
@@ -271,17 +285,28 @@ class SSHSession:
         a disclosure on a shared host.
         """
         client = self.connect()
+        target = remote_path
+        if self.needs_sudo:
+            # SFTP writes as the login, which cannot write under /opt. Stage in
+            # /tmp at the final mode, then install as root.
+            target = f"/tmp/.potato-{os.urandom(6).hex()}"
         sftp = client.open_sftp()
         try:
-            with sftp.file(remote_path, "w") as handle:
+            with sftp.file(target, "w") as handle:
                 handle.chmod(mode)
                 handle.write(content)
         finally:
             sftp.close()
+        if target != remote_path:
+            self.run(f"install -m {mode:o} -o root -g root {shlex.quote(target)} "
+                     f"{shlex.quote(remote_path)} && rm -f {shlex.quote(target)}",
+                     check=True)
 
     def fetch_dir(self, remote_dir: str, local_dir: str,
                   excludes: tuple = PULL_EXCLUDES) -> List[str]:
         """Recursively download a directory. Returns the relative paths written."""
+        if self.needs_sudo:
+            return self._fetch_dir_as_archive(remote_dir, local_dir, excludes)
         client = self.connect()
         sftp = client.open_sftp()
         written: List[str] = []
@@ -290,6 +315,36 @@ class SSHSession:
         finally:
             sftp.close()
         return written
+
+    def _fetch_dir_as_archive(self, remote_dir: str, local_dir: str,
+                              excludes: tuple) -> List[str]:
+        """Pack as root, download one file, unpack locally.
+
+        A non-root login cannot be relied on to read files the container wrote
+        as uid 1000; Ubuntu's `ubuntu` user happens to be 1000, an OpenStack
+        image's login often is not.
+        """
+        probe = self.run(f"test -d {shlex.quote(remote_dir)}")
+        if not probe.ok:
+            return []
+        remote_archive = f"/tmp/potato-pull-{os.urandom(6).hex()}.tar.gz"
+        exclude_args = " ".join(f"--exclude={shlex.quote(e)}" for e in excludes)
+        self.run(f"tar -czf {remote_archive} {exclude_args} "
+                 f"-C {shlex.quote(remote_dir)} . && chmod 644 {remote_archive}",
+                 check=True, timeout=900)
+        with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as handle:
+            local_archive = handle.name
+        try:
+            client = self.connect()
+            sftp = client.open_sftp()
+            try:
+                sftp.get(remote_archive, local_archive)
+            finally:
+                sftp.close()
+            self.run(f"rm -f {remote_archive}")
+            return _safe_extract(local_archive, local_dir)
+        finally:
+            os.unlink(local_archive)
 
     def _fetch_recursive(self, sftp, remote_dir, local_dir, excludes,
                          prefix, written) -> None:
@@ -347,3 +402,27 @@ class SSHSession:
             sftp.close()
         self.run(f"rm -f {snapshot}")
         return True
+
+
+def _safe_extract(archive_path: str, local_dir: str) -> List[str]:
+    """Unpack regular files only, refusing anything that escapes local_dir."""
+    written: List[str] = []
+    root = os.path.realpath(local_dir)
+    os.makedirs(root, exist_ok=True)
+    with tarfile.open(archive_path, "r:gz") as archive:
+        for member in archive.getmembers():
+            name = posixpath.normpath(member.name)
+            if name in (".", "") or member.isdir():
+                continue
+            if not member.isfile():
+                continue
+            target = os.path.realpath(os.path.join(root, *name.split("/")))
+            if not target.startswith(root + os.sep):
+                raise ProviderError(f"Refusing to unpack {member.name}: outside "
+                                    "the destination directory.")
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            source = archive.extractfile(member)
+            with open(target, "wb") as handle:
+                handle.write(source.read())
+            written.append(name)
+    return written

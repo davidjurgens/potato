@@ -274,10 +274,13 @@ class TestLocalProviderLifecycle:
         get_provider("local").destroy(record)  # must not raise
 
 
+ALL_PROVIDERS = available_providers()
+
+
 class TestProviderContract:
     """Every registered provider must satisfy the interface's promises."""
 
-    @pytest.mark.parametrize("name", ["local", "tunnel"])
+    @pytest.mark.parametrize("name", ALL_PROVIDERS)
     def test_declares_capabilities(self, name):
         provider = get_provider(name)
         assert isinstance(provider.ephemeral_fs, bool)
@@ -285,7 +288,7 @@ class TestProviderContract:
         assert isinstance(provider.supports_pull, bool)
         assert provider.name == name
 
-    @pytest.mark.parametrize("name", ["local", "tunnel"])
+    @pytest.mark.parametrize("name", ALL_PROVIDERS)
     def test_unsupported_operations_raise_rather_than_no_op(self, name):
         """Silently doing nothing would look like a successful pull."""
         provider = get_provider(name)
@@ -296,6 +299,27 @@ class TestProviderContract:
         if not provider.supports_logs:
             with pytest.raises(ProviderError):
                 list(provider.logs(record))
+
+    @pytest.mark.parametrize("name", ALL_PROVIDERS)
+    def test_plan_needs_no_credentials_and_makes_no_request(self, name, spec, bundle,
+                                                            monkeypatch):
+        """`--dry-run` is the plan; it must work before any account exists."""
+        import requests
+
+        def refuse(*a, **k):
+            raise AssertionError(f"{name}.plan() made a request")
+        monkeypatch.setattr(requests.Session, "request", refuse)
+        monkeypatch.setattr(requests, "get", refuse)
+        assert get_provider(name, token=None).plan(spec, bundle).actions
+
+    @pytest.mark.parametrize("name", ALL_PROVIDERS)
+    def test_plan_never_contains_a_secret_value(self, name, spec, bundle):
+        generated = spec.extra["generated"]
+        plan = get_provider(name).plan(spec, bundle)
+        blob = plan.render() + json.dumps(
+            [a.request for a in plan.actions], default=str)
+        assert generated.secret_key not in blob
+        assert generated.admin_api_key not in blob
 
     def test_check_requirements_reports_missing_modules(self):
         class Fake(Provider):

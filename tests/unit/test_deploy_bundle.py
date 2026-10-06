@@ -329,7 +329,7 @@ class TestBundleDirectoryInsideProject:
 
         manifest = build_bundle(str(config_path), str(out))
         assert "config.yaml" in manifest.files
-        assert not any(".potato" in f for f in manifest.files)
+        assert not any(f.split(os.sep)[0] == ".potato" for f in manifest.files)
 
     def test_deploy_state_is_never_bundled(self, tmp_path):
         """.potato/secrets.json holds the admin key and session key."""
@@ -341,7 +341,7 @@ class TestBundleDirectoryInsideProject:
         (state / "deployments.json").write_text("{}")
 
         manifest = build_bundle(str(config_path), str(tmp_path / "out"))
-        assert not any(".potato" in f or "secrets.json" in f for f in manifest.files)
+        assert not any(f.split(os.sep)[0] == ".potato" or "secrets.json" in f for f in manifest.files)
         for relative in manifest.files:
             content = open(os.path.join(manifest.bundle_dir, relative),
                            "rb").read()

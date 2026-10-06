@@ -164,8 +164,15 @@ Use `--volume-gb` for anything longer than a pilot:
 potato deploy up myproject/config.yaml --provider digitalocean --volume-gb 25
 ```
 
-Annotations then live on the volume rather than the droplet's own disk, so
-resizing or rebuilding the droplet does not lose them.
+The task directory, with its annotations and databases, then lives on the
+volume (`/opt/potato/data/app`) rather than the droplet's own disk, so
+resizing or rebuilding the droplet does not lose them. The volume is formatted
+and mounted over SSH after it is attached, not at first boot, and a volume that
+already holds data is never reformatted.
+
+Deployments created before this change kept the task on the droplet's disk
+even with a volume, and continue to use that layout on later `up`s. To move
+one onto its volume, pull, destroy and deploy again.
 
 ## Access control
 

@@ -112,6 +112,8 @@ class CheckContext:
     provider: str
     public: bool
     ephemeral_fs: bool = False
+    #: True when `deploy up` will write a backup block into the bundle.
+    backup_configured: bool = False
 
 
 # Values that look like a credential someone pasted into a config.
@@ -324,15 +326,18 @@ def _check_session_persistence(ctx: CheckContext) -> List[Finding]:
 def _check_ephemeral_filesystem(ctx: CheckContext) -> List[Finding]:
     if not ctx.ephemeral_fs:
         return []
-    backup = ctx.config.get("huggingface_backup") or {}
-    if backup.get("enabled"):
+    if ctx.backup_configured:
+        return []
+    from potato.server_utils.backup import resolve_settings
+    if resolve_settings(ctx.config).enabled:
         return []
     return [Finding(
         "D011", "warning",
         f"The {ctx.provider} filesystem is ephemeral: annotations are lost when "
         "the host restarts or redeploys.",
-        "Provide an HF token so a backup dataset can be configured, or pass "
-        "--demo to accept throwaway data.",
+        "Pass --backup hf (with --hf-token) or --backup s3 --s3-bucket <name> "
+        "so the data is mirrored off the host and restored after a restart, "
+        "or --demo to accept throwaway data.",
     )]
 
 
@@ -401,16 +406,23 @@ def harden_config(config: Dict[str, Any], *, provider: str = "",
         output_dir = "annotation_output/"
     hardened["output_annotation_dir"] = output_dir
 
+    # The worker count is GUNICORN_WORKERS, enforced by the image's entrypoint.
+    # The server never reads server.workers, so writing it here only made every
+    # deployed server log "Unrecognized config key 'server.workers'" at boot.
     server = dict(hardened.get("server") or {})
-    server["workers"] = workers
-    hardened["server"] = server
+    server.pop("workers", None)
+    if server:
+        hardened["server"] = server
+    else:
+        hardened.pop("server", None)
 
     return hardened
 
 
 def run_preflight(config_path: str, *, provider: str = "local",
                   public: bool = True, ephemeral_fs: bool = False,
-                  workers: int = 1) -> PreflightReport:
+                  workers: int = 1,
+                  backup_configured: bool = False) -> PreflightReport:
     """Validate and assess a config for deployment. Changes nothing on disk."""
     from potato.validate_cli import validate_config_file
 
@@ -446,7 +458,8 @@ def run_preflight(config_path: str, *, provider: str = "local",
         return report
 
     ctx = CheckContext(config=config, config_path=config_path, provider=provider,
-                       public=public, ephemeral_fs=ephemeral_fs)
+                       public=public, ephemeral_fs=ephemeral_fs,
+                       backup_configured=backup_configured)
     for check_func in _CHECKS:
         try:
             report.findings.extend(check_func(ctx) or [])

@@ -31,6 +31,7 @@ Role-based guides that walk you through Potato for your specific use case:
 ## Getting Started
 
 - [Quick Start](quick-start.md) - Get running in 5 minutes
+- [Installing and Running Potato](deployment/installation.md) - Local install, or deploy to AWS, Jetstream2, Hetzner, Fly, Railway, Render, Heroku and more
 - [Installation & Usage](deployment/usage.md) - Detailed setup guide
 - [Reverse Proxy / URL Prefix](deployment/reverse-proxy.md) - Run behind a path-prefix proxy (`/app1/`)
 - [Configuration Reference](configuration/configuration.md) - Complete config options

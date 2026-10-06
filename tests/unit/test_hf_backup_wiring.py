@@ -64,8 +64,8 @@ class TestWiring:
             if isinstance(node, ast.FunctionDef) and node.name == "configure_app")
         calls = [n.func.id for n in ast.walk(configure_app)
                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
-        assert "init_backup" in calls, (
-            "configure_app must start the HuggingFace backup: it is the only "
+        assert "start_backups" in calls, (
+            "configure_app must start the backup: it is the only "
             "startup hook both `potato start` and the gunicorn create_app "
             "factory reach. Wired anywhere else, it never runs in a container.")
 

@@ -130,7 +130,8 @@ class TestBuild:
         bundled = yaml.safe_load(open(out / "config.yaml"))
         assert bundled["debug"] is False
         assert bundled["persist_sessions"] is True
-        assert bundled["server"]["workers"] == 1
+        # The worker count is GUNICORN_WORKERS; the server never reads this key.
+        assert "workers" not in (bundled.get("server") or {})
 
     def test_bundled_config_keeps_access_settings(self, project, tmp_path):
         config = yaml.safe_load(open(project))

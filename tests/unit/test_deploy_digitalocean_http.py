@@ -176,7 +176,7 @@ class TestMidCreateFailure:
                       json={"message": "boom"})
 
         monkeypatch.setattr(
-            "potato.deploy.providers.digitalocean.generate_keypair",
+            "potato.deploy.providers.vm_base.generate_keypair",
             lambda comment="": ("PRIVATE", "ssh-ed25519 AAAA key"))
 
         store = DeploymentStore(project)
@@ -200,7 +200,7 @@ class TestMidCreateFailure:
         responses.add(responses.POST, f"{API}/droplets", status=500,
                       json={"message": "no capacity"})
         monkeypatch.setattr(
-            "potato.deploy.providers.digitalocean.generate_keypair",
+            "potato.deploy.providers.vm_base.generate_keypair",
             lambda comment="": ("PRIVATE-PEM", "ssh-ed25519 AAAA key"))
 
         provider = get_provider("digitalocean", token="t", console=lambda *a: None)

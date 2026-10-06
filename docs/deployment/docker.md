@@ -23,8 +23,8 @@ same bytes every time. `potato deploy` uses it for that reason.
 
 | Tag | Contents | Size |
 |---|---|---|
-| `latest`, `2.8.0` | Core dependencies | ~840 MB |
-| `latest-all`, `2.8.0-all` | Plus AI SDKs, document formats, export and OAuth | ~1.5 GB |
+| `latest`, `<version>` | Core dependencies, plus the backup clients (`huggingface_hub`, `boto3`) | ~900 MB |
+| `latest-all`, `<version>-all` | Plus AI SDKs, document formats, export and OAuth | ~1.5 GB |
 | `sha-<short>` | A specific commit | — |
 
 Both are built for `linux/amd64` and `linux/arm64`, so they run natively on
@@ -48,6 +48,27 @@ ONNX Runtime Web is vendored in the image already.
 | `POTATO_SECRET_KEY` | generated | Flask session signing key |
 | `POTATO_ADMIN_API_KEY` | generated | Admin API authentication |
 | `POTATO_GENERATED_TEMPLATES_DIR` | auto | Where baked task templates go |
+| `POTATO_BUNDLE_URL` | unset | Download the project from this URL at start (see below) |
+| `POTATO_BUNDLE_SHA256` | unset | Refuse a downloaded project whose checksum differs |
+| `POTATO_BUNDLE_TOKEN` | unset | Sent as `Authorization: Bearer` when downloading |
+| `POTATO_RUN_AS_ROOT` | unset | Set to `1` to keep running as root when started as root |
+
+### Downloading the project at start
+
+Hosts that only run an image (Render, Fly, Railway, ECS) have nowhere to mount a
+project. With `POTATO_BUNDLE_URL` set, the entrypoint downloads a `.tar.gz` of
+the project, checks it against `POTATO_BUNDLE_SHA256`, and unpacks it into
+`/app` before starting. It writes the checksum to `/app/.potato-bundle-sha`, so
+on a persistent disk a restart does not download it again. Collected data (the
+output directory and the SQLite databases) is never replaced by a new version
+of the project. `potato deploy up` sets all three variables for you.
+
+### Started as root
+
+Some hosts start the container as root whatever the image says. Railway does
+when its volume needs it. The entrypoint then gives `/app` to the image's
+`potato` user (uid 1000) and continues as that user, so the server never runs as
+root.
 
 Set `POTATO_SECRET_KEY` on anything that outlives a single run. Without it the
 key is random per process, so every restart logs all annotators out.

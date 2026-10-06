@@ -223,13 +223,22 @@ nav:
         - Expert Annotators: deployment/expert_annotators.md
         - Longitudinal Studies: deployment/longitudinal-studies.md
         - MTurk Integration: deployment/mturk_integration.md
+        - Installing and Running: deployment/installation.md
         - Deploying a Task: deployment/one-command-deploy.md
         - Your Own Machine: deployment/deploy-local.md
         - Temporary Public URL: deployment/deploy-share.md
         - Docker: deployment/docker.md
+        - AWS: deployment/deploy-aws.md
+        - Jetstream2 and OpenStack: deployment/deploy-openstack.md
+        - Hetzner, Vultr, Linode: deployment/deploy-vps.md
         - DigitalOcean: deployment/deploy-digitalocean.md
+        - Fly.io: deployment/deploy-fly.md
+        - Railway: deployment/deploy-railway.md
         - Render: deployment/deploy-render.md
+        - Heroku: deployment/deploy-heroku.md
         - HuggingFace Spaces: deployment/deploy-huggingface.md
+        - Backups: deployment/deploy-backups.md
+        - Deploy Buttons: deployment/deploy-buttons.md
         - Getting Annotations Back: deployment/deploy-pull.md
         - Reverse Proxy: deployment/reverse-proxy.md
         - Air-Gapped Deployment: deployment/air_gap.md

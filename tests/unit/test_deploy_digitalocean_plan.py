@@ -15,6 +15,7 @@ import pytest
 import yaml
 
 from potato.deploy.providers.base import DeploySpec, get_provider
+from potato.deploy.providers.vm_base import VOLUME_APP_DIR, prepare_volume_script
 from potato.deploy.providers.digitalocean import (
     APP_DIR,
     APP_PORT,
@@ -147,15 +148,11 @@ class TestCloudInit:
             assert any(c.startswith("chown") and "1000:1000" in c and directory in c
                        for c in commands), f"{directory} is never given to uid 1000"
 
-    def test_the_chown_follows_the_volume_mount(self, spec):
+    def test_the_chown_follows_the_volume_mount(self):
         """Mounting replaces the directory, discarding an earlier chown."""
-        spec.volume_gb = 10
-        document = yaml.safe_load(build_cloud_init(
-            spec, public_host="203.0.113.9", volume_device="/dev/sda"))
-        commands = [" ".join(str(part) for part in c) if isinstance(c, list) else str(c)
-                    for c in document["runcmd"]]
-        mount = max(i for i, c in enumerate(commands) if c.startswith("mount -a"))
-        chown = min(i for i, c in enumerate(commands)
+        lines = prepare_volume_script(["/dev/sda"], VOLUME_APP_DIR).splitlines()
+        mount = max(i for i, c in enumerate(lines) if c.strip().startswith("mount "))
+        chown = min(i for i, c in enumerate(lines)
                     if c.startswith("chown") and DATA_DIR in c)
         assert chown > mount, (
             "the data directory is chowned before the volume is mounted, so the "
@@ -195,9 +192,10 @@ class TestUploadedFilesReachTheContainerUser:
         import ast
         import inspect
 
-        from potato.deploy.providers import digitalocean
+        # The SSH half of every VM provider lives in vm_base.
+        from potato.deploy.providers import vm_base
 
-        source = inspect.getsource(digitalocean)
+        source = inspect.getsource(vm_base)
         tree = ast.parse(source)
         function = next(node for node in ast.walk(tree)
                         if isinstance(node, ast.FunctionDef)
@@ -217,9 +215,9 @@ class TestUploadedFilesReachTheContainerUser:
         import ast
         import inspect
 
-        from potato.deploy.providers import digitalocean
+        from potato.deploy.providers import vm_base
 
-        source = inspect.getsource(digitalocean)
+        source = inspect.getsource(vm_base)
         tree = ast.parse(source)
         update = next(node for node in ast.walk(tree)
                       if isinstance(node, ast.FunctionDef) and node.name == "_update")
@@ -236,32 +234,48 @@ class TestUploadedFilesReachTheContainerUser:
 
 
 class TestVolumeHandling:
-    def test_volume_is_formatted_only_when_blank(self, spec):
+    """The volume is prepared over SSH after it is attached, not at first boot.
+
+    cloud-init raced the attach: when boot won, the mount failed under nofail
+    and the task was written to the root disk.
+    """
+
+    def test_volume_is_formatted_only_when_blank(self):
         """A re-attached volume holds the study's data. Reformatting is fatal."""
+        script = prepare_volume_script(["/dev/sda"], VOLUME_APP_DIR)
+        formatting = [line for line in script.splitlines() if "mkfs" in line]
+        assert formatting
+        # The guard and the format must be one command, not two steps.
+        assert all("blkid" in line and "||" in line for line in formatting)
+
+    def test_an_already_mounted_volume_is_left_alone(self):
+        script = prepare_volume_script(["/dev/sda"], VOLUME_APP_DIR)
+        assert f"if ! mountpoint -q {DATA_DIR}" in script
+
+    def test_fstab_entry_is_not_duplicated_on_reboot(self):
+        script = prepare_volume_script(["/dev/sda"], VOLUME_APP_DIR)
+        fstab = [line for line in script.splitlines() if "fstab" in line]
+        assert fstab and all("grep -q" in line for line in fstab)
+
+    def test_fstab_uses_nofail_and_the_uuid(self):
+        """A detached volume must not leave the host unbootable, and a Nitro
+        device name can change across reboots."""
+        script = prepare_volume_script(["/dev/sda"], VOLUME_APP_DIR)
+        fstab = " ".join(line for line in script.splitlines() if "fstab" in line)
+        assert "nofail" in fstab
+        assert "UUID=$uuid" in fstab
+
+    def test_waits_for_the_device_and_tries_every_candidate(self):
+        script = prepare_volume_script(["/dev/xvdf", "/dev/nvme1n1"], VOLUME_APP_DIR)
+        assert "for candidate in /dev/xvdf /dev/nvme1n1" in script
+        assert "never appeared" in script
+
+    def test_first_boot_does_not_touch_the_volume(self, spec):
         spec.volume_gb = 10
         document = yaml.safe_load(build_cloud_init(
             spec, public_host="203.0.113.9", volume_device="/dev/sda"))
         commands = " ".join(str(c) for c in document["runcmd"])
-        assert "blkid /dev/sda" in commands
-        assert "mkfs.ext4" in commands
-        # The guard and the format must be one command, not two steps.
-        formatting = [str(c) for c in document["runcmd"] if "mkfs" in str(c)]
-        assert all("blkid" in c for c in formatting)
-
-    def test_fstab_entry_is_not_duplicated_on_reboot(self, spec):
-        spec.volume_gb = 10
-        document = yaml.safe_load(build_cloud_init(
-            spec, public_host="203.0.113.9", volume_device="/dev/sda"))
-        fstab = [str(c) for c in document["runcmd"] if "fstab" in str(c)]
-        assert fstab and all("grep -q" in c for c in fstab)
-
-    def test_fstab_uses_nofail(self, spec):
-        """A detached volume must not leave the droplet unbootable."""
-        spec.volume_gb = 10
-        document = yaml.safe_load(build_cloud_init(
-            spec, public_host="203.0.113.9", volume_device="/dev/sda"))
-        fstab = " ".join(str(c) for c in document["runcmd"] if "fstab" in str(c))
-        assert "nofail" in fstab
+        assert "mkfs" not in commands and "fstab" not in commands
 
     def test_certificates_go_on_the_volume_when_there_is_one(self, spec):
         """An IP certificate lives ~6 days; re-issuing on every restart would

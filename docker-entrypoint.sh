@@ -21,6 +21,17 @@ if [ "$#" -gt 0 ]; then
     exec "$@"
 fi
 
+# Some hosts start the container as root whatever the image says: Railway does
+# when RAILWAY_RUN_UID=0, which it needs because it mounts volumes root-owned.
+# Hand the task directory to the image's user and continue as that user, so
+# the server never runs as root and its files stay writable after a restart.
+if [ "$(id -u)" = "0" ] && [ "${POTATO_RUN_AS_ROOT}" != "1" ] && \
+   id potato >/dev/null 2>&1 && command -v setpriv >/dev/null 2>&1; then
+    chown -R potato:potato . 2>/dev/null || true
+    export HOME=/home/potato
+    exec setpriv --reuid=potato --regid=potato --init-groups /bin/sh "$0"
+fi
+
 # Potato keeps its item pool, assignment queue and per-user annotation state in
 # memory, per process. A second worker gets its own copy of all three: it hands
 # out instances the first worker already assigned, and because user_state.json is
@@ -32,6 +43,70 @@ if [ "${WORKERS}" != "1" ] && [ "${POTATO_ALLOW_MULTIWORKER}" != "1" ]; then
     echo "       lost annotations. Use 1 worker and raise GUNICORN_THREADS instead." >&2
     echo "       Set POTATO_ALLOW_MULTIWORKER=1 to override (you will lose data)." >&2
     exit 1
+fi
+
+# Image-only hosts (Render, Fly, Railway, ECS) have no SSH and nothing to upload
+# to, so the project arrives as a tarball fetched here. The sha marker makes a
+# restart on a persistent disk skip the download, and the bundle's .potato-keep
+# list names the entries holding collected data, which an update never replaces.
+if [ -n "${POTATO_BUNDLE_URL}" ]; then
+    marker=".potato-bundle-sha"
+    if [ -n "${POTATO_BUNDLE_SHA256}" ] && [ -f "${marker}" ] && \
+       [ "$(cat "${marker}")" = "${POTATO_BUNDLE_SHA256}" ]; then
+        echo "Project bundle ${POTATO_BUNDLE_SHA256} already in place"
+    else
+        echo "Fetching project bundle"
+        staging=".potato-staging"
+        rm -rf "${staging}"
+        mkdir -p "${staging}"
+        if [ -n "${POTATO_BUNDLE_TOKEN}" ]; then
+            curl -fsSL --retry 3 -H "Authorization: Bearer ${POTATO_BUNDLE_TOKEN}" \
+                -o "${staging}.tar.gz" "${POTATO_BUNDLE_URL}" || fetch_failed=1
+        else
+            curl -fsSL --retry 3 -o "${staging}.tar.gz" "${POTATO_BUNDLE_URL}" \
+                || fetch_failed=1
+        fi
+        if [ -n "${fetch_failed}" ]; then
+            echo "ERROR: could not download the project bundle from POTATO_BUNDLE_URL." >&2
+            echo "       A presigned URL may have expired; run 'potato deploy up' again." >&2
+            exit 1
+        fi
+        if [ -n "${POTATO_BUNDLE_SHA256}" ]; then
+            actual=$(sha256sum "${staging}.tar.gz" | cut -d' ' -f1)
+            if [ "${actual}" != "${POTATO_BUNDLE_SHA256}" ]; then
+                echo "ERROR: project bundle checksum mismatch." >&2
+                echo "       expected ${POTATO_BUNDLE_SHA256}" >&2
+                echo "       got      ${actual}" >&2
+                rm -rf "${staging}" "${staging}.tar.gz"
+                exit 1
+            fi
+        fi
+        tar -xzf "${staging}.tar.gz" -C "${staging}"
+        rm -f "${staging}.tar.gz"
+        keep=""
+        if [ -f "${staging}/.potato-keep" ]; then
+            keep=$(cat "${staging}/.potato-keep")
+        fi
+        for entry in "${staging}"/* "${staging}"/.[!.]*; do
+            [ -e "${entry}" ] || continue
+            name=$(basename "${entry}")
+            skip=""
+            for kept in ${keep}; do
+                if [ "${name}" = "${kept}" ] && [ -e "${name}" ]; then
+                    skip=1
+                fi
+            done
+            if [ -n "${skip}" ]; then
+                continue
+            fi
+            rm -rf "./${name}"
+            mv "${entry}" "./${name}"
+        done
+        rm -rf "${staging}"
+        if [ -n "${POTATO_BUNDLE_SHA256}" ]; then
+            echo "${POTATO_BUNDLE_SHA256}" > "${marker}"
+        fi
+    fi
 fi
 
 if [ ! -f "${CONFIG_FILE}" ]; then

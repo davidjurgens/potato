@@ -188,9 +188,17 @@ class TestHardenConfig:
                                   "output_annotation_dir": "custom_out/"})
         assert hardened["output_annotation_dir"] == "custom_out/"
 
-    def test_pins_workers_to_one(self):
+    def test_drops_the_unread_workers_key(self):
+        """The server ignores server.workers and warned about it on every boot;
+        the worker count is GUNICORN_WORKERS, guarded by the entrypoint."""
         hardened = harden_config({"task_dir": ".", "server": {"workers": 8}})
-        assert hardened["server"]["workers"] == 1
+        assert "workers" not in hardened.get("server", {})
+
+    def test_the_bundled_config_has_no_unknown_server_keys(self):
+        from potato.server_utils.config_module import KNOWN_CONFIG_KEYS
+
+        hardened = harden_config({"task_dir": ".", "server": {"port": 1}})
+        assert set(hardened["server"]) <= KNOWN_CONFIG_KEYS["server"]
 
     def test_preserves_other_server_settings(self):
         hardened = harden_config({"task_dir": ".",

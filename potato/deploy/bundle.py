@@ -45,6 +45,10 @@ SOURCE_EXCLUDES: List[str] = [
     "*.sqlite-shm",
     "*.sqlite-wal",
     "admin_api_key.txt",
+    # Backup staging (database snapshots) and fetched-bundle bookkeeping.
+    ".potato-backup",
+    ".potato-bundle-sha",
+    ".potato-staging",
     "__pycache__",
     "*.pyc",
     "*.log",
@@ -64,6 +68,9 @@ LFS_PATTERNS: List[str] = [
 
 # Where out-of-tree files land inside the bundle.
 BUNDLED_DIRNAME = "_bundled"
+
+#: Written into every bundle: the entries docker-entrypoint.sh must not replace.
+KEEP_LIST_NAME = ".potato-keep"
 
 
 @dataclass
@@ -430,6 +437,12 @@ def build_bundle(
     keep = os.path.join(annotation_output, ".gitkeep")
     if not os.path.exists(keep):
         open(keep, "w").close()
+
+    # The container entrypoint unpacks a fetched bundle over a directory that
+    # may already hold collected data. It is shell, so it cannot evaluate the
+    # config; this list tells it which top-level entries never to replace.
+    with open(os.path.join(out_dir, KEEP_LIST_NAME), "w", encoding="utf-8") as handle:
+        handle.write("\n".join(collected_data_names(config)) + "\n")
 
     manifest.files = _tree_files(out_dir)
     manifest.total_bytes = _total_size(out_dir, manifest.files)
