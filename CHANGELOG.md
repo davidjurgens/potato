@@ -2,6 +2,47 @@
 
 All notable changes to the Potato annotation platform are documented in this file.
 
+## [2.10.1] - Deploy Dry Runs and Price Fixes
+
+Fixes in `potato deploy` found after 2.10.0: dry runs that passed for deploys
+`up` then refused, a wrong Jetstream2 flavor in the plan, `--demo` offered on
+hosts where it cannot work, and two wrong prices.
+
+```bash
+pip install --upgrade potato-annotation
+```
+
+### Bug fixes
+
+- **A dry run passed for a deploy that `up` refused.** Heroku or ECS without
+  `--backup`, Render or Railway with no backup storage to upload the project
+  to, and Fly with a project too large to send inline and no backup storage,
+  all printed a clean plan and exited 0, then `up` failed. The plan and `up`
+  now run the same check: both print `REFUSED: <reason>` and exit 2.
+- **`--demo` was offered where it cannot work.** Render, Railway and ECS
+  Express upload your project to the backup's storage, so they need
+  `--backup hf` or `--backup s3` even for a disposable study. Their errors say
+  so, and the D011 preflight warning offers `--demo` only for Heroku and
+  HuggingFace.
+- **`--cloud jetstream2` planned the wrong flavor.** The dry run showed
+  `m1.small` while `up` created an `m3.small`. The Jetstream2 service-unit
+  note no longer appears for other OpenStack clouds.
+- **Two prices were wrong.** `potato deploy providers` and the docs said about
+  $16/month for `aws-ec2` and about $7 for `fly`; the plans print $18.31 (the
+  30 GB root disk adds $2.40) and $5.85. Both now say about $18 and about $6.
+- **`backup: {enabled: false}` did not turn backup off** when the config still
+  had a `huggingface_backup:` block. The new block wins.
+- `potato deploy button` errors read "A aws button…" and mentioned Lightsail
+  for every target. Each target has its own message.
+
+### Documentation
+
+- [Render](docs/deployment/deploy-render.md): the free-tier section suggested
+  `--plan starter --volume-gb 1` without `--backup`, which Render deployments
+  refuse. Both options now include a backup.
+- [Backups](docs/deployment/deploy-backups.md) said every ephemeral host restarts
+  daily. Only Heroku does; the page now gives when each host loses its disk.
+
 ## [2.10.0] - Eight Hosting Platforms, Backups and Text as Image
 
 `potato deploy` gains eight hosting platforms: AWS (three ways), Heroku, Fly,
