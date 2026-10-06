@@ -394,6 +394,10 @@ KNOWN_CONFIG_KEYS = {
                    "stems", "fillers", "require_spoken_label", "language"},
     # Pocket Mode: mobile-first annotation surface (PWA) at /pocket.
     "pocket": {"enabled", "batch_size", "auto_redirect"},
+    # text_as_image: the item text is rendered to a PNG server-side, so an
+    # annotator cannot copy it into a chatbot. Accepts `true` as well as this
+    # mapping. See potato/server_utils/text_to_image.py.
+    "text_as_image": {"enabled", "font_size", "max_width"},
     # Keystroke logging: content-blind typing dynamics on free-text fields, and
     # the composed/transcribed/pasted detection built on them. Validated in
     # detail by validate_keystroke_logging_config().
@@ -1665,6 +1669,132 @@ DEFAULT_DISCLOSURE_TEXT = (
 )
 
 
+def validate_text_as_image_config(config_data: Dict[str, Any]) -> None:
+    """Validate the ``text_as_image`` key when present.
+
+    Accepts ``true`` and the mapping form. Warns about the two things the
+    feature takes away, because neither failure is obvious on screen: a span
+    scheme silently loses the offsets it anchors to, and a screen reader gets
+    nothing.
+    """
+    raw = config_data.get("text_as_image")
+    if raw is None or raw is False:
+        return
+
+    from potato.server_utils import text_to_image
+
+    if not isinstance(raw, (bool, dict)):
+        raise ConfigValidationError(
+            "text_as_image must be true, false, or a mapping"
+        )
+
+    errors = []
+    if isinstance(raw, dict):
+        if "enabled" in raw and not isinstance(raw["enabled"], bool):
+            errors.append("text_as_image.enabled must be a boolean")
+        for key in ("font_size", "max_width"):
+            if key not in raw:
+                continue
+            value = raw[key]
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                errors.append(f"text_as_image.{key} must be a positive integer")
+    if errors:
+        raise ConfigValidationError(
+            "Invalid text_as_image configuration:\n  - "
+            + "\n  - ".join(errors)
+        )
+
+    if text_to_image.settings(config_data) is None:
+        return
+
+    schemes = config_data.get("annotation_schemes") or []
+
+    # Applicability first. A media or instance_display project renders the item
+    # itself, so the feature never runs there and nothing can conflict with it.
+    # Checking conflicts before this would reject, for example, every image
+    # project: those set text_key to image_url, and their scheme reads
+    # source_field: image_url, which the check below reads as a collision.
+    if text_to_image.applies(config_data, schemes) is None:
+        # One exception to "nothing can conflict": an audio or video scheme
+        # beside a text_key that is not its media field. The page shows that
+        # text in a box next to the player, and the feature leaves it alone, so
+        # the setting would look on and hide nothing.
+        exposed = text_to_image.media_showing_text(config_data, schemes)
+        if exposed:
+            raise ConfigValidationError(
+                "text_as_image is incompatible with these annotation schemes: "
+                + ", ".join(exposed)
+                + ". An audio_annotation, video_annotation or tiered_annotation "
+                "scheme shows the item text in a box beside the player, and "
+                "text_as_image does not replace that box, so annotators could "
+                "still copy the text. Point item_properties.text_key at the "
+                "media field, or turn off text_as_image."
+            )
+        logger.warning(
+            "text_as_image is on, but this project uses instance_display or a "
+            "media annotation scheme, which render the item themselves. The "
+            "setting has no effect here."
+        )
+        return
+
+    # Pocket Mode is a second annotation surface with its own item feed:
+    # /pocket/api/batch sends the text of every item in the batch as plain
+    # JSON, and the Pocket cards show it as words. The picture never reaches
+    # that surface, so the combination would look protected and not be.
+    pocket = config_data.get("pocket") or {}
+    if isinstance(pocket, dict) and pocket.get("enabled"):
+        raise ConfigValidationError(
+            "text_as_image is incompatible with pocket.enabled. Pocket Mode "
+            "shows each item's text as words and returns it from "
+            "/pocket/api/batch, so annotators on Pocket could still copy it. "
+            "Turn off one of the two."
+        )
+
+    # Rooms is the same case: /rooms/api/disagreements and the room state
+    # endpoint return the item text, and the room page shows it as words.
+    rooms = config_data.get("rooms") or {}
+    if isinstance(rooms, dict) and rooms.get("enabled"):
+        raise ConfigValidationError(
+            "text_as_image is incompatible with rooms.enabled. Rooms show each "
+            "item's text as words and return it from /rooms/api/disagreements "
+            "and /rooms/api/<room_id>/state, so annotators in a room could "
+            "still copy it. Turn off one of the two."
+        )
+
+    # The conflicts below are errors and not warnings, for the same reason as
+    # validate_live_ingestion_assignment_compat: each one looks like it worked.
+    # The annotator sees a picture, the scheme finds nothing, and the study
+    # collects empty annotations. A log line is too easy to miss for a failure
+    # that quiet.
+    conflicting = text_to_image.span_schemes(schemes)
+    if conflicting:
+        raise ConfigValidationError(
+            "text_as_image is incompatible with these annotation schemes: "
+            + ", ".join(conflicting)
+            + ". Each one anchors its annotations to character offsets in the "
+            "instance text, and text_as_image removes that text from the page, "
+            "so an annotator would have nothing to select. Turn off "
+            "text_as_image, or use a scheme that does not select text."
+        )
+
+    text_key = (config_data.get("item_properties") or {}).get("text_key", "text")
+    reading_removed = text_to_image.schemes_reading_removed_fields(schemes, text_key)
+    if reading_removed:
+        raise ConfigValidationError(
+            "text_as_image is incompatible with these annotation schemes: "
+            + ", ".join(reading_removed)
+            + ". Each one reads a data field that text_as_image removes from "
+            "the page, so the scheme would render empty. Point the scheme at a "
+            "different field, or turn off text_as_image."
+        )
+
+    logger.warning(
+        "text_as_image is on. Annotators see a picture of each item, so a "
+        "screen reader gets nothing from it. Leave the setting off for a "
+        "study that must stay accessible."
+    )
+
+
 def validate_keystroke_logging_config(config_data: Dict[str, Any]) -> None:
     """Validate the ``keystroke_logging`` block when present.
 
@@ -2232,6 +2362,9 @@ def validate_yaml_structure(config_data: Dict[str, Any], project_dir: str = None
 
     # Validate keystroke logging / typing dynamics block if present
     validate_keystroke_logging_config(config_data)
+
+    # Validate text_as_image (instance text rendered to a PNG) if present
+    validate_text_as_image_config(config_data)
 
     # Validate annotation telemetry (drawing dynamics) block if present
     validate_annotation_telemetry_config(config_data)
