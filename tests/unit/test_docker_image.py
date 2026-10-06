@@ -14,6 +14,7 @@ import os
 import re
 import stat
 import subprocess
+from pathlib import Path
 
 import pytest
 import yaml
@@ -515,20 +516,24 @@ class TestPublishWorkflow:
         assert DEFAULT_IMAGE.endswith(":latest")
 
 
+# Read by path, not imported: once create_app() has loaded the module as
+# `routes`, importing it again as `potato.routes` re-runs its @app.route
+# decorators and Flask refuses the duplicate endpoints.
+_ROUTES_SOURCE = Path(__file__).resolve().parents[2] / "potato" / "routes.py"
+
+
 class TestHealthEndpoint:
     """The probe the container, the load balancer and `deploy up` all poll."""
 
     def test_route_is_registered_unauthenticated(self):
-        import potato.routes as routes
-        source = open(routes.__file__).read()
+        source = _ROUTES_SOURCE.read_text()
         assert 'app.add_url_rule("/health", "health", health' in source, (
             "the /health route must be registered in configure_routes; a "
             "module-level @app.route alone 404s on the live server")
 
     def test_reports_nothing_beyond_liveness(self):
         """It is reachable without a session, so its body is public."""
-        import potato.routes as routes
-        source = open(routes.__file__).read()
+        source = _ROUTES_SOURCE.read_text()
         start = source.index('def health():')
         body = source[start:source.index('@app.route("/admin/health"', start)]
         for leak in ("annotation_task_name", "config.get", "task_name",
