@@ -36,6 +36,14 @@ from potato.deploy.backup_options import BackupOptions, apply_to_config
 from potato.deploy.preflight import harden_config
 
 TARGETS = ("heroku", "render", "aws", "railway")
+
+#: Why each target's button refuses to run without a backup.
+_NEEDS_BACKUP = {
+    "heroku": "A Heroku button deploys onto a disk that is wiped at least daily",
+    "render": "A Render button deploys onto a disk that does not survive a restart",
+    "aws": ("An AWS Launch Stack button creates an instance nobody pulls the "
+            "annotations from"),
+}
 DEPLOY_CONFIG = "potato.deploy.yaml"
 DOCKERFILE = "Dockerfile.potato"
 DEFAULT_IMAGE = "ghcr.io/davidjurgens/potato:latest"
@@ -115,11 +123,10 @@ def generate(config_path: str, target: str, backup: BackupOptions, *, name: str,
 
     if target == "railway":
         return _railway(name)
-    if target in ("heroku", "render", "aws") and not backup.enabled:
+    if target in _NEEDS_BACKUP and not backup.enabled:
         raise ButtonError(
-            f"A {target} button deploys onto a disk that does not survive a "
-            "restart (or, on Lightsail, has no one to pull it), so it needs a "
-            "backup: pass --backup hf or --backup s3 --s3-bucket <bucket>.")
+            f"{_NEEDS_BACKUP[target]}, so the button needs a backup: pass "
+            "--backup hf or --backup s3 --s3-bucket <bucket>.")
 
     result = ButtonResult()
     result.files[_join(project_rel, DEPLOY_CONFIG)] = deploy_config(config_path, backup)

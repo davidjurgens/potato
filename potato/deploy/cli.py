@@ -374,6 +374,13 @@ def cmd_up(args) -> int:
     _echo(plan.render())
     _echo("")
 
+    # The same check create() makes first, so a dry run that `up` would refuse
+    # fails too instead of printing a clean plan.
+    refused = provider.refusal(spec, manifest)
+    if refused:
+        _echo(f"REFUSED: {refused}")
+        return EXIT_BLOCKED
+
     if args.dry_run:
         _echo("Dry run: nothing was created.")
         if token:

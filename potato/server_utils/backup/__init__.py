@@ -78,7 +78,11 @@ class BackupSettings:
 def resolve_settings(config: Dict[str, Any]) -> BackupSettings:
     """Read ``backup:``, falling back to the legacy ``huggingface_backup:``."""
     block = config.get("backup")
-    if isinstance(block, dict) and block.get("enabled", True):
+    if isinstance(block, dict) and not block.get("enabled", True):
+        # An explicit `backup: {enabled: false}` turns backup off; it must not
+        # fall through to a legacy huggingface_backup block left in the file.
+        return BackupSettings()
+    if isinstance(block, dict):
         sinks = [dict(s) for s in (block.get("sinks") or []) if isinstance(s, dict)]
         return BackupSettings(
             sinks=sinks,

@@ -136,6 +136,19 @@ class TestJetstream2:
     def test_plan_does_not_warn_about_ip_certificates(self, provider, spec):
         assert not any("IP address" in w for w in provider.plan(spec, FakeBundle()).warnings)
 
+    def test_the_plan_shows_the_flavor_up_would_create(self, provider, spec):
+        """--cloud reached default_size only inside create(), so the dry run
+        printed the generic m1.small while `up` created an m3.small."""
+        descriptions = [a.description for a in provider.plan(spec, FakeBundle()).actions]
+        assert any("m3.small" in d for d in descriptions), descriptions
+        assert not any("m1.small" in d for d in descriptions), descriptions
+
+    def test_another_cloud_gets_no_jetstream2_su_note(self, provider, spec):
+        spec.extra["cloud"] = "campus"
+        plan = provider.plan(spec, FakeBundle())
+        assert not any("SU" in w for w in plan.warnings)
+        assert any("m1.small" in a.description for a in plan.actions)
+
     def test_plan_counts_allocation_units_not_dollars(self, provider, spec):
         plan = provider.plan(spec, FakeBundle())
         assert plan.estimated_cost_usd_month is None

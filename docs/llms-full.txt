@@ -52988,7 +52988,7 @@ option.
 | A study, and you have an AWS account | [`--provider aws`](deploy-aws.md) (Lightsail) | $12/month |
 | A study, US academic with no budget | [`--provider openstack --cloud jetstream2`](deploy-openstack.md) | free with an ACCESS allocation |
 | A study, as cheaply as possible | [`--provider hetzner`](deploy-vps.md) | about €6/month |
-| A study, and you would rather not run a server | [`--provider fly`](deploy-fly.md) or [`--provider railway`](deploy-railway.md) | $7–20/month |
+| A study, and you would rather not run a server | [`--provider fly`](deploy-fly.md) or [`--provider railway`](deploy-railway.md) | $6–20/month |
 | Annotators deploy their own copy from a link | [A deploy button](deploy-buttons.md) | depends on the host |
 | Your institution gives you a server | [Docker](docker.md) and a [reverse proxy](reverse-proxy.md) | — |
 
@@ -53131,13 +53131,13 @@ full:
 | [`local`](deploy-local.md) | free | yes | seeing what will deploy, before it costs anything |
 | [`potato share`](deploy-share.md) | free | — | a pilot, a lab meeting, a link for twenty minutes |
 | [`aws`](deploy-aws.md) (Lightsail) | $12/mo | yes | **a study on AWS**: flat price, `lightsail:*` permissions |
-| [`aws-ec2`](deploy-aws.md#ec2-provider-aws-ec2) | ~$16/mo | yes | AWS accounts that require EC2 |
+| [`aws-ec2`](deploy-aws.md#ec2-provider-aws-ec2) | ~$18/mo | yes | AWS accounts that require EC2 |
 | [`aws-ecs`](deploy-aws.md#ecs-express-mode-provider-aws-ecs) | ~$45–70/mo | no, `--backup` | AWS with no server to manage |
 | [`openstack`](deploy-openstack.md) | free with an allocation | yes | Jetstream2 (US academics), campus clouds |
 | [`hetzner`](deploy-vps.md) | ~€6/mo | yes | the cheapest durable VM |
 | [`vultr`](deploy-vps.md), [`linode`](deploy-vps.md) | $10–12/mo | yes | US-billed VMs |
 | [`digitalocean`](deploy-digitalocean.md) | from $18/mo | yes | a VM with the longest history in Potato |
-| [`fly`](deploy-fly.md) | ~$7/mo | yes (volume) | a managed container with a volume |
+| [`fly`](deploy-fly.md) | ~$6/mo | yes (volume) | a managed container with a volume |
 | [`railway`](deploy-railway.md) | ~$10–20/mo, usage | yes (volume) | a managed container with a volume |
 | [`render`](deploy-render.md) | free, or $7/mo | paid only; `--backup` | a study with no budget |
 | [`heroku`](deploy-heroku.md) | from $7/mo | no, `--backup` | labs that already use Heroku |
@@ -53827,7 +53827,7 @@ Potato can run on AWS in three ways. For most studies, use the first one.
 | | `--provider aws` (Lightsail) | `--provider aws-ec2` | `--provider aws-ecs` (Express Mode) |
 |---|---|---|---|
 | What you get | one VM | one VM | a managed container |
-| Cost | **$12/month**, flat | about $16/month | about $45–70/month |
+| Cost | **$12/month**, flat | about $18/month | about $45–70/month |
 | Disk | survives restarts | survives restarts | wiped when the task is replaced; needs `--backup` |
 | HTTPS | Let's Encrypt certificate for the IP | Let's Encrypt certificate for the IP | AWS certificate on `*.ecs.<region>.on.aws` |
 | Permissions | `lightsail:*` | EC2, plus `ssm:GetParameter` | ECS, IAM, SSM, CloudWatch Logs |
@@ -54445,8 +54445,9 @@ potato deploy up myproject/config.yaml --provider fly
 
 This creates a Fly app with one Machine (shared CPU, 1 GB) and a 1 GB volume
 holding the task. It is served at `https://<app>.fly.dev` using a shared IPv4
-address, which is free. The cost is about $7 a month. Fly has no free tier, and
-a new organization needs a card on file.
+address, which is free. The cost is about $6 a month: $5.70 for the 1 GB Machine
+and $0.15 for the 1 GB volume. Fly has no free tier, and a new organization
+needs a card on file.
 
 A Fly volume belongs to one Machine, which is what Potato needs: all the
 annotators' state is in one process, and there is never a second copy that
@@ -54590,26 +54591,28 @@ A free Render instance has **no disk** and **stops after 15 minutes idle**. When
 it stops, everything written to its filesystem is gone: annotations, user state,
 the project database. Fifteen minutes after your last annotator closes the tab.
 
-So `potato deploy` will not create a free service unless you have said what
-happens to the data. Three ways to answer:
+`potato deploy` requires a backup on every Render deployment, so the data is
+never only on that filesystem. What changes with the plan is whether the backup
+is the only copy:
 
 ```bash
-# 1. Back up to a HuggingFace Dataset, and restore from it on every start
+# Free: the backup is the only copy; it is restored on every start
 potato deploy up config.yaml --provider render --backup hf --hf-token hf_...
 
-# 2. Pay for a disk
-potato deploy up config.yaml --provider render --plan starter --volume-gb 1
-
-# 3. Say the data is disposable (the project still goes to the backup storage)
-potato deploy up config.yaml --provider render --demo --backup hf --hf-token hf_...
+# Paid, with a disk: the disk keeps the data and the backup is a second copy
+potato deploy up config.yaml --provider render --plan starter --volume-gb 1 \
+    --backup hf --hf-token hf_...
 ```
+
+`--demo` does not replace the backup on Render: the project itself is uploaded
+to the backup's storage, so a deployment without one has nothing to start.
 
 With a backup, an instance that stopped while idle restores the annotations
 when it starts again, so annotators continue where they left off.
 
-The backup is the usual answer for a pilot: it costs nothing, needs only a
+The free plan is the usual choice for a pilot: it costs nothing, needs only a
 HuggingFace account, and the annotations end up somewhere you can share and
-version. A paid instance is the answer for a study that will run for weeks.
+version. A paid instance with a disk suits a study that will run for weeks.
 
 ## Cost
 
@@ -54927,9 +54930,11 @@ URL: https://potatoannotator.readthedocs.io/en/latest/deployment/deploy-backups/
 
 # Backups
 
-On some hosts, the disk does not outlast the process. Heroku dynos, Render's
-free tier, ECS Express tasks and HuggingFace Spaces all start from an empty
-filesystem after a restart, and they restart at least once a day. The backup
+On some hosts, the disk does not outlast the process, and each of them starts
+from an empty filesystem at a different point. Heroku restarts every dyno at
+least once a day. Render's free tier stops after 15 minutes idle. An ECS
+Express task loses its disk whenever it is replaced, for example by a redeploy.
+A HuggingFace Space without persistent storage loses it on every restart. The backup
 copies everything Potato has collected to storage you own while the study runs,
 and copies it back when the server starts.
 

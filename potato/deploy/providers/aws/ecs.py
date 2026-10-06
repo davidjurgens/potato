@@ -164,8 +164,6 @@ class ECSExpressProvider(Provider):
                    STOP_THEN_START),
             Action("wait.http", "poll the service URL until it answers"),
         ]
-        if not spec.extra.get("backup_kinds") and not spec.demo:
-            plan.warnings.append(_NO_BACKUP)
         plan.warnings.append(
             "ECS Express is the most expensive target here. If you do not need a "
             "managed service, --provider aws (Lightsail) is $12/mo.")
@@ -180,19 +178,26 @@ class ECSExpressProvider(Provider):
 
     # -- create --------------------------------------------------------
 
+    def _bundle_store(self, spec: DeploySpec):
+        from potato.deploy.bundle_store import store_for
+
+        options = spec.extra.get("backup")
+        return store_for(options) if options is not None else None
+
+    def refusal(self, spec: DeploySpec, bundle) -> Optional[str]:
+        if not spec.extra.get("backup_kinds") or self._bundle_store(spec) is None:
+            return _NO_BACKUP
+        return None
+
     def create(self, spec: DeploySpec, bundle, existing, store) -> DeploymentRecord:
-        if not spec.extra.get("backup_kinds") and not spec.demo:
-            raise ProviderError(_NO_BACKUP)
+        refused = self.refusal(spec, bundle)
+        if refused:
+            raise ProviderError(refused)
         if bundle is None:
             raise ProviderError("No bundle was built; nothing to deploy.")
-        from potato.deploy.bundle_store import publish, store_for
+        from potato.deploy.bundle_store import publish
 
-        bundle_store = store_for(spec.extra.get("backup")) \
-            if spec.extra.get("backup") is not None else None
-        if bundle_store is None:
-            raise ProviderError(
-                "ECS runs the published image and fetches your project into it, "
-                "so it needs the backup's storage: --backup hf or --backup s3.")
+        bundle_store = self._bundle_store(spec)
 
         self.profile = spec.extra.get("aws_profile") or self.profile
         region = spec.region or DEFAULT_REGION
@@ -428,11 +433,11 @@ class ECSExpressProvider(Provider):
 _NO_BACKUP = (
     "Refusing to deploy to ECS Express with nowhere to keep the annotations. The "
     "Express API offers no volume, so the task's disk is gone whenever the task "
-    "is replaced.\n"
+    "is replaced. The backup's storage is also where your project is uploaded "
+    "for the task to fetch, so --demo is not an option here.\n"
     "Pick one:\n"
     "  --backup hf --hf-token <token>   back up to a HuggingFace dataset\n"
-    "  --backup s3 --s3-bucket <name>   back up to an S3 bucket\n"
-    "  --demo                           the annotations are disposable")
+    "  --backup s3 --s3-bucket <name>   back up to an S3 bucket")
 
 
 def _healthy(url: str, timeout: int) -> bool:

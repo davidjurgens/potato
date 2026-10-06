@@ -1,8 +1,10 @@
 # Backups
 
-On some hosts, the disk does not outlast the process. Heroku dynos, Render's
-free tier, ECS Express tasks and HuggingFace Spaces all start from an empty
-filesystem after a restart, and they restart at least once a day. The backup
+On some hosts, the disk does not outlast the process, and each of them starts
+from an empty filesystem at a different point. Heroku restarts every dyno at
+least once a day. Render's free tier stops after 15 minutes idle. An ECS
+Express task loses its disk whenever it is replaced, for example by a redeploy.
+A HuggingFace Space without persistent storage loses it on every restart. The backup
 copies everything Potato has collected to storage you own while the study runs,
 and copies it back when the server starts.
 

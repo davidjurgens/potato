@@ -626,3 +626,20 @@ class TestLocalIsActuallyLocal:
     def test_the_provider_still_declares_itself_non_public(self):
         """If this ever flips to True, the binding above has to change with it."""
         assert get_provider("local").public is False
+
+
+class TestSummaryPricesMatchThePlan:
+    """`potato deploy providers` and the plan disagreed: EC2 "about $16" against
+    a plan of $18.31 (the root disk), Fly "about $7" against $5.85."""
+
+    @pytest.mark.parametrize("name", ["aws-ec2", "fly"])
+    def test_the_summary_rounds_the_default_estimate(self, name, tmp_path):
+        import re
+        config = tmp_path / "config.yaml"
+        config.write_text("task_dir: .\n")
+        provider = get_provider(name, console=lambda *a: None)
+        spec = DeploySpec(name="pilot", config_path=str(config),
+                          extra={"config_rel": "config.yaml"})
+        estimate = provider.plan(spec, None).estimated_cost_usd_month
+        claimed = int(re.search(r"\$(\d+)/mo", provider.summary).group(1))
+        assert claimed == round(estimate), (provider.summary, estimate)

@@ -130,19 +130,26 @@ class TestPlan:
         warnings = provider.plan(spec, FakeBundle()).warnings
         assert any(str(FREE_IDLE_MINUTES) in w for w in warnings)
 
-    def test_warns_when_nothing_carries_the_data_off(self, provider, spec):
-        assert any("carry the data off" in w
-                   for w in provider.plan(spec, FakeBundle()).warnings)
+    def test_refuses_without_a_backup(self, provider, spec):
+        assert "fetches your project" in provider.refusal(spec, FakeBundle())
 
-    def test_backup_silences_the_durability_warning(self, provider, spec):
+    def test_the_free_plan_note_only_on_the_free_plan(self, provider, spec):
+        assert "only copy" in provider.refusal(spec, FakeBundle())
+        spec.extra["plan"] = "starter"
+        spec.volume_gb = 1
+        message = provider.refusal(spec, FakeBundle())
+        assert "fetches your project" in message and "only copy" not in message
+
+    def test_a_backup_clears_the_refusal(self, provider, spec):
         with_hf_backup(spec)
-        assert not any("carry the data off" in w
-                       for w in provider.plan(spec, FakeBundle()).warnings)
+        assert provider.refusal(spec, FakeBundle()) is None
 
-    def test_demo_silences_it_too(self, provider, spec):
+    def test_demo_alone_is_still_refused(self, provider, spec):
+        """The project travels through the backup's storage, so --demo
+        cannot stand in for it; the message must not offer it."""
         spec.demo = True
-        assert not any("carry the data off" in w
-                       for w in provider.plan(spec, FakeBundle()).warnings)
+        message = provider.refusal(spec, FakeBundle())
+        assert message and "not an option" in message
 
     def test_warns_that_free_instances_take_no_disk(self, provider, spec):
         spec.volume_gb = 5
@@ -156,9 +163,9 @@ class TestPlan:
         publish = next(a for a in plan.actions if a.kind == "bundle.publish")
         assert "alice/pilot-annotations" in publish.description
 
-    def test_plan_warns_when_there_is_nowhere_to_fetch_from(self, provider, spec):
-        assert any("fetches your project" in w
-                   for w in provider.plan(spec, FakeBundle()).warnings)
+    def test_plan_says_where_the_project_would_go(self, provider, spec):
+        assert any("REFUSED" in a.description
+                   for a in provider.plan(spec, FakeBundle()).actions)
 
     def test_plan_warns_a_presigned_url_expires_without_a_disk(self, provider,
                                                                spec):
@@ -195,18 +202,18 @@ class TestFreeTierRefusal:
 
     @responses.activate
     def test_refuses_a_free_service_with_no_backup(self, provider, spec, project):
-        with pytest.raises(ProviderError, match="no way to keep the annotations"):
+        with pytest.raises(ProviderError, match="fetches your project"):
             provider.create(spec, FakeBundle(), None, DeploymentStore(project))
         assert not responses.calls, "it must refuse before calling the API"
 
     @responses.activate
-    def test_the_refusal_names_all_three_ways_out(self, provider, spec, project):
+    def test_the_refusal_names_both_ways_out(self, provider, spec, project):
         with pytest.raises(ProviderError) as excinfo:
             provider.create(spec, FakeBundle(), None, DeploymentStore(project))
         message = str(excinfo.value)
         assert "--hf-token" in message
-        assert "--plan starter" in message
-        assert "--demo" in message
+        assert "--s3-bucket" in message
+        assert "15 minutes idle" in message
 
     @responses.activate
     def test_a_backup_is_enough_to_proceed(self, provider, spec, project):

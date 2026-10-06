@@ -5,7 +5,7 @@ Potato can run on AWS in three ways. For most studies, use the first one.
 | | `--provider aws` (Lightsail) | `--provider aws-ec2` | `--provider aws-ecs` (Express Mode) |
 |---|---|---|---|
 | What you get | one VM | one VM | a managed container |
-| Cost | **$12/month**, flat | about $16/month | about $45–70/month |
+| Cost | **$12/month**, flat | about $18/month | about $45–70/month |
 | Disk | survives restarts | survives restarts | wiped when the task is replaced; needs `--backup` |
 | HTTPS | Let's Encrypt certificate for the IP | Let's Encrypt certificate for the IP | AWS certificate on `*.ecs.<region>.on.aws` |
 | Permissions | `lightsail:*` | EC2, plus `ssm:GetParameter` | ECS, IAM, SSM, CloudWatch Logs |

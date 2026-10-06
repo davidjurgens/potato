@@ -157,6 +157,18 @@ class TestUp:
         assert ("create", "cli-test") not in RecordingProvider.calls
         assert "Dry run" in capsys.readouterr().out
 
+    def test_dry_run_fails_when_up_would_refuse(self, project, capsys, monkeypatch):
+        """A dry run used to print a clean plan and exit 0 for a deploy that
+        create() then refused (heroku or aws-ecs without --backup)."""
+        monkeypatch.setattr(RecordingProvider, "refusal",
+                            lambda self, spec, bundle: "needs a backup", raising=False)
+        code = cli.main(["up", project, "--provider", "recording", "--dry-run"])
+        assert code == cli.EXIT_BLOCKED
+        assert "REFUSED: needs a backup" in capsys.readouterr().out
+        code = cli.main(["up", project, "--provider", "recording", "--yes"])
+        assert code == cli.EXIT_BLOCKED
+        assert ("create", "cli-test") not in RecordingProvider.calls
+
     def test_yes_provisions(self, project, capsys):
         code = cli.main(["up", project, "--provider", "recording", "--yes"])
         assert code == cli.EXIT_OK

@@ -165,6 +165,18 @@ class TestCreate:
             get_provider("aws-ecs").create(spec, FakeBundle(), None,
                                            DeploymentStore(project))
 
+    def test_demo_does_not_replace_the_backup(self, spec, project, stubs):
+        """ECS uploads the project to the backup's storage, so --demo alone
+        used to pass the plan and then fail in create()."""
+        spec.extra["backup_kinds"] = []
+        spec.extra["backup"] = None
+        spec.demo = True
+        provider = get_provider("aws-ecs")
+        message = provider.refusal(spec, FakeBundle())
+        assert message and "--demo" in message and "not an option" in message
+        with pytest.raises(ProviderError, match="not an option"):
+            provider.create(spec, FakeBundle(), None, DeploymentStore(project))
+
     def test_a_redeploy_refuses_when_deploys_would_overlap(self, spec, project, stubs):
         stubs["ecs"].add_response("describe_services", describe_services(maximum=200),
                                   {"cluster": "default", "services": ["potato-pilot"]})

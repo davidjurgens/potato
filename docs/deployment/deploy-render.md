@@ -20,26 +20,28 @@ A free Render instance has **no disk** and **stops after 15 minutes idle**. When
 it stops, everything written to its filesystem is gone: annotations, user state,
 the project database. Fifteen minutes after your last annotator closes the tab.
 
-So `potato deploy` will not create a free service unless you have said what
-happens to the data. Three ways to answer:
+`potato deploy` requires a backup on every Render deployment, so the data is
+never only on that filesystem. What changes with the plan is whether the backup
+is the only copy:
 
 ```bash
-# 1. Back up to a HuggingFace Dataset, and restore from it on every start
+# Free: the backup is the only copy; it is restored on every start
 potato deploy up config.yaml --provider render --backup hf --hf-token hf_...
 
-# 2. Pay for a disk
-potato deploy up config.yaml --provider render --plan starter --volume-gb 1
-
-# 3. Say the data is disposable (the project still goes to the backup storage)
-potato deploy up config.yaml --provider render --demo --backup hf --hf-token hf_...
+# Paid, with a disk: the disk keeps the data and the backup is a second copy
+potato deploy up config.yaml --provider render --plan starter --volume-gb 1 \
+    --backup hf --hf-token hf_...
 ```
+
+`--demo` does not replace the backup on Render: the project itself is uploaded
+to the backup's storage, so a deployment without one has nothing to start.
 
 With a backup, an instance that stopped while idle restores the annotations
 when it starts again, so annotators continue where they left off.
 
-The backup is the usual answer for a pilot: it costs nothing, needs only a
+The free plan is the usual choice for a pilot: it costs nothing, needs only a
 HuggingFace account, and the annotations end up somewhere you can share and
-version. A paid instance is the answer for a study that will run for weeks.
+version. A paid instance with a disk suits a study that will run for weeks.
 
 ## Cost
 

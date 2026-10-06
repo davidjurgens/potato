@@ -141,9 +141,15 @@ class TestRefusal:
         assert provider.create(spec, bundle, None,
                                DeploymentStore(project)).status == "running"
 
-    def test_plan_warns_without_a_backup(self, provider, spec, bundle):
+    def test_refusal_is_known_before_create(self, provider, spec, bundle):
+        """`deploy up --dry-run` asks refusal(); it must say what create() will."""
         spec.extra["backup_kinds"] = []
-        assert any("wiped" in w for w in provider.plan(spec, bundle).warnings)
+        assert "wiped" in provider.refusal(spec, bundle)
+
+    def test_demo_is_accepted_on_heroku(self, provider, spec, bundle):
+        spec.extra["backup_kinds"] = []
+        spec.demo = True
+        assert provider.refusal(spec, bundle) is None
 
 
 class TestCreate:

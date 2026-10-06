@@ -22,13 +22,13 @@ full:
 | [`local`](deploy-local.md) | free | yes | seeing what will deploy, before it costs anything |
 | [`potato share`](deploy-share.md) | free | — | a pilot, a lab meeting, a link for twenty minutes |
 | [`aws`](deploy-aws.md) (Lightsail) | $12/mo | yes | **a study on AWS**: flat price, `lightsail:*` permissions |
-| [`aws-ec2`](deploy-aws.md#ec2-provider-aws-ec2) | ~$16/mo | yes | AWS accounts that require EC2 |
+| [`aws-ec2`](deploy-aws.md#ec2-provider-aws-ec2) | ~$18/mo | yes | AWS accounts that require EC2 |
 | [`aws-ecs`](deploy-aws.md#ecs-express-mode-provider-aws-ecs) | ~$45–70/mo | no, `--backup` | AWS with no server to manage |
 | [`openstack`](deploy-openstack.md) | free with an allocation | yes | Jetstream2 (US academics), campus clouds |
 | [`hetzner`](deploy-vps.md) | ~€6/mo | yes | the cheapest durable VM |
 | [`vultr`](deploy-vps.md), [`linode`](deploy-vps.md) | $10–12/mo | yes | US-billed VMs |
 | [`digitalocean`](deploy-digitalocean.md) | from $18/mo | yes | a VM with the longest history in Potato |
-| [`fly`](deploy-fly.md) | ~$7/mo | yes (volume) | a managed container with a volume |
+| [`fly`](deploy-fly.md) | ~$6/mo | yes (volume) | a managed container with a volume |
 | [`railway`](deploy-railway.md) | ~$10–20/mo, usage | yes (volume) | a managed container with a volume |
 | [`render`](deploy-render.md) | free, or $7/mo | paid only; `--backup` | a study with no budget |
 | [`heroku`](deploy-heroku.md) | from $7/mo | no, `--backup` | labs that already use Heroku |

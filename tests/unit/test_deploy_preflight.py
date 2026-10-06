@@ -275,6 +275,14 @@ class TestEphemeralFilesystem:
                                ephemeral_fs=True)
         assert "D011" in codes(report)
 
+    @pytest.mark.parametrize("provider,offers_demo", [
+        ("heroku", True), ("huggingface", True), ("aws-ecs", False), ("render", False)])
+    def test_offers_demo_only_where_it_works(self, tmp_path, provider, offers_demo):
+        report = run_preflight(write_config(tmp_path), provider=provider,
+                               ephemeral_fs=True)
+        finding = next(f for f in report.findings if f.code == "D011")
+        assert ("--demo" in finding.remedy) is offers_demo
+
     def test_quiet_with_backup_configured(self, tmp_path):
         path = write_config(tmp_path, huggingface_backup={
             "enabled": True, "repo_id": "me/notes"})

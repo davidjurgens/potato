@@ -154,6 +154,14 @@ class Provider(ABC):
 
     # -- optional ------------------------------------------------------
 
+    def refusal(self, spec: DeploySpec, bundle) -> Optional[str]:
+        """Why create() would refuse this spec, or None. No credentials, no I/O.
+
+        create() raises it before any API call, and `deploy up` checks it right
+        after printing the plan, so a dry run fails exactly when `up` would.
+        """
+        return None
+
     def logs(self, record, *, lines: int = 200, follow: bool = False) -> Iterator[str]:
         raise ProviderError(f"{self.name} does not support log retrieval")
 

@@ -7,8 +7,9 @@ potato deploy up myproject/config.yaml --provider fly
 
 This creates a Fly app with one Machine (shared CPU, 1 GB) and a 1 GB volume
 holding the task. It is served at `https://<app>.fly.dev` using a shared IPv4
-address, which is free. The cost is about $7 a month. Fly has no free tier, and
-a new organization needs a card on file.
+address, which is free. The cost is about $6 a month: $5.70 for the 1 GB Machine
+and $0.15 for the 1 GB volume. Fly has no free tier, and a new organization
+needs a card on file.
 
 A Fly volume belongs to one Machine, which is what Potato needs: all the
 annotators' state is in one process, and there is never a second copy that

@@ -331,14 +331,23 @@ def _check_ephemeral_filesystem(ctx: CheckContext) -> List[Finding]:
     from potato.server_utils.backup import resolve_settings
     if resolve_settings(ctx.config).enabled:
         return []
+    hint = ("Pass --backup hf (with --hf-token) or --backup s3 --s3-bucket <name> "
+            "so the data is mirrored off the host and restored after a restart")
+    # Hosts that fetch the project from the backup's storage cannot use --demo.
+    if ctx.provider in _DEMO_ACCEPTED:
+        hint += ", or --demo to accept throwaway data"
     return [Finding(
         "D011", "warning",
         f"The {ctx.provider} filesystem is ephemeral: annotations are lost when "
         "the host restarts or redeploys.",
-        "Pass --backup hf (with --hf-token) or --backup s3 --s3-bucket <name> "
-        "so the data is mirrored off the host and restored after a restart, "
-        "or --demo to accept throwaway data.",
+        hint + ".",
     )]
+
+
+#: Ephemeral hosts that can run without a backup. The others (aws-ecs, and the
+#: image-only hosts render, railway and fly) upload the project to the backup's
+#: storage, so it is required there whatever --demo says.
+_DEMO_ACCEPTED = ("heroku", "huggingface")
 
 
 @check

@@ -124,7 +124,7 @@ class FlyProvider(Provider):
     """One Fly Machine with a volume, on <app>.fly.dev."""
 
     name = "fly"
-    summary = "Fly.io: one Machine + volume on <app>.fly.dev, about $7/mo"
+    summary = "Fly.io: one Machine + volume on <app>.fly.dev, about $6/mo"
     public = True
     ephemeral_fs = False
     supports_logs = False
@@ -166,8 +166,6 @@ class FlyProvider(Provider):
             Action("wait.started", "wait for the Machine to start"),
             Action("wait.http", "poll /health"),
         ]
-        if not self._can_deliver(spec, bundle):
-            plan.warnings.append(_NO_DELIVERY)
         plan.warnings.append(
             "Fly has no free tier; new organizations need a card on file.")
         if not bundle:
@@ -196,15 +194,21 @@ class FlyProvider(Provider):
             return f"upload the project to {store.describe()}; fetched at start"
         if bundle is not None and bundle.total_bytes <= INLINE_BUNDLE_LIMIT:
             return "ship the project inline in the Machine's files"
-        return "(nowhere to put the project; see the warning)"
+        return "(nowhere; see REFUSED below)"
 
     # -- create --------------------------------------------------------
+
+    def refusal(self, spec: DeploySpec, bundle) -> Optional[str]:
+        if bundle is not None and not self._can_deliver(spec, bundle):
+            return _NO_DELIVERY
+        return None
 
     def create(self, spec: DeploySpec, bundle, existing, store) -> DeploymentRecord:
         if bundle is None:
             raise ProviderError("No bundle was built; nothing to deploy.")
-        if not self._can_deliver(spec, bundle):
-            raise ProviderError(_NO_DELIVERY)
+        refused = self.refusal(spec, bundle)
+        if refused:
+            raise ProviderError(refused)
 
         api = FlyAPI(self.token)
         name = app_name(spec.name)

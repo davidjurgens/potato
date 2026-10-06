@@ -110,7 +110,7 @@ class EC2Provider(VMProvider):
     """One EC2 instance with an Elastic IP, behind Caddy."""
 
     name = "aws-ec2"
-    summary = "AWS EC2: a t4g.small VM with an Elastic IP, about $16/mo"
+    summary = "AWS EC2: a t4g.small VM with an Elastic IP, about $18/mo with its root disk"
     requires = ("boto3", "paramiko")
     install_extra = "deploy-aws"
     ssh_user = "ubuntu"

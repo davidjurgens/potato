@@ -152,7 +152,7 @@ class RailwayProvider(Provider):
                    f"{spec.image or DEFAULT_IMAGE}"),
             Action("railway.volume", "mount a volume at /app"),
             Action("bundle.publish",
-                   f"upload the project to {store.describe() if store else '(nowhere)'}"),
+                   f"upload the project to {store.describe() if store else '(nowhere; see REFUSED below)'}"),
             Action("railway.variables", "set variables, including RAILWAY_RUN_UID=0",
                    {"keys": sorted(set(env) | {"RAILWAY_RUN_UID", "PORT",
                                                "POTATO_BUNDLE_URL"})}),
@@ -161,8 +161,6 @@ class RailwayProvider(Provider):
             Action("railway.domain", "generate a *.up.railway.app domain"),
             Action("wait.deploy", "wait for the deployment to succeed"),
         ]
-        if store is None:
-            plan.warnings.append(_NO_STORE)
         plan.warnings.append(
             "Railway bills by usage: RAM, CPU and volume per minute. A small task "
             "that is always on typically costs $10-20 a month.")
@@ -172,12 +170,16 @@ class RailwayProvider(Provider):
 
     # -- create --------------------------------------------------------
 
+    def refusal(self, spec: DeploySpec, bundle) -> Optional[str]:
+        return _NO_STORE if self._store(spec) is None else None
+
     def create(self, spec: DeploySpec, bundle, existing, store) -> DeploymentRecord:
         if bundle is None:
             raise ProviderError("No bundle was built; nothing to deploy.")
+        refused = self.refusal(spec, bundle)
+        if refused:
+            raise ProviderError(refused)
         bundle_store = self._store(spec)
-        if bundle_store is None:
-            raise ProviderError(_NO_STORE)
 
         api = RailwayAPI(self.token)
         record = existing or DeploymentRecord(name=spec.name, provider=self.name)
@@ -313,5 +315,5 @@ class RailwayProvider(Provider):
 _NO_STORE = (
     "Railway runs the published image and fetches your project into it at start, "
     "so the project has to be uploaded somewhere first. It goes to the backup's "
-    "storage: pass --backup hf --hf-token <token> or --backup s3 --s3-bucket "
+    "storage, so --demo is not an option here: pass --backup hf --hf-token <token> or --backup s3 --s3-bucket "
     "<bucket>.")

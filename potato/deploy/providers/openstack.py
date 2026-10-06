@@ -144,6 +144,8 @@ class OpenStackProvider(VMProvider):
         return None
 
     def cost_note(self, size: str, volume_gb: Optional[int]) -> Optional[str]:
+        if preset_for(self.cloud) is not PRESETS["jetstream2"]:
+            return None
         return ("Charged to your allocation, not a card: on Jetstream2 an m3.small "
                 "uses 2 SUs per hour, about 17,500 a year if left running.")
 
@@ -179,8 +181,17 @@ class OpenStackProvider(VMProvider):
 
     # -- create --------------------------------------------------------
 
-    def create(self, spec: DeploySpec, bundle, existing, store):
+    def _resolve_cloud(self, spec: DeploySpec) -> None:
+        # default_size and cost_note read self.cloud, so plan() must set it the
+        # same way create() does or the dry run shows the generic flavor.
         self.cloud = spec.extra.get("cloud") or self.cloud or os.environ.get("OS_CLOUD")
+
+    def plan(self, spec: DeploySpec, bundle):
+        self._resolve_cloud(spec)
+        return super().plan(spec, bundle)
+
+    def create(self, spec: DeploySpec, bundle, existing, store):
+        self._resolve_cloud(spec)
         if existing is not None:
             self._bind(existing)
         return super().create(spec, bundle, existing, store)

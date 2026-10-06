@@ -264,8 +264,6 @@ class HerokuProvider(Provider):
             Action("wait.http", "poll /health"),
         ]
 
-        if not spec.extra.get("backup_kinds") and not spec.demo:
-            plan.warnings.append(_NO_BACKUP)
         if size == "eco":
             plan.warnings.append(
                 "Eco dynos sleep after 30 minutes idle. Each sleep wipes the "
@@ -288,9 +286,15 @@ class HerokuProvider(Provider):
 
     # -- create --------------------------------------------------------
 
-    def create(self, spec: DeploySpec, bundle, existing, store) -> DeploymentRecord:
+    def refusal(self, spec: DeploySpec, bundle) -> Optional[str]:
         if not spec.extra.get("backup_kinds") and not spec.demo:
-            raise ProviderError(_NO_BACKUP)
+            return _NO_BACKUP
+        return None
+
+    def create(self, spec: DeploySpec, bundle, existing, store) -> DeploymentRecord:
+        refused = self.refusal(spec, bundle)
+        if refused:
+            raise ProviderError(refused)
         if bundle is None:
             raise ProviderError("No bundle was built; nothing to deploy.")
 

@@ -6,10 +6,10 @@ HTTPS on ``*.onrender.com`` comes with it.
 
 What it buys in convenience it charges for in persistence. A free instance has
 no disk and spins down after 15 minutes idle, and a spun-down instance loses
-everything written to its filesystem. So the provider refuses to create a free
-service without a route for the data to leave: either a HuggingFace Dataset
-backup, or ``--demo`` to say out loud that the annotations are disposable. A
-paid instance with a disk has neither problem.
+everything written to its filesystem. The provider refuses to create any
+service without a backup (HuggingFace Dataset or S3), because the backup's
+storage is also how the project reaches the container (below); on the free plan
+it is the only copy of the annotations as well.
 
 The bundle travels differently here than on a droplet. Render pulls an image and
 runs it; there is no SSH and nothing to upload to. So the project is published
@@ -241,7 +241,7 @@ class RenderProvider(Provider):
             Action("render.owners", "verify the API key with GET /v1/owners"),
             Action("bundle.publish",
                    f"upload the project tarball to "
-                   f"{bundle_store.describe() if bundle_store else '(nowhere configured)'}"
+                   f"{bundle_store.describe() if bundle_store else '(nowhere; see REFUSED below)'}"
                    "; the container fetches it at start"),
             Action("render.service",
                    f"create a {plan_name} web service from "
@@ -252,10 +252,7 @@ class RenderProvider(Provider):
             Action("wait.http", "poll the service URL until it answers"),
         ]
 
-        has_backup = bool(spec.extra.get("backup_kinds"))
-        if bundle_store is None:
-            result.warnings.append(_NO_BUNDLE_STORE)
-        elif bundle_store.kind == "s3" and not spec.volume_gb:
+        if bundle_store is not None and bundle_store.kind == "s3" and not spec.volume_gb:
             result.warnings.append(
                 "The project is fetched from a presigned S3 URL, valid seven "
                 "days. With no disk every restart fetches again, so after a "
@@ -265,14 +262,9 @@ class RenderProvider(Provider):
             if not spec.volume_gb:
                 result.warnings.append(
                     f"A free Render instance has no disk and stops after "
-                    f"{FREE_IDLE_MINUTES} minutes idle. Everything written to it "
-                    "is lost when it stops, including annotations.")
-            if not has_backup and not spec.demo:
-                result.warnings.append(
-                    "Nothing is configured to carry the data off the instance. "
-                    "Supply --backup hf|s3 for an off-host backup, choose "
-                    "--plan starter --volume-gb 1, or pass --demo if the "
-                    "annotations are genuinely disposable.")
+                    f"{FREE_IDLE_MINUTES} minutes idle and loses everything "
+                    "written to it. The backup is the only copy of the "
+                    "annotations, restored when it starts again.")
         if spec.volume_gb and plan_name == "free":
             result.warnings.append(
                 "Render does not attach disks to free instances; this needs "
@@ -283,28 +275,22 @@ class RenderProvider(Provider):
 
     # -- create --------------------------------------------------------
 
+    def refusal(self, spec: DeploySpec, bundle) -> Optional[str]:
+        # The project is uploaded to the backup's storage, so every Render
+        # deploy needs one. That also covers the free plan, whose data would
+        # otherwise be lost fifteen minutes after the last annotator leaves.
+        if not spec.extra.get("backup_kinds") or _bundle_store(spec) is None:
+            if (spec.extra.get("plan") or DEFAULT_PLAN) == "free":
+                return _NO_BUNDLE_STORE + _FREE_PLAN_NOTE
+            return _NO_BUNDLE_STORE
+        return None
+
     def create(self, spec: DeploySpec, bundle, existing, store) -> DeploymentRecord:
         plan_name = spec.extra.get("plan") or DEFAULT_PLAN
-        has_backup = bool(spec.extra.get("backup_kinds"))
-
-        # The refusal is the point of this provider's create(). A free instance
-        # with no backup loses the study's data the first time it goes idle, and
-        # it does so silently, fifteen minutes after the last annotator leaves.
-        if plan_name == "free" and not has_backup and not spec.demo:
-            raise ProviderError(
-                "Refusing to create a free Render service with no way to keep the "
-                "annotations.\n"
-                f"A free instance has no disk and stops after {FREE_IDLE_MINUTES} "
-                "minutes idle; when it stops, everything on its filesystem is gone.\n"
-                "Pick one:\n"
-                "  --backup hf --hf-token <t>  back up to a HuggingFace Dataset\n"
-                "  --backup s3 --s3-bucket <b> back up to an S3 bucket\n"
-                "  --plan starter --volume-gb 1  a paid instance with a real disk\n"
-                "  --demo                      the annotations are disposable")
-
+        refused = self.refusal(spec, bundle)
+        if refused:
+            raise ProviderError(refused)
         bundle_store = _bundle_store(spec)
-        if bundle_store is None:
-            raise ProviderError(_NO_BUNDLE_STORE)
 
         api = RenderAPI(self.token)
         owners = api.verify_token()
@@ -501,9 +487,14 @@ def _admin_key(record) -> Optional[str]:
 _NO_BUNDLE_STORE = (
     "Render runs the published image and fetches your project into it at start, "
     "so the project has to be uploaded somewhere first. It goes to the backup's "
-    "storage: pass --backup hf --hf-token <token> (recommended: the link never "
-    "expires) or --backup s3 --s3-bucket <bucket>. With --demo the backup still "
-    "provides that storage.")
+    "storage, so --demo is not an option here: pass --backup hf --hf-token "
+    "<token> (recommended: the link never expires) or --backup s3 --s3-bucket "
+    "<bucket>.")
+
+_FREE_PLAN_NOTE = (
+    " On the free plan the backup is also the only copy of the annotations, "
+    f"since the instance stops after {FREE_IDLE_MINUTES} minutes idle and loses "
+    "its filesystem.")
 
 
 def _bundle_store(spec: DeploySpec):

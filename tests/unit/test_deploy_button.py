@@ -54,10 +54,16 @@ class TestCommon:
         assert deployed["backup"]["restore_on_boot"] is True
         assert deployed["backup"]["sinks"][0]["repo_id"] == "lab/study-annotations"
 
-    @pytest.mark.parametrize("target", ["heroku", "render", "aws"])
-    def test_refuses_without_a_backup(self, repo, target):
-        with pytest.raises(ButtonError, match="--backup"):
+    @pytest.mark.parametrize("target,reason", [
+        ("heroku", "A Heroku button"), ("render", "A Render button"),
+        ("aws", "An AWS Launch Stack button")])
+    def test_refuses_without_a_backup(self, repo, target, reason):
+        with pytest.raises(ButtonError, match="--backup") as excinfo:
             generate(config_of(repo), target, BackupOptions(), name="pilot")
+        # Each target gave "A aws button ... (or, on Lightsail, ...)" before.
+        assert str(excinfo.value).startswith(reason)
+        if target != "aws":
+            assert "Lightsail" not in str(excinfo.value)
 
     def test_a_dockerignore_keeps_secrets_out_of_the_image(self, repo):
         result = generate(config_of(repo), "heroku", backup(), name="pilot")

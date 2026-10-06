@@ -13,7 +13,7 @@ option.
 | A study, and you have an AWS account | [`--provider aws`](deploy-aws.md) (Lightsail) | $12/month |
 | A study, US academic with no budget | [`--provider openstack --cloud jetstream2`](deploy-openstack.md) | free with an ACCESS allocation |
 | A study, as cheaply as possible | [`--provider hetzner`](deploy-vps.md) | about €6/month |
-| A study, and you would rather not run a server | [`--provider fly`](deploy-fly.md) or [`--provider railway`](deploy-railway.md) | $7–20/month |
+| A study, and you would rather not run a server | [`--provider fly`](deploy-fly.md) or [`--provider railway`](deploy-railway.md) | $6–20/month |
 | Annotators deploy their own copy from a link | [A deploy button](deploy-buttons.md) | depends on the host |
 | Your institution gives you a server | [Docker](docker.md) and a [reverse proxy](reverse-proxy.md) | — |
 

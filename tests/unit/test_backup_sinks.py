@@ -106,6 +106,12 @@ class TestSettings:
         assert settings.sinks == [{"type": "huggingface", "repo_id": "me/x"}]
         assert settings.schedule_minutes == 3
 
+    def test_a_disabled_backup_block_wins_over_a_legacy_one(self, tmp_path):
+        """`backup: {enabled: false}` used to fall through to the legacy block."""
+        config = make_config(tmp_path, backup={"enabled": False},
+                             huggingface_backup={"enabled": True, "repo_id": "me/x"})
+        assert not backup.resolve_settings(config).enabled
+
     def test_legacy_block_does_not_start_restoring_unasked(self, tmp_path):
         """An existing deployment's behaviour must not change under it."""
         config = make_config(tmp_path, huggingface_backup={
