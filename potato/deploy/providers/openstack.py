@@ -52,6 +52,10 @@ PRESETS: Dict[str, CloudPreset] = {
         flavor="m3.small", image="Featured-Ubuntu24", external_network="public",
         hostname="{name}.{project}.projects.jetstream-cloud.org"),
 }
+#: vCPUs per Jetstream2 CPU flavor; each vCPU-hour costs one SU.
+JETSTREAM2_VCPUS = {"m3.tiny": 1, "m3.small": 2, "m3.quad": 4, "m3.medium": 8,
+                    "m3.large": 16, "m3.xl": 32, "m3.2xl": 64}
+
 GENERIC = CloudPreset(flavor="m1.small", image="Ubuntu 24.04", external_network="public")
 
 VOLUME_DEVICES = ["/dev/sdb", "/dev/vdb"]
@@ -146,8 +150,15 @@ class OpenStackProvider(VMProvider):
     def cost_note(self, size: str, volume_gb: Optional[int]) -> Optional[str]:
         if preset_for(self.cloud) is not PRESETS["jetstream2"]:
             return None
-        return ("Charged to your allocation, not a card: on Jetstream2 an m3.small "
-                "uses 2 SUs per hour, about 17,500 a year if left running.")
+        # Jetstream2 CPU flavors bill one SU per vCPU-hour.
+        vcpus = JETSTREAM2_VCPUS.get(size)
+        if vcpus is None:
+            return ("Charged to your allocation, not a card: Jetstream2 CPU "
+                    f"flavors use one SU per vCPU per hour; check {size}'s vCPU "
+                    "count in Horizon.")
+        return (f"Charged to your allocation, not a card: on Jetstream2 an {size} "
+                f"uses {vcpus} SU{'s' if vcpus != 1 else ''} per hour, about "
+                f"{vcpus * 8760:,} a year if left running.")
 
     def volume_device_hint(self, spec: DeploySpec) -> str:
         return VOLUME_DEVICES[0]

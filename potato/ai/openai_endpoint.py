@@ -33,7 +33,10 @@ class OpenAIEndpoint(BaseAIEndpoint):
         api_key = self.ai_config.get("api_key") or os.environ.get(
             "OPENAI_API_KEY", ""
         )
-        base_url = self.ai_config.get("base_url")
+        # api_base is the documented alias (config validation accepts it, and
+        # openai_vision reads it); without it here a config that set only
+        # api_base passed validation and then failed for a missing key.
+        base_url = self.ai_config.get("base_url") or self.ai_config.get("api_base")
         if not api_key:
             if base_url:
                 api_key = "EMPTY"  # non-empty placeholder for local servers

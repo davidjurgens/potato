@@ -99,6 +99,7 @@ def backup_repo_id(owner: str, name: str) -> str:
 class HuggingFaceProvider(Provider):
     """A Docker Space backed by a private Dataset repo."""
 
+    ignored_flags = ("domain", "size")
     name = "huggingface"
     requires = ("huggingface_hub",)
     ephemeral_fs = True
@@ -127,7 +128,9 @@ class HuggingFaceProvider(Provider):
 
         result = DeployPlan(
             result_url_pattern=f"https://{_slug(owner)}-{_slug(spec.name)}.hf.space",
-            estimated_cost_usd_month=0.0)
+            # Not 0: a Docker Space needs a paid HuggingFace plan, which create()
+            # reports on a 402. The account's plan is not visible from here.
+            estimated_cost_usd_month=None)
         result.actions = [
             Action("hf.whoami", "verify the token with GET /api/whoami-v2"),
         ]
@@ -283,8 +286,10 @@ class HuggingFaceProvider(Provider):
                     "HuggingFace requires a paid plan to create a Docker Space "
                     "(PRO for a personal account, Team or Enterprise for an "
                     "organization). See https://huggingface.co/pricing\n"
-                    "Free alternatives: `--provider render`, or `potato share` "
-                    "to expose a local server through a tunnel.") from exc
+                    "Free alternatives: `--provider render --backup hf "
+                    "--hf-token <token>` (Render needs the backup to receive the "
+                    "project), or `potato share` to expose a local server "
+                    "through a tunnel.") from exc
             raise ProviderError(f"Could not create the Space {repo_id}: {exc}") from exc
         self.console(f"Space ready: {repo_id}")
 

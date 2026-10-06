@@ -3577,7 +3577,16 @@ When `allow_phase_back_navigation` is disabled (the default), the Back button is
 
 ### MySQL Database Setup
 
-Potato can store annotations in MySQL instead of files. To use it:
+Potato can store annotations in MySQL instead of files. It needs the MySQL
+driver, which is not installed by default:
+
+```bash
+pip install 'potato-annotation[mysql]'
+```
+
+If the driver is missing or the database cannot be reached, `potato start`
+stops with an error. It does not fall back to files, so annotations never end up
+somewhere other than the database you configured. To use it:
 
 ```yaml
 database:
@@ -14536,7 +14545,7 @@ GPU and want a larger model, but it is the exception.
 
 | | Browser (default) | Server endpoint |
 |---|---|---|
-| Setup | `potato download-models` | `pip install 'potato[vision]'` + weights |
+| Setup | `potato download-models` | `pip install 'potato-annotation[vision]'` + weights |
 | GPU | Not required | Recommended |
 | Air-gapped | Yes, once models are downloaded | Yes |
 | Model size | Distilled (~30 MB) | Whatever you supply |
@@ -21249,7 +21258,7 @@ training:
 | `passing_criteria.max_mistakes` | integer | No | -1 | Maximum total mistakes before failure (-1 = unlimited) |
 | `passing_criteria.max_mistakes_per_question` | integer | No | -1 | Maximum mistakes per question before failure (-1 = unlimited) |
 | `allow_retry` | boolean | No | true | Whether to allow retrying incorrect answers |
-| `failure_action` | string | No | "move_to_done" | Action when user fails ("move_to_done" or "repeat_training") |
+| `failure_action` | string | No | "move_to_done" | Action when user fails: "move_to_done" ends the task; "repeat_training" starts the training again from the first question. Exceeding `max_mistakes` or `max_mistakes_per_question` ends the task either way. |
 
 ### Training Strategies
 
@@ -36055,7 +36064,6 @@ item_properties:
 category_assignment:
   enabled: true
   qualification:
-    source: training      # Where qualification comes from
     threshold: 0.7        # 70% accuracy required
     min_questions: 2      # At least 2 questions per category
   fallback: uncategorized # What to do if user qualifies for nothing
@@ -36084,11 +36092,13 @@ spelling ran with every item uncategorized, fell through to the
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `enabled` | boolean | true | Enable/disable category assignment |
-| `qualification.source` | string | "training" | Where qualification scores come from: "training", "prestudy", or "both" |
 | `qualification.threshold` | float | 0.7 | Minimum accuracy (0.0-1.0) to qualify for a category |
 | `qualification.min_questions` | integer | 1 | Minimum questions answered per category to qualify |
-| `qualification.combine_method` | string | "average" | How to combine scores when source is "both": "average", "max", or "sum" |
 | `fallback` | string | "uncategorized" | Behavior when user doesn't qualify for any category |
+
+Qualification scores come from the training phase only.
+`qualification.source` and `qualification.combine_method` are still accepted,
+but nothing reads them, and Potato logs a warning when either is set.
 
 #### Fallback Options
 
@@ -36460,7 +36470,6 @@ You can use both training-based qualification AND dynamic expertise:
 category_assignment:
   enabled: true
   qualification:
-    source: training
     threshold: 0.7
     min_questions: 2
   dynamic:
@@ -53640,7 +53649,9 @@ same bytes every time. `potato deploy` uses it for that reason.
 Both are built for `linux/amd64` and `linux/arm64`, so they run natively on
 Apple Silicon.
 
-Pin a version for a study that will run for months. `latest` moves.
+Pin a version for a study that will run for months. `latest` follows the
+master branch and moves with every change to it. A `<version>` tag is pushed
+once, when that release is tagged, and is not rebuilt afterwards.
 
 The `-all` variant covers `ai_support`, PDF and DOCX ingestion, parquet export
 and OAuth logins. Neither variant includes the `vision` extra: it pulls
@@ -54366,8 +54377,12 @@ potato deploy up myproject/config.yaml --provider digitalocean   # push changes
 potato deploy destroy myproject/config.yaml    # remove everything
 ```
 
-Running `up` again on the same name updates the existing droplet: it uploads the
-new bundle and restarts the service rather than creating a second machine. Use
+Running `up` again on the same name updates the existing droplet rather than
+creating a second machine: it uploads the new bundle, pulls the image (`--image`,
+or the current `latest`) and restarts the service. The size, region, volume and
+domain are fixed when the droplet is created; an `up` that asks to change one is
+refused, so pull, destroy and deploy again to change them. The same applies to
+every VM target (Lightsail, EC2, Hetzner, Vultr, Linode, OpenStack). Use
 `--name` to run several deployments from one config:
 
 ```bash
@@ -54549,7 +54564,8 @@ potato deploy pull config.yaml       # over the admin API
 potato deploy destroy config.yaml    # deletes the project, volume included
 ```
 
-Running `up` again updates the service's variables and redeploys it.
+Running `up` again updates the service's variables and image (`--image`, or the
+current `latest`) and redeploys it.
 
 ## A Railway button
 
@@ -54673,7 +54689,9 @@ potato deploy destroy myproject/config.yaml
 ```
 
 Running `up` again uploads the new project, updates the service's environment,
-and redeploys the existing service rather than creating a second one.
+and redeploys the existing service with the image you name (`--image`, or the
+current `latest`) rather than creating a second one. The plan, region and disk
+cannot be changed this way.
 
 `potato deploy logs` is not supported: Render's log API needs a paid plan and a
 websocket. Read them in the dashboard.
@@ -54683,9 +54701,17 @@ Dataset is unaffected, because `destroy` does not touch that repo.
 
 ## Troubleshooting
 
-**"Refusing to create a free Render service"** — see
-[the free tier](#read-this-before-using-the-free-tier). The message lists the
-three ways forward.
+**"REFUSED: Render runs the published image and fetches your project…"** — every
+Render deployment needs `--backup hf` or `--backup s3`, because that storage is
+how the project reaches the container. `--demo` does not replace it. See
+[the free tier](#read-this-before-using-the-free-tier).
+
+**"Render does not attach disks to free instances"** — `--volume-gb` needs
+`--plan starter` or higher.
+
+**"a redeploy cannot change --plan …"** — the plan, region and disk are fixed
+when the service is created. Change them in the Render dashboard, or pull,
+destroy and deploy again.
 
 **The first request takes a minute** — a free instance that has spun down starts
 on the next request. `potato deploy status` says so when it sees this.
@@ -54835,8 +54861,10 @@ potato deploy pull myproject/config.yaml
 This downloads the backup Dataset, not the Space. Whatever is on the Space right
 now is at best a partial copy of what the Dataset already has.
 
-Without a backup — a `--demo` deployment — there is nowhere to pull from, and
-the only route is the admin export API against the running Space.
+Without a backup (a `--demo` deployment) there is no Dataset, so `potato
+deploy pull` reads the running Space directly through its admin export API.
+That works only while the Space is up, and anything it lost in a rebuild is
+gone.
 
 `potato deploy destroy` deletes the Space and **leaves the Dataset alone**.
 Deleting the host is cheap and reversible; deleting the annotations is neither,

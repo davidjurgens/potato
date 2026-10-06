@@ -549,7 +549,16 @@ When `allow_phase_back_navigation` is disabled (the default), the Back button is
 
 ### MySQL Database Setup
 
-Potato can store annotations in MySQL instead of files. To use it:
+Potato can store annotations in MySQL instead of files. It needs the MySQL
+driver, which is not installed by default:
+
+```bash
+pip install 'potato-annotation[mysql]'
+```
+
+If the driver is missing or the database cannot be reached, `potato start`
+stops with an error. It does not fall back to files, so annotations never end up
+somewhere other than the database you configured. To use it:
 
 ```yaml
 database:

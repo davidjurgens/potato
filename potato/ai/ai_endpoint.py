@@ -827,23 +827,27 @@ def get_ai_endpoint(config: dict):
 
 # Register built-in endpoints lazily: nothing here imports an SDK. The
 # endpoint module (and the optional package it wraps) is imported the first
-# time a config selects that endpoint_type.
+# time a config selects that endpoint_type. A hint names the extra where one
+# exists, so pip applies the version floors setup.py declares; it is printed
+# after "pip install " as is, so an extra carries its own shell quotes.
 for _type, _module, _class, _hint in [
-    ("ollama", ".ollama_endpoint", "OllamaEndpoint", "ollama"),
-    ("openai", ".openai_endpoint", "OpenAIEndpoint", "openai"),
-    ("huggingface", ".huggingface_endpoint", "HuggingfaceEndpoint", "huggingface_hub"),
-    ("gemini", ".gemini_endpoint", "GeminiEndpoint", "google-genai"),
-    ("anthropic", ".anthropic_endpoint", "AnthropicEndpoint", "anthropic"),
+    ("ollama", ".ollama_endpoint", "OllamaEndpoint", "'potato-annotation[ai]'"),
+    ("openai", ".openai_endpoint", "OpenAIEndpoint", "'potato-annotation[ai]'"),
+    ("huggingface", ".huggingface_endpoint", "HuggingfaceEndpoint",
+     "'potato-annotation[huggingface]'"),
+    ("gemini", ".gemini_endpoint", "GeminiEndpoint", "'potato-annotation[ai]'"),
+    ("anthropic", ".anthropic_endpoint", "AnthropicEndpoint", "'potato-annotation[ai]'"),
     ("vllm", ".vllm_endpoint", "VLLMEndpoint", None),
     ("yolo", ".yolo_endpoint", "YOLOEndpoint", "ultralytics"),
-    ("ollama_vision", ".ollama_vision_endpoint", "OllamaVisionEndpoint", "ollama"),
-    ("openai_vision", ".openai_vision_endpoint", "OpenAIVisionEndpoint", "openai"),
-    ("anthropic_vision", ".anthropic_vision_endpoint", "AnthropicVisionEndpoint", "anthropic"),
+    ("ollama_vision", ".ollama_vision_endpoint", "OllamaVisionEndpoint", "'potato-annotation[ai]'"),
+    ("openai_vision", ".openai_vision_endpoint", "OpenAIVisionEndpoint", "'potato-annotation[ai]'"),
+    ("anthropic_vision", ".anthropic_vision_endpoint", "AnthropicVisionEndpoint",
+     "'potato-annotation[ai]'"),
     ("openrouter", ".openrouter_endpoint", "OpenRouterEndpoint", None),
     # Optional GPU segmentation. Lazy on purpose: a module-level torch
     # import loads the whole ML stack at boot for every user who happens
     # to have torch installed, whether or not they use segmentation.
-    ("sam", ".sam_endpoint", "SAMEndpoint", "potato[vision]"),
+    ("sam", ".sam_endpoint", "SAMEndpoint", "'potato-annotation[vision]'"),
     # Text-prompt segmentation, server-side. Weights are user-supplied and
     # licence-gated; nothing is bundled or downloaded. See sam3_endpoint.py.
     ("sam3", ".sam3_endpoint", "SAM3Endpoint", "onnxruntime"),

@@ -112,6 +112,14 @@ class S3BundleStore:
             kwargs["region_name"] = self.region
         if self.endpoint_url:
             kwargs["endpoint_url"] = self.endpoint_url
+        # The same lookup as the server's backup sink, so the R2/B2 route in
+        # deploy-backups.md works for the upload too. Without these the client
+        # fell through to the AWS chain and could not reach a non-AWS bucket.
+        key_id = os.environ.get("POTATO_S3_ACCESS_KEY_ID")
+        secret = os.environ.get("POTATO_S3_SECRET_ACCESS_KEY")
+        if key_id and secret:
+            kwargs["aws_access_key_id"] = key_id
+            kwargs["aws_secret_access_key"] = secret
         return boto3.client("s3", **kwargs)
 
     def put(self, tarball: str, sha: str) -> BundleLocation:

@@ -643,3 +643,78 @@ class TestSummaryPricesMatchThePlan:
         estimate = provider.plan(spec, None).estimated_cost_usd_month
         claimed = int(re.search(r"\$(\d+)/mo", provider.summary).group(1))
         assert claimed == round(estimate), (provider.summary, estimate)
+
+
+class TestPlansDoNotCallUnknownPricesFree:
+    def test_tunnel_dry_run_refuses(self):
+        """create() always raises; the dry run used to pass."""
+        assert get_provider("tunnel").refusal(None, None)
+
+    @pytest.mark.parametrize("name,size", [("digitalocean", "s-4vcpu-16gb-mystery"),
+                                           ("hetzner", None)])
+    def test_unpriced_sizes_say_so(self, name, size, tmp_path):
+        config = tmp_path / "config.yaml"
+        config.write_text("task_dir: .\n")
+        spec = DeploySpec(name="pilot", config_path=str(config), size=size,
+                          extra={"config_rel": "config.yaml"})
+        plan = get_provider(name, console=lambda *a: None).plan(spec, None)
+        assert "free" not in plan.render().lower()
+
+    def test_jetstream2_su_note_follows_the_flavor(self, tmp_path):
+        config = tmp_path / "config.yaml"
+        config.write_text("task_dir: .\n")
+        spec = DeploySpec(name="pilot", config_path=str(config), size="m3.large",
+                          extra={"config_rel": "config.yaml", "cloud": "jetstream2"})
+        warnings = " ".join(get_provider("openstack").plan(spec, None).warnings)
+        assert "16 SUs per hour" in warnings and "m3.small" not in warnings
+
+    def test_huggingface_is_not_priced_as_free(self, tmp_path):
+        config = tmp_path / "config.yaml"
+        config.write_text("task_dir: .\n")
+        spec = DeploySpec(name="pilot", config_path=str(config),
+                          extra={"config_rel": "config.yaml", "owner": "me"})
+        assert get_provider("huggingface").plan(spec, None).estimated_cost_usd_month is None
+
+
+class TestLocalPullFollowsTheOutputDir:
+    def test_a_custom_output_dir_is_copied(self, tmp_path, monkeypatch):
+        """pull copied /app/annotation_output whatever the config said."""
+        from potato.deploy.providers import local
+        from potato.deploy.state import DeploymentRecord
+
+        commands = []
+        monkeypatch.setattr(local, "_run", lambda cmd, check=False: commands.append(cmd))
+        record = DeploymentRecord(name="pilot", provider="local",
+                                  provider_ref={"container": "potato-pilot"},
+                                  spec={"output_annotation_dir": "results/"})
+        get_provider("local").pull(record, str(tmp_path / "out"))
+        copies = [c for c in commands if c[:2] == ["docker", "cp"]]
+        assert copies[0][2] == "potato-pilot:/app/results/."
+        assert copies[0][3].endswith("annotation_output")
+
+
+class TestSuggestedCommandsRunAsTyped:
+    """`potato deploy logs --name X` and friends left out config_file, a
+    required argument, so every suggested command failed when pasted."""
+
+    def test_the_helper_includes_the_config_path(self):
+        from potato.deploy.providers.base import deploy_command
+        assert deploy_command("logs", "/s p/config.yaml", "pilot") == \
+            "potato deploy logs '/s p/config.yaml' --name pilot"
+
+    def test_the_suggested_command_parses(self):
+        from potato.deploy.cli import build_parser
+        from potato.deploy.providers.base import deploy_command
+        import shlex
+        argv = shlex.split(deploy_command("destroy", "/tmp/c.yaml", "pilot", "--force"))[2:]
+        args = build_parser().parse_args(argv)
+        assert args.config_file == "/tmp/c.yaml" and args.name == "pilot"
+
+    def test_no_provider_suggests_a_command_without_it(self):
+        import re
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[2] / "potato" / "deploy"
+        bare = [f"{p.name}:{n}" for p in root.rglob("*.py")
+                for n, line in enumerate(p.read_text().splitlines(), 1)
+                if re.search(r"potato deploy (logs|destroy|status|pull) --name", line)]
+        assert not bare, bare

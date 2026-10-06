@@ -114,6 +114,10 @@ class CheckContext:
     ephemeral_fs: bool = False
     #: True when `deploy up` will write a backup block into the bundle.
     backup_configured: bool = False
+    #: `deploy up --workers`. The container refuses anything but 1.
+    workers: int = 1
+    #: Names passed with `deploy up --secret` or `--env`; they reach the host.
+    provided_env: frozenset = frozenset()
 
 
 # Values that look like a credential someone pasted into a config.
@@ -305,7 +309,8 @@ def _check_open_registration(ctx: CheckContext) -> List[Finding]:
         "D003", "warning",
         "Anyone who finds the URL can register and annotate." + detail,
         "Set user_config.allow_all_users: false and list your annotators under "
-        "user_config.users, or use authentication.method: oauth.",
+        "user_config.users, or use authentication.method: oauth with at least "
+        "one entry under authentication.providers.",
         key="user_config.allow_all_users",
     )]
 
@@ -331,11 +336,13 @@ def _check_ephemeral_filesystem(ctx: CheckContext) -> List[Finding]:
     from potato.server_utils.backup import resolve_settings
     if resolve_settings(ctx.config).enabled:
         return []
-    hint = ("Pass --backup hf (with --hf-token) or --backup s3 --s3-bucket <name> "
-            "so the data is mirrored off the host and restored after a restart")
+    # `potato deploy check` has no --backup flag, so name the command that does.
+    hint = ("Pass `potato deploy up` --backup hf (with --hf-token) or --backup s3 "
+            "--s3-bucket <name> so the data is mirrored off the host and restored "
+            "after a restart, or add a backup: block to the config")
     # Hosts that fetch the project from the backup's storage cannot use --demo.
     if ctx.provider in _DEMO_ACCEPTED:
-        hint += ", or --demo to accept throwaway data"
+        hint += "; or pass --demo to accept throwaway data"
     return [Finding(
         "D011", "warning",
         f"The {ctx.provider} filesystem is ephemeral: annotations are lost when "
@@ -352,17 +359,27 @@ _DEMO_ACCEPTED = ("heroku", "huggingface")
 
 @check
 def _check_multiworker(ctx: CheckContext) -> List[Finding]:
-    workers = (ctx.config.get("server") or {}).get("workers")
-    if workers in (None, 1):
-        return []
-    return [Finding(
-        "D013", "error",
-        f"server.workers is {workers}. Potato keeps its item pool and user state "
-        "in memory per process, so a second worker hands out duplicate "
-        "assignments and silently overwrites annotations.",
-        "Set workers to 1 and raise threads instead.",
-        key="server.workers",
-    )]
+    findings = []
+    # The flag is what reaches gunicorn, and the container exits at start for
+    # anything but 1. It used to pass preflight and the dry run regardless.
+    if ctx.workers not in (None, 1):
+        findings.append(Finding(
+            "D013", "error",
+            f"--workers is {ctx.workers}. Potato keeps its item pool and user "
+            "state in memory per process, so a second worker hands out duplicate "
+            "assignments and silently overwrites annotations; the container "
+            "refuses to start with more than one.",
+            "Leave --workers at 1 and raise --threads (default 8) for more "
+            "concurrent requests."))
+    config_workers = (ctx.config.get("server") or {}).get("workers")
+    if config_workers not in (None, 1):
+        findings.append(Finding(
+            "D013", "warning",
+            f"server.workers is {config_workers}, but the server never reads it.",
+            "Remove it. The worker count comes from `potato deploy up --workers`, "
+            "which must be 1; use --threads for concurrency.",
+            key="server.workers"))
+    return findings
 
 
 @check
@@ -370,17 +387,38 @@ def _check_ai_keys_present(ctx: CheckContext) -> List[Finding]:
     ai = ctx.config.get("ai_support") or {}
     if not ai or not ai.get("enabled", True):
         return []
-    env_names = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
-                 "GOOGLE_API_KEY")
-    if any(os.environ.get(name) for name in env_names):
+    endpoint = ai.get("endpoint_type") or ""
+    ai_config = ai.get("ai_config") or {}
+    # Local and self-hosted endpoints need no key; an OpenAI-compatible server
+    # behind base_url accepts a placeholder. The check used to fire for these.
+    if endpoint in _KEYLESS_ENDPOINTS or (
+            endpoint.startswith("openai") and ai_config.get("base_url")):
+        return []
+    api_key = ai_config.get("api_key")
+    match = re.fullmatch(r"\$\{(\w+)\}", api_key) if isinstance(api_key, str) else None
+    if api_key and not match:
+        return []                     # a literal key; D006 covers whether it should be
+    if match:
+        needed = match.group(1)
+    elif endpoint.startswith("openai"):
+        needed = "OPENAI_API_KEY"     # the OpenAI endpoint reads it from the environment
+    else:
+        return []                     # no key configured; config validation reports that
+    # --secret and --env reach the host, so following the hint below used to
+    # leave this warning in place.
+    if os.environ.get(needed) or needed in ctx.provided_env:
         return []
     return [Finding(
         "D014", "warning",
-        "ai_support is configured but no LLM API key is present in the "
-        "environment; AI features will fail on the host.",
-        "Pass the key with --secret OPENAI_API_KEY=<value>.",
+        f"ai_support uses the {endpoint or 'configured'} endpoint, which needs "
+        f"{needed}, but it is neither in this environment nor passed to the "
+        "host; AI features will fail there.",
+        f"Pass it with --secret {needed}=<value>.",
         key="ai_support",
     )]
+
+
+_KEYLESS_ENDPOINTS = ("ollama", "ollama_vision", "vllm", "yolo", "sam", "sam3")
 
 
 # --------------------------------------------------------------------------
@@ -431,7 +469,8 @@ def harden_config(config: Dict[str, Any], *, provider: str = "",
 def run_preflight(config_path: str, *, provider: str = "local",
                   public: bool = True, ephemeral_fs: bool = False,
                   workers: int = 1,
-                  backup_configured: bool = False) -> PreflightReport:
+                  backup_configured: bool = False,
+                  provided_env=()) -> PreflightReport:
     """Validate and assess a config for deployment. Changes nothing on disk."""
     from potato.validate_cli import validate_config_file
 
@@ -468,7 +507,8 @@ def run_preflight(config_path: str, *, provider: str = "local",
 
     ctx = CheckContext(config=config, config_path=config_path, provider=provider,
                        public=public, ephemeral_fs=ephemeral_fs,
-                       backup_configured=backup_configured)
+                       backup_configured=backup_configured, workers=workers,
+                       provided_env=frozenset(provided_env))
     for check_func in _CHECKS:
         try:
             report.findings.extend(check_func(ctx) or [])

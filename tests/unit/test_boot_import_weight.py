@@ -177,7 +177,7 @@ def test_missing_sdk_gives_install_hint_not_unknown_type():
         "try:\n"
         "    AIEndpointFactory.create_endpoint(cfg)\n"
         "except AIEndpointConfigError as e:\n"
-        "    assert 'pip install ollama' in str(e), str(e)\n"
+        "    assert \"pip install 'potato-annotation[ai]'\" in str(e), str(e)\n"
         "    print('HINT_OK')\n"
     )
     result = subprocess.run(

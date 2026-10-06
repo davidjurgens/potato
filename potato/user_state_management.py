@@ -388,12 +388,11 @@ class TrainingState:
         training_state.category_scores = data.get('category_scores', {})
         return training_state
 
-# Database imports
-try:
-    from potato.database import DatabaseManager, MysqlUserState
-    DATABASE_AVAILABLE = True
-except ImportError:
-    DATABASE_AVAILABLE = False
+# The MySQL backend is imported only when a config asks for it (see
+# UserStateManager.__init__). A module-level import here was circular:
+# potato.database.mysql_user_state subclasses UserState from this module, which
+# was still half-initialised, and the swallowed ImportError left the backend
+# off in every install while the server quietly wrote to files instead.
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -508,18 +507,34 @@ class UserStateManager:
         self.db_manager = None
         self.use_database = False
 
-        # Initialize database if configured
-        if DATABASE_AVAILABLE and 'database' in config:
-            db_config = config['database']
-            if db_config.get('type') == 'mysql':
-                try:
-                    self.db_manager = DatabaseManager(config)
-                    self.use_database = True
-                    self.db_manager.create_tables()
-                    logger.info("Initialized MySQL database backend")
-                except Exception as e:
-                    logger.error(f"Failed to initialize database: {e}")
-                    self.use_database = False
+        self._mysql_user_state_cls = None
+
+        # A researcher who configured MySQL expects the annotations there.
+        # Falling back to files when the driver is missing or the server is
+        # unreachable leaves them with an empty database and no warning, so
+        # both stop the server instead.
+        db_config = config.get('database')
+        if isinstance(db_config, dict) and db_config.get('type') == 'mysql':
+            try:
+                from potato.database import DatabaseManager, MysqlUserState
+            except ImportError as e:
+                raise RuntimeError(
+                    "database.type is 'mysql', but the MySQL driver is not "
+                    f"installed ({e}). Install it with: "
+                    "pip install 'potato-annotation[mysql]'") from e
+            try:
+                self.db_manager = DatabaseManager(config)
+                self.db_manager.create_tables()
+            except Exception as e:
+                raise RuntimeError(
+                    f"database.type is 'mysql', but the database at "
+                    f"{db_config.get('host')}:{db_config.get('port', 3306)} could "
+                    f"not be used: {e}. Potato does not fall back to files when "
+                    "a database is configured; fix the connection or remove the "
+                    "database block.") from e
+            self._mysql_user_state_cls = MysqlUserState
+            self.use_database = True
+            logger.info("Initialized MySQL database backend")
 
         self.logger = logging.getLogger(__name__)
         # setting to debug
@@ -666,7 +681,7 @@ class UserStateManager:
             # Create appropriate user state based on configuration
             if self.use_database and self.db_manager:
                 logger.debug(f"Creating MysqlUserState for user: {user_id} (quota={quota})")
-                user_state = MysqlUserState(user_id, self.db_manager, quota)
+                user_state = self._mysql_user_state_cls(user_id, self.db_manager, quota)
             else:
                 logger.debug(f"Creating InMemoryUserState for user: {user_id} (quota={quota})")
                 user_state = InMemoryUserState(user_id, quota)
@@ -777,7 +792,7 @@ class UserStateManager:
                 if self.use_database and self.db_manager:
                     # Try to load from database
                     try:
-                        user_state = MysqlUserState(user_id, self.db_manager, self.max_annotations_per_user)
+                        user_state = self._mysql_user_state_cls(user_id, self.db_manager, self.max_annotations_per_user)
                         self.user_to_annotation_state[user_id] = user_state
                         return user_state
                     except Exception as e:

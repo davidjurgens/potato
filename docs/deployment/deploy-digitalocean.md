@@ -206,8 +206,12 @@ potato deploy up myproject/config.yaml --provider digitalocean   # push changes
 potato deploy destroy myproject/config.yaml    # remove everything
 ```
 
-Running `up` again on the same name updates the existing droplet: it uploads the
-new bundle and restarts the service rather than creating a second machine. Use
+Running `up` again on the same name updates the existing droplet rather than
+creating a second machine: it uploads the new bundle, pulls the image (`--image`,
+or the current `latest`) and restarts the service. The size, region, volume and
+domain are fixed when the droplet is created; an `up` that asks to change one is
+refused, so pull, destroy and deploy again to change them. The same applies to
+every VM target (Lightsail, EC2, Hetzner, Vultr, Linode, OpenStack). Use
 `--name` to run several deployments from one config:
 
 ```bash

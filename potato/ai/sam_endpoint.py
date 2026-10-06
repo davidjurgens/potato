@@ -99,7 +99,7 @@ class SAMEndpoint(BaseAIEndpoint):
         except ImportError as exc:  # pragma: no cover - depends on optional extra
             raise RuntimeError(
                 "The SAM endpoint needs torch and segment-anything. Install "
-                "the vision extra for torch: pip install 'potato[vision]'. "
+                "the vision extra for torch: pip install 'potato-annotation[vision]'. "
                 "segment-anything is published from GitHub, not PyPI: "
                 "pip install "
                 "'git+https://github.com/facebookresearch/segment-anything.git'"

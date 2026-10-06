@@ -430,6 +430,45 @@ class TestPublishWorkflow:
         variants = workflow["jobs"]["build"]["strategy"]["matrix"]["include"]
         assert {v["extras"] for v in variants} == {"", "all"}
 
+    def _tag_rules(self, workflow):
+        steps = workflow["jobs"]["build"]["steps"]
+        meta = next(s for s in steps if s.get("name") == "Compute tags")
+        return [line.strip() for line in meta["with"]["tags"].splitlines() if line.strip()]
+
+    def test_the_version_tag_is_pushed_only_by_a_release_tag(self, workflow):
+        """Master pushes used to push <version> too: 86c7f56a overwrote :2.9.4
+        and 7d5f819b overwrote :2.10.0 with unreleased code."""
+        version_rule = next(r for r in self._tag_rules(workflow)
+                            if "steps.version.outputs.version" in r)
+        assert "enable=${{ startsWith(github.ref, 'refs/tags/v') }}" in version_rule
+
+    def test_latest_comes_only_from_the_default_branch(self, workflow):
+        latest_rule = next(r for r in self._tag_rules(workflow) if "value=latest" in r)
+        assert "is_default_branch" in latest_rule
+
+    def test_a_newer_branch_run_cancels_an_older_one(self, workflow):
+        """Two master runs overlapped and the older finished last, so :latest
+        went back to 7d5f819b after 6b281231 was pushed."""
+        concurrency = workflow["concurrency"]
+        assert "github.ref" in concurrency["group"]
+        assert "!startsWith(github.ref, 'refs/tags/')" in concurrency["cancel-in-progress"]
+
+    @pytest.mark.parametrize("ref_type,ref_name,ok", [
+        ("tag", "v9.9.9", True),
+        ("tag", "v9.9.8", False),
+        ("branch", "master", True),
+    ])
+    def test_a_release_tag_must_match_setup_py(self, workflow, tmp_path,
+                                               ref_type, ref_name, ok):
+        steps = workflow["jobs"]["build"]["steps"]
+        script = next(s for s in steps if s.get("id") == "version")["run"]
+        (tmp_path / "setup.py").write_text("setup(version='9.9.9')\n")
+        result = subprocess.run(
+            ["bash", "-e", "-c", script], cwd=tmp_path, capture_output=True, text=True,
+            env={"PATH": os.environ["PATH"], "GITHUB_OUTPUT": str(tmp_path / "out"),
+                 "GITHUB_REF_TYPE": ref_type, "GITHUB_REF_NAME": ref_name})
+        assert (result.returncode == 0) is ok, result.stdout + result.stderr
+
     def test_refusal_checks_do_not_pipe_docker_into_grep(self, workflow):
         """Under `set -o pipefail` that pattern inverts its own result.
 

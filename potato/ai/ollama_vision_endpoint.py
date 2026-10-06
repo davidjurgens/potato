@@ -85,7 +85,7 @@ class OllamaVisionEndpoint(BaseVisualAIEndpoint):
             import ollama
         except ImportError:
             raise AIEndpointRequestError(
-                "ollama package is required. Install it with: pip install ollama"
+                "ollama package is required. Install it with: pip install 'potato-annotation[ai]'"
             )
 
         timeout = self.ai_config.get("timeout", 120)  # Vision models can be slower

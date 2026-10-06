@@ -66,7 +66,7 @@ class AnthropicVisionEndpoint(BaseVisualAIEndpoint):
             import anthropic
         except ImportError:
             raise AIEndpointRequestError(
-                "anthropic package is required. Install it with: pip install anthropic"
+                "anthropic package is required. Install it with: pip install 'potato-annotation[ai]'"
             )
 
         import os

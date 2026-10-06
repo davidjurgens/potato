@@ -821,16 +821,17 @@ def deprecated_key_warnings(config_data: Dict[str, Any]) -> List[str]:
                 f"are stored. Reading it as '{replacement}: {folded}', which "
                 f"writes a periodic export to "
                 f"'<output_annotation_dir>/exports/{folded}/'. The value "
-                f"changed because no exporter is called '{value}'. Rename the "
-                f"key. {_DEPRECATION_REMOVAL_NOTE}"
+                f"changed because no exporter is called '{value}'. Replace it "
+                f"with '{replacement}: {folded}' (renaming the key alone leaves "
+                f"'{value}', which no exporter handles). {_DEPRECATION_REMOVAL_NOTE}"
             )
         else:
             messages.append(
                 f"'{legacy}' is deprecated and never changed where annotations "
                 f"are stored. Reading it as '{replacement}: {folded}', which "
                 f"writes a periodic export to "
-                f"'<output_annotation_dir>/exports/{folded}/'. Rename the key. "
-                f"{_DEPRECATION_REMOVAL_NOTE}"
+                f"'<output_annotation_dir>/exports/{folded}/'. Rename the key "
+                f"to '{replacement}'. {_DEPRECATION_REMOVAL_NOTE}"
             )
     return messages
 
@@ -1233,17 +1234,23 @@ def resolve_num_annotators_per_item(config_data: Dict[str, Any]) -> int:
     here -- silently picking one of two numbers an author wrote down is
     the failure this key already caused once.
     """
+    # 0 means unlimited, as the validation message for this key promises. The
+    # cap checks treat any cap >= 0 as a limit, so a 0 passed through retired
+    # every item before anyone saw it.
+    def cap(value: int) -> int:
+        return -1 if value == 0 else value
+
     val = config_data.get("num_annotators_per_item")
     if isinstance(val, int) and not isinstance(val, bool):
-        return val
+        return cap(val)
     if isinstance(val, dict) and val.get("default") is not None:
-        return int(val["default"])
+        return cap(int(val["default"]))
     legacy = config_data.get("max_annotations_per_item")
     if isinstance(legacy, int) and not isinstance(legacy, bool):
-        return legacy
+        return cap(legacy)
     renamed = config_data.get("min_annotators_per_instance")
     if isinstance(renamed, int) and not isinstance(renamed, bool):
-        return renamed
+        return cap(renamed)
     return -1
 
 
@@ -1992,7 +1999,7 @@ def validate_annotation_telemetry_config(config_data: Dict[str, Any]) -> None:
 
     Records content-blind drawing dynamics on geometry schemas so a researcher
     can tell considered annotation from rubber-stamping. See
-    ``docs/administration/annotation_telemetry.md``.
+    ``docs/advanced/annotation_telemetry.md``.
     """
     at = config_data.get("annotation_telemetry")
     if at is None:
@@ -2877,6 +2884,17 @@ def _validate_rooms_block(config_data: Dict[str, Any]) -> None:
                 "rooms will refuse to open. Schemes here: %s.",
                 named, scheme_names or 'none',
             )
+            return
+        # The same test room creation applies. A `text` or geometry scheme
+        # validated clean here and then every room creation returned 400.
+        from potato.rooms.routes import _scheme_labels, votable_schema_error
+        blocked = votable_schema_error(config_data, named)
+        if blocked:
+            raise ConfigValidationError(f"rooms.schema: {blocked}")
+        if not _scheme_labels(config_data, named):
+            raise ConfigValidationError(
+                f"rooms.schema: scheme '{named}' has no labels, so a room has "
+                "nothing to vote on.")
         return
 
     # The autopick rooms itself runs. Imported rather than restated so the two
@@ -4552,6 +4570,13 @@ def validate_authentication_config(config_data: Dict[str, Any]) -> None:
 
     # OAuth-specific validation
     if method == "oauth":
+        # Without this, validate passed and `potato start` died with a raw
+        # ModuleNotFoundError from oauth_backend.py.
+        import importlib.util
+        if importlib.util.find_spec("authlib") is None:
+            raise ConfigValidationError(
+                "authentication.method is 'oauth', which requires Authlib. "
+                "Install it with: pip install 'potato-annotation[auth]'")
         # providers is required
         providers = auth_config.get("providers")
         if not providers or not isinstance(providers, dict):
@@ -4816,7 +4841,12 @@ def warn_batch_groups_need_the_batch_strategy(config_data: Dict[str, Any]) -> No
     if not isinstance(groups, list):
         return
 
-    strategy = str(config_data.get("assignment_strategy") or "").lower()
+    raw_strategy = config_data.get("assignment_strategy")
+    # The mapping form (`assignment_strategy: {name: batch}`) is valid too; the
+    # warning used to fire on it and fail `validate --strict`.
+    if isinstance(raw_strategy, dict):
+        raw_strategy = raw_strategy.get("name")
+    strategy = str(raw_strategy or "").lower()
     if strategy == "batch":
         return
 
@@ -5529,6 +5559,13 @@ def validate_database_config(db_config: Dict[str, Any]) -> None:
     if db_config['type'] == 'mysql':
         if 'password' not in db_config:
             raise ConfigValidationError("MySQL database requires password")
+        import importlib.util
+        if importlib.util.find_spec("mysql") is None or \
+                importlib.util.find_spec("mysql.connector") is None:
+            raise ConfigValidationError(
+                "database.type is 'mysql', but the MySQL driver "
+                "(mysql-connector-python) is not installed. Install it with: "
+                "pip install 'potato-annotation[mysql]'")
 
         # Validate port if specified
         if 'port' in db_config:
@@ -6282,6 +6319,19 @@ def validate_category_assignment_config(config_data: Dict[str, Any]) -> None:
         if not isinstance(qual, dict):
             raise ConfigValidationError("category_assignment.qualification must be a dictionary")
 
+        # Accepted for compatibility but read by nothing: qualifications come
+        # only from the training phase (calculate_and_set_qualifications), so
+        # these promised a prestudy source and a score combination that never
+        # happened.
+        inert = [k for k in ('source', 'combine_method') if k in qual]
+        if inert:
+            logger.warning(
+                "category_assignment.qualification.%s %s not used: "
+                "qualifications are computed from the training phase only. "
+                "Remove %s.",
+                " and ".join(inert), "is" if len(inert) == 1 else "are",
+                "it" if len(inert) == 1 else "them")
+
         # Validate source
         if 'source' in qual:
             valid_sources = ['training', 'prestudy', 'both']
@@ -6718,7 +6768,37 @@ def _substitute_llm_block_env_vars(config_data: Dict[str, Any]) -> Dict[str, Any
                     if isinstance(provider_cfg.get(key), str):
                         provider_cfg[key] = _substitute_env_typed(provider_cfg[key], key)
 
+    # Anywhere else. The deploy preflight (D006) flags a literal credential at
+    # any key path and says to replace it with ${ENV_VAR}; blocks outside the
+    # lists above (trace_ingestion, for one) then kept the literal "${API_KEY}"
+    # as their secret. A credential-named leaf, or a value that is exactly one
+    # ${VAR} reference, is expanded wherever it sits.
+    _substitute_secret_references(config_data)
+
     return config_data
+
+
+#: Leaf names the deploy preflight treats as credentials (D006); kept in step
+#: with potato/deploy/preflight.py by tests/unit/test_secret_env_substitution.py.
+_SECRET_LEAF_NAMES = ("api_key", "secret_key", "client_secret", "password",
+                      "token", "access_token", "auth_token")
+_WHOLE_ENV_REFERENCE = re.compile(r"^\$\{[A-Za-z_][A-Za-z0-9_]*\}$")
+
+
+def _substitute_secret_references(node: Any) -> None:
+    if isinstance(node, dict):
+        items = node.items()
+    elif isinstance(node, list):
+        items = enumerate(node)
+    else:
+        return
+    for key, value in list(items):
+        if isinstance(value, str):
+            if "${" in value and (key in _SECRET_LEAF_NAMES
+                                  or _WHOLE_ENV_REFERENCE.match(value)):
+                node[key] = _substitute_env_typed(value, key if isinstance(key, str) else None)
+        else:
+            _substitute_secret_references(value)
 
 
 def _merge_ai_config_file(config_data: Dict[str, Any], config_dir: str) -> Dict[str, Any]:
@@ -8671,5 +8751,5 @@ def _check_display_only_deprecation(config_data: Dict[str, Any]) -> None:
                 logger.warning(
                     f"Deprecation warning: Using {annotation_type} with min_annotations=0 "
                     f"for display-only is deprecated. Use instance_display instead. "
-                    f"See docs/instance_display.md for migration guide."
+                    f"See docs/annotation-types/instance_display.md for migration guide."
                 )

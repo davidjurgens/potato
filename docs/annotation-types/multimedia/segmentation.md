@@ -30,7 +30,7 @@ GPU and want a larger model, but it is the exception.
 
 | | Browser (default) | Server endpoint |
 |---|---|---|
-| Setup | `potato download-models` | `pip install 'potato[vision]'` + weights |
+| Setup | `potato download-models` | `pip install 'potato-annotation[vision]'` + weights |
 | GPU | Not required | Recommended |
 | Air-gapped | Yes, once models are downloaded | Yes |
 | Model size | Distilled (~30 MB) | Whatever you supply |

@@ -102,7 +102,9 @@ potato deploy destroy myproject/config.yaml
 ```
 
 Running `up` again uploads the new project, updates the service's environment,
-and redeploys the existing service rather than creating a second one.
+and redeploys the existing service with the image you name (`--image`, or the
+current `latest`) rather than creating a second one. The plan, region and disk
+cannot be changed this way.
 
 `potato deploy logs` is not supported: Render's log API needs a paid plan and a
 websocket. Read them in the dashboard.
@@ -112,9 +114,17 @@ Dataset is unaffected, because `destroy` does not touch that repo.
 
 ## Troubleshooting
 
-**"Refusing to create a free Render service"** — see
-[the free tier](#read-this-before-using-the-free-tier). The message lists the
-three ways forward.
+**"REFUSED: Render runs the published image and fetches your project…"** — every
+Render deployment needs `--backup hf` or `--backup s3`, because that storage is
+how the project reaches the container. `--demo` does not replace it. See
+[the free tier](#read-this-before-using-the-free-tier).
+
+**"Render does not attach disks to free instances"** — `--volume-gb` needs
+`--plan starter` or higher.
+
+**"a redeploy cannot change --plan …"** — the plan, region and disk are fixed
+when the service is created. Change them in the Render dashboard, or pull,
+destroy and deploy again.
 
 **The first request takes a minute** — a free instance that has spun down starts
 on the next request. `potato deploy status` says so when it sees this.

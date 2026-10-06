@@ -38,7 +38,8 @@ potato deploy pull config.yaml       # over the admin API
 potato deploy destroy config.yaml    # deletes the project, volume included
 ```
 
-Running `up` again updates the service's variables and redeploys it.
+Running `up` again updates the service's variables and image (`--image`, or the
+current `latest`) and redeploys it.
 
 ## A Railway button
 

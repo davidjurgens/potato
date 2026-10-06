@@ -154,6 +154,8 @@ class LocalProvider(Provider):
 
         record = existing or DeploymentRecord(name=spec.name, provider=self.name)  # noqa: E501
         record.provider_ref = {"container": container, "port": port, "image": image}
+        record.spec["output_annotation_dir"] = spec.extra.get(
+            "output_annotation_dir", "annotation_output")
         record.status = "creating"
         record.url = f"http://127.0.0.1:{port}"
         record.bundle_sha = bundle.sha256() if bundle else None
@@ -339,7 +341,14 @@ class LocalProvider(Provider):
         os.makedirs(dest, exist_ok=True)
         result = PullResult(dest=dest)
 
-        _run(["docker", "cp", f"{container}:/app/annotation_output", dest], check=False)
+        # The task's own output directory, under the name every pull uses. It
+        # was hard-coded to /app/annotation_output, so a task writing to
+        # results/ pulled nothing while the pull still counted as done.
+        output_dir = (record.spec.get("output_annotation_dir")
+                      or "annotation_output").strip("/")
+        os.makedirs(os.path.join(dest, "annotation_output"), exist_ok=True)
+        _run(["docker", "cp", f"{container}:/app/{output_dir}/.",
+              os.path.join(dest, "annotation_output")], check=False)
 
         for database in ("project.sqlite", "datasets.sqlite"):
             snapshot = f"/tmp/{database}.snapshot"

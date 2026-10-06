@@ -41,7 +41,7 @@ training:
 | `passing_criteria.max_mistakes` | integer | No | -1 | Maximum total mistakes before failure (-1 = unlimited) |
 | `passing_criteria.max_mistakes_per_question` | integer | No | -1 | Maximum mistakes per question before failure (-1 = unlimited) |
 | `allow_retry` | boolean | No | true | Whether to allow retrying incorrect answers |
-| `failure_action` | string | No | "move_to_done" | Action when user fails ("move_to_done" or "repeat_training") |
+| `failure_action` | string | No | "move_to_done" | Action when user fails: "move_to_done" ends the task; "repeat_training" starts the training again from the first question. Exceeding `max_mistakes` or `max_mistakes_per_question` ends the task either way. |
 
 ### Training Strategies
 

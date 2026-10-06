@@ -220,3 +220,24 @@ class TestRequest:
     def test_plan_prints_no_secret(self, spec):
         rendered = get_provider("aws-ecs").plan(spec, FakeBundle()).render()
         assert "ECS-SECRET" not in rendered and "ECS-ADMIN" not in rendered
+
+
+class TestDestroy:
+    def test_user_secrets_are_deleted_too(self, project, stubs):
+        """destroy deleted only the built-in keys; every --secret KEY=... stayed
+        in SSM as a SecureString."""
+        from potato.deploy.providers.aws.ecs import SECRET_KEYS, parameter_path
+
+        user = f"arn:aws:ssm:{REGION}:{ACCOUNT}:parameter/potato/pilot/OPENAI_API_KEY"
+        record = DeploymentRecord(name="pilot", provider="aws-ecs", provider_ref={
+            "service_arn": SERVICE_ARN, "region": REGION, "parameters": [user]})
+        names = sorted({parameter_path("pilot", k) for k in SECRET_KEYS}
+                       | {"/potato/pilot/OPENAI_API_KEY"})
+        stubs["ecs"].add_response("delete_express_gateway_service", {},
+                                  {"serviceArn": SERVICE_ARN})
+        for start in range(0, len(names), 10):
+            stubs["ssm"].add_response("delete_parameters", {},
+                                      {"Names": names[start:start + 10]})
+        stubs.activate()
+        get_provider("aws-ecs", console=lambda *a: None).destroy(record)
+        stubs.assert_done()

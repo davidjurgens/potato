@@ -286,6 +286,14 @@ def cmd_up(args) -> int:
     provider_name = args.provider
     public = provider_name != "local" and not args.private
 
+    # A target `deploy up` cannot drive at all (the tunnel runs under `potato
+    # share`) is refused before anything else, including the credential prompt
+    # it used to show first.
+    early = get_provider(provider_name, console=_echo)
+    if getattr(early, "driven_by", None):
+        _echo(f"REFUSED: {early.refusal(None, None)}")
+        return EXIT_BLOCKED
+
     token, source = creds.resolve_token(provider_name, args.token)
     if creds.requires_credential(provider_name) and not token and not args.dry_run:
         _echo(creds.missing_token_message(provider_name))
@@ -302,7 +310,9 @@ def cmd_up(args) -> int:
     report = run_preflight(args.config_file, provider=provider_name, public=public,
                            ephemeral_fs=provider.ephemeral_fs, workers=args.workers,
                            backup_configured=backup.enabled or (
-                               provider_name == "huggingface" and not args.demo))
+                               provider_name == "huggingface" and not args.demo),
+                           provided_env=[item.split("=", 1)[0] for item in
+                                         (args.secret or []) + (args.env or [])])
     _echo(render_report(report))
     _echo("")
 
@@ -370,7 +380,16 @@ def cmd_up(args) -> int:
                },
     )
 
+    # The plan and the refusal check need to know whether this is an update:
+    # an existing VM is updated in place, and a plan for a fresh machine
+    # described resources `up` would never create.
+    spec.extra["existing_record"] = DeploymentStore(args.config_file).get(name)
+
     plan = provider.plan(spec, manifest)
+    for field in getattr(provider, "ignored_flags", ()):
+        if getattr(spec, field, None) not in (None, False):
+            flag = "--" + field.replace("_", "-")
+            plan.warnings.append(f"{provider_name} does not use {flag}; it is ignored.")
     _echo(plan.render())
     _echo("")
 
@@ -442,7 +461,15 @@ def _confirm(plan, provider_name: str) -> bool:
         _echo("Not a terminal; re-run with --yes to confirm non-interactively.")
         return False
     cost = plan.estimated_cost_usd_month
-    money = "no ongoing cost" if not cost else f"about ${cost:.2f} per month"
+    # None means "not estimated" (an unlisted size, a non-dollar price), never
+    # free: it used to read "no ongoing cost" for Hetzner, Railway and any size
+    # missing from a provider's price table.
+    if cost is None:
+        money = "cost not estimated; see the plan above"
+    elif cost == 0:
+        money = "no ongoing cost"
+    else:
+        money = f"about ${cost:.2f} per month"
     answer = input(f"Create this deployment on {provider_name} ({money})? [y/N] ")
     return answer.strip().lower() in ("y", "yes")
 

@@ -33,6 +33,7 @@ from typing import Any, Dict, Iterator, List, Optional
 import requests
 
 from potato.deploy.providers.base import (
+    deploy_command,
     Action,
     DeployPlan,
     DeploymentStatus,
@@ -213,6 +214,7 @@ def build_source_tarball(spec: DeploySpec, bundle, dest: str) -> str:
 class HerokuProvider(Provider):
     """One container-stack web dyno built from the published image."""
 
+    ignored_flags = ("domain",)
     name = "heroku"
     summary = ("Heroku container dyno from $7/mo; ephemeral disk, so it needs "
                "--backup (sustaining mode since 2026-02)")
@@ -317,8 +319,9 @@ class HerokuProvider(Provider):
             store.upsert(record)
         elif api.get_app(name) is None:
             raise ProviderError(
-                f"The Heroku app {name} no longer exists. Run `potato deploy destroy "
-                f"--name {record.name} --force` to clear the record, then deploy again.")
+                f"The Heroku app {name} no longer exists. Run `"
+                + deploy_command("destroy", spec.config_path, record.name, "--force")
+                + "` to clear the record, then deploy again.")
         else:
             record.status = "updating"
             store.upsert(record)
@@ -344,8 +347,8 @@ class HerokuProvider(Provider):
         store.upsert(record)
         if not healthy:
             raise ProviderError(
-                f"{record.url} never answered. See `potato deploy logs --name "
-                f"{record.name}`.")
+                f"{record.url} never answered. See `"
+                + deploy_command("logs", spec.config_path, record.name) + "`.")
         self.console(f"Live at {record.url}")
         return record
 

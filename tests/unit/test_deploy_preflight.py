@@ -91,12 +91,20 @@ class TestBlockingFindings:
         report = run_preflight(path)
         assert "D010" in codes(report)
 
-    def test_multiple_workers_is_an_error(self, tmp_path):
-        """Two workers duplicate assignments and lose annotations."""
-        path = write_config(tmp_path, server={"workers": 4})
-        report = run_preflight(path)
-        assert "D013" in codes(report)
+    def test_the_workers_flag_is_an_error(self, tmp_path):
+        """`up --workers 3` passed preflight and the dry run, then the container
+        exited at start. Two workers duplicate assignments and lose annotations."""
+        report = run_preflight(write_config(tmp_path), workers=3)
+        finding = next(f for f in report.findings if f.code == "D013")
+        assert finding.severity == "error" and "--threads" in finding.remedy
         assert not report.ok
+
+    def test_a_server_workers_key_is_only_a_warning(self, tmp_path):
+        """The server never reads server.workers, so it cannot break anything;
+        the old hint told people to raise a `threads` key that does not exist."""
+        report = run_preflight(write_config(tmp_path, server={"workers": 4}))
+        finding = next(f for f in report.findings if f.code == "D013")
+        assert finding.severity == "warning" and "--threads" in finding.remedy
 
     def test_one_worker_is_fine(self, tmp_path):
         report = run_preflight(write_config(tmp_path, server={"workers": 1}))
@@ -462,3 +470,38 @@ class TestCredentialResolution:
     def test_describe_available_covers_every_provider(self):
         lines = creds.describe_available(environ={})
         assert len(lines) == len(creds.PROVIDER_CREDENTIALS)
+
+
+class TestAIKeyCheck:
+    """D014 told people to pass --secret OPENAI_API_KEY=..., then kept firing
+    after they did; it also fired for vLLM, which needs no key, and named
+    OpenAI for an Anthropic config."""
+
+    def _report(self, tmp_path, monkeypatch, endpoint, ai_config, provided=()):
+        for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
+            monkeypatch.delenv(name, raising=False)
+        path = write_config(tmp_path, ai_support={
+            "enabled": True, "endpoint_type": endpoint, "ai_config": ai_config})
+        return run_preflight(path, provided_env=provided)
+
+    def test_fires_when_the_key_is_nowhere(self, tmp_path, monkeypatch):
+        report = self._report(tmp_path, monkeypatch, "openai",
+                              {"model": "gpt-4o", "api_key": "${OPENAI_API_KEY}"})
+        assert "D014" in codes(report)
+
+    def test_its_own_fix_satisfies_it(self, tmp_path, monkeypatch):
+        report = self._report(tmp_path, monkeypatch, "openai",
+                              {"model": "gpt-4o", "api_key": "${OPENAI_API_KEY}"},
+                              provided=["OPENAI_API_KEY"])
+        assert "D014" not in codes(report)
+
+    def test_vllm_needs_no_key(self, tmp_path, monkeypatch):
+        report = self._report(tmp_path, monkeypatch, "vllm",
+                              {"model": "m", "base_url": "http://h:8001/v1"})
+        assert "D014" not in codes(report)
+
+    def test_names_the_variable_the_config_uses(self, tmp_path, monkeypatch):
+        report = self._report(tmp_path, monkeypatch, "anthropic",
+                              {"model": "claude", "api_key": "${ANTHROPIC_API_KEY}"})
+        finding = next(f for f in report.findings if f.code == "D014")
+        assert "ANTHROPIC_API_KEY" in finding.remedy and "OPENAI" not in finding.remedy

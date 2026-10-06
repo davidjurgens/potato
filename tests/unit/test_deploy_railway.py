@@ -151,6 +151,21 @@ class TestCreate:
         assert not by_operation(sent, "serviceCreate")
         assert by_operation(sent, "variableCollectionUpsert")
 
+    @responses.activate
+    def test_a_redeploy_sets_the_requested_image(self, provider, spec, project):
+        """Only serviceCreate set the image, so a redeploy kept the first one."""
+        sent = graphql_responder()
+        spec.image = "ghcr.io/davidjurgens/potato:2.10.2"
+        existing = DeploymentRecord(name="pilot", provider="railway",
+                                    url="https://potato-pilot.up.railway.app",
+                                    provider_ref={"project_id": "proj",
+                                                  "environment_id": "env",
+                                                  "service_id": "svc"})
+        provider.create(spec, FakeBundle(), existing, DeploymentStore(project))
+        updates = by_operation(sent, "serviceInstanceUpdate")
+        assert any(u["variables"]["input"].get("source") == {"image": spec.image}
+                   for u in updates), updates
+
 
 class TestPlan:
     def test_prints_no_secret(self, provider, spec):

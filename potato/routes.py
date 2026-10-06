@@ -1580,6 +1580,13 @@ def training():
                 else:
                     # All questions completed
                     require_all = passing_criteria.get('require_all_correct', False)
+                    if require_all and training_state.get_correct_answer_count() < total_questions \
+                            and training_config.get('failure_action') == 'repeat_training':
+                        _restart_training(user_state, training_state)
+                        training_state.set_feedback(
+                            True, "You did not answer every question correctly. "
+                            "The training starts again.", False, "warning")
+                        return redirect(url_for("home"))
                     if require_all and training_state.get_correct_answer_count() < total_questions:
                         # User didn't get all correct
                         training_state.set_failed(True)
@@ -1677,6 +1684,14 @@ def training():
                                 training_state.set_passed(True)
                                 usm = get_user_state_manager()
                                 usm.advance_phase(username)
+                                return redirect(url_for("home"))
+                            elif failure_action == 'repeat_training':
+                                # Documented as "repeat the training"; it used
+                                # to end the task exactly as move_to_done does.
+                                _restart_training(user_state, training_state)
+                                training_state.set_feedback(
+                                    True, "You did not get enough answers right. "
+                                    "The training starts again.", False, "warning")
                                 return redirect(url_for("home"))
                             else:
                                 training_state.set_failed(True)
@@ -6780,6 +6795,23 @@ def _configured_annotator_cap():
     except Exception:
         return "unknown"
     return "unlimited" if cap < 0 else cap
+
+
+def _restart_training(user_state, training_state):
+    """Send an annotator back to the first training question with a clean slate.
+
+    Keeps the question list and the mistake limits; clears answers, counts and
+    the fail flag. Mistake-limit failures (max_mistakes) still end the task.
+    """
+    training_state.completed_questions = {}
+    training_state.total_correct = 0
+    training_state.total_attempts = 0
+    training_state.total_mistakes = 0
+    training_state.category_scores = {}
+    training_state.passed = False
+    training_state.failed = False
+    training_state.set_current_question_index(0)
+    user_state.clear_phase_page_annotations()
 
 
 @app.route("/done", methods=["GET", "POST"])

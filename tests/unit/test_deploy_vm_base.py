@@ -213,3 +213,78 @@ class TestCloudInitFitsTheProvider:
         rendered = build_cloud_init(spec(volume_gb=5), public_host="1.2.3.4",
                                     volume_device="/dev/sdb")
         assert len(rendered.encode()) <= provider.user_data_limit
+
+
+class TestUpdatingAnExistingMachine:
+    """`up` on an existing VM used to print a fresh-provision plan, record a new
+    --size/--region/--volume-gb/--domain it never applied, and restart the old
+    container without pulling, so no deployment could pick up a new --image or
+    a newer :latest."""
+
+    def _record(self, **spec_fields):
+        record = DeploymentRecord(name="pilot", provider="digitalocean")
+        record.provider_ref.update({"droplet_id": 7, "ipv4": "203.0.113.5",
+                                    "host": "203.0.113.5", "app_dir": "/opt/potato/app"})
+        record.url = "https://203.0.113.5"
+        record.spec = {"size": "s-1vcpu-2gb", "region": "nyc3", "volume_gb": None,
+                       "domain": None, **spec_fields}
+        return record
+
+    def test_a_changed_size_is_refused(self, tmp_path):
+        from potato.deploy.providers.base import get_provider
+        s = spec(size="s-2vcpu-4gb")
+        s.extra["existing_record"] = self._record()
+        message = get_provider("digitalocean").refusal(s, None)
+        assert message and "--size s-2vcpu-4gb (it has s-1vcpu-2gb)" in message
+
+    def test_unchanged_or_omitted_settings_update_in_place(self):
+        from potato.deploy.providers.base import get_provider
+        s = spec(size="s-1vcpu-2gb")
+        s.extra["existing_record"] = self._record()
+        assert get_provider("digitalocean").refusal(s, None) is None
+
+    def test_the_plan_describes_an_update(self):
+        from potato.deploy.providers.base import get_provider
+        s = spec(image="ghcr.io/davidjurgens/potato:2.10.2")
+        s.extra["existing_record"] = self._record()
+        plan = get_provider("digitalocean").plan(s, None)
+        kinds = [a.kind for a in plan.actions]
+        assert "docker.pull" in kinds and not any(k.startswith("do.") for k in kinds)
+
+    def test_the_update_rewrites_the_unit_and_pulls_before_restarting(self, monkeypatch):
+        from potato.deploy.providers import vm_base
+        from potato.deploy.providers.base import get_provider
+
+        log = []
+
+        class Result:
+            def output(self):
+                return ""
+
+        class FakeSession:
+            def __init__(self, *a, **k): pass
+            def wait_for_ssh(self, timeout): pass
+            def run(self, cmd, **k):
+                log.append(("run", cmd))
+                return Result()
+            def put_archive(self, src, dest): return 1024
+            def put_text(self, text, path, mode=0o644): log.append(("put", path, text))
+            def wait_for_http(self, url, timeout): return True
+            def close(self): pass
+
+        class Bundle:
+            bundle_dir = "/tmp/b"
+            file_count = 1
+            def sha256(self): return "a" * 64
+
+        monkeypatch.setattr(vm_base, "SSHSession", FakeSession)
+        s = spec(image="ghcr.io/davidjurgens/potato:2.10.2")
+        get_provider("digitalocean", console=lambda *a: None)._configure_host(
+            s, Bundle(), self._record(), "PEM", skip_cloud_init=True)
+
+        unit = next(e for e in log if e[0] == "put" and e[1].endswith("potato.service"))
+        assert "ghcr.io/davidjurgens/potato:2.10.2" in unit[2]
+        commands = [e[1] for e in log if e[0] == "run"]
+        pull = commands.index("docker pull ghcr.io/davidjurgens/potato:2.10.2")
+        restart = commands.index("systemctl restart potato.service")
+        assert pull < restart

@@ -357,7 +357,7 @@ class SklearnTextTrainer(Trainer):
                 raise MissingDependency(
                     "Image embeddings need sentence-transformers and pillow: "
                     "%s" % exc,
-                    install_hint='pip install "potato-annotation[embeddings]"'
+                    install_hint="pip install sentence-transformers pillow"
                 ) from exc
             return ImageEmbeddingVectorizer(
                 model_name=kwargs.pop("model_name", DEFAULT_IMAGE_MODEL),

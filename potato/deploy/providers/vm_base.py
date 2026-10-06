@@ -27,9 +27,11 @@ from __future__ import annotations
 
 import os
 import posixpath
+import shlex
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from potato.deploy.providers.base import (
+    deploy_command,
     Action,
     DeployPlan,
     DeploymentStatus,
@@ -86,6 +88,39 @@ def app_dir_for(volume: bool) -> str:
     return VOLUME_APP_DIR if volume else APP_DIR
 
 
+SERVICE_UNIT_PATH = "/etc/systemd/system/potato.service"
+
+
+def render_potato_service(spec: DeploySpec, app_dir: str) -> str:
+    """The systemd unit that runs the container. cloud-init installs it on
+    first boot, and an update rewrites it so a new --image takes effect."""
+    return render_template(
+        "potato.service.j2",
+        container_name=CONTAINER, env_file=ENV_FILE, app_port=APP_PORT,
+        app_dir=app_dir, data_dir=DATA_DIR, image=spec.image or DEFAULT_IMAGE,
+        deployment_name=spec.name)
+
+
+#: Settings fixed when the machine is created. An update cannot change them,
+#: and recording the requested value anyway left the record describing a
+#: machine that did not exist.
+IMMUTABLE_SETTINGS = (("size", "--size"), ("region", "--region"),
+                      ("volume_gb", "--volume-gb"), ("domain", "--domain"))
+
+
+def changed_settings(spec: DeploySpec, record) -> List[str]:
+    """Flags this spec sets to something other than what the record holds."""
+    changed = []
+    for field, flag in IMMUTABLE_SETTINGS:
+        wanted = getattr(spec, field)
+        if wanted is None:
+            continue
+        had = (record.spec or {}).get(field)
+        if had is not None and str(wanted) != str(had):
+            changed.append(f"{flag} {wanted} (it has {had})")
+    return changed
+
+
 def build_cloud_init(spec: DeploySpec, *, public_host: str,
                      volume_device: Optional[str] = None,
                      app_dir: Optional[str] = None,
@@ -100,11 +135,7 @@ def build_cloud_init(spec: DeploySpec, *, public_host: str,
     app_dir = app_dir or app_dir_for(bool(volume_device))
     cert_dir = posixpath.join(DATA_DIR, "caddy") if volume_device else "/var/lib/caddy"
 
-    potato_service = render_template(
-        "potato.service.j2",
-        container_name=CONTAINER, env_file=ENV_FILE, app_port=APP_PORT,
-        app_dir=app_dir, data_dir=DATA_DIR, image=image,
-        deployment_name=spec.name)
+    potato_service = render_potato_service(spec, app_dir)
 
     caddyfile = render_template(
         "Caddyfile.j2",
@@ -284,7 +315,46 @@ class VMProvider(Provider):
 
     # -- plan ----------------------------------------------------------
 
+    def refusal(self, spec: DeploySpec, bundle, existing=None) -> Optional[str]:
+        record = existing or spec.extra.get("existing_record")
+        if record is None or not record.provider_ref.get(self.server_id_key):
+            return None
+        changed = changed_settings(spec, record)
+        if not changed:
+            return None
+        return (f"'{record.name}' already has a {self.server_noun}, and an update "
+                f"cannot change {', '.join(changed)}. To change it, run "
+                f"`potato deploy pull` and then `potato deploy destroy`, and "
+                "deploy again; or leave the flag off to update in place.")
+
+    def _update_plan(self, spec: DeploySpec, bundle, record) -> DeployPlan:
+        """What `up` does to a machine that already exists."""
+        image = spec.image or DEFAULT_IMAGE
+        size = (record.spec or {}).get("size") or self.default_size
+        plan = DeployPlan(
+            result_url_pattern=record.url or "",
+            estimated_cost_usd_month=self.estimate_cost(
+                size, (record.spec or {}).get("volume_gb")))
+        plan.actions = [
+            Action("ssh.connect", f"connect to the existing {self.server_noun} "
+                   f"at {self._ssh_host(record)}"),
+            Action("ssh.unit", f"rewrite potato.service to run {image}"),
+            Action("docker.pull", f"docker pull {image}"),
+            Action("ssh.upload", f"upload the bundle to {record_app_dir(record)}",
+                   {"files": bundle.file_count if bundle else None}),
+            Action("ssh.env", f"rewrite {ENV_FILE} at mode 0600"),
+            Action("ssh.start", "restart potato and caddy"),
+            Action("wait.http", f"poll {record.url}/health"),
+        ]
+        plan.warnings.append(
+            f"This updates the existing {self.server_noun}; size, region, volume "
+            "and domain stay as they are.")
+        return plan
+
     def plan(self, spec: DeploySpec, bundle) -> DeployPlan:
+        existing = spec.extra.get("existing_record")
+        if existing is not None and existing.provider_ref.get(self.server_id_key):
+            return self._update_plan(spec, bundle, existing)
         region = spec.region or self.default_region
         size = spec.size or self.default_size
         host = self.host_placeholder(spec)
@@ -317,6 +387,10 @@ class VMProvider(Provider):
         note = self.cost_note(size, spec.volume_gb)
         if note:
             plan.warnings.append(note)
+        elif plan.estimated_cost_usd_month is None:
+            plan.warnings.append(
+                f"No price is known for {self.name} size {size!r}; check the "
+                "provider's pricing before confirming.")
         if len(user_data.encode("utf-8")) > self.user_data_limit:
             plan.warnings.append(
                 f"The first-boot script is {len(user_data)} bytes; {self.name} "
@@ -422,9 +496,9 @@ class VMProvider(Provider):
         state, _raw = self._server_state(api, record)
         if state == "absent":
             raise ProviderError(
-                f"The {self.server_noun} for '{record.name}' no longer exists. Run "
-                f"`potato deploy destroy --name {record.name} --force` to clear the "
-                "record, then deploy again.")
+                f"The {self.server_noun} for '{record.name}' no longer exists. Run `"
+                + deploy_command("destroy", spec.config_path, record.name, "--force")
+                + "` to clear the record, then deploy again.")
 
         private_pem = SecretStore(spec.config_path).get(spec.name, "ssh_private_key")
         if not private_pem:
@@ -433,6 +507,10 @@ class VMProvider(Provider):
                 f"{SecretStore(spec.config_path).path}, so the host cannot be "
                 f"reached. Destroy and recreate, or add your own key in "
                 f"{self.console_name}.")
+
+        refused = self.refusal(spec, bundle, existing=record)
+        if refused:
+            raise ProviderError(refused)
 
         record.status = "updating"
         record.spec.update(self.record_spec(spec))
@@ -468,6 +546,18 @@ class VMProvider(Provider):
                         f"sed -i 's/{IP_PLACEHOLDER}/{record.provider_ref['host']}/' "
                         "/etc/caddy/Caddyfile", check=True)
 
+            if skip_cloud_init:
+                # An update. The image is named only in the systemd unit, which
+                # cloud-init wrote once, and nothing pulled it again: `up` on an
+                # existing machine never picked up a new --image or a newer
+                # :latest. Rewrite the unit and pull before the restart below.
+                image = spec.image or DEFAULT_IMAGE
+                self.console(f"Pulling {image}...")
+                session.put_text(render_potato_service(spec, app_dir),
+                                 SERVICE_UNIT_PATH, mode=0o644)
+                session.run(f"docker pull {shlex.quote(image)}", check=True,
+                            timeout=900)
+
             volume_devices = record.provider_ref.get("volume_devices")
             if volume_devices:
                 self.console("Preparing the volume...")
@@ -501,8 +591,9 @@ class VMProvider(Provider):
                 raise ProviderError(
                     f"The {self.server_noun} was created but {record.url} never "
                     f"became healthy. The machine is still running — inspect it "
-                    f"with `potato deploy logs --name {spec.name}` or destroy it "
-                    f"with `potato deploy destroy --name {spec.name} --force`.\n\n"
+                    f"with `{deploy_command('logs', spec.config_path, spec.name)}` "
+                    "or destroy it with "
+                    f"`{deploy_command('destroy', spec.config_path, spec.name, '--force')}`.\n\n"
                     f"Last service logs:\n{logs.output()[:1500]}")
         finally:
             session.close()
@@ -539,8 +630,9 @@ class VMProvider(Provider):
             # renewal that has been failing shows up here first.
             return False, (f"TLS error reaching {url}: {exc}. If this deployment "
                            "uses an IP-address certificate, renewal may have "
-                           "failed — check `potato deploy logs --name "
-                           f"{record.name}`.")
+                           "failed — check `"
+                           + deploy_command("logs", record.spec.get("config_path"),
+                                            record.name) + "`.")
         except requests.RequestException as exc:
             return False, f"{url} is not answering: {exc}"
 

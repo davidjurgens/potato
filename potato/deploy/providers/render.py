@@ -136,8 +136,12 @@ class RenderAPI:
         """Replace the service's environment (PUT replaces the whole set)."""
         return self.request("PUT", f"/services/{service_id}/env-vars", json=env_vars)
 
-    def trigger_deploy(self, service_id: str) -> Dict[str, Any]:
-        return self.request("POST", f"/services/{service_id}/deploys", json={})
+    def trigger_deploy(self, service_id: str,
+                       image_url: Optional[str] = None) -> Dict[str, Any]:
+        # An image-backed service deploys the image named here; without it,
+        # Render redeploys whatever image the service was created with.
+        body = {"imageUrl": image_url} if image_url else {}
+        return self.request("POST", f"/services/{service_id}/deploys", json=body)
 
     def list_deploys(self, service_id: str, limit: int = 5) -> List[Dict[str, Any]]:
         result = self.request("GET", f"/services/{service_id}/deploys?limit={limit}")
@@ -193,9 +197,12 @@ def service_payload(spec: DeploySpec, *, owner_id: str,
 
     disk_gb = spec.volume_gb
     if disk_gb:
+        # /app, where the image works and the entrypoint unpacks the project.
+        # The disk used to be mounted at /data, which nothing wrote to, so a
+        # paid disk held none of the annotations.
         payload["serviceDetails"]["disk"] = {
             "name": f"potato-{spec.name}-data",
-            "mountPath": "/data",
+            "mountPath": "/app",
             "sizeGB": int(disk_gb),
         }
     return payload
@@ -205,6 +212,7 @@ def service_payload(spec: DeploySpec, *, owner_id: str,
 class RenderProvider(Provider):
     """A single web service running the published image."""
 
+    ignored_flags = ("domain", "size")
     name = "render"
     requires = ()
     public = True
@@ -252,6 +260,10 @@ class RenderProvider(Provider):
             Action("wait.http", "poll the service URL until it answers"),
         ]
 
+        if result.estimated_cost_usd_month is None:
+            result.warnings.append(
+                f"No price is known for Render plan {plan_name!r}; check "
+                "Render's pricing before confirming.")
         if bundle_store is not None and bundle_store.kind == "s3" and not spec.volume_gb:
             result.warnings.append(
                 "The project is fetched from a presigned S3 URL, valid seven "
@@ -259,16 +271,11 @@ class RenderProvider(Provider):
                 "week a restart fails until `potato deploy up` is run again. "
                 "Add --backup hf, or a disk, to avoid that.")
         if plan_name == "free":
-            if not spec.volume_gb:
-                result.warnings.append(
-                    f"A free Render instance has no disk and stops after "
-                    f"{FREE_IDLE_MINUTES} minutes idle and loses everything "
-                    "written to it. The backup is the only copy of the "
-                    "annotations, restored when it starts again.")
-        if spec.volume_gb and plan_name == "free":
             result.warnings.append(
-                "Render does not attach disks to free instances; this needs "
-                "--plan starter or higher.")
+                f"A free Render instance has no disk and stops after "
+                f"{FREE_IDLE_MINUTES} minutes idle and loses everything "
+                "written to it. The backup is the only copy of the "
+                "annotations, restored when it starts again.")
         if not bundle:
             result.warnings.append("No bundle was built; this plan cannot run.")
         return result
@@ -279,10 +286,30 @@ class RenderProvider(Provider):
         # The project is uploaded to the backup's storage, so every Render
         # deploy needs one. That also covers the free plan, whose data would
         # otherwise be lost fifteen minutes after the last annotator leaves.
+        plan_name = spec.extra.get("plan") or DEFAULT_PLAN
         if not spec.extra.get("backup_kinds") or _bundle_store(spec) is None:
-            if (spec.extra.get("plan") or DEFAULT_PLAN) == "free":
+            if plan_name == "free":
                 return _NO_BUNDLE_STORE + _FREE_PLAN_NOTE
             return _NO_BUNDLE_STORE
+        # A free instance takes no disk. Requesting one used to drop both
+        # data-loss warnings from the plan while the service ran without it.
+        if plan_name == "free" and spec.volume_gb:
+            return ("Render does not attach disks to free instances, so "
+                    "--volume-gb needs --plan starter or higher. Without a disk "
+                    "the backup is the only copy of the annotations.")
+        record = spec.extra.get("existing_record")
+        if record is not None and record.provider_ref.get("service_id"):
+            had = record.spec or {}
+            changed = [f"{flag} {want} (it has {had.get(key)})"
+                       for key, flag, want in (("plan", "--plan", spec.extra.get("plan")),
+                                               ("region", "--region", spec.region),
+                                               ("volume_gb", "--volume-gb", spec.volume_gb))
+                       if want is not None and had.get(key) is not None
+                       and str(want) != str(had.get(key))]
+            if changed:
+                return (f"'{record.name}' already has a Render service, and a "
+                        f"redeploy cannot change {', '.join(changed)}. Change it "
+                        "in the Render dashboard, or pull, destroy and deploy again.")
         return None
 
     def create(self, spec: DeploySpec, bundle, existing, store) -> DeploymentRecord:
@@ -301,13 +328,20 @@ class RenderProvider(Provider):
         owner_id = spec.extra.get("owner_id") or owners[0].get("id")
 
         record = existing or DeploymentRecord(name=spec.name, provider=self.name)
-        record.spec.update({"config_path": os.path.abspath(spec.config_path),
-                            "plan": plan_name})
+        record.spec["config_path"] = os.path.abspath(spec.config_path)
 
         env = self._service_env(spec, bundle, bundle_store)
 
         if record.provider_ref.get("service_id"):
-            return self._redeploy(api, record, store, env)
+            return self._redeploy(api, record, store, env,
+                                  image=spec.image or DEFAULT_IMAGE)
+
+        # Recorded only when the service is created: a redeploy cannot change
+        # them, and recording the requested plan made `status` report one the
+        # service did not have.
+        record.spec.update({"plan": plan_name,
+                            "region": spec.region or DEFAULT_REGION,
+                            "volume_gb": spec.volume_gb})
 
         record.status = "creating"
         store.upsert(record)
@@ -356,7 +390,8 @@ class RenderProvider(Provider):
         env.update(location.env())
         return env
 
-    def _redeploy(self, api, record, store, env: Dict[str, str]) -> DeploymentRecord:
+    def _redeploy(self, api, record, store, env: Dict[str, str],
+                  image: Optional[str] = None) -> DeploymentRecord:
         """Push the new environment (and so the new bundle), then deploy.
 
         Triggering a deploy alone restarted the old bundle with the old
@@ -365,7 +400,7 @@ class RenderProvider(Provider):
         record.status = "updating"
         store.upsert(record)
         api.update_env_vars(record.provider_ref["service_id"], env_var_list(env))
-        api.trigger_deploy(record.provider_ref["service_id"])
+        api.trigger_deploy(record.provider_ref["service_id"], image_url=image)
         self.console("Triggered a redeploy; waiting for it to go live...")
         record.status = "running" if self._wait_for_live(api, record) else "unhealthy"
         store.upsert(record)
@@ -504,8 +539,11 @@ def _bundle_store(spec: DeploySpec):
     return store_for(options) if options is not None else None
 
 
-def _estimate_cost(plan_name: str, disk_gb: Optional[int]) -> float:
-    cost = PLAN_PRICES.get(plan_name, 0.0)
+def _estimate_cost(plan_name: str, disk_gb: Optional[int]) -> Optional[float]:
+    # An unlisted plan is unknown, not free.
+    if plan_name not in PLAN_PRICES:
+        return None
+    cost = PLAN_PRICES[plan_name]
     if disk_gb:
         cost += float(disk_gb) * DISK_PRICE_PER_GB
     return cost

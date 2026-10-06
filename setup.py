@@ -105,6 +105,12 @@ _VISION_DEPS = [
 _DB_DEPS = [
     "sqlalchemy>=2.0",
 ]
+# The MySQL user-state backend (`database: {type: mysql}`, potato/database/).
+# It uses mysql-connector-python directly, not the SQLAlchemy + pymysql stack
+# the data sources above use, and no extra declared it before 2.10.2.
+_MYSQL_DEPS = [
+    "mysql-connector-python>=8.0",
+]
 # Local speech-to-text and speaker diarization. faster-whisper is Whisper
 # compiled through CTranslate2: no cloud API, no per-minute charge, and it runs
 # on CPU. Used by `potato transcripts --transcribe` and by Think-Aloud Mode's
@@ -189,6 +195,7 @@ setup(
         "auth": _AUTH_DEPS,
         "langchain": _LANGCHAIN_DEPS,
         "db": _DB_DEPS,
+        "mysql": _MYSQL_DEPS,
         "deploy": _DEPLOY_DEPS,
         "hosting": _HOSTING_DEPS,
         # boto3 for the AWS targets (Lightsail, EC2, ECS) and the S3 bundle
@@ -200,7 +207,7 @@ setup(
         "transcribe": _TRANSCRIBE_DEPS,
         # `all` deliberately excludes `vision`: torch is a multi-gigabyte
         # install, and nothing in the default experience needs it.
-        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _DEPLOY_DEPS + _HOSTING_DEPS + _PREVIEW_DEPS + _MCP_DEPS + _TRANSCRIBE_DEPS,
+        "all": _AI_DEPS + _FORMAT_DEPS + _VIZ_DEPS + _EXPORT_DEPS + _HF_DEPS + _AUTH_DEPS + _LANGCHAIN_DEPS + _DB_DEPS + _MYSQL_DEPS + _DEPLOY_DEPS + _HOSTING_DEPS + _PREVIEW_DEPS + _MCP_DEPS + _TRANSCRIBE_DEPS,
     },
     include_package_data=True,
     entry_points={

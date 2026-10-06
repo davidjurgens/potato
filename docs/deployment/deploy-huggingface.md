@@ -42,8 +42,10 @@ potato deploy pull myproject/config.yaml
 This downloads the backup Dataset, not the Space. Whatever is on the Space right
 now is at best a partial copy of what the Dataset already has.
 
-Without a backup — a `--demo` deployment — there is nowhere to pull from, and
-the only route is the admin export API against the running Space.
+Without a backup (a `--demo` deployment) there is no Dataset, so `potato
+deploy pull` reads the running Space directly through its admin export API.
+That works only while the Space is up, and anything it lost in a rebuild is
+gone.
 
 `potato deploy destroy` deletes the Space and **leaves the Dataset alone**.
 Deleting the host is cheap and reversible; deleting the annotations is neither,

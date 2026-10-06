@@ -102,6 +102,16 @@ class PullResult:
     notes: List[str] = field(default_factory=list)
 
 
+def deploy_command(verb: str, config_path: Optional[str], name: str,
+                   *flags: str) -> str:
+    """A `potato deploy` command a user can paste. config_file is a required
+    argument, and suggested commands that left it out failed as typed."""
+    import shlex
+    parts = ["potato", "deploy", verb, shlex.quote(config_path or "config.yaml"),
+             "--name", shlex.quote(name), *flags]
+    return " ".join(parts)
+
+
 class ProviderError(RuntimeError):
     """A provider operation failed in a way the user must act on."""
 
@@ -129,6 +139,10 @@ class Provider(ABC):
     mounts_bundle: bool = False
     supports_logs: bool = False
     supports_pull: bool = False
+    #: DeploySpec fields this target accepts from the CLI but cannot apply
+    #: (e.g. ("domain", "volume_gb")). `deploy up` warns when one is set,
+    #: rather than dropping it without a word.
+    ignored_flags: tuple = ()
 
     def __init__(self, token: Optional[str] = None, console=None):
         self.token = token

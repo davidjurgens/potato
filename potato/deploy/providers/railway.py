@@ -20,6 +20,7 @@ import time
 from typing import Any, Dict, Optional
 
 from potato.deploy.providers.base import (
+    deploy_command,
     Action,
     DeployPlan,
     DeploymentStatus,
@@ -122,6 +123,7 @@ class RailwayAPI:
 class RailwayProvider(Provider):
     """One Railway service with a volume."""
 
+    ignored_flags = ("size", "region", "volume_gb", "domain")
     name = "railway"
     summary = "Railway: image + volume on *.up.railway.app, usage-billed (~$10-20/mo)"
     public = True
@@ -239,6 +241,12 @@ class RailwayProvider(Provider):
                     "environmentId": ref["environment_id"],
                     "serviceId": ref["service_id"],
                     "variables": variables, "skipDeploys": True}})
+                # The image was set only by serviceCreate, so a redeploy kept
+                # running the first image whatever --image said.
+                api.run(INSTANCE_UPDATE, {"serviceId": ref["service_id"],
+                                          "environmentId": ref["environment_id"],
+                                          "input": {"source": {
+                                              "image": spec.image or DEFAULT_IMAGE}}})
             api.run(REDEPLOY, {"serviceId": ref["service_id"],
                                "environmentId": ref["environment_id"]})
 
@@ -251,8 +259,9 @@ class RailwayProvider(Provider):
             raise
         store.upsert(record)
         if record.status != "running":
-            raise ProviderError(f"The Railway deployment ended {status}. "
-                                f"See `potato deploy logs --name {record.name}`.")
+            raise ProviderError(f"The Railway deployment ended {status}. See `"
+                                + deploy_command("logs", spec.config_path, record.name)
+                                + "`.")
         self.console(f"Live at {record.url}")
         return record
 

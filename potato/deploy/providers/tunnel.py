@@ -172,16 +172,22 @@ class TunnelProvider(Provider):
         if backend == "cloudflared":
             plan.warnings.append(
                 "Some university and corporate networks filter trycloudflare.com. "
-                "Use --backend tailscale if participants cannot reach the link.")
+                "Use `potato share --backend tailscale` if participants cannot reach the link.")
         if backend == "ngrok":
             plan.warnings.append(
                 "The ngrok free tier shows visitors an interstitial page first.")
         return plan
 
+    #: `deploy up` cannot drive this target; the CLI refuses it up front.
+    driven_by = "potato share"
+
+    def refusal(self, spec: DeploySpec, bundle) -> Optional[str]:
+        return ("The tunnel provider is driven by `potato share`, which runs the "
+                "server and the tunnel together in the foreground: run "
+                "`potato share config.yaml` instead of `potato deploy up`.")
+
     def create(self, spec: DeploySpec, bundle, existing, store) -> DeploymentRecord:
-        raise ProviderError(
-            "The tunnel provider is driven by `potato share`, which runs the server "
-            "and the tunnel together in the foreground.")
+        raise ProviderError(self.refusal(spec, bundle))
 
     def status(self, record) -> DeploymentStatus:
         return DeploymentStatus(

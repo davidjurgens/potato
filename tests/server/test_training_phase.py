@@ -610,3 +610,56 @@ class TestTrainingRendersAndGrades:
         page = s.get(f"{training_server.base_url}/").text
         assert "Another practice item" in page, (
             "question 2 was graded against question 1's leftover answer")
+
+
+class TestRepeatTraining:
+    """`failure_action: repeat_training` was accepted and documented, and its
+    only reader treated it exactly like move_to_done: a failing annotator's task
+    ended. It now sends them back to the first question."""
+
+    @pytest.fixture(scope="class")
+    def server(self):
+        import json as _json
+        from tests.helpers.flask_test_setup import FlaskTestServer
+        from tests.helpers.test_utils import create_test_config, create_test_data_file
+
+        test_dir = create_test_directory("training_repeat")
+        try:
+            create_test_data_file(test_dir, [{"id": "item_1", "text": "Item 1"}])
+            with open(os.path.join(test_dir, "training_data.json"), "w") as f:
+                _json.dump({"training_instances": [
+                    {"id": "t1", "text": "First practice item",
+                     "correct_answers": {"sentiment": "positive"}, "explanation": "Because."},
+                    {"id": "t2", "text": "Second practice item",
+                     "correct_answers": {"sentiment": "negative"}, "explanation": "Because."},
+                ]}, f)
+            config_file = create_test_config(
+                test_dir,
+                [{"annotation_type": "radio", "name": "sentiment",
+                  "description": "Sentiment?", "labels": ["positive", "negative"]}],
+                data_files=["test_data.jsonl"],
+                annotation_task_name="Training Repeat",
+                phases={"order": ["training", "annotation"],
+                        "training": {"type": "training"}},
+                additional_config={"training": {
+                    "enabled": True, "data_file": "training_data.json",
+                    "passing_criteria": {"min_correct": 2}, "allow_retry": False,
+                    "failure_action": "repeat_training"}},
+            )
+            srv = FlaskTestServer(port=find_free_port(), config_file=config_file)
+            if not srv.start():
+                pytest.fail("Failed to start training test server")
+            yield srv
+            srv.stop()
+        finally:
+            cleanup_test_directory(test_dir)
+
+    def test_failing_the_round_starts_it_again(self, server):
+        s = TestTrainingRendersAndGrades._login(server, "repeat@test.com")
+        for _ in range(2):   # both answers wrong
+            TestTrainingRendersAndGrades._save(s, server, {"sentiment:negative": "negative"}
+                                          if _ == 0 else {"sentiment:positive": "positive"})
+            TestTrainingRendersAndGrades._submit(s, server)
+        page = s.get(f"{server.base_url}/").text
+        assert "First practice item" in page, page[:2000]
+        assert "did not pass" not in page.lower()

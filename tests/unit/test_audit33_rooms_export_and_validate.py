@@ -134,7 +134,7 @@ class TestExportRespectsTheBlindPhase:
 # 2. validate says what boot says
 # ----------------------------------------------------------------------
 
-def _validate(name, config):
+def _validate(name, config, expect_ok=True):
     """Run the real `potato validate` on a config that is otherwise clean, so
     the only thing left to report is the rooms block."""
     import json
@@ -165,7 +165,8 @@ def _validate(name, config):
         yaml.safe_dump(config, fh)
 
     report = validate_config_file(path)
-    assert report.ok, f"fixture config is not valid: {report.errors}"
+    if expect_ok:
+        assert report.ok, f"fixture config is not valid: {report.errors}"
     return report
 
 
@@ -221,6 +222,29 @@ class TestValidateWarnsAboutRooms:
         warnings = _rooms_warnings(report)
         assert warnings, report.other_warnings
         assert "sarcams" in warnings[0]
+
+    def test_a_named_scheme_rooms_cannot_vote_on_is_refused(self):
+        """rooms.schema pointing at a text scheme validated clean, and then
+        every room creation returned 400."""
+        report = _validate("text_schema", {
+            "annotation_schemes": [
+                {"annotation_type": "radio", "name": "sarcasm",
+                 "description": "Sarcasm?", "labels": LABELS},
+                {"annotation_type": "text", "name": "notes",
+                 "description": "Notes"}],
+            "rooms": {"enabled": True, "schema": "notes"},
+        }, expect_ok=False)
+        assert not report.ok
+        assert "rooms.schema" in str(report.errors)
+
+    def test_a_named_votable_scheme_passes(self):
+        report = _validate("named_ok", {
+            "annotation_schemes": [
+                {"annotation_type": "radio", "name": "sarcasm",
+                 "description": "Sarcasm?", "labels": LABELS}],
+            "rooms": {"enabled": True, "schema": "sarcasm"},
+        })
+        assert report.ok, report.errors
 
     def test_strict_refuses_the_broken_rooms_config(self):
         """The warning has to reach the exit code, or CI cannot use it."""

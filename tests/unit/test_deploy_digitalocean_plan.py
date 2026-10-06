@@ -443,7 +443,8 @@ class TestHelpers:
         assert _memory_mb(slug) == expected
 
     def test_unknown_size_does_not_invent_a_price(self):
-        assert _estimate_cost("s-96vcpu-mystery", None) == 0.0
+        # None, not 0.0: the plan printed 0.0 as "Estimated cost: free".
+        assert _estimate_cost("s-96vcpu-mystery", None) is None
 
     def test_env_file_is_systemd_format(self):
         rendered = _render_env_file({"B": "2", "A": "1"})

@@ -30,7 +30,9 @@ same bytes every time. `potato deploy` uses it for that reason.
 Both are built for `linux/amd64` and `linux/arm64`, so they run natively on
 Apple Silicon.
 
-Pin a version for a study that will run for months. `latest` moves.
+Pin a version for a study that will run for months. `latest` follows the
+master branch and moves with every change to it. A `<version>` tag is pushed
+once, when that release is tagged, and is not rebuilt afterwards.
 
 The `-all` variant covers `ai_support`, PDF and DOCX ingestion, parquet export
 and OAuth logins. Neither variant includes the `vision` extra: it pulls

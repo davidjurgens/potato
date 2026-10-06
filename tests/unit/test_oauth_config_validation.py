@@ -34,6 +34,15 @@ class TestOAuthConfigValidation:
     def test_valid_google_config_passes(self):
         validate_authentication_config(self._base_config())
 
+    def test_missing_authlib_names_the_extra(self):
+        """validate used to pass and `potato start` died with a raw
+        ModuleNotFoundError from oauth_backend.py."""
+        real = __import__("importlib.util").util.find_spec
+        with patch("importlib.util.find_spec",
+                   side_effect=lambda name, *a: None if name == "authlib" else real(name, *a)):
+            with pytest.raises(ConfigValidationError, match=r"potato-annotation\[auth\]"):
+                validate_authentication_config(self._base_config())
+
     def test_valid_github_config_passes(self):
         config = self._base_config()
         config["authentication"]["providers"] = {

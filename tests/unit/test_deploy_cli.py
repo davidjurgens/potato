@@ -542,3 +542,38 @@ class TestProviderListingMatchesReality:
         from potato.deploy.providers.base import get_provider
         assert "durable" not in get_provider("tunnel").summary
         assert get_provider("tunnel").summary
+
+
+class TestConfirmNamesTheCost:
+    """The prompt read "no ongoing cost" whenever the estimate was None, which
+    covered Hetzner, Railway and every size missing from a price table."""
+
+    @pytest.mark.parametrize("cost,expected", [
+        (None, "cost not estimated"), (0.0, "no ongoing cost"), (12.0, "about $12.00 per month")])
+    def test_the_prompt(self, monkeypatch, cost, expected):
+        asked = []
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("builtins.input", lambda prompt: asked.append(prompt) or "n")
+        cli._confirm(DeployPlan(estimated_cost_usd_month=cost), "hetzner")
+        assert expected in asked[0]
+
+
+class TestIgnoredFlagsAreReported:
+    def test_a_flag_the_target_cannot_use_is_named(self, project, capsys, monkeypatch):
+        """--domain on Railway, --size on ECS and the like were dropped with no
+        word in the plan."""
+        monkeypatch.setattr(RecordingProvider, "ignored_flags", ("domain",), raising=False)
+        cli.main(["up", project, "--provider", "recording", "--dry-run",
+                  "--domain", "annotate.example.org"])
+        assert "recording does not use --domain; it is ignored." in capsys.readouterr().out
+
+
+class TestTunnelIsRefusedUpFront:
+    def test_no_credential_prompt_before_the_refusal(self, project, capsys, monkeypatch):
+        """`up --provider tunnel` asked for an ngrok token, then failed in
+        create() whatever was supplied."""
+        monkeypatch.delenv("NGROK_AUTHTOKEN", raising=False)
+        code = cli.main(["up", project, "--provider", "tunnel"])
+        out = capsys.readouterr().out
+        assert code == cli.EXIT_BLOCKED
+        assert "potato share" in out and "NGROK" not in out

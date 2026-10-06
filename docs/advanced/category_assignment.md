@@ -45,7 +45,6 @@ item_properties:
 category_assignment:
   enabled: true
   qualification:
-    source: training      # Where qualification comes from
     threshold: 0.7        # 70% accuracy required
     min_questions: 2      # At least 2 questions per category
   fallback: uncategorized # What to do if user qualifies for nothing
@@ -74,11 +73,13 @@ spelling ran with every item uncategorized, fell through to the
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `enabled` | boolean | true | Enable/disable category assignment |
-| `qualification.source` | string | "training" | Where qualification scores come from: "training", "prestudy", or "both" |
 | `qualification.threshold` | float | 0.7 | Minimum accuracy (0.0-1.0) to qualify for a category |
 | `qualification.min_questions` | integer | 1 | Minimum questions answered per category to qualify |
-| `qualification.combine_method` | string | "average" | How to combine scores when source is "both": "average", "max", or "sum" |
 | `fallback` | string | "uncategorized" | Behavior when user doesn't qualify for any category |
+
+Qualification scores come from the training phase only.
+`qualification.source` and `qualification.combine_method` are still accepted,
+but nothing reads them, and Potato logs a warning when either is set.
 
 #### Fallback Options
 
@@ -450,7 +451,6 @@ You can use both training-based qualification AND dynamic expertise:
 category_assignment:
   enabled: true
   qualification:
-    source: training
     threshold: 0.7
     min_questions: 2
   dynamic:

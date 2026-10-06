@@ -146,7 +146,7 @@ class DigitalOceanProvider(VMProvider):
     def memory_mb(self, size: str) -> Optional[int]:
         return _memory_mb(size)
 
-    def estimate_cost(self, size: str, volume_gb: Optional[int]) -> float:
+    def estimate_cost(self, size: str, volume_gb: Optional[int]) -> Optional[float]:
         return _estimate_cost(size, volume_gb)
 
     def volume_device_hint(self, spec: DeploySpec) -> str:
@@ -305,8 +305,11 @@ def _volume_device(spec: DeploySpec) -> str:
     return f"/dev/disk/by-id/scsi-0DO_Volume_potato-{spec.name}"
 
 
-def _estimate_cost(size: str, volume_gb: Optional[int]) -> float:
-    cost = SIZE_PRICES.get(size, 0.0)
+def _estimate_cost(size: str, volume_gb: Optional[int]) -> Optional[float]:
+    # An unlisted size is unknown, not free.
+    if size not in SIZE_PRICES:
+        return None
+    cost = SIZE_PRICES[size]
     if volume_gb:
         cost += float(volume_gb) * VOLUME_PRICE_PER_GB
     return cost

@@ -67,7 +67,7 @@ class OpenAIVisionEndpoint(BaseVisualAIEndpoint):
             import openai
         except ImportError:
             raise AIEndpointRequestError(
-                "openai package is required. Install it with: pip install openai"
+                "openai package is required. Install it with: pip install 'potato-annotation[ai]'"
             )
 
         import os

@@ -35,6 +35,7 @@ from potato.deploy.providers.aws._aws import (
     wait_until,
 )
 from potato.deploy.providers.base import (
+    deploy_command,
     Action,
     DeployPlan,
     DeploymentStatus,
@@ -111,6 +112,7 @@ def express_request(spec: DeploySpec, *, execution_role: str, infrastructure_rol
 class ECSExpressProvider(Provider):
     """ECS Express Mode on Fargate, with backup-and-restore for its disk."""
 
+    ignored_flags = ("size", "volume_gb", "domain")
     name = "aws-ecs"
     summary = ("AWS ECS Express Mode: managed HTTPS, no server, ~$45-70/mo; "
                "ephemeral disk, so it needs --backup")
@@ -263,8 +265,8 @@ class ECSExpressProvider(Provider):
             raise
         store.upsert(record)
         if record.status != "running":
-            raise ProviderError(f"{record.url} never answered. See "
-                                f"`potato deploy logs --name {record.name}`.")
+            raise ProviderError(f"{record.url} never answered. See `" + deploy_command(
+                "logs", record.spec.get("config_path"), record.name) + "`.")
         self.console(f"Live at {record.url}")
         return record
 
@@ -417,8 +419,15 @@ class ECSExpressProvider(Provider):
                 if not is_not_found(exc.__cause__ or exc):
                     raise
         ssm = self._client("ssm", region)
-        names = [parameter_path(record.name, k) for k in SECRET_KEYS]
-        ssm.call("delete_parameters", Names=names)
+        # Every parameter `up` stored, not just the built-in keys: each --secret
+        # KEY=... was left behind in SSM as a SecureString.
+        names = {parameter_path(record.name, k) for k in SECRET_KEYS}
+        names |= {arn.split(":parameter", 1)[1]
+                  for arn in record.provider_ref.get("parameters") or []
+                  if ":parameter" in arn}
+        ordered = sorted(names)
+        for start in range(0, len(ordered), 10):     # the API takes ten at a time
+            ssm.call("delete_parameters", Names=ordered[start:start + 10])
         self.console("Deleted the deployment's SSM parameters")
         if record.provider_ref.get("log_group"):
             try:

@@ -9,10 +9,11 @@ name: Publish Docker image
 #   latest, <version>, sha-<short>   core dependencies only  (~700 MB)
 #   latest-all, <version>-all        plus the `all` extras   (~1.5 GB)
 #
-# <version> comes from setup.py, so cutting a release tags the image with it
-# automatically. A tag push builds; a branch push to master builds `latest`; a
-# pull request builds without pushing, so a broken Dockerfile fails in review
-# rather than after merge.
+# <version> comes from setup.py and is pushed only by a `v*` tag push, which
+# must match it. A master push builds `latest` and sha-<short> only: it used to
+# push <version> too, so every commit between releases overwrote the last
+# release's image with unreleased code. A pull request builds without pushing,
+# so a broken Dockerfile fails in review rather than after merge.
 
 on:
   push:
@@ -32,7 +33,17 @@ on:
       - 'docker-entrypoint.sh'
       - '.dockerignore'
       - 'setup.py'
+      - 'MANIFEST.in'
+      - 'potato/**'
   workflow_dispatch:
+
+# Two master pushes minutes apart ran side by side, and the older one finished
+# last, so `latest` went back to the earlier commit. A newer run on the same
+# branch now cancels the older one. Tag runs are never cancelled: each tag is
+# its own ref, and a release image must finish.
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
   REGISTRY: ghcr.io
@@ -65,6 +76,12 @@ jobs:
             pathlib.Path('setup.py').read_text()).group(1))")
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "Building potato ${version}"
+          # A release image is named after setup.py, so a tag that disagrees
+          # with it would publish the wrong number.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match setup.py version ${version}"
+            exit 1
+          fi
 
       # arm64 matters: Apple Silicon laptops are the common `deploy up
       # --provider local` host, and emulating amd64 there is unusably slow.
@@ -88,7 +105,7 @@ jobs:
             latest=false
             suffix=${{ matrix.suffix }},onlatest=true
           tags: |
-            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
 

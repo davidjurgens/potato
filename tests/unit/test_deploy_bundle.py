@@ -451,3 +451,33 @@ class TestOnlyMountingProvidersPreserve:
     def test_upload_providers_do_not(self, name):
         from potato.deploy.providers.base import get_provider
         assert get_provider(name).mounts_bundle is False
+
+
+class TestS3BundleStoreCredentials:
+    """deploy-backups.md documents POTATO_S3_* for R2 and B2, but only the
+    server's backup sink read them: the project upload fell through to the AWS
+    credential chain and could not reach a non-AWS bucket."""
+
+    def test_potato_s3_credentials_reach_the_client(self, monkeypatch):
+        boto3 = pytest.importorskip("boto3")
+        from potato.deploy.bundle_store import S3BundleStore
+
+        seen = {}
+        monkeypatch.setattr(boto3, "client", lambda service, **kw: seen.update(kw) or object())
+        monkeypatch.setenv("POTATO_S3_ACCESS_KEY_ID", "r2-key")
+        monkeypatch.setenv("POTATO_S3_SECRET_ACCESS_KEY", "r2-secret")
+        S3BundleStore("b", endpoint_url="https://acct.r2.cloudflarestorage.com").client()
+        assert seen["aws_access_key_id"] == "r2-key"
+        assert seen["aws_secret_access_key"] == "r2-secret"
+        assert seen["endpoint_url"].endswith("r2.cloudflarestorage.com")
+
+    def test_without_them_the_aws_chain_is_used(self, monkeypatch):
+        boto3 = pytest.importorskip("boto3")
+        from potato.deploy.bundle_store import S3BundleStore
+
+        seen = {}
+        monkeypatch.setattr(boto3, "client", lambda service, **kw: seen.update(kw) or object())
+        monkeypatch.delenv("POTATO_S3_ACCESS_KEY_ID", raising=False)
+        monkeypatch.delenv("POTATO_S3_SECRET_ACCESS_KEY", raising=False)
+        S3BundleStore("b").client()
+        assert "aws_access_key_id" not in seen

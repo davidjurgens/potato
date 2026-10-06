@@ -118,7 +118,18 @@ class TestServicePayload:
     def test_a_disk_is_mounted_when_asked_for(self, spec):
         spec.volume_gb = 5
         disk = service_payload(spec, owner_id="own", env={})["serviceDetails"]["disk"]
-        assert disk["sizeGB"] == 5 and disk["mountPath"] == "/data"
+        assert disk["sizeGB"] == 5
+
+    def test_the_disk_holds_the_task(self, spec):
+        """It was mounted at /data, which nothing wrote to: the paid disk held
+        none of the annotations. It must be where the image works."""
+        import re
+        from pathlib import Path
+        dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text()
+        workdir = re.findall(r"^WORKDIR\s+(\S+)", dockerfile, re.M)[-1]
+        spec.volume_gb = 5
+        disk = service_payload(spec, owner_id="own", env={})["serviceDetails"]["disk"]
+        assert disk["mountPath"] == workdir == "/app"
 
     def test_no_disk_key_without_one(self, spec):
         assert "disk" not in service_payload(
@@ -151,10 +162,11 @@ class TestPlan:
         message = provider.refusal(spec, FakeBundle())
         assert message and "not an option" in message
 
-    def test_warns_that_free_instances_take_no_disk(self, provider, spec):
+    def test_refuses_a_disk_on_a_free_instance(self, provider, spec):
+        """Now a refusal rather than a warning: the plan went ahead without it."""
+        with_hf_backup(spec)
         spec.volume_gb = 5
-        assert any("free instances" in w
-                   for w in provider.plan(spec, FakeBundle()).warnings)
+        assert "free instances" in provider.refusal(spec, FakeBundle())
 
     def test_plan_names_where_the_project_will_be_fetched_from(self, provider,
                                                                spec):
@@ -317,6 +329,31 @@ class TestCreate:
         assert sent["POTATO_BUNDLE_SHA256"] == "d" * 64
 
     @responses.activate
+    def test_a_redeploy_deploys_the_requested_image(self, provider, spec, project):
+        """The deploy call carried no image, so Render kept running the one the
+        service was created with whatever --image said."""
+        with_hf_backup(spec)
+        spec.image = "ghcr.io/davidjurgens/potato:2.10.2"
+        responses.add(responses.GET, f"{API}/owners", json=[{"owner": {"id": "own-1"}}])
+        responses.add(responses.PUT, f"{API}/services/srv-1/env-vars", json=[])
+        responses.add(responses.POST, f"{API}/services/srv-1/deploys", json={})
+        responses.add(responses.GET, f"{API}/services/srv-1/deploys?limit=1",
+                      json=[{"deploy": {"status": "live"}}])
+        existing = DeploymentRecord(name="pilot", provider="render",
+                                    provider_ref={"service_id": "srv-1"})
+        provider.create(spec, FakeBundle(), existing, DeploymentStore(project))
+        deploy = next(c for c in responses.calls if c.request.url.endswith("/deploys"))
+        assert json.loads(deploy.request.body) == {"imageUrl": spec.image}
+
+    def test_a_redeploy_refuses_a_plan_it_cannot_apply(self, provider, spec):
+        with_hf_backup(spec)
+        spec.extra["plan"] = "standard"
+        spec.extra["existing_record"] = DeploymentRecord(
+            name="pilot", provider="render", provider_ref={"service_id": "srv-1"},
+            spec={"plan": "starter"})
+        assert "--plan standard (it has starter)" in provider.refusal(spec, FakeBundle())
+
+    @responses.activate
     def test_the_service_is_told_where_to_fetch_the_project(self, provider, spec,
                                                             project, published):
         """The regression: nothing set POTATO_BUNDLE_URL, so every service
@@ -435,7 +472,8 @@ class TestStatus:
 
 class TestCost:
     def test_unknown_plan_does_not_invent_a_price(self):
-        assert _estimate_cost("enterprise-mystery", None) == 0.0
+        # None, not 0.0: the plan printed 0.0 as "Estimated cost: free".
+        assert _estimate_cost("enterprise-mystery", None) is None
 
 
 def _stub_successful_create():
@@ -445,3 +483,16 @@ def _stub_successful_create():
                                     "serviceDetails": {"url": "https://x.onrender.com"}}})
     responses.add(responses.GET, f"{API}/services/srv-1/deploys?limit=1",
                   json=[{"deploy": {"status": "live"}}])
+
+
+class TestFreePlanDisk:
+    def test_a_disk_on_the_free_plan_is_refused(self, provider, spec):
+        """It used to silence both data-loss warnings while the service ran
+        without the disk."""
+        with_hf_backup(spec)
+        spec.volume_gb = 1
+        assert "--plan starter" in provider.refusal(spec, FakeBundle())
+
+    def test_the_free_plan_always_warns_about_loss(self, provider, spec):
+        with_hf_backup(spec)
+        assert any("only copy" in w for w in provider.plan(spec, FakeBundle()).warnings)
