@@ -57878,18 +57878,39 @@ route. See [Testing](../guides/testing.md) for the drift tests that enforce this
 <!-- source: docs/releasenotes/v2.10.2.md -->
 URL: https://potatoannotator.readthedocs.io/en/latest/releasenotes/v2.10.2/
 
-# Release Notes: v2.10.2 — AI Support and Surveys from pip and Docker
+# Release Notes: v2.10.2 — Security, MySQL, Agreement and Packaging Fixes
 
-Two features did not work from a pip install or the published Docker image:
-AI label suggestions (`ai_support`) and survey instruments. Both have been
-broken this way since at least 2.7.0. Running from a git checkout was not affected.
-Upgrade if you install Potato with pip or deploy it with `potato deploy`.
+This release fixes features that did not work from a pip install or the
+published Docker image, closes several ways to sign in as someone else,
+makes the MySQL backend work, and corrects agreement statistics that could
+be wrong in reported results. Upgrade if you install Potato with pip,
+deploy it with `potato deploy`, use SSO or MySQL, or report agreement
+numbers from Potato.
 
 ```bash
 pip install --upgrade potato-annotation
 ```
 
-## Bug fixes
+If you published agreement numbers from an earlier version, recompute them:
+see [Agreement statistics](#agreement-statistics) below.
+
+## Security
+
+- **SSO accounts could be signed into with any password.** On a task with
+  OAuth, the password form accepted any password for an account a provider
+  had registered. SSO identities now never authenticate by password, local
+  accounts (`allow_local_login`) cannot take an SSO user's name, an SSO-only
+  task shows only the provider buttons, and `/register` answers 403.
+- **Losing `user_config.json` let a stranger take over an annotator.** With
+  the MySQL backend, anyone could register an existing annotator's username
+  and inherit their work. Registration now checks the database.
+- Potato now also refuses cross-site requests to the admin crowdsourcing
+  routes, such as worker payments, usernames that are paths, dashboard viewers taking over accounts, debug
+  mode on a public address, access to other users' live-agent and
+  coding-agent sessions, MCP exports written outside the exports folder, and a Clerk
+  session for a different username.
+
+## pip and Docker
 
 - **`ai_support` failed at startup.** The wheel left out `potato/ai/prompt/`,
   so the server stopped with "Default annotation directory does not exist".
@@ -57902,14 +57923,104 @@ pip install --upgrade potato-annotation
   could pick it up.
 - **Every Docker boot logged a gunicorn error.** gunicorn 26 opens a control
   socket under `$HOME/.gunicorn/`. A container run as a user with no home
-  directory, as the local provider and Heroku do, logged "Control server
-  error: Permission denied: '/.gunicorn'". Potato does not use the socket and
-  now turns it off. The server worked either way.
+  directory logged "Control server error: Permission denied: '/.gunicorn'".
+  Potato now turns the socket off. The server worked either way.
+- **Containers left ten subsystems off.** Containers and every `potato deploy`
+  target start the server through `create_app()`, which skipped chat support,
+  MACE, active learning, the ICL labeler, diversity ordering, the embedding
+  view, expertise routing, the directory watcher, agent sessions and OAuth.
+  A deployed study with chat support showed the sidebar and answered 404.
+  The default image now includes Authlib, so an OAuth study no longer exits
+  at boot.
 
-The Docker image is built from the same package, so the first two fixes also
-apply to every `potato deploy` target that runs `ghcr.io/davidjurgens/potato`.
 A test now checks that every tracked file under `potato/`, apart from design
 notes, ships in the package.
+
+## MySQL
+
+- **The MySQL backend never turned on.** A swallowed circular import sent
+  every MySQL config to the file backend. A missing driver or unreachable
+  server now stops startup, and `pip install potato-annotation[mysql]`
+  installs the driver.
+- **Tools found no annotations on a MySQL study.** Export, Paper Mode,
+  auto-export, model training, `potato repair`, annotation filtering, the
+  admin data archive, `potato deploy pull` and backups read only the file
+  backend. They now read the database. A MySQL study always pulls over
+  HTTPS.
+- **Backups restored over a live MySQL study on every boot.** Restore now
+  runs only when both the output directory and the database are empty.
+- **File-backend work is imported at boot.** A file study switched to
+  MySQL, or a restored backup, used to leave its `user_state.json` files
+  unread. Annotators the database does not hold are imported; the database
+  copy wins when both exist.
+- Offline tools now expand `${VAR}` in the database password, as the server
+  does.
+
+## Deployment and configuration
+
+- VM providers show an update plan on re-run, refuse changes to settings
+  they cannot change in place, and rewrite the systemd unit before
+  restarting. Render mounts its disk at `/app`, refuses a free plan with a
+  disk, and redeploys the new image, as Railway now does too. ECS destroy
+  removes every parameter. Unknown prices show as "not estimated", not $0.
+- `num_annotators_per_item: 0` means unlimited, `${secret}` references are
+  substituted, the rooms schema validates, and `failure_action:
+  repeat_training` restarts training as documented.
+- Install hints in the AI endpoints, SAM and the sklearn trainer name
+  extras that exist.
+
+## Agreement statistics
+
+59 fixes, each checked against a reference implementation (scipy, sklearn,
+statsmodels, `krippendorff`, pycocotools, pygamma-agreement) or a
+simulation with known truth.
+
+- **An undefined coefficient is now reported as undefined, with a note,
+  not 1.0.** This covers one label used throughout, nothing comparable, and
+  a tied vote, in Fleiss and Cohen kappa, Paper Mode, span token kappa and
+  adjudication.
+- **MACE** scored pure spammers at about 0.35 competence; they now fit at
+  about 0.01. It also misread multiselect, free-text and dict-written
+  answers.
+- **Krippendorff's ordinal alpha** used neither the ordinal nor the interval
+  metric. It now matches the `krippendorff` package.
+- **Results changed after a restart.** Geometry, rollout and span-gamma
+  chance baselines followed per-process hash order. KS tests scored
+  identical samples as different.
+- **Pairwise means paired the wrong items** under uneven coverage for
+  ordinal, continuous and ranking answers. `kendall_tau` correlated item
+  names, not ranks; weighted kappa dropped unused scale points; Fleiss kappa
+  depended on rater order.
+- Hungarian matching applied its threshold after assignment, and keypoints, 2D cuboids and freeform shapes scored 0
+  against themselves.
+- IBWS left about 13% of items unshown per round,
+  `plackett_luce` was Bradley-Terry, BWS Bradley-Terry counted each
+  judgment twice, and gold auto-promotion promoted ties.
+
+## Annotation data
+
+- Readers of stored answers (adjudication, required follow-ups, attention
+  checks, psychometrics, admin question stats, code co-occurrence) misread
+  what the annotation page saves.
+- The crowd tab counted no completed or in-progress workers, and time on
+  task was always 0.
+- Span offsets and labels with entities, tags or doubled spaces, and a
+  cleared last checkbox, now survive the save and restore. Delimited data
+  files keep cell text verbatim, and `data_sources` load the same items as
+  `data_files`.
+- Saved user-state fields, the IBWS round and attention-check blocks
+  survive a restart.
+- YOLO, Pascal VOC and CoNLL exports, filtering by prior annotation, and
+  published survey keys are fixed.
+
+## Point clouds
+
+- **Clouds in map coordinates keep their precision.** A LAS file in UTM
+  coordinates was drawn, and annotated, on a grid as coarse as 0.5 m.
+  Potato now serves such clouds relative to a local origin and adds it back
+  when saving, so annotations and exports stay in the file's coordinates.
+  You don't need to re-centre files yourself.
+- A dark point in a 16-bit LAS file is no longer shown near white.
 
 See the [changelog](https://github.com/davidjurgens/potato/blob/master/CHANGELOG.md) for earlier releases.
 
