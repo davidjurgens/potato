@@ -547,7 +547,8 @@ def home():
         logger.debug("No active session, rendering login page")
         return render_template("home.html",
                               title=config.get("annotation_task_name", "Annotation Platform"),
-                              require_password=config.get("require_password", True))
+                              require_password=config.get("require_password", True),
+                              **_sso_login_context())
 
     user_id = session['username']
     logger.debug(f"Active session for user: {user_id}")
@@ -673,6 +674,19 @@ def auth():
                                   require_password=require_password)
 
     # GET request - show the login form
+    return render_template("home.html",
+                         title=config.get("annotation_task_name", "Annotation Platform"),
+                         require_password=config.get("require_password", True),
+                         **_sso_login_context())
+
+
+def _sso_login_context():
+    """The SSO buttons and local-form switch every login render needs.
+
+    `/` used to render the login page without these, so an SSO-only task
+    showed annotators no sign-in button and offered the password and
+    register forms instead.
+    """
     oauth_providers = []
     allow_local_login = True
     try:
@@ -682,12 +696,7 @@ def auth():
             allow_local_login = authenticator.auth_config.get("allow_local_login", False)
     except ValueError:
         pass  # Authenticator not yet initialized
-
-    return render_template("home.html",
-                         title=config.get("annotation_task_name", "Annotation Platform"),
-                         require_password=config.get("require_password", True),
-                         oauth_providers=oauth_providers,
-                         allow_local_login=allow_local_login)
+    return {"oauth_providers": oauth_providers, "allow_local_login": allow_local_login}
 
 
 @app.route("/passwordless-login", methods=["GET", "POST"])
@@ -1244,6 +1253,18 @@ def register():
     password = request.form.get("pass")
 
     logger.debug(f"Registration attempt for username: {username}")
+
+    sso_context = _sso_login_context()
+    if sso_context["oauth_providers"] and not sso_context["allow_local_login"]:
+        logger.warning("Refused password registration for '%s': this task "
+                       "signs in through SSO only (allow_local_login is false)",
+                       username)
+        return render_template(
+            "home.html",
+            login_error="This task signs in through single sign-on only.",
+            title=config.get("annotation_task_name", "Annotation Platform"),
+            require_password=config.get("require_password", True),
+            **sso_context), 403
 
     if not username or not password:
         logger.warning("Missing username or password")

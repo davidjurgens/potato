@@ -136,12 +136,14 @@ _DEPLOY_DEPS = [
 ]
 
 # What a hosted server needs to back its data up off the host and restore it
-# (potato/server_utils/backup). Installed into the published image by default:
-# on an ephemeral host a backup that cannot import its client is no backup.
+# (potato/server_utils/backup), plus Authlib for SSO logins. Installed into the
+# published image by default: on an ephemeral host a backup that cannot import
+# its client is no backup, and a deploy cannot install an extra into the image
+# it pulls, so an OAuth study deployed on the core image exited at boot.
 _HOSTING_DEPS = [
     "huggingface_hub>=0.20.0",
     "boto3>=1.26.0",
-]
+] + _AUTH_DEPS
 
 setup(
     name="potato-annotation",

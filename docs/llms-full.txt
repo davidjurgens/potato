@@ -53642,8 +53642,8 @@ same bytes every time. `potato deploy` uses it for that reason.
 
 | Tag | Contents | Size |
 |---|---|---|
-| `latest`, `<version>` | Core dependencies, plus the backup clients (`huggingface_hub`, `boto3`) | ~900 MB |
-| `latest-all`, `<version>-all` | Plus AI SDKs, document formats, export and OAuth | ~1.5 GB |
+| `latest`, `<version>` | Core dependencies, the backup clients (`huggingface_hub`, `boto3`) and Authlib for SSO logins | ~900 MB |
+| `latest-all`, `<version>-all` | Plus AI SDKs, document formats and export | ~1.5 GB |
 | `sha-<short>` | A specific commit | — |
 
 Both are built for `linux/amd64` and `linux/arm64`, so they run natively on
@@ -53653,10 +53653,11 @@ Pin a version for a study that will run for months. `latest` follows the
 master branch and moves with every change to it. A `<version>` tag is pushed
 once, when that release is tagged, and is not rebuilt afterwards.
 
-The `-all` variant covers `ai_support`, PDF and DOCX ingestion, parquet export
-and OAuth logins. Neither variant includes the `vision` extra: it pulls
-multi-gigabyte torch wheels, and browser-side segmentation does not need it:
-ONNX Runtime Web is vendored in the image already.
+The `-all` variant adds `ai_support`, PDF and DOCX ingestion, and parquet
+export. Both variants include Authlib, so OAuth logins work on either. Neither
+includes the `vision` extra. It pulls multi-gigabyte torch wheels, and
+browser-side segmentation does not need it, because ONNX Runtime Web is already
+vendored in the image.
 
 ## Configuration
 

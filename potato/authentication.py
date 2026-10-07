@@ -701,10 +701,15 @@ class UserAuthenticator:
                 logger.error(f"Missing {key} in user info")
                 return f"Missing {key} in user info"
 
+        extra = {k: v for k, v in single_user.items() if k not in ["username", "password"]}
+        if self.auth_method == "oauth" and not single_user.get("password"):
+            # A passwordless roster row on an SSO task names someone who signs
+            # in through the provider, not a local account.
+            extra.setdefault("oauth_provider", None)
         result = self.auth_backend.add_user(
             single_user["username"],
             single_user.get("password"),
-            **{k: v for k, v in single_user.items() if k not in ["username", "password"]}
+            **extra
         )
 
         if result == "Success":

@@ -67,14 +67,14 @@
                 {% endfor %}
             </div>
 
-            {% if allow_local_login or require_password %}
+            {% if allow_local_login %}
             <div class="oauth-divider">
                 <span>{{ ui_lang.or_divider|default('or') }}</span>
             </div>
             {% endif %}
             {% endif %}
 
-            {% if not oauth_providers or allow_local_login or require_password %}
+            {% if not oauth_providers or allow_local_login %}
             {% if require_password %}
             <div class="potato-tabs">
                 <button class="potato-tab active" id="login-tab" onclick="switchTab('login')">{{ ui_lang.sign_in_tab|default('Sign In') }}</button>

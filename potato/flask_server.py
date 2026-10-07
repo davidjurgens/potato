@@ -5473,6 +5473,26 @@ def _register_web_agent_blueprints_if_needed(flask_app, config):
         logger.info("Registered corpus-map blueprint")
 
 # Function to create and initialize the Flask application
+def _init_oauth_on_app(flask_app):
+    """Register the configured OAuth providers on *flask_app*.
+
+    Lives in create_app() rather than run_server() so a container (gunicorn
+    on the create_app factory) registers them too. When it ran only from
+    run_server(), a deployed OAuth study logged "OAuth not initialized" and
+    /auth/login/<provider> answered 404.
+    """
+    if (config.get("authentication") or {}).get("method", "in_memory") != "oauth":
+        return
+    try:
+        authenticator = UserAuthenticator.get_instance()
+    except Exception:
+        return
+    oauth_backend = authenticator.get_oauth_backend()
+    if oauth_backend:
+        oauth_backend.init_oauth(flask_app)
+        logger.info("OAuth providers initialized with Flask app")
+
+
 def create_app(config_file=None):
     """
     Create and configure the Flask application.
@@ -5545,6 +5565,8 @@ def create_app(config_file=None):
 
     # Configure the app
     configure_app(app)
+
+    _init_oauth_on_app(app)
 
     # Add context processor for debug settings and common config values
     @app.context_processor
@@ -5892,6 +5914,8 @@ def _initialize_from_config(config_file):
     except Exception as e:
         logger.warning(f"Search index init skipped: {e}")
 
+    _init_optional_subsystems(config)
+
     logger.info("Server initialization complete (WSGI factory mode)")
 
 
@@ -5963,6 +5987,165 @@ def _init_waveform_service(config: dict) -> None:
     except Exception as e:
         logger.error(f"Failed to initialize WaveformService: {e}")
         logger.warning("Audio annotation will use client-side waveform generation only")
+
+
+def _init_optional_subsystems(config):
+    """Start the config-gated subsystems both boot paths need.
+
+    Called by run_server() (`potato start`) and by _initialize_from_config()
+    (the create_app factory gunicorn uses, so every container and every
+    `potato deploy` target). These blocks used to live only in run_server(),
+    so chat, MACE, active learning, ICL labeling, diversity ordering,
+    embedding viz, dynamic expertise, the directory watcher and agent
+    sessions were never started in a deployment: chat answered 404 "Chat
+    support is not enabled" under a sidebar that still rendered.
+    tests/unit/test_boot_paths_init_parity.py keeps the two paths together.
+    """
+    # Initialize chat manager if enabled
+    if config.get("chat_support", {}).get("enabled", False):
+        logger.info("Initializing Chat Manager...")
+        from potato.chat_manager import init_chat_manager
+        init_chat_manager(config)
+        logger.info("Chat support initialized successfully")
+
+    # Initialize diversity manager if diversity_clustering strategy is used
+    # or if diversity_ordering is explicitly enabled
+    assignment_strategy = config.get("assignment_strategy", "")
+    if isinstance(assignment_strategy, dict):
+        assignment_strategy = assignment_strategy.get("name", "")
+    diversity_enabled = (
+        assignment_strategy == "diversity_clustering" or
+        config.get("diversity_ordering", {}).get("enabled", False)
+    )
+    if diversity_enabled:
+        logger.info("Initializing diversity manager...")
+        dm = init_diversity_manager(config)
+        if dm and dm.enabled:
+            # Prefill embeddings for first N items
+            _prefill_diversity_embeddings(dm, config)
+            logger.info("Diversity manager initialized successfully")
+
+            # Initialize embedding visualization manager (requires diversity manager)
+            from potato.embedding_visualization import init_embedding_viz_manager
+            viz_manager = init_embedding_viz_manager(config)
+            if viz_manager and viz_manager.enabled:
+                logger.info("Embedding visualization manager initialized")
+            else:
+                logger.debug(
+                    "Embedding visualization not enabled. "
+                    "Install umap-learn: pip install umap-learn"
+                )
+        else:
+            logger.warning(
+                "Diversity ordering requested but manager not enabled. "
+                "Install sentence-transformers and scikit-learn: "
+                "pip install sentence-transformers scikit-learn"
+            )
+
+    # Initialize active learning manager if enabled. The manager trains a
+    # classifier on annotations in a background thread and reorders the
+    # unlabeled pool by query strategy (uncertainty/BADGE/BALD/hybrid). Without
+    # this, `assignment_strategy: active_learning` falls back to random order.
+    if config.get('active_learning', {}).get('enabled', False):
+        try:
+            from potato.active_learning_manager import (
+                parse_active_learning_config, init_active_learning_manager,
+            )
+            al_cfg = parse_active_learning_config(config)
+            if al_cfg:
+                init_active_learning_manager(al_cfg)
+                logger.info(
+                    "Active learning manager initialized (query_strategy=%s, "
+                    "update_frequency=%s, schemas=%s)",
+                    al_cfg.query_strategy, al_cfg.update_frequency, al_cfg.schema_names,
+                )
+        except Exception as e:
+            logger.warning(
+                "Active learning requested but could not initialize (%s). "
+                "Continuing without active-learning reordering.", e
+            )
+
+    # Initialize MACE competence estimation if configured
+    if config.get('mace', {}).get('enabled', False):
+        from potato.mace_manager import init_mace_manager
+        init_mace_manager(config)
+        logger.info("MACE manager initialized")
+
+    # Initialize agent session manager if agent_proxy is configured
+    if _agent_proxy_enabled(config):
+        from potato.agent_proxy import init_agent_session_manager
+        init_agent_session_manager(config)
+        logger.info(f"Agent session manager initialized (proxy type: {config['agent_proxy'].get('type', 'unknown')})")
+
+    # Initialize ExpertiseManager for dynamic category assignment
+    category_assignment = config.get('category_assignment', {})
+    dynamic_config = category_assignment.get('dynamic', {})
+    if dynamic_config.get('enabled', False):
+        expertise_manager = init_expertise_manager(config)
+        expertise_manager.start_background_worker()
+        logger.info("Dynamic category expertise enabled with background worker")
+
+        # Register cleanup handler for expertise manager
+        import atexit
+        def cleanup_expertise_manager():
+            em = get_expertise_manager()
+            if em:
+                em.stop_background_worker()
+                logger.info("Expertise manager background worker stopped")
+        atexit.register(cleanup_expertise_manager)
+
+    # Initialize ICL labeler for AI-assisted labeling if configured
+    icl_config = config.get('icl_labeling', {})
+    if icl_config.get('enabled', False):
+        from potato.ai.icl_labeler import init_icl_labeler, get_icl_labeler
+        icl_labeler = init_icl_labeler(config)
+        icl_labeler.start_background_worker()
+        logger.info("ICL (In-Context Learning) labeler enabled with background worker")
+
+        # Register cleanup handler for ICL labeler
+        import atexit
+        def cleanup_icl_labeler():
+            labeler = get_icl_labeler()
+            if labeler:
+                labeler.stop_background_worker()
+                labeler.save_state()
+                logger.info("ICL labeler background worker stopped and state saved")
+        atexit.register(cleanup_icl_labeler)
+
+    # Initialize directory watcher if configured
+    if "data_directory" in config:
+        from potato.directory_watcher import init_directory_watcher, get_directory_watcher
+        dw = init_directory_watcher(config)
+        if dw:
+            # Load all files from the directory
+            count = dw.load_directory()
+            logger.info(f"Loaded {count} instances from data_directory: {config['data_directory']}")
+
+            # The search index was built above, BEFORE this load, so it
+            # indexed nothing. /admin/api/search answered {"count": 0} on a
+            # corpus where every item matched -- indistinguishable from "no
+            # matches" -- and the curation catalog went with it.
+            if count:
+                try:
+                    from potato.search import reindex_from_item_state
+                    reindex_from_item_state(config)
+                except Exception as e:
+                    logger.warning(f"Search reindex after directory load skipped: {e}")
+
+            # Start watching if enabled
+            if config.get("watch_data_directory", False):
+                dw.start_watching()
+                logger.info(f"Directory watching enabled (poll interval: {config.get('watch_poll_interval', 5.0)}s)")
+
+            # Register cleanup handler
+            import atexit
+            def cleanup_directory_watcher():
+                watcher = get_directory_watcher()
+                if watcher:
+                    watcher.stop()
+                    logger.info("Directory watcher stopped")
+            atexit.register(cleanup_directory_watcher)
+
 
 
 def run_server(args):
@@ -6076,13 +6259,6 @@ def run_server(args):
                 "created, so no assistant will appear on any item. See the "
                 "endpoint warning above for the reason.")
     
-    # Initialize chat manager if enabled
-    if config.get("chat_support", {}).get("enabled", False):
-        logger.info("Initializing Chat Manager...")
-        from potato.chat_manager import init_chat_manager
-        init_chat_manager(config)
-        logger.info("Chat support initialized successfully")
-
     # Initialize Solo Mode if enabled
     if config.get("solo_mode", {}).get("enabled", False):
         logger.info("Initializing Solo Mode...")
@@ -6174,63 +6350,6 @@ def run_server(args):
     except Exception as e:
         logger.warning(f"Search index init skipped: {e}")
 
-    # Initialize diversity manager if diversity_clustering strategy is used
-    # or if diversity_ordering is explicitly enabled
-    assignment_strategy = config.get("assignment_strategy", "")
-    if isinstance(assignment_strategy, dict):
-        assignment_strategy = assignment_strategy.get("name", "")
-    diversity_enabled = (
-        assignment_strategy == "diversity_clustering" or
-        config.get("diversity_ordering", {}).get("enabled", False)
-    )
-    if diversity_enabled:
-        logger.info("Initializing diversity manager...")
-        dm = init_diversity_manager(config)
-        if dm and dm.enabled:
-            # Prefill embeddings for first N items
-            _prefill_diversity_embeddings(dm, config)
-            logger.info("Diversity manager initialized successfully")
-
-            # Initialize embedding visualization manager (requires diversity manager)
-            from potato.embedding_visualization import init_embedding_viz_manager
-            viz_manager = init_embedding_viz_manager(config)
-            if viz_manager and viz_manager.enabled:
-                logger.info("Embedding visualization manager initialized")
-            else:
-                logger.debug(
-                    "Embedding visualization not enabled. "
-                    "Install umap-learn: pip install umap-learn"
-                )
-        else:
-            logger.warning(
-                "Diversity ordering requested but manager not enabled. "
-                "Install sentence-transformers and scikit-learn: "
-                "pip install sentence-transformers scikit-learn"
-            )
-
-    # Initialize active learning manager if enabled. The manager trains a
-    # classifier on annotations in a background thread and reorders the
-    # unlabeled pool by query strategy (uncertainty/BADGE/BALD/hybrid). Without
-    # this, `assignment_strategy: active_learning` falls back to random order.
-    if config.get('active_learning', {}).get('enabled', False):
-        try:
-            from potato.active_learning_manager import (
-                parse_active_learning_config, init_active_learning_manager,
-            )
-            al_cfg = parse_active_learning_config(config)
-            if al_cfg:
-                init_active_learning_manager(al_cfg)
-                logger.info(
-                    "Active learning manager initialized (query_strategy=%s, "
-                    "update_frequency=%s, schemas=%s)",
-                    al_cfg.query_strategy, al_cfg.update_frequency, al_cfg.schema_names,
-                )
-        except Exception as e:
-            logger.warning(
-                "Active learning requested but could not initialize (%s). "
-                "Continuing without active-learning reordering.", e
-            )
-
     # Initialize quality control manager if any QC features are enabled
     qc_enabled = (
         config.get('attention_checks', {}).get('enabled', False) or
@@ -6253,12 +6372,6 @@ def run_server(args):
     init_rbac_manager(config)
     init_cohort_scheme_resolver(config)
 
-    # Initialize MACE competence estimation if configured
-    if config.get('mace', {}).get('enabled', False):
-        from potato.mace_manager import init_mace_manager
-        init_mace_manager(config)
-        logger.info("MACE manager initialized")
-
     # Initialize knowledge base manager for entity linking
     init_kb_manager(config)
     logger.info("Knowledge base manager initialized")
@@ -6278,80 +6391,7 @@ def run_server(args):
         logger.info("AI budget cap set at $%s for this run",
                     budget_cfg.get("cap_usd"))
 
-    # Initialize agent session manager if agent_proxy is configured
-    if _agent_proxy_enabled(config):
-        from potato.agent_proxy import init_agent_session_manager
-        init_agent_session_manager(config)
-        logger.info(f"Agent session manager initialized (proxy type: {config['agent_proxy'].get('type', 'unknown')})")
-
-    # Initialize ExpertiseManager for dynamic category assignment
-    category_assignment = config.get('category_assignment', {})
-    dynamic_config = category_assignment.get('dynamic', {})
-    if dynamic_config.get('enabled', False):
-        expertise_manager = init_expertise_manager(config)
-        expertise_manager.start_background_worker()
-        logger.info("Dynamic category expertise enabled with background worker")
-
-        # Register cleanup handler for expertise manager
-        import atexit
-        def cleanup_expertise_manager():
-            em = get_expertise_manager()
-            if em:
-                em.stop_background_worker()
-                logger.info("Expertise manager background worker stopped")
-        atexit.register(cleanup_expertise_manager)
-
-    # Initialize ICL labeler for AI-assisted labeling if configured
-    icl_config = config.get('icl_labeling', {})
-    if icl_config.get('enabled', False):
-        from potato.ai.icl_labeler import init_icl_labeler, get_icl_labeler
-        icl_labeler = init_icl_labeler(config)
-        icl_labeler.start_background_worker()
-        logger.info("ICL (In-Context Learning) labeler enabled with background worker")
-
-        # Register cleanup handler for ICL labeler
-        import atexit
-        def cleanup_icl_labeler():
-            labeler = get_icl_labeler()
-            if labeler:
-                labeler.stop_background_worker()
-                labeler.save_state()
-                logger.info("ICL labeler background worker stopped and state saved")
-        atexit.register(cleanup_icl_labeler)
-
-    # Initialize directory watcher if configured
-    if "data_directory" in config:
-        from potato.directory_watcher import init_directory_watcher, get_directory_watcher
-        dw = init_directory_watcher(config)
-        if dw:
-            # Load all files from the directory
-            count = dw.load_directory()
-            logger.info(f"Loaded {count} instances from data_directory: {config['data_directory']}")
-
-            # The search index was built above, BEFORE this load, so it
-            # indexed nothing. /admin/api/search answered {"count": 0} on a
-            # corpus where every item matched -- indistinguishable from "no
-            # matches" -- and the curation catalog went with it.
-            if count:
-                try:
-                    from potato.search import reindex_from_item_state
-                    reindex_from_item_state(config)
-                except Exception as e:
-                    logger.warning(f"Search reindex after directory load skipped: {e}")
-
-            # Start watching if enabled
-            if config.get("watch_data_directory", False):
-                dw.start_watching()
-                logger.info(f"Directory watching enabled (poll interval: {config.get('watch_poll_interval', 5.0)}s)")
-
-            # Register cleanup handler
-            import atexit
-            def cleanup_directory_watcher():
-                watcher = get_directory_watcher()
-                if watcher:
-                    watcher.stop()
-                    logger.info("Directory watcher stopped")
-            atexit.register(cleanup_directory_watcher)
+    _init_optional_subsystems(config)
 
     # Initialize webhook emitter if configured
     if config.get('webhooks', {}).get('enabled', False):
@@ -6381,15 +6421,8 @@ def run_server(args):
     # Create and configure the Flask app
     app = create_app()
 
-    # Initialize OAuth with Flask app if using OAuth authentication
-    # (must happen after create_app() since OAuth needs the Flask app instance)
-    auth_method = config.get("authentication", {}).get("method", "in_memory")
-    if auth_method == "oauth":
-        authenticator = UserAuthenticator.get_instance()
-        oauth_backend = authenticator.get_oauth_backend()
-        if oauth_backend:
-            oauth_backend.init_oauth(app)
-            logger.info("OAuth providers initialized with Flask app")
+    # OAuth is registered on the app inside create_app(), so the gunicorn
+    # factory path gets it too.
 
     # Run the Flask app
     host = config.get("host", "0.0.0.0")

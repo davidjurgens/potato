@@ -190,11 +190,16 @@ class TestAuthBackendInterface:
         config = make_oauth_config(providers={"google": google_provider()})
         return OAuthBackend(config)
 
-    def test_add_user_and_authenticate(self):
+    def test_add_user_registers_but_password_auth_refuses_sso_identities(self):
+        """SSO identities sign in only through the provider callback. This
+        used to assert authenticate() was True for them with any password,
+        which let the password form sign in as any SSO user."""
         backend = self._backend()
         result = backend.add_user("alice@example.com", None, oauth_provider="google")
         assert result == "Success"
-        assert backend.authenticate("alice@example.com", None) is True
+        assert backend.is_valid_username("alice@example.com") is True
+        assert backend.authenticate("alice@example.com", None) is False
+        assert backend.authenticate("alice@example.com", "guess") is False
 
     def test_authenticate_unknown_user_fails(self):
         backend = self._backend()
@@ -202,9 +207,14 @@ class TestAuthBackendInterface:
 
     def test_is_valid_username(self):
         backend = self._backend()
-        backend.add_user("alice@example.com", None)
+        backend.add_user("alice@example.com", None, oauth_provider="google")
         assert backend.is_valid_username("alice@example.com") is True
         assert backend.is_valid_username("unknown@example.com") is False
+
+    def test_local_registration_is_refused_without_allow_local_login(self):
+        backend = self._backend()
+        assert backend.add_user("eve", "pw") != "Success"
+        assert backend.is_valid_username("eve") is False
 
     def test_add_duplicate_user_updates_data(self):
         backend = self._backend()

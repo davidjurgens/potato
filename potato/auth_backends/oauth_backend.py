@@ -12,7 +12,7 @@ from urllib.parse import urljoin
 
 from authlib.integrations.flask_client import OAuth
 
-from potato.authentication import AuthBackend
+from potato.authentication import AuthBackend, InMemoryAuthBackend
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,9 @@ class OAuthBackend(AuthBackend):
         self.user_identity_field = auth_config.get("user_identity_field", "email")
         self.auto_register = auth_config.get("auto_register", True)
         self.allow_local_login = auth_config.get("allow_local_login", False)
+        # Username/password accounts, kept apart from SSO identities so a
+        # password can never sign in as an account a provider vouched for.
+        self._local = InMemoryAuthBackend()
         self._oauth = None  # Initialized later via init_oauth()
         self._provider_metadata = {}  # Cached display info per provider
 
@@ -246,34 +249,50 @@ class OAuthBackend(AuthBackend):
     # --- AuthBackend interface ---
 
     def authenticate(self, username: str, password: Optional[str]) -> bool:
-        """Authenticate an OAuth user.
+        """Check a username/password sign-in.
 
-        For OAuth, authentication happens via the provider redirect flow,
-        not via username/password. This method returns True if the user
-        exists (was previously authenticated via OAuth).
+        SSO identities sign in only through the provider redirect, which sets
+        the session itself and never calls this. This used to return True for
+        any username the provider had registered, whatever password came with
+        it, so the password form signed anyone in as any SSO user. Only local
+        accounts are checked here, and only when allow_local_login is on.
         """
-        return username in self.users
+        if not self.allow_local_login or username in self.users:
+            return False
+        return self._local.authenticate(username, password)
 
     def add_user(self, username: str, password: Optional[str], **kwargs) -> str:
-        """Register an OAuth-authenticated user."""
-        if username in self.users:
-            # Update profile data
-            self.users[username].update(kwargs)
+        """Register a user: an SSO identity from the callback, or a local account."""
+        if "oauth_provider" in kwargs:
+            if username in self.users:
+                self.users[username].update(kwargs)
+            else:
+                self.users[username] = kwargs
             return "Success"
-        self.users[username] = kwargs
-        return "Success"
+        if not self.allow_local_login:
+            return ("This task signs in through single sign-on only. "
+                    "Use a sign-in button above.")
+        if username in self.users:
+            return "Duplicate user"
+        return self._local.add_user(username, password, **kwargs)
+
+    def add_user_prehashed(self, username: str, hashed_password: str, **kwargs) -> str:
+        if not self.allow_local_login:
+            return "Local accounts are disabled"
+        return self._local.add_user_prehashed(username, hashed_password, **kwargs)
 
     def is_valid_username(self, username: str) -> bool:
-        """Check if a username was registered via OAuth."""
-        return username in self.users
+        """True for an SSO identity or a local account."""
+        return username in self.users or self._local.is_valid_username(username)
 
     def update_password(self, username: str, new_password: str) -> bool:
         """Not supported for OAuth - passwords are managed by providers."""
         raise NotImplementedError("Password management is handled by OAuth providers")
 
     def get_all_users(self) -> list:
-        """Return all registered OAuth usernames."""
-        return list(self.users.keys())
+        """Return every SSO identity and local account."""
+        return list(self.users.keys()) + [
+            u for u in self._local.users if u not in self.users]
 
     def get_allowed_org(self, provider_name: str) -> Optional[str]:
         """Get the allowed_org restriction for a provider, if any."""
